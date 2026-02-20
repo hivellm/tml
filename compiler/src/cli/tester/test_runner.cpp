@@ -672,7 +672,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             // Phase 1 internal parallelism: lex/parse/typecheck/codegen per test file.
             // Thread-safe: GlobalModuleCache uses shared_mutex, ModuleRegistry is per-thread,
             // path cache uses shared_mutex, TypeEnv is per-thread.
-            // Capped at 50% of cores, range [4, 8].
+            // Capped at ~33% of cores per suite, range [2, 4] (3 suites run in parallel).
             unsigned int num_threads =
                 calc_codegen_threads(static_cast<unsigned int>(tasks.size()));
 

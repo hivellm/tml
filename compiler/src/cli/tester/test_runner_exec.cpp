@@ -15,9 +15,10 @@ unsigned int calc_codegen_threads(unsigned int task_count) {
     unsigned int hw = std::thread::hardware_concurrency();
     if (hw == 0)
         hw = 8; // Fallback for unknown hardware
-    // Use at most 40% of cores per suite, clamped to [2, 6]
-    unsigned int per_suite = hw * 2 / 5;
-    unsigned int clamped = std::clamp(per_suite, 2u, 6u);
+    // Budget: ~33% of cores per suite (3 suites compile in parallel),
+    // clamped to [2, 4]. Total across 3 suites: 6-12 threads.
+    unsigned int per_suite = hw / 3;
+    unsigned int clamped = std::clamp(per_suite, 2u, 4u);
     return std::min(clamped, task_count);
 }
 

@@ -303,15 +303,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " suites cached, skipping compilation");
             }
         } else {
-            // Sequential suite compilation.
-            // Each suite spawns internal threads for IR generation and object
-            // compilation (up to hardware_concurrency() each). Running multiple
-            // suites in parallel caused intermittent failures due to shared
-            // global state in the compiler (TypeChecker, codegen registries,
-            // LLVM target init, module loading). Serializing suite compilation
-            // eliminates these cross-suite race conditions while maintaining
-            // full internal parallelism within each suite.
-            unsigned int num_compile_threads = 1;
+            // Parallel suite compilation.
+            // Global state is thread-safe: GlobalASTCache/GlobalLibraryIRCache
+            // use shared_mutex, LLVM target init uses std::once_flag,
+            // meta preload uses std::call_once, TypeEnv/ModuleRegistry are
+            // per-thread. Each suite also spawns internal threads for codegen
+            // and object compilation (calc_codegen_threads), so we limit
+            // suite-level parallelism to 3 to avoid oversubscription.
+            unsigned int num_compile_threads = 3;
 
             // Structure to hold compilation results
             struct CompileJob {
