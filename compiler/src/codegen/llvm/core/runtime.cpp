@@ -349,32 +349,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("}");
     emit_line("");
 
-    // str_hash: FNV-1a hash for strings (used by HashMap)
-    emit_line("define internal i32 @str_hash(ptr %s) {");
-    emit_line("entry:");
-    emit_line("  %is_null = icmp eq ptr %s, null");
-    emit_line("  br i1 %is_null, label %ret_zero, label %loop_start");
-    emit_line("ret_zero:");
-    emit_line("  ret i32 0");
-    emit_line("loop_start:");
-    emit_line("  br label %loop");
-    emit_line("loop:");
-    emit_line("  %hash = phi i32 [ 2166136261, %loop_start ], [ %new_hash, %loop_body ]");
-    emit_line("  %idx = phi i64 [ 0, %loop_start ], [ %next_idx, %loop_body ]");
-    emit_line("  %ptr = getelementptr i8, ptr %s, i64 %idx");
-    emit_line("  %byte = load i8, ptr %ptr");
-    emit_line("  %is_zero = icmp eq i8 %byte, 0");
-    emit_line("  br i1 %is_zero, label %done, label %loop_body");
-    emit_line("loop_body:");
-    emit_line("  %byte_i32 = zext i8 %byte to i32");
-    emit_line("  %xored = xor i32 %hash, %byte_i32");
-    emit_line("  %new_hash = mul i32 %xored, 16777619");
-    emit_line("  %next_idx = add i64 %idx, 1");
-    emit_line("  br label %loop");
-    emit_line("done:");
-    emit_line("  ret i32 %hash");
-    emit_line("}");
-    emit_line("");
+    // str_hash — removed in Phase 34 (dead code, pure TML impl in core::hash)
 
     // i64_to_str: integer to string using libc snprintf with %lld format
     emit_line("@.fmt.lld = private constant [5 x i8] c\"%lld\\00\"");
@@ -559,15 +534,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // behaviors) Pure TML implementations: core::fmt::helpers (u64_to_binary_str, u64_to_octal_str,
     // u64_to_hex_str)
 
-    // --- nextafter32: call nextafterf from libm ---
-    emit_line("; Nextafter32 (inline IR — Phase 32)");
-    emit_line("declare float @nextafterf(float, float)");
-    emit_line("define internal float @nextafter32(float %x, float %y) {");
-    emit_line("entry:");
-    emit_line("  %result = call float @nextafterf(float %x, float %y)");
-    emit_line("  ret float %result");
-    emit_line("}");
-    emit_line("");
+    // nextafter32 — removed in Phase 34 (dead code, no TML callers)
 
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");

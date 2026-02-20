@@ -424,19 +424,7 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0.0";
     }
 
-    // nextafter32(x: F32, y: F32) -> F32
-    if (fn_name == "nextafter32" && !is_module_func("nextafter32")) {
-        if (call.args.size() >= 2) {
-            std::string x = gen_expr(*call.args[0]);
-            std::string y = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call float @nextafter32(float " + x + ", float " + y +
-                      ")");
-            last_expr_type_ = "float";
-            return result;
-        }
-        return "0.0";
-    }
+    // nextafter32 — removed in Phase 34 (dead code, no TML callers)
 
     return std::nullopt;
 }
