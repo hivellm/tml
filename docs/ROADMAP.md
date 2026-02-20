@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓; runtime: 15 compiled .c files, 1 migration candidate; inline IR: 18 functions remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓, glob→@extern FFI✓; runtime: 15 compiled .c files, 1 migration candidate; inline IR: 18 functions remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -477,7 +477,7 @@ Full audit of all ~287 `declare` statements in `runtime.cpp` cross-referenced ag
 | Float math (24 functions) | 24 | **MIGRATE** — ~16 replaceable with LLVM intrinsics, ~8 keep (snprintf, nextafter) |
 | Threading/sync/channel (32 functions) | 32 | **MIGRATE** — TML already has @extern, codegen still hardcodes |
 | Time/pool (20 functions) | 20 | **MIGRATE** — move to @extern FFI |
-| Log/glob (17 functions) | 17 | **KEEP** — I/O + already working @extern/lowlevel pattern |
+| Log/glob (17 functions) | 17 | **DONE** — Log: I/O, keep; Glob: Phase 42 migrated 5 declares to @extern FFI in glob.tml |
 
 **Target**: Reduce `runtime.cpp` from ~287 declares to ~68 essential declares.
 
@@ -512,13 +512,13 @@ KEEP FOREVER (essential C runtime):             REMAINING INLINE IR (18 function
   - tml_random_seed (1, OS random)                 black_box_i32/i64/f64 (asm sideeffect)
 
 REMAINING LIVE BUILTIN HANDLERS (7):            REMAINING C FILE CANDIDATES:
-  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) → Phase 42
-  - black_box, black_box_i64, black_box_f64        glob.c (~700 lines) → Phase 43
+  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) — blocked on crypto rewrite
+  - black_box, black_box_i64, black_box_f64
   - infinity, nan, is_inf, is_nan (LLVM const)
                                                  ESSENTIAL FFI (must stay C):
 ALREADY DONE:                                      essential.c, mem.c, pool.c, time.c, sync.c, os.c,
   - Collections (List/HashMap/Buffer) ✓             net.c, dns.c, tls.c, backtrace.c, log.c,
-  - String algorithms (str.tml) ✓                  crypto*.c (7 files), file.c
+  - String algorithms (str.tml) ✓                  crypto*.c (7 files), file.c, glob.c
   - Integer formatting ✓
   - File/Path/Dir ✓
   - Dead functions_[] entries ✓
@@ -537,6 +537,7 @@ ALREADY DONE:                                      essential.c, mem.c, pool.c, t
   - 10 dead type registrations removed (Phase 38-39) ✓
   - 3 dead stub files + declarations (Phase 40-41) ✓
   - 6 dead i64 atomics + 4 dead pool exports (Phase 41) ✓
+  - glob.tml lowlevel → @extern FFI (Phase 42) ✓
 ```
 
 ### 4.1 Collections — List[T] (DONE)
@@ -719,7 +720,7 @@ ALREADY DONE:                                      essential.c, mem.c, pool.c, t
   - **Essential FFI (14 files, must stay as C)**: essential.c, mem.c, pool.c, sync.c, net.c, dns.c, tls.c, os.c, crypto.c, crypto_key.c, crypto_x509.c, backtrace.c, log.c, time.c
   - **Migration candidates (1 file)**: collections.c (~70 lines, list_get/list_len legacy for crypto)
   - **Migrated (Phases 31-35)**: string.c deleted (Phase 31), math.c deleted (Phase 32), search.c deleted (Phase 35, → pure TML in distance.tml), collections.c cleaned (160→70 lines)
-  - **Module-conditional (2 files in lib/std/runtime/)**: file.c (FFI, keep), glob.c (algorithmic, could migrate)
+  - **Module-conditional (2 files in lib/std/runtime/)**: file.c (FFI, keep), glob.c (FFI via @extern, Phase 42)
   - **Uncompiled crypto extensions (5 files, future work)**: crypto_dh.c, crypto_ecdh.c, crypto_kdf.c, crypto_rsa.c, crypto_sign.c
 - [ ] 4.20.3 Benchmark: TML implementations within 10% of C performance (DEFERRED — needs benchmark infrastructure)
 
@@ -790,7 +791,7 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 ### 4.25 Migrate remaining C files (Phase 36+) — PLANNED
 
 - [ ] 4.25.1 Migrate `collections.c` (~70 lines) → remove entirely when crypto C runtime rewritten as `@extern("c")` FFI
-- [ ] 4.25.2 Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` for directory API (opendir/FindFirstFile)
+- [x] 4.25.2 Migrate `glob.tml` from lowlevel to @extern FFI (Phase 42) — 5 declares removed from runtime.cpp, glob.c stays as essential FFI
 
 ### Expected impact
 
