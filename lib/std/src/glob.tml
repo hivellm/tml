@@ -35,6 +35,22 @@
 //! assert(not matches("*.tml", "main.rs"))
 //! ```
 
+// FFI declarations for C runtime glob operations (glob.c)
+@extern("glob_match")
+func ffi_glob_match(base_dir: Str, pattern: Str) -> *Unit
+
+@extern("glob_result_next")
+func ffi_glob_result_next(result: *Unit) -> Str
+
+@extern("glob_result_count")
+func ffi_glob_result_count(result: *Unit) -> I64
+
+@extern("glob_result_free")
+func ffi_glob_result_free(result: *Unit)
+
+@extern("glob_pattern_matches")
+func ffi_glob_pattern_matches(pattern: Str, text: Str) -> Bool
+
 /// Glob result handle for iterating matched file paths.
 ///
 /// Use `Glob::find()` to create, `next()` to iterate, and `free()` to release.
@@ -62,7 +78,7 @@ impl Glob {
     /// g.free()
     /// ```
     pub func find(base_dir: Str, pattern: Str) -> Glob {
-        let h: *Unit = lowlevel { glob_match(base_dir, pattern) }
+        let h: *Unit = ffi_glob_match(base_dir, pattern)
         return Glob { handle: h }
     }
 
@@ -83,13 +99,13 @@ impl Glob {
     /// g.free()
     /// ```
     pub func next(mut this) -> Str {
-        let r: Str = lowlevel { glob_result_next(this.handle) }
+        let r: Str = ffi_glob_result_next(this.handle)
         return r
     }
 
     /// Get the total number of matched paths.
     pub func count(this) -> I64 {
-        let r: I64 = lowlevel { glob_result_count(this.handle) }
+        let r: I64 = ffi_glob_result_count(this.handle)
         return r
     }
 
@@ -97,7 +113,7 @@ impl Glob {
     ///
     /// Must be called when done iterating to avoid memory leaks.
     pub func free(this) {
-        lowlevel { glob_result_free(this.handle) }
+        ffi_glob_result_free(this.handle)
     }
 }
 
@@ -121,7 +137,7 @@ impl Glob {
 /// assert(not matches("*.rs", "main.tml"))
 /// ```
 pub func matches(pattern: Str, text: Str) -> Bool {
-    let r: Bool = lowlevel { glob_pattern_matches(pattern, text) }
+    let r: Bool = ffi_glob_pattern_matches(pattern, text)
     return r
 }
 

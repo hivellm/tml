@@ -171,7 +171,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // because the shared lib is linked against multiple workers with varying imports.
     bool needs_sync_atomics = options_.library_ir_only;
     bool needs_logging = options_.library_ir_only;
-    bool needs_glob = options_.library_ir_only;
+    // needs_glob removed (Phase 42) — glob now uses @extern FFI in glob.tml
 
     if (!options_.library_ir_only) {
         const auto& imports = env_.all_imports();
@@ -183,9 +183,7 @@ void LLVMIRGen::emit_runtime_decls() {
                 needs_sync_atomics = true;
             if (!needs_logging && path.find("std::log") == 0)
                 needs_logging = true;
-            if (!needs_glob && (path.find("std::fs::glob") == 0 || path.find("std::glob") == 0))
-                needs_glob = true;
-            if (needs_sync_atomics && needs_logging && needs_glob)
+            if (needs_sync_atomics && needs_logging)
                 break;
         }
     }
@@ -268,30 +266,7 @@ void LLVMIRGen::emit_runtime_decls() {
         functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
     }
 
-    // Glob runtime declarations — only when std::fs::glob is imported
-    if (needs_glob) {
-        emit_line("; Glob runtime");
-        emit_line("declare ptr @glob_match(ptr, ptr)");
-        declared_externals_.insert("glob_match");
-        emit_line("declare ptr @glob_result_next(ptr)");
-        declared_externals_.insert("glob_result_next");
-        emit_line("declare i64 @glob_result_count(ptr)");
-        declared_externals_.insert("glob_result_count");
-        emit_line("declare void @glob_result_free(ptr)");
-        declared_externals_.insert("glob_result_free");
-        emit_line("declare i1 @glob_pattern_matches(ptr, ptr)");
-        declared_externals_.insert("glob_pattern_matches");
-
-        functions_["glob_match"] = FuncInfo{"@glob_match", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-        functions_["glob_result_next"] = FuncInfo{"@glob_result_next", "ptr (ptr)", "ptr", {"ptr"}};
-        functions_["glob_result_count"] =
-            FuncInfo{"@glob_result_count", "i64 (ptr)", "i64", {"ptr"}};
-        functions_["glob_result_free"] =
-            FuncInfo{"@glob_result_free", "void (ptr)", "void", {"ptr"}};
-        functions_["glob_pattern_matches"] =
-            FuncInfo{"@glob_pattern_matches", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-        emit_line("");
-    }
+    // Glob runtime declarations removed (Phase 42) — now @extern FFI in glob.tml
 
     // String utilities — inline LLVM IR implementations (Phase 31)
     // These replace the previous C runtime declarations from string.c.
