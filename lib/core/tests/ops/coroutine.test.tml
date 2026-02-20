@@ -32,7 +32,7 @@ func test_coroutine_state_debug_string() -> I32 {
     let y: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
     assert_eq(y.debug_string(), "Yielded(42)", "Yielded debug")
     let c: CoroutineState[I32, Str] = CoroutineState::Complete("done")
-    assert_eq(c.debug_string(), "Complete(done)", "Complete debug")
+    assert_eq(c.debug_string(), "Complete(\"done\")", "Complete debug")
     return 0
 }
 

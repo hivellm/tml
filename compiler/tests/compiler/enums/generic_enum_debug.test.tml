@@ -15,6 +15,6 @@ func test_coroutine_state_debug_yielded() -> I32 {
 func test_coroutine_state_debug_complete() -> I32 {
     let state: CoroutineState[I32, Str] = CoroutineState::Complete("done")
     let s = state.debug_string()
-    assert_eq(s, "Complete(done)", "debug_string of Complete(done)")
+    assert_eq(s, "Complete(\"done\")", "debug_string of Complete(done)")
     return 0
 }
