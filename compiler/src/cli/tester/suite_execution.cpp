@@ -43,7 +43,89 @@
 #include <mutex>
 #include <regex>
 
+#ifdef _WIN32
+#include <process.h> // _beginthreadex
+#include <windows.h>
+#endif
+
 namespace tml::cli::tester {
+
+// ============================================================================
+// Thread with custom stack size (Windows)
+// ============================================================================
+// std::thread uses the default 1 MB stack on Windows. Test execution needs a
+// larger stack because OpenSSL DH/RSA operations use deep call chains with
+// heavy BIGNUM stack usage (prime generation, modular exponentiation).
+// Without this, DH tests intermittently hit EXCEPTION_STACK_OVERFLOW.
+
+#ifdef _WIN32
+
+/// RAII wrapper for a native Windows thread with a custom stack size.
+/// Provides a join() interface compatible with std::thread usage patterns.
+class NativeThread {
+public:
+    NativeThread() = default;
+
+    template <typename Fn> NativeThread(Fn&& fn, size_t stack_size) {
+        // Wrap the callable in a type-erased invocation
+        auto* ctx = new std::function<void()>(std::forward<Fn>(fn));
+        handle_ =
+            reinterpret_cast<HANDLE>(_beginthreadex(nullptr,                           // security
+                                                    static_cast<unsigned>(stack_size), // stack size
+                                                    &NativeThread::thread_proc, // start routine
+                                                    ctx,                        // argument
+                                                    STACK_SIZE_PARAM_IS_A_RESERVATION, // flags
+                                                    nullptr                            // thread id
+                                                    ));
+        if (!handle_) {
+            delete ctx;
+            throw std::runtime_error("Failed to create thread with custom stack size");
+        }
+    }
+
+    NativeThread(NativeThread&& other) noexcept : handle_(other.handle_) {
+        other.handle_ = nullptr;
+    }
+
+    NativeThread& operator=(NativeThread&& other) noexcept {
+        if (this != &other) {
+            if (handle_)
+                join();
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~NativeThread() {
+        if (handle_)
+            join();
+    }
+
+    bool joinable() const {
+        return handle_ != nullptr;
+    }
+
+    void join() {
+        if (handle_) {
+            WaitForSingleObject(handle_, INFINITE);
+            CloseHandle(handle_);
+            handle_ = nullptr;
+        }
+    }
+
+private:
+    HANDLE handle_ = nullptr;
+
+    static unsigned __stdcall thread_proc(void* arg) {
+        auto* fn = static_cast<std::function<void()>*>(arg);
+        (*fn)();
+        delete fn;
+        return 0;
+    }
+};
+
+#endif // _WIN32
 
 // ============================================================================
 // Coverage Regression Check
@@ -631,8 +713,20 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
         // --- Launch pipeline: execution thread + compilation threads ---
 
-        // Start execution thread first (it will block on CV until suites arrive)
+        // Start execution thread with 8 MB stack.
+        // Default std::thread on Windows gets 1 MB, which is insufficient for
+        // OpenSSL DH/RSA operations that use deep BIGNUM call chains.
+        // The main process has 32 MB (/STACK:33554432), but worker threads
+        // created via std::thread inherit the default 1 MB, causing
+        // intermittent EXCEPTION_STACK_OVERFLOW in crypto tests.
+        constexpr size_t EXEC_THREAD_STACK_SIZE = 8 * 1024 * 1024; // 8 MB
+#ifdef _WIN32
+        NativeThread exec_thread(execute_worker, EXEC_THREAD_STACK_SIZE);
+#else
+        // On Linux/macOS, pthread_attr_setstack can be used if needed.
+        // Default stack (typically 8 MB) is usually sufficient.
         std::thread exec_thread(execute_worker);
+#endif
 
         if (suites_to_compile.empty()) {
             if (!opts.quiet && !suites_fully_cached.empty()) {
