@@ -488,12 +488,7 @@ void print_i64(int64_t n) {
     printf("%lld", (long long)n);
 }
 
-/** @brief Prints a 32-bit floating point number to stdout. */
-void print_f32(float n) {
-    if (tml_suppress_output)
-        return;
-    printf("%g", n);
-}
+// print_f32 — REMOVED (Phase 37, dead code: no declare in runtime.cpp)
 
 /** @brief Prints a 64-bit floating point number to stdout. */
 void print_f64(double n) {
@@ -509,12 +504,7 @@ void print_bool(int32_t b) {
     printf("%s", b ? "true" : "false");
 }
 
-/** @brief Prints a character to stdout. */
-void print_char(int32_t c) {
-    if (tml_suppress_output)
-        return;
-    printf("%c", (char)c);
-}
+// print_char — REMOVED (Phase 37, dead code: no declare in runtime.cpp)
 
 // ============================================================================
 // Panic Catching Functions (for @should_panic tests)
@@ -1062,40 +1052,9 @@ int32_t tml_panic_message_contains(const char* expected) {
 // Float Formatting Functions
 // ============================================================================
 
-/** @brief Buffer for float formatting output. */
-static char float_format_buffer[256];
-
-/**
- * @brief Formats a float with specified precision.
- *
- * @param value The floating point value to format.
- * @param precision Number of decimal places.
- * @return A static buffer containing the formatted string.
- */
-const char* float_to_precision(double value, int32_t precision) {
-    if (precision < 0)
-        precision = 0;
-    if (precision > 20)
-        precision = 20;
-    snprintf(float_format_buffer, sizeof(float_format_buffer), "%.*f", precision, value);
-    return float_format_buffer;
-}
-
-/**
- * @brief Formats a float in scientific notation.
- *
- * @param value The floating point value to format.
- * @param uppercase If non-zero, uses 'E' instead of 'e'.
- * @return A static buffer containing the formatted string.
- */
-const char* float_to_exp(double value, int32_t uppercase) {
-    if (uppercase) {
-        snprintf(float_format_buffer, sizeof(float_format_buffer), "%E", value);
-    } else {
-        snprintf(float_format_buffer, sizeof(float_format_buffer), "%e", value);
-    }
-    return float_format_buffer;
-}
+// float_to_precision, float_to_exp — REMOVED (Phase 37)
+// Replaced by inline LLVM IR using @snprintf in runtime.cpp (Phase 32)
+// Declares removed in Phase 36
 
 // f64_is_nan, f64_is_infinite — REMOVED (Phase 27)
 // Replaced by pure LLVM IR: fcmp uno / fabs+fcmp oeq in string.cpp
