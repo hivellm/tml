@@ -349,7 +349,7 @@ Compiler fixes enabling coverage push:
 - Fixed partial coverage generation when tests fail
 
 Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_or[E], Maybe::default), multi-arg LLVM intrinsics (minnum, maxnum, fma, copysign), Unit type methods, class inheritance method dispatch, Char→i32 type codegen.
-**Note**: Full test suite crashes on x509/DH crypto tests (ACCESS_VIOLATION in OpenSSL). Coverage JSON generates before crash. This is a test-runner/cache issue, not a code bug.
+**Note**: DH crypto stack overflow crash **FIXED** (2026-02-20) — root cause was `std::thread` creating test execution thread with default 1 MB Windows stack; OpenSSL DH operations (BIGNUM modular exponentiation, Miller-Rabin primality) intermittently exceeded this. Fix: 8 MB stack via `_beginthreadex` with `STACK_SIZE_PARAM_IS_A_RESERVATION` in `suite_execution.cpp`.
 **Gate**: Coverage >= 75% — **ACHIEVED** (76.2%, 3,228/4,235 functions). 73 modules at 100%.
 
 ---
@@ -807,7 +807,7 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 | Hardcoded type registrations | 54 | 0 ✓ | 0 | Phase 29: -29 string, Phase 38: -2 math, Phase 39: -8 time |
 | Dead C functions in essential.c | ~20 | 0 ✓ | 0 | Phase 37: -4 (print_f32, print_char, float_to_precision, float_to_exp) |
 
-**Progress**: Phases 0-7, 16-39 complete (29-30 partial).
+**Progress**: Phases 0-7, 16-42 complete (29-30 partial).
 - Phase 31: replaced 9 C string functions with inline IR, deleted string.c (516 lines)
 - Phase 32: replaced 20 C math functions with inline IR, deleted math.c (279 lines)
 - Phase 33: removed 7 inline IR functions (SIMD+fmt), switched to TML behavior dispatch
@@ -819,11 +819,12 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 - Phase 39: removed 8 dead time type registrations
 - Phase 40: removed dead init_builtin_time() call from register.cpp
 - Phase 41: removed 3 dead stub files from build, 6 dead i64 atomic functions from sync.c, 4 dead pool exports from pool.c, header declarations cleaned
+- Phase 42: migrated glob.tml from lowlevel blocks to @extern FFI, removed 5 glob declares + needs_glob detection from runtime.cpp
+- Fix: increased test execution thread stack from 1 MB (default) to 8 MB via NativeThread wrapper, fixing intermittent OpenSSL DH stack overflow crashes
 - Current: 18 inline IR functions remain (15 active + 3 black_box); 7 live math builtin handlers
 
 **Next actionable items**:
-- **Phase 42**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
-- **Phase 43**: Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` directory API
+- **Phase 43**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
 - Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
 
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only. Inline IR reduced to 3 black_box functions only.
