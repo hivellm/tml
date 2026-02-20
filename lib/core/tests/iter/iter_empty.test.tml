@@ -1,0 +1,81 @@
+// Tests for iterator default trait methods: count on various iterator types
+// Most default behavior methods are blocked by codegen issues:
+// - last/nth/find/reduce: return Maybe[This::Item] → associated type not resolved
+// - all/any/for_each/fold: closure param type mismatch ({ptr,ptr} vs Item type)
+// Only count() and advance_by() work (concrete return types, no closures).
+// advance_by already tested in iter_traits.test.tml.
+//
+// NOTE: Empty[T] from core::iter::sources::empty is BLOCKED:
+// codegen generates Empty__T instead of Empty__I32 (generic monomorphization bug)
+use test
+
+// A simple iterator that yields nothing
+type NothingIter { _unused: I32 }
+impl Iterator for NothingIter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        return Nothing
+    }
+}
+
+// Counter: yields [current, current+1, ..., max-1]
+type Counter2 { current: I32, max: I32 }
+impl Iterator for Counter2 {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+// === Empty iterator next() ===
+
+@test
+func test_empty_next() -> I32 {
+    let mut iter: NothingIter = NothingIter { _unused: 0 }
+    assert(iter.next().is_nothing(), "empty next is Nothing")
+    return 0
+}
+
+@test
+func test_empty_always_nothing() -> I32 {
+    let mut iter: NothingIter = NothingIter { _unused: 0 }
+    assert(iter.next().is_nothing(), "first Nothing")
+    assert(iter.next().is_nothing(), "second Nothing")
+    assert(iter.next().is_nothing(), "third Nothing")
+    return 0
+}
+
+// === count() on various iterators ===
+
+@test
+func test_count_empty_iter() -> I32 {
+    let mut iter: NothingIter = NothingIter { _unused: 0 }
+    assert_eq(iter.count(), 0 as I64, "empty count = 0")
+    return 0
+}
+
+@test
+func test_count_ten() -> I32 {
+    let mut iter: Counter2 = Counter2 { current: 0, max: 10 }
+    assert_eq(iter.count(), 10 as I64, "0..10 count = 10")
+    return 0
+}
+
+@test
+func test_count_after_partial() -> I32 {
+    let mut iter: Counter2 = Counter2 { current: 0, max: 5 }
+    iter.next()  // consume 0
+    iter.next()  // consume 1
+    assert_eq(iter.count(), 3 as I64, "remaining count = 3")
+    return 0
+}
+
+@test
+func test_count_large() -> I32 {
+    let mut iter: Counter2 = Counter2 { current: 0, max: 1000 }
+    assert_eq(iter.count(), 1000 as I64, "0..1000 count = 1000")
+    return 0
+}

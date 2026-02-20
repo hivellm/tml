@@ -1,0 +1,101 @@
+// Tests for core::fmt::helpers — integer to string conversions
+// Covers: u64_to_str, u64_digit_char, i8/i16/i32_to_str, u8/u16/u32_to_str
+use test
+use core::fmt::helpers::{u64_to_str, i8_to_str, i16_to_str, i32_to_str, u8_to_str, u16_to_str, u32_to_str}
+
+// =============================================================================
+// u64_to_str (also exercises u64_digit_char internally)
+// =============================================================================
+
+@test
+func test_u64_to_str_zero() -> I32 {
+    assert_eq(u64_to_str(0 as U64), "0", "u64 0")
+    return 0
+}
+
+@test
+func test_u64_to_str_positive() -> I32 {
+    assert_eq(u64_to_str(42 as U64), "42", "u64 42")
+    assert_eq(u64_to_str(1000 as U64), "1000", "u64 1000")
+    return 0
+}
+
+@test
+func test_u64_to_str_large() -> I32 {
+    assert_eq(u64_to_str(999999 as U64), "999999", "u64 999999")
+    return 0
+}
+
+// =============================================================================
+// i8_to_str
+// =============================================================================
+
+@test
+func test_i8_to_str() -> I32 {
+    assert_eq(i8_to_str(0 as I8), "0", "i8 0")
+    assert_eq(i8_to_str(42 as I8), "42", "i8 42")
+    assert_eq(i8_to_str(127 as I8), "127", "i8 max")
+    assert_eq(i8_to_str(-1 as I8), "-1", "i8 -1")
+    assert_eq(i8_to_str(-128 as I8), "-128", "i8 min")
+    return 0
+}
+
+// =============================================================================
+// i16_to_str
+// =============================================================================
+
+@test
+func test_i16_to_str() -> I32 {
+    assert_eq(i16_to_str(0 as I16), "0", "i16 0")
+    assert_eq(i16_to_str(1000 as I16), "1000", "i16 1000")
+    assert_eq(i16_to_str(-500 as I16), "-500", "i16 -500")
+    return 0
+}
+
+// =============================================================================
+// i32_to_str
+// =============================================================================
+
+@test
+func test_i32_to_str() -> I32 {
+    assert_eq(i32_to_str(0), "0", "i32 0")
+    assert_eq(i32_to_str(12345), "12345", "i32 12345")
+    assert_eq(i32_to_str(-99), "-99", "i32 -99")
+    return 0
+}
+
+// =============================================================================
+// u8_to_str
+// =============================================================================
+
+@test
+func test_u8_to_str() -> I32 {
+    assert_eq(u8_to_str(0 as U8), "0", "u8 0")
+    assert_eq(u8_to_str(255 as U8), "255", "u8 max")
+    assert_eq(u8_to_str(128 as U8), "128", "u8 128")
+    return 0
+}
+
+// =============================================================================
+// u16_to_str
+// =============================================================================
+
+@test
+func test_u16_to_str() -> I32 {
+    assert_eq(u16_to_str(0 as U16), "0", "u16 0")
+    assert_eq(u16_to_str(65535 as U16), "65535", "u16 max")
+    assert_eq(u16_to_str(1024 as U16), "1024", "u16 1024")
+    return 0
+}
+
+// =============================================================================
+// u32_to_str
+// =============================================================================
+
+@test
+func test_u32_to_str() -> I32 {
+    assert_eq(u32_to_str(0 as U32), "0", "u32 0")
+    assert_eq(u32_to_str(100000 as U32), "100000", "u32 100000")
+    assert_eq(u32_to_str(42 as U32), "42", "u32 42")
+    return 0
+}

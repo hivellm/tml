@@ -1,12 +1,380 @@
 // Tests for size_hint() on iterator adapters
-// BLOCKED: Tuple return type (I64, Maybe[I64]) codegen bug
-// Error: '%struct.Maybe__I64' but expected 'ptr'
-// Keeping file as placeholder until codegen is fixed
+// The tuple return type (I64, Maybe[I64]) now works for .0 access
+// Note: accessing .1 (Maybe[I64]) triggers codegen bug with multiple tests
 use test::{assert, assert_eq}
+use core::iter::adapters::take::{Take, take}
+use core::iter::adapters::skip::{Skip, skip}
+use core::iter::adapters::chain::{Chain, chain}
+use core::iter::adapters::fuse::{Fuse, fuse}
+use core::iter::adapters::enumerate::{Enumerate, enumerate}
+use core::iter::adapters::zip::{Zip, zip}
+use core::iter::adapters::cycle::{Cycle, cycle}
+use core::iter::adapters::inspect::{Inspect, inspect}
+use core::iter::adapters::map::{Map, map}
+use core::iter::sources::once::{Once, once}
+use core::iter::sources::once_with::{OnceWith, once_with}
+use core::iter::sources::repeat_n::{RepeatN, repeat_n}
+use core::iter::sources::legacy::{EmptyI32, empty_i32, OnceI32, once_i32, RepeatNI32, repeat_n_i32}
+
+// A custom iterator with a known exact size_hint
+type SizedIter {
+    current: I32,
+    max: I32
+}
+
+impl Iterator for SizedIter {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        var remaining: I64 = (this.max - this.current) as I64
+        if remaining < 0 as I64 {
+            remaining = 0 as I64
+        }
+        return (remaining, Just(remaining))
+    }
+}
+
+// ============================================================================
+// Take size_hint tests
+// ============================================================================
 
 @test
-func test_size_hint_placeholder() -> I32 {
-    // size_hint tests deferred — tuple return type codegen blocked
-    assert(true, "placeholder")
+func test_take_size_hint_capped() -> I32 {
+    // take(3) from 10-element iterator: lo should be min(10, 3) = 3
+    let iter: Take[SizedIter] = take(SizedIter { current: 0, max: 10 }, 3)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 3 as I64, "take(3) from 10: lo = 3")
+    return 0
+}
+
+@test
+func test_take_size_hint_smaller_source() -> I32 {
+    // take(10) from 3-element iterator: lo should be min(3, 10) = 3
+    let iter: Take[SizedIter] = take(SizedIter { current: 0, max: 3 }, 10)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 3 as I64, "take(10) from 3: lo = 3")
+    return 0
+}
+
+@test
+func test_take_size_hint_zero() -> I32 {
+    // take(0): lo should be 0
+    let iter: Take[SizedIter] = take(SizedIter { current: 0, max: 5 }, 0)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "take(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Skip size_hint tests
+// ============================================================================
+
+@test
+func test_skip_size_hint_basic() -> I32 {
+    // skip(3) from 10-element iterator: lo should be max(10-3, 0) = 7
+    let iter: Skip[SizedIter] = skip(SizedIter { current: 0, max: 10 }, 3)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 7 as I64, "skip(3) from 10: lo = 7")
+    return 0
+}
+
+@test
+func test_skip_size_hint_skip_all() -> I32 {
+    // skip(10) from 3-element iterator: lo should be max(3-10, 0) = 0
+    let iter: Skip[SizedIter] = skip(SizedIter { current: 0, max: 3 }, 10)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "skip(10) from 3: lo = 0")
+    return 0
+}
+
+@test
+func test_skip_size_hint_zero() -> I32 {
+    // skip(0) from 5-element iterator: lo should be 5
+    let iter: Skip[SizedIter] = skip(SizedIter { current: 0, max: 5 }, 0)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "skip(0) from 5: lo = 5")
+    return 0
+}
+
+// ============================================================================
+// Chain size_hint tests
+// ============================================================================
+
+@test
+func test_chain_size_hint_both() -> I32 {
+    // chain(3-elem, 4-elem): lo should be 3 + 4 = 7
+    let iter: Chain[SizedIter, SizedIter] = chain(
+        SizedIter { current: 0, max: 3 },
+        SizedIter { current: 0, max: 4 }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 7 as I64, "chain(3, 4): lo = 7")
+    return 0
+}
+
+@test
+func test_chain_size_hint_first_empty() -> I32 {
+    // chain(0-elem, 5-elem): lo should be 0 + 5 = 5
+    let iter: Chain[SizedIter, SizedIter] = chain(
+        SizedIter { current: 0, max: 0 },
+        SizedIter { current: 0, max: 5 }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "chain(0, 5): lo = 5")
+    return 0
+}
+
+// ============================================================================
+// Fuse size_hint tests
+// ============================================================================
+
+@test
+func test_fuse_size_hint_active() -> I32 {
+    // fuse wrapping 5-element iter: lo should be 5
+    let iter: Fuse[SizedIter] = fuse(SizedIter { current: 0, max: 5 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "fuse(5): lo = 5")
+    return 0
+}
+
+@test
+func test_fuse_size_hint_empty() -> I32 {
+    // fuse wrapping 0-element iter: lo should be 0
+    let iter: Fuse[SizedIter] = fuse(SizedIter { current: 0, max: 0 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "fuse(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Enumerate size_hint tests
+// ============================================================================
+
+@test
+func test_enumerate_size_hint() -> I32 {
+    // enumerate wrapping 7-element iter: lo should be 7 (same as inner)
+    let iter: Enumerate[SizedIter] = enumerate(SizedIter { current: 0, max: 7 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 7 as I64, "enumerate(7): lo = 7")
+    return 0
+}
+
+@test
+func test_enumerate_size_hint_empty() -> I32 {
+    let iter: Enumerate[SizedIter] = enumerate(SizedIter { current: 0, max: 0 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "enumerate(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Zip size_hint tests
+// ============================================================================
+
+@test
+func test_zip_size_hint_equal() -> I32 {
+    // zip(5-elem, 5-elem): lo should be min(5, 5) = 5
+    let iter: Zip[SizedIter, SizedIter] = zip(
+        SizedIter { current: 0, max: 5 },
+        SizedIter { current: 0, max: 5 }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "zip(5, 5): lo = 5")
+    return 0
+}
+
+@test
+func test_zip_size_hint_unequal() -> I32 {
+    // zip(3-elem, 7-elem): lo should be min(3, 7) = 3
+    let iter: Zip[SizedIter, SizedIter] = zip(
+        SizedIter { current: 0, max: 3 },
+        SizedIter { current: 0, max: 7 }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 3 as I64, "zip(3, 7): lo = 3")
+    return 0
+}
+
+// ============================================================================
+// Cycle size_hint tests
+// ============================================================================
+
+impl Duplicate for SizedIter {
+    pub func duplicate(this) -> SizedIter {
+        return SizedIter { current: this.current, max: this.max }
+    }
+}
+
+impl Duplicate for I32 {
+    pub func duplicate(this) -> I32 { return this }
+}
+
+@test
+func test_cycle_size_hint_nonempty() -> I32 {
+    // cycle of non-empty iter: lo should be I64::MAX (infinite)
+    let iter: Cycle[SizedIter] = cycle(SizedIter { current: 0, max: 3 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    // Cycle of non-empty iter returns I64::MAX for lo (infinite)
+    assert(hint.0 > 1000000 as I64, "cycle(3): lo should be very large")
+    return 0
+}
+
+@test
+func test_cycle_size_hint_empty() -> I32 {
+    // cycle of empty iter: lo should be 0
+    let iter: Cycle[SizedIter] = cycle(SizedIter { current: 0, max: 0 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "cycle(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Inspect size_hint tests
+// ============================================================================
+
+@test
+func test_inspect_size_hint() -> I32 {
+    // inspect wrapping 5-element iter: lo should be 5 (passes through)
+    let iter: Inspect[SizedIter, func(ref I32)] = inspect(
+        SizedIter { current: 0, max: 5 },
+        do(x: ref I32) { }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "inspect(5): lo = 5")
+    return 0
+}
+
+@test
+func test_inspect_size_hint_empty() -> I32 {
+    let iter: Inspect[SizedIter, func(ref I32)] = inspect(
+        SizedIter { current: 0, max: 0 },
+        do(x: ref I32) { }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "inspect(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Map size_hint tests
+// ============================================================================
+
+@test
+func test_map_size_hint() -> I32 {
+    // map preserves size_hint from inner iterator
+    let iter: Map[SizedIter, func(I32) -> I32] = map(
+        SizedIter { current: 0, max: 8 },
+        do(x: I32) -> I32 { x * 2 }
+    )
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 8 as I64, "map(8): lo = 8")
+    return 0
+}
+
+// ============================================================================
+// Once size_hint tests
+// ============================================================================
+
+@test
+func test_once_size_hint_fresh() -> I32 {
+    let iter: Once[I32] = once(42)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 1 as I64, "once: lo = 1")
+    return 0
+}
+
+@test
+func test_once_size_hint_exhausted() -> I32 {
+    let mut iter: Once[I32] = once(42)
+    iter.next()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "once after next: lo = 0")
+    return 0
+}
+
+// ============================================================================
+// OnceWith size_hint tests
+// ============================================================================
+
+@test
+func test_once_with_size_hint_fresh() -> I32 {
+    let iter: OnceWith[func() -> I32] = once_with(do() -> I32 { 99 })
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 1 as I64, "once_with: lo = 1")
+    return 0
+}
+
+@test
+func test_once_with_size_hint_exhausted() -> I32 {
+    let mut iter: OnceWith[func() -> I32] = once_with(do() -> I32 { 99 })
+    iter.next()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "once_with after next: lo = 0")
+    return 0
+}
+
+// ============================================================================
+// RepeatN size_hint tests
+// ============================================================================
+
+@test
+func test_repeat_n_size_hint() -> I32 {
+    let iter: RepeatN[I32] = repeat_n(7, 5)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "repeat_n(5): lo = 5")
+    return 0
+}
+
+@test
+func test_repeat_n_size_hint_zero() -> I32 {
+    let iter: RepeatN[I32] = repeat_n(7, 0)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "repeat_n(0): lo = 0")
+    return 0
+}
+
+// ============================================================================
+// Legacy iterator size_hint tests (EmptyI32, OnceI32, RepeatNI32)
+// ============================================================================
+
+@test
+func test_empty_i32_size_hint() -> I32 {
+    let iter: EmptyI32 = empty_i32()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "empty_i32: lo = 0")
+    return 0
+}
+
+@test
+func test_once_i32_size_hint_fresh() -> I32 {
+    let iter: OnceI32 = once_i32(42)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 1 as I64, "once_i32: lo = 1")
+    return 0
+}
+
+@test
+func test_once_i32_size_hint_exhausted() -> I32 {
+    let mut iter: OnceI32 = once_i32(42)
+    iter.next()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "once_i32 after next: lo = 0")
+    return 0
+}
+
+@test
+func test_repeat_n_i32_size_hint() -> I32 {
+    let iter: RepeatNI32 = repeat_n_i32(99, 4)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 4 as I64, "repeat_n_i32(4): lo = 4")
     return 0
 }
