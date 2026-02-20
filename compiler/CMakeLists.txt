@@ -200,7 +200,7 @@ set(TML_RUNTIME_SOURCES
     # collections/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c
     # math/
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/math/math.c
+    # math.c deleted (Phase 32) — all functions migrated to inline LLVM IR
     # time/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time/time.c
     # concurrency/

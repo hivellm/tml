@@ -157,46 +157,19 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @print_bool(i32)");
     emit_line("");
 
-    emit_line("; Black box (prevent optimization)");
-    emit_line("declare i32 @black_box_i32(i32)");
-    emit_line("declare i64 @black_box_i64(i64)");
-    emit_line("declare double @black_box_f64(double)");
-    emit_line("; SIMD operations (auto-vectorized)");
-    emit_line("declare i64 @simd_sum_i32(ptr, i64)");
-    emit_line("declare double @simd_sum_f64(ptr, i64)");
-    emit_line("declare double @simd_dot_f64(ptr, ptr, i64)");
-    emit_line("");
-
-    // Float functions
-    emit_line("; Float functions");
-    emit_line("declare ptr @float_to_fixed(double, i32)");
+    // Float functions still in essential.c (keep as declare)
+    emit_line("; Float functions (essential.c)");
     emit_line("declare ptr @float_to_precision(double, i32)");
-    emit_line("declare ptr @float_to_string(double)");
-    emit_line("declare ptr @f64_to_string(double)"); // F64.to_string() method
-    emit_line("declare ptr @f32_to_string(float)");  // F32.to_string() method
     emit_line("declare ptr @float_to_exp(double, i32)");
-    emit_line("declare ptr @f64_to_string_precision(double, i64)");
-    emit_line("declare ptr @f32_to_string_precision(float, i64)");
-    emit_line("declare ptr @f64_to_exp_string(double, i32)");
-    emit_line("declare ptr @f32_to_exp_string(float, i32)");
     emit_line("");
 
-    // Integer/bool to_string — now defined as inline IR below (Phase 31)
-    // (see define @i32_to_string, @i64_to_string, @bool_to_string in string utilities section)
-
-    // Integer formatting (binary, octal, hex)
-    emit_line("; Integer formatting");
-    emit_line("declare ptr @i64_to_binary_str(i64)");
-    emit_line("declare ptr @i64_to_octal_str(i64)");
-    emit_line("declare ptr @i64_to_lower_hex_str(i64)");
-    emit_line("declare ptr @i64_to_upper_hex_str(i64)");
-    emit_line("");
-
-    // Nextafter runtime
-    emit_line("; Nextafter runtime");
+    // Nextafter from libm (keep as declare)
+    emit_line("; Nextafter (libm)");
     emit_line("declare double @nextafter(double, double)");
-    emit_line("declare float @nextafter32(float, float)");
     emit_line("");
+
+    // Integer/bool to_string — defined as inline IR below (Phase 31)
+    // (see define @i32_to_string, @i64_to_string, @bool_to_string in string utilities section)
 
     // --- On-demand runtime declares ---
     // Compute which optional categories are needed based on imports.
@@ -460,6 +433,417 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("}");
     emit_line("");
 
+    // ========================================================================
+    // Math utilities — inline LLVM IR implementations (Phase 32)
+    // These replace the previous C runtime declarations from math.c.
+    // ========================================================================
+
+    // --- Black box: prevent optimization using inline asm side-effect ---
+    emit_line("; Black box (inline IR — Phase 32)");
+    emit_line("define internal i32 @black_box_i32(i32 %val) noinline {");
+    emit_line("entry:");
+    emit_line("  call void asm sideeffect \"\", \"r\"(i32 %val)");
+    emit_line("  ret i32 %val");
+    emit_line("}");
+    emit_line("define internal i64 @black_box_i64(i64 %val) noinline {");
+    emit_line("entry:");
+    emit_line("  call void asm sideeffect \"\", \"r\"(i64 %val)");
+    emit_line("  ret i64 %val");
+    emit_line("}");
+    emit_line("define internal double @black_box_f64(double %val) noinline {");
+    emit_line("entry:");
+    emit_line("  call void asm sideeffect \"\", \"r\"(double %val)");
+    emit_line("  ret double %val");
+    emit_line("}");
+    emit_line("");
+
+    // --- SIMD operations (auto-vectorizable loops) ---
+    emit_line("; SIMD operations (inline IR — Phase 32)");
+
+    // simd_sum_i32: sum of i32 array into i64
+    emit_line("define internal i64 @simd_sum_i32(ptr %arr, i64 %len) {");
+    emit_line("entry:");
+    emit_line("  %empty = icmp sle i64 %len, 0");
+    emit_line("  br i1 %empty, label %done, label %loop");
+    emit_line("loop:");
+    emit_line("  %i = phi i64 [ 0, %entry ], [ %i_next, %loop ]");
+    emit_line("  %sum = phi i64 [ 0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  %ptr = getelementptr i32, ptr %arr, i64 %i");
+    emit_line("  %elem = load i32, ptr %ptr");
+    emit_line("  %ext = sext i32 %elem to i64");
+    emit_line("  %sum_next = add i64 %sum, %ext");
+    emit_line("  %i_next = add i64 %i, 1");
+    emit_line("  %cond = icmp slt i64 %i_next, %len");
+    emit_line("  br i1 %cond, label %loop, label %done");
+    emit_line("done:");
+    emit_line("  %result = phi i64 [ 0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  ret i64 %result");
+    emit_line("}");
+    emit_line("");
+
+    // simd_sum_f64: sum of f64 array
+    emit_line("define internal double @simd_sum_f64(ptr %arr, i64 %len) {");
+    emit_line("entry:");
+    emit_line("  %empty = icmp sle i64 %len, 0");
+    emit_line("  br i1 %empty, label %done, label %loop");
+    emit_line("loop:");
+    emit_line("  %i = phi i64 [ 0, %entry ], [ %i_next, %loop ]");
+    emit_line("  %sum = phi double [ 0.0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  %ptr = getelementptr double, ptr %arr, i64 %i");
+    emit_line("  %elem = load double, ptr %ptr");
+    emit_line("  %sum_next = fadd double %sum, %elem");
+    emit_line("  %i_next = add i64 %i, 1");
+    emit_line("  %cond = icmp slt i64 %i_next, %len");
+    emit_line("  br i1 %cond, label %loop, label %done");
+    emit_line("done:");
+    emit_line("  %result = phi double [ 0.0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  ret double %result");
+    emit_line("}");
+    emit_line("");
+
+    // simd_dot_f64: dot product of two f64 arrays
+    emit_line("define internal double @simd_dot_f64(ptr %a, ptr %b, i64 %len) {");
+    emit_line("entry:");
+    emit_line("  %empty = icmp sle i64 %len, 0");
+    emit_line("  br i1 %empty, label %done, label %loop");
+    emit_line("loop:");
+    emit_line("  %i = phi i64 [ 0, %entry ], [ %i_next, %loop ]");
+    emit_line("  %sum = phi double [ 0.0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  %pa = getelementptr double, ptr %a, i64 %i");
+    emit_line("  %pb = getelementptr double, ptr %b, i64 %i");
+    emit_line("  %ea = load double, ptr %pa");
+    emit_line("  %eb = load double, ptr %pb");
+    emit_line("  %prod = fmul double %ea, %eb");
+    emit_line("  %sum_next = fadd double %sum, %prod");
+    emit_line("  %i_next = add i64 %i, 1");
+    emit_line("  %cond = icmp slt i64 %i_next, %len");
+    emit_line("  br i1 %cond, label %loop, label %done");
+    emit_line("done:");
+    emit_line("  %result = phi double [ 0.0, %entry ], [ %sum_next, %loop ]");
+    emit_line("  ret double %result");
+    emit_line("}");
+    emit_line("");
+
+    // --- Float formatting (snprintf-based) ---
+    emit_line("; Float formatting (inline IR — Phase 32)");
+
+    // Format string constants for float formatting
+    emit_line("@.fmt.star_f = private constant [5 x i8] c\"%.*f\\00\"");
+    emit_line("@.fmt.lower_e = private constant [3 x i8] c\"%e\\00\"");
+    emit_line("@.fmt.upper_E = private constant [3 x i8] c\"%E\\00\"");
+
+    // float_to_fixed(double, i32): format with %.*f, clamp decimals to 0..20
+    emit_line("define internal ptr @float_to_fixed(double %val, i32 %decimals) {");
+    emit_line("entry:");
+    emit_line("  %neg = icmp slt i32 %decimals, 0");
+    emit_line("  %d1 = select i1 %neg, i32 0, i32 %decimals");
+    emit_line("  %over = icmp sgt i32 %d1, 20");
+    emit_line("  %d2 = select i1 %over, i32 20, i32 %d1");
+    emit_line("  %buf = call ptr @malloc(i64 64)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 64, ptr "
+              "@.fmt.star_f, i32 %d2, double %val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // float_to_string(double): format with %g
+    emit_line("define internal ptr @float_to_string(double %val) {");
+    emit_line("entry:");
+    emit_line("  %buf = call ptr @malloc(i64 32)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.g, "
+              "double %val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // f64_to_string(double): alias to float_to_string
+    emit_line("define internal ptr @f64_to_string(double %val) {");
+    emit_line("entry:");
+    emit_line("  %result = call ptr @float_to_string(double %val)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // f32_to_string(float): fpext to double, delegate to float_to_string
+    emit_line("define internal ptr @f32_to_string(float %val) {");
+    emit_line("entry:");
+    emit_line("  %ext = fpext float %val to double");
+    emit_line("  %result = call ptr @float_to_string(double %ext)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // f64_to_string_precision(double, i64): format with %.*f, clamp precision 0..20
+    emit_line("define internal ptr @f64_to_string_precision(double %val, i64 %prec) {");
+    emit_line("entry:");
+    emit_line("  %neg = icmp slt i64 %prec, 0");
+    emit_line("  %p1 = select i1 %neg, i64 0, i64 %prec");
+    emit_line("  %over = icmp sgt i64 %p1, 20");
+    emit_line("  %p2 = select i1 %over, i64 20, i64 %p1");
+    emit_line("  %p2_i32 = trunc i64 %p2 to i32");
+    emit_line("  %buf = call ptr @malloc(i64 64)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 64, ptr "
+              "@.fmt.star_f, i32 %p2_i32, double %val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // f32_to_string_precision(float, i64): fpext, delegate
+    emit_line("define internal ptr @f32_to_string_precision(float %val, i64 %prec) {");
+    emit_line("entry:");
+    emit_line("  %ext = fpext float %val to double");
+    emit_line("  %result = call ptr @f64_to_string_precision(double %ext, i64 %prec)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // f64_to_exp_string(double, i32): format with %e or %E
+    emit_line("define internal ptr @f64_to_exp_string(double %val, i32 %uppercase) {");
+    emit_line("entry:");
+    emit_line("  %is_upper = icmp ne i32 %uppercase, 0");
+    emit_line("  %fmt = select i1 %is_upper, ptr @.fmt.upper_E, ptr @.fmt.lower_e");
+    emit_line("  %buf = call ptr @malloc(i64 32)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr %fmt, "
+              "double %val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // f32_to_exp_string(float, i32): fpext, delegate
+    emit_line("define internal ptr @f32_to_exp_string(float %val, i32 %uppercase) {");
+    emit_line("entry:");
+    emit_line("  %ext = fpext float %val to double");
+    emit_line("  %result = call ptr @f64_to_exp_string(double %ext, i32 %uppercase)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // --- Integer formatting (binary, octal, hex) ---
+    emit_line("; Integer formatting (inline IR — Phase 32)");
+
+    // Digit lookup tables
+    emit_line("@.hex.lower = private constant [16 x i8] "
+              "c\"0123456789abcdef\"");
+    emit_line("@.hex.upper = private constant [16 x i8] "
+              "c\"0123456789ABCDEF\"");
+
+    // i64_to_binary_str(i64): convert to binary with "0b" prefix
+    // Uses a 67-byte stack buffer (2 prefix + 64 bits + null), then malloc+memcpy
+    emit_line("define internal ptr @i64_to_binary_str(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %is_zero = icmp eq i64 %val, 0");
+    emit_line("  br i1 %is_zero, label %zero_case, label %loop_init");
+    emit_line("zero_case:");
+    emit_line("  %z = call ptr @malloc(i64 4)");
+    emit_line("  store i8 48, ptr %z"); // '0'
+    emit_line("  %z1 = getelementptr i8, ptr %z, i64 1");
+    emit_line("  store i8 98, ptr %z1"); // 'b'
+    emit_line("  %z2 = getelementptr i8, ptr %z, i64 2");
+    emit_line("  store i8 48, ptr %z2"); // '0'
+    emit_line("  %z3 = getelementptr i8, ptr %z, i64 3");
+    emit_line("  store i8 0, ptr %z3");
+    emit_line("  ret ptr %z");
+    emit_line("loop_init:");
+    emit_line("  %buf = alloca [67 x i8]");
+    emit_line("  br label %loop");
+    emit_line("loop:");
+    emit_line("  %uval = phi i64 [ %val, %loop_init ], [ %shifted, %loop ]");
+    emit_line("  %pos = phi i32 [ 66, %loop_init ], [ %pos_dec, %loop ]");
+    emit_line("  %bit = and i64 %uval, 1");
+    emit_line("  %digit = trunc i64 %bit to i8");
+    emit_line("  %ch = add i8 %digit, 48");
+    emit_line("  %pos_dec = sub i32 %pos, 1");
+    emit_line("  %pos_ext = sext i32 %pos_dec to i64");
+    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %pos_ext");
+    emit_line("  store i8 %ch, ptr %dst");
+    emit_line("  %shifted = lshr i64 %uval, 1");
+    emit_line("  %done = icmp eq i64 %shifted, 0");
+    emit_line("  br i1 %done, label %prefix, label %loop");
+    emit_line("prefix:");
+    emit_line("  %p1 = sub i32 %pos_dec, 1");
+    emit_line("  %p1_ext = sext i32 %p1 to i64");
+    emit_line("  %d1 = getelementptr i8, ptr %buf, i64 %p1_ext");
+    emit_line("  store i8 98, ptr %d1"); // 'b'
+    emit_line("  %p0 = sub i32 %p1, 1");
+    emit_line("  %p0_ext = sext i32 %p0 to i64");
+    emit_line("  %d0 = getelementptr i8, ptr %buf, i64 %p0_ext");
+    emit_line("  store i8 48, ptr %d0"); // '0'
+    // null terminate at position 66
+    emit_line("  %end = getelementptr i8, ptr %buf, i64 66");
+    emit_line("  store i8 0, ptr %end");
+    // compute length and malloc+memcpy
+    emit_line("  %start = sext i32 %p0 to i64");
+    emit_line("  %len = sub i64 67, %start");
+    emit_line("  %out = call ptr @malloc(i64 %len)");
+    emit_line("  %src = getelementptr i8, ptr %buf, i64 %start");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %out, ptr %src, i64 %len, i1 false)");
+    emit_line("  ret ptr %out");
+    emit_line("}");
+    emit_line("");
+
+    // i64_to_octal_str(i64): convert to octal with "0o" prefix
+    emit_line("define internal ptr @i64_to_octal_str(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %is_zero = icmp eq i64 %val, 0");
+    emit_line("  br i1 %is_zero, label %zero_case, label %loop_init");
+    emit_line("zero_case:");
+    emit_line("  %z = call ptr @malloc(i64 4)");
+    emit_line("  store i8 48, ptr %z"); // '0'
+    emit_line("  %z1 = getelementptr i8, ptr %z, i64 1");
+    emit_line("  store i8 111, ptr %z1"); // 'o'
+    emit_line("  %z2 = getelementptr i8, ptr %z, i64 2");
+    emit_line("  store i8 48, ptr %z2"); // '0'
+    emit_line("  %z3 = getelementptr i8, ptr %z, i64 3");
+    emit_line("  store i8 0, ptr %z3");
+    emit_line("  ret ptr %z");
+    emit_line("loop_init:");
+    emit_line("  %buf = alloca [25 x i8]");
+    emit_line("  br label %loop");
+    emit_line("loop:");
+    emit_line("  %uval = phi i64 [ %val, %loop_init ], [ %shifted, %loop ]");
+    emit_line("  %pos = phi i32 [ 24, %loop_init ], [ %pos_dec, %loop ]");
+    emit_line("  %oct = and i64 %uval, 7");
+    emit_line("  %digit = trunc i64 %oct to i8");
+    emit_line("  %ch = add i8 %digit, 48");
+    emit_line("  %pos_dec = sub i32 %pos, 1");
+    emit_line("  %pos_ext = sext i32 %pos_dec to i64");
+    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %pos_ext");
+    emit_line("  store i8 %ch, ptr %dst");
+    emit_line("  %shifted = lshr i64 %uval, 3");
+    emit_line("  %done = icmp eq i64 %shifted, 0");
+    emit_line("  br i1 %done, label %prefix, label %loop");
+    emit_line("prefix:");
+    emit_line("  %p1 = sub i32 %pos_dec, 1");
+    emit_line("  %p1_ext = sext i32 %p1 to i64");
+    emit_line("  %d1 = getelementptr i8, ptr %buf, i64 %p1_ext");
+    emit_line("  store i8 111, ptr %d1"); // 'o'
+    emit_line("  %p0 = sub i32 %p1, 1");
+    emit_line("  %p0_ext = sext i32 %p0 to i64");
+    emit_line("  %d0 = getelementptr i8, ptr %buf, i64 %p0_ext");
+    emit_line("  store i8 48, ptr %d0"); // '0'
+    emit_line("  %end = getelementptr i8, ptr %buf, i64 24");
+    emit_line("  store i8 0, ptr %end");
+    emit_line("  %start = sext i32 %p0 to i64");
+    emit_line("  %len = sub i64 25, %start");
+    emit_line("  %out = call ptr @malloc(i64 %len)");
+    emit_line("  %src = getelementptr i8, ptr %buf, i64 %start");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %out, ptr %src, i64 %len, i1 false)");
+    emit_line("  ret ptr %out");
+    emit_line("}");
+    emit_line("");
+
+    // i64_to_lower_hex_str(i64): convert to hex with "0x" prefix, lowercase
+    emit_line("define internal ptr @i64_to_lower_hex_str(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %is_zero = icmp eq i64 %val, 0");
+    emit_line("  br i1 %is_zero, label %zero_case, label %loop_init");
+    emit_line("zero_case:");
+    emit_line("  %z = call ptr @malloc(i64 4)");
+    emit_line("  store i8 48, ptr %z"); // '0'
+    emit_line("  %z1 = getelementptr i8, ptr %z, i64 1");
+    emit_line("  store i8 120, ptr %z1"); // 'x'
+    emit_line("  %z2 = getelementptr i8, ptr %z, i64 2");
+    emit_line("  store i8 48, ptr %z2"); // '0'
+    emit_line("  %z3 = getelementptr i8, ptr %z, i64 3");
+    emit_line("  store i8 0, ptr %z3");
+    emit_line("  ret ptr %z");
+    emit_line("loop_init:");
+    emit_line("  %buf = alloca [19 x i8]");
+    emit_line("  br label %loop");
+    emit_line("loop:");
+    emit_line("  %uval = phi i64 [ %val, %loop_init ], [ %shifted, %loop ]");
+    emit_line("  %pos = phi i32 [ 18, %loop_init ], [ %pos_dec, %loop ]");
+    emit_line("  %nib = and i64 %uval, 15");
+    emit_line("  %ch_ptr = getelementptr [16 x i8], ptr @.hex.lower, i64 0, i64 %nib");
+    emit_line("  %ch = load i8, ptr %ch_ptr");
+    emit_line("  %pos_dec = sub i32 %pos, 1");
+    emit_line("  %pos_ext = sext i32 %pos_dec to i64");
+    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %pos_ext");
+    emit_line("  store i8 %ch, ptr %dst");
+    emit_line("  %shifted = lshr i64 %uval, 4");
+    emit_line("  %done = icmp eq i64 %shifted, 0");
+    emit_line("  br i1 %done, label %prefix, label %loop");
+    emit_line("prefix:");
+    emit_line("  %p1 = sub i32 %pos_dec, 1");
+    emit_line("  %p1_ext = sext i32 %p1 to i64");
+    emit_line("  %d1 = getelementptr i8, ptr %buf, i64 %p1_ext");
+    emit_line("  store i8 120, ptr %d1"); // 'x'
+    emit_line("  %p0 = sub i32 %p1, 1");
+    emit_line("  %p0_ext = sext i32 %p0 to i64");
+    emit_line("  %d0 = getelementptr i8, ptr %buf, i64 %p0_ext");
+    emit_line("  store i8 48, ptr %d0"); // '0'
+    emit_line("  %end = getelementptr i8, ptr %buf, i64 18");
+    emit_line("  store i8 0, ptr %end");
+    emit_line("  %start = sext i32 %p0 to i64");
+    emit_line("  %len = sub i64 19, %start");
+    emit_line("  %out = call ptr @malloc(i64 %len)");
+    emit_line("  %src = getelementptr i8, ptr %buf, i64 %start");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %out, ptr %src, i64 %len, i1 false)");
+    emit_line("  ret ptr %out");
+    emit_line("}");
+    emit_line("");
+
+    // i64_to_upper_hex_str(i64): same as lower but uppercase
+    emit_line("define internal ptr @i64_to_upper_hex_str(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %is_zero = icmp eq i64 %val, 0");
+    emit_line("  br i1 %is_zero, label %zero_case, label %loop_init");
+    emit_line("zero_case:");
+    emit_line("  %z = call ptr @malloc(i64 4)");
+    emit_line("  store i8 48, ptr %z"); // '0'
+    emit_line("  %z1 = getelementptr i8, ptr %z, i64 1");
+    emit_line("  store i8 120, ptr %z1"); // 'x'
+    emit_line("  %z2 = getelementptr i8, ptr %z, i64 2");
+    emit_line("  store i8 48, ptr %z2"); // '0'
+    emit_line("  %z3 = getelementptr i8, ptr %z, i64 3");
+    emit_line("  store i8 0, ptr %z3");
+    emit_line("  ret ptr %z");
+    emit_line("loop_init:");
+    emit_line("  %buf = alloca [19 x i8]");
+    emit_line("  br label %loop");
+    emit_line("loop:");
+    emit_line("  %uval = phi i64 [ %val, %loop_init ], [ %shifted, %loop ]");
+    emit_line("  %pos = phi i32 [ 18, %loop_init ], [ %pos_dec, %loop ]");
+    emit_line("  %nib = and i64 %uval, 15");
+    emit_line("  %ch_ptr = getelementptr [16 x i8], ptr @.hex.upper, i64 0, i64 %nib");
+    emit_line("  %ch = load i8, ptr %ch_ptr");
+    emit_line("  %pos_dec = sub i32 %pos, 1");
+    emit_line("  %pos_ext = sext i32 %pos_dec to i64");
+    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %pos_ext");
+    emit_line("  store i8 %ch, ptr %dst");
+    emit_line("  %shifted = lshr i64 %uval, 4");
+    emit_line("  %done = icmp eq i64 %shifted, 0");
+    emit_line("  br i1 %done, label %prefix, label %loop");
+    emit_line("prefix:");
+    emit_line("  %p1 = sub i32 %pos_dec, 1");
+    emit_line("  %p1_ext = sext i32 %p1 to i64");
+    emit_line("  %d1 = getelementptr i8, ptr %buf, i64 %p1_ext");
+    emit_line("  store i8 120, ptr %d1"); // 'x'
+    emit_line("  %p0 = sub i32 %p1, 1");
+    emit_line("  %p0_ext = sext i32 %p0 to i64");
+    emit_line("  %d0 = getelementptr i8, ptr %buf, i64 %p0_ext");
+    emit_line("  store i8 48, ptr %d0"); // '0'
+    emit_line("  %end = getelementptr i8, ptr %buf, i64 18");
+    emit_line("  store i8 0, ptr %end");
+    emit_line("  %start = sext i32 %p0 to i64");
+    emit_line("  %len = sub i64 19, %start");
+    emit_line("  %out = call ptr @malloc(i64 %len)");
+    emit_line("  %src = getelementptr i8, ptr %buf, i64 %start");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %out, ptr %src, i64 %len, i1 false)");
+    emit_line("  ret ptr %out");
+    emit_line("}");
+    emit_line("");
+
+    // --- nextafter32: call nextafterf from libm ---
+    emit_line("; Nextafter32 (inline IR — Phase 32)");
+    emit_line("declare float @nextafterf(float, float)");
+    emit_line("define internal float @nextafter32(float %x, float %y) {");
+    emit_line("entry:");
+    emit_line("  %result = call float @nextafterf(float %x, float %y)");
+    emit_line("  ret float %result");
+    emit_line("}");
+    emit_line("");
+
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");
 
@@ -490,6 +874,17 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@f64_to_exp_string", "ptr (double, i32)", "ptr", {"double", "i32"}};
     functions_["f32_to_exp_string"] =
         FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
+
+    // Register math runtime functions for lowlevel calls (Phase 32)
+    functions_["float_to_fixed"] =
+        FuncInfo{"@float_to_fixed", "ptr (double, i32)", "ptr", {"double", "i32"}};
+    functions_["float_to_string"] = FuncInfo{"@float_to_string", "ptr (double)", "ptr", {"double"}};
+    functions_["i64_to_binary_str"] = FuncInfo{"@i64_to_binary_str", "ptr (i64)", "ptr", {"i64"}};
+    functions_["i64_to_octal_str"] = FuncInfo{"@i64_to_octal_str", "ptr (i64)", "ptr", {"i64"}};
+    functions_["i64_to_lower_hex_str"] =
+        FuncInfo{"@i64_to_lower_hex_str", "ptr (i64)", "ptr", {"i64"}};
+    functions_["i64_to_upper_hex_str"] =
+        FuncInfo{"@i64_to_upper_hex_str", "ptr (i64)", "ptr", {"i64"}};
 
     // Memory functions (matches runtime/mem.c)
     emit_line("; Memory functions");

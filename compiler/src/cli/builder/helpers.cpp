@@ -661,14 +661,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
             // async.c removed — async executor dead code (Phase 30)
 
-            // math/ - math.c
-            fs::path math_c = runtime_dir / "math" / "math.c";
-            if (fs::exists(math_c)) {
-                std::string math_obj = ensure_c_compiled(to_forward_slashes(math_c.string()),
-                                                         deps_cache, clang, verbose);
-                objects.push_back(fs::path(math_obj));
-                TML_LOG_DEBUG("build", "Including math runtime: " << math_obj);
-            }
+            // math.c removed — all functions migrated to inline LLVM IR (Phase 32)
 
             // text.c removed — Text migrated to pure TML (Phase 30)
 
