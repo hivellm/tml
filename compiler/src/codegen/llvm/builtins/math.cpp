@@ -69,47 +69,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0.0";
     }
 
-    // ============ SIMD OPERATIONS ============
-
-    // simd_sum_i32(arr: ptr, len: I64) -> I64
-    if (fn_name == "simd_sum_i32") {
-        if (call.args.size() >= 2) {
-            std::string arr = gen_expr(*call.args[0]);
-            std::string len = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @simd_sum_i32(ptr " + arr + ", i64 " + len +
-                      ")");
-            return result;
-        }
-        return "0";
-    }
-
-    // simd_sum_f64(arr: ptr, len: I64) -> F64
-    if (fn_name == "simd_sum_f64") {
-        if (call.args.size() >= 2) {
-            std::string arr = gen_expr(*call.args[0]);
-            std::string len = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @simd_sum_f64(ptr " + arr + ", i64 " + len +
-                      ")");
-            return result;
-        }
-        return "0.0";
-    }
-
-    // simd_dot_f64(a: ptr, b: ptr, len: I64) -> F64
-    if (fn_name == "simd_dot_f64") {
-        if (call.args.size() >= 3) {
-            std::string a = gen_expr(*call.args[0]);
-            std::string b = gen_expr(*call.args[1]);
-            std::string len = gen_expr(*call.args[2]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @simd_dot_f64(ptr " + a + ", ptr " + b +
-                      ", i64 " + len + ")");
-            return result;
-        }
-        return "0.0";
-    }
+    // SIMD operations (simd_sum_i32, simd_sum_f64, simd_dot_f64) — dispatched
+    // through TML implementations in std::math::simd (Phase 33: removed hardcoded codegen)
 
     // ============ FLOAT NEGATION ============
 

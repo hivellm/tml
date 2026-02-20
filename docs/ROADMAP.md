@@ -1,7 +1,7 @@
 # TML Roadmap
 
 **Last updated**: 2026-02-19
-**Current state**: Compiler functional, 76.2% library coverage, 9,010+ tests passing
+**Current state**: Compiler functional, 76.2% library coverage, 9,045+ tests passing
 
 ---
 
@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, collections.c cleaned✓; runtime: 17 compiled .c files, 3 migration candidates)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓; runtime: 16 compiled .c files, 2 migration candidates; next: inline IR→pure TML)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -32,13 +32,14 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Metric | Value |
 |--------|-------|
 | Library function coverage | 76.2% (3,228/4,235) |
-| Tests passing | 9,010 across 784 files |
+| Tests passing | 9,045+ across 790+ files |
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime compiled | 17 files (14 essential FFI + 3 migration candidates: collections.c, math.c, search.c) |
-| C runtime to migrate | ~836 lines in 3 files (collections.c ~70, math.c ~236, search.c ~500) |
-| Dead C files on disk | 0 (7 deleted in Phases 30-31: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c) |
+| C runtime compiled | 16 files (14 essential FFI + 2 migration candidates: collections.c, search.c) |
+| C runtime to migrate | ~168 lines in 2 files (collections.c ~70, search.c ~98) |
+| Dead C files on disk | 0 (8 deleted in Phases 30-32: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c, math.c) |
+| Inline IR in runtime.cpp | 28 functions (~540 lines) — 9 string (Phase 31) + 19 math (Phase 32); migration target → pure TML |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -437,9 +438,14 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 ## Phase 4: Migrate C Runtime to Pure TML + Eliminate Hardcoded Codegen
 
-**Goal**: Eliminate ~5,210 lines of C runtime code AND ~3,300 lines of hardcoded dispatch in the compiler
+**Goal**: Eliminate all non-essential C/C++ runtime code, replacing with pure TML (`lowlevel` + `core::intrinsics`) or `@extern("c")` FFI wherever possible
 **Priority**: MEDIUM — architectural cleanup, prerequisite for self-hosting
 **Tracking**: [migrate-runtime-to-tml/tasks.md](../rulebook/tasks/migrate-runtime-to-tml/tasks.md)
+
+**Migration hierarchy** (always prefer Tier 1):
+1. **Pure TML** — `lowlevel` blocks + `core::intrinsics` (ptr_read/write/offset, llvm_add/sub/mul/and/or/shl/shr, mem_alloc, copy_nonoverlapping, cast, transmute)
+2. **TML + @extern("c") FFI** — for libc/OS functions (snprintf, nextafterf, opendir)
+3. **Inline LLVM IR** — only when TML has no equivalent (asm sideeffect for black_box)
 
 ### Progress (2026-02-18)
 
@@ -475,27 +481,51 @@ Full audit of all ~287 `declare` statements in `runtime.cpp` cross-referenced ag
 
 ### Architecture Target
 
-```
-KEEP FOREVER (essential):                   MIGRATE to pure TML / @extern / LLVM intrinsics:
-  - LLVM intrinsics (7)                      - Char classification (14) → pure TML dispatch
-  - C stdlib (printf, malloc, free) (5)      - Char-to-string + UTF-8 (4) → pure TML
-  - Essential runtime (panic, print) (4)     - String ops (34 str_*) → TML impl dispatch
-  - Memory (mem_alloc, mem_free, etc.) (10)  - StringBuilder (9) → pure TML or remove
-  - Coverage/debug (conditional)             - Text type (51 tml_text_*) → TML struct
-  - Panic catching + backtrace (4)           - Float math (16) → LLVM intrinsics
-  - Format string constants                  - Threading/sync/channel (32) → @extern FFI
-  - Log runtime (12, I/O)                    - Time/pool (20) → @extern FFI
-  - Glob runtime (5, FFI)                    - Dead declarations (29) → DELETE
-  - Float-to-string (8, snprintf)
-  - nextafter (2, no intrinsic)
-  - tml_random_seed (1, OS random)
+**Strategy**: Three-tier migration hierarchy, always preferring pure TML:
 
-                                            ALREADY DONE:
-                                              - Collections (List/HashMap/Buffer) ✓
-TOTAL KEEP: ~68 declares                      - String algorithms (str.tml) ✓
-TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
-                                              - File/Path/Dir ✓
-                                              - Dead functions_[] entries ✓
+```
+Tier 1 — PURE TML (lowlevel + intrinsics)     Best: self-hosting ready, no C dependency
+  Uses: ptr_read/ptr_write/ptr_offset, llvm_add/sub/mul/div/rem,
+        llvm_and/or/xor/shl/shr, mem_alloc/mem_free, copy_nonoverlapping,
+        cast[T,U], transmute, size_of[T], sqrt/sin/cos/floor/ceil/round/fabs
+
+Tier 2 — TML + @extern("c") FFI               Good: TML logic + external library calls
+  Uses: @extern("c") func snprintf(...), @extern("c") func nextafterf(...),
+        @extern("c") func opendir(...), etc.
+
+Tier 3 — Inline IR in runtime.cpp              Last resort: asm sideeffect, bootstrap code
+  Uses: define internal ... { asm sideeffect }  (no TML equivalent)
+```
+
+```
+KEEP FOREVER (essential C runtime):             MIGRATE → pure TML (lowlevel + intrinsics):
+  - LLVM intrinsics (7)                          Phase 33 — Group A (12 functions, pure TML):
+  - C stdlib (printf, malloc, free) (5)            simd_sum_i32/f64, simd_dot_f64
+  - Essential runtime (panic, print) (4)           i64_to_binary/octal/lower_hex/upper_hex_str
+  - Memory (mem_alloc, mem_free, etc.) (10)        str_hash (FNV-1a), str_eq, str_concat_opt
+  - Coverage/debug (conditional)                   i64_to_str, i32/i64_to_string, bool_to_string
+  - Panic catching + backtrace (4)
+  - Format string constants                      Phase 33 — Group B (6 functions, TML + @extern):
+  - Log runtime (12, I/O)                          float_to_fixed, float_to_string, f64_to_string
+  - tml_random_seed (1, OS random)                 f64/f32_to_string_precision, f64/f32_to_exp_string
+                                                   nextafter32, f32_to_string
+KEEP AS INLINE IR (no TML equivalent):
+  - black_box_i32/i64/f64 (asm sideeffect)      Phase 34 — Remaining C files:
+                                                   search.c (98 lines) → pure TML
+ALREADY DONE:                                      pool.c (344 lines) → pure TML
+  - Collections (List/HashMap/Buffer) ✓            collections.c (96 lines) → remove
+  - String algorithms (str.tml) ✓
+  - Integer formatting ✓                         Phase 35 — Glob:
+  - File/Path/Dir ✓                                glob.c pattern matching → pure TML + @extern FFI
+  - Dead functions_[] entries ✓
+  - Char classification → pure TML ✓            ESSENTIAL FFI (must stay C):
+  - StringBuilder → removed ✓                     essential.c, mem.c, time.c, sync.c, os.c,
+  - Text type → pure TML struct ✓                  net.c, dns.c, tls.c, backtrace.c, log.c,
+  - Float math → LLVM intrinsics ✓                crypto*.c (7 files), zlib*.c (4 files), file.c
+  - Threading/sync → @extern FFI ✓
+  - Time → @extern FFI ✓
+  - string.c → inline IR (Phase 31) ✓
+  - math.c → inline IR (Phase 32) ✓
 ```
 
 ### 4.1 Collections — List[T] (DONE)
@@ -701,21 +731,97 @@ Replaced all C runtime string functions with inline LLVM IR `define` blocks in `
 - [x] 4.21.14 Fix bare `str_len()` calls in `test/assertions/mod.tml` → `s.len()` (pre-existing bug)
 - [x] 4.21.15 Fix bare `str_eq()` calls in `core/cache.tml` → `==` operator (pre-existing bug)
 
+### 4.22 Migrate math.c to inline LLVM IR (Phase 32) — DONE
+
+Replaced all 20 C functions in `math.c` with `define internal` inline IR blocks in `runtime.cpp`, using the same pattern as Phase 31 (string.c). Deleted `math.c` (279 lines).
+
+- [x] 4.22.1 Replace black_box_i32/i64/f64 with inline asm sideeffect barrier
+- [x] 4.22.2 Replace simd_sum_i32/f64 and simd_dot_f64 with loop-based IR (phi nodes)
+- [x] 4.22.3 Replace float_to_fixed/float_to_string/f64_to_string with snprintf-based IR
+- [x] 4.22.4 Replace f32/f64_to_string_precision and f32/f64_to_exp_string with IR
+- [x] 4.22.5 Replace i64_to_binary/octal/lower_hex/upper_hex_str with bit-manipulation loop IR
+- [x] 4.22.6 Replace nextafter32 with direct call to nextafterf from libm
+- [x] 4.22.7 Delete math.c, remove from CMakeLists.txt and helpers.cpp
+- [x] 4.22.8 All tests pass (9,045+)
+
+### 4.23 Inline IR → pure TML with `lowlevel` + intrinsics (Phase 33) — PLANNED
+
+**Goal**: Migrate algorithmic inline IR functions from `runtime.cpp` to pure TML library code using `lowlevel` blocks and `core::intrinsics`. This eliminates C-level code entirely for these operations, making them self-hosting ready.
+
+**Strategy**: Instead of emitting IR in the C++ compiler, implement these algorithms in `.tml` files using:
+- `ptr_read`, `ptr_write`, `ptr_offset` — memory access
+- `llvm_add`, `llvm_sub`, `llvm_mul`, `llvm_div`, `llvm_rem` — arithmetic
+- `llvm_and`, `llvm_or`, `llvm_xor`, `llvm_shl`, `llvm_shr` — bitwise ops
+- `mem_alloc`, `mem_free` — heap allocation (via `@extern("c")`)
+- `copy_nonoverlapping` — memory copy
+- `cast[T, U]` — numeric type conversion
+- `transmute` — bit reinterpretation
+
+**Prerequisite**: Compiler must support auto-importing these functions when called from `lowlevel` blocks, OR they must be registered in `functions_[]` map manually.
+
+**Group A — Pure TML (no external dependencies):**
+- [ ] 4.23.1 Migrate `simd_sum_i32(ptr, len)` → pure TML loop with `ptr_read` + `ptr_offset`
+- [ ] 4.23.2 Migrate `simd_sum_f64(ptr, len)` → pure TML loop with `ptr_read` + `ptr_offset`
+- [ ] 4.23.3 Migrate `simd_dot_f64(ptr, ptr, len)` → pure TML loop with `ptr_read` + `llvm_mul` + `llvm_add`
+- [ ] 4.23.4 Migrate `i64_to_binary_str` → pure TML with `llvm_and`, `llvm_shr`, `ptr_write`, `mem_alloc`
+- [ ] 4.23.5 Migrate `i64_to_octal_str` → pure TML with `llvm_and`, `llvm_shr`
+- [ ] 4.23.6 Migrate `i64_to_lower_hex_str` → pure TML with lookup table + `llvm_and`, `llvm_shr`
+- [ ] 4.23.7 Migrate `i64_to_upper_hex_str` → pure TML with lookup table
+- [ ] 4.23.8 Migrate `str_hash` (FNV-1a) → pure TML with `llvm_xor`, `llvm_mul`, `ptr_read`
+- [ ] 4.23.9 Migrate `str_eq` → pure TML with `ptr_read` byte comparison loop
+- [ ] 4.23.10 Migrate `str_concat_opt` → pure TML with `mem_alloc`, `copy_nonoverlapping`
+- [ ] 4.23.11 Migrate `i64_to_str` / `i32_to_string` / `i64_to_string` → pure TML digit extraction
+- [ ] 4.23.12 Migrate `bool_to_string` → pure TML (trivial select)
+
+**Group B — Require libc FFI (snprintf, nextafterf):**
+- [ ] 4.23.13 Migrate `float_to_fixed` → TML with `@extern("c") snprintf` + `mem_alloc`
+- [ ] 4.23.14 Migrate `float_to_string` / `f64_to_string` → TML with `@extern("c") snprintf`
+- [ ] 4.23.15 Migrate `f64/f32_to_string_precision` → TML with `@extern("c") snprintf`
+- [ ] 4.23.16 Migrate `f64/f32_to_exp_string` → TML with `@extern("c") snprintf`
+- [ ] 4.23.17 Migrate `f32_to_string` → pure TML (fpext + delegate to f64)
+- [ ] 4.23.18 Migrate `nextafter32` → TML with `@extern("c") nextafterf`
+
+**Group C — Must stay as inline IR (no TML equivalent):**
+- black_box_i32/i64/f64 — require `asm sideeffect` which has no TML intrinsic
+- `f64_to_str` used by essential print formatting — chicken-and-egg with runtime init
+
+### 4.24 Migrate remaining C runtime to pure TML (Phase 34) — PLANNED
+
+**Goal**: Migrate the last 2 algorithmic C files to pure TML.
+
+- [ ] 4.24.1 Migrate `search.c` (~98 lines) → pure TML: dot product, cosine similarity, euclidean distance, vector normalization using `llvm_mul`, `llvm_add`, `sqrt` intrinsics
+- [ ] 4.24.2 Migrate `pool.c` (~344 lines) → pure TML: object pool using `mem_alloc`, `mem_free`, `ptr_read`, `ptr_write`
+- [ ] 4.24.3 Migrate `collections.c` (~96 lines) → remove entirely when crypto C runtime is rewritten as `@extern("c")` FFI bindings
+
+### 4.25 Migrate glob.c pattern matching to pure TML (Phase 35) — PLANNED
+
+- [ ] 4.25.1 Migrate glob pattern matching logic from `glob.c` (~700 lines) → pure TML with `@extern("c")` for directory API (opendir/FindFirstFile)
+
 ### Expected impact
 
 | Metric | Before | Current | Target | Notes |
 |--------|--------|---------|--------|-------|
-| runtime.cpp declares | 393 | 106 (81 effective) | ~68 | -271 declares via Phases 17-27; 25 on-demand (Phase 28); 16 declares→defines (Phase 31) |
-| C runtime (compiled) | 20 files | 17 files | 14 | 6 dead files deleted (Phase 30); string.c deleted (Phase 31); 3 migration candidates remain |
-| C runtime (on disk) | 29 files | 20 files | 14 | 9 dead/migrated files deleted; 5 uncompiled crypto extensions kept |
+| runtime.cpp declares | 393 | 87 (62 effective) | ~55 | -271 via Phases 17-27; 25 on-demand (Phase 28); 16 declares→defines (Phase 31); 19 declares→defines (Phase 32) |
+| runtime.cpp inline IR | 0 | 28 functions (~540 lines) | 3 | Phase 31: 9 string, Phase 32: 19 math; target: migrate 25 to pure TML (Phase 33), keep 3 black_box |
+| C runtime (compiled) | 20 files | 16 files | 14 | 8 files deleted (Phases 30-32); 2 migration candidates remain (collections.c, search.c) |
+| C runtime (on disk) | 29 files | 19 files | 14 | 10 dead/migrated files deleted; 5 uncompiled crypto extensions kept |
 | Dead C on disk | ~4,450 lines | 0 lines | 0 | All dead code deleted ✓ |
 | Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char dispatch |
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 0 (string done) | 0 | Phase 29: 29 string FuncSig removed |
 
-**Progress**: Phases 0-7, 16-31 complete (29-30 partial). Phase 31: replaced 9 C string functions with inline LLVM IR defines in runtime.cpp, deleted string.c (516 lines), cleaned collections.c (160→70 lines, removed 12 unused list_* functions), removed 13 dead try_gen_builtin_string() entries, fixed pre-existing bare str_len()/str_eq() calls in TML library code.
-**Next actionable items**: Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark). Remaining C migration candidates: math.c (~236 lines, float_to_precision/float_to_exp), search.c (~500 lines), collections.c (~70 lines, list_get/list_len legacy fallback).
-**Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
+**Progress**: Phases 0-7, 16-32 complete (29-30 partial).
+- Phase 31: replaced 9 C string functions with inline IR, deleted string.c (516 lines)
+- Phase 32: replaced 20 C math functions with inline IR, deleted math.c (279 lines)
+- Total: 28 inline IR functions in runtime.cpp (intermediate step toward pure TML)
+
+**Next actionable items**:
+- **Phase 33**: Migrate 25 inline IR functions → pure TML using `lowlevel` + `core::intrinsics` (12 pure TML, 6 TML + @extern FFI, 7 already pure TML delegates). Only 3 `black_box` functions stay as inline IR (require `asm sideeffect`).
+- **Phase 34**: Migrate remaining C files (search.c, pool.c, collections.c) → pure TML
+- **Phase 35**: Migrate glob.c pattern matching → pure TML + @extern FFI
+- Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
+
+**Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only. Inline IR reduced to 3 black_box functions only.
 
 ---
 
@@ -921,12 +1027,12 @@ These can be worked on alongside the main phases without blocking or being block
 | 1. Codegen bugs | 43 | 43 | 100% | **COMPLETE** |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (76.2%) |
 | 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
-| 4. Runtime migration + codegen cleanup | 49 | 48 | 98% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, Text✓, Float math✓; Phases 18.2+24-30 remaining) |
+| 4. Runtime migration + codegen cleanup | 76 | 57 | 75% | IN PROGRESS — C files: 8 deleted, 2 remain; inline IR: 28 functions to migrate → pure TML (Phase 33); remaining C: search.c, pool.c, collections.c, glob.c (Phases 34-35) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 9 | 7 | 78% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **298** | **225** | **75.5%** | |
+| **TOTAL** | **325** | **232** | **71.4%** | |
 
 ---
 

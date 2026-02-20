@@ -224,6 +224,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             "core::str",
             "core::hash",
             "std::text",
+            "core::fmt::impls",
+            "core::fmt::helpers",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))
@@ -356,8 +358,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
         if (!will_process) {
             static const std::unordered_set<std::string> core_essential = {
-                "core::ordering",         "core::alloc", "core::option", "core::types",
-                "std::collections::List",
+                "core::ordering",         "core::alloc",      "core::option",       "core::types",
+                "std::collections::List", "core::fmt::impls", "core::fmt::helpers",
             };
             will_process = core_essential.count(module_name) > 0;
             // Conditionally add sync essential modules
@@ -510,6 +512,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     "std::collections::List",
                     "std::collections::buffer",
                     "std::text",
+                    "core::fmt::impls",
+                    "core::fmt::helpers",
                 };
                 should_process = core_essential_modules.count(module_name) > 0;
                 if (!should_process) {

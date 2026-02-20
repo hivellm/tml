@@ -931,114 +931,11 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return result;
     }
 
-    // fmt_binary() -> Str (Binary behavior)
-    if (method == "fmt_binary" && is_integer) {
-        emit_coverage("Binary::fmt_binary");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_binary");
-        // Extend/truncate receiver to i64 for the runtime call
-        std::string val64 = receiver;
-        if (llvm_ty != "i64") {
-            val64 = fresh_reg();
-            if (is_signed) {
-                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
-            } else {
-                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
-            }
-        }
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @i64_to_binary_str(i64 " + val64 + ")");
-        last_expr_type_ = "ptr";
-        return result;
-    }
+    // fmt_binary, fmt_octal, fmt_lower_hex, fmt_upper_hex — dispatched through
+    // TML behavior impls in core::fmt::impls (Phase 33: removed hardcoded codegen)
 
-    // fmt_octal() -> Str (Octal behavior)
-    if (method == "fmt_octal" && is_integer) {
-        emit_coverage("Octal::fmt_octal");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_octal");
-        std::string val64 = receiver;
-        if (llvm_ty != "i64") {
-            val64 = fresh_reg();
-            if (is_signed) {
-                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
-            } else {
-                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
-            }
-        }
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @i64_to_octal_str(i64 " + val64 + ")");
-        last_expr_type_ = "ptr";
-        return result;
-    }
-
-    // fmt_lower_hex() -> Str (LowerHex behavior)
-    if (method == "fmt_lower_hex" && is_integer) {
-        emit_coverage("LowerHex::fmt_lower_hex");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_lower_hex");
-        std::string val64 = receiver;
-        if (llvm_ty != "i64") {
-            val64 = fresh_reg();
-            if (is_signed) {
-                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
-            } else {
-                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
-            }
-        }
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @i64_to_lower_hex_str(i64 " + val64 + ")");
-        last_expr_type_ = "ptr";
-        return result;
-    }
-
-    // fmt_upper_hex() -> Str (UpperHex behavior)
-    if (method == "fmt_upper_hex" && is_integer) {
-        emit_coverage("UpperHex::fmt_upper_hex");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_upper_hex");
-        std::string val64 = receiver;
-        if (llvm_ty != "i64") {
-            val64 = fresh_reg();
-            if (is_signed) {
-                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
-            } else {
-                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
-            }
-        }
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @i64_to_upper_hex_str(i64 " + val64 + ")");
-        last_expr_type_ = "ptr";
-        return result;
-    }
-
-    // fmt_lower_exp() -> Str (LowerExp behavior) for floats
-    if (method == "fmt_lower_exp" && is_float) {
-        emit_coverage("LowerExp::fmt_lower_exp");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_lower_exp");
-        std::string result = fresh_reg();
-        if (kind == types::PrimitiveKind::F32) {
-            emit_line("  " + result + " = call ptr @f32_to_exp_string(float " + receiver +
-                      ", i32 0)");
-        } else {
-            emit_line("  " + result + " = call ptr @f64_to_exp_string(double " + receiver +
-                      ", i32 0)");
-        }
-        last_expr_type_ = "ptr";
-        return result;
-    }
-
-    // fmt_upper_exp() -> Str (UpperExp behavior) for floats
-    if (method == "fmt_upper_exp" && is_float) {
-        emit_coverage("UpperExp::fmt_upper_exp");
-        emit_coverage(types::primitive_kind_to_string(kind) + "::fmt_upper_exp");
-        std::string result = fresh_reg();
-        if (kind == types::PrimitiveKind::F32) {
-            emit_line("  " + result + " = call ptr @f32_to_exp_string(float " + receiver +
-                      ", i32 1)");
-        } else {
-            emit_line("  " + result + " = call ptr @f64_to_exp_string(double " + receiver +
-                      ", i32 1)");
-        }
-        last_expr_type_ = "ptr";
-        return result;
-    }
+    // fmt_lower_exp, fmt_upper_exp — dispatched through TML behavior impls
+    // in core::fmt::impls / core::fmt::float (Phase 33: removed hardcoded codegen)
 
     // ========================================================================
     // Wrapping arithmetic (integers wrap naturally in LLVM)
