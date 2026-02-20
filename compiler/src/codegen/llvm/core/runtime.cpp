@@ -157,11 +157,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @print_bool(i32)");
     emit_line("");
 
-    // Float functions still in essential.c (keep as declare)
-    emit_line("; Float functions (essential.c)");
-    emit_line("declare ptr @float_to_precision(double, i32)");
-    emit_line("declare ptr @float_to_exp(double, i32)");
-    emit_line("");
+    // float_to_precision, float_to_exp — removed in Phase 36 (dead declares)
+    // Builtins/string.cpp handlers that called these were also dead code.
 
     // Nextafter from libm (keep as declare)
     emit_line("; Nextafter (libm)");
@@ -443,19 +440,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("@.fmt.lower_e = private constant [3 x i8] c\"%e\\00\"");
     emit_line("@.fmt.upper_E = private constant [3 x i8] c\"%E\\00\"");
 
-    // float_to_fixed(double, i32): format with %.*f, clamp decimals to 0..20
-    emit_line("define internal ptr @float_to_fixed(double %val, i32 %decimals) {");
-    emit_line("entry:");
-    emit_line("  %neg = icmp slt i32 %decimals, 0");
-    emit_line("  %d1 = select i1 %neg, i32 0, i32 %decimals");
-    emit_line("  %over = icmp sgt i32 %d1, 20");
-    emit_line("  %d2 = select i1 %over, i32 20, i32 %d1");
-    emit_line("  %buf = call ptr @malloc(i64 64)");
-    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 64, ptr "
-              "@.fmt.star_f, i32 %d2, double %val)");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
+    // float_to_fixed — removed in Phase 36 (dead code, no TML or C++ callers)
 
     // float_to_string(double): format with %g
     emit_line("define internal ptr @float_to_string(double %val) {");
@@ -568,8 +553,7 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
 
     // Register math runtime functions for lowlevel calls (Phase 32)
-    functions_["float_to_fixed"] =
-        FuncInfo{"@float_to_fixed", "ptr (double, i32)", "ptr", {"double", "i32"}};
+    // float_to_fixed — removed in Phase 36 (no TML lowlevel callers)
     functions_["float_to_string"] = FuncInfo{"@float_to_string", "ptr (double)", "ptr", {"double"}};
     // Integer formatting (i64_to_binary/octal/hex_str) — removed in Phase 33
     // Now dispatched through pure TML behavior impls in core::fmt::impls

@@ -99,50 +99,7 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
     }
 
     // ============ FLOAT FUNCTIONS ============
-
-    // float_to_fixed(value: F64, decimals: I32) -> Str
-    if (fn_name == "float_to_fixed" || fn_name == "toFixed") {
-        if (call.args.size() >= 2) {
-            std::string value = gen_expr(*call.args[0]);
-            std::string decimals = gen_expr(*call.args[1]);
-            // Convert to double if needed
-            std::string double_val = fresh_reg();
-            emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @float_to_fixed(double " + double_val +
-                      ", i32 " + decimals + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    // float_to_precision(value: F64, precision: I32) -> Str
-    if (fn_name == "float_to_precision" || fn_name == "toPrecision") {
-        if (call.args.size() >= 2) {
-            std::string value = gen_expr(*call.args[0]);
-            std::string precision = gen_expr(*call.args[1]);
-            std::string double_val = fresh_reg();
-            emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @float_to_precision(double " + double_val +
-                      ", i32 " + precision + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    // float_to_string(value: F64) -> Str
-    if (fn_name == "float_to_string" || fn_name == "toString") {
-        if (!call.args.empty()) {
-            std::string value = gen_expr(*call.args[0]);
-            std::string double_val = fresh_reg();
-            emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @float_to_string(double " + double_val + ")");
-            return result;
-        }
-        return "0";
-    }
+    // float_to_fixed, float_to_precision, float_to_string — removed in Phase 36 (dead code)
 
     // int_to_float(value: I32/I64) -> F64 — inline LLVM sitofp
     if (fn_name == "int_to_float" || fn_name == "toFloat") {
