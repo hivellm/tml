@@ -7,7 +7,7 @@
  *
  * - **I/O functions**: `print`, `println`, `panic`, `assert_tml`
  * - **String functions**: manipulation, comparison, and conversion
- * - **Time functions**: timestamps, sleep, and elapsed time measurement
+ * - **Time functions**: `time_ns`, `sleep_ms` (see time/time.c for Instant API)
  * - **Memory functions**: allocation, deallocation, and memory operations
  * - **Panic catching**: infrastructure for `@should_panic` tests
  * - **Async helpers**: simple block_on implementations for sync async functions
@@ -110,9 +110,6 @@ void print_i32(int32_t n);
 /** @brief Prints a 64-bit signed integer. */
 void print_i64(int64_t n);
 
-/** @brief Prints a 32-bit floating point number. */
-void print_f32(float n);
-
 /** @brief Prints a 64-bit floating point number. */
 void print_f64(double n);
 
@@ -156,14 +153,6 @@ int32_t str_hash(const char* s);
  * @warning Result is invalidated by next call to string functions using static buffer.
  */
 const char* str_concat(const char* a, const char* b);
-
-/**
- * @brief Optimized string concatenation with O(1) amortized complexity.
- * @param a Left string (may be modified in place if dynamic with capacity).
- * @param b Right string to append.
- * @return Concatenated string (may be same pointer as 'a' or new allocation).
- */
-const char* str_concat_opt(const char* a, const char* b);
 
 /**
  * @brief Concatenates 3 strings in a single allocation.
@@ -259,18 +248,6 @@ const char* char_to_string(uint8_t c);
 // ============================================================================
 
 /**
- * @brief Gets current time in milliseconds.
- * @return Milliseconds since system-dependent epoch.
- */
-int32_t time_ms(void);
-
-/**
- * @brief Gets current time in microseconds.
- * @return Microseconds since system-dependent epoch.
- */
-int64_t time_us(void);
-
-/**
  * @brief Gets current time in nanoseconds.
  * @return Nanoseconds since system-dependent epoch.
  */
@@ -281,33 +258,6 @@ int64_t time_ns(void);
  * @param ms Number of milliseconds to sleep.
  */
 void sleep_ms(int32_t ms);
-
-/**
- * @brief Sleeps for specified microseconds.
- * @param us Number of microseconds to sleep.
- */
-void sleep_us(int64_t us);
-
-/**
- * @brief Calculates elapsed time in milliseconds.
- * @param start Start timestamp from time_ms().
- * @return Elapsed milliseconds.
- */
-int32_t elapsed_ms(int32_t start);
-
-/**
- * @brief Calculates elapsed time in microseconds.
- * @param start Start timestamp from time_us().
- * @return Elapsed microseconds.
- */
-int64_t elapsed_us(int64_t start);
-
-/**
- * @brief Calculates elapsed time in nanoseconds.
- * @param start Start timestamp from time_ns().
- * @return Elapsed nanoseconds.
- */
-int64_t elapsed_ns(int64_t start);
 
 // ============================================================================
 // Memory Functions
