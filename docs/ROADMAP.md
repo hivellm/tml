@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓; runtime: 15 compiled .c files, 1 migration candidate; inline IR: 19 functions remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓; runtime: 15 compiled .c files, 1 migration candidate; inline IR: 18 functions remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -40,7 +40,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | C runtime to migrate | ~70 lines in 1 file (collections.c ~70; search.c deleted Phase 35) |
 | Dead C files on disk | 0 (9 deleted in Phases 30-35: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c, math.c, search.c) |
 | Inline IR in runtime.cpp | 18 functions (~380 lines) — Phase 33: -7, Phase 34: -2, Phase 36: -1 (float_to_fixed); 3 black_box must stay |
-| Dead builtin handlers removed | Phase 36: 18 string handlers, Phase 38: 13 math handlers, Phase 39: 8 time registrations |
+| Dead builtin handlers removed | Phase 36: 18 string handlers, Phase 38: 13 math handlers, Phase 39: 8 time registrations, Phase 41: 3 dead stubs + declarations |
+| Dead C runtime functions removed | Phase 41: 6 i64 atomics from sync.c, 4 pool exports from pool.c |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -448,7 +449,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 2. **TML + @extern("c") FFI** — for libc/OS functions (snprintf, nextafterf, opendir)
 3. **Inline LLVM IR** — only when TML has no equivalent (asm sideeffect for black_box)
 
-### Progress (2026-02-18)
+### Progress (2026-02-20)
 
 **Collections migration COMPLETE**: List, HashMap, Buffer all migrated to pure TML. Eliminated ~3,300 lines of C runtime AND ~2,800 lines of hardcoded compiler dispatch.
 
@@ -511,8 +512,8 @@ KEEP FOREVER (essential C runtime):             REMAINING INLINE IR (18 function
   - tml_random_seed (1, OS random)                 black_box_i32/i64/f64 (asm sideeffect)
 
 REMAINING LIVE BUILTIN HANDLERS (7):            REMAINING C FILE CANDIDATES:
-  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) → remove when crypto rewritten
-  - black_box, black_box_i64, black_box_f64        glob.c (~700 lines) → pure TML + @extern FFI
+  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) → Phase 42
+  - black_box, black_box_i64, black_box_f64        glob.c (~700 lines) → Phase 43
   - infinity, nan, is_inf, is_nan (LLVM const)
                                                  ESSENTIAL FFI (must stay C):
 ALREADY DONE:                                      essential.c, mem.c, pool.c, time.c, sync.c, os.c,
@@ -534,6 +535,8 @@ ALREADY DONE:                                      essential.c, mem.c, pool.c, t
   - 31 dead builtin handlers removed (Phase 36-38) ✓
   - 4 dead C functions from essential.c (Phase 37) ✓
   - 10 dead type registrations removed (Phase 38-39) ✓
+  - 3 dead stub files + declarations (Phase 40-41) ✓
+  - 6 dead i64 atomics + 4 dead pool exports (Phase 41) ✓
 ```
 
 ### 4.1 Collections — List[T] (DONE)
@@ -813,11 +816,13 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 - Phase 37: removed 4 dead C functions from essential.c (print_f32, print_char, float_to_precision, float_to_exp)
 - Phase 38: removed 13 dead math builtin handlers + nextafter declare + 2 type registrations
 - Phase 39: removed 8 dead time type registrations
+- Phase 40: removed dead init_builtin_time() call from register.cpp
+- Phase 41: removed 3 dead stub files from build, 6 dead i64 atomic functions from sync.c, 4 dead pool exports from pool.c, header declarations cleaned
 - Current: 18 inline IR functions remain (15 active + 3 black_box); 7 live math builtin handlers
 
 **Next actionable items**:
-- **Phase 40**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
-- **Phase 41**: Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` directory API
+- **Phase 42**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
+- **Phase 43**: Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` directory API
 - Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
 
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only. Inline IR reduced to 3 black_box functions only.
