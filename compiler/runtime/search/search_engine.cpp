@@ -10,7 +10,6 @@
 
 #include "search/bm25_index.hpp"
 #include "search/hnsw_index.hpp"
-#include "search/simd_distance.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -24,33 +23,7 @@
 
 using namespace tml::search;
 
-// ============================================================================
-// F32 Distance Functions (auto-vectorized SIMD)
-// ============================================================================
-
-TML_EXPORT float search_dot_product_f32(const float* a, const float* b, int64_t dim) {
-    return dot_product_f32(a, b, static_cast<size_t>(dim));
-}
-
-TML_EXPORT float search_cosine_similarity_f32(const float* a, const float* b, int64_t dim) {
-    return cosine_similarity_f32(a, b, static_cast<size_t>(dim));
-}
-
-TML_EXPORT float search_euclidean_distance_f32(const float* a, const float* b, int64_t dim) {
-    return euclidean_distance_f32(a, b, static_cast<size_t>(dim));
-}
-
-TML_EXPORT float search_l2_squared_f32(const float* a, const float* b, int64_t dim) {
-    return l2_distance_squared_f32(a, b, static_cast<size_t>(dim));
-}
-
-TML_EXPORT void search_normalize_f32(float* v, int64_t dim) {
-    normalize_f32(v, static_cast<size_t>(dim));
-}
-
-TML_EXPORT float search_norm_f32(const float* v, int64_t dim) {
-    return norm_f32(v, static_cast<size_t>(dim));
-}
+// F32 Distance Functions — removed in Phase 35 (migrated to pure TML in distance.tml)
 
 // ============================================================================
 // BM25 Index - Opaque Handle API

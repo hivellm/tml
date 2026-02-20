@@ -1,8 +1,8 @@
-//! SIMD-optimized vector distance and similarity functions.
+//! Vector distance and similarity functions.
 //!
 //! Provides dot product, cosine similarity, euclidean distance, and
 //! vector normalization for both F32 and F64 arrays. All functions
-//! use auto-vectorized loops for SIMD performance.
+//! are pure TML using pointer intrinsics; LLVM auto-vectorizes the loops.
 //!
 //! # F64 Functions
 //!
@@ -24,46 +24,7 @@
 //! let dp = dot_product_f32(&a[0], &b[0], 3)   // 32.0
 //! ```
 
-// ============================================================================
-// F64 FFI Declarations
-// ============================================================================
-
-@extern("search_dot_product")
-func ffi_dot_product(a: *F64, b: *F64, dim: I64) -> F64
-
-@extern("search_cosine_similarity")
-func ffi_cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64
-
-@extern("search_euclidean_distance")
-func ffi_euclidean_distance(a: *F64, b: *F64, dim: I64) -> F64
-
-@extern("search_norm")
-func ffi_norm(v: *F64, dim: I64) -> F64
-
-@extern("search_normalize")
-func ffi_normalize(v: *F64, dim: I64) -> Unit
-
-// ============================================================================
-// F32 FFI Declarations
-// ============================================================================
-
-@extern("search_dot_product_f32")
-func ffi_dot_product_f32(a: *F32, b: *F32, dim: I64) -> F32
-
-@extern("search_cosine_similarity_f32")
-func ffi_cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32
-
-@extern("search_euclidean_distance_f32")
-func ffi_euclidean_distance_f32(a: *F32, b: *F32, dim: I64) -> F32
-
-@extern("search_l2_squared_f32")
-func ffi_l2_squared_f32(a: *F32, b: *F32, dim: I64) -> F32
-
-@extern("search_norm_f32")
-func ffi_norm_f32(v: *F32, dim: I64) -> F32
-
-@extern("search_normalize_f32")
-func ffi_normalize_f32(v: *F32, dim: I64) -> Unit
+use core::intrinsics
 
 // ============================================================================
 // F64 Public API
@@ -76,7 +37,17 @@ func ffi_normalize_f32(v: *F32, dim: I64) -> Unit
 /// @param dim Number of dimensions
 /// @returns Sum of element-wise products
 pub func dot_product(a: *F64, b: *F64, dim: I64) -> F64 {
-    return lowlevel { ffi_dot_product(a, b, dim) }
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
+        let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
+        let va: F64 = lowlevel { ptr_read[F64](pa) }
+        let vb: F64 = lowlevel { ptr_read[F64](pb) }
+        sum = sum + va * vb
+        i = i + 1
+    }
+    return sum
 }
 
 /// Computes cosine similarity between two F64 vectors.
@@ -89,7 +60,25 @@ pub func dot_product(a: *F64, b: *F64, dim: I64) -> F64 {
 /// @param dim Number of dimensions
 /// @returns Cosine similarity score
 pub func cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64 {
-    return lowlevel { ffi_cosine_similarity(a, b, dim) }
+    var dot: F64 = 0.0
+    var norm_a: F64 = 0.0
+    var norm_b: F64 = 0.0
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
+        let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
+        let va: F64 = lowlevel { ptr_read[F64](pa) }
+        let vb: F64 = lowlevel { ptr_read[F64](pb) }
+        dot = dot + va * vb
+        norm_a = norm_a + va * va
+        norm_b = norm_b + vb * vb
+        i = i + 1
+    }
+    let denom: F64 = intrinsics::sqrt[F64](norm_a) * intrinsics::sqrt[F64](norm_b)
+    if denom < 1e-12 {
+        return 0.0
+    }
+    return dot / denom
 }
 
 /// Computes the Euclidean (L2) distance between two F64 vectors.
@@ -99,7 +88,18 @@ pub func cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64 {
 /// @param dim Number of dimensions
 /// @returns L2 distance (always >= 0)
 pub func euclidean_distance(a: *F64, b: *F64, dim: I64) -> F64 {
-    return lowlevel { ffi_euclidean_distance(a, b, dim) }
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
+        let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
+        let va: F64 = lowlevel { ptr_read[F64](pa) }
+        let vb: F64 = lowlevel { ptr_read[F64](pb) }
+        let diff: F64 = va - vb
+        sum = sum + diff * diff
+        i = i + 1
+    }
+    return intrinsics::sqrt[F64](sum)
 }
 
 /// Computes the L2 norm (magnitude) of an F64 vector.
@@ -108,7 +108,15 @@ pub func euclidean_distance(a: *F64, b: *F64, dim: I64) -> F64 {
 /// @param dim Number of dimensions
 /// @returns L2 norm (always >= 0)
 pub func norm(v: *F64, dim: I64) -> F64 {
-    return lowlevel { ffi_norm(v, dim) }
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop (i < dim) {
+        let p: *F64 = lowlevel { ptr_offset[F64](v, i) }
+        let val: F64 = lowlevel { ptr_read[F64](p) }
+        sum = sum + val * val
+        i = i + 1
+    }
+    return intrinsics::sqrt[F64](sum)
 }
 
 /// Normalizes an F64 vector in place (makes it unit length).
@@ -119,7 +127,17 @@ pub func norm(v: *F64, dim: I64) -> F64 {
 /// @param v Vector to normalize (modified in place)
 /// @param dim Number of dimensions
 pub func normalize(v: *F64, dim: I64) -> Unit {
-    lowlevel { ffi_normalize(v, dim) }
+    let mag: F64 = norm(v, dim)
+    if mag >= 1e-12 {
+        let inv: F64 = 1.0 / mag
+        var i: I64 = 0
+        loop (i < dim) {
+            let p: *F64 = lowlevel { ptr_offset[F64](v, i) }
+            let val: F64 = lowlevel { ptr_read[F64](p) }
+            lowlevel { ptr_write[F64](p, val * inv) }
+            i = i + 1
+        }
+    }
 }
 
 // ============================================================================
@@ -136,7 +154,17 @@ pub func normalize(v: *F64, dim: I64) -> Unit {
 /// @param dim Number of dimensions
 /// @returns Sum of element-wise products
 pub func dot_product_f32(a: *F32, b: *F32, dim: I64) -> F32 {
-    return lowlevel { ffi_dot_product_f32(a, b, dim) }
+    var sum: F32 = 0.0 as F32
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
+        let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
+        let va: F32 = lowlevel { ptr_read[F32](pa) }
+        let vb: F32 = lowlevel { ptr_read[F32](pb) }
+        sum = sum + va * vb
+        i = i + 1
+    }
+    return sum
 }
 
 /// Computes cosine similarity between two F32 vectors.
@@ -149,7 +177,25 @@ pub func dot_product_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @param dim Number of dimensions
 /// @returns Cosine similarity score
 pub func cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32 {
-    return lowlevel { ffi_cosine_similarity_f32(a, b, dim) }
+    var dot: F32 = 0.0 as F32
+    var norm_a: F32 = 0.0 as F32
+    var norm_b: F32 = 0.0 as F32
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
+        let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
+        let va: F32 = lowlevel { ptr_read[F32](pa) }
+        let vb: F32 = lowlevel { ptr_read[F32](pb) }
+        dot = dot + va * vb
+        norm_a = norm_a + va * va
+        norm_b = norm_b + vb * vb
+        i = i + 1
+    }
+    let denom: F32 = intrinsics::sqrt[F32](norm_a) * intrinsics::sqrt[F32](norm_b)
+    if denom < (1e-12 as F32) {
+        return 0.0 as F32
+    }
+    return dot / denom
 }
 
 /// Computes the Euclidean (L2) distance between two F32 vectors.
@@ -159,7 +205,18 @@ pub func cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @param dim Number of dimensions
 /// @returns L2 distance (always >= 0)
 pub func euclidean_distance_f32(a: *F32, b: *F32, dim: I64) -> F32 {
-    return lowlevel { ffi_euclidean_distance_f32(a, b, dim) }
+    var sum: F32 = 0.0 as F32
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
+        let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
+        let va: F32 = lowlevel { ptr_read[F32](pa) }
+        let vb: F32 = lowlevel { ptr_read[F32](pb) }
+        let diff: F32 = va - vb
+        sum = sum + diff * diff
+        i = i + 1
+    }
+    return intrinsics::sqrt[F32](sum)
 }
 
 /// Computes the squared L2 distance between two F32 vectors.
@@ -172,7 +229,18 @@ pub func euclidean_distance_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @param dim Number of dimensions
 /// @returns Squared L2 distance (always >= 0)
 pub func l2_squared_f32(a: *F32, b: *F32, dim: I64) -> F32 {
-    return lowlevel { ffi_l2_squared_f32(a, b, dim) }
+    var sum: F32 = 0.0 as F32
+    var i: I64 = 0
+    loop (i < dim) {
+        let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
+        let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
+        let va: F32 = lowlevel { ptr_read[F32](pa) }
+        let vb: F32 = lowlevel { ptr_read[F32](pb) }
+        let diff: F32 = va - vb
+        sum = sum + diff * diff
+        i = i + 1
+    }
+    return sum
 }
 
 /// Computes the L2 norm (magnitude) of an F32 vector.
@@ -181,7 +249,15 @@ pub func l2_squared_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @param dim Number of dimensions
 /// @returns L2 norm (always >= 0)
 pub func norm_f32(v: *F32, dim: I64) -> F32 {
-    return lowlevel { ffi_norm_f32(v, dim) }
+    var sum: F32 = 0.0 as F32
+    var i: I64 = 0
+    loop (i < dim) {
+        let p: *F32 = lowlevel { ptr_offset[F32](v, i) }
+        let val: F32 = lowlevel { ptr_read[F32](p) }
+        sum = sum + val * val
+        i = i + 1
+    }
+    return intrinsics::sqrt[F32](sum)
 }
 
 /// Normalizes an F32 vector in place (makes it unit length).
@@ -192,5 +268,15 @@ pub func norm_f32(v: *F32, dim: I64) -> F32 {
 /// @param v Vector to normalize (modified in place)
 /// @param dim Number of dimensions
 pub func normalize_f32(v: *F32, dim: I64) -> Unit {
-    lowlevel { ffi_normalize_f32(v, dim) }
+    let mag: F32 = norm_f32(v, dim)
+    if mag >= (1e-12 as F32) {
+        let inv: F32 = (1.0 as F32) / mag
+        var i: I64 = 0
+        loop (i < dim) {
+            let p: *F32 = lowlevel { ptr_offset[F32](v, i) }
+            let val: F32 = lowlevel { ptr_read[F32](p) }
+            lowlevel { ptr_write[F32](p, val * inv) }
+            i = i + 1
+        }
+    }
 }
