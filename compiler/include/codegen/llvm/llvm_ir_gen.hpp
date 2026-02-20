@@ -1545,8 +1545,7 @@ private:
         -> std::optional<std::string>;
     auto try_gen_builtin_sync(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
-    auto try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call)
-        -> std::optional<std::string>;
+    // try_gen_builtin_time removed (Phase 41) — stub since Phase 25, zero callers
     auto try_gen_builtin_math(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
     auto try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)

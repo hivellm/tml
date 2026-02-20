@@ -7,8 +7,9 @@
  *
  * ## Components
  *
- * - **Global Pools**: pool_* functions for shared object pools
- * - **Thread-Local Pools**: tls_pool_* functions for per-thread pools
+ * - **Global Pools**: pool_acquire, pool_release (declared in runtime.cpp)
+ * - **Thread-Local Pools**: tls_pool_acquire, tls_pool_release (declared in runtime.cpp)
+ * - **Internal**: pool_init, pool_destroy (static, used by TLS pool management)
  *
  * ## Usage
  *
@@ -60,7 +61,8 @@ typedef struct TmlPoolBlock {
  * @param object_size Size of each object in bytes.
  * @param initial_capacity Initial number of objects to pre-allocate.
  */
-TML_EXPORT void pool_init(TmlPool* pool, int64_t object_size, int64_t initial_capacity) {
+// pool_init — internal only (not declared in runtime.cpp, used by tls_pool_get_or_create)
+static void pool_init(TmlPool* pool, int64_t object_size, int64_t initial_capacity) {
     pool->free_list = NULL;
     pool->block_list = NULL;
     pool->capacity = 0;
@@ -157,13 +159,8 @@ TML_EXPORT void pool_release(TmlPool* pool, void* obj) {
     pool->count--;
 }
 
-/**
- * @brief Destroys a pool and frees all allocated memory.
- *
- * @param pool Pointer to the pool structure.
- */
-TML_EXPORT void pool_destroy(TmlPool* pool) {
-    // Free all blocks
+// pool_destroy — internal only (not declared in runtime.cpp)
+static void pool_destroy(TmlPool* pool) {
     TmlPoolBlock* block = (TmlPoolBlock*)pool->block_list;
     while (block != NULL) {
         TmlPoolBlock* next = block->next;
@@ -176,25 +173,8 @@ TML_EXPORT void pool_destroy(TmlPool* pool) {
     pool->count = 0;
 }
 
-/**
- * @brief Gets the current number of allocated objects in the pool.
- *
- * @param pool Pointer to the pool structure.
- * @return Number of objects currently in use.
- */
-TML_EXPORT int64_t pool_count(TmlPool* pool) {
-    return pool->count;
-}
-
-/**
- * @brief Gets the total capacity of the pool.
- *
- * @param pool Pointer to the pool structure.
- * @return Total number of objects the pool can hold.
- */
-TML_EXPORT int64_t pool_capacity(TmlPool* pool) {
-    return pool->capacity;
-}
+// pool_count — REMOVED (Phase 41, dead: no declare in runtime.cpp, 0 TML callers)
+// pool_capacity — REMOVED (Phase 41, dead: no declare in runtime.cpp, 0 TML callers)
 
 // ============================================================================
 // Thread-Local Pool Functions (for @pool(thread_local: true) classes)
@@ -299,46 +279,5 @@ TML_EXPORT void tls_pool_release(const char* class_name, void* obj, int64_t obje
     }
 }
 
-/**
- * @brief Cleans up all thread-local pools for current thread.
- *
- * Should be called before thread exits to free pool memory.
- */
-TML_EXPORT void tls_pools_cleanup(void) {
-    if (!tls_initialized)
-        return;
-
-    for (int32_t i = 0; i < tls_pool_count; i++) {
-        if (tls_pools[i].initialized) {
-            pool_destroy(&tls_pools[i].pool);
-            tls_pools[i].initialized = 0;
-        }
-    }
-    tls_pool_count = 0;
-}
-
-/**
- * @brief Gets statistics for a thread-local pool.
- *
- * @param class_name The class name identifier.
- * @param out_count Output: number of objects in use.
- * @param out_capacity Output: total pool capacity.
- * @return 1 if pool exists, 0 otherwise.
- */
-TML_EXPORT int32_t tls_pool_stats(const char* class_name, int64_t* out_count,
-                                  int64_t* out_capacity) {
-    tls_pools_init();
-
-    for (int32_t i = 0; i < tls_pool_count; i++) {
-        if (tls_pools[i].class_name == class_name ||
-            (tls_pools[i].class_name && class_name &&
-             strcmp(tls_pools[i].class_name, class_name) == 0)) {
-            if (out_count)
-                *out_count = tls_pools[i].pool.count;
-            if (out_capacity)
-                *out_capacity = tls_pools[i].pool.capacity;
-            return 1;
-        }
-    }
-    return 0;
-}
+// tls_pools_cleanup — REMOVED (Phase 41, dead: no declare in runtime.cpp, 0 TML callers)
+// tls_pool_stats — REMOVED (Phase 41, dead: no declare in runtime.cpp, 0 TML callers)

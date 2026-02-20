@@ -417,8 +417,8 @@ add_library(tml_types STATIC
     src/types/builtins/register.cpp
     src/types/builtins/types.cpp
     src/types/builtins/io.cpp
-    src/types/builtins/string.cpp
-    src/types/builtins/time.cpp
+    # src/types/builtins/string.cpp  — removed Phase 29 (dead stub)
+    # src/types/builtins/time.cpp    — removed Phase 39 (dead stub)
     src/types/builtins/mem.cpp
     src/types/builtins/atomic.cpp
     src/types/builtins/sync.cpp
@@ -685,7 +685,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/builtins/mem.cpp
     src/codegen/llvm/builtins/atomic.cpp
     src/codegen/llvm/builtins/sync.cpp
-    src/codegen/llvm/builtins/time.cpp
+    # src/codegen/llvm/builtins/time.cpp  — removed Phase 25 (dead stub)
     src/codegen/llvm/builtins/math.cpp
     src/codegen/llvm/builtins/string.cpp
     src/codegen/llvm/builtins/assert.cpp

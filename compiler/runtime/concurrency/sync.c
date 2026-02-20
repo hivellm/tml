@@ -642,73 +642,9 @@ TML_EXPORT int32_t atomic_swap_i32(int32_t* ptr, int32_t val) {
 #endif
 }
 
-// 64-bit atomic operations
-
-/**
- * @brief Atomically add to an I64 and return the previous value.
- */
-TML_EXPORT int64_t atomic_fetch_add_i64(int64_t* ptr, int64_t val) {
-#ifdef _WIN32
-    return (int64_t)InterlockedExchangeAdd64((LONG64*)ptr, (LONG64)val);
-#else
-    return __sync_fetch_and_add(ptr, val);
-#endif
-}
-
-/**
- * @brief Atomically subtract from an I64 and return the previous value.
- */
-TML_EXPORT int64_t atomic_fetch_sub_i64(int64_t* ptr, int64_t val) {
-#ifdef _WIN32
-    return (int64_t)InterlockedExchangeAdd64((LONG64*)ptr, -(LONG64)val);
-#else
-    return __sync_fetch_and_sub(ptr, val);
-#endif
-}
-
-/**
- * @brief Atomically load an I64 value.
- */
-TML_EXPORT int64_t atomic_load_i64(const int64_t* ptr) {
-#ifdef _WIN32
-    return (int64_t)InterlockedCompareExchange64((LONG64*)ptr, 0, 0);
-#else
-    return __sync_fetch_and_add((int64_t*)ptr, 0);
-#endif
-}
-
-/**
- * @brief Atomically store an I64 value.
- */
-TML_EXPORT void atomic_store_i64(int64_t* ptr, int64_t val) {
-#ifdef _WIN32
-    InterlockedExchange64((LONG64*)ptr, (LONG64)val);
-#else
-    __sync_lock_test_and_set(ptr, val);
-#endif
-}
-
-/**
- * @brief Atomically compare and swap an I64 value.
- */
-TML_EXPORT int64_t atomic_compare_exchange_i64(int64_t* ptr, int64_t expected, int64_t desired) {
-#ifdef _WIN32
-    return (int64_t)InterlockedCompareExchange64((LONG64*)ptr, (LONG64)desired, (LONG64)expected);
-#else
-    return __sync_val_compare_and_swap(ptr, expected, desired);
-#endif
-}
-
-/**
- * @brief Atomically swap an I64 value.
- */
-TML_EXPORT int64_t atomic_swap_i64(int64_t* ptr, int64_t val) {
-#ifdef _WIN32
-    return (int64_t)InterlockedExchange64((LONG64*)ptr, (LONG64)val);
-#else
-    return __sync_lock_test_and_set(ptr, val);
-#endif
-}
+// 64-bit atomic operations — REMOVED (Phase 41)
+// No declare in runtime.cpp, 0 TML callers. Only i32 atomics are used.
+// Codegen uses LLVM atomicrmw/cmpxchg instructions for typed atomics.
 
 // Atomic fence operations
 
