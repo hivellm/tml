@@ -562,50 +562,31 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
                 segment_strs.push_back(expr_val);
             } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
                        expr_type == "i64") {
-                // Convert integer to string using i64_to_str
-                std::string int_val = expr_val;
+                // Phase 45: Use TML Display behavior dispatch per type
+                std::string func;
                 if (expr_type == "i8") {
-                    // Extend i8 to i64 - use zext for unsigned semantics
-                    std::string ext_reg = fresh_reg();
-                    if (last_expr_is_unsigned_) {
-                        emit_line("  " + ext_reg + " = zext i8 " + expr_val + " to i64");
-                    } else {
-                        emit_line("  " + ext_reg + " = sext i8 " + expr_val + " to i64");
-                    }
-                    int_val = ext_reg;
+                    func = last_expr_is_unsigned_ ? "@tml_U8_to_string" : "@tml_I8_to_string";
                 } else if (expr_type == "i16") {
-                    // Extend i16 to i64 - use zext for unsigned semantics
-                    std::string ext_reg = fresh_reg();
-                    if (last_expr_is_unsigned_) {
-                        emit_line("  " + ext_reg + " = zext i16 " + expr_val + " to i64");
-                    } else {
-                        emit_line("  " + ext_reg + " = sext i16 " + expr_val + " to i64");
-                    }
-                    int_val = ext_reg;
+                    func = last_expr_is_unsigned_ ? "@tml_U16_to_string" : "@tml_I16_to_string";
                 } else if (expr_type == "i32") {
-                    // Extend i32 to i64 - use zext for unsigned semantics
-                    std::string ext_reg = fresh_reg();
-                    if (last_expr_is_unsigned_) {
-                        emit_line("  " + ext_reg + " = zext i32 " + expr_val + " to i64");
-                    } else {
-                        emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
-                    }
-                    int_val = ext_reg;
+                    func = last_expr_is_unsigned_ ? "@tml_U32_to_string" : "@tml_I32_to_string";
+                } else {
+                    func = last_expr_is_unsigned_ ? "@tml_U64_to_string" : "@tml_I64_to_string";
                 }
                 std::string str_result = fresh_reg();
-                emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + int_val + ")");
+                emit_line("  " + str_result + " = call ptr " + func + "(" + expr_type + " " +
+                          expr_val + ")");
                 segment_strs.push_back(str_result);
             } else if (expr_type == "double" || expr_type == "float") {
-                // Convert float to string using f64_to_str
-                std::string float_val = expr_val;
-                if (expr_type == "float") {
-                    // Extend float to double
-                    std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = fpext float " + expr_val + " to double");
-                    float_val = ext_reg;
-                }
+                // Phase 45: Use TML Display behavior dispatch
                 std::string str_result = fresh_reg();
-                emit_line("  " + str_result + " = call ptr @f64_to_str(double " + float_val + ")");
+                if (expr_type == "float") {
+                    emit_line("  " + str_result + " = call ptr @tml_F32_to_string(float " +
+                              expr_val + ")");
+                } else {
+                    emit_line("  " + str_result + " = call ptr @tml_F64_to_string(double " +
+                              expr_val + ")");
+                }
                 segment_strs.push_back(str_result);
             } else if (expr_type == "i1") {
                 // Convert bool to string
@@ -673,46 +654,31 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
             return expr_val;
         } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
                    expr_type == "i64") {
-            // Convert integer to string using i64_to_str
-            std::string int_val = expr_val;
+            // Phase 45: Use TML Display behavior dispatch per type
+            std::string func;
             if (expr_type == "i8") {
-                std::string ext_reg = fresh_reg();
-                if (last_expr_is_unsigned_) {
-                    emit_line("  " + ext_reg + " = zext i8 " + expr_val + " to i64");
-                } else {
-                    emit_line("  " + ext_reg + " = sext i8 " + expr_val + " to i64");
-                }
-                int_val = ext_reg;
+                func = last_expr_is_unsigned_ ? "@tml_U8_to_string" : "@tml_I8_to_string";
             } else if (expr_type == "i16") {
-                std::string ext_reg = fresh_reg();
-                if (last_expr_is_unsigned_) {
-                    emit_line("  " + ext_reg + " = zext i16 " + expr_val + " to i64");
-                } else {
-                    emit_line("  " + ext_reg + " = sext i16 " + expr_val + " to i64");
-                }
-                int_val = ext_reg;
+                func = last_expr_is_unsigned_ ? "@tml_U16_to_string" : "@tml_I16_to_string";
             } else if (expr_type == "i32") {
-                std::string ext_reg = fresh_reg();
-                if (last_expr_is_unsigned_) {
-                    emit_line("  " + ext_reg + " = zext i32 " + expr_val + " to i64");
-                } else {
-                    emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
-                }
-                int_val = ext_reg;
+                func = last_expr_is_unsigned_ ? "@tml_U32_to_string" : "@tml_I32_to_string";
+            } else {
+                func = last_expr_is_unsigned_ ? "@tml_U64_to_string" : "@tml_I64_to_string";
             }
             std::string str_result = fresh_reg();
-            emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + int_val + ")");
+            emit_line("  " + str_result + " = call ptr " + func + "(" + expr_type + " " + expr_val +
+                      ")");
             return str_result;
         } else if (expr_type == "double" || expr_type == "float") {
-            // Convert float to string using f64_to_str
-            std::string float_val = expr_val;
-            if (expr_type == "float") {
-                std::string ext_reg = fresh_reg();
-                emit_line("  " + ext_reg + " = fpext float " + expr_val + " to double");
-                float_val = ext_reg;
-            }
+            // Phase 45: Use TML Display behavior dispatch
             std::string str_result = fresh_reg();
-            emit_line("  " + str_result + " = call ptr @f64_to_str(double " + float_val + ")");
+            if (expr_type == "float") {
+                emit_line("  " + str_result + " = call ptr @tml_F32_to_string(float " + expr_val +
+                          ")");
+            } else {
+                emit_line("  " + str_result + " = call ptr @tml_F64_to_string(double " + expr_val +
+                          ")");
+            }
             return str_result;
         } else if (expr_type == "i1") {
             // Convert bool to string

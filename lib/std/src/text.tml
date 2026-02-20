@@ -356,8 +356,8 @@ impl Text {
 
     /// Create Text from a floating-point number
     pub func from_f64(value: F64) -> Text {
-        // Use the f64_to_str C runtime (hardware-dependent snprintf)
-        let s: Str = lowlevel { f64_to_str(value) }
+        // Use the f64_to_string C runtime (hardware-dependent snprintf)
+        let s: Str = lowlevel { f64_to_string(value) }
         Text::from(s)
     }
 

@@ -51,7 +51,7 @@ static bool has_derive_display(const parser::EnumDecl& e) {
 }
 
 /// Get the appropriate to_string function for a primitive type
-/// Phase 44: Use TML Display behavior impls for Bool, I8, I16, I32
+/// Phase 45: All types use TML Display behavior impls
 static std::string get_display_func(const std::string& llvm_type) {
     if (llvm_type == "i1") {
         return "tml_Bool_to_string";
@@ -62,9 +62,11 @@ static std::string get_display_func(const std::string& llvm_type) {
     } else if (llvm_type == "i32") {
         return "tml_I32_to_string";
     } else if (llvm_type == "i64" || llvm_type == "i128") {
-        return "i64_to_str";
-    } else if (llvm_type == "float" || llvm_type == "double") {
-        return "f64_to_str";
+        return "tml_I64_to_string";
+    } else if (llvm_type == "float") {
+        return "tml_F32_to_string";
+    } else if (llvm_type == "double") {
+        return "tml_F64_to_string";
     }
     return "";
 }
@@ -168,35 +170,15 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
             std::string to_string_func = get_display_func(field.llvm_type);
             value_str = fresh_temp();
 
-            if (field.llvm_type == "i1") {
-                // Phase 44: tml_Bool_to_string takes i1 directly
+            // Phase 45: All primitives use TML Display, taking native types directly
+            if (field.llvm_type == "i128") {
+                std::string trunc = fresh_temp();
+                type_defs_buffer_ << "  " << trunc << " = trunc i128 " << val << " to i64\n";
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(i1 " << val << ")\n";
-            } else if (field.llvm_type == "i8" || field.llvm_type == "i16") {
-                // Phase 44: tml_I8/I16_to_string take native types directly
+                                  << "(i64 " << trunc << ")\n";
+            } else {
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func << "("
                                   << field.llvm_type << " " << val << ")\n";
-            } else if (field.llvm_type == "i32") {
-                type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(i32 " << val << ")\n";
-            } else if (field.llvm_type == "i64" || field.llvm_type == "i128") {
-                if (field.llvm_type == "i128") {
-                    std::string trunc = fresh_temp();
-                    type_defs_buffer_ << "  " << trunc << " = trunc i128 " << val << " to i64\n";
-                    type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                      << "(i64 " << trunc << ")\n";
-                } else {
-                    type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                      << "(i64 " << val << ")\n";
-                }
-            } else if (field.llvm_type == "float") {
-                std::string ext = fresh_temp();
-                type_defs_buffer_ << "  " << ext << " = fpext float " << val << " to double\n";
-                type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(double " << ext << ")\n";
-            } else if (field.llvm_type == "double") {
-                type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(double " << val << ")\n";
             }
         } else {
             // Non-primitive type - call to_string() on the field
