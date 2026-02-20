@@ -37,6 +37,7 @@
 #include "tester_internal.hpp"
 #include "types/module_binary.hpp"
 
+#include <condition_variable>
 #include <fstream>
 #include <iomanip>
 #include <mutex>
@@ -288,175 +289,73 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
         }
 
-        // Compile remaining suites IN PARALLEL
-        // DLLs are loaded just-in-time during execution, not upfront, to avoid
-        // holding all DLLs in memory (critical for coverage mode with large DLLs).
+        // ======================================================================
+        // Pipeline: compile suites (3 threads) + execute (1 thread) concurrently
+        // ======================================================================
+        // Suites are pushed to a ready queue as they finish compiling.
+        // A single execution thread consumes from the queue, loading DLLs
+        // and running tests while other suites are still being compiled.
+        // Execution must be single-threaded (mem_track, atexit, log sinks).
+
         struct CompiledSuite {
             TestSuite suite;
             std::string dll_path;
         };
-        std::vector<CompiledSuite> compiled_suites;
 
-        if (suites_to_compile.empty()) {
-            if (!opts.quiet && !suites_fully_cached.empty()) {
-                TML_LOG_DEBUG("test", "All " << suites_fully_cached.size()
-                                             << " suites cached, skipping compilation");
-            }
-        } else {
-            // Parallel suite compilation.
-            // Global state is thread-safe: GlobalASTCache/GlobalLibraryIRCache
-            // use shared_mutex, LLVM target init uses std::once_flag,
-            // meta preload uses std::call_once, TypeEnv/ModuleRegistry are
-            // per-thread. Each suite also spawns internal threads for codegen
-            // and object compilation (calc_codegen_threads), so we limit
-            // suite-level parallelism to 3 to avoid oversubscription.
-            unsigned int num_compile_threads = 3;
+        // Ready queue: compiled suites waiting to be executed
+        std::vector<CompiledSuite> ready_queue;
+        std::mutex ready_mutex;
+        std::condition_variable ready_cv;
+        std::atomic<bool> all_compiled{false};
 
-            // Structure to hold compilation results
-            struct CompileJob {
-                size_t index;
-                TestSuite suite;
-                SuiteCompileResult result;
-                bool compiled = false;
-            };
-
-            std::vector<CompileJob> jobs;
-            jobs.reserve(suites_to_compile.size());
-            for (size_t i = 0; i < suites_to_compile.size(); ++i) {
-                jobs.push_back({i, std::move(suites_to_compile[i]), {}, false});
-            }
-
-            // Thread-safe job queue
-            std::atomic<size_t> next_job{0};
-            std::mutex output_mutex;
-
-            // Compile suites in parallel
-            auto compile_worker = [&]() {
-                while (true) {
-                    size_t job_idx = next_job.fetch_add(1);
-                    if (job_idx >= jobs.size())
-                        break;
-
-                    auto& job = jobs[job_idx];
-
-                    if (!opts.quiet && opts.verbose) {
-                        std::lock_guard<std::mutex> lock(output_mutex);
-                        TML_LOG_DEBUG("test", "Compiling suite: " << job.suite.name << " ("
-                                                                  << job.suite.tests.size()
-                                                                  << " tests)");
-                    }
-
-                    // Track which suite is being compiled for crash diagnostics
-                    set_crash_context("compiling", job.suite.name.c_str(), nullptr, nullptr);
-
-                    job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache,
-                                                    opts.backend, opts.features);
-                    job.compiled = true;
-                }
-            };
-
-            // Launch compilation threads
-            if (!opts.quiet) {
-                TML_LOG_DEBUG("test", "Compiling " << jobs.size() << " suites with "
-                                                   << num_compile_threads << " threads...");
-            }
-
-            phase_start = Clock::now();
-            std::vector<std::thread> compile_threads;
-            for (unsigned int t = 0; t < std::min(num_compile_threads, (unsigned int)jobs.size());
-                 ++t) {
-                compile_threads.emplace_back(compile_worker);
-            }
-            for (auto& t : compile_threads) {
-                t.join();
-            }
-
-            if (opts.profile) {
-                collector.profile_stats.add("parallel_compile",
-                                            std::chrono::duration_cast<std::chrono::microseconds>(
-                                                Clock::now() - phase_start)
-                                                .count());
-            }
-
-            // Process compilation results — collect compiled suites for deferred loading.
-            for (auto& job : jobs) {
-                auto& suite = job.suite;
-                auto& compile_result = job.result;
-
-                if (!compile_result.success) {
-                    // Report compilation error but continue with other suites.
-                    // Use failed_test if available, otherwise fall back to
-                    // first test in suite or suite name to avoid empty names.
-                    std::string failed_file = compile_result.failed_test;
-                    if (failed_file.empty() && !suite.tests.empty()) {
-                        failed_file = suite.tests[0].file_path;
-                    }
-                    std::string failed_name =
-                        failed_file.empty() ? suite.name : fs::path(failed_file).stem().string();
-
-                    TestResult error_result;
-                    error_result.file_path = failed_file;
-                    error_result.test_name = failed_name;
-                    error_result.group = suite.group;
-                    error_result.passed = false;
-                    error_result.compilation_error = true;
-                    error_result.exit_code = EXIT_COMPILATION_ERROR;
-                    error_result.error_message =
-                        "COMPILATION FAILED\n" + compile_result.error_message;
-
-                    collector.add(std::move(error_result));
-
-                    TML_LOG_ERROR("build", "COMPILATION FAILED suite="
-                                               << suite.name << " file=" << failed_file
-                                               << " error=" << compile_result.error_message);
-
-                    continue; // Continue with other suites instead of stopping
-                }
-
-                suite.dll_path = compile_result.dll_path;
-                compiled_suites.push_back({std::move(suite), compile_result.dll_path});
-            }
-        } // end of suites_to_compile block
-
-        // Run all tests from compiled suites sequentially.
-        // DLLs are loaded just-in-time and unloaded after each suite to avoid
-        // holding all DLLs in memory (critical for coverage mode).
-        std::mutex output_mutex;
-        std::mutex cache_mutex;    // For synchronized cache updates
-        std::mutex coverage_mutex; // For synchronized coverage collection
+        // Shared state for execution
+        std::mutex cache_mutex;
+        std::mutex coverage_mutex;
         std::atomic<bool> fail_fast_triggered{false};
+        std::atomic<size_t> suites_executed{0};
+        size_t total_suites_to_run = 0; // set after we know how many will compile
 
-        // Single-threaded test execution to avoid global state conflicts
-        // between test DLLs (mem_track atexit, log sinks, etc.)
-        std::atomic<size_t> suite_index{0};
+        auto pipeline_start = Clock::now();
 
-        // Worker function that processes suites
-        auto suite_worker = [&]() {
+        // --- Execution worker (runs on its own thread) ---
+        auto execute_worker = [&]() {
             while (true) {
-                // Check if fail-fast was triggered
-                if (fail_fast_triggered.load()) {
-                    return;
+                CompiledSuite compiled;
+
+                // Wait for a suite to be ready
+                {
+                    std::unique_lock<std::mutex> lock(ready_mutex);
+                    ready_cv.wait(lock, [&]() {
+                        return !ready_queue.empty() || all_compiled.load() ||
+                               fail_fast_triggered.load();
+                    });
+
+                    if (fail_fast_triggered.load())
+                        return;
+
+                    if (ready_queue.empty()) {
+                        if (all_compiled.load())
+                            return; // No more suites coming
+                        continue;   // Spurious wakeup
+                    }
+
+                    compiled = std::move(ready_queue.front());
+                    ready_queue.erase(ready_queue.begin());
                 }
 
-                // Get next suite to process
-                size_t idx = suite_index.fetch_add(1);
-                if (idx >= compiled_suites.size()) {
-                    return;
-                }
-
-                auto& compiled = compiled_suites[idx];
                 auto& suite = compiled.suite;
+                size_t exec_idx = suites_executed.fetch_add(1);
 
                 // Load DLL just-in-time for this suite
                 set_crash_context("loading_dll", suite.name.c_str(), nullptr,
                                   compiled.dll_path.c_str());
-                phase_start = Clock::now();
+                auto load_start = Clock::now();
                 DynamicLibrary lib;
                 bool load_ok = lib.load(compiled.dll_path);
                 if (opts.profile) {
                     collector.profile_stats.add(
                         "suite_load", std::chrono::duration_cast<std::chrono::microseconds>(
-                                          Clock::now() - phase_start)
+                                          Clock::now() - load_start)
                                           .count());
                 }
                 if (!load_ok) {
@@ -472,35 +371,28 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     TML_LOG_ERROR("build", "DLL LOAD FAILED suite=" << suite.name << " error="
                                                                     << lib.get_error());
-
-                    continue; // Continue with other suites
+                    continue;
                 }
 
                 TML_LOG_INFO("test", "Running suite: " << suite.name << " (" << suite.tests.size()
-                                                       << " test files, " << (idx + 1) << "/"
-                                                       << compiled_suites.size() << ")");
-                // Flush log to ensure crash diagnostics are captured
+                                                       << " test files, " << (exec_idx + 1) << "/"
+                                                       << total_suites_to_run << ")");
                 tml::log::Logger::instance().flush();
 
                 for (size_t i = 0; i < suite.tests.size(); ++i) {
-                    // Check fail-fast before each test
-                    if (fail_fast_triggered.load()) {
+                    if (fail_fast_triggered.load())
                         return;
-                    }
 
                     const auto& test_info = suite.tests[i];
 
-                    // Compute file hash (thread-local, no lock needed)
                     std::string file_hash =
                         TestCacheManager::compute_file_hash(test_info.file_path);
 
-                    // Check if we can skip this test (valid cache + previously passed)
                     if (cache_loaded) {
                         std::lock_guard<std::mutex> lock(cache_mutex);
                         if (test_cache.can_skip(test_info.file_path)) {
                             auto cached_info = test_cache.get_cached_info(test_info.file_path);
                             if (cached_info && cached_info->sha512 == file_hash) {
-                                // Use cached result
                                 TestResult result;
                                 result.file_path = test_info.file_path;
                                 result.test_name = test_info.test_name;
@@ -523,17 +415,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         }
                     }
 
-                    // Show which test is running (INFO level for crash diagnostics)
                     TML_LOG_INFO("test", "  Test " << (i + 1) << "/" << suite.tests.size() << ": "
                                                    << test_info.test_name);
                     tml::log::Logger::instance().flush();
 
-                    // Track which test is running for crash diagnostics (C++ side)
                     set_crash_context("running", suite.name.c_str(), test_info.test_name.c_str(),
                                       test_info.file_path.c_str());
 
-                    // Also set crash context in the DLL's VEH handler (C side)
-                    // so hardware exceptions report which test crashed
                     using TmlSetCrashCtx = void (*)(const char*, const char*, const char*);
                     auto set_dll_crash_ctx =
                         lib.get_function<TmlSetCrashCtx>("tml_set_test_crash_context");
@@ -542,8 +430,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                           suite.name.c_str());
                     }
 
-                    // Set memory tracking context so leaked allocations
-                    // report which test was active when they were created
                     using TmlMemTrackSetCtx = void (*)(const char*, const char*);
                     auto set_mem_ctx =
                         lib.get_function<TmlMemTrackSetCtx>("tml_mem_track_set_test_context");
@@ -551,7 +437,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         set_mem_ctx(test_info.test_name.c_str(), test_info.file_path.c_str());
                     }
 
-                    // Clear crash severity from any previous test
                     using TmlClearCrashSev = void (*)();
                     auto clear_sev = lib.get_function<TmlClearCrashSev>("tml_clear_crash_severity");
                     if (clear_sev) {
@@ -586,7 +471,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     result.exit_code = run_exit_code;
 
                     if (!result.passed) {
-                        // Build clear error message with test name prominent
                         result.error_message = "\n  FAILED: " + test_info.test_name;
                         result.error_message += "\n  File:   " + test_info.file_path;
                         result.error_message += "\n  Exit:   " + std::to_string(result.exit_code);
@@ -606,7 +490,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         }
                         result.error_message += "\n";
 
-                        // Log structured failure info for JSON log file
                         TML_LOG_ERROR("test",
                                       "FAILED test=" << test_info.test_name
                                                      << " file=" << test_info.file_path
@@ -617,7 +500,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         }
                     }
 
-                    // Update cache with result (synchronized)
                     if (should_update_cache) {
                         std::lock_guard<std::mutex> lock(cache_mutex);
                         std::vector<std::string> test_functions;
@@ -629,21 +511,17 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     collector.add(std::move(result));
 
-                    // Handle fail-fast
                     if (opts.fail_fast && !run_success) {
                         fail_fast_triggered.store(true);
                         TML_LOG_WARN("test", "Test failed, stopping due to --fail-fast");
                         return;
                     }
 
-                    // Handle dangerous crash: abort remaining tests in this suite
-                    // to avoid running on potentially corrupted state.
                     if (!run_success && run_exit_code == -2) {
                         using TmlGetAbortSuite = int32_t (*)();
                         auto get_abort =
                             lib.get_function<TmlGetAbortSuite>("tml_get_crash_abort_suite");
                         if (get_abort && get_abort()) {
-                            // Get severity for logging
                             using TmlGetSeverity = int32_t (*)();
                             auto get_sev =
                                 lib.get_function<TmlGetSeverity>("tml_get_crash_severity");
@@ -662,7 +540,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " crash — skipping " << remaining
                                              << " remaining test(s) to avoid corrupted state");
 
-                            // Mark remaining tests as skipped
                             for (size_t skip_idx = i + 1; skip_idx < suite.tests.size();
                                  skip_idx++) {
                                 auto& skip_info = suite.tests[skip_idx];
@@ -672,18 +549,18 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 skip_result.group = suite.group;
                                 skip_result.test_count = skip_info.test_count;
                                 skip_result.passed = false;
-                                skip_result.exit_code = -3; // special: skipped due to crash
+                                skip_result.exit_code = -3;
                                 skip_result.error_message =
                                     "\n  SKIPPED: " + skip_info.test_name + "\n  Reason: Prior " +
                                     sev_name + " crash in suite — state may be corrupted\n";
                                 collector.add(std::move(skip_result));
                             }
-                            return; // exit the suite loop
+                            break; // exit the test loop for this suite
                         }
                     }
                 }
 
-                // Collect coverage data before unloading DLL (synchronized)
+                // Collect coverage data before unloading DLL
                 if (CompilerOptions::coverage) {
                     using GetFuncCountFunc = int32_t (*)();
                     using GetFuncNameFunc = const char* (*)(int32_t);
@@ -696,9 +573,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     if (get_func_count && get_func_name && get_func_hits) {
                         std::lock_guard<std::mutex> lock(coverage_mutex);
                         int32_t count = get_func_count();
-                        for (int32_t i = 0; i < count; i++) {
-                            const char* name = get_func_name(i);
-                            int32_t hits = get_func_hits(i);
+                        for (int32_t fi = 0; fi < count; fi++) {
+                            const char* name = get_func_name(fi);
+                            int32_t hits = get_func_hits(fi);
                             if (name && hits > 0) {
                                 all_covered_functions.insert(name);
                             }
@@ -724,7 +601,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 // Incremental cache save after each suite completes
-                // This ensures cache is preserved even if process crashes later
                 if (should_update_cache) {
                     std::lock_guard<std::mutex> lock(cache_mutex);
                     fs::create_directories(cache_file.parent_path());
@@ -732,9 +608,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 // Incremental coverage save after each suite completes
-                // If the process crashes in a later suite, we still have partial data
-                // NOTE: Only save covered_functions.txt here, NOT the full report.
-                // The full report (HTML/JSON/history) is written once at the end.
                 if (CompilerOptions::coverage && !all_covered_functions.empty()) {
                     try {
                         std::lock_guard<std::mutex> lock(coverage_mutex);
@@ -748,27 +621,138 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                             }
                         }
                     } catch (...) {
-                        // Non-critical — don't let incremental save failures block tests
+                        // Non-critical
                     }
                 }
 
-                // Suite completed - clear crash context
                 clear_crash_context();
             }
         };
 
-        // Launch suite execution (single-threaded)
-        if (!opts.quiet) {
-            TML_LOG_DEBUG("test", "Running " << compiled_suites.size() << " suites...");
+        // --- Launch pipeline: execution thread + compilation threads ---
+
+        // Start execution thread first (it will block on CV until suites arrive)
+        std::thread exec_thread(execute_worker);
+
+        if (suites_to_compile.empty()) {
+            if (!opts.quiet && !suites_fully_cached.empty()) {
+                TML_LOG_DEBUG("test", "All " << suites_fully_cached.size()
+                                             << " suites cached, skipping compilation");
+            }
+            total_suites_to_run = 0;
+            all_compiled.store(true);
+            ready_cv.notify_one();
+        } else {
+            // Parallel suite compilation (3 threads).
+            // Global state is thread-safe: GlobalASTCache/GlobalLibraryIRCache
+            // use shared_mutex, LLVM target init uses std::once_flag,
+            // meta preload uses std::call_once, TypeEnv/ModuleRegistry are
+            // per-thread.
+            unsigned int num_compile_threads = 3;
+
+            struct CompileJob {
+                size_t index;
+                TestSuite suite;
+                SuiteCompileResult result;
+                bool compiled = false;
+            };
+
+            std::vector<CompileJob> jobs;
+            jobs.reserve(suites_to_compile.size());
+            for (size_t i = 0; i < suites_to_compile.size(); ++i) {
+                jobs.push_back({i, std::move(suites_to_compile[i]), {}, false});
+            }
+
+            total_suites_to_run = jobs.size();
+
+            std::atomic<size_t> next_job{0};
+
+            auto compile_worker = [&]() {
+                while (true) {
+                    if (fail_fast_triggered.load())
+                        break;
+
+                    size_t job_idx = next_job.fetch_add(1);
+                    if (job_idx >= jobs.size())
+                        break;
+
+                    auto& job = jobs[job_idx];
+
+                    if (!opts.quiet && opts.verbose) {
+                        TML_LOG_DEBUG("test", "Compiling suite: " << job.suite.name << " ("
+                                                                  << job.suite.tests.size()
+                                                                  << " tests)");
+                    }
+
+                    set_crash_context("compiling", job.suite.name.c_str(), nullptr, nullptr);
+
+                    job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache,
+                                                    opts.backend, opts.features);
+                    job.compiled = true;
+
+                    if (job.result.success) {
+                        // Push to ready queue for immediate execution
+                        job.suite.dll_path = job.result.dll_path;
+                        {
+                            std::lock_guard<std::mutex> lock(ready_mutex);
+                            ready_queue.push_back({std::move(job.suite), job.result.dll_path});
+                        }
+                        ready_cv.notify_one();
+                    } else {
+                        // Report compilation error immediately
+                        std::string failed_file = job.result.failed_test;
+                        if (failed_file.empty() && !job.suite.tests.empty()) {
+                            failed_file = job.suite.tests[0].file_path;
+                        }
+                        std::string failed_name = failed_file.empty()
+                                                      ? job.suite.name
+                                                      : fs::path(failed_file).stem().string();
+
+                        TestResult error_result;
+                        error_result.file_path = failed_file;
+                        error_result.test_name = failed_name;
+                        error_result.group = job.suite.group;
+                        error_result.passed = false;
+                        error_result.compilation_error = true;
+                        error_result.exit_code = EXIT_COMPILATION_ERROR;
+                        error_result.error_message =
+                            "COMPILATION FAILED\n" + job.result.error_message;
+
+                        collector.add(std::move(error_result));
+
+                        TML_LOG_ERROR("build", "COMPILATION FAILED suite="
+                                                   << job.suite.name << " file=" << failed_file
+                                                   << " error=" << job.result.error_message);
+                    }
+                }
+            };
+
+            if (!opts.quiet) {
+                TML_LOG_DEBUG("test", "Compiling " << jobs.size() << " suites with "
+                                                   << num_compile_threads << " threads...");
+            }
+
+            std::vector<std::thread> compile_threads;
+            for (unsigned int t = 0; t < std::min(num_compile_threads, (unsigned int)jobs.size());
+                 ++t) {
+                compile_threads.emplace_back(compile_worker);
+            }
+            for (auto& t : compile_threads) {
+                t.join();
+            }
+
+            // Signal execution thread that all compilation is done
+            all_compiled.store(true);
+            ready_cv.notify_one();
         }
 
-        phase_start = Clock::now();
-        suite_worker();
+        // Wait for execution to finish
+        exec_thread.join();
 
         if (opts.profile) {
             collector.profile_stats.add(
-                "parallel_execute",
-                std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start)
+                "pipeline_total",
+                std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - pipeline_start)
                     .count());
         }
 
