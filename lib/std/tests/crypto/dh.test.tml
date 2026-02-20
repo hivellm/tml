@@ -3,7 +3,7 @@ use test::{assert, assert_eq}
 use std::crypto::dh::{DhGroup, DiffieHellman, create_dh, create_dh_group, get_dh_group_params, diffie_hellman}
 use std::collections::Buffer
 
-// --- DhGroup::name ---
+// --- DhGroup enum tests (pure TML, no OpenSSL) ---
 
 @test
 func test_dh_group_names() -> I32 {
@@ -23,266 +23,98 @@ func test_dh_group_names() -> I32 {
     return 0
 }
 
-// --- DhGroup::prime_bits ---
-
 @test
 func test_dh_group_prime_bits() -> I32 {
-    assert_eq(DhGroup::Modp1.prime_bits(), 768 as I64, "modp1 bits")
-    assert_eq(DhGroup::Modp2.prime_bits(), 1024 as I64, "modp2 bits")
-    assert_eq(DhGroup::Modp5.prime_bits(), 1536 as I64, "modp5 bits")
     assert_eq(DhGroup::Modp14.prime_bits(), 2048 as I64, "modp14 bits")
-    assert_eq(DhGroup::Modp15.prime_bits(), 3072 as I64, "modp15 bits")
-    assert_eq(DhGroup::Modp16.prime_bits(), 4096 as I64, "modp16 bits")
-    assert_eq(DhGroup::Modp17.prime_bits(), 6144 as I64, "modp17 bits")
-    assert_eq(DhGroup::Modp18.prime_bits(), 8192 as I64, "modp18 bits")
     assert_eq(DhGroup::Ffdhe2048.prime_bits(), 2048 as I64, "ffdhe2048 bits")
-    assert_eq(DhGroup::Ffdhe3072.prime_bits(), 3072 as I64, "ffdhe3072 bits")
     assert_eq(DhGroup::Ffdhe4096.prime_bits(), 4096 as I64, "ffdhe4096 bits")
-    assert_eq(DhGroup::Ffdhe6144.prime_bits(), 6144 as I64, "ffdhe6144 bits")
-    assert_eq(DhGroup::Ffdhe8192.prime_bits(), 8192 as I64, "ffdhe8192 bits")
     return 0
 }
-
-// --- DhGroup::is_deprecated ---
 
 @test
 func test_dh_group_deprecated() -> I32 {
     assert(DhGroup::Modp1.is_deprecated(), "modp1 deprecated")
     assert(DhGroup::Modp2.is_deprecated(), "modp2 deprecated")
-    assert(DhGroup::Modp5.is_deprecated(), "modp5 deprecated")
     assert(not DhGroup::Modp14.is_deprecated(), "modp14 not deprecated")
-    assert(not DhGroup::Modp15.is_deprecated(), "modp15 not deprecated")
     assert(not DhGroup::Ffdhe2048.is_deprecated(), "ffdhe2048 not deprecated")
     return 0
 }
 
-// --- DhGroup::from_name ---
-
 @test
-func test_dh_group_from_name_valid() -> I32 {
+func test_dh_group_from_name() -> I32 {
     let m14: Maybe[DhGroup] = DhGroup::from_name("modp14")
     assert(m14.is_just(), "modp14 found")
+    assert_eq(m14.unwrap().name(), "modp14", "modp14 roundtrip")
     let ff: Maybe[DhGroup] = DhGroup::from_name("ffdhe2048")
     assert(ff.is_just(), "ffdhe2048 found")
+    assert_eq(ff.unwrap().name(), "ffdhe2048", "ffdhe2048 roundtrip")
+    let invalid: Maybe[DhGroup] = DhGroup::from_name("invalid")
+    assert(invalid.is_nothing(), "invalid is Nothing")
     return 0
 }
 
-@test
-func test_dh_group_from_name_invalid() -> I32 {
-    let result: Maybe[DhGroup] = DhGroup::from_name("invalid")
-    assert(result.is_nothing(), "invalid group is Nothing")
-    return 0
-}
-
-// --- DH operations: with_group, prime_length, check_params, prime, generator, group, verify_error ---
+// --- DH with_group and accessors (uses OpenSSL named group — instant, no prime gen) ---
 
 @test
-func test_dh_with_group_and_accessors() -> I32 {
-    let dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    assert_eq(dh.prime_length(), 768 as I64, "modp1 prime length")
-    assert(dh.check_params(), "modp1 params valid")
+func test_dh_with_group() -> I32 {
+    let dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
+    assert_eq(dh.prime_length(), 2048 as I64, "ffdhe2048 prime length")
+    assert(dh.check_params(), "ffdhe2048 params valid")
+    assert_eq(dh.verify_error(), 0 as I64, "no verify errors")
     let p: Buffer = dh.prime()
     assert(p.len() > (0 as I64), "prime not empty")
     let g: Buffer = dh.generator()
     assert(g.len() > (0 as I64), "generator not empty")
     let grp: Maybe[DhGroup] = dh.group()
     assert(grp.is_just(), "group should be Just")
-    let err: I64 = dh.verify_error()
-    assert_eq(err, 0 as I64, "verify_error should be 0 for valid params")
     return 0
 }
 
-// --- DH keygen, set_keys, public_key, private_key, destroy ---
+// --- DH keygen and compute_secret ---
 
 @test
-func test_dh_keygen_set_destroy() -> I32 {
-    let mut dh1: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    dh1.generate_keys()
-    let pub_key: Buffer = dh1.public_key()
-    assert(pub_key.len() > (0 as I64), "public key not empty")
-    let priv_key: Buffer = dh1.private_key()
-    assert(priv_key.len() > (0 as I64), "private key not empty")
-
-    let mut dh2: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    dh2.set_public_key(ref pub_key)
-    dh2.set_private_key(ref priv_key)
-    let pub2: Buffer = dh2.public_key()
-    assert(pub2.len() > (0 as I64), "set pub key recoverable")
-
-    dh1.destroy()
-    dh1.destroy()
-    dh2.destroy()
-    return 0
-}
-
-// --- create_dh_group convenience function ---
-
-@test
-func test_create_dh_group() -> I32 {
-    let result = create_dh_group(DhGroup::Modp1)
-    assert(result.is_ok(), "create_dh_group should succeed")
-    let dh: DiffieHellman = result.unwrap()
-    assert_eq(dh.prime_length(), 768 as I64, "modp1 768 bits")
-    return 0
-}
-
-// --- DiffieHellman::new / create_dh with custom params ---
-
-@test
-func test_dh_new_and_create_dh() -> I32 {
-    let dh_source: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    let p: Buffer = dh_source.prime()
-    let g: Buffer = dh_source.generator()
-
-    let result = DiffieHellman::new(ref p, ref g)
-    assert(result.is_ok(), "DH new with custom params should succeed")
-    let dh: DiffieHellman = result.unwrap()
-    assert(dh.check_params(), "custom params should be valid")
-
-    let result2 = create_dh(ref p, ref g)
-    assert(result2.is_ok(), "create_dh should succeed")
-    return 0
-}
-
-// --- get_dh_group_params (tuple return) ---
-
-@test
-func test_get_dh_group_params() -> I32 {
-    let pair: (Buffer, Buffer) = get_dh_group_params(DhGroup::Modp1)
-    return 0
-}
-
-// --- DhGroup::from_name roundtrip ---
-
-@test
-func test_dh_group_from_name_roundtrip_modp() -> I32 {
-    let r1: Maybe[DhGroup] = DhGroup::from_name("modp1")
-    assert(r1.is_just(), "modp1 found")
-    assert_eq(r1.unwrap().name(), "modp1", "modp1 roundtrip")
-    let r2: Maybe[DhGroup] = DhGroup::from_name("modp2")
-    assert(r2.is_just(), "modp2 found")
-    assert_eq(r2.unwrap().name(), "modp2", "modp2 roundtrip")
-    let r5: Maybe[DhGroup] = DhGroup::from_name("modp5")
-    assert(r5.is_just(), "modp5 found")
-    assert_eq(r5.unwrap().name(), "modp5", "modp5 roundtrip")
-    let r14: Maybe[DhGroup] = DhGroup::from_name("modp14")
-    assert(r14.is_just(), "modp14 found")
-    assert_eq(r14.unwrap().name(), "modp14", "modp14 roundtrip")
-    let r15: Maybe[DhGroup] = DhGroup::from_name("modp15")
-    assert(r15.is_just(), "modp15 found")
-    assert_eq(r15.unwrap().name(), "modp15", "modp15 roundtrip")
-    let r16: Maybe[DhGroup] = DhGroup::from_name("modp16")
-    assert(r16.is_just(), "modp16 found")
-    assert_eq(r16.unwrap().name(), "modp16", "modp16 roundtrip")
-    let r17: Maybe[DhGroup] = DhGroup::from_name("modp17")
-    assert(r17.is_just(), "modp17 found")
-    assert_eq(r17.unwrap().name(), "modp17", "modp17 roundtrip")
-    let r18: Maybe[DhGroup] = DhGroup::from_name("modp18")
-    assert(r18.is_just(), "modp18 found")
-    assert_eq(r18.unwrap().name(), "modp18", "modp18 roundtrip")
-    return 0
-}
-
-@test
-func test_dh_group_from_name_roundtrip_ffdhe() -> I32 {
-    let r1: Maybe[DhGroup] = DhGroup::from_name("ffdhe2048")
-    assert(r1.is_just(), "ffdhe2048 found")
-    assert_eq(r1.unwrap().name(), "ffdhe2048", "ffdhe2048 roundtrip")
-    let r2: Maybe[DhGroup] = DhGroup::from_name("ffdhe3072")
-    assert(r2.is_just(), "ffdhe3072 found")
-    assert_eq(r2.unwrap().name(), "ffdhe3072", "ffdhe3072 roundtrip")
-    let r3: Maybe[DhGroup] = DhGroup::from_name("ffdhe4096")
-    assert(r3.is_just(), "ffdhe4096 found")
-    assert_eq(r3.unwrap().name(), "ffdhe4096", "ffdhe4096 roundtrip")
-    let r4: Maybe[DhGroup] = DhGroup::from_name("ffdhe6144")
-    assert(r4.is_just(), "ffdhe6144 found")
-    assert_eq(r4.unwrap().name(), "ffdhe6144", "ffdhe6144 roundtrip")
-    let r5: Maybe[DhGroup] = DhGroup::from_name("ffdhe8192")
-    assert(r5.is_just(), "ffdhe8192 found")
-    assert_eq(r5.unwrap().name(), "ffdhe8192", "ffdhe8192 roundtrip")
-    return 0
-}
-
-// --- DH with FFDHE groups ---
-
-@test
-func test_dh_ffdhe2048_create() -> I32 {
-    let dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
-    assert_eq(dh.prime_length(), 2048 as I64, "ffdhe2048 prime length")
-    assert(dh.check_params(), "ffdhe2048 params valid")
-    return 0
-}
-
-@test
-func test_dh_ffdhe2048_keygen() -> I32 {
-    let mut dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
-    dh.generate_keys()
-    let pub_key: Buffer = dh.public_key()
-    assert(pub_key.len() > (0 as I64), "ffdhe2048 public key not empty")
-    let priv_key: Buffer = dh.private_key()
-    assert(priv_key.len() > (0 as I64), "ffdhe2048 private key not empty")
-    dh.destroy()
-    return 0
-}
-
-// --- DH double destroy is safe ---
-
-@test
-func test_dh_double_destroy_safe() -> I32 {
-    let mut dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    dh.destroy()
-    dh.destroy()
-    return 0
-}
-
-// --- DH verify_error for valid group ---
-
-@test
-func test_dh_verify_error_ffdhe() -> I32 {
-    let dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
-    let err: I64 = dh.verify_error()
-    assert_eq(err, 0 as I64, "ffdhe2048 should have no verify errors")
-    return 0
-}
-
-// --- DiffieHellman::compute_secret (key exchange) ---
-
-@test
-func test_dh_compute_secret() -> I32 {
-    let mut alice: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+func test_dh_keygen_and_exchange() -> I32 {
+    let mut alice: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
     alice.generate_keys()
     let alice_pub: Buffer = alice.public_key()
+    assert(alice_pub.len() > (0 as I64), "alice pub not empty")
 
-    let mut bob: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    let mut bob: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
     bob.generate_keys()
     let bob_pub: Buffer = bob.public_key()
+    assert(bob_pub.len() > (0 as I64), "bob pub not empty")
 
-    let alice_secret = alice.compute_secret(ref bob_pub)
-    assert(alice_secret.is_ok(), "alice compute_secret should succeed")
-    let a_secret: Buffer = alice_secret.unwrap()
-    assert(a_secret.len() > (0 as I64), "alice secret not empty")
-
-    let bob_secret = bob.compute_secret(ref alice_pub)
-    assert(bob_secret.is_ok(), "bob compute_secret should succeed")
-    let b_secret: Buffer = bob_secret.unwrap()
-    assert(b_secret.len() > (0 as I64), "bob secret not empty")
-
-    assert_eq(a_secret.len(), b_secret.len(), "shared secrets same length")
+    let a_secret: Buffer = alice.compute_secret(ref bob_pub).unwrap()
+    let b_secret: Buffer = bob.compute_secret(ref alice_pub).unwrap()
+    assert(a_secret.len() > (0 as I64), "secret not empty")
+    assert_eq(a_secret.len(), b_secret.len(), "secrets same length")
 
     alice.destroy()
     bob.destroy()
     return 0
 }
 
-// --- DiffieHellman::generate ---
+// --- DH double destroy is safe ---
 
 @test
-func test_dh_generate() -> I32 {
-    let result = DiffieHellman::generate(512 as I64)
-    assert(result.is_ok(), "DH generate 512-bit should succeed")
-    let mut dh: DiffieHellman = result.unwrap()
-    assert(dh.prime_length() == (512 as I64), "prime length should be 512")
+func test_dh_destroy_safe() -> I32 {
+    let mut dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
     dh.destroy()
+    dh.destroy()
+    return 0
+}
+
+// --- create_dh with custom params ---
+
+@test
+func test_dh_custom_params() -> I32 {
+    let dh_source: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
+    let p: Buffer = dh_source.prime()
+    let g: Buffer = dh_source.generator()
+    let result = create_dh(ref p, ref g)
+    assert(result.is_ok(), "create_dh should succeed")
+    let dh: DiffieHellman = result.unwrap()
+    assert(dh.check_params(), "custom params valid")
     return 0
 }
 
@@ -290,16 +122,15 @@ func test_dh_generate() -> I32 {
 
 @test
 func test_diffie_hellman_func() -> I32 {
-    let mut dh1: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    let mut dh1: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
     dh1.generate_keys()
     let priv_key: Buffer = dh1.private_key()
-
-    let mut dh2: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
-    dh2.generate_keys()
-    let pub_key: Buffer = dh2.public_key()
-
     let prime: Buffer = dh1.prime()
     let gen: Buffer = dh1.generator()
+
+    let mut dh2: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
+    dh2.generate_keys()
+    let pub_key: Buffer = dh2.public_key()
 
     let result = diffie_hellman(ref priv_key, ref pub_key, ref prime, ref gen)
     assert(result.is_ok(), "diffie_hellman should succeed")

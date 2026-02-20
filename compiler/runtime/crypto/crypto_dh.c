@@ -59,34 +59,25 @@ static TmlBuffer* tml_pkey_get_bn_param_buf(EVP_PKEY* pkey, const char* param_na
     return buf;
 }
 
-// Helper: resolve prime length for modp group names
-// Returns 0 if unrecognised (caller should try as ffdhe group)
-static int tml_dh_modp_prime_len(const char* name) {
-    if (!name)
-        return 0;
-    if (strcmp(name, "modp1") == 0)
-        return 768;
-    if (strcmp(name, "modp2") == 0)
-        return 1024;
-    if (strcmp(name, "modp5") == 0)
-        return 1536;
-    if (strcmp(name, "modp14") == 0)
-        return 2048;
-    if (strcmp(name, "modp15") == 0)
-        return 3072;
-    if (strcmp(name, "modp16") == 0)
-        return 4096;
-    if (strcmp(name, "modp17") == 0)
-        return 6144;
-    if (strcmp(name, "modp18") == 0)
-        return 8192;
-    return 0;
-}
-
-// Helper: map TML group name to OpenSSL group name for ffdhe groups
-static const char* tml_dh_ffdhe_ossl_name(const char* name) {
+// Helper: map TML group name to OpenSSL named group for EVP paramgen.
+// OpenSSL 3.0+ supports named groups for both modp (RFC 3526) and ffdhe (RFC 7919).
+// modp1/2/5 are NOT built-in OpenSSL named groups — they need prime-length generation.
+// Returns NULL if the name is not a recognized named group.
+static const char* tml_dh_ossl_group_name(const char* name) {
     if (!name)
         return NULL;
+    // modp14-18 map to OpenSSL's "modp_XXXX" names (RFC 3526 well-known primes)
+    if (strcmp(name, "modp14") == 0)
+        return "modp_2048";
+    if (strcmp(name, "modp15") == 0)
+        return "modp_3072";
+    if (strcmp(name, "modp16") == 0)
+        return "modp_4096";
+    if (strcmp(name, "modp17") == 0)
+        return "modp_6144";
+    if (strcmp(name, "modp18") == 0)
+        return "modp_8192";
+    // ffdhe groups (RFC 7919) — OpenSSL uses the same names
     if (strcmp(name, "ffdhe2048") == 0)
         return "ffdhe2048";
     if (strcmp(name, "ffdhe3072") == 0)
@@ -97,18 +88,22 @@ static const char* tml_dh_ffdhe_ossl_name(const char* name) {
         return "ffdhe6144";
     if (strcmp(name, "ffdhe8192") == 0)
         return "ffdhe8192";
-    // Also accept modp names mapped to OpenSSL names for named-group path
-    if (strcmp(name, "modp_2048") == 0)
-        return "modp_2048";
-    if (strcmp(name, "modp_3072") == 0)
-        return "modp_3072";
-    if (strcmp(name, "modp_4096") == 0)
-        return "modp_4096";
-    if (strcmp(name, "modp_6144") == 0)
-        return "modp_6144";
-    if (strcmp(name, "modp_8192") == 0)
-        return "modp_8192";
     return NULL;
+}
+
+// Helper: resolve prime length for legacy modp group names (modp1/2/5).
+// These are NOT built-in OpenSSL named groups, so we must generate params
+// with the appropriate prime length. Returns 0 for unrecognized names.
+static int tml_dh_legacy_modp_prime_len(const char* name) {
+    if (!name)
+        return 0;
+    if (strcmp(name, "modp1") == 0)
+        return 768;
+    if (strcmp(name, "modp2") == 0)
+        return 1024;
+    if (strcmp(name, "modp5") == 0)
+        return 1536;
+    return 0;
 }
 
 // Helper: get the effective EVP_PKEY (prefer pkey if it has keys, else params)
@@ -253,10 +248,15 @@ TML_EXPORT void* crypto_dh_create_group(const char* group_name) {
     if (!dh)
         return NULL;
 
-    // First try modp groups (generate params with appropriate prime length)
-    int modp_bits = tml_dh_modp_prime_len(group_name);
-    if (modp_bits > 0) {
-        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DH, NULL);
+    // Try named groups first (modp14-18, ffdhe2048-8192).
+    // These use well-known RFC primes via OpenSSL's built-in named groups —
+    // instant, deterministic, and no stack-heavy prime generation.
+    const char* ossl_name = tml_dh_ossl_group_name(group_name);
+    if (ossl_name) {
+        // Try DHX first (preferred for named groups), fall back to DH
+        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_from_name(NULL, "DHX", NULL);
+        if (!ctx)
+            ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
         if (!ctx) {
             free(dh);
             return NULL;
@@ -268,7 +268,12 @@ TML_EXPORT void* crypto_dh_create_group(const char* group_name) {
             return NULL;
         }
 
-        if (EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, modp_bits) <= 0) {
+        OSSL_PARAM group_params[2];
+        group_params[0] =
+            OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, (char*)ossl_name, 0);
+        group_params[1] = OSSL_PARAM_construct_end();
+
+        if (EVP_PKEY_CTX_set_params(ctx, group_params) <= 0) {
             EVP_PKEY_CTX_free(ctx);
             free(dh);
             return NULL;
@@ -286,14 +291,12 @@ TML_EXPORT void* crypto_dh_create_group(const char* group_name) {
         return (void*)dh;
     }
 
-    // Try ffdhe named groups via EVP_PKEY_CTX_set_group_name (OpenSSL 3.0+)
-    const char* ossl_name = tml_dh_ffdhe_ossl_name(group_name);
-    if (ossl_name) {
-        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_from_name(NULL, "DHX", NULL);
-        if (!ctx) {
-            // Fallback: try "DH" algorithm name
-            ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
-        }
+    // Legacy modp groups (modp1/2/5) — not built-in OpenSSL named groups.
+    // Must generate random params with the appropriate prime length.
+    // WARNING: This is slow and stack-heavy for large primes.
+    int legacy_bits = tml_dh_legacy_modp_prime_len(group_name);
+    if (legacy_bits > 0) {
+        EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_DH, NULL);
         if (!ctx) {
             free(dh);
             return NULL;
@@ -305,10 +308,7 @@ TML_EXPORT void* crypto_dh_create_group(const char* group_name) {
             return NULL;
         }
 
-        if (EVP_PKEY_CTX_set_params(
-                ctx, (OSSL_PARAM[]){OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
-                                                                     (char*)ossl_name, 0),
-                                    OSSL_PARAM_construct_end()}) <= 0) {
+        if (EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, legacy_bits) <= 0) {
             EVP_PKEY_CTX_free(ctx);
             free(dh);
             return NULL;
