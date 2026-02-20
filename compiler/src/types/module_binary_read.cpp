@@ -15,6 +15,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 namespace tml::types {
@@ -1237,58 +1238,63 @@ static int generate_all_meta_from_source() {
 }
 
 int preload_all_meta_caches() {
-    // Only run once per process
-    static bool s_preloaded = false;
-    if (s_preloaded) {
-        return 0;
-    }
-    s_preloaded = true;
+    // Thread-safe once-only initialization.
+    // Called from suite_execution.cpp (main thread) before parallel compilation,
+    // AND from compile_test_suite workers (multiple threads). std::call_once
+    // guarantees the heavy work runs exactly once with proper memory barriers.
+    static std::once_flag s_preload_flag;
+    static int s_preload_result = 0;
 
-    auto preload_start = std::chrono::steady_clock::now();
+    std::call_once(s_preload_flag, []() {
+        auto preload_start = std::chrono::steady_clock::now();
 
-    auto build_root = find_build_root();
-    fs::path meta_dir = build_root / "cache" / "meta";
+        auto build_root = find_build_root();
+        fs::path meta_dir = build_root / "cache" / "meta";
 
-    TML_LOG_INFO("meta", "========================================");
-    TML_LOG_INFO("meta", " META PRELOAD START");
-    TML_LOG_INFO("meta", "  Cache dir: " << meta_dir);
-    TML_LOG_INFO("meta", "========================================");
+        TML_LOG_INFO("meta", "========================================");
+        TML_LOG_INFO("meta", " META PRELOAD START");
+        TML_LOG_INFO("meta", "  Cache dir: " << meta_dir);
+        TML_LOG_INFO("meta", "========================================");
 
-    // Phase 1: Try to load existing .tml.meta files
-    int loaded = 0;
-    if (fs::exists(meta_dir)) {
-        loaded = load_existing_meta_files(meta_dir);
-    }
+        // Phase 1: Try to load existing .tml.meta files
+        int loaded = 0;
+        if (fs::exists(meta_dir)) {
+            loaded = load_existing_meta_files(meta_dir);
+        }
 
-    if (loaded > 0) {
+        if (loaded > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - preload_start)
+                               .count();
+            TML_LOG_INFO("meta", "========================================");
+            TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 1: binary cache)");
+            TML_LOG_INFO("meta", "  Loaded: " << loaded << " modules from .tml.meta files");
+            TML_LOG_INFO("meta", "  Time: " << elapsed << "ms");
+            TML_LOG_INFO("meta", "========================================");
+            s_preload_result = loaded;
+            return;
+        }
+
+        // Phase 2: No .tml.meta files found — generate them by parsing source files
+        // This happens on first run or after cache clean. We MUST do this before
+        // any test/build execution starts, so all library modules are available
+        // in GlobalModuleCache when tests begin.
+        TML_LOG_INFO("meta", "  No .tml.meta files found. Generating from source (first run)...");
+        int generated = generate_all_meta_from_source();
+
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                            std::chrono::steady_clock::now() - preload_start)
                            .count();
         TML_LOG_INFO("meta", "========================================");
-        TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 1: binary cache)");
-        TML_LOG_INFO("meta", "  Loaded: " << loaded << " modules from .tml.meta files");
+        TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 2: generated from source)");
+        TML_LOG_INFO("meta", "  Generated: " << generated << " modules");
         TML_LOG_INFO("meta", "  Time: " << elapsed << "ms");
         TML_LOG_INFO("meta", "========================================");
-        return loaded;
-    }
 
-    // Phase 2: No .tml.meta files found — generate them by parsing source files
-    // This happens on first run or after cache clean. We MUST do this before
-    // any test/build execution starts, so all library modules are available
-    // in GlobalModuleCache when tests begin.
-    TML_LOG_INFO("meta", "  No .tml.meta files found. Generating from source (first run)...");
-    int generated = generate_all_meta_from_source();
+        s_preload_result = generated;
+    });
 
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::steady_clock::now() - preload_start)
-                       .count();
-    TML_LOG_INFO("meta", "========================================");
-    TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 2: generated from source)");
-    TML_LOG_INFO("meta", "  Generated: " << generated << " modules");
-    TML_LOG_INFO("meta", "  Time: " << elapsed << "ms");
-    TML_LOG_INFO("meta", "========================================");
-
-    return generated;
+    return s_preload_result;
 }
 
 } // namespace tml::types

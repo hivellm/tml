@@ -379,6 +379,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             TML_LOG_INFO("test", "EARLY CACHE HIT - skipping compilation");
             if (!fast_copy_file(cached_dll_by_source, lib_output)) {
                 result.error_message = "Failed to copy cached DLL";
+                if (!suite.tests.empty()) {
+                    result.failed_test = suite.tests[0].file_path;
+                }
                 return result;
             }
 
@@ -1672,6 +1675,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             TML_LOG_INFO("test", "  Link complete");
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
+                if (!suite.tests.empty()) {
+                    result.failed_test = suite.tests[0].file_path;
+                }
                 return result;
             }
         }
@@ -1695,6 +1701,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // Copy to output location
         if (!fast_copy_file(cached_dll, lib_output)) {
             result.error_message = "Failed to copy DLL";
+            if (!suite.tests.empty()) {
+                result.failed_test = suite.tests[0].file_path;
+            }
             return result;
         }
 

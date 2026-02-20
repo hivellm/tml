@@ -39,6 +39,7 @@
 
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <regex>
 
 namespace tml::cli::tester {
@@ -161,10 +162,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         // suites
         if (!opts.no_cache && fs::exists(run_cache_dir)) {
             // Only clean up once per session to avoid overhead
-            static bool cleanup_done = false;
-            if (!cleanup_done) {
-                cleanup_done = true;
-
+            static std::once_flag cleanup_flag;
+            std::call_once(cleanup_flag, [&]() {
                 size_t removed_count = 0;
                 size_t removed_bytes = 0;
                 auto now = fs::file_time_type::clock::now();
@@ -218,7 +217,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         TML_LOG_WARN("test", "[CLEANUP] Error: " << e.what());
                     }
                 }
-            }
+            });
         }
 
         // Cache file hashes to avoid recomputing SHA512 multiple times
@@ -304,20 +303,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " suites cached, skipping compilation");
             }
         } else {
-            // Parallel suite compilation.
+            // Sequential suite compilation.
             // Each suite spawns internal threads for IR generation and object
-            // compilation (up to hardware_concurrency() each). Running too many
-            // suites in parallel causes thread explosion (N suites * M internal
-            // threads) which saturates the CPU at 100%.
-            // Cap at 2 concurrent suites to keep CPU usage reasonable.
-            unsigned int hw = std::thread::hardware_concurrency();
-            if (hw == 0)
-                hw = 8;
-            // Limit concurrent suite compilations: each suite uses up to hw
-            // internal threads, so 2 suites already use 2*hw threads.
-            unsigned int max_suite_threads = std::min(2u, hw);
-            unsigned int num_compile_threads =
-                std::min(max_suite_threads, static_cast<unsigned int>(suites_to_compile.size()));
+            // compilation (up to hardware_concurrency() each). Running multiple
+            // suites in parallel caused intermittent failures due to shared
+            // global state in the compiler (TypeChecker, codegen registries,
+            // LLVM target init, module loading). Serializing suite compilation
+            // eliminates these cross-suite race conditions while maintaining
+            // full internal parallelism within each suite.
+            unsigned int num_compile_threads = 1;
 
             // Structure to hold compilation results
             struct CompileJob {
@@ -391,10 +385,19 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 auto& compile_result = job.result;
 
                 if (!compile_result.success) {
-                    // Report compilation error but continue with other suites
+                    // Report compilation error but continue with other suites.
+                    // Use failed_test if available, otherwise fall back to
+                    // first test in suite or suite name to avoid empty names.
+                    std::string failed_file = compile_result.failed_test;
+                    if (failed_file.empty() && !suite.tests.empty()) {
+                        failed_file = suite.tests[0].file_path;
+                    }
+                    std::string failed_name =
+                        failed_file.empty() ? suite.name : fs::path(failed_file).stem().string();
+
                     TestResult error_result;
-                    error_result.file_path = compile_result.failed_test;
-                    error_result.test_name = fs::path(compile_result.failed_test).stem().string();
+                    error_result.file_path = failed_file;
+                    error_result.test_name = failed_name;
                     error_result.group = suite.group;
                     error_result.passed = false;
                     error_result.compilation_error = true;
@@ -405,8 +408,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     collector.add(std::move(error_result));
 
                     TML_LOG_ERROR("build", "COMPILATION FAILED suite="
-                                               << suite.name
-                                               << " file=" << compile_result.failed_test
+                                               << suite.name << " file=" << failed_file
                                                << " error=" << compile_result.error_message);
 
                     continue; // Continue with other suites instead of stopping

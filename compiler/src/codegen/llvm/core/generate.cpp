@@ -436,7 +436,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 std::vector<FieldInfo> fi;
                 fi.reserve(fields.size());
                 for (const auto& f : fields) {
-                    fi.push_back(FieldInfo{f.name, f.index, f.llvm_type, nullptr});
+                    fi.push_back(FieldInfo{f.name, f.index, f.llvm_type, f.semantic_type});
                 }
                 struct_fields_[struct_name] = std::move(fi);
             }

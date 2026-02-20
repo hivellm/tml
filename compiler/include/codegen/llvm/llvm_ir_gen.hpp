@@ -40,6 +40,7 @@
 #include "parser/ast.hpp"
 #include "types/checker.hpp"
 
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -103,8 +104,8 @@ private:
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, parser::Module> cache_;
-    mutable size_t hits_ = 0;
-    mutable size_t misses_ = 0;
+    mutable std::atomic<size_t> hits_ = 0;
+    mutable std::atomic<size_t> misses_ = 0;
 };
 
 // ============================================================================
@@ -208,8 +209,8 @@ private:
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, CachedIREntry> cache_;
     std::unordered_set<std::string> in_progress_; ///< Entries being generated
-    mutable size_t hits_ = 0;
-    mutable size_t misses_ = 0;
+    mutable std::atomic<size_t> hits_ = 0;
+    mutable std::atomic<size_t> misses_ = 0;
 };
 
 /// Error during LLVM IR generation.
@@ -241,6 +242,7 @@ struct CodegenLibraryState {
         std::string name;
         int index;
         std::string llvm_type;
+        types::TypePtr semantic_type; ///< Semantic type for proper type inference
     };
     std::unordered_map<std::string, std::vector<FieldInfoData>> struct_fields;
 

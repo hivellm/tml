@@ -465,8 +465,10 @@ static std::set<std::string> extract_preamble_func_names(const std::string& head
     std::istringstream stream(headers);
     std::string line;
     while (std::getline(stream, line)) {
-        // Match "declare ... @funcname(...)"
-        if (line.size() > 8 && line.substr(0, 8) == "declare ") {
+        // Match "declare ... @funcname(...)" and "define ... @funcname(...) {"
+        bool is_declare = line.size() > 8 && line.substr(0, 8) == "declare ";
+        bool is_define = line.size() > 7 && line.substr(0, 7) == "define ";
+        if (is_declare || is_define) {
             auto at_pos = line.find('@');
             if (at_pos != std::string::npos) {
                 auto paren_pos = line.find('(', at_pos);
@@ -502,6 +504,26 @@ static std::string generate_decls_from_ir(const std::string& full_ir,
                 auto hash_pos = signature.rfind(" #");
                 if (hash_pos != std::string::npos)
                     signature = signature.substr(0, hash_pos);
+                // Strip linkage qualifiers that are invalid on declarations.
+                // define internal/linkonce_odr/dllexport → declare (no qualifier)
+                for (const char* qual : {"internal ", "linkonce_odr ", "dllexport ", "private "}) {
+                    if (signature.substr(0, strlen(qual)) == qual) {
+                        signature = signature.substr(strlen(qual));
+                        break;
+                    }
+                }
+                // Skip functions already declared in preamble (e.g. runtime defines
+                // like str_eq, str_concat_opt that are emitted by emit_runtime_decls)
+                auto at_pos = signature.find('@');
+                if (at_pos != std::string::npos) {
+                    auto paren_pos = signature.find('(', at_pos);
+                    if (paren_pos != std::string::npos) {
+                        std::string func_ref = signature.substr(at_pos, paren_pos - at_pos);
+                        if (preamble_funcs.count(func_ref) > 0) {
+                            continue; // Already in preamble, skip
+                        }
+                    }
+                }
                 decls << "declare " << signature << "\n";
             }
         }
@@ -558,7 +580,7 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
         std::vector<CodegenLibraryState::FieldInfoData> field_data;
         field_data.reserve(fields.size());
         for (const auto& f : fields) {
-            field_data.push_back({f.name, f.index, f.llvm_type});
+            field_data.push_back({f.name, f.index, f.llvm_type, f.semantic_type});
         }
         state->struct_fields[struct_name] = std::move(field_data);
     }

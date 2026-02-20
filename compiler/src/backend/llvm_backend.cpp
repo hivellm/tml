@@ -7,6 +7,7 @@
 #include "log/log.hpp"
 
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 // LLVM C API headers
@@ -83,20 +84,25 @@ auto LLVMBackend::initialize() -> bool {
         return true;
     }
 
-    // Initialize X86 and AArch64 targets only (avoids linking all target backends)
-    LLVMInitializeX86TargetInfo();
-    LLVMInitializeX86Target();
-    LLVMInitializeX86TargetMC();
-    LLVMInitializeX86AsmParser();
-    LLVMInitializeX86AsmPrinter();
+    // Initialize LLVM targets exactly once across all threads.
+    // LLVMInitialize* functions are NOT safe for concurrent first calls,
+    // but LLVMContextCreate IS thread-safe.
+    static std::once_flag s_target_init_flag;
+    std::call_once(s_target_init_flag, []() {
+        LLVMInitializeX86TargetInfo();
+        LLVMInitializeX86Target();
+        LLVMInitializeX86TargetMC();
+        LLVMInitializeX86AsmParser();
+        LLVMInitializeX86AsmPrinter();
 
-    LLVMInitializeAArch64TargetInfo();
-    LLVMInitializeAArch64Target();
-    LLVMInitializeAArch64TargetMC();
-    LLVMInitializeAArch64AsmParser();
-    LLVMInitializeAArch64AsmPrinter();
+        LLVMInitializeAArch64TargetInfo();
+        LLVMInitializeAArch64Target();
+        LLVMInitializeAArch64TargetMC();
+        LLVMInitializeAArch64AsmParser();
+        LLVMInitializeAArch64AsmPrinter();
+    });
 
-    // Create LLVM context
+    // Create per-instance LLVM context (thread-safe)
     context_ = LLVMContextCreate();
     if (!context_) {
         last_error_ = "Failed to create LLVM context";
