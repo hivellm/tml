@@ -5,8 +5,7 @@
  * Core runtime declarations for the TML language. This header provides the
  * fundamental runtime functions that all TML programs depend on, including:
  *
- * - **I/O functions**: `print`, `println`, `panic`, `assert_tml`
- * - **String functions**: manipulation, comparison, and conversion
+ * - **I/O functions**: `print`, `println`, `panic`, `assert_tml_loc`
  * - **Time functions**: `time_ns`, `sleep_ms` (see time/time.c for Instant API)
  * - **Memory functions**: allocation, deallocation, and memory operations
  * - **Panic catching**: infrastructure for `@should_panic` tests
@@ -18,11 +17,11 @@
  * LLVM IR that calls runtime functions. User code should not include this
  * directly.
  *
- * ## Thread Safety
+ * ## Note on Strings
  *
- * Most functions are thread-safe. String functions using static buffers
- * (like `str_concat`) are NOT thread-safe and should not be used from
- * multiple threads simultaneously.
+ * String operations (concat, compare, slice, etc.) are implemented in pure TML
+ * (lib/core/src/str.tml) or as inline LLVM IR (str_eq, str_concat_opt).
+ * No C string functions are needed in the runtime.
  */
 
 #ifndef TML_ESSENTIAL_H
@@ -84,13 +83,6 @@ void println(const char* message);
 void panic(const char* message);
 
 /**
- * @brief Asserts a condition, panicking if false.
- * @param condition The condition to check (0 = false, non-zero = true).
- * @param message The message to display if assertion fails.
- */
-void assert_tml(int32_t condition, const char* message);
-
-/**
  * @brief Asserts a condition with file and line information.
  *
  * @param condition The condition to check.
@@ -119,129 +111,13 @@ void print_bool(int32_t b);
 /** @brief Prints a character. */
 void print_char(int32_t c);
 
-// ============================================================================
-// String Functions
-// ============================================================================
-
-/**
- * @brief Returns the length of a string.
- * @param s The null-terminated string.
- * @return The length in bytes, or 0 if s is NULL.
- */
-int32_t str_len(const char* s);
-
-/**
- * @brief Compares two strings for equality.
- * @param a First string.
- * @param b Second string.
- * @return 1 if equal, 0 if not equal.
- */
-int32_t str_eq(const char* a, const char* b);
-
-/**
- * @brief Computes a hash code for a string using djb2 algorithm.
- * @param s The string to hash.
- * @return Hash value as signed 32-bit integer.
- */
-int32_t str_hash(const char* s);
-
-/**
- * @brief Concatenates two strings.
- * @param a First string.
- * @param b Second string.
- * @return Pointer to static buffer containing result. NOT THREAD SAFE.
- * @warning Result is invalidated by next call to string functions using static buffer.
- */
-const char* str_concat(const char* a, const char* b);
-
-/**
- * @brief Concatenates 3 strings in a single allocation.
- * Optimized version for the common case of "a" + "b" + "c".
- */
-const char* str_concat_3(const char* a, const char* b, const char* c);
-
-/**
- * @brief Concatenates 4 strings in a single allocation.
- * Optimized version for "a" + "b" + "c" + "d".
- */
-const char* str_concat_4(const char* a, const char* b, const char* c, const char* d);
-
-/**
- * @brief Concatenates multiple strings in a single allocation.
- * @param strings Array of string pointers.
- * @param count Number of strings.
- * @return Concatenated string (caller owns, uses dynamic string header).
- */
-const char* str_concat_n(const char** strings, int64_t count);
-
-/**
- * @brief Extracts a substring.
- * @param s Source string.
- * @param start Starting index (0-based).
- * @param len Number of characters to extract.
- * @return Pointer to static buffer containing result.
- */
-const char* str_substring(const char* s, int32_t start, int32_t len);
-
-/**
- * @brief Extracts a slice of a string (exclusive end).
- * @param s Source string.
- * @param start Starting index (0-based).
- * @param end Ending index (exclusive).
- * @return Pointer to static buffer containing result.
- */
-const char* str_slice(const char* s, int64_t start, int64_t end);
-
-/**
- * @brief Checks if haystack contains needle.
- * @return 1 if found, 0 if not found.
- */
-int32_t str_contains(const char* haystack, const char* needle);
-
-/**
- * @brief Checks if string starts with prefix.
- * @return 1 if starts with prefix, 0 otherwise.
- */
-int32_t str_starts_with(const char* s, const char* prefix);
-
-/**
- * @brief Checks if string ends with suffix.
- * @return 1 if ends with suffix, 0 otherwise.
- */
-int32_t str_ends_with(const char* s, const char* suffix);
-
-/**
- * @brief Converts string to uppercase.
- * @return Pointer to static buffer containing result.
- */
-const char* str_to_upper(const char* s);
-
-/**
- * @brief Converts string to lowercase.
- * @return Pointer to static buffer containing result.
- */
-const char* str_to_lower(const char* s);
-
-/**
- * @brief Removes leading and trailing whitespace.
- * @return Pointer to static buffer containing result.
- */
-const char* str_trim(const char* s);
-
-/**
- * @brief Gets the character at a specific index.
- * @param s The string.
- * @param index The 0-based index.
- * @return The character code, or 0 if out of bounds.
- */
-int32_t str_char_at(const char* s, int32_t index);
-
-/**
- * @brief Converts a single byte to a 1-character string.
- * @param c The character byte.
- * @return Pointer to static buffer containing the character as string.
- */
-const char* char_to_string(uint8_t c);
+// String functions — REMOVED (Phase 49)
+// All 17 string functions (str_len, str_eq, str_hash, str_concat, str_concat_3,
+// str_concat_4, str_concat_n, str_substring, str_slice, str_contains,
+// str_starts_with, str_ends_with, str_to_upper, str_to_lower, str_trim,
+// str_char_at, char_to_string) had NO implementation in any .c file.
+// str_eq and str_concat_opt are inlined as LLVM IR in runtime.cpp.
+// All string operations are implemented in pure TML (lib/core/src/str.tml).
 
 // ============================================================================
 // Time Functions

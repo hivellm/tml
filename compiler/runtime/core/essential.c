@@ -346,68 +346,7 @@ void panic(const char* message) {
     exit(1);
 }
 
-/**
- * @brief Asserts a condition, panicking if false.
- *
- * Maps to TML's `assert(condition: Bool, message: Str) -> Unit` builtin.
- * Note: Named `assert_tml` to avoid conflict with C's `assert` macro.
- *
- * When panic catching is active (in test mode), this uses the panic
- * mechanism to properly longjmp back to the test harness instead of
- * calling exit() which can cause stack corruption in DLL context.
- *
- * @param condition The condition to check (0 = false, non-zero = true).
- * @param message The message to display if assertion fails.
- */
-void assert_tml(int32_t condition, const char* message) {
-    if (!condition) {
-        // Build assertion failed message
-        static char assert_msg[1024];
-        snprintf(assert_msg, sizeof(assert_msg), "assertion failed: %s",
-                 message ? message : "(no message)");
-
-        // Use panic mechanism if catching is enabled (DLL test context)
-        // This properly longjmps back instead of calling exit()
-        if (tml_catching_panic) {
-            snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
-            // Capture backtrace before longjmp (stack will be unwound)
-            tml_panic_backtrace[0] = '\0';
-            tml_panic_backtrace_json[0] = '\0';
-            if (tml_backtrace_on_panic) {
-                Backtrace* bt = backtrace_capture_full(2); // Skip internal frames
-                if (bt) {
-                    backtrace_resolve_all(bt);
-                    char* formatted = backtrace_format(bt);
-                    if (formatted) {
-                        snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
-                        free(formatted);
-                    }
-                    char* json = backtrace_format_json(bt);
-                    if (json) {
-                        snprintf(tml_panic_backtrace_json, sizeof(tml_panic_backtrace_json), "%s",
-                                 json);
-                        free(json);
-                    }
-                    backtrace_free(bt);
-                }
-            }
-            longjmp(tml_panic_jmp_buf, 1);
-        }
-
-        // Normal mode - print and exit
-        RT_FATAL("runtime", "%s", assert_msg);
-
-        // Print backtrace if enabled
-        if (tml_backtrace_on_panic && !tml_in_panic) {
-            tml_in_panic = 1;
-            RT_ERROR("runtime", "Backtrace:");
-            backtrace_print(2);
-            tml_in_panic = 0;
-        }
-
-        exit(1);
-    }
-}
+// assert_tml (2-arg) — REMOVED (Phase 49, dead: codegen only emits assert_tml_loc)
 
 /**
  * @brief Asserts a condition with file and line information.
