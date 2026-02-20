@@ -880,34 +880,38 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return tmp;
     }
 
-    // to_string() -> Str and debug_string() -> Str (same for primitives)
+    // to_string() / debug_string() — most types dispatched through TML Display/Debug
+    // behavior impls in lib/core/src/fmt/impls.tml (Phase 44: removed hardcoded IR emission).
+    // Str and Char still need hardcoded handling (Str is identity, Char has lazy-lib
+    // resolution issues with char_to_str dependency chain).
     if (method == "to_string" || method == "debug_string") {
-        std::string trait_name = (method == "to_string") ? "Display" : "Debug";
-        emit_coverage(trait_name + "::" + method);
-        emit_coverage(types::primitive_kind_to_string(kind) + "::" + method);
-        std::string result = fresh_reg();
-        if (kind == types::PrimitiveKind::Bool) {
-            std::string ext = fresh_reg();
-            emit_line("  " + ext + " = zext i1 " + receiver + " to i32");
-            emit_line("  " + result + " = call ptr @bool_to_string(i32 " + ext + ")");
-        } else if (kind == types::PrimitiveKind::I32) {
-            emit_line("  " + result + " = call ptr @i32_to_string(i32 " + receiver + ")");
-        } else if (kind == types::PrimitiveKind::I64 || kind == types::PrimitiveKind::U64) {
-            // I64 and U64 are both already i64 type
-            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + receiver + ")");
-        } else if (kind == types::PrimitiveKind::F64) {
-            emit_line("  " + result + " = call ptr @float_to_string(double " + receiver + ")");
-        } else if (kind == types::PrimitiveKind::F32) {
-            // Convert F32 to F64 first
-            std::string ext = fresh_reg();
-            emit_line("  " + ext + " = fpext float " + receiver + " to double");
-            emit_line("  " + result + " = call ptr @float_to_string(double " + ext + ")");
-        } else if (kind == types::PrimitiveKind::Str) {
+        if (kind == types::PrimitiveKind::Str) {
+            std::string trait_name = (method == "to_string") ? "Display" : "Debug";
+            emit_coverage(trait_name + "::" + method);
+            emit_coverage("Str::" + method);
+            if (method == "to_string") {
+                // Identity — string is already a string
+                last_expr_type_ = "ptr";
+                return receiver;
+            }
+            // debug_string wraps in quotes: "\"" + s + "\""
+            std::string q = add_string_literal("\"");
+            std::string tmp1 = fresh_reg();
+            emit_line("  " + tmp1 + " = call ptr @str_concat_opt(ptr " + q + ", ptr " + receiver +
+                      ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + tmp1 + ", ptr " + q +
+                      ")");
             last_expr_type_ = "ptr";
-            return receiver;
-        } else if (kind == types::PrimitiveKind::Char) {
+            return result;
+        }
+        if (kind == types::PrimitiveKind::Char) {
+            std::string trait_name = (method == "to_string") ? "Display" : "Debug";
+            emit_coverage(trait_name + "::" + method);
+            emit_coverage("Char::" + method);
             // Inline char-to-string: alloc 2 bytes, write char byte + null terminator
             // (Handles ASCII; full UTF-8 encoding in TML char/methods.tml char_to_string)
+            std::string result = fresh_reg();
             std::string byte = fresh_reg();
             emit_line("  " + byte + " = trunc i32 " + receiver + " to i8");
             std::string buf = fresh_reg();
@@ -916,19 +920,23 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             std::string p1 = fresh_reg();
             emit_line("  " + p1 + " = getelementptr i8, ptr " + buf + ", i64 1");
             emit_line("  store i8 0, ptr " + p1);
-            emit_line("  " + result + " = bitcast ptr " + buf + " to ptr");
-        } else {
-            // For other integer types, extend to i64
-            std::string ext = fresh_reg();
-            if (is_signed) {
-                emit_line("  " + ext + " = sext " + llvm_ty + " " + receiver + " to i64");
-            } else {
-                emit_line("  " + ext + " = zext " + llvm_ty + " " + receiver + " to i64");
+            if (method == "debug_string") {
+                // Wrap in single quotes: "'" + c + "'"
+                std::string sq = add_string_literal("'");
+                std::string tmp1 = fresh_reg();
+                emit_line("  " + tmp1 + " = call ptr @str_concat_opt(ptr " + sq + ", ptr " + buf +
+                          ")");
+                std::string wrapped = fresh_reg();
+                emit_line("  " + wrapped + " = call ptr @str_concat_opt(ptr " + tmp1 + ", ptr " +
+                          sq + ")");
+                last_expr_type_ = "ptr";
+                return wrapped;
             }
-            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + ext + ")");
+            last_expr_type_ = "ptr";
+            return buf;
         }
-        last_expr_type_ = "ptr";
-        return result;
+        // All other primitives (Bool, I8-I128, U8-U128, F32, F64) are handled by
+        // try_gen_primitive_behavior_method() → TML Display/Debug impls in fmt/impls.tml
     }
 
     // fmt_binary, fmt_octal, fmt_lower_hex, fmt_upper_hex — dispatched through
