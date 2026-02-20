@@ -540,6 +540,53 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         return;
     }
 
+    // ========================================================================
+    // Inline primitive to_string / debug_string (Char, Str, Bool)
+    // These may arrive as CallInst with func_name "Type::method" when the
+    // MIR builder resolves behavior methods to qualified function names.
+    // ========================================================================
+    if (i.func_name == "Char::to_string" || i.func_name == "Char::debug_string" ||
+        i.func_name == "Char__to_string" || i.func_name == "Char__debug_string") {
+        std::string id = std::to_string(temp_counter_++);
+        std::string receiver = i.args.empty() ? "0" : get_value_reg(i.args[0]);
+        // Truncate i32 to i8 (ASCII)
+        emitln("    %char_byte." + id + " = trunc i32 " + receiver + " to i8");
+        // Allocate 2 bytes for single-char string + null
+        emitln("    %char_buf." + id + " = call ptr @mem_alloc(i64 2)");
+        emitln("    store i8 %char_byte." + id + ", ptr %char_buf." + id);
+        emitln("    %char_p1." + id + " = getelementptr i8, ptr %char_buf." + id + ", i64 1");
+        emitln("    store i8 0, ptr %char_p1." + id);
+        if (i.func_name == "Char::debug_string" || i.func_name == "Char__debug_string") {
+            emitln("    %sq_tmp." + id +
+                   " = call ptr @str_concat_opt(ptr @.str.sq, ptr %char_buf." + id + ")");
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %sq_tmp." + id +
+                   ", ptr @.str.sq)");
+        } else {
+            emitln("    " + result_reg + " = bitcast ptr %char_buf." + id + " to ptr");
+        }
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "ptr";
+        }
+        return;
+    }
+    if (i.func_name == "Str::to_string" || i.func_name == "Str::debug_string" ||
+        i.func_name == "Str__to_string" || i.func_name == "Str__debug_string") {
+        std::string receiver = i.args.empty() ? "null" : get_value_reg(i.args[0]);
+        if (i.func_name == "Str::to_string" || i.func_name == "Str__to_string") {
+            emitln("    " + result_reg + " = bitcast ptr " + receiver + " to ptr");
+        } else {
+            std::string id = std::to_string(temp_counter_++);
+            emitln("    %dq_tmp." + id + " = call ptr @str_concat_opt(ptr @.str.dq, ptr " +
+                   receiver + ")");
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %dq_tmp." + id +
+                   ", ptr @.str.dq)");
+        }
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "ptr";
+        }
+        return;
+    }
+
     // Check if this is an indirect call (function pointer parameter)
     auto param_it = param_info_.find(i.func_name);
     if (param_it != param_info_.end()) {

@@ -213,6 +213,15 @@ auto DevirtualizationPass::get_single_implementation(const std::string& class_na
 
 auto DevirtualizationPass::can_devirtualize(const std::string& receiver_type,
                                             const std::string& method_name) const -> DevirtReason {
+    // Skip primitive types — their methods are handled by MIR codegen inline emission,
+    // not by devirtualization to named functions.
+    static const std::unordered_set<std::string> primitive_types = {
+        "I8",  "I16",  "I32", "I64", "I128", "U8",   "U16", "U32",
+        "U64", "U128", "F32", "F64", "Bool", "Char", "Str"};
+    if (primitive_types.count(receiver_type) > 0) {
+        return DevirtReason::NotDevirtualized;
+    }
+
     // Build class hierarchy if not already done
     build_class_hierarchy();
 

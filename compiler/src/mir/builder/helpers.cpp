@@ -302,6 +302,8 @@ auto MirBuilder::get_type_name(const MirTypePtr& type) const -> std::string {
                     return "I32";
                 case PrimitiveType::I64:
                     return "I64";
+                case PrimitiveType::I128:
+                    return "I128";
                 case PrimitiveType::U8:
                     return "U8";
                 case PrimitiveType::U16:
@@ -310,6 +312,8 @@ auto MirBuilder::get_type_name(const MirTypePtr& type) const -> std::string {
                     return "U32";
                 case PrimitiveType::U64:
                     return "U64";
+                case PrimitiveType::U128:
+                    return "U128";
                 case PrimitiveType::F32:
                     return "F32";
                 case PrimitiveType::F64:

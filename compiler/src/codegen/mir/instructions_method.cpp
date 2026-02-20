@@ -172,6 +172,63 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     // Text type: now pure TML — all methods compiled from text.tml through normal codegen
     // (V8-style inline optimizations removed — SSO layout no longer applies)
 
+    // ========================================================================
+    // Char to_string / debug_string — inline emission (Phase 47)
+    // Char is represented as i32 but needs char-to-string conversion.
+    // Alloc 2 bytes, write char byte + null terminator.
+    // ========================================================================
+    if (recv_type == "Char" && (i.method_name == "to_string" || i.method_name == "debug_string")) {
+        std::string id = std::to_string(temp_counter_++);
+        // Truncate i32 to i8 (ASCII)
+        emitln("    %char_byte." + id + " = trunc i32 " + receiver + " to i8");
+        // Allocate 2 bytes for single-char string + null
+        emitln("    %char_buf." + id + " = call ptr @mem_alloc(i64 2)");
+        emitln("    store i8 %char_byte." + id + ", ptr %char_buf." + id);
+        emitln("    %char_p1." + id + " = getelementptr i8, ptr %char_buf." + id + ", i64 1");
+        emitln("    store i8 0, ptr %char_p1." + id);
+
+        if (i.method_name == "debug_string") {
+            // Wrap in single quotes: "'" + c + "'"
+            // @.str.sq is declared in emit_preamble()
+            emitln("    %sq_tmp." + id +
+                   " = call ptr @str_concat_opt(ptr @.str.sq, ptr %char_buf." + id + ")");
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %sq_tmp." + id +
+                   ", ptr @.str.sq)");
+        } else {
+            // to_string: just return the buffer
+            emitln("    " + result_reg + " = bitcast ptr %char_buf." + id + " to ptr");
+        }
+
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "ptr";
+        }
+        return;
+    }
+
+    // ========================================================================
+    // Str to_string / debug_string — inline emission (Phase 47)
+    // Str::to_string is identity, Str::debug_string wraps in quotes.
+    // ========================================================================
+    if (recv_type == "Str" && (i.method_name == "to_string" || i.method_name == "debug_string")) {
+        if (i.method_name == "to_string") {
+            // Identity — string is already a string
+            emitln("    " + result_reg + " = bitcast ptr " + receiver + " to ptr");
+        } else {
+            // debug_string wraps in quotes: "\"" + s + "\""
+            // @.str.dq is declared in emit_preamble()
+            std::string id = std::to_string(temp_counter_++);
+            emitln("    %dq_tmp." + id + " = call ptr @str_concat_opt(ptr @.str.dq, ptr " +
+                   receiver + ")");
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %dq_tmp." + id +
+                   ", ptr @.str.dq)");
+        }
+
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "ptr";
+        }
+        return;
+    }
+
     // Normal method call path (non-inlined)
     mir::MirTypePtr ret_ptr = i.return_type;
     if (!ret_ptr && inst.result != mir::INVALID_VALUE) {

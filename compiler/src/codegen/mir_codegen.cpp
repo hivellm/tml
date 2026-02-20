@@ -254,15 +254,41 @@ void MirCodegen::emit_preamble() {
     emitln("target triple = \"" + options_.target_triple + "\"");
     emitln();
 
-    // Declare printf, println, and abort for print builtins
+    // Declare printf, println, print, and abort for print builtins
     emitln("declare i32 @printf(ptr, ...)");
+    emitln("declare void @print(ptr)");
     emitln("declare void @println(ptr)");
     emitln("declare void @abort() noreturn");
     emitln("declare ptr @str_concat(ptr, ptr)");
-    emitln("declare ptr @str_concat_opt(ptr, ptr)");         // O(1) amortized concatenation
     emitln("declare ptr @str_concat_3(ptr, ptr, ptr)");      // Fused 3-string concat
     emitln("declare ptr @str_concat_4(ptr, ptr, ptr, ptr)"); // Fused 4-string concat
     emitln("declare i64 @time_ns()");
+    emitln("declare ptr @mem_alloc(i64)"); // Memory allocation for char-to-string
+    emitln("declare i64 @strlen(ptr)");
+    emitln("declare ptr @malloc(i64)");
+    emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
+    emitln();
+
+    // str_concat_opt: null-safe string concatenation (inlined from runtime.cpp)
+    emitln("@.str.empty = private constant [1 x i8] c\"\\00\"");
+    emitln("define internal ptr @str_concat_opt(ptr %a, ptr %b) {");
+    emitln("entry:");
+    emitln("  %a_null = icmp eq ptr %a, null");
+    emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
+    emitln("  %b_null = icmp eq ptr %b, null");
+    emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
+    emitln("  %len_a = call i64 @strlen(ptr %a_safe)");
+    emitln("  %len_b = call i64 @strlen(ptr %b_safe)");
+    emitln("  %total = add i64 %len_a, %len_b");
+    emitln("  %alloc = add i64 %total, 1");
+    emitln("  %buf = call ptr @malloc(i64 %alloc)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %a_safe, i64 %len_a, i1 false)");
+    emitln("  %dst = getelementptr i8, ptr %buf, i64 %len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)");
+    emitln("  %end = getelementptr i8, ptr %buf, i64 %total");
+    emitln("  store i8 0, ptr %end");
+    emitln("  ret ptr %buf");
+    emitln("}");
     emitln();
 
     // Black box functions (prevent optimization)
@@ -279,6 +305,10 @@ void MirCodegen::emit_preamble() {
     emitln("@.str.str = private constant [4 x i8] c\"%s\\0A\\00\"");
     emitln("@.str.bool.true = private constant [5 x i8] c\"true\\00\"");
     emitln("@.str.bool.false = private constant [6 x i8] c\"false\\00\"");
+    emitln(
+        "@.str.sq = private constant [2 x i8] c\"'\\00\""); // Single quote for Char::debug_string
+    emitln(
+        "@.str.dq = private constant [2 x i8] c\"\\22\\00\""); // Double quote for Str::debug_string
     emitln("@.str.assert = private constant [18 x i8] c\"assertion failed\\0A\\00\"");
     emitln();
 
