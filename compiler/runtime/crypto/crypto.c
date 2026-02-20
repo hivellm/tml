@@ -1555,60 +1555,11 @@ TML_EXPORT const char* crypto_u64_to_hex(uint64_t value) {
 // Algorithm Discovery & Constants
 // ============================================================================
 
-// Forward declarations for list_create/list_push from collections.c
-typedef struct TmlCollectionList {
-    void* data;
-    int64_t len;
-    int64_t capacity;
-    int64_t elem_size;
-} TmlCollectionList;
-
-extern TmlCollectionList* list_create(int64_t initial_capacity);
-extern void list_push(TmlCollectionList* list, int64_t value);
-
-static void list_push_str(TmlCollectionList* list, const char* str) {
-    char* dup = tml_strdup(str);
-    if (dup)
-        list_push(list, (int64_t)(uintptr_t)dup);
-}
-
-TML_EXPORT void* crypto_get_hashes(void) {
-    TmlCollectionList* list = list_create(16);
-    if (!list)
-        return NULL;
-    list_push_str(list, "md5");
-    list_push_str(list, "sha1");
-    list_push_str(list, "sha256");
-    list_push_str(list, "sha384");
-    list_push_str(list, "sha512");
-    list_push_str(list, "sha512-256");
-    list_push_str(list, "sha3-256");
-    list_push_str(list, "sha3-384");
-    list_push_str(list, "sha3-512");
-    list_push_str(list, "blake2b512");
-    list_push_str(list, "blake2s256");
-    return list;
-}
-
-TML_EXPORT void* crypto_get_ciphers(void) {
-    TmlCollectionList* list = list_create(16);
-    if (!list)
-        return NULL;
-    list_push_str(list, "aes-128-cbc");
-    list_push_str(list, "aes-192-cbc");
-    list_push_str(list, "aes-256-cbc");
-    list_push_str(list, "aes-128-ctr");
-    list_push_str(list, "aes-256-ctr");
-    list_push_str(list, "aes-128-gcm");
-    list_push_str(list, "aes-192-gcm");
-    list_push_str(list, "aes-256-gcm");
-    list_push_str(list, "chacha20");
-    list_push_str(list, "chacha20-poly1305");
-    list_push_str(list, "des-ede3-cbc");
-    return list;
-}
-
-// NOTE: crypto_get_curves is defined in crypto_ecdh.c
+// NOTE: crypto_get_hashes, crypto_get_ciphers, crypto_get_curves removed
+// (Phase 43). TML now builds these lists in pure TML:
+//   - std::crypto::constants::get_hashes()
+//   - std::crypto::constants::get_ciphers()
+//   - std::crypto::ecdh::get_curves()
 
 // Cipher info lookup table
 typedef struct {

@@ -763,33 +763,8 @@ TML_EXPORT void* crypto_x448_public_from_private(void* priv_handle) {
     return (void*)buf;
 }
 
-// ============================================================================
-// 16. crypto_get_curves - Get list of supported curves
-// ============================================================================
-
-// List FFI (from collections runtime)
-typedef struct TmlList_tag {
-    int64_t* data;
-    int64_t length;
-    int64_t capacity;
-} TmlList_tag;
-extern TmlList_tag* list_create(int64_t initial_capacity);
-extern void list_push(TmlList_tag* list, int64_t value);
-
-TML_EXPORT void* crypto_get_curves(void) {
-    TmlList_tag* list = list_create(16);
-    if (!list)
-        return NULL;
-    const char* curves[] = {"prime256v1",      "secp384r1",       "secp521r1",
-                            "secp256k1",       "X25519",          "X448",
-                            "brainpoolP256r1", "brainpoolP384r1", "brainpoolP512r1"};
-    for (int i = 0; i < 9; i++) {
-        char* dup = tml_strdup(curves[i]);
-        if (dup)
-            list_push(list, (int64_t)(uintptr_t)dup);
-    }
-    return list;
-}
+// NOTE: crypto_get_curves removed (Phase 43). TML builds curve list in pure TML:
+//   std::crypto::ecdh::get_curves()
 
 // ============================================================================
 // 17. crypto_is_curve_supported - Check if a curve name is supported
@@ -889,9 +864,6 @@ TML_EXPORT void* crypto_x448_generate_private(void) {
 }
 TML_EXPORT void* crypto_x448_public_from_private(void* priv_handle) {
     (void)priv_handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_get_curves(void) {
     return NULL;
 }
 TML_EXPORT int32_t crypto_is_curve_supported(const char* curve_name) {

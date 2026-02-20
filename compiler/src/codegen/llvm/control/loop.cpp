@@ -317,10 +317,6 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string range_end = "0";
     bool inclusive = false;
     std::string range_type = "i32"; // Default type for range
-    bool is_collection_iter = false;
-    std::string collection_ptr;
-    std::string idx_var_name = "_for_collection_idx";
-
     if (for_expr.iter->is<parser::RangeExpr>()) {
         const auto& range = for_expr.iter->as<parser::RangeExpr>();
         inclusive = range.inclusive;
@@ -332,38 +328,10 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
             range_type = last_expr_type_; // Use type of end value
         }
     } else {
-        // Check if it's a collection (List, HashMap, Buffer)
+        // Treat as simple range 0 to iter
         std::string iter_val = gen_expr(*for_expr.iter);
-        std::string iter_type = last_expr_type_;
-
-        // Check if iter_type is ptr (collections are pointers)
-        if (iter_type == "ptr") {
-            is_collection_iter = true;
-
-            // Store collection pointer in an alloca so we can use it in the loop body
-            std::string collection_alloca = fresh_reg();
-            emit_line("  " + collection_alloca + " = alloca ptr");
-            emit_line("  store ptr " + iter_val + ", ptr " + collection_alloca);
-
-            // Load it back to call _len
-            std::string collection_loaded = fresh_reg();
-            emit_line("  " + collection_loaded + " = load ptr, ptr " + collection_alloca);
-            collection_ptr = collection_alloca; // Store the alloca, not the value
-
-            // Call the appropriate _len function to get collection size
-            std::string len_result = fresh_reg();
-            emit_line("  " + len_result + " = call i64 @list_len(ptr " + collection_loaded + ")");
-
-            // Convert i64 to i32 for loop counter
-            std::string len_i32 = fresh_reg();
-            emit_line("  " + len_i32 + " = trunc i64 " + len_result + " to i32");
-            range_end = len_i32;
-            range_type = "i32";
-        } else {
-            // Fallback: treat as simple range 0 to iter
-            range_end = iter_val;
-            range_type = iter_type;
-        }
+        range_end = iter_val;
+        range_type = last_expr_type_;
     }
 
     // Preheader block - loop initialization (for loop-invariant code motion)
@@ -400,35 +368,6 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     current_block_ = label_body;
     block_terminated_ = false;
     current_loop_stack_save_ = ""; // No stack save for break/continue
-
-    // If iterating over a collection, get the element and bind it to the loop variable
-    if (is_collection_iter) {
-        // Load the collection pointer
-        std::string collection_loaded = fresh_reg();
-        emit_line("  " + collection_loaded + " = load ptr, ptr " + collection_ptr);
-
-        // Get current index
-        std::string idx = fresh_reg();
-        emit_line("  " + idx + " = load " + range_type + ", ptr " + var_alloca);
-
-        // Convert i32 index to i64 for list_get call
-        std::string idx_i64 = fresh_reg();
-        emit_line("  " + idx_i64 + " = sext i32 " + idx + " to i64");
-
-        // Call list_get(collection, index)
-        std::string element = fresh_reg();
-        emit_line("  " + element + " = call i64 @list_get(ptr " + collection_loaded + ", i64 " +
-                  idx_i64 + ")");
-
-        // Convert i64 result to i32 and store in actual loop variable
-        std::string element_i32 = fresh_reg();
-        emit_line("  " + element_i32 + " = trunc i64 " + element + " to i32");
-
-        std::string element_alloca = fresh_reg();
-        emit_line("  " + element_alloca + " = alloca i32");
-        emit_line("  store i32 " + element_i32 + ", ptr " + element_alloca);
-        locals_[var_name] = VarInfo{element_alloca, "i32", nullptr, std::nullopt};
-    }
 
     // Push a lifetime scope for the loop body
     push_lifetime_scope();

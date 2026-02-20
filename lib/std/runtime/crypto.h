@@ -341,7 +341,6 @@ TmlBuffer* crypto_x25519_generate_private(void);
 TmlBuffer* crypto_x448_generate_private(void);
 TmlBuffer* crypto_x25519_public_from_private(TmlBuffer* private_key);
 TmlBuffer* crypto_x448_public_from_private(TmlBuffer* private_key);
-void* crypto_get_curves(void);
 bool crypto_is_curve_supported(const char* curve_name);
 
 // ============================================================================
@@ -374,8 +373,6 @@ TmlBuffer* crypto_concat_buffers3(TmlBuffer* a, TmlBuffer* b, TmlBuffer* c);
 char* crypto_jwk_extract_k(const char* jwk);
 
 // Algorithm info
-void* crypto_get_hashes(void);
-void* crypto_get_ciphers(void);
 bool crypto_cipher_exists(const char* name);
 int64_t crypto_cipher_key_length(const char* name);
 int64_t crypto_cipher_iv_length(const char* name);

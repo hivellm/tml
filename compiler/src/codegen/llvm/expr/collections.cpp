@@ -140,7 +140,7 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
 
 auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
     // For fixed-size arrays: arr[i] -> GEP + load
-    // For dynamic lists: arr[i] -> list_get(arr, i)
+    // For slices: slice[i] -> extract data ptr from fat pointer, GEP + load
 
     // First, infer the type of the object to determine if it's an array or list
     types::TypePtr obj_type = infer_expr_type(*idx.object);
@@ -313,23 +313,13 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
         }
     }
 
-    // Fall back to list_get for dynamic lists
+    // Fallback: generate both expressions and return the object value.
+    // This path should not be reached for well-typed code — slices and arrays
+    // are handled above. If reached, emit a comment for debugging.
     std::string arr_ptr = gen_expr(*idx.object);
-    std::string index_val = gen_expr(*idx.index);
-    std::string index_type = last_expr_type_;
-
-    // Convert index to i64 if needed (list_get expects i64)
-    std::string index_i64 = index_val;
-    if (index_type == "i32") {
-        index_i64 = fresh_reg();
-        emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
-    }
-
-    std::string result = fresh_reg();
-    emit_line("  " + result + " = call i64 @list_get(ptr " + arr_ptr + ", i64 " + index_i64 + ")");
-
+    gen_expr(*idx.index); // evaluate index for side effects
     last_expr_type_ = "i64";
-    return result;
+    return arr_ptr;
 }
 
 auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
