@@ -259,8 +259,7 @@ void MirCodegen::emit_preamble() {
     emitln("declare void @print(ptr)");
     emitln("declare void @println(ptr)");
     emitln("declare void @abort() noreturn");
-    // str_concat, str_concat_3, str_concat_4 — removed (Phase 49, dead: MIR uses str_concat_opt)
-    emitln("declare i64 @time_ns()");
+    // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
     emitln("declare ptr @mem_alloc(i64)"); // Memory allocation for char-to-string
     emitln("declare i64 @strlen(ptr)");
     emitln("declare ptr @malloc(i64)");

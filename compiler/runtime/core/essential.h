@@ -108,8 +108,7 @@ void print_f64(double n);
 /** @brief Prints a boolean as "true" or "false". */
 void print_bool(int32_t b);
 
-/** @brief Prints a character. */
-void print_char(int32_t c);
+// print_char — REMOVED (Phase 37/49, no .c impl, no codegen declare)
 
 // String functions — REMOVED (Phase 49)
 // All 17 string functions (str_len, str_eq, str_hash, str_concat, str_concat_3,

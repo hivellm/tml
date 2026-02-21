@@ -1,10 +1,10 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phases 0-7, 16-24, 24b complete; Phases 25-30 planned — full runtime.cpp audit done: 287→201→68 declares target)
+**Status**: In Progress (Phases 0-7, 16-27, 48-49 complete; Phases 28-30 planned — full runtime.cpp audit done: 287→77→68 declares target)
 
-**Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; 15 dead declares to remove (Phase 17) + ~204 to migrate (Phases 18-26)
+**Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; runtime C code actively shrinking via dead code removal
 
-**Current metrics** (2026-02-18): 76.2% coverage (3,228/4,235), 9,025 tests across 787 files
+**Current metrics** (2026-02-20): 76.2% coverage, 9,035 tests across 787 files, 77 runtime.cpp declares remaining
 
 **Phase 7-15 Audit Results** (2026-02-18):
 - Phase 7: INTEGER TO STRING — **MIGRATED** to pure TML (16 lowlevel blocks eliminated)
@@ -689,6 +689,29 @@ The search module is already following the three-tier rule correctly:
 
 ---
 
+## Phase 48: Dead Time/Header Cleanup (DONE — 2026-02-20)
+
+> Commit: `b601024`
+
+- [x] 48.1.1 Remove 9 dead functions from time.c (time_ms, time_us, sleep_us, elapsed_ms/us/ns, elapsed_secs, duration_as_millis_f64, duration_format_secs)
+- [x] 48.1.2 Remove 8 stale declarations from essential.h (print_f32, str_concat_opt, 6 time functions)
+- [x] 48.1.3 Remove 5 dead lowlevel bindings from core/time.tml (time_ms, time_us, elapsed_ms, duration_as_millis, duration_as_secs)
+- [x] 48.1.4 Tests: 9,045 passed
+
+---
+
+## Phase 49: Ghost String/Assert Declarations Removed (DONE — 2026-02-20)
+
+> Commit: `93655e6`
+
+- [x] 49.1.1 Remove 17 ghost string declarations from essential.h (str_len, str_eq, str_hash, str_concat/_3/_4/_n, str_substring, str_slice, str_contains, str_starts_with, str_ends_with, str_to_upper, str_to_lower, str_trim, str_char_at, char_to_string — none had C implementations)
+- [x] 49.1.2 Remove dead assert_tml() 2-arg function from essential.c (~60 lines, codegen only emits assert_tml_loc)
+- [x] 49.1.3 Remove 3 dead str_concat declares from mir_codegen.cpp (MIR uses str_concat_opt inline)
+- [x] 49.1.4 Update essential.h header comment (remove string section, update assert reference)
+- [x] 49.1.5 Tests: 9,035 passed
+
+---
+
 ## Phase 28: On-Demand Declaration Emit
 
 > **Goal**: Only emit runtime declares that are actually used in each compilation unit
@@ -727,9 +750,9 @@ The search module is already following the three-tier rule correctly:
 
 ## Summary: Impact and Status
 
-### runtime.cpp Declaration Audit (2026-02-19)
+### runtime.cpp Declaration Audit (2026-02-20)
 
-**Current state**: 122 declares remain (down from ~287 at Phase 16)
+**Current state**: 77 declares remain in LLVM runtime.cpp, 12 in MIR mir_codegen.cpp (down from ~287 at Phase 16)
 
 | Category | Declares | Status |
 |----------|----------|--------|
@@ -800,6 +823,8 @@ TOTAL: ~68 declarations (down from ~287)
 | 25 | Time builtins → @extern FFI | -10 declares | **DONE** |
 | 26 | Dead C files removed from build | 0 declares | **DONE** |
 | 27 | Float NaN/Inf → LLVM IR | -16 declares, -176 lines C | **DONE** |
+| 48 | Dead time/header cleanup | -8 .h decls, -9 .c funcs, -5 TML bindings | **DONE** |
+| 49 | Ghost string/assert removal | -17 .h decls, -1 .c func, -3 MIR declares | **DONE** |
 | 28 | On-demand emit | remaining | TODO |
 | 29 | Type system cleanup | — | TODO |
 | 30 | Benchmarks and validation | — | TODO |
