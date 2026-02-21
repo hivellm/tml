@@ -381,103 +381,17 @@ impl[T, const N: I64] Array[T, N] {
 // Splitting Operations
 // ============================================================================
 
-impl[T, const N: I64] Array[T, N] {
-    /// Divides one array reference into two at an index.
-    ///
-    /// The first will contain all indices from `[0, M)` and the second
-    /// will contain all indices from `[M, N)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `M > N`.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let v = [1, 2, 3, 4, 5, 6]
-    /// let (left, right) = v.split_array_ref::<3>()
-    ///
-    /// assert_eq(left, ref [1, 2, 3])
-    /// assert_eq(right, ref [4, 5, 6])
-    /// ```
-    pub func split_array_ref[const M: I64](this) -> (ref Array[T, M], ref Array[T, N - M]) {
-        if M > N {
-            panic("array::split_array_ref: M > N")
-        }
-        let left: ref Array[T, M] = lowlevel { array_split_left(this.data, M) }
-        let right: ref Array[T, N - M] = lowlevel { array_split_right(this.data, M) }
-        return (left, right)
-    }
-
-    /// Divides one mutable array reference into two at an index.
-    ///
-    /// The first will contain all indices from `[0, M)` and the second
-    /// will contain all indices from `[M, N)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `M > N`.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let mut v = [1, 2, 3, 4, 5, 6]
-    /// let (left, right) = v.split_array_mut::<3>()
-    ///
-    /// left[0] = 100
-    /// right[0] = 200
-    ///
-    /// assert_eq(v, [100, 2, 3, 200, 5, 6])
-    /// ```
-    pub func split_array_mut[const M: I64](mut this) -> (mut ref Array[T, M], mut ref Array[T, N - M]) {
-        if M > N {
-            panic("array::split_array_mut: M > N")
-        }
-        let left: mut ref Array[T, M] = lowlevel { array_split_left_mut(this.data, M) }
-        let right: mut ref Array[T, N - M] = lowlevel { array_split_right_mut(this.data, M) }
-        return (left, right)
-    }
-
-    /// Divides one array reference into two at an index from the end.
-    ///
-    /// The first will contain all indices from `[0, N - M)` and the second
-    /// will contain all indices from `[N - M, N)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `M > N`.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let v = [1, 2, 3, 4, 5, 6]
-    /// let (left, right) = v.rsplit_array_ref::<2>()
-    ///
-    /// assert_eq(left, ref [1, 2, 3, 4])
-    /// assert_eq(right, ref [5, 6])
-    /// ```
-    pub func rsplit_array_ref[const M: I64](this) -> (ref Array[T, N - M], ref Array[T, M]) {
-        if M > N {
-            panic("array::rsplit_array_ref: M > N")
-        }
-        return this.split_array_ref::<N - M>()
-    }
-
-    /// Divides one mutable array reference into two at an index from the end.
-    ///
-    /// The first will contain all indices from `[0, N - M)` and the second
-    /// will contain all indices from `[N - M, N)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `M > N`.
-    pub func rsplit_array_mut[const M: I64](mut this) -> (mut ref Array[T, N - M], mut ref Array[T, M]) {
-        if M > N {
-            panic("array::rsplit_array_mut: M > N")
-        }
-        return this.split_array_mut::<N - M>()
-    }
-}
+// NOTE: The following functions require const generic arithmetic (N - M) in
+// type arguments, which the parser does not yet support. They are commented
+// out to prevent parse errors that block documentation generation for the
+// entire module. Uncomment when const generic expressions are implemented.
+//
+// impl[T, const N: I64] Array[T, N] {
+//     pub func split_array_ref[const M: I64](this) -> (ref Array[T, M], ref Array[T, N - M])
+//     pub func split_array_mut[const M: I64](mut this) -> (mut ref Array[T, M], mut ref Array[T, N - M])
+//     pub func rsplit_array_ref[const M: I64](this) -> (ref Array[T, N - M], ref Array[T, M])
+//     pub func rsplit_array_mut[const M: I64](mut this) -> (mut ref Array[T, N - M], mut ref Array[T, M])
+// }
 
 // ============================================================================
 // Zip Operation

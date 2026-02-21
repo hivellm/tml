@@ -11,6 +11,7 @@
 #include "lexer/lexer.hpp"
 #include "log/log.hpp"
 #include "parser/parser.hpp"
+#include "preprocessor/preprocessor.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -58,27 +59,47 @@ int run_doc(const DocOptions& options) {
     // Collect all modules to document
     std::vector<std::pair<parser::Module, std::string>> modules;
 
-    // If --all, find all .tml files in current directory and lib/
+    // Helper to check if a file should be documented
+    auto is_documentable = [](const fs::path& path) -> bool {
+        std::string filename = path.filename().string();
+        // Skip test files and error test files
+        if (filename.ends_with(".test.tml") || filename.ends_with(".error.tml")) {
+            return false;
+        }
+        // Skip files in tests/ or examples/ directories
+        std::string path_str = path.string();
+        for (auto& c : path_str) {
+            if (c == '\\')
+                c = '/';
+        }
+        if (path_str.find("/tests/") != std::string::npos ||
+            path_str.find("/examples/") != std::string::npos) {
+            return false;
+        }
+        return path.extension() == ".tml";
+    };
+
+    // If --all, find all .tml source files in current directory and lib/
     std::vector<std::string> files = options.input_files;
     if (options.all_modules) {
         // Look for project files
         if (fs::exists("src")) {
             for (const auto& entry : fs::recursive_directory_iterator("src")) {
-                if (entry.path().extension() == ".tml") {
+                if (is_documentable(entry.path())) {
                     files.push_back(entry.path().string());
                 }
             }
         }
         if (fs::exists("lib")) {
             for (const auto& entry : fs::recursive_directory_iterator("lib")) {
-                if (entry.path().extension() == ".tml") {
+                if (is_documentable(entry.path())) {
                     files.push_back(entry.path().string());
                 }
             }
         }
         // Also check current directory
         for (const auto& entry : fs::directory_iterator(".")) {
-            if (entry.path().extension() == ".tml") {
+            if (is_documentable(entry.path())) {
                 files.push_back(entry.path().string());
             }
         }
@@ -102,10 +123,25 @@ int run_doc(const DocOptions& options) {
             continue;
         }
 
-        diag.set_source_content(file, source_code);
+        // Run preprocessor to handle #if/#ifdef/#define etc.
+        auto pp_config = preprocessor::Preprocessor::host_config();
+        preprocessor::Preprocessor pp(pp_config);
+        auto pp_result = pp.process(source_code, file);
+
+        if (!pp_result.success()) {
+            for (const auto& pp_diag : pp_result.errors()) {
+                TML_LOG_ERROR("doc", file << ":" << pp_diag.line << ":" << pp_diag.column << ": "
+                                          << pp_diag.message);
+            }
+            continue;
+        }
+
+        // Use preprocessed source for lexing
+        std::string preprocessed = pp_result.output;
+        diag.set_source_content(file, preprocessed);
 
         // Lex
-        auto source = lexer::Source::from_string(source_code, file);
+        auto source = lexer::Source::from_string(preprocessed, file);
         lexer::Lexer lex(source);
         auto tokens = lex.tokenize();
 

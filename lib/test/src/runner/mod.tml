@@ -27,25 +27,25 @@ pub func empty_stats() -> TestStats {
 }
 
 /// Increment passed test count
-pub func stats_add_passed(mut ref stats: TestStats) {
+pub func stats_add_passed(stats: mut ref TestStats) {
     stats.passed = stats.passed + 1
     stats.total = stats.total + 1
 }
 
 /// Increment failed test count
-pub func stats_add_failed(mut ref stats: TestStats) {
+pub func stats_add_failed(stats: mut ref TestStats) {
     stats.failed = stats.failed + 1
     stats.total = stats.total + 1
 }
 
 /// Increment ignored test count
-pub func stats_add_ignored(mut ref stats: TestStats) {
+pub func stats_add_ignored(stats: mut ref TestStats) {
     stats.ignored = stats.ignored + 1
     stats.total = stats.total + 1
 }
 
 /// Set total duration in microseconds
-pub func stats_set_duration(mut ref stats: TestStats, duration_us: I64) {
+pub func stats_set_duration(stats: mut ref TestStats, duration_us: I64) {
     stats.duration = duration_us
 }
 
