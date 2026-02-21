@@ -880,31 +880,12 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return tmp;
     }
 
-    // to_string() / debug_string() — most types dispatched through TML Display/Debug
+    // to_string() / debug_string() — most primitives dispatched through TML Display/Debug
     // behavior impls in lib/core/src/fmt/impls.tml (Phase 44: removed hardcoded IR emission).
-    // Str and Char still need hardcoded handling (Str is identity, Char has lazy-lib
-    // resolution issues with char_to_str dependency chain).
+    // Phase 50: removed hardcoded Str handling (TML impls work fine via lazy-lib).
+    // Char still needs hardcoded handling: lazy-lib cannot resolve the char_to_str
+    // dependency chain (char::decode → mem_alloc → ptr_write) for individual test files.
     if (method == "to_string" || method == "debug_string") {
-        if (kind == types::PrimitiveKind::Str) {
-            std::string trait_name = (method == "to_string") ? "Display" : "Debug";
-            emit_coverage(trait_name + "::" + method);
-            emit_coverage("Str::" + method);
-            if (method == "to_string") {
-                // Identity — string is already a string
-                last_expr_type_ = "ptr";
-                return receiver;
-            }
-            // debug_string wraps in quotes: "\"" + s + "\""
-            std::string q = add_string_literal("\"");
-            std::string tmp1 = fresh_reg();
-            emit_line("  " + tmp1 + " = call ptr @str_concat_opt(ptr " + q + ", ptr " + receiver +
-                      ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + tmp1 + ", ptr " + q +
-                      ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
         if (kind == types::PrimitiveKind::Char) {
             std::string trait_name = (method == "to_string") ? "Display" : "Debug";
             emit_coverage(trait_name + "::" + method);
@@ -935,7 +916,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             last_expr_type_ = "ptr";
             return buf;
         }
-        // All other primitives (Bool, I8-I128, U8-U128, F32, F64) are handled by
+        // Str, Bool, I8-I128, U8-U128, F32, F64 all dispatched through
         // try_gen_primitive_behavior_method() → TML Display/Debug impls in fmt/impls.tml
     }
 
