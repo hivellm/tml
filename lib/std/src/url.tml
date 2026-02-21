@@ -1,0 +1,580 @@
+//! URL parsing and building per RFC 3986.
+//!
+//! Provides the `Url` type for parsing, decomposing, and reconstructing URLs.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::url::Url
+//!
+//! let result = Url::parse("https://example.com:8080/path?q=1#frag")
+//! when result {
+//!     Ok(url) => {
+//!         assert(url.scheme == "https")
+//!         assert(url.host == "example.com")
+//!         assert(url.port == 8080)
+//!     }
+//!     Err(e) => panic(e)
+//! }
+//! ```
+
+use core::str
+use std::collections::List
+
+/// A parsed URL per RFC 3986.
+pub type Url {
+    scheme: Str,       // "http", "https", "ftp", etc.
+    userinfo: Str,     // "user:pass" (empty if none)
+    host: Str,         // "example.com"
+    port: I64,         // port number (-1 if not specified)
+    path: Str,         // "/foo/bar" (empty string for root)
+    raw_query: Str,    // "a=1&b=2" (empty if none)
+    fragment: Str      // "section" (empty if none)
+}
+
+/// A key-value pair from a URL query string.
+pub type QueryPair {
+    key: Str,
+    value: Str
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/// Find the first occurrence of a character starting at `from`.
+/// Returns the index if found, or `slen` if not found.
+func find_char(s: Str, from: I64, slen: I64, target: I32) -> I64 {
+    var i: I64 = from
+    loop (i < slen) {
+        if str::char_at(s, i) == target {
+            return i
+        }
+        i = i + 1
+    }
+    return slen
+}
+
+/// Find the first occurrence of a character starting at `from`.
+/// Returns the index if found, or -1 if not found.
+func find_char_or_neg(s: Str, from: I64, slen: I64, target: I32) -> I64 {
+    var i: I64 = from
+    loop (i < slen) {
+        if str::char_at(s, i) == target {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Convert a non-negative I64 to a Str.
+func i64_to_str(n: I64) -> Str {
+    if n == 0 {
+        return "0"
+    }
+    let buf: *Unit = lowlevel { mem_alloc(21 as I64) }
+    var val: I64 = n
+    if val < 0 { val = 0 - val }
+    var pos: I64 = 20
+    loop (val > 0) {
+        pos = pos - 1
+        let digit: I64 = val % 10
+        lowlevel { ptr_write[U8]((buf as I64 + pos) as *U8, (digit + 48) as U8) }
+        val = val / 10
+    }
+    if n < 0 {
+        pos = pos - 1
+        lowlevel { ptr_write[U8]((buf as I64 + pos) as *U8, 45 as U8) }
+    }
+    let out_len: I64 = 20 - pos
+    let out: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    lowlevel { copy_nonoverlapping((buf as I64 + pos) as *U8, out as *U8, out_len) }
+    lowlevel { ptr_write[U8]((out as I64 + out_len) as *U8, 0 as U8) }
+    lowlevel { mem_free(buf) }
+    return out as Str
+}
+
+/// Parse a decimal integer from a string. Returns -1 if invalid.
+func parse_port_str(s: Str) -> I64 {
+    let slen: I64 = str::len(s)
+    if slen == 0 { return -1 }
+    var result: I64 = 0
+    var i: I64 = 0
+    loop (i < slen) {
+        let c: I32 = str::char_at(s, i)
+        if c < 48 or c > 57 { return -1 }
+        result = result * 10 + (c - 48) as I64
+        i = i + 1
+    }
+    return result
+}
+
+/// Check if a character is a valid scheme character.
+func is_scheme_char(c: I32) -> Bool {
+    if c >= 97 and c <= 122 { return true }
+    if c >= 65 and c <= 90 { return true }
+    if c >= 48 and c <= 57 { return true }
+    if c == 43 { return true }
+    if c == 45 { return true }
+    if c == 46 { return true }
+    return false
+}
+
+/// Find the end of the scheme (position of ':' in '://').
+func find_scheme_end(s: Str, slen: I64) -> I64 {
+    if slen < 3 { return -1 }
+    let first: I32 = str::char_at(s, 0)
+    if not ((first >= 65 and first <= 90) or (first >= 97 and first <= 122)) {
+        return -1
+    }
+    var i: I64 = 1
+    loop (i < slen - 2) {
+        let c: I32 = str::char_at(s, i)
+        if c == 58 {
+            if str::char_at(s, i + 1) == 47 and str::char_at(s, i + 2) == 47 {
+                return i
+            }
+            return -1
+        }
+        if not is_scheme_char(c) {
+            return -1
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Find the last ':' in a host string (handles IPv6 brackets).
+func find_last_colon(s: Str, slen: I64) -> I64 {
+    if slen == 0 { return -1 }
+    if str::char_at(s, 0) == 91 {
+        let bracket_end: I64 = find_char_or_neg(s, 1, slen, 93)
+        if bracket_end >= 0 and bracket_end + 1 < slen {
+            if str::char_at(s, bracket_end + 1) == 58 {
+                return bracket_end + 1
+            }
+        }
+        return -1
+    }
+    var i: I64 = slen - 1
+    loop (i >= 0) {
+        if str::char_at(s, i) == 58 { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+/// Internal: parse a URL string.
+func parse_url_impl(input: Str) -> Outcome[Url, Str] {
+    let slen: I64 = str::len(input)
+    if slen == 0 {
+        return Err("url: empty input")
+    }
+
+    let scheme_end: I64 = find_scheme_end(input, slen)
+    if scheme_end < 0 {
+        return Err("url: missing scheme (no :// found)")
+    }
+    let scheme: Str = str::to_lowercase(str::substring(input, 0, scheme_end))
+    let after_scheme: I64 = scheme_end + 3
+
+    let frag_pos: I64 = find_char_or_neg(input, after_scheme, slen, 35)
+    var effective_end: I64 = slen
+    var frag: Str = ""
+    if frag_pos >= 0 {
+        frag = str::substring(input, frag_pos + 1, slen)
+        effective_end = frag_pos
+    }
+
+    let query_pos: I64 = find_char_or_neg(input, after_scheme, effective_end, 63)
+    var raw_q: Str = ""
+    var path_end: I64 = effective_end
+    if query_pos >= 0 {
+        raw_q = str::substring(input, query_pos + 1, effective_end)
+        path_end = query_pos
+    }
+
+    let auth_end: I64 = find_char(input, after_scheme, path_end, 47)
+    let authority: Str = str::substring(input, after_scheme, auth_end)
+
+    var url_path: Str = ""
+    if auth_end < path_end {
+        url_path = str::substring(input, auth_end, path_end)
+    }
+
+    let auth_len: I64 = str::len(authority)
+    var uinfo: Str = ""
+    var hst: Str = ""
+    var prt: I64 = -1
+
+    let at_pos: I64 = find_char_or_neg(authority, 0, auth_len, 64)
+    var host_start: I64 = 0
+    if at_pos >= 0 {
+        uinfo = str::substring(authority, 0, at_pos)
+        host_start = at_pos + 1
+    }
+
+    let host_part: Str = str::substring(authority, host_start, auth_len)
+    let hp_len: I64 = str::len(host_part)
+    let colon_pos: I64 = find_last_colon(host_part, hp_len)
+
+    if colon_pos >= 0 {
+        hst = str::substring(host_part, 0, colon_pos)
+        let port_str: Str = str::substring(host_part, colon_pos + 1, hp_len)
+        prt = parse_port_str(port_str)
+    } else {
+        hst = host_part
+    }
+
+    return Ok(Url {
+        scheme: scheme,
+        userinfo: uinfo,
+        host: hst,
+        port: prt,
+        path: url_path,
+        raw_query: raw_q,
+        fragment: frag
+    })
+}
+
+/// Internal: reconstruct URL from components.
+func url_to_string_impl(scheme: Str, userinfo: Str, host: Str, port: I64, path: Str, raw_query: Str, frag: Str) -> Str {
+    var result: Str = scheme + "://"
+    if str::len(userinfo) > 0 {
+        result = result + userinfo + "@"
+    }
+    result = result + host
+    if port >= 0 {
+        result = result + ":" + i64_to_str(port)
+    }
+    result = result + path
+    if str::len(raw_query) > 0 {
+        result = result + "?" + raw_query
+    }
+    if str::len(frag) > 0 {
+        result = result + "#" + frag
+    }
+    return result
+}
+
+// ─── Url impl ───────────────────────────────────────────────────────
+
+impl Url {
+    /// Parse a URL string into its components per RFC 3986.
+    pub func parse(input: Str) -> Outcome[Url, Str] {
+        return parse_url_impl(input)
+    }
+
+    /// Get the scheme component.
+    pub func get_scheme(this) -> Str { return this.scheme }
+
+    /// Get the host component.
+    pub func get_host(this) -> Str { return this.host }
+
+    /// Get the port number (-1 if not specified).
+    pub func get_port(this) -> I64 { return this.port }
+
+    /// Get the path component.
+    pub func get_path(this) -> Str { return this.path }
+
+    /// Get the raw query string.
+    pub func get_query(this) -> Str { return this.raw_query }
+
+    /// Get the fragment component.
+    pub func get_fragment(this) -> Str { return this.fragment }
+
+    /// Get the authority string: [userinfo@]host[:port].
+    pub func authority(this) -> Str {
+        var result: Str = ""
+        if str::len(this.userinfo) > 0 {
+            result = this.userinfo + "@"
+        }
+        result = result + this.host
+        if this.port >= 0 {
+            result = result + ":" + i64_to_str(this.port)
+        }
+        return result
+    }
+
+    /// Get host:port or just host if no port.
+    pub func host_port(this) -> Str {
+        if this.port >= 0 {
+            return this.host + ":" + i64_to_str(this.port)
+        }
+        return this.host
+    }
+
+    /// Reconstruct the URL as a string.
+    pub func to_string(this) -> Str {
+        return url_to_string_impl(this.scheme, this.userinfo, this.host, this.port, this.path, this.raw_query, this.fragment)
+    }
+
+    /// Parse query string into key-value pairs (raw, not percent-decoded).
+    pub func query_pairs(this) -> List[QueryPair] {
+        let pairs: List[QueryPair] = List[QueryPair]::new(8)
+        let qlen: I64 = str::len(this.raw_query)
+        if qlen == 0 {
+            return pairs
+        }
+
+        let parts: List[Str] = str::split(this.raw_query, "&")
+        var i: I64 = 0
+        loop (i < parts.len()) {
+            let part: Str = parts.get(i)
+            let plen: I64 = str::len(part)
+            let eq_pos: I64 = find_char_or_neg(part, 0, plen, 61)
+            if eq_pos >= 0 {
+                let raw_key: Str = str::substring(part, 0, eq_pos)
+                let raw_val: Str = str::substring(part, eq_pos + 1, plen)
+                pairs.push(QueryPair { key: raw_key, value: raw_val })
+            } else {
+                pairs.push(QueryPair { key: part, value: "" })
+            }
+            i = i + 1
+        }
+        return pairs
+    }
+
+    /// Resolve a relative reference against this URL.
+    pub func join(this, relative: Str) -> Outcome[Url, Str] {
+        let rlen: I64 = str::len(relative)
+        if rlen == 0 {
+            return Ok(this)
+        }
+
+        let scheme_pos: I64 = find_scheme_end(relative, rlen)
+        if scheme_pos >= 0 {
+            return parse_url_impl(relative)
+        }
+
+        let first: I32 = str::char_at(relative, 0)
+
+        if first == 35 {
+            return Ok(Url {
+                scheme: this.scheme,
+                userinfo: this.userinfo,
+                host: this.host,
+                port: this.port,
+                path: this.path,
+                raw_query: this.raw_query,
+                fragment: str::substring(relative, 1, rlen)
+            })
+        }
+
+        if first == 63 {
+            let fp: I64 = find_char_or_neg(relative, 1, rlen, 35)
+            var nq: Str = ""
+            var nf: Str = ""
+            if fp >= 0 {
+                nq = str::substring(relative, 1, fp)
+                nf = str::substring(relative, fp + 1, rlen)
+            } else {
+                nq = str::substring(relative, 1, rlen)
+            }
+            return Ok(Url {
+                scheme: this.scheme,
+                userinfo: this.userinfo,
+                host: this.host,
+                port: this.port,
+                path: this.path,
+                raw_query: nq,
+                fragment: nf
+            })
+        }
+
+        if first == 47 {
+            return resolve_absolute_path(this.scheme, this.userinfo, this.host, this.port, relative, rlen)
+        }
+
+        return resolve_relative_path(this.scheme, this.userinfo, this.host, this.port, this.path, relative, rlen)
+    }
+}
+
+/// Resolve an absolute-path reference (starts with /).
+func resolve_absolute_path(scheme: Str, userinfo: Str, host: Str, port: I64, relative: Str, rlen: I64) -> Outcome[Url, Str] {
+    let fp: I64 = find_char_or_neg(relative, 0, rlen, 35)
+    let qp: I64 = find_char_or_neg(relative, 0, rlen, 63)
+    var np: Str = relative
+    var nq: Str = ""
+    var nf: Str = ""
+    var end: I64 = rlen
+    if fp >= 0 {
+        nf = str::substring(relative, fp + 1, rlen)
+        end = fp
+    }
+    if qp >= 0 and qp < end {
+        nq = str::substring(relative, qp + 1, end)
+        np = str::substring(relative, 0, qp)
+    } else {
+        np = str::substring(relative, 0, end)
+    }
+    return Ok(Url {
+        scheme: scheme,
+        userinfo: userinfo,
+        host: host,
+        port: port,
+        path: np,
+        raw_query: nq,
+        fragment: nf
+    })
+}
+
+/// Resolve a relative-path reference (no leading /).
+func resolve_relative_path(scheme: Str, userinfo: Str, host: Str, port: I64, cur_path: Str, relative: Str, rlen: I64) -> Outcome[Url, Str] {
+    let cplen: I64 = str::len(cur_path)
+    var last_slash: I64 = -1
+    var k: I64 = cplen - 1
+    loop (k >= 0) {
+        if str::char_at(cur_path, k) == 47 {
+            last_slash = k
+            k = -1
+        }
+        k = k - 1
+    }
+    var dir: Str = "/"
+    if last_slash >= 0 {
+        dir = str::substring(cur_path, 0, last_slash + 1)
+    }
+
+    let merged: Str = dir + relative
+    let mlen: I64 = str::len(merged)
+    let fp: I64 = find_char_or_neg(merged, 0, mlen, 35)
+    let qp: I64 = find_char_or_neg(merged, 0, mlen, 63)
+    var np: Str = merged
+    var nq: Str = ""
+    var nf: Str = ""
+    var end: I64 = mlen
+    if fp >= 0 {
+        nf = str::substring(merged, fp + 1, mlen)
+        end = fp
+    }
+    if qp >= 0 and qp < end {
+        nq = str::substring(merged, qp + 1, end)
+        np = str::substring(merged, 0, qp)
+    } else {
+        np = str::substring(merged, 0, end)
+    }
+    return Ok(Url {
+        scheme: scheme,
+        userinfo: userinfo,
+        host: host,
+        port: port,
+        path: np,
+        raw_query: nq,
+        fragment: nf
+    })
+}
+
+// ─── UrlBuilder ─────────────────────────────────────────────────────
+
+/// Builder for constructing URLs fluently.
+pub type UrlBuilder {
+    bld_scheme: Str,
+    bld_userinfo: Str,
+    bld_host: Str,
+    bld_port: I64,
+    bld_path: Str,
+    bld_query: Str,
+    bld_fragment: Str
+}
+
+impl UrlBuilder {
+    /// Create a new empty UrlBuilder.
+    pub func new() -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: "",
+            bld_userinfo: "",
+            bld_host: "",
+            bld_port: -1,
+            bld_path: "",
+            bld_query: "",
+            bld_fragment: ""
+        }
+    }
+
+    /// Set the scheme.
+    pub func set_scheme(this, s: Str) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: s, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: this.bld_port, bld_path: this.bld_path, bld_query: this.bld_query,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Set the host.
+    pub func set_host(this, h: Str) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: h,
+            bld_port: this.bld_port, bld_path: this.bld_path, bld_query: this.bld_query,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Set the port.
+    pub func set_port(this, p: I64) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: p, bld_path: this.bld_path, bld_query: this.bld_query,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Set the path.
+    pub func set_path(this, p: Str) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: this.bld_port, bld_path: p, bld_query: this.bld_query,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Set the raw query string.
+    pub func set_query(this, q: Str) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: this.bld_port, bld_path: this.bld_path, bld_query: q,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Set the fragment.
+    pub func set_fragment(this, f: Str) -> UrlBuilder {
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: this.bld_port, bld_path: this.bld_path, bld_query: this.bld_query,
+            bld_fragment: f
+        }
+    }
+
+    /// Append a query parameter (raw, caller must percent-encode if needed).
+    pub func add_query(this, key: Str, value: Str) -> UrlBuilder {
+        var new_q: Str = this.bld_query
+        if str::len(new_q) > 0 {
+            new_q = new_q + "&"
+        }
+        new_q = new_q + key + "=" + value
+        return UrlBuilder {
+            bld_scheme: this.bld_scheme, bld_userinfo: this.bld_userinfo, bld_host: this.bld_host,
+            bld_port: this.bld_port, bld_path: this.bld_path, bld_query: new_q,
+            bld_fragment: this.bld_fragment
+        }
+    }
+
+    /// Build the URL. Returns Err if scheme or host is missing.
+    pub func build(this) -> Outcome[Url, Str] {
+        if str::len(this.bld_scheme) == 0 {
+            return Err("url: scheme is required")
+        }
+        if str::len(this.bld_host) == 0 {
+            return Err("url: host is required")
+        }
+        return Ok(Url {
+            scheme: this.bld_scheme,
+            userinfo: this.bld_userinfo,
+            host: this.bld_host,
+            port: this.bld_port,
+            path: this.bld_path,
+            raw_query: this.bld_query,
+            fragment: this.bld_fragment
+        })
+    }
+}

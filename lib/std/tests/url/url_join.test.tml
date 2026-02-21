@@ -1,0 +1,79 @@
+use test
+use std::url::Url
+
+@test
+func test_join_absolute_path() -> I32 {
+    let result = Url::parse("https://example.com/old/path")
+    when result {
+        Ok(url) => {
+            let joined = url.join("/new/path")
+            when joined {
+                Ok(u) => {
+                    assert_eq(u.scheme, "https")
+                    assert_eq(u.host, "example.com")
+                    assert_eq(u.path, "/new/path")
+                }
+                Err(e) => assert(false, "join should succeed")
+            }
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_join_relative_path() -> I32 {
+    let result = Url::parse("https://example.com/dir/file.html")
+    when result {
+        Ok(url) => {
+            let joined = url.join("other.html")
+            when joined {
+                Ok(u) => {
+                    assert_eq(u.path, "/dir/other.html")
+                }
+                Err(e) => assert(false, "join should succeed")
+            }
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_join_with_query() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            let joined = url.join("?q=search")
+            when joined {
+                Ok(u) => {
+                    assert_eq(u.path, "/path")
+                    assert_eq(u.raw_query, "q=search")
+                }
+                Err(e) => assert(false, "join should succeed")
+            }
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_join_fragment_only() -> I32 {
+    let result = Url::parse("https://example.com/page?x=1")
+    when result {
+        Ok(url) => {
+            let joined = url.join("#section")
+            when joined {
+                Ok(u) => {
+                    assert_eq(u.path, "/page")
+                    assert_eq(u.raw_query, "x=1")
+                    assert_eq(u.fragment, "section")
+                }
+                Err(e) => assert(false, "join should succeed")
+            }
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}

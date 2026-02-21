@@ -1,0 +1,51 @@
+use test
+use std::url::Url
+
+@test
+func test_to_string_simple() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            assert_eq(url.to_string(), "https://example.com/path")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_to_string_with_port() -> I32 {
+    let result = Url::parse("https://example.com:443/api")
+    when result {
+        Ok(url) => {
+            assert_eq(url.to_string(), "https://example.com:443/api")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_to_string_full() -> I32 {
+    let result = Url::parse("https://user:pass@example.com:8080/path?q=1#frag")
+    when result {
+        Ok(url) => {
+            assert_eq(url.to_string(), "https://user:pass@example.com:8080/path?q=1#frag")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_authority() -> I32 {
+    let result = Url::parse("https://admin:pw@example.com:9090/x")
+    when result {
+        Ok(url) => {
+            assert_eq(url.authority(), "admin:pw@example.com:9090")
+            assert_eq(url.host_port(), "example.com:9090")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}

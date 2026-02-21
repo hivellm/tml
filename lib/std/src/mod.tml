@@ -65,3 +65,4 @@ pub mod alloc
 pub mod io
 pub mod uuid       // UUID v4/v7 generation, parsing, formatting
 pub mod semver     // Semantic versioning parse, compare, ranges
+pub mod url        // URL parsing and building per RFC 3986

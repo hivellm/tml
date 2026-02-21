@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (30%) — Phases 1-2 mostly complete, 8 (UUID) and 9 (SemVer) complete, rest not started
+**Status**: In Progress (35%) — Phases 1-3 mostly complete, 8 (UUID) and 9 (SemVer) complete, rest not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -67,15 +67,15 @@
 
 > **Priority**: Critical | **File**: `lib/std/src/url.tml`
 
-- [ ] 3.1.1 Create `lib/std/src/url.tml`
-- [ ] 3.1.2 Design `Url` struct: scheme, authority, userinfo, host, port, path, query, fragment
-- [ ] 3.1.3 Implement `Url::parse(s: Str) -> Outcome[Url, UrlError]` per RFC 3986
-- [ ] 3.1.4 Implement accessors: `scheme()`, `host()`, `port()`, `path()`, `query()`, `fragment()`
-- [ ] 3.1.5 Implement `query_pairs() -> Iterator[(Str, Str)]`
-- [ ] 3.1.6 Implement `Url::join(this, relative: Str) -> Outcome[Url, UrlError]`
-- [ ] 3.1.7 Implement `to_string(this) -> Str`
-- [ ] 3.1.8 Implement `UrlBuilder` for constructing URLs fluently
-- [ ] 3.1.9 Write unit tests for `std::url`
+- [x] 3.1.1 Create `lib/std/src/url.tml`
+- [x] 3.1.2 Design `Url` struct: scheme, userinfo, host, port, path, raw_query, fragment
+- [x] 3.1.3 Implement `Url::parse(s: Str) -> Outcome[Url, Str]` per RFC 3986
+- [x] 3.1.4 Implement accessors: `get_scheme()`, `get_host()`, `get_port()`, `get_path()`, `get_query()`, `get_fragment()`, `authority()`, `host_port()`
+- [x] 3.1.5 Implement `query_pairs() -> List[QueryPair]`
+- [x] 3.1.6 Implement `Url::join(this, relative: Str) -> Outcome[Url, Str]`
+- [x] 3.1.7 Implement `to_string(this) -> Str`
+- [x] 3.1.8 Implement `UrlBuilder` with fluent API (set_scheme, set_host, set_port, set_path, set_query, set_fragment, add_query, build)
+- [x] 3.1.9 Write unit tests for `std::url` (23 tests: 7 parse, 4 format, 4 query, 4 builder, 4 join)
 
 ## Phase 4: SIMD Module
 

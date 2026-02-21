@@ -1,0 +1,99 @@
+use test
+use std::url::Url
+
+@test
+func test_parse_simple_http() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.port, -1 as I64)
+            assert_eq(url.path, "/path")
+            assert_eq(url.raw_query, "")
+            assert_eq(url.fragment, "")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_with_port() -> I32 {
+    let result = Url::parse("https://example.com:8080/api")
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.port, 8080 as I64)
+            assert_eq(url.path, "/api")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_with_query_and_fragment() -> I32 {
+    let result = Url::parse("https://example.com/search?q=hello&lang=en#results")
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.path, "/search")
+            assert_eq(url.raw_query, "q=hello&lang=en")
+            assert_eq(url.fragment, "results")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_with_userinfo() -> I32 {
+    let result = Url::parse("https://admin:secret@example.com/dashboard")
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.userinfo, "admin:secret")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.path, "/dashboard")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_no_path() -> I32 {
+    let result = Url::parse("https://example.com")
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.path, "")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_error_missing_scheme() -> I32 {
+    let result = Url::parse("example.com/path")
+    when result {
+        Ok(url) => assert(false, "missing scheme should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_error_empty_input() -> I32 {
+    let result = Url::parse("")
+    when result {
+        Ok(url) => assert(false, "empty input should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}

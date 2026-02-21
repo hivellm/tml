@@ -1,0 +1,62 @@
+use test
+use std::url::Url
+
+@test
+func test_query_pairs_simple() -> I32 {
+    let result = Url::parse("https://example.com/search?a=1&b=2")
+    when result {
+        Ok(url) => {
+            let pairs = url.query_pairs()
+            assert_eq(pairs.len(), 2 as I64)
+            assert_eq(pairs.get(0).key, "a")
+            assert_eq(pairs.get(0).value, "1")
+            assert_eq(pairs.get(1).key, "b")
+            assert_eq(pairs.get(1).value, "2")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_query_pairs_empty() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            let pairs = url.query_pairs()
+            assert_eq(pairs.len(), 0 as I64)
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_query_pairs_single() -> I32 {
+    let result = Url::parse("https://example.com/?key=value")
+    when result {
+        Ok(url) => {
+            let pairs = url.query_pairs()
+            assert_eq(pairs.len(), 1 as I64)
+            assert_eq(pairs.get(0).key, "key")
+            assert_eq(pairs.get(0).value, "value")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_query_pairs_no_value() -> I32 {
+    let result = Url::parse("https://example.com/?flag")
+    when result {
+        Ok(url) => {
+            let pairs = url.query_pairs()
+            assert_eq(pairs.len(), 1 as I64)
+            assert_eq(pairs.get(0).key, "flag")
+            assert_eq(pairs.get(0).value, "")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}

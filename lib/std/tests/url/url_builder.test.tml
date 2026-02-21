@@ -1,0 +1,68 @@
+use test
+use std::url::Url
+use std::url::UrlBuilder
+
+@test
+func test_builder_simple() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("https")
+        .set_host("example.com")
+        .set_path("/api")
+        .build()
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "https")
+            assert_eq(url.host, "example.com")
+            assert_eq(url.path, "/api")
+            assert_eq(url.to_string(), "https://example.com/api")
+        }
+        Err(e) => assert(false, "build should succeed")
+    }
+    0
+}
+
+@test
+func test_builder_with_port_and_query() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("http")
+        .set_host("localhost")
+        .set_port(3000 as I64)
+        .set_path("/search")
+        .add_query("q", "hello")
+        .add_query("page", "1")
+        .build()
+    when result {
+        Ok(url) => {
+            assert_eq(url.scheme, "http")
+            assert_eq(url.host, "localhost")
+            assert_eq(url.port, 3000 as I64)
+            assert_eq(url.raw_query, "q=hello&page=1")
+        }
+        Err(e) => assert(false, "build should succeed")
+    }
+    0
+}
+
+@test
+func test_builder_error_missing_scheme() -> I32 {
+    let result = UrlBuilder::new()
+        .set_host("example.com")
+        .build()
+    when result {
+        Ok(url) => assert(false, "missing scheme should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_builder_error_missing_host() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("https")
+        .build()
+    when result {
+        Ok(url) => assert(false, "missing host should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
