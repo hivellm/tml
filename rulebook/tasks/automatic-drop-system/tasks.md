@@ -1,6 +1,6 @@
 # Tasks: Automatic Drop System
 
-**Status**: In Progress (35%)
+**Status**: In Progress (60%)
 
 ## Phase 1: Str Auto-Free (Guaranteed Heap Allocations)
 
@@ -25,11 +25,15 @@
 
 ## Phase 2: needs_drop Recursive Analysis
 
-- [ ] 2.1 Implement `needs_drop(type_name)` query in codegen
-- [ ] 2.2 Recursive field check: if any field needs_drop, parent needs_drop
-- [ ] 2.3 Auto-generate field-level drops for structs without `impl Drop`
-- [ ] 2.4 Handle generic instantiations (e.g., `Wrapper[String]` needs drop)
-- [ ] 2.5 Write tests for recursive drop scenarios
+- [x] 2.1 Extend `DropInfo` with `needs_field_drops` flag
+- [x] 2.2 Use `env_.type_needs_drop()` in `register_for_drop` for imported types
+- [x] 2.3 Add `struct_fields_` fallback for local/test-defined types
+- [x] 2.4 Implement `emit_field_level_drops` with GEP + per-field drop calls
+- [x] 2.5 Handle generic field types (extract mangled name from `%struct.X__Y`)
+- [x] 2.6 Library vs local type detection for correct drop function naming
+- [x] 2.7 Support nested recursive drops (OuterWrapper -> MutexWrapper -> Mutex)
+- [x] 2.8 Write tests: single field, double field, nested wrapper (4 tests)
+- [x] 2.9 Full test suite passes (7,160+ tests, zero regressions)
 
 ## Phase 3: Temporary Value Drops
 

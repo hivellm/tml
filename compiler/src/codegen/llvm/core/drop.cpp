@@ -129,10 +129,7 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         return;
     }
 
-    // Only register for drop if the type directly implements Drop.
-    // Types that are non-trivially-destructible only because their fields
-    // have Drop impls need recursive field-level drops (not yet supported).
-    // For now, we only call drop on types that explicitly implement Drop.
+    // Check if the type directly implements Drop
     bool has_drop = env_.type_implements(type_name, "Drop");
 
     // For generic types (MutexGuard__I32), check the base type too
@@ -158,14 +155,87 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         }
     }
 
+    // If no direct Drop impl, check if any field needs drop (recursive analysis).
+    // Types like Wrapper { res: Resource } where Resource impls Drop need
+    // field-level drops even though Wrapper doesn't have its own Drop impl.
+    bool needs_field_drops = false;
     if (!has_drop) {
+        // First try the type environment (works for imported/library types)
+        needs_field_drops = env_.type_needs_drop(type_name);
+
+        // Fallback: check local struct_fields_ for test-local types.
+        // env_.type_needs_drop() only knows about types registered in TypeEnv,
+        // not locally-defined structs from the current compilation unit.
+        if (!needs_field_drops) {
+            auto fields_it = struct_fields_.find(type_name);
+            if (fields_it != struct_fields_.end()) {
+                for (const auto& field : fields_it->second) {
+                    // Extract field type name from LLVM type
+                    std::string ft_name;
+                    if (field.llvm_type.starts_with("%struct.")) {
+                        ft_name = field.llvm_type.substr(8);
+                    }
+                    if (!ft_name.empty()) {
+                        // Check if field type implements Drop or recursively needs drop
+                        if (env_.type_implements(ft_name, "Drop")) {
+                            needs_field_drops = true;
+                            break;
+                        }
+                        // Check generic base type (e.g., Mutex from Mutex__I32)
+                        auto sep = ft_name.find("__");
+                        if (sep != std::string::npos) {
+                            std::string base = ft_name.substr(0, sep);
+                            if (env_.type_implements(base, "Drop")) {
+                                needs_field_drops = true;
+                                break;
+                            }
+                        }
+                        // Recurse: check if field type itself has droppable fields
+                        auto sub_fields = struct_fields_.find(ft_name);
+                        if (sub_fields != struct_fields_.end()) {
+                            // Recursively check (limited depth via struct_fields_ lookup)
+                            for (const auto& sf : sub_fields->second) {
+                                std::string sft_name;
+                                if (sf.llvm_type.starts_with("%struct.")) {
+                                    sft_name = sf.llvm_type.substr(8);
+                                }
+                                if (!sft_name.empty() && (env_.type_implements(sft_name, "Drop") ||
+                                                          env_.type_needs_drop(sft_name))) {
+                                    needs_field_drops = true;
+                                    break;
+                                }
+                                // Check generic base
+                                if (!sft_name.empty()) {
+                                    auto sep2 = sft_name.find("__");
+                                    if (sep2 != std::string::npos) {
+                                        std::string base2 = sft_name.substr(0, sep2);
+                                        if (env_.type_implements(base2, "Drop")) {
+                                            needs_field_drops = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (needs_field_drops)
+                        break;
+                }
+            }
+        }
+    }
+
+    if (!has_drop && !needs_field_drops) {
         return;
     }
 
-    TML_DEBUG_LN("[DROP] Registering " << var_name << " for drop, type=" << type_name);
+    TML_DEBUG_LN("[DROP] Registering " << var_name << " for drop, type=" << type_name
+                                       << (needs_field_drops ? " (field-level)" : ""));
 
     if (!drop_scopes_.empty()) {
-        drop_scopes_.back().push_back(DropInfo{var_name, var_reg, type_name, llvm_type});
+        DropInfo di{var_name, var_reg, type_name, llvm_type};
+        di.needs_field_drops = needs_field_drops;
+        drop_scopes_.back().push_back(di);
 
         // For generic imported types, request Drop method instantiation
         // This handles types like MutexGuard__I32 from std::sync
@@ -262,6 +332,13 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
         return;
     }
 
+    // Field-level drops: type doesn't implement Drop itself, but contains
+    // fields that need dropping. Emit GEP + drop for each droppable field.
+    if (info.needs_field_drops) {
+        emit_field_level_drops(info);
+        return;
+    }
+
     // Load the value from the variable's alloca
     std::string value_reg = fresh_reg();
     emit_line("  " + value_reg + " = load " + info.llvm_type + ", ptr " + info.var_reg);
@@ -293,6 +370,119 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
     else if (pool_classes_.count(info.type_name) > 0) {
         emit_line("  call void @pool_release(ptr @pool." + info.type_name + ", ptr " +
                   info.var_reg + ")");
+    }
+}
+
+void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
+    // Look up struct fields
+    auto fields_it = struct_fields_.find(info.type_name);
+    if (fields_it == struct_fields_.end()) {
+        TML_DEBUG_LN("[DROP] No field info for " << info.type_name << ", skipping field drops");
+        return;
+    }
+
+    const auto& fields = fields_it->second;
+    std::string struct_type = info.llvm_type;
+
+    // Drop fields in reverse order (last field first, matching Rust semantics)
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
+        const auto& field = *it;
+
+        // Get the field's TML type name to check if it needs drop.
+        // For generic types (Mutex[I32]), use the mangled LLVM type name
+        // (%struct.Mutex__I32 -> Mutex__I32) since that's what register_for_drop uses.
+        std::string field_type_name;
+        if (field.llvm_type.starts_with("%struct.")) {
+            field_type_name = field.llvm_type.substr(8); // "%struct.X" -> "X"
+        } else if (field.semantic_type) {
+            if (field.semantic_type->is<types::NamedType>()) {
+                field_type_name = field.semantic_type->as<types::NamedType>().name;
+            } else if (field.semantic_type->is<types::ClassType>()) {
+                field_type_name = field.semantic_type->as<types::ClassType>().name;
+            }
+        }
+
+        if (field_type_name.empty()) {
+            continue;
+        }
+
+        // Check if this specific field needs drop
+        bool field_has_drop = env_.type_implements(field_type_name, "Drop");
+        bool field_needs_recursive = false;
+        if (!field_has_drop) {
+            field_needs_recursive = env_.type_needs_drop(field_type_name);
+        }
+
+        if (!field_has_drop && !field_needs_recursive) {
+            continue;
+        }
+
+        TML_DEBUG_LN("[DROP]   Field " << info.type_name << "." << field.name
+                                       << " (type=" << field_type_name << ")"
+                                       << (field_needs_recursive ? " [recursive]" : ""));
+
+        // GEP to get field pointer
+        std::string field_ptr = fresh_reg();
+        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + info.var_reg +
+                  ", i32 0, i32 " + std::to_string(field.index));
+
+        if (field_needs_recursive) {
+            // Recursively emit field-level drops for nested structs
+            DropInfo field_info;
+            field_info.var_name = info.var_name + "." + field.name;
+            field_info.var_reg = field_ptr;
+            field_info.type_name = field_type_name;
+            field_info.llvm_type = field.llvm_type;
+            field_info.needs_field_drops = true;
+            emit_field_level_drops(field_info);
+        } else {
+            // Field directly implements Drop — call its drop method.
+            // Look up in functions_ first; if not found, determine the correct
+            // function name based on whether it's a library or local type.
+            std::string drop_lookup_key = field_type_name + "_drop";
+            auto drop_it = functions_.find(drop_lookup_key);
+            std::string drop_func;
+            if (drop_it != functions_.end()) {
+                drop_func = drop_it->second.llvm_name;
+            } else {
+                // Check if library type (no suite prefix) or local type (suite prefix)
+                bool is_library = false;
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (mod_name.starts_with("std::") || mod_name.starts_with("core::")) {
+                            if (mod.structs.count(field_type_name) ||
+                                mod.classes.count(field_type_name)) {
+                                is_library = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Also check generic base types (e.g., Mutex from Mutex__I32)
+                if (!is_library) {
+                    auto sep = field_type_name.find("__");
+                    if (sep != std::string::npos) {
+                        std::string base = field_type_name.substr(0, sep);
+                        if (env_.module_registry()) {
+                            const auto& all_modules = env_.module_registry()->get_all_modules();
+                            for (const auto& [mod_name, mod] : all_modules) {
+                                if (mod_name.starts_with("std::") ||
+                                    mod_name.starts_with("core::")) {
+                                    if (mod.structs.count(base) || mod.classes.count(base)) {
+                                        is_library = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                std::string prefix = is_library ? "" : get_suite_prefix();
+                drop_func = "@tml_" + prefix + field_type_name + "_drop";
+            }
+            emit_line("  call void " + drop_func + "(ptr " + field_ptr + ")");
+        }
     }
 }
 

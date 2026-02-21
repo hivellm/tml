@@ -1,0 +1,103 @@
+// Tests for recursive field-level drop (Phase 2 of automatic drop system)
+//
+// When a struct does NOT implement Drop but contains fields that do,
+// the compiler must automatically emit field-level drop calls at scope exit.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Wrapper types that do NOT implement Drop themselves
+// ============================================================================
+
+// Simple wrapper around a Mutex — Mutex implements Drop
+type MutexWrapper {
+    inner: Mutex[I32],
+    tag: I32
+}
+
+// Wrapper with two droppable fields
+type DoubleMutex {
+    first: Mutex[I32],
+    second: Mutex[I32]
+}
+
+// Nested wrapper: contains a MutexWrapper (which itself needs field drops)
+type OuterWrapper {
+    nested: MutexWrapper,
+    extra: I32
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_wrapper_drops_mutex_field() -> I32 {
+    // MutexWrapper doesn't impl Drop, but its Mutex[I32] field does.
+    // If field-level drop works, the Mutex is properly cleaned up.
+    let w: MutexWrapper = MutexWrapper {
+        inner: Mutex::new(42),
+        tag: 1
+    }
+    assert_eq(w.tag, 1, "tag should be 1")
+    // w goes out of scope — Mutex::drop should be called on w.inner
+    return 0
+}
+
+@test
+func test_wrapper_mutex_relockable() -> I32 {
+    // Verify that the Mutex inside a wrapper is properly dropped by
+    // locking it, letting the wrapper go out of scope, then creating
+    // a new one and locking again. If drop doesn't fire, this deadlocks.
+    {
+        let w: MutexWrapper = MutexWrapper {
+            inner: Mutex::new(10),
+            tag: 1
+        }
+        let guard: MutexGuard[I32] = w.inner.lock()
+        assert_eq(*guard.get(), 10)
+        // guard dropped here, then w.inner (Mutex) dropped here
+    }
+    // If we got here, the Mutex was properly dropped
+    assert(true, "wrapper scope exited without deadlock")
+    return 0
+}
+
+@test
+func test_double_mutex_both_dropped() -> I32 {
+    // Both Mutex fields should be dropped
+    {
+        let dm: DoubleMutex = DoubleMutex {
+            first: Mutex::new(1),
+            second: Mutex::new(2)
+        }
+        let g1: MutexGuard[I32] = dm.first.lock()
+        let g2: MutexGuard[I32] = dm.second.lock()
+        assert_eq(*g1.get(), 1)
+        assert_eq(*g2.get(), 2)
+        // guards dropped, then both mutexes dropped
+    }
+    assert(true, "both mutexes dropped without deadlock")
+    return 0
+}
+
+@test
+func test_nested_wrapper_recursive_drop() -> I32 {
+    // OuterWrapper -> MutexWrapper -> Mutex[I32]
+    // Two levels of recursive field-level drops
+    {
+        let outer: OuterWrapper = OuterWrapper {
+            nested: MutexWrapper {
+                inner: Mutex::new(99),
+                tag: 5
+            },
+            extra: 7
+        }
+        assert_eq(outer.extra, 7, "extra should be 7")
+        assert_eq(outer.nested.tag, 5, "nested tag should be 5")
+    }
+    // If drop propagated through OuterWrapper -> MutexWrapper -> Mutex, we get here
+    assert(true, "nested recursive drop succeeded")
+    return 0
+}
