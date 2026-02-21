@@ -511,6 +511,18 @@ private:
     void emit_drop_call(const DropInfo& info);
     void emit_field_level_drops(const DropInfo& info);
 
+    // Temporary value drop tracking
+    // Tracks droppable values from function/method returns that aren't bound to variables.
+    // These are dropped at the end of the enclosing expression statement.
+    std::vector<DropInfo> temp_drops_;
+    // Register a temporary value for drop. If existing_alloca is non-empty, uses it
+    // instead of creating a new alloca (avoids redundant spills when method dispatch
+    // already spilled the receiver to stack).
+    std::string register_temp_for_drop(const std::string& value, const std::string& type_name,
+                                       const std::string& llvm_type,
+                                       const std::string& existing_alloca = "");
+    void emit_temp_drops();
+
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
     std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)

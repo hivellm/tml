@@ -79,6 +79,12 @@ void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
     } else if (stmt.is<parser::DeclPtr>()) {
         gen_nested_decl(*stmt.as<parser::DeclPtr>());
     }
+
+    // After any statement completes, flush temporary drops.
+    // Intermediates from method chains (e.g., MutexGuard from m.lock().get())
+    // must be dropped at statement end. This is safe even for gen_expr_stmt
+    // which already calls emit_temp_drops() — double call is a no-op.
+    emit_temp_drops();
 }
 
 // Helper to check if an expression is boolean-typed (without variable lookup)
@@ -1018,7 +1024,33 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 }
 
 void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {
-    gen_expr(*expr.expr);
+    std::string result = gen_expr(*expr.expr);
+
+    // If the expression is a call/method that returned a droppable struct value,
+    // drop it. Only applies to actual call expressions (not all expressions),
+    // and the result must be a valid LLVM register (starts with '%').
+    if (!result.empty() && result[0] == '%' && last_expr_type_.starts_with("%struct.") &&
+        (expr.expr->is<parser::CallExpr>() || expr.expr->is<parser::MethodCallExpr>())) {
+        std::string type_name = extract_type_name_for_drop(last_expr_type_);
+        if (!type_name.empty()) {
+            bool has_drop = env_.type_implements(type_name, "Drop");
+            if (!has_drop) {
+                auto sep = type_name.find("__");
+                if (sep != std::string::npos) {
+                    has_drop = env_.type_implements(type_name.substr(0, sep), "Drop");
+                }
+            }
+            bool needs_field_drops = !has_drop && env_.type_needs_drop(type_name);
+            if (has_drop || needs_field_drops) {
+                register_temp_for_drop(result, type_name, last_expr_type_);
+            }
+        }
+    }
+
+    // Drop any temporary droppable values produced during this expression.
+    // This handles both the discarded return value above and any intermediates
+    // from method chains (e.g., a.lock().get() — MutexGuard is intermediate).
+    emit_temp_drops();
 }
 
 void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,

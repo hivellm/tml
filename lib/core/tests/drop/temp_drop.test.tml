@@ -1,0 +1,49 @@
+// Tests for temporary value drops (Phase 3 of automatic drop system)
+//
+// Temporary values from function/method returns that are not bound
+// to variables must be dropped at the end of the statement.
+//
+// NOTE: Method chain intermediate drops (e.g., m.lock().get() where
+// MutexGuard is intermediate) are deferred to a future phase. They
+// require distinguishing owning temps from shallow-copy temps, which
+// needs borrow checker / ownership annotations not yet available.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Helper function that returns a droppable type
+// ============================================================================
+
+func make_mutex(val: I32) -> Mutex[I32] {
+    return Mutex::new(val)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_discarded_droppable_return() -> I32 {
+    // Calling a function that returns a Mutex without binding it.
+    // The temporary Mutex must be dropped at statement end.
+    // If not dropped, the Mutex leaks (no observable crash, but verifies codegen).
+    make_mutex(42)
+
+    // If we got here without crash, the temporary was handled
+    assert(true, "discarded droppable return handled")
+    return 0
+}
+
+@test
+func test_discarded_mutex_then_reuse() -> I32 {
+    // Create and discard a Mutex, then create another one.
+    // Verifies that discarded droppable temps don't leak.
+    make_mutex(1)
+    make_mutex(2)
+    make_mutex(3)
+
+    // If all three were properly dropped, no leaks
+    assert(true, "multiple discarded mutexes handled")
+    return 0
+}

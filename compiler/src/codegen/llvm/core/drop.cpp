@@ -531,4 +531,105 @@ void LLVMIRGen::emit_all_drops() {
     }
 }
 
+std::string LLVMIRGen::register_temp_for_drop(const std::string& value,
+                                              const std::string& type_name,
+                                              const std::string& llvm_type,
+                                              const std::string& existing_alloca) {
+    // Use existing alloca if provided (from method dispatch spill), otherwise create new
+    std::string temp_alloca;
+    if (!existing_alloca.empty()) {
+        temp_alloca = existing_alloca;
+    } else {
+        temp_alloca = fresh_reg();
+        emit_line("  " + temp_alloca + " = alloca " + llvm_type);
+        emit_line("  store " + llvm_type + " " + value + ", ptr " + temp_alloca);
+    }
+
+    DropInfo di;
+    di.var_name = "__temp_" + std::to_string(temp_counter_);
+    di.var_reg = temp_alloca;
+    di.type_name = type_name;
+    di.llvm_type = llvm_type;
+
+    // Check if it needs field-level drops (same logic as register_for_drop)
+    bool has_drop = env_.type_implements(type_name, "Drop");
+    if (!has_drop) {
+        auto sep_pos = type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string base_type = type_name.substr(0, sep_pos);
+            has_drop = env_.type_implements(base_type, "Drop");
+        }
+    }
+
+    if (!has_drop) {
+        di.needs_field_drops = true;
+    }
+
+    temp_drops_.push_back(di);
+    TML_DEBUG_LN("[DROP] Registered temp " << di.var_name << " for drop, type=" << type_name);
+
+    // Also need to ensure drop function exists (same as register_for_drop)
+    if (has_drop) {
+        auto sep_pos = type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string base_type = type_name.substr(0, sep_pos);
+            std::string drop_key = "tml_" + type_name + "_drop";
+            if (generated_impl_methods_.find(drop_key) == generated_impl_methods_.end()) {
+                std::unordered_map<std::string, types::TypePtr> type_subs;
+                std::string remaining = type_name.substr(sep_pos + 2);
+                types::TypePtr type_arg = parse_mangled_type_for_drop(remaining);
+                if (type_arg) {
+                    type_subs["T"] = type_arg;
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{type_name, "drop", type_subs, base_type, "",
+                                          /*is_library_type=*/true});
+                    generated_impl_methods_.insert(drop_key);
+                    std::string func_llvm_name = "tml_" + type_name + "_drop";
+                    functions_[type_name + "_drop"] =
+                        FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
+                }
+            }
+        } else {
+            std::string method_name = type_name + "_drop";
+            if (functions_.find(method_name) == functions_.end()) {
+                bool is_library = false;
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (mod_name.starts_with("std::") || mod_name.starts_with("core::")) {
+                            if (mod.structs.count(type_name) || mod.classes.count(type_name)) {
+                                is_library = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                std::string prefix = is_library ? "" : get_suite_prefix();
+                std::string func_llvm_name = "tml_" + prefix + type_name + "_drop";
+                functions_[method_name] =
+                    FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
+                std::unordered_map<std::string, types::TypePtr> empty_subs;
+                pending_impl_method_instantiations_.push_back(
+                    PendingImplMethod{type_name, "drop", empty_subs, type_name, "",
+                                      /*is_library_type=*/is_library});
+                generated_impl_methods_.insert(func_llvm_name);
+            }
+        }
+    }
+
+    return temp_alloca;
+}
+
+void LLVMIRGen::emit_temp_drops() {
+    if (temp_drops_.empty()) {
+        return;
+    }
+
+    // Drop in reverse order (LIFO)
+    for (auto it = temp_drops_.rbegin(); it != temp_drops_.rend(); ++it) {
+        emit_drop_call(*it);
+    }
+    temp_drops_.clear();
+}
+
 } // namespace tml::codegen
