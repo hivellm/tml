@@ -1459,6 +1459,8 @@ private:
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
     auto gen_simd_struct_expr_ptr(const parser::StructExpr& s, const SimdTypeInfo& info)
         -> std::string;
+    auto try_gen_simd_vector_op(const parser::StructExpr& s, const SimdTypeInfo& info)
+        -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;
     auto gen_array(const parser::ArrayExpr& arr) -> std::string;
     auto gen_index(const parser::IndexExpr& idx) -> std::string;

@@ -1404,7 +1404,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
         }
         emit_line("");
 
-        emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+        emit_line("define dso_local i32 @main(i32 %argc, ptr %argv) noinline {");
         emit_line("entry:");
 
         // Print benchmark header
@@ -1720,7 +1720,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emit_line("  ret i32 " + std::string(main_returns_void ? "0" : "%ret"));
             emit_line("}");
         } else {
-            emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+            emit_line("define dso_local i32 @main(i32 %argc, ptr %argv) noinline {");
             emit_line("entry:");
             // Enable backtrace on panic if flag is set
             if (CompilerOptions::backtrace) {

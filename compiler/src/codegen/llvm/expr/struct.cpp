@@ -128,9 +128,209 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
     return t;
 }
 
+// Try to detect element-wise vector operations on @simd types and emit a single
+// LLVM vector instruction instead of extract+scalar_op+insert per lane.
+//
+// Pattern: I32x4 { e0: a.e0 + b.e0, e1: a.e1 + b.e1, e2: a.e2 + b.e2, e3: a.e3 + b.e3 }
+// Emits:   %r = add <4 x i32> %a, %b
+//
+// Returns pointer to alloca with result, or "" if pattern doesn't match.
+auto LLVMIRGen::try_gen_simd_vector_op(const parser::StructExpr& s, const SimdTypeInfo& info)
+    -> std::string {
+    if (s.fields.empty())
+        return "";
+
+    std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
+    std::string struct_name_for_lookup = base_name;
+
+    // All fields must be BinaryExpr with the same operator
+    parser::BinaryOp common_op{};
+    std::string left_ident_name;
+    std::string right_ident_name;
+
+    for (size_t i = 0; i < s.fields.size(); ++i) {
+        const auto& field_expr = *s.fields[i].second;
+        if (!field_expr.is<parser::BinaryExpr>())
+            return "";
+
+        const auto& bin = field_expr.as<parser::BinaryExpr>();
+
+        // Only support arithmetic ops that LLVM can do on vectors
+        if (bin.op != parser::BinaryOp::Add && bin.op != parser::BinaryOp::Sub &&
+            bin.op != parser::BinaryOp::Mul && bin.op != parser::BinaryOp::Div &&
+            bin.op != parser::BinaryOp::Mod && bin.op != parser::BinaryOp::BitAnd &&
+            bin.op != parser::BinaryOp::BitOr && bin.op != parser::BinaryOp::BitXor &&
+            bin.op != parser::BinaryOp::Shl && bin.op != parser::BinaryOp::Shr)
+            return "";
+
+        if (i == 0) {
+            common_op = bin.op;
+        } else if (bin.op != common_op) {
+            return ""; // Different ops across fields
+        }
+
+        // Left must be FieldExpr on an identifier
+        if (!bin.left->is<parser::FieldExpr>())
+            return "";
+        const auto& lf = bin.left->as<parser::FieldExpr>();
+        if (!lf.object->is<parser::IdentExpr>())
+            return "";
+        const auto& left_id = lf.object->as<parser::IdentExpr>();
+
+        // Right must be FieldExpr on an identifier
+        if (!bin.right->is<parser::FieldExpr>())
+            return "";
+        const auto& rf = bin.right->as<parser::FieldExpr>();
+        if (!rf.object->is<parser::IdentExpr>())
+            return "";
+        const auto& right_id = rf.object->as<parser::IdentExpr>();
+
+        // All left idents must be the same, all right idents must be the same
+        if (i == 0) {
+            left_ident_name = left_id.name;
+            right_ident_name = right_id.name;
+        } else {
+            if (left_id.name != left_ident_name || right_id.name != right_ident_name)
+                return "";
+        }
+
+        // The field names must match the struct's field at this index
+        const std::string& struct_field = s.fields[i].first;
+        if (lf.field != struct_field || rf.field != struct_field)
+            return "";
+
+        // Verify field index matches
+        int expected_idx = get_field_index(struct_name_for_lookup, struct_field);
+        if (expected_idx != static_cast<int>(i))
+            return "";
+    }
+
+    // Verify both source objects are the same SIMD type
+    // Check left object type
+    std::string left_type;
+    std::string left_ptr;
+    if (left_ident_name == "this" && !current_impl_type_.empty()) {
+        left_type = current_impl_type_;
+        left_ptr = "%this";
+    } else {
+        auto it = locals_.find(left_ident_name);
+        if (it == locals_.end())
+            return "";
+        // locals_ stores type as "%struct.TypeName" or similar
+        left_type = it->second.type;
+        if (left_type.starts_with("%struct."))
+            left_type = left_type.substr(8); // Strip "%struct."
+        left_ptr = it->second.reg;
+    }
+
+    std::string right_type;
+    std::string right_ptr;
+    if (right_ident_name == "this" && !current_impl_type_.empty()) {
+        right_type = current_impl_type_;
+        right_ptr = "%this";
+    } else {
+        auto it = locals_.find(right_ident_name);
+        if (it == locals_.end())
+            return "";
+        right_type = it->second.type;
+        if (right_type.starts_with("%struct."))
+            right_type = right_type.substr(8);
+        right_ptr = it->second.reg;
+    }
+
+    // Both must be the same SIMD type as the result type
+    if (!is_simd_type(left_type) || !is_simd_type(right_type))
+        return "";
+    if (left_type != base_name || right_type != base_name)
+        return "";
+
+    // Pattern matches! Emit direct vector operation.
+    std::string vec_type = simd_vec_type_str(info);
+    bool is_float = (info.element_llvm_type == "float" || info.element_llvm_type == "double");
+
+    // Load both vectors
+    std::string left_vec = fresh_reg();
+    emit_line("  " + left_vec + " = load " + vec_type + ", ptr " + left_ptr);
+    std::string right_vec = fresh_reg();
+    emit_line("  " + right_vec + " = load " + vec_type + ", ptr " + right_ptr);
+
+    // Emit the vector operation
+    std::string result_vec = fresh_reg();
+    switch (common_op) {
+    case parser::BinaryOp::Add:
+        if (is_float)
+            emit_line("  " + result_vec + " = fadd " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        else
+            emit_line("  " + result_vec + " = add " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::Sub:
+        if (is_float)
+            emit_line("  " + result_vec + " = fsub " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        else
+            emit_line("  " + result_vec + " = sub " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::Mul:
+        if (is_float)
+            emit_line("  " + result_vec + " = fmul " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        else
+            emit_line("  " + result_vec + " = mul " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::Div:
+        if (is_float)
+            emit_line("  " + result_vec + " = fdiv " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        else
+            emit_line("  " + result_vec + " = sdiv " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        break;
+    case parser::BinaryOp::Mod:
+        if (is_float)
+            emit_line("  " + result_vec + " = frem " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        else
+            emit_line("  " + result_vec + " = srem " + vec_type + " " + left_vec + ", " +
+                      right_vec);
+        break;
+    case parser::BinaryOp::BitAnd:
+        emit_line("  " + result_vec + " = and " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::BitOr:
+        emit_line("  " + result_vec + " = or " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::BitXor:
+        emit_line("  " + result_vec + " = xor " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::Shl:
+        emit_line("  " + result_vec + " = shl " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    case parser::BinaryOp::Shr:
+        emit_line("  " + result_vec + " = lshr " + vec_type + " " + left_vec + ", " + right_vec);
+        break;
+    default:
+        return ""; // Should not happen
+    }
+
+    // Store result to alloca
+    std::string ptr = fresh_reg();
+    emit_line("  " + ptr + " = alloca " + vec_type);
+    emit_line("  store " + vec_type + " " + result_vec + ", ptr " + ptr);
+
+    std::string struct_type_name = "%struct." + base_name;
+    last_expr_type_ = struct_type_name;
+    return ptr;
+}
+
 // Generate SIMD struct expression via insertelement chain, returning pointer to alloca
 auto LLVMIRGen::gen_simd_struct_expr_ptr(const parser::StructExpr& s, const SimdTypeInfo& info)
     -> std::string {
+    // Try direct vector operation first (e.g., add <4 x i32> instead of extract+add+insert)
+    std::string vec_op_result = try_gen_simd_vector_op(s, info);
+    if (!vec_op_result.empty())
+        return vec_op_result;
+
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
     std::string vec_type = simd_vec_type_str(info);
     std::string struct_type_name = "%struct." + base_name;
@@ -138,7 +338,7 @@ auto LLVMIRGen::gen_simd_struct_expr_ptr(const parser::StructExpr& s, const Simd
     // Get struct name for field lookup
     std::string struct_name_for_lookup = base_name;
 
-    // Build the vector value via insertelement chain
+    // Build the vector value via insertelement chain (fallback for non-vectorizable patterns)
     std::string current_vec = "undef";
     for (size_t i = 0; i < s.fields.size(); ++i) {
         const std::string& field_name = s.fields[i].first;

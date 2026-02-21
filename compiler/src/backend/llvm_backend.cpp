@@ -183,7 +183,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
         LLVMDisposeMessage(host_features);
     }
 
-    // Determine optimization level
+    // Determine optimization level for codegen
     LLVMCodeGenOptLevel opt_level;
     switch (options.optimization_level) {
     case 0:
