@@ -1,0 +1,169 @@
+//! Base45 encoding and decoding per RFC 9285.
+//!
+//! Base45 is optimized for QR code encoding (alphanumeric mode).
+//! Alphabet: 0-9 A-Z SP $ % * + - . / :
+//!
+//! Encoding: 2 input bytes -> 3 base45 chars, 1 input byte -> 2 base45 chars.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base45
+//!
+//! let encoded = base45::encode("Hi")
+//! assert(base45::decode(encoded) == Ok("Hi"))
+//! ```
+
+use core::str
+
+/// The RFC 9285 Base45 alphabet (45 characters).
+/// 0-9 A-Z SP $ % * + - . / :
+func char_at_idx(idx: I32) -> U8 {
+    // 0-9 -> '0'-'9'
+    if idx < 10 {
+        return (idx + 48) as U8
+    }
+    // 10-35 -> 'A'-'Z'
+    if idx < 36 {
+        return (idx - 10 + 65) as U8
+    }
+    // 36 -> SP (32)
+    if idx == 36 { return 32 as U8 }
+    // 37 -> $ (36)
+    if idx == 37 { return 36 as U8 }
+    // 38 -> % (37)
+    if idx == 38 { return 37 as U8 }
+    // 39 -> * (42)
+    if idx == 39 { return 42 as U8 }
+    // 40 -> + (43)
+    if idx == 40 { return 43 as U8 }
+    // 41 -> - (45)
+    if idx == 41 { return 45 as U8 }
+    // 42 -> . (46)
+    if idx == 42 { return 46 as U8 }
+    // 43 -> / (47)
+    if idx == 43 { return 47 as U8 }
+    // 44 -> : (58)
+    return 58 as U8
+}
+
+/// Map character to index (0-44), returns -1 for invalid.
+func idx_of_char(c: I32) -> I32 {
+    if c >= 48 and c <= 57 { return c - 48 }         // '0'-'9' -> 0-9
+    if c >= 65 and c <= 90 { return c - 65 + 10 }    // 'A'-'Z' -> 10-35
+    if c == 32 { return 36 }                           // SP
+    if c == 36 { return 37 }                           // $
+    if c == 37 { return 38 }                           // %
+    if c == 42 { return 39 }                           // *
+    if c == 43 { return 40 }                           // +
+    if c == 45 { return 41 }                           // -
+    if c == 46 { return 42 }                           // .
+    if c == 47 { return 43 }                           // /
+    if c == 58 { return 44 }                           // :
+    return -1
+}
+
+/// Encode bytes using Base45 (RFC 9285).
+///
+/// Two input bytes are encoded as three Base45 characters.
+/// A trailing single byte is encoded as two Base45 characters.
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    // Calculate output length: pairs produce 3 chars, odd byte produces 2
+    let pairs: I64 = in_len / 2
+    let has_odd: I64 = in_len % 2
+    let out_len: I64 = pairs * 3 + has_odd * 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+    // Process pairs of bytes
+    loop (si + 1 < in_len) {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let val: I32 = b0 * 256 + b1
+        let c2: U8 = char_at_idx(val / 2025)
+        let rem1: I32 = val % 2025
+        let c1: U8 = char_at_idx(rem1 / 45)
+        let c0: U8 = char_at_idx(rem1 % 45)
+        lowlevel { ptr_write[U8]((dst + di) as *U8, c0) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, c1) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, c2) }
+        si = si + 2
+        di = di + 3
+    }
+    // Process trailing odd byte
+    if si < in_len {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let c1: U8 = char_at_idx(b0 / 45)
+        let c0: U8 = char_at_idx(b0 % 45)
+        lowlevel { ptr_write[U8]((dst + di) as *U8, c0) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, c1) }
+        di = di + 2
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode a Base45 string back to original bytes.
+///
+/// Input length must satisfy: len % 3 == 0 or len % 3 == 2.
+pub func decode(input: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return Ok("")
+    }
+    let rem: I64 = in_len % 3
+    if rem == 1 {
+        return Err("base45: invalid input length")
+    }
+    let triplets: I64 = in_len / 3
+    let has_pair: I64 = rem / 2  // 1 if rem==2, 0 otherwise
+    let out_len: I64 = triplets * 2 + has_pair
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+    // Process triplets -> 2 bytes each
+    loop (si + 2 < in_len) {
+        let c0: I32 = idx_of_char(lowlevel { ptr_read[U8]((src + si) as *U8) } as I32)
+        let c1: I32 = idx_of_char(lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32)
+        let c2: I32 = idx_of_char(lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32)
+        if c0 == -1 or c1 == -1 or c2 == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("base45: invalid character")
+        }
+        let val: I32 = c2 * 2025 + c1 * 45 + c0
+        if val > 65535 {
+            lowlevel { mem_free(buf) }
+            return Err("base45: decoded value overflow")
+        }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, (val / 256) as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, (val % 256) as U8) }
+        si = si + 3
+        di = di + 2
+    }
+    // Process trailing pair -> 1 byte
+    if si + 1 < in_len {
+        let c0: I32 = idx_of_char(lowlevel { ptr_read[U8]((src + si) as *U8) } as I32)
+        let c1: I32 = idx_of_char(lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32)
+        if c0 == -1 or c1 == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("base45: invalid character")
+        }
+        let val: I32 = c1 * 45 + c0
+        if val > 255 {
+            lowlevel { mem_free(buf) }
+            return Err("base45: decoded single byte overflow")
+        }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, val as U8) }
+        di = di + 1
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

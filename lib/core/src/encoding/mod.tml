@@ -8,15 +8,29 @@
 //! | Module | Description |
 //! |--------|-------------|
 //! | [`hex`] | Hexadecimal encoding (uppercase/lowercase) |
-//! | [`base64`] | Base64 encoding (standard + URL-safe) |
-//! | [`percent`] | Percent-encoding per RFC 3986 |
+//! | [`base8`] | Octal (base-8) encoding |
+//! | [`base16`] | Base16 (hex alias per RFC 4648) |
 //! | [`base32`] | Base32 encoding per RFC 4648 |
+//! | [`base36`] | Base36 encoding [0-9a-z] |
+//! | [`base45`] | Base45 encoding per RFC 9285 (QR codes) |
 //! | [`base58`] | Base58 encoding (Bitcoin alphabet) |
+//! | [`base62`] | Base62 encoding [0-9A-Za-z] (short URLs) |
+//! | [`base64`] | Base64 encoding (standard + URL-safe) |
+//! | [`base64url`] | URL-safe Base64 convenience wrapper |
+//! | [`base91`] | Base91 high-density encoding |
 //! | [`ascii85`] | ASCII85/Base85 encoding |
+//! | [`percent`] | Percent-encoding per RFC 3986 |
 
 pub mod hex
-pub mod base64
-pub mod percent
+pub mod base8
+pub mod base16
 pub mod base32
+pub mod base36
+pub mod base45
 pub mod base58
+pub mod base62
+pub mod base64
+pub mod base64url
+pub mod base91
 pub mod ascii85
+pub mod percent

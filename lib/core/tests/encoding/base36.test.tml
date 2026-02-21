@@ -1,0 +1,78 @@
+use test
+use core::encoding::base36
+
+@test
+func test_base36_encode_empty() -> I32 {
+    assert_eq(base36::encode(""), "")
+    0
+}
+
+@test
+func test_base36_encode_A() -> I32 {
+    // 'A' = 65, 65/36=1 rem 29. 1->'1', 29->'t' => "1t"
+    assert_eq(base36::encode("A"), "1t")
+    0
+}
+
+@test
+func test_base36_decode_empty() -> I32 {
+    let result = base36::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base36_decode_error_odd() -> I32 {
+    let result = base36::decode("a")
+    when result {
+        Ok(s) => assert(false, "odd length should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base36_decode_error_invalid() -> I32 {
+    let result = base36::decode("!!")
+    when result {
+        Ok(s) => assert(false, "invalid chars should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base36_roundtrip() -> I32 {
+    let input: Str = "Hello"
+    let result = base36::decode(base36::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base36_roundtrip_binary() -> I32 {
+    let input: Str = "TML v1.0"
+    let result = base36::decode(base36::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base36_case_insensitive() -> I32 {
+    // Encoding produces lowercase, but decoding should accept uppercase
+    let result = base36::decode("1T")
+    when result {
+        Ok(s) => assert_eq(s, "A")
+        Err(e) => assert(false, "uppercase should be accepted")
+    }
+    0
+}

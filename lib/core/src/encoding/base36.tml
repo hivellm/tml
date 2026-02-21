@@ -1,0 +1,101 @@
+//! Base36 encoding and decoding.
+//!
+//! Encodes binary data using the alphabet [0-9a-z].
+//! Each byte is encoded as a big-endian base36 number.
+//! This is a byte-by-byte encoding: each byte produces exactly 2 base36 characters.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base36
+//!
+//! let encoded = base36::encode("Hi")
+//! assert(base36::decode(encoded) == Ok("Hi"))
+//! ```
+
+use core::str
+
+/// Alphabet: 0-9 a-z (36 characters)
+func char_at_idx(idx: I32) -> U8 {
+    if idx < 10 {
+        return (idx + 48) as U8  // '0'-'9'
+    }
+    return (idx - 10 + 97) as U8  // 'a'-'z'
+}
+
+/// Map character to index (0-35), returns -1 for invalid.
+func idx_of_char(c: I32) -> I32 {
+    if c >= 48 and c <= 57 {
+        return c - 48              // '0'-'9' -> 0-9
+    }
+    if c >= 97 and c <= 122 {
+        return c - 97 + 10         // 'a'-'z' -> 10-35
+    }
+    if c >= 65 and c <= 90 {
+        return c - 65 + 10         // 'A'-'Z' -> 10-35 (case-insensitive)
+    }
+    return -1
+}
+
+/// Encode bytes as base36. Each byte -> 2 base36 characters.
+///
+/// Since 36^2 = 1296 > 256, each byte fits in exactly 2 base36 digits.
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    let out_len: I64 = in_len * 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < in_len) {
+        let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
+        let b: I32 = byte as I32
+        let hi: U8 = char_at_idx(b / 36)
+        let lo: U8 = char_at_idx(b % 36)
+        lowlevel { ptr_write[U8]((dst + i * 2) as *U8, hi) }
+        lowlevel { ptr_write[U8]((dst + i * 2 + 1) as *U8, lo) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode base36 back to original bytes (2 chars -> 1 byte).
+///
+/// Input length must be even. Accepts both lowercase and uppercase.
+pub func decode(input: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return Ok("")
+    }
+    if in_len % 2 != 0 {
+        return Err("base36: input length must be even")
+    }
+    let out_len: I64 = in_len / 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < out_len) {
+        let c_hi: I32 = lowlevel { ptr_read[U8]((src + i * 2) as *U8) } as I32
+        let c_lo: I32 = lowlevel { ptr_read[U8]((src + i * 2 + 1) as *U8) } as I32
+        let hi: I32 = idx_of_char(c_hi)
+        let lo: I32 = idx_of_char(c_lo)
+        if hi == -1 or lo == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("base36: invalid character")
+        }
+        let val: I32 = hi * 36 + lo
+        if val > 255 {
+            lowlevel { mem_free(buf) }
+            return Err("base36: decoded value exceeds byte range")
+        }
+        lowlevel { ptr_write[U8]((dst + i) as *U8, val as U8) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

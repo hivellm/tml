@@ -1,0 +1,62 @@
+use test
+use core::encoding::base91
+
+@test
+func test_base91_encode_empty() -> I32 {
+    assert_eq(base91::encode(""), "")
+    0
+}
+
+@test
+func test_base91_decode_empty() -> I32 {
+    let result = base91::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base91_decode_error_invalid() -> I32 {
+    // ' (single quote, ASCII 39) is excluded from alphabet
+    let result = base91::decode("'")
+    when result {
+        Ok(s) => assert(false, "excluded char should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base91_roundtrip_short() -> I32 {
+    let input: Str = "Hi"
+    let result = base91::decode(base91::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base91_roundtrip_hello() -> I32 {
+    let input: Str = "Hello"
+    let result = base91::decode(base91::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base91_roundtrip_longer() -> I32 {
+    let input: Str = "TML encoding!"
+    let result = base91::decode(base91::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}

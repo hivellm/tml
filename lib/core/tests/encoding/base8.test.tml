@@ -1,0 +1,70 @@
+use test
+use core::encoding::base8
+
+@test
+func test_base8_encode_empty() -> I32 {
+    assert_eq(base8::encode(""), "")
+    0
+}
+
+@test
+func test_base8_encode_A() -> I32 {
+    // 'A' = 65 = 0o101
+    assert_eq(base8::encode("A"), "101")
+    0
+}
+
+@test
+func test_base8_encode_space() -> I32 {
+    // ' ' = 32 = 0o040
+    assert_eq(base8::encode(" "), "040")
+    0
+}
+
+@test
+func test_base8_encode_Hello() -> I32 {
+    // H=110, e=145, l=154, l=154, o=157
+    assert_eq(base8::encode("Hello"), "110145154154157")
+    0
+}
+
+@test
+func test_base8_decode_A() -> I32 {
+    let result = base8::decode("101")
+    when result {
+        Ok(s) => assert_eq(s, "A")
+        Err(e) => assert(false, "decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base8_decode_error_bad_digit() -> I32 {
+    let result = base8::decode("189")
+    when result {
+        Ok(s) => assert(false, "8 and 9 are invalid octal")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base8_decode_error_odd_length() -> I32 {
+    let result = base8::decode("10")
+    when result {
+        Ok(s) => assert(false, "should reject non-multiple-of-3")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base8_roundtrip() -> I32 {
+    let input: Str = "TML!"
+    let result = base8::decode(base8::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}

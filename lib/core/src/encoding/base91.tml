@@ -1,0 +1,189 @@
+//! Base91 encoding and decoding.
+//!
+//! Base91 uses 91 printable ASCII characters (excluding `-`, `'`, and `\`)
+//! to achieve higher density than Base64 (~23% overhead vs ~33%).
+//!
+//! Encodes 13 bits at a time: if value < 89, output 1 char; otherwise 2 chars.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base91
+//!
+//! let encoded = base91::encode("Hello")
+//! assert(base91::decode(encoded) == Ok("Hello"))
+//! ```
+
+use core::str
+
+/// The base91 alphabet: 91 printable ASCII characters.
+/// Characters ! through ~ (33-126) excluding - (45), ' (39), and \ (92).
+/// This gives: !"#$%&()*+,./0-9:;<=>?@A-Z[]^_`a-z{|}~
+func char_at_idx(idx: I32) -> U8 {
+    // Table of 91 characters mapped by index
+    // We use arithmetic to skip the 3 excluded characters
+    var c: I32 = idx + 33  // Start at '!' (33)
+    // Skip ' (39) at offset 6
+    if c >= 39 { c = c + 1 }
+    // Skip - (45) at offset 12 (after adjustment)
+    if c >= 45 { c = c + 1 }
+    // Skip \ (92) at offset 59 (after adjustments)
+    if c >= 92 { c = c + 1 }
+    return c as U8
+}
+
+/// Map character to index (0-90), returns -1 for invalid.
+func idx_of_char(c: I32) -> I32 {
+    if c < 33 or c > 126 { return -1 }
+    if c == 39 or c == 45 or c == 92 { return -1 }  // excluded chars
+    var idx: I32 = c - 33
+    // Adjust for excluded characters
+    if c > 92 { idx = idx - 1 }   // \ at 92
+    if c > 45 { idx = idx - 1 }   // - at 45
+    if c > 39 { idx = idx - 1 }   // ' at 39
+    return idx
+}
+
+/// Encode bytes using Base91.
+///
+/// Processes input as a bit stream, extracting 13 bits at a time.
+/// Each 13-bit value is encoded as 1 or 2 base91 characters.
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    // Worst case: each byte -> ~1.23 base91 chars. Allocate 2x for safety.
+    let max_out: I64 = in_len * 2 + 3
+    let buf: *Unit = lowlevel { mem_alloc(max_out + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+
+    var ebq: I32 = 0     // encode bit queue
+    var en: I32 = 0       // number of bits in queue
+    var di: I64 = 0       // output position
+    var si: I64 = 0
+
+    loop (si < in_len) {
+        let byte: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        ebq = ebq + (byte * (1 << en))  // Use shift via multiply
+        en = en + 8
+
+        if en > 13 {
+            var val: I32 = ebq % 8192  // ebq & 0x1FFF (13 bits)
+            if val > 88 {
+                ebq = ebq / 8192       // ebq >> 13
+                en = en - 13
+            } else {
+                val = ebq % 16384      // ebq & 0x3FFF (14 bits)
+                ebq = ebq / 16384      // ebq >> 14
+                en = en - 14
+            }
+            lowlevel { ptr_write[U8]((dst + di) as *U8, char_at_idx(val % 91)) }
+            di = di + 1
+            lowlevel { ptr_write[U8]((dst + di) as *U8, char_at_idx(val / 91)) }
+            di = di + 1
+        }
+        si = si + 1
+    }
+
+    // Flush remaining bits
+    if en > 0 {
+        lowlevel { ptr_write[U8]((dst + di) as *U8, char_at_idx(ebq % 91)) }
+        di = di + 1
+        if en > 7 or ebq > 90 {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, char_at_idx(ebq / 91)) }
+            di = di + 1
+        }
+    }
+
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
+    // Return exact-length string
+    if di < max_out {
+        let out: *Unit = lowlevel { mem_alloc(di + 1) }
+        var ci: I64 = 0
+        loop (ci <= di) {
+            let cb: U8 = lowlevel { ptr_read[U8]((dst + ci) as *U8) }
+            lowlevel { ptr_write[U8]((out as I64 + ci) as *U8, cb) }
+            ci = ci + 1
+        }
+        lowlevel { mem_free(buf) }
+        return out as Str
+    }
+    return buf as Str
+}
+
+/// Decode a Base91 string back to original bytes.
+pub func decode(input: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return Ok("")
+    }
+    // Worst case: each char decodes to ~1 byte
+    let max_out: I64 = in_len + 1
+    let buf: *Unit = lowlevel { mem_alloc(max_out + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+
+    var dbq: I32 = 0      // decode bit queue
+    var dn: I32 = 0        // bits in queue
+    var di: I64 = 0        // output position
+    var dv: I32 = -1       // first char value accumulator
+    var si: I64 = 0
+
+    loop (si < in_len) {
+        let c: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let idx: I32 = idx_of_char(c)
+        if idx == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("base91: invalid character")
+        }
+        if dv == -1 {
+            dv = idx
+        } else {
+            var val: I32 = dv + idx * 91
+            dv = -1
+            // Determine bit count from val
+            var bits: I32 = 13
+            if val > 88 {
+                bits = 13
+            } else {
+                bits = 14
+            }
+            dbq = dbq + (val * (1 << dn))
+            dn = dn + bits
+            // Extract bytes
+            loop (dn >= 8) {
+                lowlevel { ptr_write[U8]((dst + di) as *U8, (dbq % 256) as U8) }
+                di = di + 1
+                dbq = dbq / 256
+                dn = dn - 8
+            }
+        }
+        si = si + 1
+    }
+
+    // Handle trailing single character
+    if dv != -1 {
+        dbq = dbq + (dv * (1 << dn))
+        dn = dn + 6  // single char contributes ~6-7 bits
+        loop (dn >= 8) {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, (dbq % 256) as U8) }
+            di = di + 1
+            dbq = dbq / 256
+            dn = dn - 8
+        }
+    }
+
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
+    // Copy to exact-size buffer
+    let out: *Unit = lowlevel { mem_alloc(di + 1) }
+    var ci: I64 = 0
+    loop (ci <= di) {
+        let cb: U8 = lowlevel { ptr_read[U8]((dst + ci) as *U8) }
+        lowlevel { ptr_write[U8]((out as I64 + ci) as *U8, cb) }
+        ci = ci + 1
+    }
+    lowlevel { mem_free(buf) }
+    return Ok(out as Str)
+}

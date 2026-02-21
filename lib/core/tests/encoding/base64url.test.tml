@@ -1,0 +1,55 @@
+use test
+use core::encoding::base64url
+
+@test
+func test_base64url_encode_empty() -> I32 {
+    assert_eq(base64url::encode(""), "")
+    0
+}
+
+@test
+func test_base64url_encode_hello() -> I32 {
+    // "Hello" in standard base64 = "SGVsbG8="
+    // URL-safe uses same alphabet except - for + and _ for /
+    // "Hello" has no + or / so result is same: "SGVsbG8="
+    assert_eq(base64url::encode("Hello"), "SGVsbG8=")
+    0
+}
+
+@test
+func test_base64url_decode_hello() -> I32 {
+    let result = base64url::decode("SGVsbG8=")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base64url_encode_nopad() -> I32 {
+    // "Hello" -> "SGVsbG8=" with pad, "SGVsbG8" without
+    assert_eq(base64url::encode_nopad("Hello"), "SGVsbG8")
+    0
+}
+
+@test
+func test_base64url_roundtrip() -> I32 {
+    let input: Str = "TML encoding test!"
+    let result = base64url::decode(base64url::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base64url_decode_error() -> I32 {
+    let result = base64url::decode("!!!!")
+    when result {
+        Ok(s) => assert(false, "invalid chars should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}

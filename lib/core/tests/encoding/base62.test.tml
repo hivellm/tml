@@ -1,0 +1,67 @@
+use test
+use core::encoding::base62
+
+@test
+func test_base62_encode_empty() -> I32 {
+    assert_eq(base62::encode(""), "")
+    0
+}
+
+@test
+func test_base62_encode_A() -> I32 {
+    // 'A' = 65, 65/62=1 rem 3. 1->'1', 3->'3' => "13"
+    assert_eq(base62::encode("A"), "13")
+    0
+}
+
+@test
+func test_base62_decode_empty() -> I32 {
+    let result = base62::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base62_decode_error_odd() -> I32 {
+    let result = base62::decode("a")
+    when result {
+        Ok(s) => assert(false, "odd length should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base62_decode_error_invalid() -> I32 {
+    let result = base62::decode("!!")
+    when result {
+        Ok(s) => assert(false, "invalid chars should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base62_roundtrip() -> I32 {
+    let input: Str = "Hello"
+    let result = base62::decode(base62::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base62_roundtrip_longer() -> I32 {
+    let input: Str = "TML encoding!"
+    let result = base62::decode(base62::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}

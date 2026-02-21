@@ -1,0 +1,41 @@
+//! URL-safe Base64 encoding per RFC 4648 section 5.
+//!
+//! Convenience module that re-exports the URL-safe variants from `core::encoding::base64`.
+//! Uses `-` and `_` instead of `+` and `/`, with no padding by default.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base64url
+//!
+//! assert(base64url::encode("Hello") == "SGVsbG8=")
+//! assert(base64url::decode("SGVsbG8=") == Ok("Hello"))
+//! ```
+
+use core::str
+use core::encoding::base64
+
+/// Encode a string using URL-safe Base64 alphabet (- and _ instead of + and /).
+pub func encode(input: Str) -> Str {
+    return base64::encode_url(input)
+}
+
+/// Decode a URL-safe Base64 string.
+pub func decode(input: Str) -> Outcome[Str, Str] {
+    return base64::decode_url(input)
+}
+
+/// Encode without padding (no trailing '=').
+pub func encode_nopad(input: Str) -> Str {
+    let encoded: Str = base64::encode_url(input)
+    // Strip trailing '=' characters
+    let elen: I64 = str::len(encoded)
+    var end: I64 = elen
+    loop (end > 0 and str::char_at(encoded, end - 1) == 61) {
+        end = end - 1
+    }
+    if end == elen {
+        return encoded
+    }
+    return str::substring(encoded, 0, end)
+}

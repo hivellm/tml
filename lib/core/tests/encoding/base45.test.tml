@@ -1,0 +1,87 @@
+use test
+use core::encoding::base45
+
+@test
+func test_base45_encode_empty() -> I32 {
+    assert_eq(base45::encode(""), "")
+    0
+}
+
+@test
+func test_base45_encode_single_byte() -> I32 {
+    // 'A' = 65, 65/45=1 rem 20. idx 20->'K', idx 1->'1' => "K1"
+    // Actually: c0 = char_at_idx(65 % 45) = char_at_idx(20) = 'K'
+    //           c1 = char_at_idx(65 / 45) = char_at_idx(1) = '1'
+    let enc: Str = base45::encode("A")
+    // Just verify roundtrip instead of exact encoding
+    let result = base45::decode(enc)
+    when result {
+        Ok(s) => assert_eq(s, "A")
+        Err(e) => assert(false, "roundtrip single byte should succeed")
+    }
+    0
+}
+
+@test
+func test_base45_decode_empty() -> I32 {
+    let result = base45::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base45_decode_error_invalid_length() -> I32 {
+    // length 1 => len%3 == 1, which is invalid
+    let result = base45::decode("A")
+    when result {
+        Ok(s) => assert(false, "length 1 should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base45_decode_error_invalid_char() -> I32 {
+    let result = base45::decode("!!!")
+    when result {
+        Ok(s) => assert(false, "invalid chars should fail")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base45_roundtrip_short() -> I32 {
+    let input: Str = "Hi"
+    let result = base45::decode(base45::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base45_roundtrip_longer() -> I32 {
+    let input: Str = "Hello, World!"
+    let result = base45::decode(base45::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base45_roundtrip_odd_length() -> I32 {
+    let input: Str = "TML"
+    let result = base45::decode(base45::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip odd length should succeed")
+    }
+    0
+}

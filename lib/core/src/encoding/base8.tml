@@ -1,0 +1,81 @@
+//! Base8 (octal) encoding and decoding.
+//!
+//! Encodes each byte as a 3-digit octal string (000-377).
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base8
+//!
+//! assert(base8::encode("A") == "101")
+//! assert(base8::decode("101") == Ok("A"))
+//! ```
+
+use core::str
+
+/// Encode a string's bytes as 3-digit octal values.
+///
+/// Each byte produces exactly 3 octal digits (zero-padded).
+/// Example: 'A' (65) -> "101", '\0' (0) -> "000"
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    let out_len: I64 = in_len * 3
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < in_len) {
+        let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
+        let b: I32 = byte as I32
+        let d2: U8 = (b / 64 + 48) as U8
+        let d1: U8 = ((b / 8) % 8 + 48) as U8
+        let d0: U8 = (b % 8 + 48) as U8
+        lowlevel { ptr_write[U8]((dst + i * 3) as *U8, d2) }
+        lowlevel { ptr_write[U8]((dst + i * 3 + 1) as *U8, d1) }
+        lowlevel { ptr_write[U8]((dst + i * 3 + 2) as *U8, d0) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode octal-encoded bytes back to original string.
+///
+/// Input must have length divisible by 3. Each group of 3 digits must be
+/// a valid octal byte value (000-377).
+pub func decode(input: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return Ok("")
+    }
+    if in_len % 3 != 0 {
+        return Err("base8: input length must be multiple of 3")
+    }
+    let out_len: I64 = in_len / 3
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < out_len) {
+        let c2: I32 = lowlevel { ptr_read[U8]((src + i * 3) as *U8) } as I32
+        let c1: I32 = lowlevel { ptr_read[U8]((src + i * 3 + 1) as *U8) } as I32
+        let c0: I32 = lowlevel { ptr_read[U8]((src + i * 3 + 2) as *U8) } as I32
+        // Validate digits 0-7
+        if c2 < 48 or c2 > 55 or c1 < 48 or c1 > 55 or c0 < 48 or c0 > 55 {
+            lowlevel { mem_free(buf) }
+            return Err("base8: invalid octal digit")
+        }
+        let val: I32 = (c2 - 48) * 64 + (c1 - 48) * 8 + (c0 - 48)
+        if val > 255 {
+            lowlevel { mem_free(buf) }
+            return Err("base8: octal value exceeds byte range (> 377)")
+        }
+        lowlevel { ptr_write[U8]((dst + i) as *U8, val as U8) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

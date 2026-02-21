@@ -1,0 +1,51 @@
+use test
+use core::encoding::base16
+
+@test
+func test_base16_encode_empty() -> I32 {
+    assert_eq(base16::encode(""), "")
+    0
+}
+
+@test
+func test_base16_encode_hello() -> I32 {
+    assert_eq(base16::encode("Hello"), "48656c6c6f")
+    0
+}
+
+@test
+func test_base16_encode_upper() -> I32 {
+    assert_eq(base16::encode_upper("Hello"), "48656C6C6F")
+    0
+}
+
+@test
+func test_base16_decode_hello() -> I32 {
+    let result = base16::decode("48656c6c6f")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base16_decode_error() -> I32 {
+    let result = base16::decode("GG")
+    when result {
+        Ok(s) => assert(false, "should fail for invalid hex")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_base16_roundtrip() -> I32 {
+    let input: Str = "TML Base16!"
+    let result = base16::decode(base16::encode(input))
+    when result {
+        Ok(s) => assert_eq(s, input)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
