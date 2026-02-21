@@ -831,10 +831,10 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 - Phase 48: dead code cleanup — removed 9 dead functions from time.c (time_ms, time_us, sleep_us, elapsed_ms/us/ns, elapsed_secs, duration_as_millis_f64, duration_format_secs); removed 8 stale declarations from essential.h (print_f32, str_concat_opt, 6 time functions); removed 5 dead lowlevel bindings from core/time.tml (time_ms, time_us, elapsed_ms, duration_as_millis, duration_as_secs)
 - Phase 49: removed 17 ghost string declarations from essential.h (str_len, str_eq, str_hash, str_concat/_3/_4/_n, str_substring, str_slice, str_contains, str_starts_with, str_ends_with, str_to_upper, str_to_lower, str_trim, str_char_at, char_to_string — none had C implementations); removed dead assert_tml() 2-arg function from essential.c (codegen only emits assert_tml_loc); removed 3 dead str_concat declares from mir_codegen.cpp
 - Phase 50: removed hardcoded Str::to_string/debug_string codegen from method_primitive.cpp — now dispatched through TML Display/Debug behavior impls in fmt/impls.tml via lazy-lib; Char still needs hardcoded inline codegen (lazy-lib cannot resolve char_to_str dependency chain)
-- Current: 5 inline IR functions remain (2 string utils + 3 black_box); 7 live math builtin handlers; 0 C migration candidates; all primitive formatting (except Char) uses TML Display behavior dispatch
+- Phase 51: (a) fixed Char Display/Debug lazy-lib resolution — added `Char` to `is_primitive_type` lambda in runtime_modules.cpp, removed 30 lines of hardcoded Char codegen from method_primitive.cpp; (b) made `%struct.HashMapIter`, `%struct.RawThread`, `%struct.RawPtr` conditional on import-based flags in runtime.cpp; (c) removed 40-line dead return-type workaround from method_prim_behavior.cpp (never triggered — all methods either inlined or dispatched via lazy-lib)
+- Current: 5 inline IR functions remain (2 string utils + 3 black_box); 7 live math builtin handlers; 0 C migration candidates; ALL primitive formatting (including Char) uses TML Display behavior dispatch via lazy-lib
 
 **Next actionable items**:
-- Fix lazy-lib resolution for Char Display/Debug impls
 - Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
 - Remaining Phase 4 work: str_eq and str_concat_opt are deeply embedded in C++ codegen (30+ callsites each) — migration would require major codegen refactoring with no functional benefit; 3 black_box functions require inline asm and must stay
 

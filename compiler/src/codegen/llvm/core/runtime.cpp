@@ -48,20 +48,16 @@ void LLVMIRGen::emit_runtime_decls() {
     struct_types_["Ordering"] = "%struct.Ordering";
     struct_fields_["Ordering"] = {{"value", 0, "i32", types::make_i32()}};
 
+    // --- On-demand type declarations (Phase 51) ---
+    // These struct types are only emitted when their associated modules are imported.
+
     // HashMapIter type for iterating over HashMap entries
-    emit_line("%struct.HashMapIter = type { ptr }");
-    struct_types_["HashMapIter"] = "%struct.HashMapIter";
-    struct_fields_["HashMapIter"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+    // Only needed when std::collections is imported.
+    // NOTE: Deferred to after import scan below (needs_collections flag).
 
     // Thread types (from std::thread) - needed for @extern function declarations
-    emit_line("%struct.RawThread = type { i64 }"); // _handle: U64
-    struct_types_["RawThread"] = "%struct.RawThread";
-    struct_fields_["RawThread"] = {
-        {"_handle", 0, "i64", types::make_primitive(types::PrimitiveKind::U64)}};
-    emit_line("%struct.RawPtr = type { i64 }"); // addr: I64
-    struct_types_["RawPtr"] = "%struct.RawPtr";
-    struct_fields_["RawPtr"] = {{"addr", 0, "i64", types::make_i64()}};
-    emit_line("");
+    // Only needed when std::thread is imported.
+    // NOTE: Deferred to after import scan below (needs_thread flag).
 
     // External C functions
     emit_line("; External function declarations");
@@ -165,12 +161,14 @@ void LLVMIRGen::emit_runtime_decls() {
     // Integer/bool to_string — removed in Phase 44 (now TML Display behavior impls)
     // i64_to_str — removed in Phase 45 (string interpolation now uses TML Display dispatch)
 
-    // --- On-demand runtime declares ---
+    // --- On-demand runtime declares (Phase 51) ---
     // Compute which optional categories are needed based on imports.
     // In library_ir_only mode (shared library for test suites), emit everything
     // because the shared lib is linked against multiple workers with varying imports.
     bool needs_sync_atomics = options_.library_ir_only;
     bool needs_logging = options_.library_ir_only;
+    bool needs_collections = options_.library_ir_only;
+    bool needs_thread = options_.library_ir_only;
     // needs_glob removed (Phase 42) — glob now uses @extern FFI in glob.tml
 
     if (!options_.library_ir_only) {
@@ -183,10 +181,29 @@ void LLVMIRGen::emit_runtime_decls() {
                 needs_sync_atomics = true;
             if (!needs_logging && path.find("std::log") == 0)
                 needs_logging = true;
-            if (needs_sync_atomics && needs_logging)
-                break;
+            if (!needs_collections && path.find("std::collections") == 0)
+                needs_collections = true;
+            if (!needs_thread && path.find("std::thread") == 0)
+                needs_thread = true;
         }
     }
+
+    // Deferred type declarations (depend on import scan results)
+    if (needs_collections) {
+        emit_line("%struct.HashMapIter = type { ptr }");
+        struct_types_["HashMapIter"] = "%struct.HashMapIter";
+        struct_fields_["HashMapIter"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+    }
+    if (needs_thread || needs_sync_atomics) {
+        emit_line("%struct.RawThread = type { i64 }");
+        struct_types_["RawThread"] = "%struct.RawThread";
+        struct_fields_["RawThread"] = {
+            {"_handle", 0, "i64", types::make_primitive(types::PrimitiveKind::U64)}};
+        emit_line("%struct.RawPtr = type { i64 }");
+        struct_types_["RawPtr"] = "%struct.RawPtr";
+        struct_fields_["RawPtr"] = {{"addr", 0, "i64", types::make_i64()}};
+    }
+    emit_line("");
 
     // Typed atomic operations — only when sync/thread modules are imported
     if (needs_sync_atomics) {
@@ -331,6 +348,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // ========================================================================
 
     // --- Black box: prevent optimization using inline asm side-effect ---
+    // define internal: LLVM strips unused internal definitions, so always safe to emit.
     emit_line("; Black box (inline IR — Phase 32)");
     emit_line("define internal i32 @black_box_i32(i32 %val) noinline {");
     emit_line("entry:");
@@ -349,12 +367,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("}");
     emit_line("");
 
-    // SIMD operations (simd_sum_i32/f64, simd_dot_f64) — removed in Phase 33
-    // No TML callers existed; C++ codegen handlers removed from builtins/math.cpp
-
     // --- Float formatting (Phase 46: moved from inline IR to C runtime in essential.c) ---
     // These wrap variadic snprintf, which TML cannot call directly.
-    // Phase 32: originally inline IR; Phase 45: float_to_string inlined; Phase 46: moved to C.
+    // Always emitted: string interpolation on floats triggers Display without explicit import.
     emit_line("; Float formatting (C runtime — Phase 46)");
     emit_line("declare ptr @f64_to_string(double)");
     emit_line("declare ptr @f32_to_string(float)");
@@ -364,29 +379,17 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f32_to_exp_string(float, i32)");
     emit_line("");
 
-    // Integer formatting (binary, octal, hex) — removed in Phase 33
-    // Now dispatched through pure TML in core::fmt::impls (Binary/Octal/LowerHex/UpperHex
-    // behaviors) Pure TML implementations: core::fmt::helpers (u64_to_binary_str, u64_to_octal_str,
-    // u64_to_hex_str)
-
-    // nextafter32 — removed in Phase 34 (dead code, no TML callers)
-
+    // Random seed — used by core::hash (FNV-1a seed) and std::random
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");
-
-    // Register random_seed in functions_ map for lowlevel calls
     functions_["random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
-    // Also register with tml_ prefix for when called as tml_random_seed()
     functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
-
-    // Phase 46: str_as_bytes removed — Str::as_bytes() now uses pure identity (lowlevel { this }).
 
     // Register I/O functions for lowlevel calls (used by text.tml print/println methods)
     functions_["print_str"] = FuncInfo{"@print", "void (ptr)", "void", {"ptr"}};
     functions_["println_str"] = FuncInfo{"@println", "void (ptr)", "void", {"ptr"}};
 
     // Register float formatting C runtime functions for lowlevel calls from core::fmt
-    // Phase 46: moved from inline IR to C functions in essential.c (snprintf wrappers)
     functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};
     functions_["f32_to_string"] = FuncInfo{"@f32_to_string", "ptr (float)", "ptr", {"float"}};
     functions_["f64_to_string_precision"] =

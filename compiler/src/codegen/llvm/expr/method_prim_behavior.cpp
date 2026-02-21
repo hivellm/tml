@@ -375,51 +375,6 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
             ret_type = method_it->second.ret_type;
         }
 
-        // WORKAROUND: Fix behavior methods on primitives returning void
-        // The metadata loader sometimes loses the return type for behavior impls
-        // Force correct return types for known behavior methods
-        if (ret_type == "void" || ret_type == "{}") {
-            if (method == "eq" || method == "ne") {
-                ret_type = "i1"; // Bool
-            } else if (method == "lt" || method == "le" || method == "gt" || method == "ge") {
-                ret_type = "i1"; // Bool
-            } else if (method == "is_zero" || method == "is_one") {
-                ret_type = "i1"; // Bool
-            } else if (method == "hash") {
-                ret_type = "i64"; // U64
-            } else if (method == "duplicate" || method == "clone") {
-                ret_type = recv_llvm_ty; // Self
-            } else if (method == "to_owned") {
-                ret_type = recv_llvm_ty; // Self
-            } else if (method == "to_string" || method == "debug_string") {
-                ret_type = "ptr"; // Str
-            } else if (method == "fmt_binary" || method == "fmt_octal" ||
-                       method == "fmt_lower_hex" || method == "fmt_upper_hex" ||
-                       method == "fmt_lower_exp" || method == "fmt_upper_exp") {
-                ret_type = "ptr"; // Str
-            } else if (method == "partial_cmp") {
-                // Maybe[Ordering]
-                auto ordering_type = std::make_shared<types::Type>();
-                ordering_type->kind = types::NamedType{"Ordering", "", {}};
-                std::vector<types::TypePtr> maybe_type_args = {ordering_type};
-                std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-                ret_type = "%struct." + maybe_mangled;
-            } else if (method == "checked_add" || method == "checked_sub" ||
-                       method == "checked_mul" || method == "checked_div" ||
-                       method == "checked_rem" || method == "checked_neg" ||
-                       method == "checked_shl" || method == "checked_shr") {
-                // Maybe[Self]
-                std::vector<types::TypePtr> maybe_type_args = {receiver_type};
-                std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-                ret_type = "%struct." + maybe_mangled;
-            } else if (method == "saturating_add" || method == "saturating_sub" ||
-                       method == "saturating_mul" || method == "wrapping_add" ||
-                       method == "wrapping_sub" || method == "wrapping_mul" ||
-                       method == "wrapping_neg") {
-                ret_type = recv_llvm_ty; // Self
-            }
-        }
-
         std::string args_str;
         for (size_t i = 0; i < typed_args.size(); ++i) {
             if (i > 0)

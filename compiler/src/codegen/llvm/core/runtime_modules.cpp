@@ -847,7 +847,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
                            name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
                            name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
-                           name == "Bool" || name == "Str";
+                           name == "Bool" || name == "Char" || name == "Str";
                 };
                 if (!type_name.empty() && !imported_types.empty() &&
                     imported_types.find(type_name) == imported_types.end() &&

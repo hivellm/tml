@@ -880,45 +880,11 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return tmp;
     }
 
-    // to_string() / debug_string() — most primitives dispatched through TML Display/Debug
-    // behavior impls in lib/core/src/fmt/impls.tml (Phase 44: removed hardcoded IR emission).
-    // Phase 50: removed hardcoded Str handling (TML impls work fine via lazy-lib).
-    // Char still needs hardcoded handling: lazy-lib cannot resolve the char_to_str
-    // dependency chain (char::decode → mem_alloc → ptr_write) for individual test files.
-    if (method == "to_string" || method == "debug_string") {
-        if (kind == types::PrimitiveKind::Char) {
-            std::string trait_name = (method == "to_string") ? "Display" : "Debug";
-            emit_coverage(trait_name + "::" + method);
-            emit_coverage("Char::" + method);
-            // Inline char-to-string: alloc 2 bytes, write char byte + null terminator
-            // (Handles ASCII; full UTF-8 encoding in TML char/methods.tml char_to_string)
-            std::string result = fresh_reg();
-            std::string byte = fresh_reg();
-            emit_line("  " + byte + " = trunc i32 " + receiver + " to i8");
-            std::string buf = fresh_reg();
-            emit_line("  " + buf + " = call ptr @mem_alloc(i64 2)");
-            emit_line("  store i8 " + byte + ", ptr " + buf);
-            std::string p1 = fresh_reg();
-            emit_line("  " + p1 + " = getelementptr i8, ptr " + buf + ", i64 1");
-            emit_line("  store i8 0, ptr " + p1);
-            if (method == "debug_string") {
-                // Wrap in single quotes: "'" + c + "'"
-                std::string sq = add_string_literal("'");
-                std::string tmp1 = fresh_reg();
-                emit_line("  " + tmp1 + " = call ptr @str_concat_opt(ptr " + sq + ", ptr " + buf +
-                          ")");
-                std::string wrapped = fresh_reg();
-                emit_line("  " + wrapped + " = call ptr @str_concat_opt(ptr " + tmp1 + ", ptr " +
-                          sq + ")");
-                last_expr_type_ = "ptr";
-                return wrapped;
-            }
-            last_expr_type_ = "ptr";
-            return buf;
-        }
-        // Str, Bool, I8-I128, U8-U128, F32, F64 all dispatched through
-        // try_gen_primitive_behavior_method() → TML Display/Debug impls in fmt/impls.tml
-    }
+    // to_string() / debug_string() — ALL primitives dispatched through TML Display/Debug
+    // behavior impls in lib/core/src/fmt/impls.tml via try_gen_primitive_behavior_method().
+    // Phase 44: removed hardcoded I32-F64 codegen.
+    // Phase 50: removed hardcoded Str codegen.
+    // Phase 51: removed hardcoded Char codegen (core::char::decode added to essential modules).
 
     // fmt_binary, fmt_octal, fmt_lower_hex, fmt_upper_hex — dispatched through
     // TML behavior impls in core::fmt::impls (Phase 33: removed hardcoded codegen)
