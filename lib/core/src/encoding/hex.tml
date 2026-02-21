@@ -1,0 +1,147 @@
+//! Hexadecimal encoding and decoding.
+//!
+//! Provides functions to encode byte strings as hexadecimal text and
+//! decode hexadecimal text back to byte strings.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::hex
+//!
+//! assert(hex::encode("Hello") == "48656c6c6f")
+//! assert(hex::decode("48656c6c6f") == Ok("Hello"))
+//! ```
+
+use core::str
+
+/// Maps a nibble value (0-15) to a lowercase hex ASCII character code.
+func nibble_to_lower(n: I32) -> U8 {
+    if n < 10 {
+        return (n + 48) as U8   // '0' = 48
+    }
+    return (n + 87) as U8       // 'a' = 97, so 10 + 87 = 97
+}
+
+/// Maps a nibble value (0-15) to an uppercase hex ASCII character code.
+func nibble_to_upper(n: I32) -> U8 {
+    if n < 10 {
+        return (n + 48) as U8   // '0' = 48
+    }
+    return (n + 55) as U8       // 'A' = 65, so 10 + 55 = 65
+}
+
+/// Maps a hex ASCII character code to its nibble value (0-15).
+/// Returns -1 for invalid characters.
+func char_to_nibble(c: I32) -> I32 {
+    if c >= 48 and c <= 57 {
+        return c - 48            // '0'-'9' -> 0-9
+    }
+    if c >= 97 and c <= 102 {
+        return c - 87            // 'a'-'f' -> 10-15
+    }
+    if c >= 65 and c <= 70 {
+        return c - 55            // 'A'-'F' -> 10-15
+    }
+    return -1
+}
+
+/// Encode a string's bytes as lowercase hexadecimal.
+///
+/// Each byte of the input produces two hex characters in the output.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(encode("Hello") == "48656c6c6f")
+/// assert(encode("") == "")
+/// ```
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    let out_len: I64 = in_len * 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    var i: I64 = 0
+    loop (i < in_len) {
+        let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
+        let b: I32 = byte as I32
+        let hi: U8 = nibble_to_lower(b / 16)
+        let lo: U8 = nibble_to_lower(b % 16)
+        lowlevel { ptr_write[U8]((buf as I64 + i * 2) as *U8, hi) }
+        lowlevel { ptr_write[U8]((buf as I64 + i * 2 + 1) as *U8, lo) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((buf as I64 + out_len) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Encode a string's bytes as uppercase hexadecimal.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(encode_upper("Hello") == "48656C6C6F")
+/// ```
+pub func encode_upper(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    let out_len: I64 = in_len * 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    var i: I64 = 0
+    loop (i < in_len) {
+        let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
+        let b: I32 = byte as I32
+        let hi: U8 = nibble_to_upper(b / 16)
+        let lo: U8 = nibble_to_upper(b % 16)
+        lowlevel { ptr_write[U8]((buf as I64 + i * 2) as *U8, hi) }
+        lowlevel { ptr_write[U8]((buf as I64 + i * 2 + 1) as *U8, lo) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((buf as I64 + out_len) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode a hexadecimal string back to the original bytes (as Str).
+///
+/// Accepts both uppercase and lowercase hex characters.
+/// Returns `Err` if the input has odd length or contains non-hex characters.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(decode("48656c6c6f") == Ok("Hello"))
+/// assert(decode("zz").is_err())
+/// ```
+pub func decode(hex_str: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(hex_str)
+    if in_len == 0 {
+        return Ok("")
+    }
+    if in_len % 2 != 0 {
+        return Err("hex: odd length input")
+    }
+    let out_len: I64 = in_len / 2
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = hex_str as I64
+    var i: I64 = 0
+    loop (i < out_len) {
+        let hi_byte: U8 = lowlevel { ptr_read[U8]((src + i * 2) as *U8) }
+        let lo_byte: U8 = lowlevel { ptr_read[U8]((src + i * 2 + 1) as *U8) }
+        let hi: I32 = char_to_nibble(hi_byte as I32)
+        let lo: I32 = char_to_nibble(lo_byte as I32)
+        if hi == -1 or lo == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("hex: invalid character")
+        }
+        let byte: U8 = (hi * 16 + lo) as U8
+        lowlevel { ptr_write[U8]((buf as I64 + i) as *U8, byte) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((buf as I64 + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

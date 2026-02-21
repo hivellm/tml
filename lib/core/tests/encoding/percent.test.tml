@@ -1,0 +1,90 @@
+use test
+use core::encoding::percent
+
+@test
+func test_percent_encode_empty() -> I32 {
+    assert_eq(percent::encode(""), "")
+    0
+}
+
+@test
+func test_percent_encode_unreserved() -> I32 {
+    // Unreserved chars should not be encoded
+    assert_eq(percent::encode("hello"), "hello")
+    assert_eq(percent::encode("abc123"), "abc123")
+    assert_eq(percent::encode("a-b_c.d~e"), "a-b_c.d~e")
+    0
+}
+
+@test
+func test_percent_encode_space() -> I32 {
+    assert_eq(percent::encode("hello world"), "hello%20world")
+    0
+}
+
+@test
+func test_percent_encode_special() -> I32 {
+    assert_eq(percent::encode("a+b=c"), "a%2Bb%3Dc")
+    assert_eq(percent::encode("100%"), "100%25")
+    0
+}
+
+@test
+func test_percent_decode_basic() -> I32 {
+    let result = percent::decode("hello%20world")
+    when result {
+        Ok(s) => assert_eq(s, "hello world")
+        Err(e) => assert(false, "decode should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_decode_passthrough() -> I32 {
+    let result = percent::decode("hello")
+    when result {
+        Ok(s) => assert_eq(s, "hello")
+        Err(e) => assert(false, "decode passthrough should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_roundtrip() -> I32 {
+    let original = "hello world/path?key=val&a=b"
+    let encoded = percent::encode(original)
+    let result = percent::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_form_encode() -> I32 {
+    assert_eq(percent::encode_form("hello world"), "hello+world")
+    0
+}
+
+@test
+func test_percent_form_roundtrip() -> I32 {
+    let original = "hello world"
+    let encoded = percent::encode_form(original)
+    let result = percent::decode_form(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "form roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_decode_error_incomplete() -> I32 {
+    let result = percent::decode("hello%2")
+    when result {
+        Ok(s) => assert(false, "incomplete escape should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}

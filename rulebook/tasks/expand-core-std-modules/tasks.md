@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (10%) — Phase 1 complete (std::math exists), Phases 2-16 not started
+**Status**: In Progress (20%) — Phases 1-2 mostly complete, Phases 3-16 not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -53,15 +53,15 @@
 
 > **Priority**: Critical | **Dir**: `lib/core/src/encoding/`
 
-- [ ] 2.1.1 Create `lib/core/src/encoding/mod.tml` with re-exports
-- [ ] 2.1.2 Implement `encoding/base64.tml` — `encode`, `decode`, standard + URL-safe alphabets
-- [ ] 2.1.3 Implement `encoding/hex.tml` — `encode`, `decode`, upper/lower case
-- [ ] 2.1.4 Implement `encoding/percent.tml` — `encode`, `decode` per RFC 3986
+- [x] 2.1.1 Create `lib/core/src/encoding/mod.tml` with re-exports
+- [x] 2.1.2 Implement `encoding/base64.tml` — `encode`, `decode`, standard + URL-safe alphabets (13 tests)
+- [x] 2.1.3 Implement `encoding/hex.tml` — `encode`, `decode`, upper/lower case (9 tests)
+- [x] 2.1.4 Implement `encoding/percent.tml` — `encode`, `decode` per RFC 3986 (10 tests)
 - [ ] 2.1.5 Implement `encoding/base32.tml` — `encode`, `decode`
 - [ ] 2.1.6 Implement `encoding/base58.tml` — `encode`, `decode` (Bitcoin alphabet)
 - [ ] 2.1.7 Implement `encoding/ascii85.tml` — `encode`, `decode`
-- [ ] 2.1.8 Write unit tests for each encoding format
-- [ ] 2.1.9 Export `core::encoding` from `lib/core/src/mod.tml`
+- [x] 2.1.8 Write unit tests for hex, base64, percent (32 tests passing)
+- [x] 2.1.9 Export `core::encoding` from `lib/core/src/mod.tml`
 
 ## Phase 3: URL Module
 

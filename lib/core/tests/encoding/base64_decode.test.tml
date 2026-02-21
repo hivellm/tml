@@ -1,0 +1,86 @@
+use test
+use core::encoding::base64
+
+@test
+func test_base64_decode_empty() -> I32 {
+    let result = base64::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_decode_foobar() -> I32 {
+    let result = base64::decode("Zm9vYmFy")
+    when result {
+        Ok(s) => assert_eq(s, "foobar")
+        Err(e) => assert(false, "decode foobar should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_decode_padding_2() -> I32 {
+    let result = base64::decode("Zg==")
+    when result {
+        Ok(s) => assert_eq(s, "f")
+        Err(e) => assert(false, "decode 'f' should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_decode_padding_1() -> I32 {
+    let result = base64::decode("Zm8=")
+    when result {
+        Ok(s) => assert_eq(s, "fo")
+        Err(e) => assert(false, "decode 'fo' should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_roundtrip() -> I32 {
+    let original = "Hello, World!"
+    let encoded = base64::encode(original)
+    let result = base64::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_decode_invalid_length() -> I32 {
+    let result = base64::decode("abc")
+    when result {
+        Ok(s) => assert(false, "invalid length should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_base64_url_safe_encode() -> I32 {
+    // Standard Base64 uses + and /
+    // URL-safe Base64 uses - and _
+    // Test with bytes that produce +/- and / or _ in output
+    let encoded_std = base64::encode("subjects?_d")
+    let encoded_url = base64::encode_url("subjects?_d")
+    // Both should decode to the same thing
+    let r1 = base64::decode(encoded_std)
+    let r2 = base64::decode_url(encoded_url)
+    when r1 {
+        Ok(s1) => {
+            when r2 {
+                Ok(s2) => assert_eq(s1, s2)
+                Err(e) => assert(false, "url decode should succeed")
+            }
+        }
+        Err(e) => assert(false, "std decode should succeed")
+    }
+    0
+}

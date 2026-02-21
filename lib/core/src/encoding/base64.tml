@@ -1,0 +1,237 @@
+//! Base64 encoding and decoding per RFC 4648.
+//!
+//! Provides standard Base64 and URL-safe Base64 encoding/decoding.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base64
+//!
+//! assert(base64::encode("Hello") == "SGVsbG8=")
+//! assert(base64::decode("SGVsbG8=") == Ok("Hello"))
+//! ```
+
+use core::str
+
+/// Maps a 6-bit value (0-63) to the standard Base64 alphabet character code.
+func encode_char(idx: I32) -> U8 {
+    if idx < 26 { return (idx + 65) as U8 }         // A-Z
+    if idx < 52 { return (idx - 26 + 97) as U8 }    // a-z
+    if idx < 62 { return (idx - 52 + 48) as U8 }    // 0-9
+    if idx == 62 { return 43 as U8 }                 // +
+    return 47 as U8                                   // /
+}
+
+/// Maps a 6-bit value (0-63) to the URL-safe Base64 alphabet character code.
+func encode_char_url(idx: I32) -> U8 {
+    if idx < 26 { return (idx + 65) as U8 }         // A-Z
+    if idx < 52 { return (idx - 26 + 97) as U8 }    // a-z
+    if idx < 62 { return (idx - 52 + 48) as U8 }    // 0-9
+    if idx == 62 { return 45 as U8 }                 // -
+    return 95 as U8                                   // _
+}
+
+/// Maps a Base64 character code to its 6-bit value.
+/// Returns -1 for invalid characters, -2 for padding '='.
+func decode_char(c: I32) -> I32 {
+    if c >= 65 and c <= 90 { return c - 65 }         // A-Z -> 0-25
+    if c >= 97 and c <= 122 { return c - 97 + 26 }   // a-z -> 26-51
+    if c >= 48 and c <= 57 { return c - 48 + 52 }    // 0-9 -> 52-61
+    if c == 43 or c == 45 { return 62 }               // + or -
+    if c == 47 or c == 95 { return 63 }               // / or _
+    if c == 61 { return -2 }                           // =
+    return -1                                          // invalid
+}
+
+/// Encode a string's bytes as standard Base64 with padding.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(encode("f") == "Zg==")
+/// assert(encode("fo") == "Zm8=")
+/// assert(encode("foo") == "Zm9v")
+/// assert(encode("foobar") == "Zm9vYmFy")
+/// ```
+pub func encode(input: Str) -> Str {
+    return encode_with(input, false)
+}
+
+/// Encode using URL-safe alphabet (- and _ instead of + and /).
+pub func encode_url(input: Str) -> Str {
+    return encode_with(input, true)
+}
+
+/// Internal encode with alphabet selection.
+func encode_with(input: Str, url_safe: Bool) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    // Output length: ceil(in_len / 3) * 4
+    let full_groups: I64 = in_len / 3
+    let remainder: I64 = in_len % 3
+    var out_len: I64 = full_groups * 4
+    if remainder > 0 {
+        out_len = out_len + 4
+    }
+
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var si: I64 = 0   // source index
+    var di: I64 = 0   // destination index
+
+    // Process full 3-byte groups
+    loop (si + 3 <= in_len) {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
+
+        let c0: I32 = b0 / 4                                // bits 7-2 of b0
+        let c1: I32 = (b0 % 4) * 16 + b1 / 16               // bits 1-0 of b0 + bits 7-4 of b1
+        let c2: I32 = (b1 % 16) * 4 + b2 / 64                // bits 3-0 of b1 + bits 7-6 of b2
+        let c3: I32 = b2 % 64                                 // bits 5-0 of b2
+
+        if url_safe {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char_url(c2)) }
+            lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char_url(c3)) }
+        } else {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char(c2)) }
+            lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char(c3)) }
+        }
+        si = si + 3
+        di = di + 4
+    }
+
+    // Handle remainder (1 or 2 bytes)
+    if remainder == 1 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let c0: I32 = b0 / 4
+        let c1: I32 = (b0 % 4) * 16
+        if url_safe {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
+        } else {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
+        }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, 61 as U8) }  // '='
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }  // '='
+        di = di + 4
+    }
+    if remainder == 2 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let c0: I32 = b0 / 4
+        let c1: I32 = (b0 % 4) * 16 + b1 / 16
+        let c2: I32 = (b1 % 16) * 4
+        if url_safe {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char_url(c2)) }
+        } else {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char(c2)) }
+        }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }  // '='
+        di = di + 4
+    }
+
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode a standard Base64 string back to original bytes.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(decode("Zm9vYmFy") == Ok("foobar"))
+/// assert(decode("Zg==") == Ok("f"))
+/// ```
+pub func decode(b64: Str) -> Outcome[Str, Str] {
+    return decode_impl(b64)
+}
+
+/// Decode URL-safe Base64 (same decoder handles both alphabets).
+pub func decode_url(b64: Str) -> Outcome[Str, Str] {
+    return decode_impl(b64)
+}
+
+/// Internal decode implementation (handles both standard and URL-safe).
+func decode_impl(b64: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(b64)
+    if in_len == 0 {
+        return Ok("")
+    }
+    if in_len % 4 != 0 {
+        return Err("base64: input length must be a multiple of 4")
+    }
+
+    // Count padding characters
+    let src: I64 = b64 as I64
+    var pad: I64 = 0
+    let last: U8 = lowlevel { ptr_read[U8]((src + in_len - 1) as *U8) }
+    if last == (61 as U8) {
+        pad = pad + 1
+    }
+    if in_len >= 2 {
+        let second_last: U8 = lowlevel { ptr_read[U8]((src + in_len - 2) as *U8) }
+        if second_last == (61 as U8) {
+            pad = pad + 1
+        }
+    }
+
+    let out_len: I64 = (in_len / 4) * 3 - pad
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+
+    loop (si < in_len) {
+        let a: I32 = decode_char(lowlevel { ptr_read[U8]((src + si) as *U8) } as I32)
+        let b: I32 = decode_char(lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32)
+        let c: I32 = decode_char(lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32)
+        let d: I32 = decode_char(lowlevel { ptr_read[U8]((src + si + 3) as *U8) } as I32)
+
+        // Check for invalid characters (but padding -2 is ok in positions 2,3)
+        if a == -1 or b == -1 {
+            lowlevel { mem_free(buf) }
+            return Err("base64: invalid character")
+        }
+        if c == -1 or (d == -1 and d != -2) {
+            lowlevel { mem_free(buf) }
+            return Err("base64: invalid character")
+        }
+
+        // Use 0 for padding positions
+        let cv: I32 = if c == -2 { 0 } else { c }
+        let dv: I32 = if d == -2 { 0 } else { d }
+
+        let byte0: U8 = (a * 4 + b / 16) as U8
+        let byte1: U8 = ((b % 16) * 16 + cv / 4) as U8
+        let byte2: U8 = ((cv % 4) * 64 + dv) as U8
+
+        if di < out_len {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, byte0) }
+        }
+        if di + 1 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, byte1) }
+        }
+        if di + 2 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, byte2) }
+        }
+
+        si = si + 4
+        di = di + 3
+    }
+
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

@@ -1,0 +1,20 @@
+use test
+use core::encoding::hex
+
+@test
+func test_hex_encode_empty() -> I32 {
+    assert_eq(hex::encode(""), "")
+    0
+}
+
+@test
+func test_hex_encode_hello() -> I32 {
+    assert_eq(hex::encode("Hello"), "48656c6c6f")
+    0
+}
+
+@test
+func test_hex_encode_upper() -> I32 {
+    assert_eq(hex::encode_upper("Hello"), "48656C6C6F")
+    0
+}

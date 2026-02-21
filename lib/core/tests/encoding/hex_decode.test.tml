@@ -1,0 +1,64 @@
+use test
+use core::encoding::hex
+
+@test
+func test_hex_decode_hello() -> I32 {
+    let result = hex::decode("48656c6c6f")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode should succeed")
+    }
+    0
+}
+
+@test
+func test_hex_decode_uppercase() -> I32 {
+    let result = hex::decode("48656C6C6F")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode should handle uppercase")
+    }
+    0
+}
+
+@test
+func test_hex_decode_empty() -> I32 {
+    let result = hex::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_hex_decode_error_odd() -> I32 {
+    let result = hex::decode("abc")
+    when result {
+        Ok(s) => assert(false, "odd length should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_hex_decode_error_invalid() -> I32 {
+    let result = hex::decode("zzzz")
+    when result {
+        Ok(s) => assert(false, "invalid chars should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_hex_roundtrip() -> I32 {
+    let original = "Hello, World!"
+    let encoded = hex::encode(original)
+    let result = hex::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}

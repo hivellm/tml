@@ -1,0 +1,38 @@
+use test
+use core::encoding::base64
+
+@test
+func test_base64_encode_empty() -> I32 {
+    assert_eq(base64::encode(""), "")
+    0
+}
+
+@test
+func test_base64_encode_f() -> I32 {
+    assert_eq(base64::encode("f"), "Zg==")
+    0
+}
+
+@test
+func test_base64_encode_fo() -> I32 {
+    assert_eq(base64::encode("fo"), "Zm8=")
+    0
+}
+
+@test
+func test_base64_encode_foo() -> I32 {
+    assert_eq(base64::encode("foo"), "Zm9v")
+    0
+}
+
+@test
+func test_base64_encode_foobar() -> I32 {
+    assert_eq(base64::encode("foobar"), "Zm9vYmFy")
+    0
+}
+
+@test
+func test_base64_encode_hello() -> I32 {
+    assert_eq(base64::encode("Hello, World!"), "SGVsbG8sIFdvcmxkIQ==")
+    0
+}

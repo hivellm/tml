@@ -80,3 +80,4 @@ pub mod any        // TypeId, Any for runtime type identification
 pub mod reflect    // TypeInfo, FieldInfo, Reflect behavior for runtime reflection
 pub mod sync       // Raw atomic operations, fences, spinlocks
 pub mod intrinsics // Compiler intrinsics for runtime reflection
+pub mod encoding   // Base64, hex, percent-encoding
