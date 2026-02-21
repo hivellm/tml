@@ -1,0 +1,182 @@
+use test
+use core::encoding::base58
+
+// === Known Test Vectors ===
+
+@test
+func test_base58_encode_known_vectors() -> I32 {
+    assert_eq(base58::encode(""), "")
+    assert_eq(base58::encode("Hello World"), "JxF12TrwUP45BMd")
+    assert_eq(base58::encode("Hello"), "9Ajdvzr")
+    0
+}
+
+@test
+func test_base58_encode_single_chars() -> I32 {
+    // Single character encoding
+    let e1 = base58::encode("a")
+    let r1 = base58::decode(e1)
+    when r1 {
+        Ok(decoded) => assert_eq(decoded, "a")
+        Err(e) => assert(false, "single a roundtrip should succeed")
+    }
+    let e2 = base58::encode("z")
+    let r2 = base58::decode(e2)
+    when r2 {
+        Ok(decoded) => assert_eq(decoded, "z")
+        Err(e) => assert(false, "single z roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_decode_known_vectors() -> I32 {
+    let r1 = base58::decode("")
+    when r1 {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "empty decode should succeed")
+    }
+    let r2 = base58::decode("JxF12TrwUP45BMd")
+    when r2 {
+        Ok(s) => assert_eq(s, "Hello World")
+        Err(e) => assert(false, "Hello World decode should succeed")
+    }
+    let r3 = base58::decode("9Ajdvzr")
+    when r3 {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "Hello decode should succeed")
+    }
+    0
+}
+
+// === Alphabet Validation ===
+
+@test
+func test_base58_decode_invalid_zero() -> I32 {
+    // '0' is not in Bitcoin Base58 alphabet
+    let result = base58::decode("0")
+    when result {
+        Ok(s) => assert(false, "char 0 should fail")
+        Err(e) => assert(true, "expected error for 0")
+    }
+    0
+}
+
+@test
+func test_base58_decode_invalid_O() -> I32 {
+    // 'O' (uppercase O) is not in Bitcoin Base58 alphabet
+    let result = base58::decode("O")
+    when result {
+        Ok(s) => assert(false, "char O should fail")
+        Err(e) => assert(true, "expected error for O")
+    }
+    0
+}
+
+@test
+func test_base58_decode_invalid_I() -> I32 {
+    // 'I' (uppercase I) is not in Bitcoin Base58 alphabet
+    let result = base58::decode("I")
+    when result {
+        Ok(s) => assert(false, "char I should fail")
+        Err(e) => assert(true, "expected error for I")
+    }
+    0
+}
+
+@test
+func test_base58_decode_invalid_l() -> I32 {
+    // 'l' (lowercase L) is not in Bitcoin Base58 alphabet
+    let result = base58::decode("l")
+    when result {
+        Ok(s) => assert(false, "char l should fail")
+        Err(e) => assert(true, "expected error for l")
+    }
+    0
+}
+
+// === Roundtrip Tests (Various Sizes) ===
+
+@test
+func test_base58_roundtrip_2_bytes() -> I32 {
+    let original = "AB"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "2-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_3_bytes() -> I32 {
+    let original = "ABC"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "3-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_4_bytes() -> I32 {
+    let original = "ABCD"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "4-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_10_bytes() -> I32 {
+    let original = "0123456789"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "10-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_sentence() -> I32 {
+    let original = "The quick brown fox jumps over the lazy dog"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "sentence roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_special_chars() -> I32 {
+    let original = "!@#$%^&*()"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "special chars roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip_long() -> I32 {
+    let original = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "long roundtrip should succeed")
+    }
+    0
+}

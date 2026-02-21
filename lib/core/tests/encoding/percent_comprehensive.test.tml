@@ -1,0 +1,216 @@
+use test
+use core::encoding::percent
+
+// === RFC 3986 Unreserved Characters ===
+
+@test
+func test_percent_all_unreserved_lowercase() -> I32 {
+    assert_eq(percent::encode("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklmnopqrstuvwxyz")
+    0
+}
+
+@test
+func test_percent_all_unreserved_uppercase() -> I32 {
+    assert_eq(percent::encode("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    0
+}
+
+@test
+func test_percent_all_unreserved_digits() -> I32 {
+    assert_eq(percent::encode("0123456789"), "0123456789")
+    0
+}
+
+@test
+func test_percent_unreserved_special() -> I32 {
+    // RFC 3986: unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"
+    assert_eq(percent::encode("-._~"), "-._~")
+    0
+}
+
+// === Reserved Characters Must Be Encoded ===
+
+@test
+func test_percent_encode_reserved_chars() -> I32 {
+    assert_eq(percent::encode(":"), "%3A")
+    assert_eq(percent::encode("/"), "%2F")
+    assert_eq(percent::encode("?"), "%3F")
+    assert_eq(percent::encode("#"), "%23")
+    assert_eq(percent::encode("@"), "%40")
+    assert_eq(percent::encode("&"), "%26")
+    assert_eq(percent::encode("="), "%3D")
+    assert_eq(percent::encode("+"), "%2B")
+    assert_eq(percent::encode("$"), "%24")
+    assert_eq(percent::encode(","), "%2C")
+    0
+}
+
+@test
+func test_percent_encode_brackets_braces() -> I32 {
+    assert_eq(percent::encode("["), "%5B")
+    assert_eq(percent::encode("]"), "%5D")
+    assert_eq(percent::encode("{"), "%7B")
+    assert_eq(percent::encode("}"), "%7D")
+    0
+}
+
+@test
+func test_percent_encode_quotes_parens() -> I32 {
+    assert_eq(percent::encode("("), "%28")
+    assert_eq(percent::encode(")"), "%29")
+    assert_eq(percent::encode("!"), "%21")
+    assert_eq(percent::encode("'"), "%27")
+    assert_eq(percent::encode("*"), "%2A")
+    0
+}
+
+// === URL Path/Query Patterns ===
+
+@test
+func test_percent_encode_url_query() -> I32 {
+    let input = "key=value&name=John Doe"
+    let encoded = percent::encode(input)
+    assert_eq(encoded, "key%3Dvalue%26name%3DJohn%20Doe")
+    0
+}
+
+@test
+func test_percent_decode_url_query() -> I32 {
+    let result = percent::decode("key%3Dvalue%26name%3DJohn%20Doe")
+    when result {
+        Ok(s) => assert_eq(s, "key=value&name=John Doe")
+        Err(e) => assert(false, "url query decode should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_encode_url_path() -> I32 {
+    let input = "/path/to/my file.txt"
+    let encoded = percent::encode(input)
+    assert_eq(encoded, "%2Fpath%2Fto%2Fmy%20file.txt")
+    0
+}
+
+// === Decode Edge Cases ===
+
+@test
+func test_percent_decode_lowercase_hex() -> I32 {
+    // %2f is lowercase hex, should decode same as %2F
+    let result = percent::decode("%2f")
+    when result {
+        Ok(s) => assert_eq(s, "/")
+        Err(e) => assert(false, "lowercase hex should decode")
+    }
+    0
+}
+
+@test
+func test_percent_decode_mixed_encoded_plain() -> I32 {
+    let result = percent::decode("a%20b%20c")
+    when result {
+        Ok(s) => assert_eq(s, "a b c")
+        Err(e) => assert(false, "mixed decode should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_decode_double_encoded() -> I32 {
+    // %2520 = decode to %20 (not to space, single pass)
+    let result = percent::decode("%2520")
+    when result {
+        Ok(s) => assert_eq(s, "%20")
+        Err(e) => assert(false, "double encode decode should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_decode_error_trailing_percent() -> I32 {
+    let result = percent::decode("hello%")
+    when result {
+        Ok(s) => assert(false, "trailing % should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_percent_decode_error_invalid_hex() -> I32 {
+    let result = percent::decode("hello%GG")
+    when result {
+        Ok(s) => assert(false, "invalid hex should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+// === Form Encoding (application/x-www-form-urlencoded) ===
+
+@test
+func test_percent_form_encode_spaces() -> I32 {
+    // Form encoding replaces space with +
+    assert_eq(percent::encode_form("a b c"), "a+b+c")
+    0
+}
+
+@test
+func test_percent_form_encode_mixed() -> I32 {
+    let encoded = percent::encode_form("key=value&foo=bar baz")
+    // = and & should be encoded, spaces become +
+    let result = percent::decode_form(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "key=value&foo=bar baz")
+        Err(e) => assert(false, "form roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_form_decode_plus() -> I32 {
+    let result = percent::decode_form("hello+world+test")
+    when result {
+        Ok(s) => assert_eq(s, "hello world test")
+        Err(e) => assert(false, "form plus decode should succeed")
+    }
+    0
+}
+
+// === Roundtrip Tests ===
+
+@test
+func test_percent_roundtrip_all_printable() -> I32 {
+    let original = "The quick brown fox! @#$%^&*()"
+    let encoded = percent::encode(original)
+    let result = percent::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "printable roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_roundtrip_long_string() -> I32 {
+    let original = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor."
+    let encoded = percent::encode(original)
+    let result = percent::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "long roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_percent_roundtrip_email() -> I32 {
+    let original = "user@example.com"
+    let encoded = percent::encode(original)
+    let result = percent::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "email roundtrip should succeed")
+    }
+    0
+}

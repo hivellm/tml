@@ -1,0 +1,140 @@
+use test
+use core::encoding::base64
+
+// === RFC 4648 Test Vectors ===
+
+@test
+func test_base64_rfc4648_vectors() -> I32 {
+    // From RFC 4648 Section 10
+    assert_eq(base64::encode(""), "")
+    assert_eq(base64::encode("f"), "Zg==")
+    assert_eq(base64::encode("fo"), "Zm8=")
+    assert_eq(base64::encode("foo"), "Zm9v")
+    assert_eq(base64::encode("foob"), "Zm9vYg==")
+    assert_eq(base64::encode("fooba"), "Zm9vYmE=")
+    assert_eq(base64::encode("foobar"), "Zm9vYmFy")
+    0
+}
+
+@test
+func test_base64_decode_rfc4648_vectors() -> I32 {
+    // Empty string
+    let r0 = base64::decode("")
+    when r0 {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "empty decode should succeed")
+    }
+    // "f"
+    let r1 = base64::decode("Zg==")
+    when r1 {
+        Ok(s) => assert_eq(s, "f")
+        Err(e) => assert(false, "f decode should succeed")
+    }
+    // "fo"
+    let r2 = base64::decode("Zm8=")
+    when r2 {
+        Ok(s) => assert_eq(s, "fo")
+        Err(e) => assert(false, "fo decode should succeed")
+    }
+    // "foo"
+    let r3 = base64::decode("Zm9v")
+    when r3 {
+        Ok(s) => assert_eq(s, "foo")
+        Err(e) => assert(false, "foo decode should succeed")
+    }
+    // "foob"
+    let r4 = base64::decode("Zm9vYg==")
+    when r4 {
+        Ok(s) => assert_eq(s, "foob")
+        Err(e) => assert(false, "foob decode should succeed")
+    }
+    // "fooba"
+    let r5 = base64::decode("Zm9vYmE=")
+    when r5 {
+        Ok(s) => assert_eq(s, "fooba")
+        Err(e) => assert(false, "fooba decode should succeed")
+    }
+    // "foobar"
+    let r6 = base64::decode("Zm9vYmFy")
+    when r6 {
+        Ok(s) => assert_eq(s, "foobar")
+        Err(e) => assert(false, "foobar decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_encode_sentence() -> I32 {
+    assert_eq(base64::encode("The quick brown fox jumps over the lazy dog"),
+              "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZw==")
+    0
+}
+
+@test
+func test_base64_decode_sentence() -> I32 {
+    let result = base64::decode("VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZw==")
+    when result {
+        Ok(s) => assert_eq(s, "The quick brown fox jumps over the lazy dog")
+        Err(e) => assert(false, "sentence decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_url_safe_difference() -> I32 {
+    // URL-safe encoding uses - instead of + and _ instead of /
+    let std_enc = base64::encode("subjects?_d")
+    let url_enc = base64::encode_url("subjects?_d")
+    // They should decode to the same thing
+    let r1 = base64::decode(std_enc)
+    let r2 = base64::decode_url(url_enc)
+    when r1 {
+        Ok(s1) => {
+            when r2 {
+                Ok(s2) => assert_eq(s1, s2)
+                Err(e) => assert(false, "url decode should succeed")
+            }
+        }
+        Err(e) => assert(false, "std decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_decode_error_cases() -> I32 {
+    // Length not a multiple of 4
+    let r1 = base64::decode("a")
+    when r1 {
+        Ok(s) => assert(false, "length 1 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    let r2 = base64::decode("ab")
+    when r2 {
+        Ok(s) => assert(false, "length 2 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    let r3 = base64::decode("abc")
+    when r3 {
+        Ok(s) => assert(false, "length 3 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_base64_roundtrip_longer() -> I32 {
+    let original = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    let encoded = base64::encode(original)
+    let result = base64::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base64_encode_numbers() -> I32 {
+    assert_eq(base64::encode("1234567890"), "MTIzNDU2Nzg5MA==")
+    0
+}

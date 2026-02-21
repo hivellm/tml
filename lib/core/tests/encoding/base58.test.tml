@@ -1,0 +1,73 @@
+use test
+use core::encoding::base58
+
+@test
+func test_base58_encode_empty() -> I32 {
+    assert_eq(base58::encode(""), "")
+    0
+}
+
+@test
+func test_base58_encode_hello() -> I32 {
+    assert_eq(base58::encode("Hello World"), "JxF12TrwUP45BMd")
+    0
+}
+
+@test
+func test_base58_encode_hello_short() -> I32 {
+    assert_eq(base58::encode("Hello"), "9Ajdvzr")
+    0
+}
+
+@test
+func test_base58_decode_empty() -> I32 {
+    let result = base58::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_decode_hello() -> I32 {
+    let result = base58::decode("9Ajdvzr")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode Hello should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_roundtrip() -> I32 {
+    let original = "test data"
+    let encoded = base58::encode(original)
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base58_decode_invalid_char() -> I32 {
+    let result = base58::decode("0invalid")
+    when result {
+        Ok(s) => assert(false, "invalid char should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_base58_single_byte() -> I32 {
+    let encoded = base58::encode("A")
+    let result = base58::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "A")
+        Err(e) => assert(false, "single byte roundtrip should succeed")
+    }
+    0
+}

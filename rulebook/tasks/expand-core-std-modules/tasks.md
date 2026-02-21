@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (20%) — Phases 1-2 mostly complete, Phases 3-16 not started
+**Status**: In Progress (30%) — Phases 1-2 mostly complete, 8 (UUID) and 9 (SemVer) complete, rest not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -57,10 +57,10 @@
 - [x] 2.1.2 Implement `encoding/base64.tml` — `encode`, `decode`, standard + URL-safe alphabets (13 tests)
 - [x] 2.1.3 Implement `encoding/hex.tml` — `encode`, `decode`, upper/lower case (9 tests)
 - [x] 2.1.4 Implement `encoding/percent.tml` — `encode`, `decode` per RFC 3986 (10 tests)
-- [ ] 2.1.5 Implement `encoding/base32.tml` — `encode`, `decode`
-- [ ] 2.1.6 Implement `encoding/base58.tml` — `encode`, `decode` (Bitcoin alphabet)
-- [ ] 2.1.7 Implement `encoding/ascii85.tml` — `encode`, `decode`
-- [x] 2.1.8 Write unit tests for hex, base64, percent (32 tests passing)
+- [x] 2.1.5 Implement `encoding/base32.tml` — `encode`, `decode` (24 tests)
+- [x] 2.1.6 Implement `encoding/base58.tml` — `encode`, `decode` (24 tests)
+- [x] 2.1.7 Implement `encoding/ascii85.tml` — `encode`, `decode` (24 tests)
+- [x] 2.1.8 Write unit tests for all 6 encoding modules (145 tests passing)
 - [x] 2.1.9 Export `core::encoding` from `lib/core/src/mod.tml`
 
 ## Phase 3: URL Module
@@ -132,28 +132,28 @@
 
 > **Priority**: High | **File**: `lib/std/src/uuid.tml`
 
-- [ ] 8.1.1 Create `lib/std/src/uuid.tml`
-- [ ] 8.1.2 Define `Uuid` struct (128-bit, stored as `[U8; 16]`)
-- [ ] 8.1.3 Implement `Uuid::nil()`, `Uuid::max()`, `Uuid::parse()`
-- [ ] 8.1.4 Implement `to_string`, `to_urn`
-- [ ] 8.1.5 Implement `version()`, `variant()`
-- [ ] 8.1.6 Implement `Uuid::v4()` — random
-- [ ] 8.1.7 Implement `Uuid::v7()` — Unix epoch time + random (RFC 9562)
+- [x] 8.1.1 Create `lib/std/src/uuid.tml`
+- [x] 8.1.2 Define `Uuid` struct (128-bit, stored as 4xI64 fields)
+- [x] 8.1.3 Implement `Uuid::nil()`, `Uuid::max()`, `Uuid::parse()`
+- [x] 8.1.4 Implement `to_string`, `to_urn`
+- [x] 8.1.5 Implement `version()`, `variant()`
+- [x] 8.1.6 Implement `Uuid::v4()` — random via std::random
+- [x] 8.1.7 Implement `Uuid::v7()` — Unix epoch time + random (RFC 9562)
 - [ ] 8.1.8 Implement `Uuid::v3/v5` — MD5/SHA1-based (requires std::crypto)
 - [ ] 8.1.9 Implement `Hash`, `Eq`, `Ord`, `Display`, `Debug` behaviors
-- [ ] 8.1.10 Write unit tests for all UUID versions
+- [x] 8.1.10 Write unit tests (20 tests: basic, generate, v7, parse)
 
 ## Phase 9: SemVer Module
 
 > **Priority**: High | **File**: `lib/std/src/semver.tml`
 
-- [ ] 9.1.1 Create `lib/std/src/semver.tml`
-- [ ] 9.1.2 Define `Version` struct: major, minor, patch, pre-release, build metadata
-- [ ] 9.1.3 Implement `Version::parse`, `to_string`
-- [ ] 9.1.4 Implement `PartialEq`, `Eq`, `PartialOrd`, `Ord` (SemVer 2.0 precedence)
-- [ ] 9.1.5 Implement `VersionReq` — version requirement ranges
-- [ ] 9.1.6 Implement `VersionReq::parse` and `VersionReq::matches`
-- [ ] 9.1.7 Write unit tests
+- [x] 9.1.1 Create `lib/std/src/semver.tml`
+- [x] 9.1.2 Define `Version` struct: major, minor, patch, pre-release, build metadata
+- [x] 9.1.3 Implement `Version::parse`, `to_string`
+- [x] 9.1.4 Implement `eq`, `compare`, `lt`, `gt`, `le`, `ge` (SemVer 2.0 precedence)
+- [x] 9.1.5 Implement `VersionReq` — version requirement ranges (exact, gt, ge, lt, le, caret, tilde)
+- [x] 9.1.6 Implement `VersionReq::parse` and `VersionReq::matches`
+- [x] 9.1.7 Write unit tests (31 tests: basic, compare, parse, format, req)
 
 ## Phase 10: SQLite Module
 

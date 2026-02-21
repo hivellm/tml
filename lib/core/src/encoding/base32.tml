@@ -1,0 +1,214 @@
+//! Base32 encoding and decoding per RFC 4648.
+//!
+//! Uses the standard alphabet: A-Z, 2-7, with '=' padding.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base32
+//!
+//! assert(base32::encode("Hello") == "JBSWY3DP")
+//! assert(base32::decode("JBSWY3DP") == Ok("Hello"))
+//! ```
+
+use core::str
+
+/// Maps a 5-bit value (0-31) to the Base32 alphabet character code.
+func encode_char(idx: I32) -> U8 {
+    if idx < 26 {
+        return (idx + 65) as U8   // A-Z
+    }
+    return (idx - 26 + 50) as U8  // 2-7
+}
+
+/// Maps a Base32 character to its 5-bit value, or -1 for invalid, -2 for padding.
+func decode_char(c: I32) -> I32 {
+    if c >= 65 and c <= 90 { return c - 65 }       // A-Z -> 0-25
+    if c >= 97 and c <= 122 { return c - 97 }      // a-z -> 0-25 (case insensitive)
+    if c >= 50 and c <= 55 { return c - 50 + 26 }  // 2-7 -> 26-31
+    if c == 61 { return -2 }                         // = padding
+    return -1
+}
+
+/// Encode a string's bytes as Base32.
+///
+/// Processes 5 bytes at a time into 8 Base32 characters, with '=' padding.
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+    // Output: ceil(in_len / 5) * 8
+    let full_groups: I64 = in_len / 5
+    let remainder: I64 = in_len % 5
+    var out_len: I64 = full_groups * 8
+    if remainder > 0 {
+        out_len = out_len + 8
+    }
+
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let src: I64 = input as I64
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+
+    // Process full 5-byte groups
+    loop (si + 5 <= in_len) {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
+        let b3: I32 = lowlevel { ptr_read[U8]((src + si + 3) as *U8) } as I32
+        let b4: I32 = lowlevel { ptr_read[U8]((src + si + 4) as *U8) } as I32
+
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2 + b3 / 128)) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 / 4) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char((b3 % 4) * 8 + b4 / 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, encode_char(b4 % 32)) }
+
+        si = si + 5
+        di = di + 8
+    }
+
+    // Handle remainder with padding
+    if remainder == 1 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
+        di = di + 8
+    }
+    if remainder == 2 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16)) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
+        di = di + 8
+    }
+    if remainder == 3 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2)) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, 61 as U8) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
+        di = di + 8
+    }
+    if remainder == 4 {
+        let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
+        let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
+        let b3: I32 = lowlevel { ptr_read[U8]((src + si + 3) as *U8) } as I32
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2 + b3 / 128)) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 / 4) % 32)) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char((b3 % 4) * 8)) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
+        di = di + 8
+    }
+
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Decode a Base32 string back to original bytes.
+///
+/// Case insensitive. Padding is required.
+pub func decode(b32: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(b32)
+    if in_len == 0 {
+        return Ok("")
+    }
+    if in_len % 8 != 0 {
+        return Err("base32: input length must be a multiple of 8")
+    }
+
+    // Count padding
+    let src_addr: I64 = b32 as I64
+    var pad: I64 = 0
+    var pi: I64 = in_len - 1
+    loop (pi >= 0 and pad < 6) {
+        let c: U8 = lowlevel { ptr_read[U8]((src_addr + pi) as *U8) }
+        if c == (61 as U8) {
+            pad = pad + 1
+            pi = pi - 1
+        } else {
+            pi = -1  // break
+        }
+    }
+
+    // Calculate output length based on padding
+    let groups: I64 = in_len / 8
+    var out_len: I64 = groups * 5
+    if pad == 6 { out_len = out_len - 4 }
+    if pad == 4 { out_len = out_len - 3 }
+    if pad == 3 { out_len = out_len - 2 }
+    if pad == 1 { out_len = out_len - 1 }
+
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+
+    loop (si < in_len) {
+        // Decode 8 characters
+        var vals: I64 = 0  // We'll pack 8 5-bit values (40 bits) into this
+        var ci: I32 = 0
+        loop (ci < 8) {
+            let c: I32 = lowlevel { ptr_read[U8]((src_addr + si + ci as I64) as *U8) } as I32
+            let v: I32 = decode_char(c)
+            if v == -1 {
+                lowlevel { mem_free(buf) }
+                return Err("base32: invalid character")
+            }
+            let vv: I32 = if v == -2 { 0 } else { v }
+            vals = (vals << 5) | (vv as I64)
+            ci = ci + 1
+        }
+
+        // Extract 5 bytes from 40 bits
+        if di < out_len {
+            lowlevel { ptr_write[U8]((dst + di) as *U8, ((vals >> 32) & (255 as I64)) as U8) }
+        }
+        if di + 1 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, ((vals >> 24) & (255 as I64)) as U8) }
+        }
+        if di + 2 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, ((vals >> 16) & (255 as I64)) as U8) }
+        }
+        if di + 3 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 3) as *U8, ((vals >> 8) & (255 as I64)) as U8) }
+        }
+        if di + 4 < out_len {
+            lowlevel { ptr_write[U8]((dst + di + 4) as *U8, (vals & (255 as I64)) as U8) }
+        }
+
+        si = si + 8
+        di = di + 5
+    }
+
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    return Ok(buf as Str)
+}

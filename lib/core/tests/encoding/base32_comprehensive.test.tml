@@ -1,0 +1,219 @@
+use test
+use core::encoding::base32
+
+// === RFC 4648 Test Vectors (Complete) ===
+
+@test
+func test_base32_rfc4648_encode_all() -> I32 {
+    // From RFC 4648 Section 10
+    assert_eq(base32::encode(""), "")
+    assert_eq(base32::encode("f"), "MY======")
+    assert_eq(base32::encode("fo"), "MZXQ====")
+    assert_eq(base32::encode("foo"), "MZXW6===")
+    assert_eq(base32::encode("foob"), "MZXW6YQ=")
+    assert_eq(base32::encode("fooba"), "MZXW6YTB")
+    assert_eq(base32::encode("foobar"), "MZXW6YTBOI======")
+    0
+}
+
+@test
+func test_base32_rfc4648_decode_all() -> I32 {
+    // Decode all RFC vectors
+    let r0 = base32::decode("")
+    when r0 {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "empty decode should succeed")
+    }
+    let r1 = base32::decode("MY======")
+    when r1 {
+        Ok(s) => assert_eq(s, "f")
+        Err(e) => assert(false, "f decode should succeed")
+    }
+    let r2 = base32::decode("MZXQ====")
+    when r2 {
+        Ok(s) => assert_eq(s, "fo")
+        Err(e) => assert(false, "fo decode should succeed")
+    }
+    let r3 = base32::decode("MZXW6===")
+    when r3 {
+        Ok(s) => assert_eq(s, "foo")
+        Err(e) => assert(false, "foo decode should succeed")
+    }
+    let r4 = base32::decode("MZXW6YQ=")
+    when r4 {
+        Ok(s) => assert_eq(s, "foob")
+        Err(e) => assert(false, "foob decode should succeed")
+    }
+    let r5 = base32::decode("MZXW6YTB")
+    when r5 {
+        Ok(s) => assert_eq(s, "fooba")
+        Err(e) => assert(false, "fooba decode should succeed")
+    }
+    let r6 = base32::decode("MZXW6YTBOI======")
+    when r6 {
+        Ok(s) => assert_eq(s, "foobar")
+        Err(e) => assert(false, "foobar decode should succeed")
+    }
+    0
+}
+
+// === Case Insensitive Decode ===
+
+@test
+func test_base32_decode_lowercase() -> I32 {
+    // Base32 decode should handle lowercase input
+    let r1 = base32::decode("my======")
+    when r1 {
+        Ok(s) => assert_eq(s, "f")
+        Err(e) => assert(false, "lowercase decode should succeed")
+    }
+    let r2 = base32::decode("mzxw6ytb")
+    when r2 {
+        Ok(s) => assert_eq(s, "fooba")
+        Err(e) => assert(false, "lowercase fooba should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_decode_mixed_case() -> I32 {
+    let r1 = base32::decode("MzXw6YtB")
+    when r1 {
+        Ok(s) => assert_eq(s, "fooba")
+        Err(e) => assert(false, "mixed case decode should succeed")
+    }
+    0
+}
+
+// === Encode Known Strings ===
+
+@test
+func test_base32_encode_hello() -> I32 {
+    assert_eq(base32::encode("Hello"), "JBSWY3DP")
+    0
+}
+
+@test
+func test_base32_encode_numbers() -> I32 {
+    assert_eq(base32::encode("1234567890"), "GEZDGNBVGY3TQOJQ")
+    0
+}
+
+@test
+func test_base32_encode_sentence() -> I32 {
+    let encoded = base32::encode("The quick brown fox")
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "The quick brown fox")
+        Err(e) => assert(false, "sentence roundtrip should succeed")
+    }
+    0
+}
+
+// === Roundtrip Tests ===
+
+@test
+func test_base32_roundtrip_1_byte() -> I32 {
+    let original = "A"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "1-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip_2_bytes() -> I32 {
+    let original = "AB"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "2-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip_3_bytes() -> I32 {
+    let original = "ABC"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "3-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip_4_bytes() -> I32 {
+    let original = "ABCD"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "4-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip_5_bytes() -> I32 {
+    let original = "ABCDE"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "5-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip_long() -> I32 {
+    let original = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "long roundtrip should succeed")
+    }
+    0
+}
+
+// === Error Cases ===
+
+@test
+func test_base32_decode_invalid_length() -> I32 {
+    // Base32 encoded length must be multiple of 8
+    let r1 = base32::decode("A")
+    when r1 {
+        Ok(s) => assert(false, "length 1 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    let r2 = base32::decode("ABC")
+    when r2 {
+        Ok(s) => assert(false, "length 3 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_base32_decode_invalid_char() -> I32 {
+    // '0', '1', '8', '9' are not in base32 alphabet
+    let r1 = base32::decode("00000000")
+    when r1 {
+        Ok(s) => assert(false, "invalid char 0 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    let r2 = base32::decode("11111111")
+    when r2 {
+        Ok(s) => assert(false, "invalid char 1 should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}

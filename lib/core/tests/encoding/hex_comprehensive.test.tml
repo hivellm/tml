@@ -1,0 +1,95 @@
+use test
+use core::encoding::hex
+
+// === RFC / Known Test Vectors ===
+
+@test
+func test_hex_encode_single_bytes() -> I32 {
+    assert_eq(hex::encode("A"), "41")
+    assert_eq(hex::encode("Z"), "5a")
+    assert_eq(hex::encode("0"), "30")
+    assert_eq(hex::encode(" "), "20")
+    0
+}
+
+@test
+func test_hex_encode_binary_like() -> I32 {
+    // "foobar" should encode to "666f6f626172"
+    assert_eq(hex::encode("foobar"), "666f6f626172")
+    0
+}
+
+@test
+func test_hex_encode_upper_full() -> I32 {
+    assert_eq(hex::encode_upper("foobar"), "666F6F626172")
+    assert_eq(hex::encode_upper("Hello"), "48656C6C6F")
+    0
+}
+
+@test
+func test_hex_decode_mixed_case() -> I32 {
+    // Decode should be case-insensitive
+    let r1 = hex::decode("48656c6c6f")
+    when r1 {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "lowercase decode should succeed")
+    }
+    let r2 = hex::decode("48656C6C6F")
+    when r2 {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "uppercase decode should succeed")
+    }
+    let r3 = hex::decode("48656c6C6f")
+    when r3 {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "mixed case decode should succeed")
+    }
+    0
+}
+
+@test
+func test_hex_decode_error_invalid_chars() -> I32 {
+    let r1 = hex::decode("zz")
+    when r1 {
+        Ok(s) => assert(false, "zz should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    let r2 = hex::decode("gg")
+    when r2 {
+        Ok(s) => assert(false, "gg should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}
+
+@test
+func test_hex_roundtrip_all_printable() -> I32 {
+    let original = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let encoded = hex::encode(original)
+    let result = hex::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "printable roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_hex_roundtrip_special_chars() -> I32 {
+    let original = "!@#$%^&*()_+-=[]{}|;:',.<>?/~`"
+    let encoded = hex::encode(original)
+    let result = hex::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "special chars roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_hex_encode_long_string() -> I32 {
+    let input = "The quick brown fox jumps over the lazy dog"
+    let expected = "54686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f67"
+    assert_eq(hex::encode(input), expected)
+    0
+}

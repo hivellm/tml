@@ -1,0 +1,96 @@
+use test
+use core::encoding::base32
+
+@test
+func test_base32_encode_empty() -> I32 {
+    assert_eq(base32::encode(""), "")
+    0
+}
+
+@test
+func test_base32_encode_f() -> I32 {
+    assert_eq(base32::encode("f"), "MY======")
+    0
+}
+
+@test
+func test_base32_encode_fo() -> I32 {
+    assert_eq(base32::encode("fo"), "MZXQ====")
+    0
+}
+
+@test
+func test_base32_encode_foo() -> I32 {
+    assert_eq(base32::encode("foo"), "MZXW6===")
+    0
+}
+
+@test
+func test_base32_encode_foob() -> I32 {
+    assert_eq(base32::encode("foob"), "MZXW6YQ=")
+    0
+}
+
+@test
+func test_base32_encode_fooba() -> I32 {
+    assert_eq(base32::encode("fooba"), "MZXW6YTB")
+    0
+}
+
+@test
+func test_base32_encode_foobar() -> I32 {
+    assert_eq(base32::encode("foobar"), "MZXW6YTBOI======")
+    0
+}
+
+@test
+func test_base32_decode_empty() -> I32 {
+    let result = base32::decode("")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "decode empty should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_decode_hello() -> I32 {
+    let result = base32::decode("JBSWY3DP")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "decode Hello should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_roundtrip() -> I32 {
+    let original = "Hello, World!"
+    let encoded = base32::encode(original)
+    let result = base32::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_decode_case_insensitive() -> I32 {
+    let result = base32::decode("jbswy3dp")
+    when result {
+        Ok(s) => assert_eq(s, "Hello")
+        Err(e) => assert(false, "case insensitive decode should succeed")
+    }
+    0
+}
+
+@test
+func test_base32_decode_invalid_length() -> I32 {
+    let result = base32::decode("ABCDE")
+    when result {
+        Ok(s) => assert(false, "invalid length should fail")
+        Err(e) => assert(true, "expected error")
+    }
+    0
+}

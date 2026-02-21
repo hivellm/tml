@@ -1,0 +1,27 @@
+use test
+use std::semver::Version
+
+@test
+func test_version_new() -> I32 {
+    let v = Version::new(1, 2, 3)
+    assert_eq(v.major, 1 as I64)
+    assert_eq(v.minor, 2 as I64)
+    assert_eq(v.patch, 3 as I64)
+    0
+}
+
+@test
+func test_version_eq() -> I32 {
+    let a = Version::new(1, 2, 3)
+    let b = Version::new(1, 2, 3)
+    assert(a.eq(b), "same versions should be equal")
+    0
+}
+
+@test
+func test_version_neq() -> I32 {
+    let a = Version::new(1, 2, 3)
+    let b = Version::new(1, 2, 4)
+    assert(not a.eq(b), "different versions should not be equal")
+    0
+}

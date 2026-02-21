@@ -1,0 +1,97 @@
+use test
+use std::semver::Version
+
+@test
+func test_parse_simple() -> I32 {
+    let result = Version::parse("1.2.3")
+    when result {
+        Ok(v) => {
+            assert_eq(v.major, 1 as I64)
+            assert_eq(v.minor, 2 as I64)
+            assert_eq(v.patch, 3 as I64)
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_zeros() -> I32 {
+    let result = Version::parse("0.0.0")
+    when result {
+        Ok(v) => {
+            assert_eq(v.major, 0 as I64)
+            assert_eq(v.minor, 0 as I64)
+            assert_eq(v.patch, 0 as I64)
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_with_v_prefix() -> I32 {
+    let result = Version::parse("v1.2.3")
+    when result {
+        Ok(v) => {
+            assert_eq(v.major, 1 as I64)
+            assert_eq(v.minor, 2 as I64)
+            assert_eq(v.patch, 3 as I64)
+        }
+        Err(e) => assert(false, "parse should accept v prefix")
+    }
+    0
+}
+
+@test
+func test_parse_prerelease() -> I32 {
+    let result = Version::parse("1.0.0-alpha")
+    when result {
+        Ok(v) => {
+            assert_eq(v.major, 1 as I64)
+            assert(v.is_prerelease(), "should be prerelease")
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_parse_error_empty() -> I32 {
+    let result = Version::parse("")
+    when result {
+        Ok(v) => assert(false, "should fail on empty")
+        Err(e) => assert(true, "correctly rejected empty")
+    }
+    0
+}
+
+@test
+func test_parse_error_no_minor() -> I32 {
+    let result = Version::parse("1")
+    when result {
+        Ok(v) => assert(false, "should fail without minor")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_error_no_patch() -> I32 {
+    let result = Version::parse("1.2")
+    when result {
+        Ok(v) => assert(false, "should fail without patch")
+        Err(e) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_leading_zeros() -> I32 {
+    let result = Version::parse("01.0.0")
+    when result {
+        Ok(v) => assert(false, "should reject leading zeros")
+        Err(e) => assert(true, "correctly rejected leading zeros")
+    }
+    0
+}

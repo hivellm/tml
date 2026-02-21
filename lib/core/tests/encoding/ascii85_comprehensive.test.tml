@@ -1,0 +1,212 @@
+use test
+use core::encoding::ascii85
+
+// === Known Encode Values ===
+
+@test
+func test_ascii85_encode_known_values() -> I32 {
+    assert_eq(ascii85::encode(""), "<~~>")
+    assert_eq(ascii85::encode("Man "), "<~9jqo^~>")
+    assert_eq(ascii85::encode("test"), "<~FCfN8~>")
+    0
+}
+
+@test
+func test_ascii85_encode_single_char() -> I32 {
+    // 1 byte remainder = 2 output chars
+    let enc = ascii85::encode("A")
+    // Verify via roundtrip
+    let result = ascii85::decode(enc)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "A")
+        Err(e) => assert(false, "single char roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_encode_two_chars() -> I32 {
+    // 2 byte remainder = 3 output chars
+    let enc = ascii85::encode("AB")
+    let result = ascii85::decode(enc)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "AB")
+        Err(e) => assert(false, "two chars roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_encode_three_chars() -> I32 {
+    // 3 byte remainder = 4 output chars
+    let enc = ascii85::encode("ABC")
+    let result = ascii85::decode(enc)
+    when result {
+        Ok(decoded) => assert_eq(decoded, "ABC")
+        Err(e) => assert(false, "three chars roundtrip should succeed")
+    }
+    0
+}
+
+// === Decode Validation ===
+
+@test
+func test_ascii85_decode_known_values() -> I32 {
+    let r1 = ascii85::decode("<~~>")
+    when r1 {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "empty decode should succeed")
+    }
+    let r2 = ascii85::decode("<~9jqo^~>")
+    when r2 {
+        Ok(s) => assert_eq(s, "Man ")
+        Err(e) => assert(false, "Man decode should succeed")
+    }
+    let r3 = ascii85::decode("<~FCfN8~>")
+    when r3 {
+        Ok(s) => assert_eq(s, "test")
+        Err(e) => assert(false, "test decode should succeed")
+    }
+    0
+}
+
+// === Error Cases ===
+
+@test
+func test_ascii85_decode_missing_prefix() -> I32 {
+    let result = ascii85::decode("FCfN8~>")
+    when result {
+        Ok(s) => assert(false, "missing prefix should fail")
+        Err(e) => assert(true, "expected error for missing prefix")
+    }
+    0
+}
+
+@test
+func test_ascii85_decode_missing_suffix() -> I32 {
+    let result = ascii85::decode("<~FCfN8")
+    when result {
+        Ok(s) => assert(false, "missing suffix should fail")
+        Err(e) => assert(true, "expected error for missing suffix")
+    }
+    0
+}
+
+@test
+func test_ascii85_decode_too_short() -> I32 {
+    let result = ascii85::decode("<~")
+    when result {
+        Ok(s) => assert(false, "too short should fail")
+        Err(e) => assert(true, "expected error for too short")
+    }
+    0
+}
+
+@test
+func test_ascii85_decode_just_delimiters() -> I32 {
+    // Only the delimiters, empty content
+    let result = ascii85::decode("<~~>")
+    when result {
+        Ok(s) => assert_eq(s, "")
+        Err(e) => assert(false, "empty content should succeed")
+    }
+    0
+}
+
+// === Roundtrip Tests (Various Sizes) ===
+
+@test
+func test_ascii85_roundtrip_1_byte() -> I32 {
+    let original = "X"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "1-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_4_bytes() -> I32 {
+    let original = "abcd"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "4-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_5_bytes() -> I32 {
+    let original = "abcde"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "5-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_8_bytes() -> I32 {
+    let original = "abcdefgh"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "8-byte roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_hello_world() -> I32 {
+    let original = "Hello, World!"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "Hello World roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_numbers() -> I32 {
+    let original = "1234567890"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "numbers roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_long() -> I32 {
+    let original = "The quick brown fox jumps over the lazy dog"
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "long roundtrip should succeed")
+    }
+    0
+}
+
+@test
+func test_ascii85_roundtrip_sentence() -> I32 {
+    let original = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    let encoded = ascii85::encode(original)
+    let result = ascii85::decode(encoded)
+    when result {
+        Ok(decoded) => assert_eq(decoded, original)
+        Err(e) => assert(false, "sentence roundtrip should succeed")
+    }
+    0
+}

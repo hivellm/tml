@@ -1,0 +1,34 @@
+use test
+use std::semver::Version
+
+@test
+func test_to_string_simple() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let s: Str = v.to_string()
+    assert_eq(s, "1.2.3")
+    0
+}
+
+@test
+func test_to_string_zeros() -> I32 {
+    let v = Version::new(0, 0, 0)
+    let s: Str = v.to_string()
+    assert_eq(s, "0.0.0")
+    0
+}
+
+@test
+func test_to_string_prerelease() -> I32 {
+    let v = Version::new_pre(1, 0, 0, "alpha")
+    let s: Str = v.to_string()
+    assert_eq(s, "1.0.0-alpha")
+    0
+}
+
+@test
+func test_to_string_large_numbers() -> I32 {
+    let v = Version::new(100, 200, 300)
+    let s: Str = v.to_string()
+    assert_eq(s, "100.200.300")
+    0
+}

@@ -1,5 +1,22 @@
+//! Encoding and decoding utilities.
+//!
+//! This module provides functions for encoding binary data to text
+//! representations and decoding text back to binary data.
+//!
+//! # Submodules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`hex`] | Hexadecimal encoding (uppercase/lowercase) |
+//! | [`base64`] | Base64 encoding (standard + URL-safe) |
+//! | [`percent`] | Percent-encoding per RFC 3986 |
+//! | [`base32`] | Base32 encoding per RFC 4648 |
+//! | [`base58`] | Base58 encoding (Bitcoin alphabet) |
+//! | [`ascii85`] | ASCII85/Base85 encoding |
+
 pub mod hex
-
 pub mod base64
-
 pub mod percent
+pub mod base32
+pub mod base58
+pub mod ascii85

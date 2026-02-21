@@ -1,0 +1,280 @@
+//! Base58 encoding and decoding (Bitcoin alphabet).
+//!
+//! Uses the Bitcoin/IPFS alphabet which excludes 0, O, I, l to avoid
+//! visual ambiguity: `123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz`
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::encoding::base58
+//!
+//! assert(base58::encode("Hello") == "9Ajdvzr")
+//! assert(base58::decode("9Ajdvzr") == Ok("Hello"))
+//! ```
+
+use core::str
+
+/// The Base58 alphabet (Bitcoin).
+/// Index 0 = '1' (0x31), index 57 = 'z' (0x7A).
+func alphabet_char(idx: I32) -> U8 {
+    // 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+    if idx == 0 { return 49 as U8 }   // '1'
+    if idx == 1 { return 50 as U8 }   // '2'
+    if idx == 2 { return 51 as U8 }   // '3'
+    if idx == 3 { return 52 as U8 }   // '4'
+    if idx == 4 { return 53 as U8 }   // '5'
+    if idx == 5 { return 54 as U8 }   // '6'
+    if idx == 6 { return 55 as U8 }   // '7'
+    if idx == 7 { return 56 as U8 }   // '8'
+    if idx == 8 { return 57 as U8 }   // '9'
+    if idx == 9 { return 65 as U8 }   // 'A'
+    if idx == 10 { return 66 as U8 }  // 'B'
+    if idx == 11 { return 67 as U8 }  // 'C'
+    if idx == 12 { return 68 as U8 }  // 'D'
+    if idx == 13 { return 69 as U8 }  // 'E'
+    if idx == 14 { return 70 as U8 }  // 'F'
+    if idx == 15 { return 71 as U8 }  // 'G'
+    if idx == 16 { return 72 as U8 }  // 'H'
+    if idx == 17 { return 74 as U8 }  // 'J' (skip I)
+    if idx == 18 { return 75 as U8 }  // 'K'
+    if idx == 19 { return 76 as U8 }  // 'L'
+    if idx == 20 { return 77 as U8 }  // 'M'
+    if idx == 21 { return 78 as U8 }  // 'N'
+    if idx == 22 { return 80 as U8 }  // 'P' (skip O)
+    if idx == 23 { return 81 as U8 }  // 'Q'
+    if idx == 24 { return 82 as U8 }  // 'R'
+    if idx == 25 { return 83 as U8 }  // 'S'
+    if idx == 26 { return 84 as U8 }  // 'T'
+    if idx == 27 { return 85 as U8 }  // 'U'
+    if idx == 28 { return 86 as U8 }  // 'V'
+    if idx == 29 { return 87 as U8 }  // 'W'
+    if idx == 30 { return 88 as U8 }  // 'X'
+    if idx == 31 { return 89 as U8 }  // 'Y'
+    if idx == 32 { return 90 as U8 }  // 'Z'
+    if idx == 33 { return 97 as U8 }  // 'a'
+    if idx == 34 { return 98 as U8 }  // 'b'
+    if idx == 35 { return 99 as U8 }  // 'c'
+    if idx == 36 { return 100 as U8 } // 'd'
+    if idx == 37 { return 101 as U8 } // 'e'
+    if idx == 38 { return 102 as U8 } // 'f'
+    if idx == 39 { return 103 as U8 } // 'g'
+    if idx == 40 { return 104 as U8 } // 'h'
+    if idx == 41 { return 105 as U8 } // 'i'
+    if idx == 42 { return 106 as U8 } // 'j'
+    if idx == 43 { return 107 as U8 } // 'k'
+    if idx == 44 { return 109 as U8 } // 'm' (skip l)
+    if idx == 45 { return 110 as U8 } // 'n'
+    if idx == 46 { return 111 as U8 } // 'o'
+    if idx == 47 { return 112 as U8 } // 'p'
+    if idx == 48 { return 113 as U8 } // 'q'
+    if idx == 49 { return 114 as U8 } // 'r'
+    if idx == 50 { return 115 as U8 } // 's'
+    if idx == 51 { return 116 as U8 } // 't'
+    if idx == 52 { return 117 as U8 } // 'u'
+    if idx == 53 { return 118 as U8 } // 'v'
+    if idx == 54 { return 119 as U8 } // 'w'
+    if idx == 55 { return 120 as U8 } // 'x'
+    if idx == 56 { return 121 as U8 } // 'y'
+    if idx == 57 { return 122 as U8 } // 'z'
+    return 0 as U8
+}
+
+/// Reverse map: ASCII code -> Base58 value, or -1 for invalid.
+func alphabet_val(c: I32) -> I32 {
+    // '1'-'9' -> 0-8
+    if c >= 49 and c <= 57 { return c - 49 }
+    // 'A'-'H' -> 9-16
+    if c >= 65 and c <= 72 { return c - 65 + 9 }
+    // 'J'-'N' -> 17-21 (skip I=73)
+    if c >= 74 and c <= 78 { return c - 74 + 17 }
+    // 'P'-'Z' -> 22-32 (skip O=79)
+    if c >= 80 and c <= 90 { return c - 80 + 22 }
+    // 'a'-'k' -> 33-43
+    if c >= 97 and c <= 107 { return c - 97 + 33 }
+    // 'm'-'z' -> 44-57 (skip l=108)
+    if c >= 109 and c <= 122 { return c - 109 + 44 }
+    return -1
+}
+
+/// Encode a string's bytes as Base58.
+///
+/// Leading zero bytes in the input are preserved as '1' characters.
+pub func encode(input: Str) -> Str {
+    let in_len: I64 = str::len(input)
+    if in_len == 0 {
+        return ""
+    }
+
+    let src: I64 = input as I64
+
+    // Count leading zero bytes -> they become '1' chars
+    var leading_zeros: I64 = 0
+    var found_nonzero: I64 = 0
+    loop (leading_zeros < in_len and found_nonzero == 0) {
+        let b: U8 = lowlevel { ptr_read[U8]((src + leading_zeros) as *U8) }
+        if b != (0 as U8) {
+            found_nonzero = 1
+        } else {
+            leading_zeros = leading_zeros + 1
+        }
+    }
+
+    // Allocate a working buffer for base58 digits (big-endian).
+    // Worst case: each byte becomes ~1.37 base58 digits -> use in_len * 2 for safety
+    let work_len: I64 = in_len * 2
+    let work: *Unit = lowlevel { mem_alloc(work_len) }
+    let work_addr: I64 = work as I64
+
+    // Zero the work buffer
+    var wi: I64 = 0
+    loop (wi < work_len) {
+        lowlevel { ptr_write[U8]((work_addr + wi) as *U8, 0 as U8) }
+        wi = wi + 1
+    }
+
+    // Convert bytes to base58 using repeated division
+    var used: I64 = 0  // how many base58 digits are in use (from the right)
+    var si: I64 = 0
+    loop (si < in_len) {
+        var carry: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        var j: I64 = 0
+        loop (j < used or carry > 0) {
+            let idx: I64 = work_len - 1 - j
+            let cur: I32 = lowlevel { ptr_read[U8]((work_addr + idx) as *U8) } as I32
+            let acc: I32 = cur * 256 + carry
+            lowlevel { ptr_write[U8]((work_addr + idx) as *U8, (acc % 58) as U8) }
+            carry = acc / 58
+            j = j + 1
+        }
+        if j > used { used = j }
+        si = si + 1
+    }
+
+    // Output: leading_zeros '1's + used base58 digits
+    let out_len: I64 = leading_zeros + used
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let dst: I64 = buf as I64
+
+    // Write leading '1's
+    var li: I64 = 0
+    loop (li < leading_zeros) {
+        lowlevel { ptr_write[U8]((dst + li) as *U8, 49 as U8) }  // '1'
+        li = li + 1
+    }
+
+    // Write base58 digits
+    var di: I64 = 0
+    loop (di < used) {
+        let digit: I32 = lowlevel { ptr_read[U8]((work_addr + work_len - used + di) as *U8) } as I32
+        lowlevel { ptr_write[U8]((dst + leading_zeros + di) as *U8, alphabet_char(digit)) }
+        di = di + 1
+    }
+
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    lowlevel { mem_free(work) }
+    return buf as Str
+}
+
+/// Inline alphabet value lookup to avoid function call overhead in hot loop.
+/// Returns -1 for invalid characters.
+func decode_val(c: I32) -> I64 {
+    // '1'-'9' -> 0-8
+    if c >= 49 and c <= 57 { return (c - 49) as I64 }
+    // 'A'-'H' -> 9-16
+    if c >= 65 and c <= 72 { return (c - 65 + 9) as I64 }
+    // 'J'-'N' -> 17-21 (skip I=73)
+    if c >= 74 and c <= 78 { return (c - 74 + 17) as I64 }
+    // 'P'-'Z' -> 22-32 (skip O=79)
+    if c >= 80 and c <= 90 { return (c - 80 + 22) as I64 }
+    // 'a'-'k' -> 33-43
+    if c >= 97 and c <= 107 { return (c - 97 + 33) as I64 }
+    // 'm'-'z' -> 44-57 (skip l=108)
+    if c >= 109 and c <= 122 { return (c - 109 + 44) as I64 }
+    return -1
+}
+
+/// Decode a Base58 string back to original bytes.
+///
+/// Leading '1' characters in the input become zero bytes.
+pub func decode(b58: Str) -> Outcome[Str, Str] {
+    let in_len: I64 = str::len(b58)
+    if in_len == 0 {
+        return Ok("")
+    }
+
+    let src: I64 = b58 as I64
+
+    // Count leading '1's -> they become zero bytes
+    var leading_ones: I64 = 0
+    var found_nonone: I64 = 0
+    loop (leading_ones < in_len and found_nonone == 0) {
+        let c: U8 = lowlevel { ptr_read[U8]((src + leading_ones) as *U8) }
+        if c != (49 as U8) {
+            found_nonone = 1
+        } else {
+            leading_ones = leading_ones + 1
+        }
+    }
+
+    // Allocate work buffer for decoded bytes (big-endian).
+    // Use in_len * 2 for safety — intermediate carry propagation may need more.
+    let work_len: I64 = in_len * 2
+    let work: *Unit = lowlevel { mem_alloc(work_len) }
+    let work_addr: I64 = work as I64
+
+    var wi: I64 = 0
+    loop (wi < work_len) {
+        lowlevel { ptr_write[U8]((work_addr + wi) as *U8, 0 as U8) }
+        wi = wi + 1
+    }
+
+    // Convert base58 to bytes using repeated multiplication.
+    // Use I64 for all arithmetic to avoid overflow.
+    var used: I64 = 0
+    var si: I64 = 0
+    loop (si < in_len) {
+        let c: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
+        let val: I64 = decode_val(c)
+        if val == -1 {
+            lowlevel { mem_free(work) }
+            return Err("base58: invalid character")
+        }
+        var carry: I64 = val
+        var j: I64 = 0
+        loop (j < used or carry > 0) {
+            let idx: I64 = work_len - 1 - j
+            // Mask with 255 to ensure correct zero-extension from U8
+            let cur: I64 = (lowlevel { ptr_read[U8]((work_addr + idx) as *U8) } as I64) & (255 as I64)
+            let acc: I64 = cur * 58 + carry
+            lowlevel { ptr_write[U8]((work_addr + idx) as *U8, (acc & (255 as I64)) as U8) }
+            carry = acc / 256
+            j = j + 1
+        }
+        if j > used { used = j }
+        si = si + 1
+    }
+
+    // Output: leading_ones zero bytes + used decoded bytes
+    let out_len: I64 = leading_ones + used
+    let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
+    let dst: I64 = buf as I64
+
+    // Write leading zero bytes
+    var li: I64 = 0
+    loop (li < leading_ones) {
+        lowlevel { ptr_write[U8]((dst + li) as *U8, 0 as U8) }
+        li = li + 1
+    }
+
+    // Write decoded bytes
+    var di: I64 = 0
+    loop (di < used) {
+        let b: U8 = lowlevel { ptr_read[U8]((work_addr + work_len - used + di) as *U8) }
+        lowlevel { ptr_write[U8]((dst + leading_ones + di) as *U8, b) }
+        di = di + 1
+    }
+
+    lowlevel { ptr_write[U8]((dst + out_len) as *U8, 0 as U8) }
+    lowlevel { mem_free(work) }
+    return Ok(buf as Str)
+}

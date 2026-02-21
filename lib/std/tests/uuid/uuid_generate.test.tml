@@ -1,0 +1,23 @@
+use test
+use std::uuid::Uuid
+use core::str
+
+// === V4 Generation ===
+
+@test
+func test_uuid_v4_version_and_variant() -> I32 {
+    let id = Uuid::v4()
+    assert_eq(id.version(), 4)
+    assert_eq(id.variant(), 2)
+    assert(not id.is_nil(), "v4 should not be nil")
+    assert_eq(str::len(id.to_string()), 36)
+    0
+}
+
+@test
+func test_uuid_v4_uniqueness() -> I32 {
+    let a = Uuid::v4()
+    let b = Uuid::v4()
+    assert(not a.eq(b), "two v4 UUIDs should be different")
+    0
+}

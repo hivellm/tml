@@ -1,0 +1,574 @@
+//! Semantic Versioning 2.0.0 parsing, comparison, and requirement matching.
+//!
+//! Implements the SemVer 2.0.0 specification (https://semver.org/).
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::semver::Version
+//!
+//! let v = Version::parse("1.2.3-alpha.1+build.456")
+//! when v {
+//!     Ok(ver) => print(ver.to_string())
+//!     Err(e) => print(e)
+//! }
+//! ```
+
+use core::str
+
+/// A semantic version: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
+pub type Version {
+    major: I64,
+    minor: I64,
+    patch: I64,
+    pre: Str,    // pre-release string (empty if none)
+    build: Str   // build metadata string (empty if none)
+}
+
+impl Version {
+    /// Create a new version with no pre-release or build metadata.
+    pub func new(major: I64, minor: I64, patch: I64) -> Version {
+        return Version { major: major, minor: minor, patch: patch, pre: "", build: "" }
+    }
+
+    /// Create a version with pre-release identifier.
+    pub func new_pre(major: I64, minor: I64, patch: I64, pre: Str) -> Version {
+        return Version { major: major, minor: minor, patch: patch, pre: pre, build: "" }
+    }
+
+    /// Check if this version has a pre-release tag.
+    pub func is_prerelease(this) -> Bool {
+        return str::len(this.pre) > 0
+    }
+
+    /// Check equality (ignoring build metadata per SemVer 2.0).
+    pub func eq(this, other: Version) -> Bool {
+        return this.major == other.major and
+               this.minor == other.minor and
+               this.patch == other.patch and
+               str_compare(this.pre, other.pre) == 0
+    }
+
+    /// Compare two versions per SemVer 2.0 precedence.
+    /// Returns -1 (less), 0 (equal), or 1 (greater).
+    ///
+    /// Build metadata is ignored for precedence.
+    /// Pre-release versions have LOWER precedence than the associated normal version.
+    pub func compare(this, other: Version) -> I32 {
+        // Compare major
+        if this.major < other.major { return -1 }
+        if this.major > other.major { return 1 }
+
+        // Compare minor
+        if this.minor < other.minor { return -1 }
+        if this.minor > other.minor { return 1 }
+
+        // Compare patch
+        if this.patch < other.patch { return -1 }
+        if this.patch > other.patch { return 1 }
+
+        // Both have no pre-release: equal
+        let this_has_pre: Bool = str::len(this.pre) > 0
+        let other_has_pre: Bool = str::len(other.pre) > 0
+
+        if not this_has_pre and not other_has_pre {
+            return 0
+        }
+
+        // Pre-release has lower precedence than normal
+        if this_has_pre and not other_has_pre { return -1 }
+        if not this_has_pre and other_has_pre { return 1 }
+
+        // Both have pre-release: compare dot-separated identifiers
+        return compare_pre(this.pre, other.pre)
+    }
+
+    /// Check if this version is less than other.
+    pub func lt(this, other: Version) -> Bool {
+        return this.compare(other) < 0
+    }
+
+    /// Check if this version is greater than other.
+    pub func gt(this, other: Version) -> Bool {
+        return this.compare(other) > 0
+    }
+
+    /// Check if this version is less than or equal to other.
+    pub func le(this, other: Version) -> Bool {
+        return this.compare(other) <= 0
+    }
+
+    /// Check if this version is greater than or equal to other.
+    pub func ge(this, other: Version) -> Bool {
+        return this.compare(other) >= 0
+    }
+
+    /// Format as MAJOR.MINOR.PATCH with optional pre-release and build.
+    pub func to_string(this) -> Str {
+        return format_version(this.major, this.minor, this.patch, this.pre, this.build)
+    }
+
+    /// Increment the major version (resets minor, patch, and pre-release).
+    pub func bump_major(this) -> Version {
+        return Version { major: this.major + 1, minor: 0, patch: 0, pre: "", build: "" }
+    }
+
+    /// Increment the minor version (resets patch and pre-release).
+    pub func bump_minor(this) -> Version {
+        return Version { major: this.major, minor: this.minor + 1, patch: 0, pre: "", build: "" }
+    }
+
+    /// Increment the patch version (resets pre-release).
+    pub func bump_patch(this) -> Version {
+        return Version { major: this.major, minor: this.minor, patch: this.patch + 1, pre: "", build: "" }
+    }
+
+    /// Parse a semantic version string.
+    ///
+    /// Accepts: "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1+build.456"
+    pub func parse(s: Str) -> Outcome[Version, Str] {
+        return parse_version_impl(s)
+    }
+}
+
+/// A version requirement for matching against versions.
+///
+/// Supports: exact ("=1.2.3"), greater (">1.0.0"), greater-eq (">=1.0.0"),
+/// less ("<2.0.0"), less-eq ("<=2.0.0"), caret ("^1.2.3"), tilde ("~1.2.3").
+pub type VersionReq {
+    op: I32,       // operator: 0=exact, 1=gt, 2=ge, 3=lt, 4=le, 5=caret, 6=tilde
+    version: Version
+}
+
+impl VersionReq {
+    /// Check if a version satisfies this requirement.
+    pub func matches(this, v: Version) -> Bool {
+        let cmp: I32 = v.compare(this.version)
+
+        // op 0: exact (=)
+        if this.op == 0 { return cmp == 0 }
+
+        // op 1: greater than (>)
+        if this.op == 1 { return cmp > 0 }
+
+        // op 2: greater or equal (>=)
+        if this.op == 2 { return cmp >= 0 }
+
+        // op 3: less than (<)
+        if this.op == 3 { return cmp < 0 }
+
+        // op 4: less or equal (<=)
+        if this.op == 4 { return cmp <= 0 }
+
+        // op 5: caret (^) — compatible with version
+        // ^1.2.3 matches >=1.2.3 and <2.0.0
+        // ^0.2.3 matches >=0.2.3 and <0.3.0
+        // ^0.0.3 matches >=0.0.3 and <0.0.4
+        if this.op == 5 {
+            if cmp < 0 { return false }
+            if this.version.major != 0 {
+                return v.major == this.version.major
+            }
+            if this.version.minor != 0 {
+                return v.major == 0 and v.minor == this.version.minor
+            }
+            return v.major == 0 and v.minor == 0 and v.patch == this.version.patch
+        }
+
+        // op 6: tilde (~) — approximately equivalent
+        // ~1.2.3 matches >=1.2.3 and <1.3.0
+        if this.op == 6 {
+            if cmp < 0 { return false }
+            return v.major == this.version.major and v.minor == this.version.minor
+        }
+
+        return false
+    }
+
+    /// Parse a version requirement string.
+    ///
+    /// Accepts: "=1.2.3", ">=1.0.0", ">1.0.0", "<2.0.0", "<=2.0.0",
+    ///          "^1.2.3", "~1.2.3", "1.2.3" (defaults to caret)
+    pub func parse(s: Str) -> Outcome[VersionReq, Str] {
+        let slen: I64 = str::len(s)
+        if slen == 0 {
+            return Err("semver: empty requirement")
+        }
+
+        var op: I32 = 5  // default is caret
+        var start: I64 = 0
+        let c0: I32 = str::char_at(s, 0)
+
+        if c0 == 94 {  // '^'
+            op = 5
+            start = 1
+        } else if c0 == 126 {  // '~'
+            op = 6
+            start = 1
+        } else if c0 == 62 {  // '>'
+            if slen > 1 and str::char_at(s, 1) == 61 {  // '>='
+                op = 2
+                start = 2
+            } else {
+                op = 1
+                start = 1
+            }
+        } else if c0 == 60 {  // '<'
+            if slen > 1 and str::char_at(s, 1) == 61 {  // '<='
+                op = 4
+                start = 2
+            } else {
+                op = 3
+                start = 1
+            }
+        } else if c0 == 61 {  // '='
+            op = 0
+            start = 1
+        }
+
+        // Skip whitespace after operator
+        loop (start < slen and str::char_at(s, start) == 32) {
+            start = start + 1
+        }
+
+        let ver_str: Str = str::substring(s, start, slen)
+        let ver_result = Version::parse(ver_str)
+        when ver_result {
+            Ok(ver) => return Ok(VersionReq { op: op, version: ver })
+            Err(e) => return Err(e)
+        }
+    }
+}
+
+// === Internal helpers ===
+
+/// Format version components to string.
+func format_version(major: I64, minor: I64, patch: I64, pre: Str, build_meta: Str) -> Str {
+    let maj: Str = i64_to_str(major)
+    let min: Str = i64_to_str(minor)
+    let pat: Str = i64_to_str(patch)
+    let ver: Str = maj + "." + min + "." + pat
+
+    let has_pre: Bool = str::len(pre) > 0
+    let has_bld: Bool = str::len(build_meta) > 0
+
+    if has_pre and has_bld {
+        return ver + "-" + pre + "+" + build_meta
+    }
+    if has_pre {
+        return ver + "-" + pre
+    }
+    if has_bld {
+        return ver + "+" + build_meta
+    }
+    return ver
+}
+
+/// Internal parsing state: holds major, minor, patch and current position.
+type ParseState {
+    major: I64,
+    minor: I64,
+    patch: I64,
+    pos: I64
+}
+
+/// Parse major version and the dot after it. Returns state or error.
+func parse_major_part(s: Str, start: I64, slen: I64) -> Outcome[ParseState, Str] {
+    let result = parse_number(s, start, slen)
+    when result {
+        Err(e) => return Err("semver: invalid major version")
+        Ok(pair) => {
+            if pair.next_pos >= slen or str::char_at(s, pair.next_pos) != 46 {
+                return Err("semver: expected '.' after major")
+            }
+            return Ok(ParseState { major: pair.value, minor: 0, patch: 0, pos: pair.next_pos + 1 })
+        }
+    }
+}
+
+/// Parse minor version and the dot after it. Returns updated state or error.
+func parse_minor_part(s: Str, state: ParseState, slen: I64) -> Outcome[ParseState, Str] {
+    let result = parse_number(s, state.pos, slen)
+    when result {
+        Err(e) => return Err("semver: invalid minor version")
+        Ok(pair) => {
+            if pair.next_pos >= slen or str::char_at(s, pair.next_pos) != 46 {
+                return Err("semver: expected '.' after minor")
+            }
+            return Ok(ParseState { major: state.major, minor: pair.value, patch: 0, pos: pair.next_pos + 1 })
+        }
+    }
+}
+
+/// Parse patch version. Returns updated state or error.
+func parse_patch_part(s: Str, state: ParseState, slen: I64) -> Outcome[ParseState, Str] {
+    let result = parse_number(s, state.pos, slen)
+    when result {
+        Err(e) => return Err("semver: invalid patch version")
+        Ok(pair) => {
+            return Ok(ParseState { major: state.major, minor: state.minor, patch: pair.value, pos: pair.next_pos })
+        }
+    }
+}
+
+/// Full version parse implementation using flat helper chain.
+func parse_version_impl(s: Str) -> Outcome[Version, Str] {
+    let slen: I64 = str::len(s)
+    if slen == 0 {
+        return Err("semver: empty string")
+    }
+
+    // Skip optional leading 'v' or 'V'
+    var start: I64 = 0
+    let first: I32 = str::char_at(s, 0)
+    if first == 118 or first == 86 {
+        start = 1
+    }
+
+    // Parse major.minor.patch using chained helpers
+    let major_r = parse_major_part(s, start, slen)
+    when major_r {
+        Err(e) => return Err(e)
+        Ok(s1) => {
+            let minor_r = parse_minor_part(s, s1, slen)
+            when minor_r {
+                Err(e) => return Err(e)
+                Ok(s2) => {
+                    let patch_r = parse_patch_part(s, s2, slen)
+                    when patch_r {
+                        Err(e) => return Err(e)
+                        Ok(s3) => {
+                            return finish_parse(s, s3, slen)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Parse pre-release and build metadata from the remaining string.
+func finish_parse(s: Str, state: ParseState, slen: I64) -> Outcome[Version, Str] {
+    var pos: I64 = state.pos
+    var pre: Str = ""
+    var build: Str = ""
+
+    // Parse pre-release after '-'
+    if pos < slen and str::char_at(s, pos) == 45 {
+        pos = pos + 1
+        let pre_end: I64 = find_char(s, pos, slen, 43)
+        pre = str::substring(s, pos, pre_end)
+        if str::len(pre) == 0 {
+            return Err("semver: empty pre-release")
+        }
+        pos = pre_end
+    }
+
+    // Parse build metadata after '+'
+    if pos < slen and str::char_at(s, pos) == 43 {
+        pos = pos + 1
+        build = str::substring(s, pos, slen)
+        if str::len(build) == 0 {
+            return Err("semver: empty build metadata")
+        }
+        pos = slen
+    }
+
+    if pos != slen {
+        return Err("semver: unexpected characters after version")
+    }
+
+    return Ok(Version {
+        major: state.major,
+        minor: state.minor,
+        patch: state.patch,
+        pre: pre,
+        build: build
+    })
+}
+
+/// Result of parsing a number: the value and the position after the number.
+type ParsePair {
+    value: I64,
+    next_pos: I64
+}
+
+/// Parse a non-negative integer starting at position `start`.
+func parse_number(s: Str, start: I64, slen: I64) -> Outcome[ParsePair, Str] {
+    if start >= slen {
+        return Err("unexpected end")
+    }
+
+    let first_c: I32 = str::char_at(s, start)
+    if first_c < 48 or first_c > 57 {
+        return Err("expected digit")
+    }
+
+    // Reject leading zeros (except "0" itself)
+    if first_c == 48 and start + 1 < slen {
+        let next_c: I32 = str::char_at(s, start + 1)
+        if next_c >= 48 and next_c <= 57 {
+            return Err("leading zeros not allowed")
+        }
+    }
+
+    var value: I64 = 0
+    var pos: I64 = start
+
+    loop (pos < slen) {
+        let c: I32 = str::char_at(s, pos)
+        if c < 48 or c > 57 {
+            // Not a digit, stop
+            return Ok(ParsePair { value: value, next_pos: pos })
+        }
+        value = value * 10 + (c - 48) as I64
+        pos = pos + 1
+    }
+
+    return Ok(ParsePair { value: value, next_pos: pos })
+}
+
+/// Find the first occurrence of `target` char starting at `from`. Returns `slen` if not found.
+func find_char(s: Str, from: I64, slen: I64, target: I32) -> I64 {
+    var i: I64 = from
+    loop (i < slen) {
+        if str::char_at(s, i) == target {
+            return i
+        }
+        i = i + 1
+    }
+    return slen
+}
+
+/// Compare pre-release strings per SemVer 2.0 rules.
+///
+/// Each identifier is compared separately. Numeric identifiers are compared
+/// as integers; alphanumeric identifiers are compared lexicographically.
+/// Numeric identifiers have lower precedence than alphanumeric.
+/// A shorter set of identifiers has lower precedence when all preceding are equal.
+func compare_pre(a: Str, b: Str) -> I32 {
+    let alen: I64 = str::len(a)
+    let blen: I64 = str::len(b)
+    var ai: I64 = 0
+    var bi: I64 = 0
+
+    loop (ai < alen and bi < blen) {
+        // Extract next dot-separated identifier from a
+        let a_end: I64 = find_char(a, ai, alen, 46)  // '.'
+        let a_ident: Str = str::substring(a, ai, a_end)
+
+        // Extract next dot-separated identifier from b
+        let b_end: I64 = find_char(b, bi, blen, 46)  // '.'
+        let b_ident: Str = str::substring(b, bi, b_end)
+
+        let a_is_num: Bool = is_numeric(a_ident)
+        let b_is_num: Bool = is_numeric(b_ident)
+
+        if a_is_num and b_is_num {
+            // Both numeric: compare as integers
+            let a_val: I64 = str_to_i64(a_ident)
+            let b_val: I64 = str_to_i64(b_ident)
+            if a_val < b_val { return -1 }
+            if a_val > b_val { return 1 }
+        } else if a_is_num and not b_is_num {
+            // Numeric < alphanumeric
+            return -1
+        } else if not a_is_num and b_is_num {
+            // Alphanumeric > numeric
+            return 1
+        } else {
+            // Both alphanumeric: lexicographic
+            let cmp: I32 = str_compare(a_ident, b_ident)
+            if cmp != 0 { return cmp }
+        }
+
+        // Move past the identifier and the dot
+        ai = a_end + 1
+        bi = b_end + 1
+    }
+
+    // Shorter set of identifiers has lower precedence
+    if ai >= alen and bi < blen { return -1 }
+    if ai < alen and bi >= blen { return 1 }
+    return 0
+}
+
+/// Check if a string consists entirely of ASCII digits.
+func is_numeric(s: Str) -> Bool {
+    let slen: I64 = str::len(s)
+    if slen == 0 { return false }
+    var i: I64 = 0
+    loop (i < slen) {
+        let c: I32 = str::char_at(s, i)
+        if c < 48 or c > 57 { return false }
+        i = i + 1
+    }
+    return true
+}
+
+/// Parse a string of digits to I64.
+func str_to_i64(s: Str) -> I64 {
+    let slen: I64 = str::len(s)
+    var val: I64 = 0
+    var i: I64 = 0
+    loop (i < slen) {
+        val = val * 10 + (str::char_at(s, i) - 48) as I64
+        i = i + 1
+    }
+    return val
+}
+
+/// Convert a non-negative I64 to its decimal string representation.
+func i64_to_str(n: I64) -> Str {
+    if n == 0 {
+        return "0"
+    }
+    let buf: *Unit = lowlevel { mem_alloc(21 as I64) }
+    let dst: I64 = buf as I64
+    var pos: I32 = 20
+    var val: I64 = n
+    if val < 0 { val = 0 - val }
+    loop (val > 0) {
+        pos = pos - 1
+        let digit: I32 = (val % 10) as I32
+        lowlevel { ptr_write[U8]((dst + pos as I64) as *U8, (digit + 48) as U8) }
+        val = val / 10
+    }
+    if n < 0 {
+        pos = pos - 1
+        lowlevel { ptr_write[U8]((dst + pos as I64) as *U8, 45 as U8) }
+    }
+    let len: I32 = 20 - pos
+    let out: *Unit = lowlevel { mem_alloc((len + 1) as I64) }
+    let rdst: I64 = out as I64
+    var i: I32 = 0
+    loop (i < len) {
+        let byt: U8 = lowlevel { ptr_read[U8]((dst + (pos + i) as I64) as *U8) }
+        lowlevel { ptr_write[U8]((rdst + i as I64) as *U8, byt) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((rdst + len as I64) as *U8, 0 as U8) }
+    lowlevel { mem_free(buf) }
+    return out as Str
+}
+
+/// Lexicographic comparison of two strings. Returns -1, 0, or 1.
+func str_compare(a: Str, b: Str) -> I32 {
+    let alen: I64 = str::len(a)
+    let blen: I64 = str::len(b)
+    var min_len: I64 = alen
+    if blen < min_len { min_len = blen }
+
+    var i: I64 = 0
+    loop (i < min_len) {
+        let ac: I32 = str::char_at(a, i)
+        let bc: I32 = str::char_at(b, i)
+        if ac < bc { return -1 }
+        if ac > bc { return 1 }
+        i = i + 1
+    }
+
+    if alen < blen { return -1 }
+    if alen > blen { return 1 }
+    return 0
+}

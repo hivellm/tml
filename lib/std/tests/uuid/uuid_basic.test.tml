@@ -1,0 +1,67 @@
+use test
+use std::uuid::Uuid
+use core::str
+
+// === Nil and Max UUIDs ===
+
+@test
+func test_uuid_nil() -> I32 {
+    let nil = Uuid::nil()
+    assert(nil.is_nil(), "nil UUID should be nil")
+    assert_eq(nil.to_string(), "00000000-0000-0000-0000-000000000000")
+    0
+}
+
+@test
+func test_uuid_max() -> I32 {
+    let max = Uuid::max()
+    assert(not max.is_nil(), "max UUID should not be nil")
+    assert_eq(max.to_string(), "ffffffff-ffff-ffff-ffff-ffffffffffff")
+    0
+}
+
+@test
+func test_uuid_nil_version() -> I32 {
+    let nil = Uuid::nil()
+    assert_eq(nil.version(), 0)
+    0
+}
+
+@test
+func test_uuid_nil_variant() -> I32 {
+    let nil = Uuid::nil()
+    assert_eq(nil.variant(), 0)
+    0
+}
+
+@test
+func test_uuid_eq() -> I32 {
+    let a = Uuid::nil()
+    let b = Uuid::nil()
+    assert(a.eq(b), "two nil UUIDs should be equal")
+    0
+}
+
+@test
+func test_uuid_neq() -> I32 {
+    let nil = Uuid::nil()
+    let max = Uuid::max()
+    assert(not nil.eq(max), "nil and max should not be equal")
+    0
+}
+
+// === String Format ===
+
+@test
+func test_uuid_nil_string_length() -> I32 {
+    let s = Uuid::nil().to_string()
+    assert_eq(str::len(s), 36)
+    0
+}
+
+@test
+func test_uuid_nil_urn() -> I32 {
+    let nil = Uuid::nil()
+    assert_eq(nil.to_urn(), "urn:uuid:00000000-0000-0000-0000-000000000000")
+    0
+}
