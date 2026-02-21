@@ -66,6 +66,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @putchar(i32)");
     emit_line("declare ptr @malloc(i64)");
     emit_line("declare void @free(ptr)");
+    emit_line("declare void @tml_str_free(ptr)");
     emit_line("declare void @exit(i32) noreturn");
     emit_line("declare i64 @strlen(ptr)");
     emit_line("declare i32 @strcmp(ptr, ptr)");

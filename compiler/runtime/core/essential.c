@@ -1175,6 +1175,45 @@ TML_EXPORT void tml_free(void* ptr) {
     free(ptr);
 }
 
+/**
+ * @brief Safely frees a Str pointer if it is heap-allocated.
+ *
+ * TML Str values are raw `ptr` (char*). Some point to global string
+ * constants (.rdata section), others to heap-allocated buffers from
+ * str_concat_opt, interpolation, etc. This function validates the
+ * pointer is a valid heap allocation before calling free().
+ *
+ * On Windows: uses HeapValidate() against the process heap.
+ * On POSIX: uses malloc_usable_size() which returns 0 for non-heap pointers.
+ *
+ * @param ptr Pointer to potentially heap-allocated string.
+ */
+TML_EXPORT void tml_str_free(void* ptr) {
+    if (!ptr)
+        return;
+#ifdef _WIN32
+    HANDLE heap = GetProcessHeap();
+    if (HeapValidate(heap, 0, ptr)) {
+        free(ptr);
+    }
+#elif defined(__GLIBC__) || defined(__linux__)
+    // malloc_usable_size returns 0 for non-heap pointers on glibc
+    extern size_t malloc_usable_size(void*);
+    if (malloc_usable_size(ptr) > 0) {
+        free(ptr);
+    }
+#elif defined(__APPLE__)
+    // On macOS, malloc_size returns 0 for non-heap pointers
+    extern size_t malloc_size(const void*);
+    if (malloc_size(ptr) > 0) {
+        free(ptr);
+    }
+#else
+    // Fallback: don't free (leak is safer than crash)
+    (void)ptr;
+#endif
+}
+
 // ============================================================================
 // Windows DLL Entry Point
 // ============================================================================

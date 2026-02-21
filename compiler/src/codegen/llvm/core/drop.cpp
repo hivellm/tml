@@ -252,20 +252,13 @@ void LLVMIRGen::register_heap_str_for_drop(const std::string& var_name,
 }
 
 void LLVMIRGen::emit_drop_call(const DropInfo& info) {
-    // Heap-allocated Str: free the pointer directly
+    // Heap-allocated Str: safely free via tml_str_free.
+    // tml_str_free validates the pointer is a genuine heap allocation
+    // before calling free(), so it's safe for global string constants too.
     if (info.is_heap_str) {
         std::string ptr_val = fresh_reg();
         emit_line("  " + ptr_val + " = load ptr, ptr " + info.var_reg);
-        // Only free non-null pointers (null check guards against uninitialized paths)
-        std::string is_null = fresh_reg();
-        emit_line("  " + is_null + " = icmp eq ptr " + ptr_val + ", null");
-        std::string bb_free = fresh_label();
-        std::string bb_done = fresh_label();
-        emit_line("  br i1 " + is_null + ", label %" + bb_done + ", label %" + bb_free);
-        emit_line(bb_free + ":");
-        emit_line("  call void @free(ptr " + ptr_val + ")");
-        emit_line("  br label %" + bb_done);
-        emit_line(bb_done + ":");
+        emit_line("  call void @tml_str_free(ptr " + ptr_val + ")");
         return;
     }
 

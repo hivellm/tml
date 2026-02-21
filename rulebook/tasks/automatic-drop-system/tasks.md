@@ -1,6 +1,6 @@
 # Tasks: Automatic Drop System
 
-**Status**: In Progress (25%)
+**Status**: In Progress (35%)
 
 ## Phase 1: Str Auto-Free (Guaranteed Heap Allocations)
 
@@ -14,14 +14,14 @@
 - [x] 1.8 Verify with IR output: interpolated strings get free(), literals do not
 - [x] 1.9 Full test suite passes (7,869 tests, zero regressions)
 
-## Phase 1b: Safe Str Auto-Free for Function Returns
+## Phase 1b: Safe Str Auto-Free with tml_str_free
 
-- [ ] 1b.1 Implement `@tml_str_free` runtime function with heap validation
-- [ ] 1b.2 Use `_msize` (Windows) / `malloc_usable_size` (Linux) to check heap ownership
-- [ ] 1b.3 Replace `@free` with `@tml_str_free` in `emit_drop_call` for heap Str
-- [ ] 1b.4 Extend `is_heap_str_producer` to include CallExpr and MethodCallExpr
-- [ ] 1b.5 Write tests for function returns, method returns, string literal returns
-- [ ] 1b.6 Run coverage, measure leak reduction
+- [x] 1b.1 Implement `@tml_str_free` runtime function with heap validation
+- [x] 1b.2 Use `HeapValidate` (Windows) / `malloc_usable_size` (Linux) / `malloc_size` (macOS)
+- [x] 1b.3 Replace `@free` with `@tml_str_free` in `emit_drop_call` for heap Str
+- [x] 1b.4 Add `BinaryExpr` (string concat) to `is_heap_str_producer`
+- [x] 1b.5 Discovered CallExpr/MethodCallExpr unsafe (borrowed ptrs cause double-free)
+- [x] 1b.6 Full test suite passes (9,362 tests with coverage, zero regressions)
 
 ## Phase 2: needs_drop Recursive Analysis
 

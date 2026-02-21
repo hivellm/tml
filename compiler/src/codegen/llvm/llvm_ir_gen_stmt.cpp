@@ -42,11 +42,17 @@ static std::string extract_type_name_for_drop(const std::string& llvm_type) {
     return "";
 }
 
-// Helper to check if an expression produces a HEAP-ALLOCATED Str that needs free.
-// CONSERVATIVE: only returns true for operations that are GUARANTEED to heap-allocate.
-// We CANNOT auto-free function/method call results because they may return string
-// literals (global constants). E.g., `err.message()` returns "DNS lookup failed: ..."
-// which is a global constant, not a heap allocation.
+// Helper to check if a semantic type is Str
+static bool is_semantic_str(const types::TypePtr& sem_type) {
+    return sem_type && sem_type->is<types::PrimitiveType>() &&
+           sem_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
+}
+
+// Helper to check if an expression GUARANTEES a heap-allocated Str.
+// Only returns true for expressions that always produce uniquely-owned heap Str.
+// Does NOT include CallExpr/MethodCallExpr because those may return borrowed
+// pointers into internal buffers (e.g., Glob::next() returns into its paths array).
+// Until TML has ownership annotations, we must be conservative to avoid double-free.
 static bool is_heap_str_producer(const parser::Expr& expr) {
     // Interpolated strings always heap-allocate via snprintf+malloc
     if (expr.is<parser::InterpolatedStringExpr>())
@@ -54,11 +60,12 @@ static bool is_heap_str_producer(const parser::Expr& expr) {
     // Template literals always heap-allocate
     if (expr.is<parser::TemplateLiteralExpr>())
         return true;
-    // String literals are global constants — no free
-    // Function calls / method calls — UNSAFE to free (may return literals)
-    // Identifiers — aliases, would double-free
-    // Binary expressions — may or may not allocate (depends on types)
-    // Everything else: be conservative, don't free
+    // Binary expressions on strings (concatenation) heap-allocate
+    if (expr.is<parser::BinaryExpr>())
+        return true;
+    // String literals are global constants — never free
+    // Identifiers are aliases — freeing would double-free the original
+    // CallExpr/MethodCallExpr excluded — may return borrowed pointers (double-free risk)
     return false;
 }
 
@@ -667,8 +674,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
 
         // Register heap Str for automatic free at scope exit.
-        // is_heap_str_producer guarantees the expression allocates on the heap.
-        if (is_heap_str_producer(*let.init.value())) {
+        // Requires BOTH: semantic type is Str AND init expression may produce heap Str.
+        // This prevents freeing non-Str ptr types (List, Box, etc.) that have own lifecycle.
+        if ((is_semantic_str(semantic_var_type) || is_semantic_str(semantic_type)) &&
+            is_heap_str_producer(*let.init.value())) {
             register_heap_str_for_drop(var_name, alloca_reg);
         }
         return;
@@ -979,7 +988,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // Register heap-allocated Str variables for automatic free at scope exit.
     // is_heap_str_producer checks if the init expression GUARANTEES a heap allocation
     // (interpolated strings, template literals). These always produce Str (ptr).
-    if (var_type == "ptr" && let.init.has_value() && is_heap_str_producer(*let.init.value())) {
+    if (var_type == "ptr" && let.init.has_value() &&
+        (is_semantic_str(semantic_var_type) || is_semantic_str(semantic_type)) &&
+        is_heap_str_producer(*let.init.value())) {
         register_heap_str_for_drop(var_name, alloca_reg);
     }
 
@@ -1371,7 +1382,8 @@ void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
         register_for_drop(const_decl.name, alloca_reg, type_name, var_type);
 
         // Register heap Str for automatic free
-        if (var_type == "ptr" && is_heap_str_producer(*const_decl.value)) {
+        if (var_type == "ptr" && is_semantic_str(semantic_type) &&
+            is_heap_str_producer(*const_decl.value)) {
             register_heap_str_for_drop(const_decl.name, alloca_reg);
         }
     }
