@@ -1,0 +1,95 @@
+use test
+use core::simd::i32x4::{I32x4, select}
+use core::simd::mask::Mask4
+
+@test
+func test_i32x4_eq_ne() -> I32 {
+    let a: I32x4 = I32x4::new(1, 2, 3, 4)
+    let b: I32x4 = I32x4::new(1, 0, 3, 0)
+    let m: Mask4 = a.eq(b)
+    assert_eq(m.count(), 2)  // e0 and e2 match
+    let n: Mask4 = a.ne(b)
+    assert_eq(n.count(), 2)  // e1 and e3 differ
+    0
+}
+
+@test
+func test_i32x4_lt_gt() -> I32 {
+    let a: I32x4 = I32x4::new(1, 5, 3, 7)
+    let b: I32x4 = I32x4::new(2, 4, 3, 8)
+    let lt_mask: Mask4 = a.lt(b)
+    assert_eq(lt_mask.count(), 2)  // e0 < e0, e3 < e3
+    let gt_mask: Mask4 = a.gt(b)
+    assert_eq(gt_mask.count(), 1)  // e1 > e1
+    0
+}
+
+@test
+func test_i32x4_bitwise() -> I32 {
+    let a: I32x4 = I32x4::new(15, 255, 0, 170)
+    let b: I32x4 = I32x4::new(240, 15, 255, 85)
+    let c: I32x4 = a.band(b)
+    assert_eq(c.get(0), 0)    // 15 & 240 = 0
+    assert_eq(c.get(1), 15)   // 255 & 15 = 15
+    assert_eq(c.get(3), 0)    // 170 & 85 = 0
+    let d: I32x4 = a.bor(b)
+    assert_eq(d.get(0), 255)  // 15 | 240 = 255
+    assert_eq(d.get(3), 255)  // 170 | 85 = 255
+    let e: I32x4 = a.bxor(b)
+    assert_eq(e.get(0), 255)  // 15 ^ 240 = 255 (actually 0xFF = 255)
+    0
+}
+
+@test
+func test_i32x4_shift() -> I32 {
+    let a: I32x4 = I32x4::new(1, 2, 4, 8)
+    let b: I32x4 = a.shift_left(2)
+    assert_eq(b.get(0), 4)
+    assert_eq(b.get(1), 8)
+    assert_eq(b.get(2), 16)
+    assert_eq(b.get(3), 32)
+    let c: I32x4 = b.shift_right(2)
+    assert_eq(c.get(0), 1)
+    assert_eq(c.get(3), 8)
+    0
+}
+
+@test
+func test_i32x4_horizontal() -> I32 {
+    let v: I32x4 = I32x4::new(3, 1, 4, 2)
+    assert_eq(v.sum(), 10)
+    assert_eq(v.product(), 24)
+    assert_eq(v.hmin(), 1)
+    assert_eq(v.hmax(), 4)
+    0
+}
+
+@test
+func test_i32x4_min_max() -> I32 {
+    let a: I32x4 = I32x4::new(3, 1, 4, 2)
+    let b: I32x4 = I32x4::new(1, 5, 2, 6)
+    let lo: I32x4 = a.min(b)
+    assert_eq(lo.get(0), 1)
+    assert_eq(lo.get(1), 1)
+    assert_eq(lo.get(2), 2)
+    assert_eq(lo.get(3), 2)
+    let hi: I32x4 = a.max(b)
+    assert_eq(hi.get(0), 3)
+    assert_eq(hi.get(1), 5)
+    assert_eq(hi.get(2), 4)
+    assert_eq(hi.get(3), 6)
+    0
+}
+
+@test
+func test_i32x4_select() -> I32 {
+    let a: I32x4 = I32x4::new(1, 2, 3, 4)
+    let b: I32x4 = I32x4::new(10, 20, 30, 40)
+    let mask: Mask4 = Mask4::new(true, false, true, false)
+    let c: I32x4 = select(mask, a, b)
+    assert_eq(c.get(0), 1)   // from a (true)
+    assert_eq(c.get(1), 20)  // from b (false)
+    assert_eq(c.get(2), 3)   // from a (true)
+    assert_eq(c.get(3), 40)  // from b (false)
+    0
+}

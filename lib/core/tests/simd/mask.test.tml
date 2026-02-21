@@ -1,0 +1,67 @@
+use test
+use core::simd::mask::{Mask2, Mask4, Mask16}
+
+@test
+func test_mask4_all_true() -> I32 {
+    let m: Mask4 = Mask4::all_true()
+    assert(m.all(), "all_true should have all lanes true")
+    assert(m.any(), "all_true should have any lane true")
+    assert(not m.none(), "all_true should not be none")
+    assert_eq(m.count(), 4)
+    0
+}
+
+@test
+func test_mask4_all_false() -> I32 {
+    let m: Mask4 = Mask4::all_false()
+    assert(not m.all(), "all_false should not have all lanes true")
+    assert(not m.any(), "all_false should not have any lane true")
+    assert(m.none(), "all_false should be none")
+    assert_eq(m.count(), 0)
+    0
+}
+
+@test
+func test_mask4_partial() -> I32 {
+    let m: Mask4 = Mask4::new(true, false, true, false)
+    assert(not m.all(), "partial should not be all")
+    assert(m.any(), "partial should be any")
+    assert(not m.none(), "partial should not be none")
+    assert_eq(m.count(), 2)
+    0
+}
+
+@test
+func test_mask4_logic() -> I32 {
+    let a: Mask4 = Mask4::new(true, false, true, false)
+    let b: Mask4 = Mask4::new(true, true, false, false)
+    let c: Mask4 = a.band(b)
+    assert_eq(c.count(), 1)  // only m0 is true in both
+    let d: Mask4 = a.bor(b)
+    assert_eq(d.count(), 3)  // m0, m1, m2
+    let e: Mask4 = a.bnot()
+    assert_eq(e.count(), 2)  // m1, m3
+    0
+}
+
+@test
+func test_mask2_basic() -> I32 {
+    let m: Mask2 = Mask2::new(true, false)
+    assert(m.any(), "should have any")
+    assert(not m.all(), "should not have all")
+    assert_eq(m.count(), 1)
+    let n: Mask2 = m.bnot()
+    assert_eq(n.count(), 1)
+    0
+}
+
+@test
+func test_mask16_basic() -> I32 {
+    let m: Mask16 = Mask16::all_true()
+    assert(m.all(), "all_true should be all")
+    assert_eq(m.count(), 16)
+    let n: Mask16 = Mask16::all_false()
+    assert(n.none(), "all_false should be none")
+    assert_eq(n.count(), 0)
+    0
+}

@@ -1,0 +1,76 @@
+use test
+use core::simd::i32x4::{I32x4, select}
+use core::simd::mask::Mask4
+
+@test
+func test_i32x4_new_and_get() -> I32 {
+    let v: I32x4 = I32x4::new(10, 20, 30, 40)
+    assert_eq(v.get(0), 10)
+    assert_eq(v.get(1), 20)
+    assert_eq(v.get(2), 30)
+    assert_eq(v.get(3), 40)
+    0
+}
+
+@test
+func test_i32x4_splat() -> I32 {
+    let v: I32x4 = I32x4::splat(42)
+    assert_eq(v.get(0), 42)
+    assert_eq(v.get(1), 42)
+    assert_eq(v.get(2), 42)
+    assert_eq(v.get(3), 42)
+    0
+}
+
+@test
+func test_i32x4_zero() -> I32 {
+    let v: I32x4 = I32x4::zero()
+    assert_eq(v.sum(), 0)
+    0
+}
+
+@test
+func test_i32x4_set() -> I32 {
+    let v: I32x4 = I32x4::zero()
+    let w: I32x4 = v.set(2, 99)
+    assert_eq(w.get(0), 0)
+    assert_eq(w.get(2), 99)
+    0
+}
+
+@test
+func test_i32x4_add_sub() -> I32 {
+    let a: I32x4 = I32x4::new(1, 2, 3, 4)
+    let b: I32x4 = I32x4::new(10, 20, 30, 40)
+    let c: I32x4 = a.add(b)
+    assert_eq(c.get(0), 11)
+    assert_eq(c.get(3), 44)
+    let d: I32x4 = b.sub(a)
+    assert_eq(d.get(0), 9)
+    assert_eq(d.get(3), 36)
+    0
+}
+
+@test
+func test_i32x4_mul_div() -> I32 {
+    let a: I32x4 = I32x4::new(2, 3, 4, 5)
+    let b: I32x4 = I32x4::new(10, 10, 10, 10)
+    let c: I32x4 = a.mul(b)
+    assert_eq(c.get(0), 20)
+    assert_eq(c.get(3), 50)
+    let d: I32x4 = b.div(a)
+    assert_eq(d.get(0), 5)
+    assert_eq(d.get(1), 3)
+    0
+}
+
+@test
+func test_i32x4_neg() -> I32 {
+    let a: I32x4 = I32x4::new(1, -2, 3, -4)
+    let b: I32x4 = a.neg()
+    assert_eq(b.get(0), -1)
+    assert_eq(b.get(1), 2)
+    assert_eq(b.get(2), -3)
+    assert_eq(b.get(3), 4)
+    0
+}

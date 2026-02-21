@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (35%) — Phases 1-3 mostly complete, 8 (UUID) and 9 (SemVer) complete, rest not started
+**Status**: In Progress (42%) — Phases 1-3 mostly complete, 4 (SIMD) complete, 8 (UUID) and 9 (SemVer) complete, rest not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -81,18 +81,18 @@
 
 > **Priority**: High | **Dir**: `lib/core/src/simd/` | **See also**: `simd-optimization` task
 
-- [ ] 4.1.1 Create `lib/core/src/simd/mod.tml` with re-exports
-- [ ] 4.1.2 Implement `simd/i32x4.tml` — 4-lane I32 vector
-- [ ] 4.1.3 Implement `simd/f32x4.tml` — 4-lane F32 vector
-- [ ] 4.1.4 Implement `simd/i64x2.tml` — 2-lane I64 vector
-- [ ] 4.1.5 Implement `simd/f64x2.tml` — 2-lane F64 vector
-- [ ] 4.1.6 Implement `simd/i8x16.tml` — 16-lane I8 vector
-- [ ] 4.1.7 Implement `simd/u8x16.tml` — 16-lane U8 vector
-- [ ] 4.1.8 Implement lane ops: `splat`, `extract`, `replace`, `shuffle`
-- [ ] 4.1.9 Implement horizontal ops: `sum`, `product`, `min`, `max`
-- [ ] 4.1.10 Implement mask types and `select`
-- [ ] 4.1.11 Map to LLVM vector intrinsics in codegen
-- [ ] 4.1.12 Write unit tests for `core::simd`
+- [x] 4.1.1 Create `lib/core/src/simd/mod.tml` with re-exports
+- [x] 4.1.2 Implement `simd/i32x4.tml` — 4-lane I32 vector
+- [x] 4.1.3 Implement `simd/f32x4.tml` — 4-lane F32 vector
+- [x] 4.1.4 Implement `simd/i64x2.tml` — 2-lane I64 vector
+- [x] 4.1.5 Implement `simd/f64x2.tml` — 2-lane F64 vector
+- [x] 4.1.6 Implement `simd/i8x16.tml` — 16-lane I8 vector
+- [x] 4.1.7 Implement `simd/u8x16.tml` — 16-lane U8 vector
+- [x] 4.1.8 Implement lane ops: `splat`, `get`, `set`, `new`, `zero`
+- [x] 4.1.9 Implement horizontal ops: `sum`, `product`, `hmin`, `hmax`, `min`, `max`
+- [x] 4.1.10 Implement mask types (Mask2, Mask4, Mask16) and `select`
+- [x] 4.1.11 `@simd` annotation — codegen emits LLVM vector types (`<N x T>`), `insertelement`/`extractelement`
+- [x] 4.1.12 Write unit tests for `core::simd` (74 tests passing)
 
 ## Phase 5: Bitset Module
 

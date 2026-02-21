@@ -81,3 +81,4 @@ pub mod reflect    // TypeInfo, FieldInfo, Reflect behavior for runtime reflecti
 pub mod sync       // Raw atomic operations, fences, spinlocks
 pub mod intrinsics // Compiler intrinsics for runtime reflection
 pub mod encoding   // Base64, hex, percent-encoding
+pub mod simd       // Portable SIMD vector types (I32x4, F32x4, etc.)

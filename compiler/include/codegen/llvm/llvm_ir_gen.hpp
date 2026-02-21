@@ -512,6 +512,19 @@ private:
     std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)
     std::unordered_set<std::string> not_found_struct_types_; // Negative cache for struct lookups
 
+    // SIMD vector type info — @simd annotated structs use LLVM vector types (<N x T>)
+    struct SimdTypeInfo {
+        std::string element_llvm_type; // "i32", "float", "i8", etc.
+        int lane_count;                // 4, 2, 16
+    };
+    std::unordered_map<std::string, SimdTypeInfo> simd_types_;
+    bool is_simd_type(const std::string& struct_name) const {
+        return simd_types_.find(struct_name) != simd_types_.end();
+    }
+    std::string simd_vec_type_str(const SimdTypeInfo& info) const {
+        return "<" + std::to_string(info.lane_count) + " x " + info.element_llvm_type + ">";
+    }
+
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
 
@@ -1444,6 +1457,8 @@ private:
                          bool is_primitive) -> std::string;
     auto gen_struct_expr(const parser::StructExpr& s) -> std::string;
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
+    auto gen_simd_struct_expr_ptr(const parser::StructExpr& s, const SimdTypeInfo& info)
+        -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;
     auto gen_array(const parser::ArrayExpr& arr) -> std::string;
     auto gen_index(const parser::IndexExpr& idx) -> std::string;

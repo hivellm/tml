@@ -1,0 +1,143 @@
+//! 16-lane U8 SIMD vector type.
+
+use core::simd::mask::Mask16
+
+/// A 16-lane vector of U8 values (128 bits total).
+@simd
+pub type U8x16 {
+    e0: U8, e1: U8, e2: U8, e3: U8,
+    e4: U8, e5: U8, e6: U8, e7: U8,
+    e8: U8, e9: U8, e10: U8, e11: U8,
+    e12: U8, e13: U8, e14: U8, e15: U8
+}
+
+impl U8x16 {
+    /// Construct from 16 lane values.
+    pub func new(
+        e0: U8, e1: U8, e2: U8, e3: U8,
+        e4: U8, e5: U8, e6: U8, e7: U8,
+        e8: U8, e9: U8, e10: U8, e11: U8,
+        e12: U8, e13: U8, e14: U8, e15: U8
+    ) -> U8x16 {
+        return U8x16 {
+            e0: e0, e1: e1, e2: e2, e3: e3,
+            e4: e4, e5: e5, e6: e6, e7: e7,
+            e8: e8, e9: e9, e10: e10, e11: e11,
+            e12: e12, e13: e13, e14: e14, e15: e15
+        }
+    }
+
+    /// Broadcast a single value to all lanes.
+    pub func splat(v: U8) -> U8x16 {
+        return U8x16 {
+            e0: v, e1: v, e2: v, e3: v,
+            e4: v, e5: v, e6: v, e7: v,
+            e8: v, e9: v, e10: v, e11: v,
+            e12: v, e13: v, e14: v, e15: v
+        }
+    }
+
+    /// All lanes zero.
+    pub func zero() -> U8x16 {
+        return U8x16::splat(0 as U8)
+    }
+
+    /// Get lane by index (0-15). Returns 0 for out-of-bounds.
+    pub func get(this, idx: I32) -> U8 {
+        if idx == 0 { return this.e0 }
+        if idx == 1 { return this.e1 }
+        if idx == 2 { return this.e2 }
+        if idx == 3 { return this.e3 }
+        if idx == 4 { return this.e4 }
+        if idx == 5 { return this.e5 }
+        if idx == 6 { return this.e6 }
+        if idx == 7 { return this.e7 }
+        if idx == 8 { return this.e8 }
+        if idx == 9 { return this.e9 }
+        if idx == 10 { return this.e10 }
+        if idx == 11 { return this.e11 }
+        if idx == 12 { return this.e12 }
+        if idx == 13 { return this.e13 }
+        if idx == 14 { return this.e14 }
+        if idx == 15 { return this.e15 }
+        return 0 as U8
+    }
+
+    // -- Arithmetic --
+
+    pub func add(this, other: U8x16) -> U8x16 {
+        return U8x16 {
+            e0: this.e0 + other.e0, e1: this.e1 + other.e1,
+            e2: this.e2 + other.e2, e3: this.e3 + other.e3,
+            e4: this.e4 + other.e4, e5: this.e5 + other.e5,
+            e6: this.e6 + other.e6, e7: this.e7 + other.e7,
+            e8: this.e8 + other.e8, e9: this.e9 + other.e9,
+            e10: this.e10 + other.e10, e11: this.e11 + other.e11,
+            e12: this.e12 + other.e12, e13: this.e13 + other.e13,
+            e14: this.e14 + other.e14, e15: this.e15 + other.e15
+        }
+    }
+
+    pub func sub(this, other: U8x16) -> U8x16 {
+        return U8x16 {
+            e0: this.e0 - other.e0, e1: this.e1 - other.e1,
+            e2: this.e2 - other.e2, e3: this.e3 - other.e3,
+            e4: this.e4 - other.e4, e5: this.e5 - other.e5,
+            e6: this.e6 - other.e6, e7: this.e7 - other.e7,
+            e8: this.e8 - other.e8, e9: this.e9 - other.e9,
+            e10: this.e10 - other.e10, e11: this.e11 - other.e11,
+            e12: this.e12 - other.e12, e13: this.e13 - other.e13,
+            e14: this.e14 - other.e14, e15: this.e15 - other.e15
+        }
+    }
+
+    // -- Comparison --
+
+    pub func eq(this, other: U8x16) -> Mask16 {
+        return Mask16 {
+            m0: this.e0 == other.e0, m1: this.e1 == other.e1,
+            m2: this.e2 == other.e2, m3: this.e3 == other.e3,
+            m4: this.e4 == other.e4, m5: this.e5 == other.e5,
+            m6: this.e6 == other.e6, m7: this.e7 == other.e7,
+            m8: this.e8 == other.e8, m9: this.e9 == other.e9,
+            m10: this.e10 == other.e10, m11: this.e11 == other.e11,
+            m12: this.e12 == other.e12, m13: this.e13 == other.e13,
+            m14: this.e14 == other.e14, m15: this.e15 == other.e15
+        }
+    }
+
+    // -- Horizontal --
+
+    pub func sum(this) -> U8 {
+        return this.e0 + this.e1 + this.e2 + this.e3
+             + this.e4 + this.e5 + this.e6 + this.e7
+             + this.e8 + this.e9 + this.e10 + this.e11
+             + this.e12 + this.e13 + this.e14 + this.e15
+    }
+}
+
+/// Select lanes from `if_true` or `if_false` based on mask.
+pub func select(mask: Mask16, if_true: U8x16, if_false: U8x16) -> U8x16 {
+    var r0: U8 = if_false.e0; if mask.m0 { r0 = if_true.e0 }
+    var r1: U8 = if_false.e1; if mask.m1 { r1 = if_true.e1 }
+    var r2: U8 = if_false.e2; if mask.m2 { r2 = if_true.e2 }
+    var r3: U8 = if_false.e3; if mask.m3 { r3 = if_true.e3 }
+    var r4: U8 = if_false.e4; if mask.m4 { r4 = if_true.e4 }
+    var r5: U8 = if_false.e5; if mask.m5 { r5 = if_true.e5 }
+    var r6: U8 = if_false.e6; if mask.m6 { r6 = if_true.e6 }
+    var r7: U8 = if_false.e7; if mask.m7 { r7 = if_true.e7 }
+    var r8: U8 = if_false.e8; if mask.m8 { r8 = if_true.e8 }
+    var r9: U8 = if_false.e9; if mask.m9 { r9 = if_true.e9 }
+    var r10: U8 = if_false.e10; if mask.m10 { r10 = if_true.e10 }
+    var r11: U8 = if_false.e11; if mask.m11 { r11 = if_true.e11 }
+    var r12: U8 = if_false.e12; if mask.m12 { r12 = if_true.e12 }
+    var r13: U8 = if_false.e13; if mask.m13 { r13 = if_true.e13 }
+    var r14: U8 = if_false.e14; if mask.m14 { r14 = if_true.e14 }
+    var r15: U8 = if_false.e15; if mask.m15 { r15 = if_true.e15 }
+    return U8x16 {
+        e0: r0, e1: r1, e2: r2, e3: r3,
+        e4: r4, e5: r5, e6: r6, e7: r7,
+        e8: r8, e9: r9, e10: r10, e11: r11,
+        e12: r12, e13: r13, e14: r14, e15: r15
+    }
+}

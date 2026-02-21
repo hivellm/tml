@@ -1,0 +1,96 @@
+//! Tests for I8x16 basic operations.
+
+use core::simd::i8x16::{I8x16, select}
+use core::simd::mask::Mask16
+
+@test func test_new_and_get() -> I32 {
+    let v = I8x16::new(
+        1 as I8, 2 as I8, 3 as I8, 4 as I8,
+        5 as I8, 6 as I8, 7 as I8, 8 as I8,
+        9 as I8, 10 as I8, 11 as I8, 12 as I8,
+        13 as I8, 14 as I8, 15 as I8, 16 as I8
+    )
+    if v.get(0) != (1 as I8) { return 1 }
+    if v.get(7) != (8 as I8) { return 2 }
+    if v.get(15) != (16 as I8) { return 3 }
+    return 0
+}
+
+@test func test_splat() -> I32 {
+    let v = I8x16::splat(42 as I8)
+    if v.get(0) != (42 as I8) { return 1 }
+    if v.get(8) != (42 as I8) { return 2 }
+    if v.get(15) != (42 as I8) { return 3 }
+    return 0
+}
+
+@test func test_zero() -> I32 {
+    let v = I8x16::zero()
+    if v.get(0) != (0 as I8) { return 1 }
+    if v.get(15) != (0 as I8) { return 2 }
+    return 0
+}
+
+@test func test_add() -> I32 {
+    let a = I8x16::splat(10 as I8)
+    let b = I8x16::splat(5 as I8)
+    let c = a.add(b)
+    if c.get(0) != (15 as I8) { return 1 }
+    if c.get(15) != (15 as I8) { return 2 }
+    return 0
+}
+
+@test func test_sub() -> I32 {
+    let a = I8x16::splat(20 as I8)
+    let b = I8x16::splat(7 as I8)
+    let c = a.sub(b)
+    if c.get(0) != (13 as I8) { return 1 }
+    if c.get(15) != (13 as I8) { return 2 }
+    return 0
+}
+
+@test func test_eq_ne() -> I32 {
+    let a = I8x16::splat(5 as I8)
+    let b = I8x16::new(
+        5 as I8, 0 as I8, 5 as I8, 0 as I8,
+        5 as I8, 0 as I8, 5 as I8, 0 as I8,
+        5 as I8, 0 as I8, 5 as I8, 0 as I8,
+        5 as I8, 0 as I8, 5 as I8, 0 as I8
+    )
+    let m = a.eq(b)
+    if not m.m0 { return 1 }
+    if m.m1 { return 2 }
+    if not m.m2 { return 3 }
+    let n = a.ne(b)
+    if n.m0 { return 4 }
+    if not n.m1 { return 5 }
+    return 0
+}
+
+@test func test_sum() -> I32 {
+    let v = I8x16::new(
+        1 as I8, 1 as I8, 1 as I8, 1 as I8,
+        1 as I8, 1 as I8, 1 as I8, 1 as I8,
+        1 as I8, 1 as I8, 1 as I8, 1 as I8,
+        1 as I8, 1 as I8, 1 as I8, 1 as I8
+    )
+    if v.sum() != (16 as I8) { return 1 }
+    return 0
+}
+
+@test func test_select() -> I32 {
+    let mask = Mask16 {
+        m0: true, m1: false, m2: true, m3: false,
+        m4: true, m5: false, m6: true, m7: false,
+        m8: true, m9: false, m10: true, m11: false,
+        m12: true, m13: false, m14: true, m15: false
+    }
+    let a = I8x16::splat(10 as I8)
+    let b = I8x16::splat(1 as I8)
+    let r = select(mask, a, b)
+    if r.get(0) != (10 as I8) { return 1 }
+    if r.get(1) != (1 as I8) { return 2 }
+    if r.get(2) != (10 as I8) { return 3 }
+    if r.get(3) != (1 as I8) { return 4 }
+    return 0
+}

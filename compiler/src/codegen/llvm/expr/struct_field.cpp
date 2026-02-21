@@ -817,6 +817,21 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         return result;
     }
 
+    // SIMD vector field access — use extractelement instead of GEP+load
+    if (is_simd_type(type_name)) {
+        const auto& info = simd_types_.at(type_name);
+        std::string vec_type = simd_vec_type_str(info);
+        // Load the full vector
+        std::string vec_val = fresh_reg();
+        emit_line("  " + vec_val + " = load " + vec_type + ", ptr " + struct_ptr);
+        // Extract the element
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = extractelement " + vec_type + " " + vec_val + ", i32 " +
+                  std::to_string(field_idx));
+        last_expr_type_ = info.element_llvm_type;
+        return result;
+    }
+
     std::string field_ptr;
 
     // Check if this is an inherited field (for class types)

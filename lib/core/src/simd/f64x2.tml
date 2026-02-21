@@ -1,0 +1,120 @@
+//! 2-lane F64 SIMD vector type.
+
+use core::simd::mask::Mask2
+
+/// A 2-lane vector of F64 values (128 bits total).
+@simd
+pub type F64x2 {
+    e0: F64,
+    e1: F64
+}
+
+impl F64x2 {
+    pub func new(e0: F64, e1: F64) -> F64x2 {
+        return F64x2 { e0: e0, e1: e1 }
+    }
+
+    pub func splat(v: F64) -> F64x2 {
+        return F64x2 { e0: v, e1: v }
+    }
+
+    pub func zero() -> F64x2 {
+        return F64x2 { e0: 0.0, e1: 0.0 }
+    }
+
+    pub func get(this, idx: I32) -> F64 {
+        if idx == 0 { return this.e0 }
+        if idx == 1 { return this.e1 }
+        return 0.0
+    }
+
+    pub func set(this, idx: I32, val: F64) -> F64x2 {
+        var r: F64x2 = F64x2 { e0: this.e0, e1: this.e1 }
+        if idx == 0 { r.e0 = val }
+        if idx == 1 { r.e1 = val }
+        return r
+    }
+
+    // -- Arithmetic --
+
+    pub func add(this, other: F64x2) -> F64x2 {
+        return F64x2 { e0: this.e0 + other.e0, e1: this.e1 + other.e1 }
+    }
+
+    pub func sub(this, other: F64x2) -> F64x2 {
+        return F64x2 { e0: this.e0 - other.e0, e1: this.e1 - other.e1 }
+    }
+
+    pub func mul(this, other: F64x2) -> F64x2 {
+        return F64x2 { e0: this.e0 * other.e0, e1: this.e1 * other.e1 }
+    }
+
+    pub func div(this, other: F64x2) -> F64x2 {
+        return F64x2 { e0: this.e0 / other.e0, e1: this.e1 / other.e1 }
+    }
+
+    pub func neg(this) -> F64x2 {
+        return F64x2 { e0: 0.0 - this.e0, e1: 0.0 - this.e1 }
+    }
+
+    // -- Comparison --
+
+    pub func eq(this, other: F64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 == other.e0, m1: this.e1 == other.e1 }
+    }
+
+    pub func ne(this, other: F64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 != other.e0, m1: this.e1 != other.e1 }
+    }
+
+    pub func lt(this, other: F64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 < other.e0, m1: this.e1 < other.e1 }
+    }
+
+    pub func gt(this, other: F64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 > other.e0, m1: this.e1 > other.e1 }
+    }
+
+    // -- Horizontal --
+
+    pub func sum(this) -> F64 {
+        return this.e0 + this.e1
+    }
+
+    pub func hmin(this) -> F64 {
+        if this.e1 < this.e0 { return this.e1 }
+        return this.e0
+    }
+
+    pub func hmax(this) -> F64 {
+        if this.e1 > this.e0 { return this.e1 }
+        return this.e0
+    }
+
+    pub func min(this, other: F64x2) -> F64x2 {
+        var r0: F64 = this.e0; if other.e0 < r0 { r0 = other.e0 }
+        var r1: F64 = this.e1; if other.e1 < r1 { r1 = other.e1 }
+        return F64x2 { e0: r0, e1: r1 }
+    }
+
+    pub func max(this, other: F64x2) -> F64x2 {
+        var r0: F64 = this.e0; if other.e0 > r0 { r0 = other.e0 }
+        var r1: F64 = this.e1; if other.e1 > r1 { r1 = other.e1 }
+        return F64x2 { e0: r0, e1: r1 }
+    }
+
+    // -- Math --
+
+    pub func abs(this) -> F64x2 {
+        var r0: F64 = this.e0; if r0 < 0.0 { r0 = 0.0 - r0 }
+        var r1: F64 = this.e1; if r1 < 0.0 { r1 = 0.0 - r1 }
+        return F64x2 { e0: r0, e1: r1 }
+    }
+}
+
+/// Select lanes from `if_true` or `if_false` based on mask.
+pub func select(mask: Mask2, if_true: F64x2, if_false: F64x2) -> F64x2 {
+    var r0: F64 = if_false.e0; if mask.m0 { r0 = if_true.e0 }
+    var r1: F64 = if_false.e1; if mask.m1 { r1 = if_true.e1 }
+    return F64x2 { e0: r0, e1: r1 }
+}

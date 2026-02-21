@@ -128,10 +128,86 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
     return t;
 }
 
+// Generate SIMD struct expression via insertelement chain, returning pointer to alloca
+auto LLVMIRGen::gen_simd_struct_expr_ptr(const parser::StructExpr& s, const SimdTypeInfo& info)
+    -> std::string {
+    std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
+    std::string vec_type = simd_vec_type_str(info);
+    std::string struct_type_name = "%struct." + base_name;
+
+    // Get struct name for field lookup
+    std::string struct_name_for_lookup = base_name;
+
+    // Build the vector value via insertelement chain
+    std::string current_vec = "undef";
+    for (size_t i = 0; i < s.fields.size(); ++i) {
+        const std::string& field_name = s.fields[i].first;
+        int field_idx = get_field_index(struct_name_for_lookup, field_name);
+
+        // Set expected literal type for proper coercion
+        if (info.element_llvm_type == "i8") {
+            expected_literal_type_ = "i8";
+            expected_literal_is_unsigned_ = false;
+        } else if (info.element_llvm_type == "i16") {
+            expected_literal_type_ = "i16";
+            expected_literal_is_unsigned_ = false;
+        } else if (info.element_llvm_type == "i64") {
+            expected_literal_type_ = "i64";
+            expected_literal_is_unsigned_ = false;
+        }
+
+        std::string field_val = gen_expr(*s.fields[i].second);
+        std::string actual_type = last_expr_type_;
+
+        expected_literal_type_.clear();
+        expected_literal_is_unsigned_ = false;
+
+        // Handle type coercions (double -> float, i32 -> i64, etc.)
+        if (actual_type != info.element_llvm_type) {
+            if (actual_type == "double" && info.element_llvm_type == "float") {
+                std::string casted = fresh_reg();
+                emit_line("  " + casted + " = fptrunc double " + field_val + " to float");
+                field_val = casted;
+            } else if (actual_type == "float" && info.element_llvm_type == "double") {
+                std::string casted = fresh_reg();
+                emit_line("  " + casted + " = fpext float " + field_val + " to double");
+                field_val = casted;
+            } else if (actual_type == "i32" && info.element_llvm_type == "i64") {
+                std::string casted = fresh_reg();
+                emit_line("  " + casted + " = sext i32 " + field_val + " to i64");
+                field_val = casted;
+            } else if (actual_type == "i64" && info.element_llvm_type == "i32") {
+                std::string casted = fresh_reg();
+                emit_line("  " + casted + " = trunc i64 " + field_val + " to i32");
+                field_val = casted;
+            }
+        }
+
+        std::string next_vec = fresh_reg();
+        emit_line("  " + next_vec + " = insertelement " + vec_type + " " + current_vec + ", " +
+                  info.element_llvm_type + " " + field_val + ", i32 " + std::to_string(field_idx));
+        current_vec = next_vec;
+    }
+
+    // Store to alloca for consistency with rest of codegen
+    std::string ptr = fresh_reg();
+    emit_line("  " + ptr + " = alloca " + vec_type);
+    emit_line("  store " + vec_type + " " + current_vec + ", ptr " + ptr);
+
+    last_expr_type_ = struct_type_name;
+    return ptr;
+}
+
 // Generate struct expression, returning pointer to allocated struct
 auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string {
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
     std::string struct_type;
+
+    // Check if this is a SIMD type — use insertelement construction
+    auto simd_it = simd_types_.find(base_name);
+    if (simd_it != simd_types_.end()) {
+        return gen_simd_struct_expr_ptr(s, simd_it->second);
+    }
 
     // Check if this is a union type - unions have special initialization
     // Union literals only have one field set, and we bitcast to store it
@@ -780,6 +856,17 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
     std::string ptr = gen_struct_expr_ptr(s);
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
     std::string struct_type;
+
+    // Check if this is a SIMD vector type
+    auto simd_it = simd_types_.find(base_name);
+    if (simd_it != simd_types_.end()) {
+        const auto& info = simd_it->second;
+        std::string vec_type = simd_vec_type_str(info);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + vec_type + ", ptr " + ptr);
+        last_expr_type_ = vec_type;
+        return result;
+    }
 
     // Check if this is a union type
     if (union_types_.find(base_name) != union_types_.end()) {

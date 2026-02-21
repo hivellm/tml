@@ -1,0 +1,36 @@
+//! Portable SIMD vector types.
+//!
+//! This module provides fixed-width vector types for data-parallel computation.
+//! Types annotated with `@simd` compile to native LLVM vector types (e.g. `<4 x i32>`)
+//! and use `insertelement`/`extractelement` for lane access. LLVM collapses
+//! element-wise patterns into single vector instructions at -O2+.
+//!
+//! # Types
+//!
+//! | Type | Lanes | Element | Description |
+//! |------|-------|---------|-------------|
+//! | `I32x4` | 4 | I32 | 4-lane signed 32-bit integer |
+//! | `F32x4` | 4 | F32 | 4-lane 32-bit float |
+//! | `I64x2` | 2 | I64 | 2-lane signed 64-bit integer |
+//! | `F64x2` | 2 | F64 | 2-lane 64-bit float |
+//! | `I8x16` | 16 | I8 | 16-lane signed 8-bit integer |
+//! | `U8x16` | 16 | U8 | 16-lane unsigned 8-bit integer |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::simd::i32x4::I32x4
+//!
+//! let a = I32x4::new(1, 2, 3, 4)
+//! let b = I32x4::splat(10)
+//! let c = a.add(b)
+//! assert(c.sum() == 50)
+//! ```
+
+pub mod mask
+pub mod i32x4
+pub mod f32x4
+pub mod i64x2
+pub mod f64x2
+pub mod i8x16
+pub mod u8x16

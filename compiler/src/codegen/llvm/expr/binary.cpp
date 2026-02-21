@@ -701,12 +701,29 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // Get field pointer
                 int field_idx = get_field_index(type_name, field.field);
                 std::string field_type = get_field_type(type_name, field.field);
-                std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + gep_type + ", ptr " +
-                          struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
-                // Store value to field
-                emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
+                // SIMD vector field assignment — load+insertelement+store
+                if (is_simd_type(type_name)) {
+                    const auto& info = simd_types_.at(type_name);
+                    std::string vec_type = simd_vec_type_str(info);
+                    // Load current vector
+                    std::string old_vec = fresh_reg();
+                    emit_line("  " + old_vec + " = load " + vec_type + ", ptr " + struct_ptr);
+                    // Insert new element
+                    std::string new_vec = fresh_reg();
+                    emit_line("  " + new_vec + " = insertelement " + vec_type + " " + old_vec +
+                              ", " + info.element_llvm_type + " " + right + ", i32 " +
+                              std::to_string(field_idx));
+                    // Store updated vector
+                    emit_line("  store " + vec_type + " " + new_vec + ", ptr " + struct_ptr);
+                } else {
+                    std::string field_ptr = fresh_reg();
+                    emit_line("  " + field_ptr + " = getelementptr " + gep_type + ", ptr " +
+                              struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+
+                    // Store value to field
+                    emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
+                }
             }
         } else if (bin.left->is<parser::PathExpr>()) {
             // PathExpr assignment: Counter::count = value (static field via :: syntax)

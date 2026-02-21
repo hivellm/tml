@@ -1,0 +1,227 @@
+//! SIMD mask types for lane selection and comparison results.
+//!
+//! Masks are produced by vector comparison operations (eq, lt, gt, etc.)
+//! and consumed by `select` to choose lanes from two vectors.
+
+/// 2-lane mask for I64x2 and F64x2 comparisons.
+pub type Mask2 {
+    m0: Bool,
+    m1: Bool
+}
+
+impl Mask2 {
+    /// All lanes true.
+    pub func all_true() -> Mask2 {
+        return Mask2 { m0: true, m1: true }
+    }
+
+    /// All lanes false.
+    pub func all_false() -> Mask2 {
+        return Mask2 { m0: false, m1: false }
+    }
+
+    /// Construct from individual lane values.
+    pub func new(m0: Bool, m1: Bool) -> Mask2 {
+        return Mask2 { m0: m0, m1: m1 }
+    }
+
+    /// Logical AND of two masks.
+    pub func band(this, other: Mask2) -> Mask2 {
+        return Mask2 {
+            m0: this.m0 and other.m0,
+            m1: this.m1 and other.m1
+        }
+    }
+
+    /// Logical OR of two masks.
+    pub func bor(this, other: Mask2) -> Mask2 {
+        return Mask2 {
+            m0: this.m0 or other.m0,
+            m1: this.m1 or other.m1
+        }
+    }
+
+    /// Logical NOT of a mask.
+    pub func bnot(this) -> Mask2 {
+        return Mask2 {
+            m0: not this.m0,
+            m1: not this.m1
+        }
+    }
+
+    /// True if any lane is true.
+    pub func any(this) -> Bool {
+        return this.m0 or this.m1
+    }
+
+    /// True if all lanes are true.
+    pub func all(this) -> Bool {
+        return this.m0 and this.m1
+    }
+
+    /// True if no lane is true.
+    pub func none(this) -> Bool {
+        return not this.m0 and not this.m1
+    }
+
+    /// Count the number of true lanes.
+    pub func count(this) -> I32 {
+        var n: I32 = 0
+        if this.m0 { n = n + 1 }
+        if this.m1 { n = n + 1 }
+        return n
+    }
+}
+
+/// 4-lane mask for I32x4 and F32x4 comparisons.
+pub type Mask4 {
+    m0: Bool,
+    m1: Bool,
+    m2: Bool,
+    m3: Bool
+}
+
+impl Mask4 {
+    /// All lanes true.
+    pub func all_true() -> Mask4 {
+        return Mask4 { m0: true, m1: true, m2: true, m3: true }
+    }
+
+    /// All lanes false.
+    pub func all_false() -> Mask4 {
+        return Mask4 { m0: false, m1: false, m2: false, m3: false }
+    }
+
+    /// Construct from individual lane values.
+    pub func new(m0: Bool, m1: Bool, m2: Bool, m3: Bool) -> Mask4 {
+        return Mask4 { m0: m0, m1: m1, m2: m2, m3: m3 }
+    }
+
+    /// Logical AND of two masks.
+    pub func band(this, other: Mask4) -> Mask4 {
+        return Mask4 {
+            m0: this.m0 and other.m0,
+            m1: this.m1 and other.m1,
+            m2: this.m2 and other.m2,
+            m3: this.m3 and other.m3
+        }
+    }
+
+    /// Logical OR of two masks.
+    pub func bor(this, other: Mask4) -> Mask4 {
+        return Mask4 {
+            m0: this.m0 or other.m0,
+            m1: this.m1 or other.m1,
+            m2: this.m2 or other.m2,
+            m3: this.m3 or other.m3
+        }
+    }
+
+    /// Logical NOT of a mask.
+    pub func bnot(this) -> Mask4 {
+        return Mask4 {
+            m0: not this.m0,
+            m1: not this.m1,
+            m2: not this.m2,
+            m3: not this.m3
+        }
+    }
+
+    /// True if any lane is true.
+    pub func any(this) -> Bool {
+        return this.m0 or this.m1 or this.m2 or this.m3
+    }
+
+    /// True if all lanes are true.
+    pub func all(this) -> Bool {
+        return this.m0 and this.m1 and this.m2 and this.m3
+    }
+
+    /// True if no lane is true.
+    pub func none(this) -> Bool {
+        return not this.m0 and not this.m1 and not this.m2 and not this.m3
+    }
+
+    /// Count the number of true lanes.
+    pub func count(this) -> I32 {
+        var n: I32 = 0
+        if this.m0 { n = n + 1 }
+        if this.m1 { n = n + 1 }
+        if this.m2 { n = n + 1 }
+        if this.m3 { n = n + 1 }
+        return n
+    }
+}
+
+/// 16-lane mask for I8x16 and U8x16 comparisons.
+pub type Mask16 {
+    m0: Bool, m1: Bool, m2: Bool, m3: Bool,
+    m4: Bool, m5: Bool, m6: Bool, m7: Bool,
+    m8: Bool, m9: Bool, m10: Bool, m11: Bool,
+    m12: Bool, m13: Bool, m14: Bool, m15: Bool
+}
+
+impl Mask16 {
+    /// All lanes true.
+    pub func all_true() -> Mask16 {
+        return Mask16 {
+            m0: true, m1: true, m2: true, m3: true,
+            m4: true, m5: true, m6: true, m7: true,
+            m8: true, m9: true, m10: true, m11: true,
+            m12: true, m13: true, m14: true, m15: true
+        }
+    }
+
+    /// All lanes false.
+    pub func all_false() -> Mask16 {
+        return Mask16 {
+            m0: false, m1: false, m2: false, m3: false,
+            m4: false, m5: false, m6: false, m7: false,
+            m8: false, m9: false, m10: false, m11: false,
+            m12: false, m13: false, m14: false, m15: false
+        }
+    }
+
+    /// True if any lane is true.
+    pub func any(this) -> Bool {
+        return this.m0 or this.m1 or this.m2 or this.m3
+            or this.m4 or this.m5 or this.m6 or this.m7
+            or this.m8 or this.m9 or this.m10 or this.m11
+            or this.m12 or this.m13 or this.m14 or this.m15
+    }
+
+    /// True if all lanes are true.
+    pub func all(this) -> Bool {
+        return this.m0 and this.m1 and this.m2 and this.m3
+            and this.m4 and this.m5 and this.m6 and this.m7
+            and this.m8 and this.m9 and this.m10 and this.m11
+            and this.m12 and this.m13 and this.m14 and this.m15
+    }
+
+    /// True if no lane is true.
+    pub func none(this) -> Bool {
+        return not this.any()
+    }
+
+    /// Count the number of true lanes.
+    pub func count(this) -> I32 {
+        var n: I32 = 0
+        if this.m0 { n = n + 1 }
+        if this.m1 { n = n + 1 }
+        if this.m2 { n = n + 1 }
+        if this.m3 { n = n + 1 }
+        if this.m4 { n = n + 1 }
+        if this.m5 { n = n + 1 }
+        if this.m6 { n = n + 1 }
+        if this.m7 { n = n + 1 }
+        if this.m8 { n = n + 1 }
+        if this.m9 { n = n + 1 }
+        if this.m10 { n = n + 1 }
+        if this.m11 { n = n + 1 }
+        if this.m12 { n = n + 1 }
+        if this.m13 { n = n + 1 }
+        if this.m14 { n = n + 1 }
+        if this.m15 { n = n + 1 }
+        return n
+    }
+}

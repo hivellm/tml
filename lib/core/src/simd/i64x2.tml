@@ -1,0 +1,131 @@
+//! 2-lane I64 SIMD vector type.
+
+use core::simd::mask::Mask2
+
+/// A 2-lane vector of I64 values (128 bits total).
+@simd
+pub type I64x2 {
+    e0: I64,
+    e1: I64
+}
+
+impl I64x2 {
+    /// Construct from two lane values.
+    pub func new(e0: I64, e1: I64) -> I64x2 {
+        return I64x2 { e0: e0, e1: e1 }
+    }
+
+    /// Broadcast a single value to all lanes.
+    pub func splat(v: I64) -> I64x2 {
+        return I64x2 { e0: v, e1: v }
+    }
+
+    /// All lanes zero.
+    pub func zero() -> I64x2 {
+        return I64x2 { e0: 0 as I64, e1: 0 as I64 }
+    }
+
+    /// Get lane by index (0-1). Returns 0 for out-of-bounds.
+    pub func get(this, idx: I32) -> I64 {
+        if idx == 0 { return this.e0 }
+        if idx == 1 { return this.e1 }
+        return 0 as I64
+    }
+
+    /// Return a new vector with lane `idx` replaced by `val`.
+    pub func set(this, idx: I32, val: I64) -> I64x2 {
+        var r: I64x2 = I64x2 { e0: this.e0, e1: this.e1 }
+        if idx == 0 { r.e0 = val }
+        if idx == 1 { r.e1 = val }
+        return r
+    }
+
+    // -- Arithmetic --
+
+    pub func add(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 + other.e0, e1: this.e1 + other.e1 }
+    }
+
+    pub func sub(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 - other.e0, e1: this.e1 - other.e1 }
+    }
+
+    pub func mul(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 * other.e0, e1: this.e1 * other.e1 }
+    }
+
+    pub func div(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 / other.e0, e1: this.e1 / other.e1 }
+    }
+
+    pub func neg(this) -> I64x2 {
+        return I64x2 { e0: (0 as I64) - this.e0, e1: (0 as I64) - this.e1 }
+    }
+
+    // -- Comparison --
+
+    pub func eq(this, other: I64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 == other.e0, m1: this.e1 == other.e1 }
+    }
+
+    pub func ne(this, other: I64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 != other.e0, m1: this.e1 != other.e1 }
+    }
+
+    pub func lt(this, other: I64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 < other.e0, m1: this.e1 < other.e1 }
+    }
+
+    pub func gt(this, other: I64x2) -> Mask2 {
+        return Mask2 { m0: this.e0 > other.e0, m1: this.e1 > other.e1 }
+    }
+
+    // -- Bitwise --
+
+    pub func band(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 & other.e0, e1: this.e1 & other.e1 }
+    }
+
+    pub func bor(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 | other.e0, e1: this.e1 | other.e1 }
+    }
+
+    pub func bxor(this, other: I64x2) -> I64x2 {
+        return I64x2 { e0: this.e0 ^ other.e0, e1: this.e1 ^ other.e1 }
+    }
+
+    // -- Horizontal --
+
+    pub func sum(this) -> I64 {
+        return this.e0 + this.e1
+    }
+
+    pub func hmin(this) -> I64 {
+        if this.e1 < this.e0 { return this.e1 }
+        return this.e0
+    }
+
+    pub func hmax(this) -> I64 {
+        if this.e1 > this.e0 { return this.e1 }
+        return this.e0
+    }
+
+    pub func min(this, other: I64x2) -> I64x2 {
+        var r0: I64 = this.e0; if other.e0 < r0 { r0 = other.e0 }
+        var r1: I64 = this.e1; if other.e1 < r1 { r1 = other.e1 }
+        return I64x2 { e0: r0, e1: r1 }
+    }
+
+    pub func max(this, other: I64x2) -> I64x2 {
+        var r0: I64 = this.e0; if other.e0 > r0 { r0 = other.e0 }
+        var r1: I64 = this.e1; if other.e1 > r1 { r1 = other.e1 }
+        return I64x2 { e0: r0, e1: r1 }
+    }
+}
+
+/// Select lanes from `if_true` or `if_false` based on mask.
+pub func select(mask: Mask2, if_true: I64x2, if_false: I64x2) -> I64x2 {
+    var r0: I64 = if_false.e0; if mask.m0 { r0 = if_true.e0 }
+    var r1: I64 = if_false.e1; if mask.m1 { r1 = if_true.e1 }
+    return I64x2 { e0: r0, e1: r1 }
+}

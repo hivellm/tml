@@ -71,15 +71,34 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     struct_types_[s.name] = type_name;
     struct_fields_[s.name] = fields;
 
-    // Emit struct type definition to type_defs_buffer_ (ensures types before functions)
-    std::string def = type_name + " = type { ";
-    for (size_t i = 0; i < field_types.size(); ++i) {
-        if (i > 0)
-            def += ", ";
-        def += field_types[i];
+    // Check for @simd annotation — emit LLVM vector type instead of struct
+    bool is_simd = false;
+    for (const auto& deco : s.decorators) {
+        if (deco.name == "simd") {
+            is_simd = true;
+            break;
+        }
     }
-    def += " }";
-    type_defs_buffer_ << def << "\n";
+
+    if (is_simd && !field_types.empty()) {
+        // All fields must be the same type for SIMD vectors
+        std::string elem_type = field_types[0];
+        int lane_count = static_cast<int>(field_types.size());
+        std::string def =
+            type_name + " = type <" + std::to_string(lane_count) + " x " + elem_type + ">";
+        type_defs_buffer_ << def << "\n";
+        simd_types_[s.name] = {elem_type, lane_count};
+    } else {
+        // Emit struct type definition to type_defs_buffer_ (ensures types before functions)
+        std::string def = type_name + " = type { ";
+        for (size_t i = 0; i < field_types.size(); ++i) {
+            if (i > 0)
+                def += ", ";
+            def += field_types[i];
+        }
+        def += " }";
+        type_defs_buffer_ << def << "\n";
+    }
 
     // Generate @derive support if decorated
     gen_derive_reflect_struct(s);

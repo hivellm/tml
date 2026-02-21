@@ -1,0 +1,167 @@
+//! 4-lane F32 SIMD vector type.
+
+use core::simd::mask::Mask4
+
+/// A 4-lane vector of F32 values (128 bits total).
+@simd
+pub type F32x4 {
+    e0: F32,
+    e1: F32,
+    e2: F32,
+    e3: F32
+}
+
+impl F32x4 {
+    pub func new(e0: F32, e1: F32, e2: F32, e3: F32) -> F32x4 {
+        return F32x4 { e0: e0, e1: e1, e2: e2, e3: e3 }
+    }
+
+    pub func splat(v: F32) -> F32x4 {
+        return F32x4 { e0: v, e1: v, e2: v, e3: v }
+    }
+
+    pub func zero() -> F32x4 {
+        return F32x4 { e0: 0.0 as F32, e1: 0.0 as F32, e2: 0.0 as F32, e3: 0.0 as F32 }
+    }
+
+    pub func get(this, idx: I32) -> F32 {
+        if idx == 0 { return this.e0 }
+        if idx == 1 { return this.e1 }
+        if idx == 2 { return this.e2 }
+        if idx == 3 { return this.e3 }
+        return 0.0 as F32
+    }
+
+    pub func set(this, idx: I32, val: F32) -> F32x4 {
+        var r: F32x4 = F32x4 { e0: this.e0, e1: this.e1, e2: this.e2, e3: this.e3 }
+        if idx == 0 { r.e0 = val }
+        if idx == 1 { r.e1 = val }
+        if idx == 2 { r.e2 = val }
+        if idx == 3 { r.e3 = val }
+        return r
+    }
+
+    // -- Arithmetic --
+
+    pub func add(this, other: F32x4) -> F32x4 {
+        return F32x4 {
+            e0: this.e0 + other.e0, e1: this.e1 + other.e1,
+            e2: this.e2 + other.e2, e3: this.e3 + other.e3
+        }
+    }
+
+    pub func sub(this, other: F32x4) -> F32x4 {
+        return F32x4 {
+            e0: this.e0 - other.e0, e1: this.e1 - other.e1,
+            e2: this.e2 - other.e2, e3: this.e3 - other.e3
+        }
+    }
+
+    pub func mul(this, other: F32x4) -> F32x4 {
+        return F32x4 {
+            e0: this.e0 * other.e0, e1: this.e1 * other.e1,
+            e2: this.e2 * other.e2, e3: this.e3 * other.e3
+        }
+    }
+
+    pub func div(this, other: F32x4) -> F32x4 {
+        return F32x4 {
+            e0: this.e0 / other.e0, e1: this.e1 / other.e1,
+            e2: this.e2 / other.e2, e3: this.e3 / other.e3
+        }
+    }
+
+    pub func neg(this) -> F32x4 {
+        return F32x4 {
+            e0: (0.0 as F32) - this.e0, e1: (0.0 as F32) - this.e1,
+            e2: (0.0 as F32) - this.e2, e3: (0.0 as F32) - this.e3
+        }
+    }
+
+    // -- Comparison --
+
+    pub func eq(this, other: F32x4) -> Mask4 {
+        return Mask4 {
+            m0: this.e0 == other.e0, m1: this.e1 == other.e1,
+            m2: this.e2 == other.e2, m3: this.e3 == other.e3
+        }
+    }
+
+    pub func ne(this, other: F32x4) -> Mask4 {
+        return Mask4 {
+            m0: this.e0 != other.e0, m1: this.e1 != other.e1,
+            m2: this.e2 != other.e2, m3: this.e3 != other.e3
+        }
+    }
+
+    pub func lt(this, other: F32x4) -> Mask4 {
+        return Mask4 {
+            m0: this.e0 < other.e0, m1: this.e1 < other.e1,
+            m2: this.e2 < other.e2, m3: this.e3 < other.e3
+        }
+    }
+
+    pub func gt(this, other: F32x4) -> Mask4 {
+        return Mask4 {
+            m0: this.e0 > other.e0, m1: this.e1 > other.e1,
+            m2: this.e2 > other.e2, m3: this.e3 > other.e3
+        }
+    }
+
+    // -- Horizontal --
+
+    pub func sum(this) -> F32 {
+        return this.e0 + this.e1 + this.e2 + this.e3
+    }
+
+    pub func hmin(this) -> F32 {
+        var m: F32 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        return m
+    }
+
+    pub func hmax(this) -> F32 {
+        var m: F32 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        return m
+    }
+
+    pub func min(this, other: F32x4) -> F32x4 {
+        var r0: F32 = this.e0; if other.e0 < r0 { r0 = other.e0 }
+        var r1: F32 = this.e1; if other.e1 < r1 { r1 = other.e1 }
+        var r2: F32 = this.e2; if other.e2 < r2 { r2 = other.e2 }
+        var r3: F32 = this.e3; if other.e3 < r3 { r3 = other.e3 }
+        return F32x4 { e0: r0, e1: r1, e2: r2, e3: r3 }
+    }
+
+    pub func max(this, other: F32x4) -> F32x4 {
+        var r0: F32 = this.e0; if other.e0 > r0 { r0 = other.e0 }
+        var r1: F32 = this.e1; if other.e1 > r1 { r1 = other.e1 }
+        var r2: F32 = this.e2; if other.e2 > r2 { r2 = other.e2 }
+        var r3: F32 = this.e3; if other.e3 > r3 { r3 = other.e3 }
+        return F32x4 { e0: r0, e1: r1, e2: r2, e3: r3 }
+    }
+
+    // -- Math --
+
+    pub func abs(this) -> F32x4 {
+        var r0: F32 = this.e0; if r0 < (0.0 as F32) { r0 = (0.0 as F32) - r0 }
+        var r1: F32 = this.e1; if r1 < (0.0 as F32) { r1 = (0.0 as F32) - r1 }
+        var r2: F32 = this.e2; if r2 < (0.0 as F32) { r2 = (0.0 as F32) - r2 }
+        var r3: F32 = this.e3; if r3 < (0.0 as F32) { r3 = (0.0 as F32) - r3 }
+        return F32x4 { e0: r0, e1: r1, e2: r2, e3: r3 }
+    }
+}
+
+/// Select lanes from `if_true` or `if_false` based on mask.
+pub func select(mask: Mask4, if_true: F32x4, if_false: F32x4) -> F32x4 {
+    var r0: F32 = if_false.e0; if mask.m0 { r0 = if_true.e0 }
+    var r1: F32 = if_false.e1; if mask.m1 { r1 = if_true.e1 }
+    var r2: F32 = if_false.e2; if mask.m2 { r2 = if_true.e2 }
+    var r3: F32 = if_false.e3; if mask.m3 { r3 = if_true.e3 }
+    return F32x4 { e0: r0, e1: r1, e2: r2, e3: r3 }
+}

@@ -1,0 +1,119 @@
+//! Tests for I64x2 basic operations.
+
+use core::simd::i64x2::{I64x2, select}
+use core::simd::mask::Mask2
+
+@test func test_new_and_get() -> I32 {
+    let v = I64x2::new(10 as I64, 20 as I64)
+    if v.get(0) != (10 as I64) { return 1 }
+    if v.get(1) != (20 as I64) { return 2 }
+    return 0
+}
+
+@test func test_splat() -> I32 {
+    let v = I64x2::splat(42 as I64)
+    if v.get(0) != (42 as I64) { return 1 }
+    if v.get(1) != (42 as I64) { return 2 }
+    return 0
+}
+
+@test func test_zero() -> I32 {
+    let v = I64x2::zero()
+    if v.get(0) != (0 as I64) { return 1 }
+    if v.get(1) != (0 as I64) { return 2 }
+    return 0
+}
+
+@test func test_set() -> I32 {
+    let v = I64x2::new(1 as I64, 2 as I64)
+    let w = v.set(0, 99 as I64)
+    if w.get(0) != (99 as I64) { return 1 }
+    if w.get(1) != (2 as I64) { return 2 }
+    return 0
+}
+
+@test func test_add_sub() -> I32 {
+    let a = I64x2::new(10 as I64, 20 as I64)
+    let b = I64x2::new(3 as I64, 7 as I64)
+    let c = a.add(b)
+    if c.get(0) != (13 as I64) { return 1 }
+    if c.get(1) != (27 as I64) { return 2 }
+    let d = a.sub(b)
+    if d.get(0) != (7 as I64) { return 3 }
+    if d.get(1) != (13 as I64) { return 4 }
+    return 0
+}
+
+@test func test_mul_div() -> I32 {
+    let a = I64x2::new(6 as I64, 15 as I64)
+    let b = I64x2::new(3 as I64, 5 as I64)
+    let c = a.mul(b)
+    if c.get(0) != (18 as I64) { return 1 }
+    if c.get(1) != (75 as I64) { return 2 }
+    let d = a.div(b)
+    if d.get(0) != (2 as I64) { return 3 }
+    if d.get(1) != (3 as I64) { return 4 }
+    return 0
+}
+
+@test func test_neg() -> I32 {
+    let v = I64x2::new(5 as I64, (0 as I64) - (3 as I64))
+    let n = v.neg()
+    if n.get(0) != ((0 as I64) - (5 as I64)) { return 1 }
+    if n.get(1) != (3 as I64) { return 2 }
+    return 0
+}
+
+@test func test_eq_ne() -> I32 {
+    let a = I64x2::new(1 as I64, 2 as I64)
+    let b = I64x2::new(1 as I64, 9 as I64)
+    let m = a.eq(b)
+    if not m.m0 { return 1 }
+    if m.m1 { return 2 }
+    let n = a.ne(b)
+    if n.m0 { return 3 }
+    if not n.m1 { return 4 }
+    return 0
+}
+
+@test func test_lt_gt() -> I32 {
+    let a = I64x2::new(1 as I64, 5 as I64)
+    let b = I64x2::new(2 as I64, 3 as I64)
+    let lt = a.lt(b)
+    if not lt.m0 { return 1 }
+    if lt.m1 { return 2 }
+    let gt = a.gt(b)
+    if gt.m0 { return 3 }
+    if not gt.m1 { return 4 }
+    return 0
+}
+
+@test func test_bitwise() -> I32 {
+    let a = I64x2::new(0xFF as I64, 0x0F as I64)
+    let b = I64x2::new(0x0F as I64, 0xFF as I64)
+    let c = a.band(b)
+    if c.get(0) != (0x0F as I64) { return 1 }
+    if c.get(1) != (0x0F as I64) { return 2 }
+    let d = a.bor(b)
+    if d.get(0) != (0xFF as I64) { return 3 }
+    if d.get(1) != (0xFF as I64) { return 4 }
+    return 0
+}
+
+@test func test_sum_hmin_hmax() -> I32 {
+    let v = I64x2::new(3 as I64, 7 as I64)
+    if v.sum() != (10 as I64) { return 1 }
+    if v.hmin() != (3 as I64) { return 2 }
+    if v.hmax() != (7 as I64) { return 3 }
+    return 0
+}
+
+@test func test_select() -> I32 {
+    let mask = Mask2 { m0: true, m1: false }
+    let a = I64x2::new(10 as I64, 20 as I64)
+    let b = I64x2::new(1 as I64, 2 as I64)
+    let r = select(mask, a, b)
+    if r.get(0) != (10 as I64) { return 1 }
+    if r.get(1) != (2 as I64) { return 2 }
+    return 0
+}
