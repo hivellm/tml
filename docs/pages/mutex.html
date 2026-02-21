@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mutex - TML Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon">TML</span>
+            <span>Documentation</span>
+        </a>
+    </div>
+    <div class="search-container">
+        <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+            </svg>
+            <input type="text" id="search-input" class="search-input" placeholder="Search..." autocomplete="off">
+            <span class="search-shortcut">/</span>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+    <nav class="nav-section">
+        <div class="nav-title">core</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-core">
+            <li class="nav-item"><a href="accumulators.html" class="nav-link"><span class="nav-icon module"></span>accumulators</a></li>
+            <li class="nav-item"><a href="alignment.html" class="nav-link"><span class="nav-icon module"></span>alignment</a></li>
+            <li class="nav-item"><a href="any.html" class="nav-link"><span class="nav-icon module"></span>any</a></li>
+            <li class="nav-item"><a href="arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="arith.html" class="nav-link"><span class="nav-icon module"></span>arith</a></li>
+            <li class="nav-item"><a href="ascii.html" class="nav-link"><span class="nav-icon module"></span>ascii</a></li>
+            <li class="nav-item"><a href="ascii85.html" class="nav-link"><span class="nav-icon module"></span>ascii85</a></li>
+            <li class="nav-item"><a href="async_function.html" class="nav-link"><span class="nav-icon module"></span>async_function</a></li>
+            <li class="nav-item"><a href="base16.html" class="nav-link"><span class="nav-icon module"></span>base16</a></li>
+            <li class="nav-item"><a href="base32.html" class="nav-link"><span class="nav-icon module"></span>base32</a></li>
+            <li class="nav-item"><a href="base36.html" class="nav-link"><span class="nav-icon module"></span>base36</a></li>
+            <li class="nav-item"><a href="base45.html" class="nav-link"><span class="nav-icon module"></span>base45</a></li>
+            <li class="nav-item"><a href="base58.html" class="nav-link"><span class="nav-icon module"></span>base58</a></li>
+            <li class="nav-item"><a href="base62.html" class="nav-link"><span class="nav-icon module"></span>base62</a></li>
+            <li class="nav-item"><a href="base64.html" class="nav-link"><span class="nav-icon module"></span>base64</a></li>
+            <li class="nav-item"><a href="base64url.html" class="nav-link"><span class="nav-icon module"></span>base64url</a></li>
+            <li class="nav-item"><a href="base8.html" class="nav-link"><span class="nav-icon module"></span>base8</a></li>
+            <li class="nav-item"><a href="base91.html" class="nav-link"><span class="nav-icon module"></span>base91</a></li>
+            <li class="nav-item"><a href="bit.html" class="nav-link"><span class="nav-icon module"></span>bit</a></li>
+            <li class="nav-item"><a href="borrow.html" class="nav-link"><span class="nav-icon module"></span>borrow</a></li>
+            <li class="nav-item"><a href="builders.html" class="nav-link"><span class="nav-icon module"></span>builders</a></li>
+            <li class="nav-item"><a href="cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="cell.html" class="nav-link"><span class="nav-icon module"></span>cell</a></li>
+            <li class="nav-item"><a href="chain.html" class="nav-link"><span class="nav-icon module"></span>chain</a></li>
+            <li class="nav-item"><a href="char.html" class="nav-link"><span class="nav-icon module"></span>char</a></li>
+            <li class="nav-item"><a href="clone.html" class="nav-link"><span class="nav-icon module"></span>clone</a></li>
+            <li class="nav-item"><a href="cloned.html" class="nav-link"><span class="nav-icon module"></span>cloned</a></li>
+            <li class="nav-item"><a href="cmp.html" class="nav-link"><span class="nav-icon module"></span>cmp</a></li>
+            <li class="nav-item"><a href="collections.html" class="nav-link"><span class="nav-icon module"></span>collections</a></li>
+            <li class="nav-item"><a href="const_ptr.html" class="nav-link"><span class="nav-icon module"></span>const_ptr</a></li>
+            <li class="nav-item"><a href="convert.html" class="nav-link"><span class="nav-icon module"></span>convert</a></li>
+            <li class="nav-item"><a href="copied.html" class="nav-link"><span class="nav-icon module"></span>copied</a></li>
+            <li class="nav-item"><a href="coroutine.html" class="nav-link"><span class="nav-icon module"></span>coroutine</a></li>
+            <li class="nav-item"><a href="cycle.html" class="nav-link"><span class="nav-icon module"></span>cycle</a></li>
+            <li class="nav-item"><a href="decode.html" class="nav-link"><span class="nav-icon module"></span>decode</a></li>
+            <li class="nav-item"><a href="default.html" class="nav-link"><span class="nav-icon module"></span>default</a></li>
+            <li class="nav-item"><a href="deref.html" class="nav-link"><span class="nav-icon module"></span>deref</a></li>
+            <li class="nav-item"><a href="double_ended.html" class="nav-link"><span class="nav-icon module"></span>double_ended</a></li>
+            <li class="nav-item"><a href="drop.html" class="nav-link"><span class="nav-icon module"></span>drop</a></li>
+            <li class="nav-item"><a href="empty.html" class="nav-link"><span class="nav-icon module"></span>empty</a></li>
+            <li class="nav-item"><a href="enumerate.html" class="nav-link"><span class="nav-icon module"></span>enumerate</a></li>
+            <li class="nav-item"><a href="error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="exact_size.html" class="nav-link"><span class="nav-icon module"></span>exact_size</a></li>
+            <li class="nav-item"><a href="extend.html" class="nav-link"><span class="nav-icon module"></span>extend</a></li>
+            <li class="nav-item"><a href="f32x4.html" class="nav-link"><span class="nav-icon module"></span>f32x4</a></li>
+            <li class="nav-item"><a href="f64x2.html" class="nav-link"><span class="nav-icon module"></span>f64x2</a></li>
+            <li class="nav-item"><a href="filter.html" class="nav-link"><span class="nav-icon module"></span>filter</a></li>
+            <li class="nav-item"><a href="filter_map.html" class="nav-link"><span class="nav-icon module"></span>filter_map</a></li>
+            <li class="nav-item"><a href="flat_map.html" class="nav-link"><span class="nav-icon module"></span>flat_map</a></li>
+            <li class="nav-item"><a href="flatten.html" class="nav-link"><span class="nav-icon module"></span>flatten</a></li>
+            <li class="nav-item"><a href="float.html" class="nav-link"><span class="nav-icon module"></span>float</a></li>
+            <li class="nav-item"><a href="formatter.html" class="nav-link"><span class="nav-icon module"></span>formatter</a></li>
+            <li class="nav-item"><a href="from_fn.html" class="nav-link"><span class="nav-icon module"></span>from_fn</a></li>
+            <li class="nav-item"><a href="from_iterator.html" class="nav-link"><span class="nav-icon module"></span>from_iterator</a></li>
+            <li class="nav-item"><a href="function.html" class="nav-link"><span class="nav-icon module"></span>function</a></li>
+            <li class="nav-item"><a href="fuse.html" class="nav-link"><span class="nav-icon module"></span>fuse</a></li>
+            <li class="nav-item"><a href="global.html" class="nav-link"><span class="nav-icon module"></span>global</a></li>
+            <li class="nav-item"><a href="hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="heap.html" class="nav-link"><span class="nav-icon module"></span>heap</a></li>
+            <li class="nav-item"><a href="helpers.html" class="nav-link"><span class="nav-icon module"></span>helpers</a></li>
+            <li class="nav-item"><a href="hex.html" class="nav-link"><span class="nav-icon module"></span>hex</a></li>
+            <li class="nav-item"><a href="i32x4.html" class="nav-link"><span class="nav-icon module"></span>i32x4</a></li>
+            <li class="nav-item"><a href="i64x2.html" class="nav-link"><span class="nav-icon module"></span>i64x2</a></li>
+            <li class="nav-item"><a href="i8x16.html" class="nav-link"><span class="nav-icon module"></span>i8x16</a></li>
+            <li class="nav-item"><a href="impls.html" class="nav-link"><span class="nav-icon module"></span>impls</a></li>
+            <li class="nav-item"><a href="index.html" class="nav-link"><span class="nav-icon module"></span>index</a></li>
+            <li class="nav-item"><a href="inspect.html" class="nav-link"><span class="nav-icon module"></span>inspect</a></li>
+            <li class="nav-item"><a href="integer.html" class="nav-link"><span class="nav-icon module"></span>integer</a></li>
+            <li class="nav-item"><a href="intersperse.html" class="nav-link"><span class="nav-icon module"></span>intersperse</a></li>
+            <li class="nav-item"><a href="into_iterator.html" class="nav-link"><span class="nav-icon module"></span>into_iterator</a></li>
+            <li class="nav-item"><a href="intrinsics.html" class="nav-link"><span class="nav-icon module"></span>intrinsics</a></li>
+            <li class="nav-item"><a href="iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="iterator.html" class="nav-link"><span class="nav-icon module"></span>iterator</a></li>
+            <li class="nav-item"><a href="layout.html" class="nav-link"><span class="nav-icon module"></span>layout</a></li>
+            <li class="nav-item"><a href="lazy.html" class="nav-link"><span class="nav-icon module"></span>lazy</a></li>
+            <li class="nav-item"><a href="legacy.html" class="nav-link"><span class="nav-icon module"></span>legacy</a></li>
+            <li class="nav-item"><a href="map.html" class="nav-link"><span class="nav-icon module"></span>map</a></li>
+            <li class="nav-item"><a href="map_while.html" class="nav-link"><span class="nav-icon module"></span>map_while</a></li>
+            <li class="nav-item"><a href="marker.html" class="nav-link"><span class="nav-icon module"></span>marker</a></li>
+            <li class="nav-item"><a href="markers.html" class="nav-link"><span class="nav-icon module"></span>markers</a></li>
+            <li class="nav-item"><a href="mask.html" class="nav-link"><span class="nav-icon module"></span>mask</a></li>
+            <li class="nav-item"><a href="mem.html" class="nav-link"><span class="nav-icon module"></span>mem</a></li>
+            <li class="nav-item"><a href="methods.html" class="nav-link"><span class="nav-icon module"></span>methods</a></li>
+            <li class="nav-item"><a href="mut_ptr.html" class="nav-link"><span class="nav-icon module"></span>mut_ptr</a></li>
+            <li class="nav-item"><a href="non_null.html" class="nav-link"><span class="nav-icon module"></span>non_null</a></li>
+            <li class="nav-item"><a href="nonzero.html" class="nav-link"><span class="nav-icon module"></span>nonzero</a></li>
+            <li class="nav-item"><a href="num.html" class="nav-link"><span class="nav-icon module"></span>num</a></li>
+            <li class="nav-item"><a href="once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="once_with.html" class="nav-link"><span class="nav-icon module"></span>once_with</a></li>
+            <li class="nav-item"><a href="ops.html" class="nav-link"><span class="nav-icon module"></span>ops</a></li>
+            <li class="nav-item"><a href="option.html" class="nav-link"><span class="nav-icon module"></span>option</a></li>
+            <li class="nav-item"><a href="overflow.html" class="nav-link"><span class="nav-icon module"></span>overflow</a></li>
+            <li class="nav-item"><a href="peekable.html" class="nav-link"><span class="nav-icon module"></span>peekable</a></li>
+            <li class="nav-item"><a href="percent.html" class="nav-link"><span class="nav-icon module"></span>percent</a></li>
+            <li class="nav-item"><a href="pin.html" class="nav-link"><span class="nav-icon module"></span>pin</a></li>
+            <li class="nav-item"><a href="pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="range.html" class="nav-link"><span class="nav-icon module"></span>range</a></li>
+            <li class="nav-item"><a href="ref_cell.html" class="nav-link"><span class="nav-icon module"></span>ref_cell</a></li>
+            <li class="nav-item"><a href="reflect.html" class="nav-link"><span class="nav-icon module"></span>reflect</a></li>
+            <li class="nav-item"><a href="repeat.html" class="nav-link"><span class="nav-icon module"></span>repeat</a></li>
+            <li class="nav-item"><a href="repeat_n.html" class="nav-link"><span class="nav-icon module"></span>repeat_n</a></li>
+            <li class="nav-item"><a href="repeat_with.html" class="nav-link"><span class="nav-icon module"></span>repeat_with</a></li>
+            <li class="nav-item"><a href="result.html" class="nav-link"><span class="nav-icon module"></span>result</a></li>
+            <li class="nav-item"><a href="rev.html" class="nav-link"><span class="nav-icon module"></span>rev</a></li>
+            <li class="nav-item"><a href="rt.html" class="nav-link"><span class="nav-icon module"></span>rt</a></li>
+            <li class="nav-item"><a href="saturating.html" class="nav-link"><span class="nav-icon module"></span>saturating</a></li>
+            <li class="nav-item"><a href="scan.html" class="nav-link"><span class="nav-icon module"></span>scan</a></li>
+            <li class="nav-item"><a href="shared.html" class="nav-link"><span class="nav-icon module"></span>shared</a></li>
+            <li class="nav-item"><a href="skip.html" class="nav-link"><span class="nav-icon module"></span>skip</a></li>
+            <li class="nav-item"><a href="skip_while.html" class="nav-link"><span class="nav-icon module"></span>skip_while</a></li>
+            <li class="nav-item"><a href="soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="sort.html" class="nav-link"><span class="nav-icon module"></span>sort</a></li>
+            <li class="nav-item"><a href="step_by.html" class="nav-link"><span class="nav-icon module"></span>step_by</a></li>
+            <li class="nav-item"><a href="str.html" class="nav-link"><span class="nav-icon module"></span>str</a></li>
+            <li class="nav-item"><a href="successors.html" class="nav-link"><span class="nav-icon module"></span>successors</a></li>
+            <li class="nav-item"><a href="sync.html" class="nav-link"><span class="nav-icon module"></span>sync</a></li>
+            <li class="nav-item"><a href="take.html" class="nav-link"><span class="nav-icon module"></span>take</a></li>
+            <li class="nav-item"><a href="take_while.html" class="nav-link"><span class="nav-icon module"></span>take_while</a></li>
+            <li class="nav-item"><a href="time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="try_trait.html" class="nav-link"><span class="nav-icon module"></span>try_trait</a></li>
+            <li class="nav-item"><a href="tuple.html" class="nav-link"><span class="nav-icon module"></span>tuple</a></li>
+            <li class="nav-item"><a href="u8x16.html" class="nav-link"><span class="nav-icon module"></span>u8x16</a></li>
+            <li class="nav-item"><a href="unicode_data.html" class="nav-link"><span class="nav-icon module"></span>unicode_data</a></li>
+            <li class="nav-item"><a href="unsafe_cell.html" class="nav-link"><span class="nav-icon module"></span>unsafe_cell</a></li>
+            <li class="nav-item"><a href="wrapping.html" class="nav-link"><span class="nav-icon module"></span>wrapping</a></li>
+            <li class="nav-item"><a href="zip.html" class="nav-link"><span class="nav-icon module"></span>zip</a></li>
+        </ul>
+        <button class="nav-toggle" onclick="toggleLibrary('core')">Show core</button>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">std</div>
+        <ul class="nav-list" id="lib-std">
+            <li class="nav-item"><a href="Arc.html" class="nav-link"><span class="nav-icon module"></span>Arc</a></li>
+            <li class="nav-item"><a href="arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="async_tcp.html" class="nav-link"><span class="nav-icon module"></span>async_tcp</a></li>
+            <li class="nav-item"><a href="async_udp.html" class="nav-link"><span class="nav-icon module"></span>async_udp</a></li>
+            <li class="nav-item"><a href="atomic.html" class="nav-link"><span class="nav-icon module"></span>atomic</a></li>
+            <li class="nav-item"><a href="barrier.html" class="nav-link"><span class="nav-icon module"></span>barrier</a></li>
+            <li class="nav-item"><a href="behaviors.html" class="nav-link"><span class="nav-icon module"></span>behaviors</a></li>
+            <li class="nav-item"><a href="bm25.html" class="nav-link"><span class="nav-icon module"></span>bm25</a></li>
+            <li class="nav-item"><a href="brotli.html" class="nav-link"><span class="nav-icon module"></span>brotli</a></li>
+            <li class="nav-item"><a href="btreemap.html" class="nav-link"><span class="nav-icon module"></span>btreemap</a></li>
+            <li class="nav-item"><a href="btreeset.html" class="nav-link"><span class="nav-icon module"></span>btreeset</a></li>
+            <li class="nav-item"><a href="buffer.html" class="nav-link"><span class="nav-icon module"></span>buffer</a></li>
+            <li class="nav-item"><a href="bufio.html" class="nav-link"><span class="nav-icon module"></span>bufio</a></li>
+            <li class="nav-item"><a href="builder.html" class="nav-link"><span class="nav-icon module"></span>builder</a></li>
+            <li class="nav-item"><a href="cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="cipher.html" class="nav-link"><span class="nav-icon module"></span>cipher</a></li>
+            <li class="nav-item"><a href="class_collections.html" class="nav-link"><span class="nav-icon module"></span>class_collections</a></li>
+            <li class="nav-item"><a href="condvar.html" class="nav-link"><span class="nav-icon module"></span>condvar</a></li>
+            <li class="nav-item"><a href="constants.html" class="nav-link"><span class="nav-icon module"></span>constants</a></li>
+            <li class="nav-item"><a href="crc32.html" class="nav-link"><span class="nav-icon module"></span>crc32</a></li>
+            <li class="nav-item"><a href="datetime.html" class="nav-link"><span class="nav-icon module"></span>datetime</a></li>
+            <li class="nav-item"><a href="deflate.html" class="nav-link"><span class="nav-icon module"></span>deflate</a></li>
+            <li class="nav-item"><a href="deque.html" class="nav-link"><span class="nav-icon module"></span>deque</a></li>
+            <li class="nav-item"><a href="dh.html" class="nav-link"><span class="nav-icon module"></span>dh</a></li>
+            <li class="nav-item"><a href="dir.html" class="nav-link"><span class="nav-icon module"></span>dir</a></li>
+            <li class="nav-item"><a href="distance.html" class="nav-link"><span class="nav-icon module"></span>distance</a></li>
+            <li class="nav-item"><a href="dns.html" class="nav-link"><span class="nav-icon module"></span>dns</a></li>
+            <li class="nav-item"><a href="ecdh.html" class="nav-link"><span class="nav-icon module"></span>ecdh</a></li>
+            <li class="nav-item"><a href="error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="exception.html" class="nav-link"><span class="nav-icon module"></span>exception</a></li>
+            <li class="nav-item"><a href="file.html" class="nav-link"><span class="nav-icon module"></span>file</a></li>
+            <li class="nav-item"><a href="glob.html" class="nav-link"><span class="nav-icon module"></span>glob</a></li>
+            <li class="nav-item"><a href="gzip.html" class="nav-link"><span class="nav-icon module"></span>gzip</a></li>
+            <li class="nav-item"><a href="hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="hashmap.html" class="nav-link"><span class="nav-icon module"></span>hashmap</a></li>
+            <li class="nav-item"><a href="hmac.html" class="nav-link"><span class="nav-icon module"></span>hmac</a></li>
+            <li class="nav-item"><a href="hnsw.html" class="nav-link"><span class="nav-icon module"></span>hnsw</a></li>
+            <li class="nav-item"><a href="interfaces.html" class="nav-link"><span class="nav-icon module"></span>interfaces</a></li>
+            <li class="nav-item"><a href="io.html" class="nav-link"><span class="nav-icon module"></span>io</a></li>
+            <li class="nav-item"><a href="ip.html" class="nav-link"><span class="nav-icon module"></span>ip</a></li>
+            <li class="nav-item"><a href="iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="kdf.html" class="nav-link"><span class="nav-icon module"></span>kdf</a></li>
+            <li class="nav-item"><a href="key.html" class="nav-link"><span class="nav-icon module"></span>key</a></li>
+            <li class="nav-item"><a href="list.html" class="nav-link"><span class="nav-icon module"></span>list</a></li>
+            <li class="nav-item"><a href="local.html" class="nav-link"><span class="nav-icon module"></span>local</a></li>
+            <li class="nav-item"><a href="log.html" class="nav-link"><span class="nav-icon module"></span>log</a></li>
+            <li class="nav-item"><a href="math.html" class="nav-link"><span class="nav-icon module"></span>math</a></li>
+            <li class="nav-item"><a href="mpsc.html" class="nav-link"><span class="nav-icon module"></span>mpsc</a></li>
+            <li class="nav-item active"><a href="mutex.html" class="nav-link"><span class="nav-icon module"></span>mutex</a></li>
+            <li class="nav-item"><a href="object.html" class="nav-link"><span class="nav-icon module"></span>object</a></li>
+            <li class="nav-item"><a href="once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="options.html" class="nav-link"><span class="nav-icon module"></span>options</a></li>
+            <li class="nav-item"><a href="ordering.html" class="nav-link"><span class="nav-icon module"></span>ordering</a></li>
+            <li class="nav-item"><a href="os.html" class="nav-link"><span class="nav-icon module"></span>os</a></li>
+            <li class="nav-item"><a href="parser.html" class="nav-link"><span class="nav-icon module"></span>parser</a></li>
+            <li class="nav-item"><a href="path.html" class="nav-link"><span class="nav-icon module"></span>path</a></li>
+            <li class="nav-item"><a href="pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="precompiled_symbols.html" class="nav-link"><span class="nav-icon module"></span>precompiled_symbols</a></li>
+            <li class="nav-item"><a href="profiler.html" class="nav-link"><span class="nav-icon module"></span>profiler</a></li>
+            <li class="nav-item"><a href="queue.html" class="nav-link"><span class="nav-icon module"></span>queue</a></li>
+            <li class="nav-item"><a href="random.html" class="nav-link"><span class="nav-icon module"></span>random</a></li>
+            <li class="nav-item"><a href="regex.html" class="nav-link"><span class="nav-icon module"></span>regex</a></li>
+            <li class="nav-item"><a href="rsa.html" class="nav-link"><span class="nav-icon module"></span>rsa</a></li>
+            <li class="nav-item"><a href="rwlock.html" class="nav-link"><span class="nav-icon module"></span>rwlock</a></li>
+            <li class="nav-item"><a href="scope.html" class="nav-link"><span class="nav-icon module"></span>scope</a></li>
+            <li class="nav-item"><a href="semver.html" class="nav-link"><span class="nav-icon module"></span>semver</a></li>
+            <li class="nav-item"><a href="serialize.html" class="nav-link"><span class="nav-icon module"></span>serialize</a></li>
+            <li class="nav-item"><a href="sign.html" class="nav-link"><span class="nav-icon module"></span>sign</a></li>
+            <li class="nav-item"><a href="socket.html" class="nav-link"><span class="nav-icon module"></span>socket</a></li>
+            <li class="nav-item"><a href="soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="stack.html" class="nav-link"><span class="nav-icon module"></span>stack</a></li>
+            <li class="nav-item"><a href="stream.html" class="nav-link"><span class="nav-icon module"></span>stream</a></li>
+            <li class="nav-item"><a href="tcp.html" class="nav-link"><span class="nav-icon module"></span>tcp</a></li>
+            <li class="nav-item"><a href="text.html" class="nav-link"><span class="nav-icon module"></span>text</a></li>
+            <li class="nav-item"><a href="time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="tls.html" class="nav-link"><span class="nav-icon module"></span>tls</a></li>
+            <li class="nav-item"><a href="traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+            <li class="nav-item"><a href="udp.html" class="nav-link"><span class="nav-icon module"></span>udp</a></li>
+            <li class="nav-item"><a href="url.html" class="nav-link"><span class="nav-icon module"></span>url</a></li>
+            <li class="nav-item"><a href="uuid.html" class="nav-link"><span class="nav-icon module"></span>uuid</a></li>
+            <li class="nav-item"><a href="x509.html" class="nav-link"><span class="nav-icon module"></span>x509</a></li>
+            <li class="nav-item"><a href="zstd.html" class="nav-link"><span class="nav-icon module"></span>zstd</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">test</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-test">
+            <li class="nav-item"><a href="types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">backtrace</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-backtrace">
+            <li class="nav-item"><a href="backtrace.html" class="nav-link"><span class="nav-icon module"></span>backtrace</a></li>
+            <li class="nav-item"><a href="frame.html" class="nav-link"><span class="nav-icon module"></span>frame</a></li>
+            <li class="nav-item"><a href="symbol.html" class="nav-link"><span class="nav-icon module"></span>symbol</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">mutex</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="#lib::std::src::sync::mutex::RawMutex" class="nav-link"><span class="nav-icon struct"></span>RawMutex</a></li>
+            <li class="nav-item"><a href="#lib::std::src::sync::mutex::Mutex" class="nav-link"><span class="nav-icon struct"></span>Mutex</a></li>
+            <li class="nav-item"><a href="#lib::std::src::sync::mutex::MutexGuard" class="nav-link"><span class="nav-icon struct"></span>MutexGuard</a></li>
+        </ul>
+    </nav>
+</aside>
+<main class="main-content">
+<div class="page-header">
+    <h1 class="page-title">mutex</h1>
+<p class="page-description">Mutual exclusion primitives for thread synchronization.</p>
+</div>
+<section class="item-section">
+<h2 class="section-title">Structs</h2>
+<article class="item-card" id="lib::std::src::sync::mutex::RawMutex">
+  <div class="item-header">
+    <span class="item-kind-badge struct">struct</span>
+    <h3 class="item-name"><a href="#lib::std::src::sync::mutex::RawMutex">RawMutex</a></h3>
+  </div>
+  <div class="signature">type RawMutex</div>
+</article>
+<article class="item-card" id="lib::std::src::sync::mutex::Mutex">
+  <div class="item-header">
+    <span class="item-kind-badge struct">struct</span>
+    <h3 class="item-name"><a href="#lib::std::src::sync::mutex::Mutex">Mutex</a></h3>
+  </div>
+  <div class="signature">type Mutex[T]</div>
+</article>
+<article class="item-card" id="lib::std::src::sync::mutex::MutexGuard">
+  <div class="item-header">
+    <span class="item-kind-badge struct">struct</span>
+    <h3 class="item-name"><a href="#lib::std::src::sync::mutex::MutexGuard">MutexGuard</a></h3>
+  </div>
+  <div class="signature">type MutexGuard[T]</div>
+</article>
+</section>
+<section class="item-section">
+<h2 class="section-title">Type Aliases</h2>
+<article class="item-card" id="lib::std::src::sync::mutex::Lock">
+  <div class="item-header">
+    <span class="item-kind-badge function">type_alias</span>
+    <h3 class="item-name"><a href="#lib::std::src::sync::mutex::Lock">Lock</a></h3>
+  </div>
+  <div class="signature">type Lock[T] = Mutex[T]</div>
+</article>
+</section>
+<footer class="footer">
+    <p>Generated by <a href="https://github.com/tml-lang/tml">TML Documentation Generator</a></p>
+</footer>
+</main>
+</div>
+<button class="mobile-toggle" aria-label="Toggle menu">☰</button>
+<script src="../search-index.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

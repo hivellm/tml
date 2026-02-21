@@ -1,0 +1,2037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>intrinsics - TML Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="../index.html" class="logo">
+            <span class="logo-icon">TML</span>
+            <span>Documentation</span>
+        </a>
+    </div>
+    <div class="search-container">
+        <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+            </svg>
+            <input type="text" id="search-input" class="search-input" placeholder="Search..." autocomplete="off">
+            <span class="search-shortcut">/</span>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+    <nav class="nav-section">
+        <div class="nav-title">core</div>
+        <ul class="nav-list" id="lib-core">
+            <li class="nav-item"><a href="accumulators.html" class="nav-link"><span class="nav-icon module"></span>accumulators</a></li>
+            <li class="nav-item"><a href="alignment.html" class="nav-link"><span class="nav-icon module"></span>alignment</a></li>
+            <li class="nav-item"><a href="any.html" class="nav-link"><span class="nav-icon module"></span>any</a></li>
+            <li class="nav-item"><a href="arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="arith.html" class="nav-link"><span class="nav-icon module"></span>arith</a></li>
+            <li class="nav-item"><a href="ascii.html" class="nav-link"><span class="nav-icon module"></span>ascii</a></li>
+            <li class="nav-item"><a href="ascii85.html" class="nav-link"><span class="nav-icon module"></span>ascii85</a></li>
+            <li class="nav-item"><a href="async_function.html" class="nav-link"><span class="nav-icon module"></span>async_function</a></li>
+            <li class="nav-item"><a href="base16.html" class="nav-link"><span class="nav-icon module"></span>base16</a></li>
+            <li class="nav-item"><a href="base32.html" class="nav-link"><span class="nav-icon module"></span>base32</a></li>
+            <li class="nav-item"><a href="base36.html" class="nav-link"><span class="nav-icon module"></span>base36</a></li>
+            <li class="nav-item"><a href="base45.html" class="nav-link"><span class="nav-icon module"></span>base45</a></li>
+            <li class="nav-item"><a href="base58.html" class="nav-link"><span class="nav-icon module"></span>base58</a></li>
+            <li class="nav-item"><a href="base62.html" class="nav-link"><span class="nav-icon module"></span>base62</a></li>
+            <li class="nav-item"><a href="base64.html" class="nav-link"><span class="nav-icon module"></span>base64</a></li>
+            <li class="nav-item"><a href="base64url.html" class="nav-link"><span class="nav-icon module"></span>base64url</a></li>
+            <li class="nav-item"><a href="base8.html" class="nav-link"><span class="nav-icon module"></span>base8</a></li>
+            <li class="nav-item"><a href="base91.html" class="nav-link"><span class="nav-icon module"></span>base91</a></li>
+            <li class="nav-item"><a href="bit.html" class="nav-link"><span class="nav-icon module"></span>bit</a></li>
+            <li class="nav-item"><a href="borrow.html" class="nav-link"><span class="nav-icon module"></span>borrow</a></li>
+            <li class="nav-item"><a href="builders.html" class="nav-link"><span class="nav-icon module"></span>builders</a></li>
+            <li class="nav-item"><a href="cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="cell.html" class="nav-link"><span class="nav-icon module"></span>cell</a></li>
+            <li class="nav-item"><a href="chain.html" class="nav-link"><span class="nav-icon module"></span>chain</a></li>
+            <li class="nav-item"><a href="char.html" class="nav-link"><span class="nav-icon module"></span>char</a></li>
+            <li class="nav-item"><a href="clone.html" class="nav-link"><span class="nav-icon module"></span>clone</a></li>
+            <li class="nav-item"><a href="cloned.html" class="nav-link"><span class="nav-icon module"></span>cloned</a></li>
+            <li class="nav-item"><a href="cmp.html" class="nav-link"><span class="nav-icon module"></span>cmp</a></li>
+            <li class="nav-item"><a href="collections.html" class="nav-link"><span class="nav-icon module"></span>collections</a></li>
+            <li class="nav-item"><a href="const_ptr.html" class="nav-link"><span class="nav-icon module"></span>const_ptr</a></li>
+            <li class="nav-item"><a href="convert.html" class="nav-link"><span class="nav-icon module"></span>convert</a></li>
+            <li class="nav-item"><a href="copied.html" class="nav-link"><span class="nav-icon module"></span>copied</a></li>
+            <li class="nav-item"><a href="coroutine.html" class="nav-link"><span class="nav-icon module"></span>coroutine</a></li>
+            <li class="nav-item"><a href="cycle.html" class="nav-link"><span class="nav-icon module"></span>cycle</a></li>
+            <li class="nav-item"><a href="decode.html" class="nav-link"><span class="nav-icon module"></span>decode</a></li>
+            <li class="nav-item"><a href="default.html" class="nav-link"><span class="nav-icon module"></span>default</a></li>
+            <li class="nav-item"><a href="deref.html" class="nav-link"><span class="nav-icon module"></span>deref</a></li>
+            <li class="nav-item"><a href="double_ended.html" class="nav-link"><span class="nav-icon module"></span>double_ended</a></li>
+            <li class="nav-item"><a href="drop.html" class="nav-link"><span class="nav-icon module"></span>drop</a></li>
+            <li class="nav-item"><a href="empty.html" class="nav-link"><span class="nav-icon module"></span>empty</a></li>
+            <li class="nav-item"><a href="enumerate.html" class="nav-link"><span class="nav-icon module"></span>enumerate</a></li>
+            <li class="nav-item"><a href="error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="exact_size.html" class="nav-link"><span class="nav-icon module"></span>exact_size</a></li>
+            <li class="nav-item"><a href="extend.html" class="nav-link"><span class="nav-icon module"></span>extend</a></li>
+            <li class="nav-item"><a href="f32x4.html" class="nav-link"><span class="nav-icon module"></span>f32x4</a></li>
+            <li class="nav-item"><a href="f64x2.html" class="nav-link"><span class="nav-icon module"></span>f64x2</a></li>
+            <li class="nav-item"><a href="filter.html" class="nav-link"><span class="nav-icon module"></span>filter</a></li>
+            <li class="nav-item"><a href="filter_map.html" class="nav-link"><span class="nav-icon module"></span>filter_map</a></li>
+            <li class="nav-item"><a href="flat_map.html" class="nav-link"><span class="nav-icon module"></span>flat_map</a></li>
+            <li class="nav-item"><a href="flatten.html" class="nav-link"><span class="nav-icon module"></span>flatten</a></li>
+            <li class="nav-item"><a href="float.html" class="nav-link"><span class="nav-icon module"></span>float</a></li>
+            <li class="nav-item"><a href="formatter.html" class="nav-link"><span class="nav-icon module"></span>formatter</a></li>
+            <li class="nav-item"><a href="from_fn.html" class="nav-link"><span class="nav-icon module"></span>from_fn</a></li>
+            <li class="nav-item"><a href="from_iterator.html" class="nav-link"><span class="nav-icon module"></span>from_iterator</a></li>
+            <li class="nav-item"><a href="function.html" class="nav-link"><span class="nav-icon module"></span>function</a></li>
+            <li class="nav-item"><a href="fuse.html" class="nav-link"><span class="nav-icon module"></span>fuse</a></li>
+            <li class="nav-item"><a href="global.html" class="nav-link"><span class="nav-icon module"></span>global</a></li>
+            <li class="nav-item"><a href="hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="heap.html" class="nav-link"><span class="nav-icon module"></span>heap</a></li>
+            <li class="nav-item"><a href="helpers.html" class="nav-link"><span class="nav-icon module"></span>helpers</a></li>
+            <li class="nav-item"><a href="hex.html" class="nav-link"><span class="nav-icon module"></span>hex</a></li>
+            <li class="nav-item"><a href="i32x4.html" class="nav-link"><span class="nav-icon module"></span>i32x4</a></li>
+            <li class="nav-item"><a href="i64x2.html" class="nav-link"><span class="nav-icon module"></span>i64x2</a></li>
+            <li class="nav-item"><a href="i8x16.html" class="nav-link"><span class="nav-icon module"></span>i8x16</a></li>
+            <li class="nav-item"><a href="impls.html" class="nav-link"><span class="nav-icon module"></span>impls</a></li>
+            <li class="nav-item"><a href="index.html" class="nav-link"><span class="nav-icon module"></span>index</a></li>
+            <li class="nav-item"><a href="inspect.html" class="nav-link"><span class="nav-icon module"></span>inspect</a></li>
+            <li class="nav-item"><a href="integer.html" class="nav-link"><span class="nav-icon module"></span>integer</a></li>
+            <li class="nav-item"><a href="intersperse.html" class="nav-link"><span class="nav-icon module"></span>intersperse</a></li>
+            <li class="nav-item"><a href="into_iterator.html" class="nav-link"><span class="nav-icon module"></span>into_iterator</a></li>
+            <li class="nav-item active"><a href="intrinsics.html" class="nav-link"><span class="nav-icon module"></span>intrinsics</a></li>
+            <li class="nav-item"><a href="iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="iterator.html" class="nav-link"><span class="nav-icon module"></span>iterator</a></li>
+            <li class="nav-item"><a href="layout.html" class="nav-link"><span class="nav-icon module"></span>layout</a></li>
+            <li class="nav-item"><a href="lazy.html" class="nav-link"><span class="nav-icon module"></span>lazy</a></li>
+            <li class="nav-item"><a href="legacy.html" class="nav-link"><span class="nav-icon module"></span>legacy</a></li>
+            <li class="nav-item"><a href="map.html" class="nav-link"><span class="nav-icon module"></span>map</a></li>
+            <li class="nav-item"><a href="map_while.html" class="nav-link"><span class="nav-icon module"></span>map_while</a></li>
+            <li class="nav-item"><a href="marker.html" class="nav-link"><span class="nav-icon module"></span>marker</a></li>
+            <li class="nav-item"><a href="markers.html" class="nav-link"><span class="nav-icon module"></span>markers</a></li>
+            <li class="nav-item"><a href="mask.html" class="nav-link"><span class="nav-icon module"></span>mask</a></li>
+            <li class="nav-item"><a href="mem.html" class="nav-link"><span class="nav-icon module"></span>mem</a></li>
+            <li class="nav-item"><a href="methods.html" class="nav-link"><span class="nav-icon module"></span>methods</a></li>
+            <li class="nav-item"><a href="mut_ptr.html" class="nav-link"><span class="nav-icon module"></span>mut_ptr</a></li>
+            <li class="nav-item"><a href="non_null.html" class="nav-link"><span class="nav-icon module"></span>non_null</a></li>
+            <li class="nav-item"><a href="nonzero.html" class="nav-link"><span class="nav-icon module"></span>nonzero</a></li>
+            <li class="nav-item"><a href="num.html" class="nav-link"><span class="nav-icon module"></span>num</a></li>
+            <li class="nav-item"><a href="once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="once_with.html" class="nav-link"><span class="nav-icon module"></span>once_with</a></li>
+            <li class="nav-item"><a href="ops.html" class="nav-link"><span class="nav-icon module"></span>ops</a></li>
+            <li class="nav-item"><a href="option.html" class="nav-link"><span class="nav-icon module"></span>option</a></li>
+            <li class="nav-item"><a href="overflow.html" class="nav-link"><span class="nav-icon module"></span>overflow</a></li>
+            <li class="nav-item"><a href="peekable.html" class="nav-link"><span class="nav-icon module"></span>peekable</a></li>
+            <li class="nav-item"><a href="percent.html" class="nav-link"><span class="nav-icon module"></span>percent</a></li>
+            <li class="nav-item"><a href="pin.html" class="nav-link"><span class="nav-icon module"></span>pin</a></li>
+            <li class="nav-item"><a href="pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="range.html" class="nav-link"><span class="nav-icon module"></span>range</a></li>
+            <li class="nav-item"><a href="ref_cell.html" class="nav-link"><span class="nav-icon module"></span>ref_cell</a></li>
+            <li class="nav-item"><a href="reflect.html" class="nav-link"><span class="nav-icon module"></span>reflect</a></li>
+            <li class="nav-item"><a href="repeat.html" class="nav-link"><span class="nav-icon module"></span>repeat</a></li>
+            <li class="nav-item"><a href="repeat_n.html" class="nav-link"><span class="nav-icon module"></span>repeat_n</a></li>
+            <li class="nav-item"><a href="repeat_with.html" class="nav-link"><span class="nav-icon module"></span>repeat_with</a></li>
+            <li class="nav-item"><a href="result.html" class="nav-link"><span class="nav-icon module"></span>result</a></li>
+            <li class="nav-item"><a href="rev.html" class="nav-link"><span class="nav-icon module"></span>rev</a></li>
+            <li class="nav-item"><a href="rt.html" class="nav-link"><span class="nav-icon module"></span>rt</a></li>
+            <li class="nav-item"><a href="saturating.html" class="nav-link"><span class="nav-icon module"></span>saturating</a></li>
+            <li class="nav-item"><a href="scan.html" class="nav-link"><span class="nav-icon module"></span>scan</a></li>
+            <li class="nav-item"><a href="shared.html" class="nav-link"><span class="nav-icon module"></span>shared</a></li>
+            <li class="nav-item"><a href="skip.html" class="nav-link"><span class="nav-icon module"></span>skip</a></li>
+            <li class="nav-item"><a href="skip_while.html" class="nav-link"><span class="nav-icon module"></span>skip_while</a></li>
+            <li class="nav-item"><a href="soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="sort.html" class="nav-link"><span class="nav-icon module"></span>sort</a></li>
+            <li class="nav-item"><a href="step_by.html" class="nav-link"><span class="nav-icon module"></span>step_by</a></li>
+            <li class="nav-item"><a href="str.html" class="nav-link"><span class="nav-icon module"></span>str</a></li>
+            <li class="nav-item"><a href="successors.html" class="nav-link"><span class="nav-icon module"></span>successors</a></li>
+            <li class="nav-item"><a href="sync.html" class="nav-link"><span class="nav-icon module"></span>sync</a></li>
+            <li class="nav-item"><a href="take.html" class="nav-link"><span class="nav-icon module"></span>take</a></li>
+            <li class="nav-item"><a href="take_while.html" class="nav-link"><span class="nav-icon module"></span>take_while</a></li>
+            <li class="nav-item"><a href="time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="try_trait.html" class="nav-link"><span class="nav-icon module"></span>try_trait</a></li>
+            <li class="nav-item"><a href="tuple.html" class="nav-link"><span class="nav-icon module"></span>tuple</a></li>
+            <li class="nav-item"><a href="u8x16.html" class="nav-link"><span class="nav-icon module"></span>u8x16</a></li>
+            <li class="nav-item"><a href="unicode_data.html" class="nav-link"><span class="nav-icon module"></span>unicode_data</a></li>
+            <li class="nav-item"><a href="unsafe_cell.html" class="nav-link"><span class="nav-icon module"></span>unsafe_cell</a></li>
+            <li class="nav-item"><a href="wrapping.html" class="nav-link"><span class="nav-icon module"></span>wrapping</a></li>
+            <li class="nav-item"><a href="zip.html" class="nav-link"><span class="nav-icon module"></span>zip</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">std</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-std">
+            <li class="nav-item"><a href="Arc.html" class="nav-link"><span class="nav-icon module"></span>Arc</a></li>
+            <li class="nav-item"><a href="arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="async_tcp.html" class="nav-link"><span class="nav-icon module"></span>async_tcp</a></li>
+            <li class="nav-item"><a href="async_udp.html" class="nav-link"><span class="nav-icon module"></span>async_udp</a></li>
+            <li class="nav-item"><a href="atomic.html" class="nav-link"><span class="nav-icon module"></span>atomic</a></li>
+            <li class="nav-item"><a href="barrier.html" class="nav-link"><span class="nav-icon module"></span>barrier</a></li>
+            <li class="nav-item"><a href="behaviors.html" class="nav-link"><span class="nav-icon module"></span>behaviors</a></li>
+            <li class="nav-item"><a href="bm25.html" class="nav-link"><span class="nav-icon module"></span>bm25</a></li>
+            <li class="nav-item"><a href="brotli.html" class="nav-link"><span class="nav-icon module"></span>brotli</a></li>
+            <li class="nav-item"><a href="btreemap.html" class="nav-link"><span class="nav-icon module"></span>btreemap</a></li>
+            <li class="nav-item"><a href="btreeset.html" class="nav-link"><span class="nav-icon module"></span>btreeset</a></li>
+            <li class="nav-item"><a href="buffer.html" class="nav-link"><span class="nav-icon module"></span>buffer</a></li>
+            <li class="nav-item"><a href="bufio.html" class="nav-link"><span class="nav-icon module"></span>bufio</a></li>
+            <li class="nav-item"><a href="builder.html" class="nav-link"><span class="nav-icon module"></span>builder</a></li>
+            <li class="nav-item"><a href="cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="cipher.html" class="nav-link"><span class="nav-icon module"></span>cipher</a></li>
+            <li class="nav-item"><a href="class_collections.html" class="nav-link"><span class="nav-icon module"></span>class_collections</a></li>
+            <li class="nav-item"><a href="condvar.html" class="nav-link"><span class="nav-icon module"></span>condvar</a></li>
+            <li class="nav-item"><a href="constants.html" class="nav-link"><span class="nav-icon module"></span>constants</a></li>
+            <li class="nav-item"><a href="crc32.html" class="nav-link"><span class="nav-icon module"></span>crc32</a></li>
+            <li class="nav-item"><a href="datetime.html" class="nav-link"><span class="nav-icon module"></span>datetime</a></li>
+            <li class="nav-item"><a href="deflate.html" class="nav-link"><span class="nav-icon module"></span>deflate</a></li>
+            <li class="nav-item"><a href="deque.html" class="nav-link"><span class="nav-icon module"></span>deque</a></li>
+            <li class="nav-item"><a href="dh.html" class="nav-link"><span class="nav-icon module"></span>dh</a></li>
+            <li class="nav-item"><a href="dir.html" class="nav-link"><span class="nav-icon module"></span>dir</a></li>
+            <li class="nav-item"><a href="distance.html" class="nav-link"><span class="nav-icon module"></span>distance</a></li>
+            <li class="nav-item"><a href="dns.html" class="nav-link"><span class="nav-icon module"></span>dns</a></li>
+            <li class="nav-item"><a href="ecdh.html" class="nav-link"><span class="nav-icon module"></span>ecdh</a></li>
+            <li class="nav-item"><a href="error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="exception.html" class="nav-link"><span class="nav-icon module"></span>exception</a></li>
+            <li class="nav-item"><a href="file.html" class="nav-link"><span class="nav-icon module"></span>file</a></li>
+            <li class="nav-item"><a href="glob.html" class="nav-link"><span class="nav-icon module"></span>glob</a></li>
+            <li class="nav-item"><a href="gzip.html" class="nav-link"><span class="nav-icon module"></span>gzip</a></li>
+            <li class="nav-item"><a href="hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="hashmap.html" class="nav-link"><span class="nav-icon module"></span>hashmap</a></li>
+            <li class="nav-item"><a href="hmac.html" class="nav-link"><span class="nav-icon module"></span>hmac</a></li>
+            <li class="nav-item"><a href="hnsw.html" class="nav-link"><span class="nav-icon module"></span>hnsw</a></li>
+            <li class="nav-item"><a href="interfaces.html" class="nav-link"><span class="nav-icon module"></span>interfaces</a></li>
+            <li class="nav-item"><a href="io.html" class="nav-link"><span class="nav-icon module"></span>io</a></li>
+            <li class="nav-item"><a href="ip.html" class="nav-link"><span class="nav-icon module"></span>ip</a></li>
+            <li class="nav-item"><a href="iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="kdf.html" class="nav-link"><span class="nav-icon module"></span>kdf</a></li>
+            <li class="nav-item"><a href="key.html" class="nav-link"><span class="nav-icon module"></span>key</a></li>
+            <li class="nav-item"><a href="list.html" class="nav-link"><span class="nav-icon module"></span>list</a></li>
+            <li class="nav-item"><a href="local.html" class="nav-link"><span class="nav-icon module"></span>local</a></li>
+            <li class="nav-item"><a href="log.html" class="nav-link"><span class="nav-icon module"></span>log</a></li>
+            <li class="nav-item"><a href="math.html" class="nav-link"><span class="nav-icon module"></span>math</a></li>
+            <li class="nav-item"><a href="mpsc.html" class="nav-link"><span class="nav-icon module"></span>mpsc</a></li>
+            <li class="nav-item"><a href="mutex.html" class="nav-link"><span class="nav-icon module"></span>mutex</a></li>
+            <li class="nav-item"><a href="object.html" class="nav-link"><span class="nav-icon module"></span>object</a></li>
+            <li class="nav-item"><a href="once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="options.html" class="nav-link"><span class="nav-icon module"></span>options</a></li>
+            <li class="nav-item"><a href="ordering.html" class="nav-link"><span class="nav-icon module"></span>ordering</a></li>
+            <li class="nav-item"><a href="os.html" class="nav-link"><span class="nav-icon module"></span>os</a></li>
+            <li class="nav-item"><a href="parser.html" class="nav-link"><span class="nav-icon module"></span>parser</a></li>
+            <li class="nav-item"><a href="path.html" class="nav-link"><span class="nav-icon module"></span>path</a></li>
+            <li class="nav-item"><a href="pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="precompiled_symbols.html" class="nav-link"><span class="nav-icon module"></span>precompiled_symbols</a></li>
+            <li class="nav-item"><a href="profiler.html" class="nav-link"><span class="nav-icon module"></span>profiler</a></li>
+            <li class="nav-item"><a href="queue.html" class="nav-link"><span class="nav-icon module"></span>queue</a></li>
+            <li class="nav-item"><a href="random.html" class="nav-link"><span class="nav-icon module"></span>random</a></li>
+            <li class="nav-item"><a href="regex.html" class="nav-link"><span class="nav-icon module"></span>regex</a></li>
+            <li class="nav-item"><a href="rsa.html" class="nav-link"><span class="nav-icon module"></span>rsa</a></li>
+            <li class="nav-item"><a href="rwlock.html" class="nav-link"><span class="nav-icon module"></span>rwlock</a></li>
+            <li class="nav-item"><a href="scope.html" class="nav-link"><span class="nav-icon module"></span>scope</a></li>
+            <li class="nav-item"><a href="semver.html" class="nav-link"><span class="nav-icon module"></span>semver</a></li>
+            <li class="nav-item"><a href="serialize.html" class="nav-link"><span class="nav-icon module"></span>serialize</a></li>
+            <li class="nav-item"><a href="sign.html" class="nav-link"><span class="nav-icon module"></span>sign</a></li>
+            <li class="nav-item"><a href="socket.html" class="nav-link"><span class="nav-icon module"></span>socket</a></li>
+            <li class="nav-item"><a href="soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="stack.html" class="nav-link"><span class="nav-icon module"></span>stack</a></li>
+            <li class="nav-item"><a href="stream.html" class="nav-link"><span class="nav-icon module"></span>stream</a></li>
+            <li class="nav-item"><a href="tcp.html" class="nav-link"><span class="nav-icon module"></span>tcp</a></li>
+            <li class="nav-item"><a href="text.html" class="nav-link"><span class="nav-icon module"></span>text</a></li>
+            <li class="nav-item"><a href="time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="tls.html" class="nav-link"><span class="nav-icon module"></span>tls</a></li>
+            <li class="nav-item"><a href="traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+            <li class="nav-item"><a href="udp.html" class="nav-link"><span class="nav-icon module"></span>udp</a></li>
+            <li class="nav-item"><a href="url.html" class="nav-link"><span class="nav-icon module"></span>url</a></li>
+            <li class="nav-item"><a href="uuid.html" class="nav-link"><span class="nav-icon module"></span>uuid</a></li>
+            <li class="nav-item"><a href="x509.html" class="nav-link"><span class="nav-icon module"></span>x509</a></li>
+            <li class="nav-item"><a href="zstd.html" class="nav-link"><span class="nav-icon module"></span>zstd</a></li>
+        </ul>
+        <button class="nav-toggle" onclick="toggleLibrary('std')">Show std</button>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">test</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-test">
+            <li class="nav-item"><a href="types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">backtrace</div>
+        <ul class="nav-list nav-list-collapsed" id="lib-backtrace">
+            <li class="nav-item"><a href="backtrace.html" class="nav-link"><span class="nav-icon module"></span>backtrace</a></li>
+            <li class="nav-item"><a href="frame.html" class="nav-link"><span class="nav-icon module"></span>frame</a></li>
+            <li class="nav-item"><a href="symbol.html" class="nav-link"><span class="nav-icon module"></span>symbol</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">intrinsics</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_add" class="nav-link"><span class="nav-icon function"></span>llvm_add</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_sub" class="nav-link"><span class="nav-icon function"></span>llvm_sub</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_mul" class="nav-link"><span class="nav-icon function"></span>llvm_mul</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_div" class="nav-link"><span class="nav-icon function"></span>llvm_div</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_rem" class="nav-link"><span class="nav-icon function"></span>llvm_rem</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_neg" class="nav-link"><span class="nav-icon function"></span>llvm_neg</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_eq" class="nav-link"><span class="nav-icon function"></span>llvm_eq</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_ne" class="nav-link"><span class="nav-icon function"></span>llvm_ne</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_lt" class="nav-link"><span class="nav-icon function"></span>llvm_lt</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_le" class="nav-link"><span class="nav-icon function"></span>llvm_le</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_gt" class="nav-link"><span class="nav-icon function"></span>llvm_gt</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_ge" class="nav-link"><span class="nav-icon function"></span>llvm_ge</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_and" class="nav-link"><span class="nav-icon function"></span>llvm_and</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_or" class="nav-link"><span class="nav-icon function"></span>llvm_or</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_xor" class="nav-link"><span class="nav-icon function"></span>llvm_xor</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_not" class="nav-link"><span class="nav-icon function"></span>llvm_not</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_shl" class="nav-link"><span class="nav-icon function"></span>llvm_shl</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::llvm_shr" class="nav-link"><span class="nav-icon function"></span>llvm_shr</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::checked_add" class="nav-link"><span class="nav-icon function"></span>checked_add</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::checked_sub" class="nav-link"><span class="nav-icon function"></span>checked_sub</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::checked_mul" class="nav-link"><span class="nav-icon function"></span>checked_mul</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::checked_div" class="nav-link"><span class="nav-icon function"></span>checked_div</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::saturating_add" class="nav-link"><span class="nav-icon function"></span>saturating_add</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::saturating_sub" class="nav-link"><span class="nav-icon function"></span>saturating_sub</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::saturating_mul" class="nav-link"><span class="nav-icon function"></span>saturating_mul</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::slice_get" class="nav-link"><span class="nav-icon function"></span>slice_get</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::slice_get_mut" class="nav-link"><span class="nav-icon function"></span>slice_get_mut</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::slice_set" class="nav-link"><span class="nav-icon function"></span>slice_set</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::slice_offset" class="nav-link"><span class="nav-icon function"></span>slice_offset</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::slice_swap" class="nav-link"><span class="nav-icon function"></span>slice_swap</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::array_as_ptr" class="nav-link"><span class="nav-icon function"></span>array_as_ptr</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::array_as_mut_ptr" class="nav-link"><span class="nav-icon function"></span>array_as_mut_ptr</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::array_offset_ptr" class="nav-link"><span class="nav-icon function"></span>array_offset_ptr</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::array_offset_mut_ptr" class="nav-link"><span class="nav-icon function"></span>array_offset_mut_ptr</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ptr_read" class="nav-link"><span class="nav-icon function"></span>ptr_read</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ptr_write" class="nav-link"><span class="nav-icon function"></span>ptr_write</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ptr_offset" class="nav-link"><span class="nav-icon function"></span>ptr_offset</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::copy_nonoverlapping" class="nav-link"><span class="nav-icon function"></span>copy_nonoverlapping</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::copy" class="nav-link"><span class="nav-icon function"></span>copy</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::write_bytes" class="nav-link"><span class="nav-icon function"></span>write_bytes</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::size_of" class="nav-link"><span class="nav-icon function"></span>size_of</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::align_of" class="nav-link"><span class="nav-icon function"></span>align_of</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::type_id" class="nav-link"><span class="nav-icon function"></span>type_id</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::type_name" class="nav-link"><span class="nav-icon function"></span>type_name</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::transmute" class="nav-link"><span class="nav-icon function"></span>transmute</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::cast" class="nav-link"><span class="nav-icon function"></span>cast</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::volatile_read" class="nav-link"><span class="nav-icon function"></span>volatile_read</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::volatile_write" class="nav-link"><span class="nav-icon function"></span>volatile_write</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_load" class="nav-link"><span class="nav-icon function"></span>atomic_load</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_store" class="nav-link"><span class="nav-icon function"></span>atomic_store</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_cmpxchg" class="nav-link"><span class="nav-icon function"></span>atomic_cmpxchg</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_add" class="nav-link"><span class="nav-icon function"></span>atomic_add</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_sub" class="nav-link"><span class="nav-icon function"></span>atomic_sub</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_and" class="nav-link"><span class="nav-icon function"></span>atomic_and</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_or" class="nav-link"><span class="nav-icon function"></span>atomic_or</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::atomic_xor" class="nav-link"><span class="nav-icon function"></span>atomic_xor</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::unreachable" class="nav-link"><span class="nav-icon function"></span>unreachable</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::assume" class="nav-link"><span class="nav-icon function"></span>assume</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::likely" class="nav-link"><span class="nav-icon function"></span>likely</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::unlikely" class="nav-link"><span class="nav-icon function"></span>unlikely</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::fence" class="nav-link"><span class="nav-icon function"></span>fence</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ctlz" class="nav-link"><span class="nav-icon function"></span>ctlz</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::cttz" class="nav-link"><span class="nav-icon function"></span>cttz</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ctpop" class="nav-link"><span class="nav-icon function"></span>ctpop</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::bswap" class="nav-link"><span class="nav-icon function"></span>bswap</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::bitreverse" class="nav-link"><span class="nav-icon function"></span>bitreverse</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::sqrt" class="nav-link"><span class="nav-icon function"></span>sqrt</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::sin" class="nav-link"><span class="nav-icon function"></span>sin</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::cos" class="nav-link"><span class="nav-icon function"></span>cos</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::log" class="nav-link"><span class="nav-icon function"></span>log</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::exp" class="nav-link"><span class="nav-icon function"></span>exp</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::pow" class="nav-link"><span class="nav-icon function"></span>pow</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::floor" class="nav-link"><span class="nav-icon function"></span>floor</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::ceil" class="nav-link"><span class="nav-icon function"></span>ceil</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::round" class="nav-link"><span class="nav-icon function"></span>round</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::trunc" class="nav-link"><span class="nav-icon function"></span>trunc</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::fma" class="nav-link"><span class="nav-icon function"></span>fma</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::minnum" class="nav-link"><span class="nav-icon function"></span>minnum</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::maxnum" class="nav-link"><span class="nav-icon function"></span>maxnum</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::fabs" class="nav-link"><span class="nav-icon function"></span>fabs</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::copysign" class="nav-link"><span class="nav-icon function"></span>copysign</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::field_count" class="nav-link"><span class="nav-icon function"></span>field_count</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::variant_count" class="nav-link"><span class="nav-icon function"></span>variant_count</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::field_name" class="nav-link"><span class="nav-icon function"></span>field_name</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::field_type_id" class="nav-link"><span class="nav-icon function"></span>field_type_id</a></li>
+            <li class="nav-item"><a href="#lib::core::src::intrinsics::field_offset" class="nav-link"><span class="nav-icon function"></span>field_offset</a></li>
+        </ul>
+    </nav>
+</aside>
+<main class="main-content">
+<div class="page-header">
+    <h1 class="page-title">intrinsics</h1>
+<p class="page-description">Compiler intrinsics.</p>
+</div>
+<section class="item-section">
+<h2 class="section-title">Functions</h2>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_add">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_add">llvm_add</a></h3>
+  </div>
+  <div class="signature">func llvm_add[T](a: T, b: T) -&gt; T</div>
+  <div class="item-description"><p>Adds two values. Maps to LLVM `add` instruction. For integers: wrapping addition (no overflow check). For floats: IEEE 754 addition.</p>
+</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_sub">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_sub">llvm_sub</a></h3>
+  </div>
+  <div class="signature">func llvm_sub[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_mul">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_mul">llvm_mul</a></h3>
+  </div>
+  <div class="signature">func llvm_mul[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_div">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_div">llvm_div</a></h3>
+  </div>
+  <div class="signature">func llvm_div[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_rem">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_rem">llvm_rem</a></h3>
+  </div>
+  <div class="signature">func llvm_rem[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_neg">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_neg">llvm_neg</a></h3>
+  </div>
+  <div class="signature">func llvm_neg[T](a: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_eq">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_eq">llvm_eq</a></h3>
+  </div>
+  <div class="signature">func llvm_eq[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_ne">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_ne">llvm_ne</a></h3>
+  </div>
+  <div class="signature">func llvm_ne[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_lt">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_lt">llvm_lt</a></h3>
+  </div>
+  <div class="signature">func llvm_lt[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_le">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_le">llvm_le</a></h3>
+  </div>
+  <div class="signature">func llvm_le[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_gt">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_gt">llvm_gt</a></h3>
+  </div>
+  <div class="signature">func llvm_gt[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_ge">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_ge">llvm_ge</a></h3>
+  </div>
+  <div class="signature">func llvm_ge[T](a: T, b: T) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_and">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_and">llvm_and</a></h3>
+  </div>
+  <div class="signature">func llvm_and[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_or">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_or">llvm_or</a></h3>
+  </div>
+  <div class="signature">func llvm_or[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_xor">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_xor">llvm_xor</a></h3>
+  </div>
+  <div class="signature">func llvm_xor[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_not">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_not">llvm_not</a></h3>
+  </div>
+  <div class="signature">func llvm_not[T](a: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_shl">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_shl">llvm_shl</a></h3>
+  </div>
+  <div class="signature">func llvm_shl[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::llvm_shr">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::llvm_shr">llvm_shr</a></h3>
+  </div>
+  <div class="signature">func llvm_shr[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::checked_add">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::checked_add">checked_add</a></h3>
+  </div>
+  <div class="signature">func checked_add[T](a: T, b: T) -&gt; Maybe[T]</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Maybe[T]</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::checked_sub">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::checked_sub">checked_sub</a></h3>
+  </div>
+  <div class="signature">func checked_sub[T](a: T, b: T) -&gt; Maybe[T]</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Maybe[T]</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::checked_mul">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::checked_mul">checked_mul</a></h3>
+  </div>
+  <div class="signature">func checked_mul[T](a: T, b: T) -&gt; Maybe[T]</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Maybe[T]</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::checked_div">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::checked_div">checked_div</a></h3>
+  </div>
+  <div class="signature">func checked_div[T](a: T, b: T) -&gt; Maybe[T]</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Maybe[T]</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::saturating_add">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::saturating_add">saturating_add</a></h3>
+  </div>
+  <div class="signature">func saturating_add[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::saturating_sub">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::saturating_sub">saturating_sub</a></h3>
+  </div>
+  <div class="signature">func saturating_sub[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::saturating_mul">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::saturating_mul">saturating_mul</a></h3>
+  </div>
+  <div class="signature">func saturating_mul[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::slice_get">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::slice_get">slice_get</a></h3>
+  </div>
+  <div class="signature">func slice_get[T](data: ref T, index: I64) -&gt; ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">ref T</td><td></td></tr>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::slice_get_mut">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::slice_get_mut">slice_get_mut</a></h3>
+  </div>
+  <div class="signature">func slice_get_mut[T](data: mut ref T, index: I64) -&gt; mut ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">mut ref T</td><td></td></tr>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">mut ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::slice_set">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::slice_set">slice_set</a></h3>
+  </div>
+  <div class="signature">func slice_set[T](data: mut ref T, index: I64, value: T)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">mut ref T</td><td></td></tr>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+        <tr><td class="param-name">value</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::slice_offset">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::slice_offset">slice_offset</a></h3>
+  </div>
+  <div class="signature">func slice_offset[T](data: ref T, count: I64) -&gt; ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">ref T</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::slice_swap">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::slice_swap">slice_swap</a></h3>
+  </div>
+  <div class="signature">func slice_swap[T](data: mut ref T, a: I64, b: I64)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">mut ref T</td><td></td></tr>
+        <tr><td class="param-name">a</td><td class="param-type">I64</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::array_as_ptr">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::array_as_ptr">array_as_ptr</a></h3>
+  </div>
+  <div class="signature">func array_as_ptr[T](data: T) -&gt; ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::array_as_mut_ptr">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::array_as_mut_ptr">array_as_mut_ptr</a></h3>
+  </div>
+  <div class="signature">func array_as_mut_ptr[T](data: T) -&gt; mut ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">mut ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::array_offset_ptr">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::array_offset_ptr">array_offset_ptr</a></h3>
+  </div>
+  <div class="signature">func array_offset_ptr[T](data: ref T, count: I64) -&gt; ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">ref T</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::array_offset_mut_ptr">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::array_offset_mut_ptr">array_offset_mut_ptr</a></h3>
+  </div>
+  <div class="signature">func array_offset_mut_ptr[T](data: mut ref T, count: I64) -&gt; mut ref T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">data</td><td class="param-type">mut ref T</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">mut ref T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ptr_read">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ptr_read">ptr_read</a></h3>
+  </div>
+  <div class="signature">func ptr_read[T](ptr: Ptr[T]) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ptr_write">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ptr_write">ptr_write</a></h3>
+  </div>
+  <div class="signature">func ptr_write[T](ptr: Ptr[T], val: T)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ptr_offset">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ptr_offset">ptr_offset</a></h3>
+  </div>
+  <div class="signature">func ptr_offset[T](ptr: Ptr[T], count: I64) -&gt; Ptr[T]</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Ptr[T]</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::copy_nonoverlapping">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::copy_nonoverlapping">copy_nonoverlapping</a></h3>
+  </div>
+  <div class="signature">func copy_nonoverlapping[T](src: Ptr[T], dst: Ptr[T], count: I64)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">src</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">dst</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::copy">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::copy">copy</a></h3>
+  </div>
+  <div class="signature">func copy[T](src: Ptr[T], dst: Ptr[T], count: I64)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">src</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">dst</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::write_bytes">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::write_bytes">write_bytes</a></h3>
+  </div>
+  <div class="signature">func write_bytes[T](dst: Ptr[T], val: U8, count: I64)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">dst</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">U8</td><td></td></tr>
+        <tr><td class="param-name">count</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::size_of">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::size_of">size_of</a></h3>
+  </div>
+  <div class="signature">func size_of[T]() -&gt; I64</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">I64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::align_of">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::align_of">align_of</a></h3>
+  </div>
+  <div class="signature">func align_of[T]() -&gt; I64</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">I64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::type_id">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::type_id">type_id</a></h3>
+  </div>
+  <div class="signature">func type_id[T]() -&gt; U64</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">U64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::type_name">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::type_name">type_name</a></h3>
+  </div>
+  <div class="signature">func type_name[T]() -&gt; Str</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Str</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::transmute">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::transmute">transmute</a></h3>
+  </div>
+  <div class="signature">func transmute[T, U](val: T) -&gt; U</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">U</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::cast">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::cast">cast</a></h3>
+  </div>
+  <div class="signature">func cast[T, U](val: T) -&gt; U</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">U</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::volatile_read">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::volatile_read">volatile_read</a></h3>
+  </div>
+  <div class="signature">func volatile_read[T](ptr: Ptr[T]) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::volatile_write">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::volatile_write">volatile_write</a></h3>
+  </div>
+  <div class="signature">func volatile_write[T](ptr: Ptr[T], val: T)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_load">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_load">atomic_load</a></h3>
+  </div>
+  <div class="signature">func atomic_load[T](ptr: Ptr[T]) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_store">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_store">atomic_store</a></h3>
+  </div>
+  <div class="signature">func atomic_store[T](ptr: Ptr[T], val: T)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_cmpxchg">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_cmpxchg">atomic_cmpxchg</a></h3>
+  </div>
+  <div class="signature">func atomic_cmpxchg[T](ptr: Ptr[T], expected: T, desired: T) -&gt; (Bool, T)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">expected</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">desired</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">(Bool, T)</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_add">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_add">atomic_add</a></h3>
+  </div>
+  <div class="signature">func atomic_add[T](ptr: Ptr[T], val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_sub">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_sub">atomic_sub</a></h3>
+  </div>
+  <div class="signature">func atomic_sub[T](ptr: Ptr[T], val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_and">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_and">atomic_and</a></h3>
+  </div>
+  <div class="signature">func atomic_and[T](ptr: Ptr[T], val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_or">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_or">atomic_or</a></h3>
+  </div>
+  <div class="signature">func atomic_or[T](ptr: Ptr[T], val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::atomic_xor">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::atomic_xor">atomic_xor</a></h3>
+  </div>
+  <div class="signature">func atomic_xor[T](ptr: Ptr[T], val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">ptr</td><td class="param-type">Ptr[T]</td><td></td></tr>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::unreachable">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::unreachable">unreachable</a></h3>
+  </div>
+  <div class="signature">func unreachable() -&gt; Unit</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Unit</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::assume">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::assume">assume</a></h3>
+  </div>
+  <div class="signature">func assume(cond: Bool)</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">cond</td><td class="param-type">Bool</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::likely">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::likely">likely</a></h3>
+  </div>
+  <div class="signature">func likely(cond: Bool) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">cond</td><td class="param-type">Bool</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::unlikely">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::unlikely">unlikely</a></h3>
+  </div>
+  <div class="signature">func unlikely(cond: Bool) -&gt; Bool</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">cond</td><td class="param-type">Bool</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Bool</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::fence">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::fence">fence</a></h3>
+  </div>
+  <div class="signature">func fence()</div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ctlz">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ctlz">ctlz</a></h3>
+  </div>
+  <div class="signature">func ctlz[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::cttz">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::cttz">cttz</a></h3>
+  </div>
+  <div class="signature">func cttz[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ctpop">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ctpop">ctpop</a></h3>
+  </div>
+  <div class="signature">func ctpop[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::bswap">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::bswap">bswap</a></h3>
+  </div>
+  <div class="signature">func bswap[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::bitreverse">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::bitreverse">bitreverse</a></h3>
+  </div>
+  <div class="signature">func bitreverse[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::sqrt">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::sqrt">sqrt</a></h3>
+  </div>
+  <div class="signature">func sqrt[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::sin">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::sin">sin</a></h3>
+  </div>
+  <div class="signature">func sin[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::cos">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::cos">cos</a></h3>
+  </div>
+  <div class="signature">func cos[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::log">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::log">log</a></h3>
+  </div>
+  <div class="signature">func log[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::exp">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::exp">exp</a></h3>
+  </div>
+  <div class="signature">func exp[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::pow">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::pow">pow</a></h3>
+  </div>
+  <div class="signature">func pow[T](x: T, exp: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">x</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">exp</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::floor">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::floor">floor</a></h3>
+  </div>
+  <div class="signature">func floor[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::ceil">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::ceil">ceil</a></h3>
+  </div>
+  <div class="signature">func ceil[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::round">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::round">round</a></h3>
+  </div>
+  <div class="signature">func round[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::trunc">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::trunc">trunc</a></h3>
+  </div>
+  <div class="signature">func trunc[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::fma">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::fma">fma</a></h3>
+  </div>
+  <div class="signature">func fma[T](a: T, b: T, c: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">c</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::minnum">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::minnum">minnum</a></h3>
+  </div>
+  <div class="signature">func minnum[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::maxnum">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::maxnum">maxnum</a></h3>
+  </div>
+  <div class="signature">func maxnum[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::fabs">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::fabs">fabs</a></h3>
+  </div>
+  <div class="signature">func fabs[T](val: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">val</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::copysign">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::copysign">copysign</a></h3>
+  </div>
+  <div class="signature">func copysign[T](a: T, b: T) -&gt; T</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">a</td><td class="param-type">T</td><td></td></tr>
+        <tr><td class="param-name">b</td><td class="param-type">T</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">T</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::field_count">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::field_count">field_count</a></h3>
+  </div>
+  <div class="signature">func field_count[T]() -&gt; I64</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">I64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::variant_count">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::variant_count">variant_count</a></h3>
+  </div>
+  <div class="signature">func variant_count[T]() -&gt; I64</div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">I64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::field_name">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::field_name">field_name</a></h3>
+  </div>
+  <div class="signature">func field_name[T](index: I64) -&gt; Str</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">Str</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::field_type_id">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::field_type_id">field_type_id</a></h3>
+  </div>
+  <div class="signature">func field_type_id[T](index: I64) -&gt; U64</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">U64</code></p>
+  </div>
+</article>
+<article class="item-card" id="lib::core::src::intrinsics::field_offset">
+  <div class="item-header">
+    <span class="item-kind-badge function">function</span>
+    <h3 class="item-name"><a href="#lib::core::src::intrinsics::field_offset">field_offset</a></h3>
+  </div>
+  <div class="signature">func field_offset[T](index: I64) -&gt; I64</div>
+  <div class="params-section">
+    <div class="params-title">Parameters</div>
+    <table class="params-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="param-name">index</td><td class="param-type">I64</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="returns-section">
+    <div class="returns-title">Returns</div>
+    <p><code class="param-type">I64</code></p>
+  </div>
+</article>
+</section>
+<footer class="footer">
+    <p>Generated by <a href="https://github.com/tml-lang/tml">TML Documentation Generator</a></p>
+</footer>
+</main>
+</div>
+<button class="mobile-toggle" aria-label="Toggle menu">☰</button>
+<script src="../search-index.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

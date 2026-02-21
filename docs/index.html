@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TML Project - TML Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="index.html" class="logo">
+            <span class="logo-icon">TML</span>
+            <span>Documentation</span>
+        </a>
+    </div>
+    <div class="search-container">
+        <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+            </svg>
+            <input type="text" id="search-input" class="search-input" placeholder="Search docs..." autocomplete="off">
+            <span class="search-shortcut">/</span>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+    <nav class="nav-section">
+        <div class="nav-title">core</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="pages/accumulators.html" class="nav-link"><span class="nav-icon module"></span>accumulators</a></li>
+            <li class="nav-item"><a href="pages/alignment.html" class="nav-link"><span class="nav-icon module"></span>alignment</a></li>
+            <li class="nav-item"><a href="pages/any.html" class="nav-link"><span class="nav-icon module"></span>any</a></li>
+            <li class="nav-item"><a href="pages/arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="pages/arith.html" class="nav-link"><span class="nav-icon module"></span>arith</a></li>
+            <li class="nav-item"><a href="pages/ascii.html" class="nav-link"><span class="nav-icon module"></span>ascii</a></li>
+            <li class="nav-item"><a href="pages/ascii85.html" class="nav-link"><span class="nav-icon module"></span>ascii85</a></li>
+            <li class="nav-item"><a href="pages/async_function.html" class="nav-link"><span class="nav-icon module"></span>async_function</a></li>
+            <li class="nav-item"><a href="pages/base16.html" class="nav-link"><span class="nav-icon module"></span>base16</a></li>
+            <li class="nav-item"><a href="pages/base32.html" class="nav-link"><span class="nav-icon module"></span>base32</a></li>
+            <li class="nav-item"><a href="pages/base36.html" class="nav-link"><span class="nav-icon module"></span>base36</a></li>
+            <li class="nav-item"><a href="pages/base45.html" class="nav-link"><span class="nav-icon module"></span>base45</a></li>
+            <li class="nav-item"><a href="pages/base58.html" class="nav-link"><span class="nav-icon module"></span>base58</a></li>
+            <li class="nav-item"><a href="pages/base62.html" class="nav-link"><span class="nav-icon module"></span>base62</a></li>
+            <li class="nav-item"><a href="pages/base64.html" class="nav-link"><span class="nav-icon module"></span>base64</a></li>
+            <li class="nav-item"><a href="pages/base64url.html" class="nav-link"><span class="nav-icon module"></span>base64url</a></li>
+            <li class="nav-item"><a href="pages/base8.html" class="nav-link"><span class="nav-icon module"></span>base8</a></li>
+            <li class="nav-item"><a href="pages/base91.html" class="nav-link"><span class="nav-icon module"></span>base91</a></li>
+            <li class="nav-item"><a href="pages/bit.html" class="nav-link"><span class="nav-icon module"></span>bit</a></li>
+            <li class="nav-item"><a href="pages/borrow.html" class="nav-link"><span class="nav-icon module"></span>borrow</a></li>
+            <li class="nav-item"><a href="pages/builders.html" class="nav-link"><span class="nav-icon module"></span>builders</a></li>
+            <li class="nav-item"><a href="pages/cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="pages/cell.html" class="nav-link"><span class="nav-icon module"></span>cell</a></li>
+            <li class="nav-item"><a href="pages/chain.html" class="nav-link"><span class="nav-icon module"></span>chain</a></li>
+            <li class="nav-item"><a href="pages/char.html" class="nav-link"><span class="nav-icon module"></span>char</a></li>
+            <li class="nav-item"><a href="pages/clone.html" class="nav-link"><span class="nav-icon module"></span>clone</a></li>
+            <li class="nav-item"><a href="pages/cloned.html" class="nav-link"><span class="nav-icon module"></span>cloned</a></li>
+            <li class="nav-item"><a href="pages/cmp.html" class="nav-link"><span class="nav-icon module"></span>cmp</a></li>
+            <li class="nav-item"><a href="pages/collections.html" class="nav-link"><span class="nav-icon module"></span>collections</a></li>
+            <li class="nav-item"><a href="pages/const_ptr.html" class="nav-link"><span class="nav-icon module"></span>const_ptr</a></li>
+            <li class="nav-item"><a href="pages/convert.html" class="nav-link"><span class="nav-icon module"></span>convert</a></li>
+            <li class="nav-item"><a href="pages/copied.html" class="nav-link"><span class="nav-icon module"></span>copied</a></li>
+            <li class="nav-item"><a href="pages/coroutine.html" class="nav-link"><span class="nav-icon module"></span>coroutine</a></li>
+            <li class="nav-item"><a href="pages/cycle.html" class="nav-link"><span class="nav-icon module"></span>cycle</a></li>
+            <li class="nav-item"><a href="pages/decode.html" class="nav-link"><span class="nav-icon module"></span>decode</a></li>
+            <li class="nav-item"><a href="pages/default.html" class="nav-link"><span class="nav-icon module"></span>default</a></li>
+            <li class="nav-item"><a href="pages/deref.html" class="nav-link"><span class="nav-icon module"></span>deref</a></li>
+            <li class="nav-item"><a href="pages/double_ended.html" class="nav-link"><span class="nav-icon module"></span>double_ended</a></li>
+            <li class="nav-item"><a href="pages/drop.html" class="nav-link"><span class="nav-icon module"></span>drop</a></li>
+            <li class="nav-item"><a href="pages/empty.html" class="nav-link"><span class="nav-icon module"></span>empty</a></li>
+            <li class="nav-item"><a href="pages/enumerate.html" class="nav-link"><span class="nav-icon module"></span>enumerate</a></li>
+            <li class="nav-item"><a href="pages/error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="pages/exact_size.html" class="nav-link"><span class="nav-icon module"></span>exact_size</a></li>
+            <li class="nav-item"><a href="pages/extend.html" class="nav-link"><span class="nav-icon module"></span>extend</a></li>
+            <li class="nav-item"><a href="pages/f32x4.html" class="nav-link"><span class="nav-icon module"></span>f32x4</a></li>
+            <li class="nav-item"><a href="pages/f64x2.html" class="nav-link"><span class="nav-icon module"></span>f64x2</a></li>
+            <li class="nav-item"><a href="pages/filter.html" class="nav-link"><span class="nav-icon module"></span>filter</a></li>
+            <li class="nav-item"><a href="pages/filter_map.html" class="nav-link"><span class="nav-icon module"></span>filter_map</a></li>
+            <li class="nav-item"><a href="pages/flat_map.html" class="nav-link"><span class="nav-icon module"></span>flat_map</a></li>
+            <li class="nav-item"><a href="pages/flatten.html" class="nav-link"><span class="nav-icon module"></span>flatten</a></li>
+            <li class="nav-item"><a href="pages/float.html" class="nav-link"><span class="nav-icon module"></span>float</a></li>
+            <li class="nav-item"><a href="pages/formatter.html" class="nav-link"><span class="nav-icon module"></span>formatter</a></li>
+            <li class="nav-item"><a href="pages/from_fn.html" class="nav-link"><span class="nav-icon module"></span>from_fn</a></li>
+            <li class="nav-item"><a href="pages/from_iterator.html" class="nav-link"><span class="nav-icon module"></span>from_iterator</a></li>
+            <li class="nav-item"><a href="pages/function.html" class="nav-link"><span class="nav-icon module"></span>function</a></li>
+            <li class="nav-item"><a href="pages/fuse.html" class="nav-link"><span class="nav-icon module"></span>fuse</a></li>
+            <li class="nav-item"><a href="pages/global.html" class="nav-link"><span class="nav-icon module"></span>global</a></li>
+            <li class="nav-item"><a href="pages/hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="pages/heap.html" class="nav-link"><span class="nav-icon module"></span>heap</a></li>
+            <li class="nav-item"><a href="pages/helpers.html" class="nav-link"><span class="nav-icon module"></span>helpers</a></li>
+            <li class="nav-item"><a href="pages/hex.html" class="nav-link"><span class="nav-icon module"></span>hex</a></li>
+            <li class="nav-item"><a href="pages/i32x4.html" class="nav-link"><span class="nav-icon module"></span>i32x4</a></li>
+            <li class="nav-item"><a href="pages/i64x2.html" class="nav-link"><span class="nav-icon module"></span>i64x2</a></li>
+            <li class="nav-item"><a href="pages/i8x16.html" class="nav-link"><span class="nav-icon module"></span>i8x16</a></li>
+            <li class="nav-item"><a href="pages/impls.html" class="nav-link"><span class="nav-icon module"></span>impls</a></li>
+            <li class="nav-item"><a href="pages/index.html" class="nav-link"><span class="nav-icon module"></span>index</a></li>
+            <li class="nav-item"><a href="pages/inspect.html" class="nav-link"><span class="nav-icon module"></span>inspect</a></li>
+            <li class="nav-item"><a href="pages/integer.html" class="nav-link"><span class="nav-icon module"></span>integer</a></li>
+            <li class="nav-item"><a href="pages/intersperse.html" class="nav-link"><span class="nav-icon module"></span>intersperse</a></li>
+            <li class="nav-item"><a href="pages/into_iterator.html" class="nav-link"><span class="nav-icon module"></span>into_iterator</a></li>
+            <li class="nav-item"><a href="pages/intrinsics.html" class="nav-link"><span class="nav-icon module"></span>intrinsics</a></li>
+            <li class="nav-item"><a href="pages/iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="pages/iterator.html" class="nav-link"><span class="nav-icon module"></span>iterator</a></li>
+            <li class="nav-item"><a href="pages/layout.html" class="nav-link"><span class="nav-icon module"></span>layout</a></li>
+            <li class="nav-item"><a href="pages/lazy.html" class="nav-link"><span class="nav-icon module"></span>lazy</a></li>
+            <li class="nav-item"><a href="pages/legacy.html" class="nav-link"><span class="nav-icon module"></span>legacy</a></li>
+            <li class="nav-item"><a href="pages/map.html" class="nav-link"><span class="nav-icon module"></span>map</a></li>
+            <li class="nav-item"><a href="pages/map_while.html" class="nav-link"><span class="nav-icon module"></span>map_while</a></li>
+            <li class="nav-item"><a href="pages/marker.html" class="nav-link"><span class="nav-icon module"></span>marker</a></li>
+            <li class="nav-item"><a href="pages/markers.html" class="nav-link"><span class="nav-icon module"></span>markers</a></li>
+            <li class="nav-item"><a href="pages/mask.html" class="nav-link"><span class="nav-icon module"></span>mask</a></li>
+            <li class="nav-item"><a href="pages/mem.html" class="nav-link"><span class="nav-icon module"></span>mem</a></li>
+            <li class="nav-item"><a href="pages/methods.html" class="nav-link"><span class="nav-icon module"></span>methods</a></li>
+            <li class="nav-item"><a href="pages/mut_ptr.html" class="nav-link"><span class="nav-icon module"></span>mut_ptr</a></li>
+            <li class="nav-item"><a href="pages/non_null.html" class="nav-link"><span class="nav-icon module"></span>non_null</a></li>
+            <li class="nav-item"><a href="pages/nonzero.html" class="nav-link"><span class="nav-icon module"></span>nonzero</a></li>
+            <li class="nav-item"><a href="pages/num.html" class="nav-link"><span class="nav-icon module"></span>num</a></li>
+            <li class="nav-item"><a href="pages/once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="pages/once_with.html" class="nav-link"><span class="nav-icon module"></span>once_with</a></li>
+            <li class="nav-item"><a href="pages/ops.html" class="nav-link"><span class="nav-icon module"></span>ops</a></li>
+            <li class="nav-item"><a href="pages/option.html" class="nav-link"><span class="nav-icon module"></span>option</a></li>
+            <li class="nav-item"><a href="pages/overflow.html" class="nav-link"><span class="nav-icon module"></span>overflow</a></li>
+            <li class="nav-item"><a href="pages/peekable.html" class="nav-link"><span class="nav-icon module"></span>peekable</a></li>
+            <li class="nav-item"><a href="pages/percent.html" class="nav-link"><span class="nav-icon module"></span>percent</a></li>
+            <li class="nav-item"><a href="pages/pin.html" class="nav-link"><span class="nav-icon module"></span>pin</a></li>
+            <li class="nav-item"><a href="pages/pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="pages/range.html" class="nav-link"><span class="nav-icon module"></span>range</a></li>
+            <li class="nav-item"><a href="pages/ref_cell.html" class="nav-link"><span class="nav-icon module"></span>ref_cell</a></li>
+            <li class="nav-item"><a href="pages/reflect.html" class="nav-link"><span class="nav-icon module"></span>reflect</a></li>
+            <li class="nav-item"><a href="pages/repeat.html" class="nav-link"><span class="nav-icon module"></span>repeat</a></li>
+            <li class="nav-item"><a href="pages/repeat_n.html" class="nav-link"><span class="nav-icon module"></span>repeat_n</a></li>
+            <li class="nav-item"><a href="pages/repeat_with.html" class="nav-link"><span class="nav-icon module"></span>repeat_with</a></li>
+            <li class="nav-item"><a href="pages/result.html" class="nav-link"><span class="nav-icon module"></span>result</a></li>
+            <li class="nav-item"><a href="pages/rev.html" class="nav-link"><span class="nav-icon module"></span>rev</a></li>
+            <li class="nav-item"><a href="pages/rt.html" class="nav-link"><span class="nav-icon module"></span>rt</a></li>
+            <li class="nav-item"><a href="pages/saturating.html" class="nav-link"><span class="nav-icon module"></span>saturating</a></li>
+            <li class="nav-item"><a href="pages/scan.html" class="nav-link"><span class="nav-icon module"></span>scan</a></li>
+            <li class="nav-item"><a href="pages/shared.html" class="nav-link"><span class="nav-icon module"></span>shared</a></li>
+            <li class="nav-item"><a href="pages/skip.html" class="nav-link"><span class="nav-icon module"></span>skip</a></li>
+            <li class="nav-item"><a href="pages/skip_while.html" class="nav-link"><span class="nav-icon module"></span>skip_while</a></li>
+            <li class="nav-item"><a href="pages/soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="pages/sort.html" class="nav-link"><span class="nav-icon module"></span>sort</a></li>
+            <li class="nav-item"><a href="pages/step_by.html" class="nav-link"><span class="nav-icon module"></span>step_by</a></li>
+            <li class="nav-item"><a href="pages/str.html" class="nav-link"><span class="nav-icon module"></span>str</a></li>
+            <li class="nav-item"><a href="pages/successors.html" class="nav-link"><span class="nav-icon module"></span>successors</a></li>
+            <li class="nav-item"><a href="pages/sync.html" class="nav-link"><span class="nav-icon module"></span>sync</a></li>
+            <li class="nav-item"><a href="pages/take.html" class="nav-link"><span class="nav-icon module"></span>take</a></li>
+            <li class="nav-item"><a href="pages/take_while.html" class="nav-link"><span class="nav-icon module"></span>take_while</a></li>
+            <li class="nav-item"><a href="pages/time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="pages/traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="pages/try_trait.html" class="nav-link"><span class="nav-icon module"></span>try_trait</a></li>
+            <li class="nav-item"><a href="pages/tuple.html" class="nav-link"><span class="nav-icon module"></span>tuple</a></li>
+            <li class="nav-item"><a href="pages/u8x16.html" class="nav-link"><span class="nav-icon module"></span>u8x16</a></li>
+            <li class="nav-item"><a href="pages/unicode_data.html" class="nav-link"><span class="nav-icon module"></span>unicode_data</a></li>
+            <li class="nav-item"><a href="pages/unsafe_cell.html" class="nav-link"><span class="nav-icon module"></span>unsafe_cell</a></li>
+            <li class="nav-item"><a href="pages/wrapping.html" class="nav-link"><span class="nav-icon module"></span>wrapping</a></li>
+            <li class="nav-item"><a href="pages/zip.html" class="nav-link"><span class="nav-icon module"></span>zip</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">std</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="pages/Arc.html" class="nav-link"><span class="nav-icon module"></span>Arc</a></li>
+            <li class="nav-item"><a href="pages/arena.html" class="nav-link"><span class="nav-icon module"></span>arena</a></li>
+            <li class="nav-item"><a href="pages/async_tcp.html" class="nav-link"><span class="nav-icon module"></span>async_tcp</a></li>
+            <li class="nav-item"><a href="pages/async_udp.html" class="nav-link"><span class="nav-icon module"></span>async_udp</a></li>
+            <li class="nav-item"><a href="pages/atomic.html" class="nav-link"><span class="nav-icon module"></span>atomic</a></li>
+            <li class="nav-item"><a href="pages/barrier.html" class="nav-link"><span class="nav-icon module"></span>barrier</a></li>
+            <li class="nav-item"><a href="pages/behaviors.html" class="nav-link"><span class="nav-icon module"></span>behaviors</a></li>
+            <li class="nav-item"><a href="pages/bm25.html" class="nav-link"><span class="nav-icon module"></span>bm25</a></li>
+            <li class="nav-item"><a href="pages/brotli.html" class="nav-link"><span class="nav-icon module"></span>brotli</a></li>
+            <li class="nav-item"><a href="pages/btreemap.html" class="nav-link"><span class="nav-icon module"></span>btreemap</a></li>
+            <li class="nav-item"><a href="pages/btreeset.html" class="nav-link"><span class="nav-icon module"></span>btreeset</a></li>
+            <li class="nav-item"><a href="pages/buffer.html" class="nav-link"><span class="nav-icon module"></span>buffer</a></li>
+            <li class="nav-item"><a href="pages/bufio.html" class="nav-link"><span class="nav-icon module"></span>bufio</a></li>
+            <li class="nav-item"><a href="pages/builder.html" class="nav-link"><span class="nav-icon module"></span>builder</a></li>
+            <li class="nav-item"><a href="pages/cache.html" class="nav-link"><span class="nav-icon module"></span>cache</a></li>
+            <li class="nav-item"><a href="pages/cipher.html" class="nav-link"><span class="nav-icon module"></span>cipher</a></li>
+            <li class="nav-item"><a href="pages/class_collections.html" class="nav-link"><span class="nav-icon module"></span>class_collections</a></li>
+            <li class="nav-item"><a href="pages/condvar.html" class="nav-link"><span class="nav-icon module"></span>condvar</a></li>
+            <li class="nav-item"><a href="pages/constants.html" class="nav-link"><span class="nav-icon module"></span>constants</a></li>
+            <li class="nav-item"><a href="pages/crc32.html" class="nav-link"><span class="nav-icon module"></span>crc32</a></li>
+            <li class="nav-item"><a href="pages/datetime.html" class="nav-link"><span class="nav-icon module"></span>datetime</a></li>
+            <li class="nav-item"><a href="pages/deflate.html" class="nav-link"><span class="nav-icon module"></span>deflate</a></li>
+            <li class="nav-item"><a href="pages/deque.html" class="nav-link"><span class="nav-icon module"></span>deque</a></li>
+            <li class="nav-item"><a href="pages/dh.html" class="nav-link"><span class="nav-icon module"></span>dh</a></li>
+            <li class="nav-item"><a href="pages/dir.html" class="nav-link"><span class="nav-icon module"></span>dir</a></li>
+            <li class="nav-item"><a href="pages/distance.html" class="nav-link"><span class="nav-icon module"></span>distance</a></li>
+            <li class="nav-item"><a href="pages/dns.html" class="nav-link"><span class="nav-icon module"></span>dns</a></li>
+            <li class="nav-item"><a href="pages/ecdh.html" class="nav-link"><span class="nav-icon module"></span>ecdh</a></li>
+            <li class="nav-item"><a href="pages/error.html" class="nav-link"><span class="nav-icon module"></span>error</a></li>
+            <li class="nav-item"><a href="pages/exception.html" class="nav-link"><span class="nav-icon module"></span>exception</a></li>
+            <li class="nav-item"><a href="pages/file.html" class="nav-link"><span class="nav-icon module"></span>file</a></li>
+            <li class="nav-item"><a href="pages/glob.html" class="nav-link"><span class="nav-icon module"></span>glob</a></li>
+            <li class="nav-item"><a href="pages/gzip.html" class="nav-link"><span class="nav-icon module"></span>gzip</a></li>
+            <li class="nav-item"><a href="pages/hash.html" class="nav-link"><span class="nav-icon module"></span>hash</a></li>
+            <li class="nav-item"><a href="pages/hashmap.html" class="nav-link"><span class="nav-icon module"></span>hashmap</a></li>
+            <li class="nav-item"><a href="pages/hmac.html" class="nav-link"><span class="nav-icon module"></span>hmac</a></li>
+            <li class="nav-item"><a href="pages/hnsw.html" class="nav-link"><span class="nav-icon module"></span>hnsw</a></li>
+            <li class="nav-item"><a href="pages/interfaces.html" class="nav-link"><span class="nav-icon module"></span>interfaces</a></li>
+            <li class="nav-item"><a href="pages/io.html" class="nav-link"><span class="nav-icon module"></span>io</a></li>
+            <li class="nav-item"><a href="pages/ip.html" class="nav-link"><span class="nav-icon module"></span>ip</a></li>
+            <li class="nav-item"><a href="pages/iter.html" class="nav-link"><span class="nav-icon module"></span>iter</a></li>
+            <li class="nav-item"><a href="pages/kdf.html" class="nav-link"><span class="nav-icon module"></span>kdf</a></li>
+            <li class="nav-item"><a href="pages/key.html" class="nav-link"><span class="nav-icon module"></span>key</a></li>
+            <li class="nav-item"><a href="pages/list.html" class="nav-link"><span class="nav-icon module"></span>list</a></li>
+            <li class="nav-item"><a href="pages/local.html" class="nav-link"><span class="nav-icon module"></span>local</a></li>
+            <li class="nav-item"><a href="pages/log.html" class="nav-link"><span class="nav-icon module"></span>log</a></li>
+            <li class="nav-item"><a href="pages/math.html" class="nav-link"><span class="nav-icon module"></span>math</a></li>
+            <li class="nav-item"><a href="pages/mpsc.html" class="nav-link"><span class="nav-icon module"></span>mpsc</a></li>
+            <li class="nav-item"><a href="pages/mutex.html" class="nav-link"><span class="nav-icon module"></span>mutex</a></li>
+            <li class="nav-item"><a href="pages/object.html" class="nav-link"><span class="nav-icon module"></span>object</a></li>
+            <li class="nav-item"><a href="pages/once.html" class="nav-link"><span class="nav-icon module"></span>once</a></li>
+            <li class="nav-item"><a href="pages/options.html" class="nav-link"><span class="nav-icon module"></span>options</a></li>
+            <li class="nav-item"><a href="pages/ordering.html" class="nav-link"><span class="nav-icon module"></span>ordering</a></li>
+            <li class="nav-item"><a href="pages/os.html" class="nav-link"><span class="nav-icon module"></span>os</a></li>
+            <li class="nav-item"><a href="pages/parser.html" class="nav-link"><span class="nav-icon module"></span>parser</a></li>
+            <li class="nav-item"><a href="pages/path.html" class="nav-link"><span class="nav-icon module"></span>path</a></li>
+            <li class="nav-item"><a href="pages/pool.html" class="nav-link"><span class="nav-icon module"></span>pool</a></li>
+            <li class="nav-item"><a href="pages/precompiled_symbols.html" class="nav-link"><span class="nav-icon module"></span>precompiled_symbols</a></li>
+            <li class="nav-item"><a href="pages/profiler.html" class="nav-link"><span class="nav-icon module"></span>profiler</a></li>
+            <li class="nav-item"><a href="pages/queue.html" class="nav-link"><span class="nav-icon module"></span>queue</a></li>
+            <li class="nav-item"><a href="pages/random.html" class="nav-link"><span class="nav-icon module"></span>random</a></li>
+            <li class="nav-item"><a href="pages/regex.html" class="nav-link"><span class="nav-icon module"></span>regex</a></li>
+            <li class="nav-item"><a href="pages/rsa.html" class="nav-link"><span class="nav-icon module"></span>rsa</a></li>
+            <li class="nav-item"><a href="pages/rwlock.html" class="nav-link"><span class="nav-icon module"></span>rwlock</a></li>
+            <li class="nav-item"><a href="pages/scope.html" class="nav-link"><span class="nav-icon module"></span>scope</a></li>
+            <li class="nav-item"><a href="pages/semver.html" class="nav-link"><span class="nav-icon module"></span>semver</a></li>
+            <li class="nav-item"><a href="pages/serialize.html" class="nav-link"><span class="nav-icon module"></span>serialize</a></li>
+            <li class="nav-item"><a href="pages/sign.html" class="nav-link"><span class="nav-icon module"></span>sign</a></li>
+            <li class="nav-item"><a href="pages/socket.html" class="nav-link"><span class="nav-icon module"></span>socket</a></li>
+            <li class="nav-item"><a href="pages/soo.html" class="nav-link"><span class="nav-icon module"></span>soo</a></li>
+            <li class="nav-item"><a href="pages/stack.html" class="nav-link"><span class="nav-icon module"></span>stack</a></li>
+            <li class="nav-item"><a href="pages/stream.html" class="nav-link"><span class="nav-icon module"></span>stream</a></li>
+            <li class="nav-item"><a href="pages/tcp.html" class="nav-link"><span class="nav-icon module"></span>tcp</a></li>
+            <li class="nav-item"><a href="pages/text.html" class="nav-link"><span class="nav-icon module"></span>text</a></li>
+            <li class="nav-item"><a href="pages/time.html" class="nav-link"><span class="nav-icon module"></span>time</a></li>
+            <li class="nav-item"><a href="pages/tls.html" class="nav-link"><span class="nav-icon module"></span>tls</a></li>
+            <li class="nav-item"><a href="pages/traits.html" class="nav-link"><span class="nav-icon module"></span>traits</a></li>
+            <li class="nav-item"><a href="pages/types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+            <li class="nav-item"><a href="pages/udp.html" class="nav-link"><span class="nav-icon module"></span>udp</a></li>
+            <li class="nav-item"><a href="pages/url.html" class="nav-link"><span class="nav-icon module"></span>url</a></li>
+            <li class="nav-item"><a href="pages/uuid.html" class="nav-link"><span class="nav-icon module"></span>uuid</a></li>
+            <li class="nav-item"><a href="pages/x509.html" class="nav-link"><span class="nav-icon module"></span>x509</a></li>
+            <li class="nav-item"><a href="pages/zstd.html" class="nav-link"><span class="nav-icon module"></span>zstd</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">test</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="pages/types.html" class="nav-link"><span class="nav-icon module"></span>types</a></li>
+        </ul>
+    </nav>
+    <nav class="nav-section">
+        <div class="nav-title">backtrace</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="pages/backtrace.html" class="nav-link"><span class="nav-icon module"></span>backtrace</a></li>
+            <li class="nav-item"><a href="pages/frame.html" class="nav-link"><span class="nav-icon module"></span>frame</a></li>
+            <li class="nav-item"><a href="pages/symbol.html" class="nav-link"><span class="nav-icon module"></span>symbol</a></li>
+        </ul>
+    </nav>
+</aside>
+<main class="main-content">
+<div class="page-header">
+    <h1 class="page-title">TML Project</h1>
+</div>
+<section class="item-section">
+<h2 class="section-title">core</h2>
+<p class="library-description">Core library providing fundamental types, traits, and utilities.</p>
+<div class="module-list">
+<a href="pages/accumulators.html" class="module-card">
+  <div class="module-name">accumulators</div>
+  <div class="module-summary">Accumulator behaviors for iterators.</div>
+</a>
+<a href="pages/alignment.html" class="module-card">
+  <div class="module-name">alignment</div>
+  <div class="module-summary">Pointer alignment utilities.</div>
+</a>
+<a href="pages/any.html" class="module-card">
+  <div class="module-name">any</div>
+  <div class="module-summary">Type reflection primitives.</div>
+</a>
+<a href="pages/arena.html" class="module-card">
+  <div class="module-name">arena</div>
+  <div class="module-summary">Arena Allocator for fast bump-pointer allocation.</div>
+</a>
+<a href="pages/arith.html" class="module-card">
+  <div class="module-name">arith</div>
+  <div class="module-summary">Arithmetic operator behaviors and implementations.</div>
+</a>
+<a href="pages/ascii.html" class="module-card">
+  <div class="module-name">ascii</div>
+  <div class="module-summary">ASCII utilities for byte arrays.</div>
+</a>
+<a href="pages/ascii85.html" class="module-card">
+  <div class="module-name">ascii85</div>
+  <div class="module-summary">ASCII85 (Base85) encoding and decoding.</div>
+</a>
+<a href="pages/async_function.html" class="module-card">
+  <div class="module-name">async_function</div>
+  <div class="module-summary">Async function behaviors.</div>
+</a>
+<a href="pages/base16.html" class="module-card">
+  <div class="module-name">base16</div>
+  <div class="module-summary">Base16 (hexadecimal) encoding per RFC 4648.</div>
+</a>
+<a href="pages/base32.html" class="module-card">
+  <div class="module-name">base32</div>
+  <div class="module-summary">Base32 encoding and decoding per RFC 4648.</div>
+</a>
+<a href="pages/base36.html" class="module-card">
+  <div class="module-name">base36</div>
+  <div class="module-summary">Base36 encoding and decoding.</div>
+</a>
+<a href="pages/base45.html" class="module-card">
+  <div class="module-name">base45</div>
+  <div class="module-summary">Base45 encoding and decoding per RFC 9285.</div>
+</a>
+<a href="pages/base58.html" class="module-card">
+  <div class="module-name">base58</div>
+  <div class="module-summary">Base58 encoding and decoding (Bitcoin alphabet).</div>
+</a>
+<a href="pages/base62.html" class="module-card">
+  <div class="module-name">base62</div>
+  <div class="module-summary">Base62 encoding and decoding.</div>
+</a>
+<a href="pages/base64.html" class="module-card">
+  <div class="module-name">base64</div>
+  <div class="module-summary">Base64 encoding and decoding per RFC 4648.</div>
+</a>
+<a href="pages/base64url.html" class="module-card">
+  <div class="module-name">base64url</div>
+  <div class="module-summary">URL-safe Base64 encoding per RFC 4648 section 5.</div>
+</a>
+<a href="pages/base8.html" class="module-card">
+  <div class="module-name">base8</div>
+  <div class="module-summary">Base8 (octal) encoding and decoding.</div>
+</a>
+<a href="pages/base91.html" class="module-card">
+  <div class="module-name">base91</div>
+  <div class="module-summary">Base91 encoding and decoding.</div>
+</a>
+<a href="pages/bit.html" class="module-card">
+  <div class="module-name">bit</div>
+  <div class="module-summary">Bitwise operator behaviors and implementations.</div>
+</a>
+<a href="pages/borrow.html" class="module-card">
+  <div class="module-name">borrow</div>
+  <div class="module-summary">Borrowing and ownership semantics.</div>
+</a>
+<a href="pages/builders.html" class="module-card">
+  <div class="module-name">builders</div>
+  <div class="module-summary">Debug formatting builder helpers.</div>
+</a>
+<a href="pages/cache.html" class="module-card">
+  <div class="module-name">cache</div>
+  <div class="module-summary">Cache-friendly data layout utilities.</div>
+</a>
+<a href="pages/cell.html" class="module-card">
+  <div class="module-name">cell</div>
+  <div class="module-summary">A mutable memory location for `Copy` types.</div>
+</a>
+<a href="pages/chain.html" class="module-card">
+  <div class="module-name">chain</div>
+  <div class="module-summary">The Chain adapter.</div>
+</a>
+<a href="pages/char.html" class="module-card">
+  <div class="module-name">char</div>
+  <div class="module-summary">The `AsciiChar` type for representing ASCII characters.</div>
+</a>
+<a href="pages/clone.html" class="module-card">
+  <div class="module-name">clone</div>
+  <div class="module-summary">Duplication and copying of values.</div>
+</a>
+<a href="pages/cloned.html" class="module-card">
+  <div class="module-name">cloned</div>
+  <div class="module-summary">The Cloned adapter.</div>
+</a>
+<a href="pages/cmp.html" class="module-card">
+  <div class="module-name">cmp</div>
+  <div class="module-summary">Slice comparison operations.</div>
+</a>
+<a href="pages/collections.html" class="module-card">
+  <div class="module-name">collections</div>
+  <div class="module-summary">Re-exports from [`std::collections::behaviors`].</div>
+</a>
+<a href="pages/const_ptr.html" class="module-card">
+  <div class="module-name">const_ptr</div>
+  <div class="module-summary">Immutable raw pointer type.</div>
+</a>
+<a href="pages/convert.html" class="module-card">
+  <div class="module-name">convert</div>
+  <div class="module-summary">Character conversions.</div>
+</a>
+<a href="pages/copied.html" class="module-card">
+  <div class="module-name">copied</div>
+  <div class="module-summary">The Copied adapter.</div>
+</a>
+<a href="pages/coroutine.html" class="module-card">
+  <div class="module-name">coroutine</div>
+  <div class="module-summary">Coroutine and Generator behaviors.</div>
+</a>
+<a href="pages/cycle.html" class="module-card">
+  <div class="module-name">cycle</div>
+  <div class="module-summary">The Cycle adapter.</div>
+</a>
+<a href="pages/decode.html" class="module-card">
+  <div class="module-name">decode</div>
+  <div class="module-summary">UTF-16 decoding utilities.</div>
+</a>
+<a href="pages/default.html" class="module-card">
+  <div class="module-name">default</div>
+  <div class="module-summary">Default values for types.</div>
+</a>
+<a href="pages/deref.html" class="module-card">
+  <div class="module-name">deref</div>
+  <div class="module-summary">Dereference operators.</div>
+</a>
+<a href="pages/double_ended.html" class="module-card">
+  <div class="module-name">double_ended</div>
+  <div class="module-summary">The DoubleEndedIterator behavior.</div>
+</a>
+<a href="pages/drop.html" class="module-card">
+  <div class="module-name">drop</div>
+  <div class="module-summary">Resource cleanup behavior.</div>
+</a>
+<a href="pages/empty.html" class="module-card">
+  <div class="module-name">empty</div>
+  <div class="module-summary">The Empty iterator source.</div>
+</a>
+<a href="pages/enumerate.html" class="module-card">
+  <div class="module-name">enumerate</div>
+  <div class="module-summary">The Enumerate adapter.</div>
+</a>
+<a href="pages/error.html" class="module-card">
+  <div class="module-name">error</div>
+  <div class="module-summary">Error handling types and the `Error` behavior.</div>
+</a>
+<a href="pages/exact_size.html" class="module-card">
+  <div class="module-name">exact_size</div>
+  <div class="module-summary">The ExactSizeIterator behavior.</div>
+</a>
+<a href="pages/extend.html" class="module-card">
+  <div class="module-name">extend</div>
+  <div class="module-summary">The Extend behavior.</div>
+</a>
+<a href="pages/f32x4.html" class="module-card">
+  <div class="module-name">f32x4</div>
+  <div class="module-summary">4-lane F32 SIMD vector type.</div>
+</a>
+<a href="pages/f64x2.html" class="module-card">
+  <div class="module-name">f64x2</div>
+  <div class="module-summary">2-lane F64 SIMD vector type.</div>
+</a>
+<a href="pages/filter.html" class="module-card">
+  <div class="module-name">filter</div>
+  <div class="module-summary">The Filter adapter.</div>
+</a>
+<a href="pages/filter_map.html" class="module-card">
+  <div class="module-name">filter_map</div>
+  <div class="module-summary">The FilterMap adapter.</div>
+</a>
+<a href="pages/flat_map.html" class="module-card">
+  <div class="module-name">flat_map</div>
+  <div class="module-summary">The FlatMap adapter.</div>
+</a>
+<a href="pages/flatten.html" class="module-card">
+  <div class="module-name">flatten</div>
+  <div class="module-summary">The Flatten adapter.</div>
+</a>
+<a href="pages/float.html" class="module-card">
+  <div class="module-name">float</div>
+  <div class="module-summary">Floating-point number formatting.</div>
+</a>
+<a href="pages/formatter.html" class="module-card">
+  <div class="module-name">formatter</div>
+  <div class="module-summary">The Formatter type for fine-grained formatting control.</div>
+</a>
+<a href="pages/from_fn.html" class="module-card">
+  <div class="module-name">from_fn</div>
+  <div class="module-summary">The FromFn iterator source.</div>
+</a>
+<a href="pages/from_iterator.html" class="module-card">
+  <div class="module-name">from_iterator</div>
+  <div class="module-summary">The FromIterator behavior.</div>
+</a>
+<a href="pages/function.html" class="module-card">
+  <div class="module-name">function</div>
+  <div class="module-summary">Function traits for callable types.</div>
+</a>
+<a href="pages/fuse.html" class="module-card">
+  <div class="module-name">fuse</div>
+  <div class="module-summary">The Fuse adapter.</div>
+</a>
+<a href="pages/global.html" class="module-card">
+  <div class="module-name">global</div>
+  <div class="module-summary">Global memory allocator interface.</div>
+</a>
+<a href="pages/hash.html" class="module-card">
+  <div class="module-name">hash</div>
+  <div class="module-summary">Hashing support for types.</div>
+</a>
+<a href="pages/heap.html" class="module-card">
+  <div class="module-name">heap</div>
+</a>
+<a href="pages/helpers.html" class="module-card">
+  <div class="module-name">helpers</div>
+  <div class="module-summary">Internal helper functions for formatting.</div>
+</a>
+<a href="pages/hex.html" class="module-card">
+  <div class="module-name">hex</div>
+  <div class="module-summary">Hexadecimal encoding and decoding.</div>
+</a>
+<a href="pages/i32x4.html" class="module-card">
+  <div class="module-name">i32x4</div>
+  <div class="module-summary">4-lane I32 SIMD vector type.</div>
+</a>
+<a href="pages/i64x2.html" class="module-card">
+  <div class="module-name">i64x2</div>
+  <div class="module-summary">2-lane I64 SIMD vector type.</div>
+</a>
+<a href="pages/i8x16.html" class="module-card">
+  <div class="module-name">i8x16</div>
+  <div class="module-summary">16-lane I8 SIMD vector type.</div>
+</a>
+<a href="pages/impls.html" class="module-card">
+  <div class="module-name">impls</div>
+  <div class="module-summary">Implementations of formatting behaviors for built-in types.</div>
+</a>
+<a href="pages/index.html" class="module-card">
+  <div class="module-name">index</div>
+  <div class="module-summary">Indexing operators.</div>
+</a>
+<a href="pages/inspect.html" class="module-card">
+  <div class="module-name">inspect</div>
+  <div class="module-summary">The Inspect adapter.</div>
+</a>
+<a href="pages/integer.html" class="module-card">
+  <div class="module-name">integer</div>
+  <div class="module-summary">Integer methods and constants.</div>
+</a>
+<a href="pages/intersperse.html" class="module-card">
+  <div class="module-name">intersperse</div>
+  <div class="module-summary">The Intersperse adapter.</div>
+</a>
+<a href="pages/into_iterator.html" class="module-card">
+  <div class="module-name">into_iterator</div>
+  <div class="module-summary">The IntoIterator behavior.</div>
+</a>
+<a href="pages/intrinsics.html" class="module-card">
+  <div class="module-name">intrinsics</div>
+  <div class="module-summary">Compiler intrinsics.</div>
+</a>
+<a href="pages/iter.html" class="module-card">
+  <div class="module-name">iter</div>
+  <div class="module-summary">Slice iterator types.</div>
+</a>
+<a href="pages/iterator.html" class="module-card">
+  <div class="module-name">iterator</div>
+  <div class="module-summary">The Iterator behavior.</div>
+</a>
+<a href="pages/layout.html" class="module-card">
+  <div class="module-name">layout</div>
+  <div class="module-summary">Memory layout calculations.</div>
+</a>
+<a href="pages/lazy.html" class="module-card">
+  <div class="module-name">lazy</div>
+  <div class="module-summary">Lazy initialization cells.</div>
+</a>
+<a href="pages/legacy.html" class="module-card">
+  <div class="module-name">legacy</div>
+  <div class="module-summary">Legacy type-suffixed iterator sources.</div>
+</a>
+<a href="pages/map.html" class="module-card">
+  <div class="module-name">map</div>
+  <div class="module-summary">The Map adapter.</div>
+</a>
+<a href="pages/map_while.html" class="module-card">
+  <div class="module-name">map_while</div>
+  <div class="module-summary">The MapWhile adapter.</div>
+</a>
+<a href="pages/marker.html" class="module-card">
+  <div class="module-name">marker</div>
+  <div class="module-summary">Marker behaviors for compile-time type properties.</div>
+</a>
+<a href="pages/markers.html" class="module-card">
+  <div class="module-name">markers</div>
+  <div class="module-summary">Iterator marker behaviors.</div>
+</a>
+<a href="pages/mask.html" class="module-card">
+  <div class="module-name">mask</div>
+  <div class="module-summary">SIMD mask types for lane selection and comparison results.</div>
+</a>
+<a href="pages/mem.html" class="module-card">
+  <div class="module-name">mem</div>
+  <div class="module-summary">Low-level memory manipulation utilities.</div>
+</a>
+<a href="pages/methods.html" class="module-card">
+  <div class="module-name">methods</div>
+  <div class="module-summary">Methods for working with `Char` (Unicode scalar values).</div>
+</a>
+<a href="pages/mut_ptr.html" class="module-card">
+  <div class="module-name">mut_ptr</div>
+  <div class="module-summary">Mutable raw pointer type.</div>
+</a>
+<a href="pages/non_null.html" class="module-card">
+  <div class="module-name">non_null</div>
+  <div class="module-summary">Non-null pointer wrapper.</div>
+</a>
+<a href="pages/nonzero.html" class="module-card">
+  <div class="module-name">nonzero</div>
+  <div class="module-summary">Non-zero wrapper type.</div>
+</a>
+<a href="pages/num.html" class="module-card">
+  <div class="module-name">num</div>
+  <div class="module-summary">Numeric formatting behaviors.</div>
+</a>
+<a href="pages/once.html" class="module-card">
+  <div class="module-name">once</div>
+  <div class="module-summary">A cell which can be written to only once.</div>
+</a>
+<a href="pages/once_with.html" class="module-card">
+  <div class="module-name">once_with</div>
+  <div class="module-summary">The OnceWith iterator source.</div>
+</a>
+<a href="pages/ops.html" class="module-card">
+  <div class="module-name">ops</div>
+  <div class="module-summary">Pointer operations and free functions.</div>
+</a>
+<a href="pages/option.html" class="module-card">
+  <div class="module-name">option</div>
+  <div class="module-summary">Optional values.</div>
+</a>
+<a href="pages/overflow.html" class="module-card">
+  <div class="module-name">overflow</div>
+  <div class="module-summary">Overflow-handling behaviors.</div>
+</a>
+<a href="pages/peekable.html" class="module-card">
+  <div class="module-name">peekable</div>
+  <div class="module-summary">The Peekable adapter.</div>
+</a>
+<a href="pages/percent.html" class="module-card">
+  <div class="module-name">percent</div>
+  <div class="module-summary">Percent-encoding (URL encoding) per RFC 3986.</div>
+</a>
+<a href="pages/pin.html" class="module-card">
+  <div class="module-name">pin</div>
+  <div class="module-summary">Pinned memory locations.</div>
+</a>
+<a href="pages/pool.html" class="module-card">
+  <div class="module-name">pool</div>
+  <div class="module-summary">Object Pool for efficient memory reuse.</div>
+</a>
+<a href="pages/range.html" class="module-card">
+  <div class="module-name">range</div>
+  <div class="module-summary">Range iteration support.</div>
+</a>
+<a href="pages/ref_cell.html" class="module-card">
+  <div class="module-name">ref_cell</div>
+  <div class="module-summary">A mutable memory location with dynamically checked borrow rules.</div>
+</a>
+<a href="pages/reflect.html" class="module-card">
+  <div class="module-name">reflect</div>
+  <div class="module-summary">Runtime reflection types and utilities.</div>
+</a>
+<a href="pages/repeat.html" class="module-card">
+  <div class="module-name">repeat</div>
+  <div class="module-summary">The Repeat iterator source.</div>
+</a>
+<a href="pages/repeat_n.html" class="module-card">
+  <div class="module-name">repeat_n</div>
+  <div class="module-summary">The RepeatN iterator source.</div>
+</a>
+<a href="pages/repeat_with.html" class="module-card">
+  <div class="module-name">repeat_with</div>
+  <div class="module-summary">The RepeatWith iterator source.</div>
+</a>
+<a href="pages/result.html" class="module-card">
+  <div class="module-name">result</div>
+  <div class="module-summary">Error handling with the `Outcome` type.</div>
+</a>
+<a href="pages/rev.html" class="module-card">
+  <div class="module-name">rev</div>
+  <div class="module-summary">The Rev adapter.</div>
+</a>
+<a href="pages/rt.html" class="module-card">
+  <div class="module-name">rt</div>
+  <div class="module-summary">Runtime formatting types.</div>
+</a>
+<a href="pages/saturating.html" class="module-card">
+  <div class="module-name">saturating</div>
+  <div class="module-summary">Saturating arithmetic wrapper type.</div>
+</a>
+<a href="pages/scan.html" class="module-card">
+  <div class="module-name">scan</div>
+  <div class="module-summary">The Scan adapter.</div>
+</a>
+<a href="pages/shared.html" class="module-card">
+  <div class="module-name">shared</div>
+</a>
+<a href="pages/skip.html" class="module-card">
+  <div class="module-name">skip</div>
+  <div class="module-summary">The Skip adapter.</div>
+</a>
+<a href="pages/skip_while.html" class="module-card">
+  <div class="module-name">skip_while</div>
+  <div class="module-summary">The SkipWhile adapter.</div>
+</a>
+<a href="pages/soo.html" class="module-card">
+  <div class="module-name">soo</div>
+  <div class="module-summary">Small Object Optimization (SOO) types.</div>
+</a>
+<a href="pages/sort.html" class="module-card">
+  <div class="module-name">sort</div>
+  <div class="module-summary">Slice sorting algorithms.</div>
+</a>
+<a href="pages/step_by.html" class="module-card">
+  <div class="module-name">step_by</div>
+  <div class="module-summary">The StepBy adapter.</div>
+</a>
+<a href="pages/str.html" class="module-card">
+  <div class="module-name">str</div>
+  <div class="module-summary">String manipulation utilities.</div>
+</a>
+<a href="pages/successors.html" class="module-card">
+  <div class="module-name">successors</div>
+  <div class="module-summary">The Successors iterator source.</div>
+</a>
+<a href="pages/sync.html" class="module-card">
+  <div class="module-name">sync</div>
+</a>
+<a href="pages/take.html" class="module-card">
+  <div class="module-name">take</div>
+  <div class="module-summary">The Take adapter.</div>
+</a>
+<a href="pages/take_while.html" class="module-card">
+  <div class="module-name">take_while</div>
+  <div class="module-summary">The TakeWhile adapter.</div>
+</a>
+<a href="pages/time.html" class="module-card">
+  <div class="module-name">time</div>
+  <div class="module-summary">Time-related types.</div>
+</a>
+<a href="pages/traits.html" class="module-card">
+  <div class="module-name">traits</div>
+  <div class="module-summary">Core numeric traits.</div>
+</a>
+<a href="pages/try_trait.html" class="module-card">
+  <div class="module-name">try_trait</div>
+  <div class="module-summary">The `Try` operator trait for early return.</div>
+</a>
+<a href="pages/tuple.html" class="module-card">
+  <div class="module-name">tuple</div>
+  <div class="module-summary">Tuple implementations.</div>
+</a>
+<a href="pages/u8x16.html" class="module-card">
+  <div class="module-name">u8x16</div>
+  <div class="module-summary">16-lane U8 SIMD vector type.</div>
+</a>
+<a href="pages/unicode_data.html" class="module-card">
+  <div class="module-name">unicode_data</div>
+  <div class="module-summary">Unicode property tables and lookup functions.</div>
+</a>
+<a href="pages/unsafe_cell.html" class="module-card">
+  <div class="module-name">unsafe_cell</div>
+  <div class="module-summary">The core primitive for interior mutability.</div>
+</a>
+<a href="pages/wrapping.html" class="module-card">
+  <div class="module-name">wrapping</div>
+  <div class="module-summary">Wrapping arithmetic wrapper type.</div>
+</a>
+<a href="pages/zip.html" class="module-card">
+  <div class="module-name">zip</div>
+  <div class="module-summary">The Zip adapter.</div>
+</a>
+</div>
+</section>
+<section class="item-section">
+<h2 class="section-title">std</h2>
+<p class="library-description">Standard library with collections, I/O, and system interfaces.</p>
+<div class="module-list">
+<a href="pages/Arc.html" class="module-card">
+  <div class="module-name">Arc</div>
+  <div class="module-summary">Thread-safe reference-counted pointer.</div>
+</a>
+<a href="pages/arena.html" class="module-card">
+  <div class="module-name">arena</div>
+  <div class="module-summary">Re-exports from [`core::arena`].</div>
+</a>
+<a href="pages/async_tcp.html" class="module-card">
+  <div class="module-name">async_tcp</div>
+  <div class="module-summary">Async TCP networking primitives.</div>
+</a>
+<a href="pages/async_udp.html" class="module-card">
+  <div class="module-name">async_udp</div>
+  <div class="module-summary">Async UDP networking primitives.</div>
+</a>
+<a href="pages/atomic.html" class="module-card">
+  <div class="module-name">atomic</div>
+  <div class="module-summary">Atomic types for lock-free concurrent programming.</div>
+</a>
+<a href="pages/barrier.html" class="module-card">
+  <div class="module-name">barrier</div>
+  <div class="module-summary">Barrier synchronization primitive.</div>
+</a>
+<a href="pages/behaviors.html" class="module-card">
+  <div class="module-name">behaviors</div>
+  <div class="module-summary">Behavior implementations for collection types.</div>
+</a>
+<a href="pages/bm25.html" class="module-card">
+  <div class="module-name">bm25</div>
+  <div class="module-summary">BM25 full-text search index.</div>
+</a>
+<a href="pages/brotli.html" class="module-card">
+  <div class="module-name">brotli</div>
+  <div class="module-summary">Brotli compression and decompression.</div>
+</a>
+<a href="pages/btreemap.html" class="module-card">
+  <div class="module-name">btreemap</div>
+  <div class="module-summary">Sorted key-value map backed by sorted arrays with binary search.</div>
+</a>
+<a href="pages/btreeset.html" class="module-card">
+  <div class="module-name">btreeset</div>
+  <div class="module-summary">Sorted set backed by a BTreeMap.</div>
+</a>
+<a href="pages/buffer.html" class="module-card">
+  <div class="module-name">buffer</div>
+  <div class="module-summary">Buffer management for network I/O operations.</div>
+</a>
+<a href="pages/bufio.html" class="module-card">
+  <div class="module-name">bufio</div>
+  <div class="module-summary">Buffered I/O wrappers for `File`.</div>
+</a>
+<a href="pages/builder.html" class="module-card">
+  <div class="module-name">builder</div>
+  <div class="module-summary">JSON Builder - Elegant JSON construction with fluent API</div>
+</a>
+<a href="pages/cache.html" class="module-card">
+  <div class="module-name">cache</div>
+  <div class="module-summary">Re-exports from [`core::cache`].</div>
+</a>
+<a href="pages/cipher.html" class="module-card">
+  <div class="module-name">cipher</div>
+  <div class="module-summary">Symmetric encryption and decryption.</div>
+</a>
+<a href="pages/class_collections.html" class="module-card">
+  <div class="module-name">class_collections</div>
+  <div class="module-summary">Collection types for common data structures.</div>
+</a>
+<a href="pages/condvar.html" class="module-card">
+  <div class="module-name">condvar</div>
+  <div class="module-summary">Condition variables for thread synchronization.</div>
+</a>
+<a href="pages/constants.html" class="module-card">
+  <div class="module-name">constants</div>
+  <div class="module-summary">Cryptographic constants and utility functions.</div>
+</a>
+<a href="pages/crc32.html" class="module-card">
+  <div class="module-name">crc32</div>
+  <div class="module-summary">CRC32 checksum computation.</div>
+</a>
+<a href="pages/datetime.html" class="module-card">
+  <div class="module-name">datetime</div>
+  <div class="module-summary">UTC date and time from Unix timestamps.</div>
+</a>
+<a href="pages/deflate.html" class="module-card">
+  <div class="module-name">deflate</div>
+  <div class="module-summary">Deflate compression and decompression.</div>
+</a>
+<a href="pages/deque.html" class="module-card">
+  <div class="module-name">deque</div>
+  <div class="module-summary">Double-ended queue.</div>
+</a>
+<a href="pages/dh.html" class="module-card">
+  <div class="module-name">dh</div>
+  <div class="module-summary">Diffie-Hellman key exchange.</div>
+</a>
+<a href="pages/dir.html" class="module-card">
+  <div class="module-name">dir</div>
+  <div class="module-summary">Directory operations.</div>
+</a>
+<a href="pages/distance.html" class="module-card">
+  <div class="module-name">distance</div>
+  <div class="module-summary">Vector distance and similarity functions.</div>
+</a>
+<a href="pages/dns.html" class="module-card">
+  <div class="module-name">dns</div>
+  <div class="module-summary">DNS resolution module.</div>
+</a>
+<a href="pages/ecdh.html" class="module-card">
+  <div class="module-name">ecdh</div>
+  <div class="module-summary">Elliptic Curve Diffie-Hellman (ECDH) key exchange.</div>
+</a>
+<a href="pages/error.html" class="module-card">
+  <div class="module-name">error</div>
+  <div class="module-summary">Error types for zlib compression operations.</div>
+</a>
+<a href="pages/exception.html" class="module-card">
+  <div class="module-name">exception</div>
+  <div class="module-summary">Exception class hierarchy for error handling.</div>
+</a>
+<a href="pages/file.html" class="module-card">
+  <div class="module-name">file</div>
+  <div class="module-summary">File I/O operations.</div>
+</a>
+<a href="pages/glob.html" class="module-card">
+  <div class="module-name">glob</div>
+  <div class="module-summary">High-performance glob pattern matching.</div>
+</a>
+<a href="pages/gzip.html" class="module-card">
+  <div class="module-name">gzip</div>
+  <div class="module-summary">Gzip compression and decompression.</div>
+</a>
+<a href="pages/hash.html" class="module-card">
+  <div class="module-name">hash</div>
+  <div class="module-summary">Fast non-cryptographic hash functions.</div>
+</a>
+<a href="pages/hashmap.html" class="module-card">
+  <div class="module-name">hashmap</div>
+  <div class="module-summary">Hash-based key-value collection type — pure TML implementation.</div>
+</a>
+<a href="pages/hmac.html" class="module-card">
+  <div class="module-name">hmac</div>
+  <div class="module-summary">HMAC (Hash-based Message Authentication Code).</div>
+</a>
+<a href="pages/hnsw.html" class="module-card">
+  <div class="module-name">hnsw</div>
+  <div class="module-summary">HNSW approximate nearest neighbor vector search.</div>
+</a>
+<a href="pages/interfaces.html" class="module-card">
+  <div class="module-name">interfaces</div>
+  <div class="module-summary">Re-exports from [`std::oop::interfaces`].</div>
+</a>
+<a href="pages/io.html" class="module-card">
+  <div class="module-name">io</div>
+  <div class="module-summary">I/O error types.</div>
+</a>
+<a href="pages/ip.html" class="module-card">
+  <div class="module-name">ip</div>
+  <div class="module-summary">IP address types.</div>
+</a>
+<a href="pages/iter.html" class="module-card">
+  <div class="module-name">iter</div>
+  <div class="module-summary">Iterator behaviors and types for TML.</div>
+</a>
+<a href="pages/kdf.html" class="module-card">
+  <div class="module-name">kdf</div>
+  <div class="module-summary">Key Derivation Functions.</div>
+</a>
+<a href="pages/key.html" class="module-card">
+  <div class="module-name">key</div>
+  <div class="module-summary">Cryptographic key management.</div>
+</a>
+<a href="pages/list.html" class="module-card">
+  <div class="module-name">list</div>
+  <div class="module-summary">Dynamic array collection type — pure TML implementation.</div>
+</a>
+<a href="pages/local.html" class="module-card">
+  <div class="module-name">local</div>
+  <div class="module-summary">Thread-local storage.</div>
+</a>
+<a href="pages/log.html" class="module-card">
+  <div class="module-name">log</div>
+  <div class="module-summary">Structured logging for TML programs.</div>
+</a>
+<a href="pages/math.html" class="module-card">
+  <div class="module-name">math</div>
+  <div class="module-summary">Mathematical functions and constants.</div>
+</a>
+<a href="pages/mpsc.html" class="module-card">
+  <div class="module-name">mpsc</div>
+  <div class="module-summary">Multi-producer, single-consumer channel.</div>
+</a>
+<a href="pages/mutex.html" class="module-card">
+  <div class="module-name">mutex</div>
+  <div class="module-summary">Mutual exclusion primitives for thread synchronization.</div>
+</a>
+<a href="pages/object.html" class="module-card">
+  <div class="module-name">object</div>
+  <div class="module-summary">Re-exports from [`std::oop::object`].</div>
+</a>
+<a href="pages/once.html" class="module-card">
+  <div class="module-name">once</div>
+  <div class="module-summary">One-time initialization primitives.</div>
+</a>
+<a href="pages/options.html" class="module-card">
+  <div class="module-name">options</div>
+  <div class="module-summary">Compression options for zlib, Brotli, and Zstd.</div>
+</a>
+<a href="pages/ordering.html" class="module-card">
+  <div class="module-name">ordering</div>
+  <div class="module-summary">Memory ordering semantics for atomic operations.</div>
+</a>
+<a href="pages/os.html" class="module-card">
+  <div class="module-name">os</div>
+  <div class="module-summary">Operating system information and utilities.</div>
+</a>
+<a href="pages/parser.html" class="module-card">
+  <div class="module-name">parser</div>
+  <div class="module-summary">Parsing utilities for network addresses.</div>
+</a>
+<a href="pages/path.html" class="module-card">
+  <div class="module-name">path</div>
+  <div class="module-summary">Path manipulation utilities.</div>
+</a>
+<a href="pages/pool.html" class="module-card">
+  <div class="module-name">pool</div>
+  <div class="module-summary">Re-exports from [`core::pool`].</div>
+</a>
+<a href="pages/precompiled_symbols.html" class="module-card">
+  <div class="module-name">precompiled_symbols</div>
+</a>
+<a href="pages/profiler.html" class="module-card">
+  <div class="module-name">profiler</div>
+</a>
+<a href="pages/queue.html" class="module-card">
+  <div class="module-name">queue</div>
+  <div class="module-summary">Lock-free concurrent queue.</div>
+</a>
+<a href="pages/random.html" class="module-card">
+  <div class="module-name">random</div>
+  <div class="module-summary">Pseudo-random number generation.</div>
+</a>
+<a href="pages/regex.html" class="module-card">
+  <div class="module-name">regex</div>
+  <div class="module-summary">Simple regex engine using Thompson&#39;s NFA construction.</div>
+</a>
+<a href="pages/rsa.html" class="module-card">
+  <div class="module-name">rsa</div>
+  <div class="module-summary">RSA encryption and decryption.</div>
+</a>
+<a href="pages/rwlock.html" class="module-card">
+  <div class="module-name">rwlock</div>
+  <div class="module-summary">Reader-writer lock for concurrent read access.</div>
+</a>
+<a href="pages/scope.html" class="module-card">
+  <div class="module-name">scope</div>
+  <div class="module-summary">Scoped threads for borrowing from parent scope.</div>
+</a>
+<a href="pages/semver.html" class="module-card">
+  <div class="module-name">semver</div>
+  <div class="module-summary">Semantic Versioning 2.0.0 parsing, comparison, and requirement matching.</div>
+</a>
+<a href="pages/serialize.html" class="module-card">
+  <div class="module-name">serialize</div>
+  <div class="module-summary">JSON Serialization Behaviors</div>
+</a>
+<a href="pages/sign.html" class="module-card">
+  <div class="module-name">sign</div>
+  <div class="module-summary">Digital signatures.</div>
+</a>
+<a href="pages/socket.html" class="module-card">
+  <div class="module-name">socket</div>
+  <div class="module-summary">Socket address types.</div>
+</a>
+<a href="pages/soo.html" class="module-card">
+  <div class="module-name">soo</div>
+  <div class="module-summary">Re-exports from [`core::soo`].</div>
+</a>
+<a href="pages/stack.html" class="module-card">
+  <div class="module-name">stack</div>
+  <div class="module-summary">Lock-free concurrent stack.</div>
+</a>
+<a href="pages/stream.html" class="module-card">
+  <div class="module-name">stream</div>
+  <div class="module-summary">Streaming compression classes.</div>
+</a>
+<a href="pages/tcp.html" class="module-card">
+  <div class="module-name">tcp</div>
+  <div class="module-summary">TCP networking primitives.</div>
+</a>
+<a href="pages/text.html" class="module-card">
+  <div class="module-name">text</div>
+  <div class="module-summary">Dynamic string type with heap allocation and rich manipulation API.</div>
+</a>
+<a href="pages/time.html" class="module-card">
+  <div class="module-name">time</div>
+  <div class="module-summary">Time measurement types.</div>
+</a>
+<a href="pages/tls.html" class="module-card">
+  <div class="module-name">tls</div>
+  <div class="module-summary">Transport Layer Security (TLS) for encrypted network communication.</div>
+</a>
+<a href="pages/traits.html" class="module-card">
+  <div class="module-name">traits</div>
+  <div class="module-summary">Core traits (behaviors) for TML types.</div>
+</a>
+<a href="pages/types.html" class="module-card">
+  <div class="module-name">types</div>
+  <div class="module-summary">Free-standing helper functions for `Maybe[T]` and `Outcome[T, E]`.</div>
+</a>
+<a href="pages/udp.html" class="module-card">
+  <div class="module-name">udp</div>
+  <div class="module-summary">UDP networking primitives.</div>
+</a>
+<a href="pages/url.html" class="module-card">
+  <div class="module-name">url</div>
+  <div class="module-summary">URL parsing and building per RFC 3986.</div>
+</a>
+<a href="pages/uuid.html" class="module-card">
+  <div class="module-name">uuid</div>
+  <div class="module-summary">UUID generation and parsing per RFC 9562.</div>
+</a>
+<a href="pages/x509.html" class="module-card">
+  <div class="module-name">x509</div>
+  <div class="module-summary">X.509 Certificate handling.</div>
+</a>
+<a href="pages/zstd.html" class="module-card">
+  <div class="module-name">zstd</div>
+  <div class="module-summary">Zstandard (Zstd) compression and decompression.</div>
+</a>
+</div>
+</section>
+<section class="item-section">
+<h2 class="section-title">test</h2>
+<p class="library-description">Testing framework for writing and running tests.</p>
+<div class="module-list">
+<a href="pages/types.html" class="module-card">
+  <div class="module-name">types</div>
+</a>
+</div>
+</section>
+<section class="item-section">
+<h2 class="section-title">backtrace</h2>
+<div class="module-list">
+<a href="pages/backtrace.html" class="module-card">
+  <div class="module-name">backtrace</div>
+</a>
+<a href="pages/frame.html" class="module-card">
+  <div class="module-name">frame</div>
+</a>
+<a href="pages/symbol.html" class="module-card">
+  <div class="module-name">symbol</div>
+</a>
+</div>
+</section>
+<footer class="footer">
+    <p>Generated by <a href="https://github.com/tml-lang/tml">TML Documentation Generator</a></p>
+</footer>
+</main>
+</div>
+<button class="mobile-toggle" aria-label="Toggle menu">☰</button>
+<script src="search-index.js"></script>
+<script src="search.js"></script>
+</body>
+</html>
