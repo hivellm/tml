@@ -1400,7 +1400,15 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_cache.cpp
     src/cli/commands/cmd_debug.cpp
     src/cli/commands/cmd_doc.cpp
-    src/cli/commands/cmd_explain.cpp
+    # Explain modules
+    src/cli/explain/run.cpp
+    src/cli/explain/lexer_errors.cpp
+    src/cli/explain/parser_errors.cpp
+    src/cli/explain/type_errors.cpp
+    src/cli/explain/borrow_errors.cpp
+    src/cli/explain/codegen_errors.cpp
+    src/cli/explain/general_errors.cpp
+    src/cli/explain/preproc_errors.cpp
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
