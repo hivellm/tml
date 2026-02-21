@@ -1,0 +1,53 @@
+use test
+use std::uuid::Uuid
+use std::collections::Buffer
+
+@test
+func test_uuid_to_bytes_nil() -> I32 {
+    let buf: Buffer = Uuid::nil().to_bytes()
+    assert_eq(buf.len(), 16 as I64)
+    var i: I64 = 0
+    loop (i < 16) {
+        assert_eq(buf.get(i), 0)
+        i = i + 1
+    }
+    buf.destroy()
+    0
+}
+
+@test
+func test_uuid_to_bytes_roundtrip() -> I32 {
+    let original = Uuid::v4()
+    let buf: Buffer = original.to_bytes()
+    when Uuid::from_bytes(ref buf) {
+        Ok(restored) => assert(original.eq(restored), "roundtrip should preserve")
+        Err(e) => assert(false, "from_bytes should succeed")
+    }
+    buf.destroy()
+    0
+}
+
+@test
+func test_uuid_compare_equal() -> I32 {
+    let a = Uuid::nil()
+    let b = Uuid::nil()
+    assert_eq(a.compare(b), 0)
+    0
+}
+
+@test
+func test_uuid_compare_ordering() -> I32 {
+    let nil = Uuid::nil()
+    let max = Uuid::max()
+    assert_eq(nil.compare(max), -1)
+    assert_eq(max.compare(nil), 1)
+    0
+}
+
+@test
+func test_uuid_timestamp_v7() -> I32 {
+    let id = Uuid::v7()
+    let ts = id.timestamp()
+    assert(ts > 0, "v7 timestamp should be positive ms")
+    0
+}

@@ -1,0 +1,27 @@
+use test
+use std::uuid::Uuid
+
+@test
+func test_uuid_v2_version_and_variant() -> I32 {
+    let id = Uuid::v2(0, 1000)
+    assert_eq(id.version(), 2)
+    assert_eq(id.variant(), 2)
+    assert(not id.is_nil(), "v2 should not be nil")
+    0
+}
+
+@test
+func test_uuid_v2_uniqueness() -> I32 {
+    let a = Uuid::v2(0, 1000)
+    let b = Uuid::v2(0, 1000)
+    assert(not a.eq(b), "two v2 UUIDs should differ (different clock_seq/node)")
+    0
+}
+
+@test
+func test_uuid_v2_different_domains() -> I32 {
+    let a = Uuid::v2(0, 1000)
+    let b = Uuid::v2(1, 1000)
+    assert(not a.eq(b), "different domains should produce different UUIDs")
+    0
+}

@@ -1,0 +1,32 @@
+use test
+use std::uuid::Uuid
+
+@test
+func test_namespace_dns() -> I32 {
+    let ns = Uuid::namespace_dns()
+    assert_eq(ns.to_string(), "6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+    assert_eq(ns.version(), 1)
+    assert_eq(ns.variant(), 2)
+    0
+}
+
+@test
+func test_namespace_url() -> I32 {
+    let ns = Uuid::namespace_url()
+    assert_eq(ns.to_string(), "6ba7b811-9dad-11d1-80b4-00c04fd430c8")
+    0
+}
+
+@test
+func test_namespace_oid() -> I32 {
+    let ns = Uuid::namespace_oid()
+    assert_eq(ns.to_string(), "6ba7b812-9dad-11d1-80b4-00c04fd430c8")
+    0
+}
+
+@test
+func test_namespace_x500() -> I32 {
+    let ns = Uuid::namespace_x500()
+    assert_eq(ns.to_string(), "6ba7b814-9dad-11d1-80b4-00c04fd430c8")
+    0
+}

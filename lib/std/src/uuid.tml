@@ -1,7 +1,20 @@
 //! UUID generation and parsing per RFC 9562.
 //!
-//! Provides UUID v4 (random) and v7 (time-ordered) generation,
-//! parsing from string, and formatting.
+//! Provides UUID v1 through v8 generation, parsing from string,
+//! formatting, and standard namespace constants.
+//!
+//! # Supported Versions
+//!
+//! | Version | Type | Description |
+//! |---------|------|-------------|
+//! | v1 | Time-based | Gregorian timestamp + random node |
+//! | v2 | DCE Security | Like v1 with local domain/identifier |
+//! | v3 | Name-based (MD5) | Deterministic from namespace + name |
+//! | v4 | Random | 122 random bits (CSPRNG) |
+//! | v5 | Name-based (SHA-1) | Deterministic from namespace + name |
+//! | v6 | Reordered time | Like v1 but lexicographically sortable |
+//! | v7 | Unix timestamp | 48-bit ms timestamp + random |
+//! | v8 | Custom | User-provided data fields |
 //!
 //! # Examples
 //!
@@ -14,8 +27,17 @@
 
 use core::str
 use core::encoding::hex
-use std::random::Rng
-use std::time::time_ns
+use std::crypto::hash::{Hash, HashAlgorithm, Digest}
+use std::collections::Buffer
+use std::collections::buffer::{buf_get_data, buf_read_byte_at}
+
+// CSPRNG for UUID generation
+@extern("crypto_random_i64")
+func crypto_rand_i64() -> I64
+
+// Wall-clock time for v1/v6/v7 timestamps
+@extern("tml_os_system_time_nanos")
+func wall_clock_nanos() -> I64
 
 /// A universally unique identifier (128 bits stored as two I64 values).
 ///
@@ -25,6 +47,10 @@ pub type Uuid {
     lo: I64
 }
 
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
 /// Helper: extract a 4-bit nibble from a 64-bit value.
 /// Position 0 is the least significant nibble.
 func nibble_at(val: I64, pos: I32) -> I32 {
@@ -32,7 +58,85 @@ func nibble_at(val: I64, pos: I32) -> I32 {
     return ((val >> (shift as I64)) & (15 as I64)) as I32
 }
 
-// hex_char and parse_hex replaced by core::encoding::hex
+/// Stamp version (4 bits at hi[15:12]) and variant (2 bits at lo[63:62]).
+func set_version_variant(hi: I64, lo: I64, version: I32) -> Uuid {
+    // Clear version nibble (bits 12-15 of hi) and set to `version`
+    var h: I64 = hi & (-61441 as I64)               // 0xFFFF_FFFF_FFFF_0FFF
+    h = h | ((version as I64) << 12)
+    // Clear variant bits (top 2 of lo) and set variant=10
+    var l: I64 = lo & (4611686018427387903 as I64)   // 0x3FFF_FFFF_FFFF_FFFF
+    l = l | (-9223372036854775808 as I64)            // 0x8000_0000_0000_0000
+    return Uuid { hi: h, lo: l }
+}
+
+/// Convert UUID to 16 bytes in big-endian order as a Buffer.
+func uuid_to_buffer(uuid: Uuid) -> Buffer {
+    let buf: Buffer = Buffer::new(16)
+    // Write hi as 8 big-endian bytes
+    buf.write_u64_be(uuid.hi, 0)
+    // Write lo as 8 big-endian bytes
+    buf.write_u64_be(uuid.lo, 8)
+    return buf
+}
+
+/// Get Gregorian timestamp: 100-ns intervals since Oct 15, 1582.
+/// Offset from Unix epoch = 122,192,928,000,000,000 intervals.
+func get_gregorian_timestamp() -> I64 {
+    let now_nanos: I64 = wall_clock_nanos()
+    let intervals: I64 = now_nanos / 100
+    return intervals + 122192928000000000
+}
+
+/// Generate a random 48-bit node with multicast bit set (bit 40).
+/// Returns the node value in the lower 48 bits of an I64.
+func random_node() -> I64 {
+    let raw: I64 = crypto_rand_i64()
+    // Take lower 48 bits
+    let node: I64 = raw & 281474976710655       // 0x0000_FFFF_FFFF_FFFF
+    // Set multicast bit (bit 40 = first octet LSB)
+    return node | 1099511627776                  // 0x0000_0100_0000_0000
+}
+
+/// Generate a name-based UUID from a namespace and name.
+/// Used by both v3 (MD5) and v5 (SHA-1).
+func name_based_uuid(ns: Uuid, name: Str, algorithm: HashAlgorithm, version: I32) -> Uuid {
+    // Step 1: Convert namespace UUID to 16 bytes (big-endian)
+    let ns_buf: Buffer = uuid_to_buffer(ns)
+
+    // Step 2: Hash namespace bytes + name string
+    var hasher: Hash = Hash::create(algorithm)
+    hasher.update_bytes(ref ns_buf)
+    hasher.update(name)
+    var digest: Digest = hasher.digest()
+    let digest_buf: ref Buffer = digest.bytes()
+
+    // Step 3: Read first 16 bytes as two big-endian I64 values
+    var hi: I64 = 0
+    var i: I64 = 0
+    loop (i < 8) {
+        hi = (hi << 8) | (digest_buf.get(i) as I64)
+        i = i + 1
+    }
+
+    var lo: I64 = 0
+    i = 8
+    loop (i < 16) {
+        lo = (lo << 8) | (digest_buf.get(i) as I64)
+        i = i + 1
+    }
+
+    // Step 4: Clean up
+    digest.destroy()
+    hasher.destroy()
+    ns_buf.destroy()
+
+    // Step 5: Set version and variant
+    return set_version_variant(hi, lo, version)
+}
+
+// ============================================================================
+// Uuid implementation
+// ============================================================================
 
 impl Uuid {
     /// The nil UUID (all zeros): 00000000-0000-0000-0000-000000000000
@@ -45,23 +149,148 @@ impl Uuid {
         return Uuid { hi: -1, lo: -1 }
     }
 
-    /// Generate a random UUID (version 4, RFC 9562).
+    // ========================================================================
+    // Namespace constants (RFC 9562)
+    // ========================================================================
+
+    /// Namespace UUID for DNS names: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+    pub func namespace_dns() -> Uuid {
+        when Uuid::parse("6ba7b8109dad11d180b400c04fd430c8") {
+            Ok(id) => return id
+            Err(_) => return Uuid::nil()
+        }
+    }
+
+    /// Namespace UUID for URLs: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
+    pub func namespace_url() -> Uuid {
+        when Uuid::parse("6ba7b8119dad11d180b400c04fd430c8") {
+            Ok(id) => return id
+            Err(_) => return Uuid::nil()
+        }
+    }
+
+    /// Namespace UUID for ISO OIDs: 6ba7b812-9dad-11d1-80b4-00c04fd430c8
+    pub func namespace_oid() -> Uuid {
+        when Uuid::parse("6ba7b8129dad11d180b400c04fd430c8") {
+            Ok(id) => return id
+            Err(_) => return Uuid::nil()
+        }
+    }
+
+    /// Namespace UUID for X.500 DNs: 6ba7b814-9dad-11d1-80b4-00c04fd430c8
+    pub func namespace_x500() -> Uuid {
+        when Uuid::parse("6ba7b8149dad11d180b400c04fd430c8") {
+            Ok(id) => return id
+            Err(_) => return Uuid::nil()
+        }
+    }
+
+    // ========================================================================
+    // UUID Generation — all versions
+    // ========================================================================
+
+    /// Generate a time-based UUID (version 1, RFC 9562).
     ///
-    /// Uses xoshiro256** PRNG seeded from monotonic clock.
-    pub func v4() -> Uuid {
-        var rng: Rng = Rng::new()
-        var hi: I64 = rng.next_i64()
-        var lo: I64 = rng.next_i64()
+    /// Uses a 60-bit Gregorian timestamp, 14-bit random clock sequence,
+    /// and 48-bit random node (with multicast bit set per Section 6.10).
+    pub func v1() -> Uuid {
+        let timestamp: I64 = get_gregorian_timestamp()
+        let clock_seq: I64 = crypto_rand_i64() & 16383  // 14 bits
+        let node: I64 = random_node()
 
-        // Set version to 4 (bits 76-79 in hi, which is bits 12-15 of the upper half)
-        // Clear bits 76-79 and set to 0100
-        hi = hi & (-61441 as I64)  // ~0xF000 for bits 12-15 = 0xFFFF_FFFF_FFFF_0FFF
-        hi = hi | (16384 as I64)   // 0x4000
+        // v1 timestamp layout:
+        // time_low = bits 0-31 of timestamp (32 bits)
+        // time_mid = bits 32-47 of timestamp (16 bits)
+        // time_hi  = bits 48-59 of timestamp (12 bits)
+        let time_low: I64 = timestamp & 4294967295           // 0xFFFFFFFF
+        let time_mid: I64 = (timestamp >> 32) & 65535        // 0xFFFF
+        let time_hi: I64  = (timestamp >> 48) & 4095         // 0x0FFF
 
-        // Set variant to 10 (bits 62-63 in lo, which is the top 2 bits)
-        // Clear top 2 bits and set to 10
+        // hi = [time_low (32)] [time_mid (16)] [version=1 (4)] [time_hi (12)]
+        let hi: I64 = (time_low << 32) | (time_mid << 16) | (1 << 12) as I64 | time_hi
+
+        // lo = [variant=10 (2)] [clock_seq (14)] [node (48)]
+        var lo: I64 = (clock_seq << 48) | node
         lo = lo & (4611686018427387903 as I64)   // 0x3FFF_FFFF_FFFF_FFFF
         lo = lo | (-9223372036854775808 as I64)  // 0x8000_0000_0000_0000
+
+        return Uuid { hi: hi, lo: lo }
+    }
+
+    /// Generate a DCE Security UUID (version 2, RFC 9562).
+    ///
+    /// Like v1 but replaces time_low with a local identifier and uses
+    /// the upper bits of clock_seq for the local domain.
+    ///
+    /// `local_domain`: 0=Person, 1=Group, 2=Org
+    /// `local_id`: 32-bit local identifier (e.g., UID, GID)
+    pub func v2(local_domain: I32, local_id: I32) -> Uuid {
+        let timestamp: I64 = get_gregorian_timestamp()
+        let clock_seq_low: I64 = crypto_rand_i64() & 255  // 8 bits
+        let node: I64 = random_node()
+
+        let time_mid: I64 = (timestamp >> 32) & 65535
+        let time_hi: I64  = (timestamp >> 48) & 4095
+
+        // hi: [local_id (32)] [time_mid (16)] [version=2 (4)] [time_hi (12)]
+        let id_bits: I64 = (local_id as I64) & 4294967295
+        let hi: I64 = (id_bits << 32) | (time_mid << 16) | (2 << 12) as I64 | time_hi
+
+        // lo: [variant=10 (2)] [local_domain (6)] [clock_seq_low (8)] [node (48)]
+        let domain_bits: I64 = (local_domain as I64) & 63  // 6 bits
+        var lo: I64 = (domain_bits << 56) | (clock_seq_low << 48) | node
+        lo = lo & (4611686018427387903 as I64)
+        lo = lo | (-9223372036854775808 as I64)
+
+        return Uuid { hi: hi, lo: lo }
+    }
+
+    /// Generate a name-based UUID using MD5 (version 3, RFC 9562).
+    ///
+    /// Deterministic: same namespace+name always produces the same UUID.
+    pub func v3(ns: Uuid, name: Str) -> Uuid {
+        return name_based_uuid(ns, name, HashAlgorithm::Md5, 3)
+    }
+
+    /// Generate a random UUID (version 4, RFC 9562).
+    ///
+    /// Uses cryptographically secure random number generator.
+    pub func v4() -> Uuid {
+        let hi: I64 = crypto_rand_i64()
+        let lo: I64 = crypto_rand_i64()
+        return set_version_variant(hi, lo, 4)
+    }
+
+    /// Generate a name-based UUID using SHA-1 (version 5, RFC 9562).
+    ///
+    /// Deterministic: same namespace+name always produces the same UUID.
+    /// Preferred over v3 for new applications.
+    pub func v5(ns: Uuid, name: Str) -> Uuid {
+        return name_based_uuid(ns, name, HashAlgorithm::Sha1, 5)
+    }
+
+    /// Generate a reordered time-based UUID (version 6, RFC 9562).
+    ///
+    /// Uses the same 60-bit Gregorian timestamp as v1, but rearranges bits
+    /// so that UUIDs sort chronologically as byte strings.
+    pub func v6() -> Uuid {
+        let timestamp: I64 = get_gregorian_timestamp()
+        let clock_seq: I64 = crypto_rand_i64() & 16383  // 14 bits
+        let node: I64 = random_node()
+
+        // Reordered: most significant time bits come first
+        // time_hi  = bits 28-59 (32 bits) -> hi bits 63-32
+        // time_mid = bits 12-27 (16 bits) -> hi bits 31-16
+        // time_low = bits 0-11  (12 bits) -> hi bits 11-0
+        let time_hi: I64  = (timestamp >> 28) & 4294967295  // 32 bits
+        let time_mid: I64 = (timestamp >> 12) & 65535       // 16 bits
+        let time_low: I64 = timestamp & 4095                // 12 bits
+
+        let hi: I64 = (time_hi << 32) | (time_mid << 16) | (6 << 12) as I64 | time_low
+
+        var lo: I64 = (clock_seq << 48) | node
+        lo = lo & (4611686018427387903 as I64)
+        lo = lo | (-9223372036854775808 as I64)
 
         return Uuid { hi: hi, lo: lo }
     }
@@ -71,26 +300,52 @@ impl Uuid {
     /// Upper 48 bits are Unix epoch milliseconds, then version 7,
     /// then 12 random bits, variant 10, and 62 random bits.
     pub func v7() -> Uuid {
-        var rng: Rng = Rng::new()
-        let now: I64 = time_ns() / 1000000  // nanoseconds to milliseconds
+        let now_nanos: I64 = wall_clock_nanos()
+        let now_ms: I64 = now_nanos / 1000000  // nanoseconds to milliseconds
 
         // hi: [48-bit timestamp] [4-bit version=0111] [12-bit random]
-        var hi: I64 = (now << 16) | (7 << 12) as I64 | (rng.next_i64() & (4095 as I64))
+        let rand_hi: I64 = crypto_rand_i64()
+        let hi: I64 = (now_ms << 16) | (7 << 12) as I64 | (rand_hi & 4095)
 
         // lo: [2-bit variant=10] [62-bit random]
-        var lo: I64 = rng.next_i64()
+        var lo: I64 = crypto_rand_i64()
         lo = lo & (4611686018427387903 as I64)   // 0x3FFF_FFFF_FFFF_FFFF
         lo = lo | (-9223372036854775808 as I64)  // 0x8000_0000_0000_0000
 
         return Uuid { hi: hi, lo: lo }
     }
 
-    /// Returns the UUID version (4 or 7 for UUIDs generated by this module).
+    /// Generate a custom UUID (version 8, RFC 9562).
+    ///
+    /// Version=8 and variant=10 are set automatically; all other bits
+    /// are user-defined.
+    ///
+    /// `custom_a`: Upper 48 bits of data (before version nibble).
+    /// `custom_b`: 12 bits of data (after version nibble).
+    /// `custom_c`: 62 bits of data (after variant bits).
+    pub func v8(custom_a: I64, custom_b: I64, custom_c: I64) -> Uuid {
+        // hi: [custom_a (48)] [version=8 (4)] [custom_b (12)]
+        let a: I64 = (custom_a & 281474976710655) << 16  // lower 48 bits << 16
+        let b: I64 = custom_b & 4095                      // 12 bits
+        let hi: I64 = a | (8 << 12) as I64 | b
+
+        // lo: [variant=10 (2)] [custom_c (62)]
+        var lo: I64 = custom_c & (4611686018427387903 as I64)  // 0x3FFFFFFFFFFFFFFF
+        lo = lo | (-9223372036854775808 as I64)                 // 0x8000000000000000
+
+        return Uuid { hi: hi, lo: lo }
+    }
+
+    // ========================================================================
+    // Accessors
+    // ========================================================================
+
+    /// Returns the UUID version (1-8 for standard versions, 0 for nil).
     pub func version(this) -> I32 {
         return ((this.hi >> 12) & (15 as I64)) as I32
     }
 
-    /// Returns the UUID variant (2 for RFC 9562 UUIDs).
+    /// Returns the UUID variant (2 for RFC 9562/4122 UUIDs).
     pub func variant(this) -> I32 {
         let top_bits: I32 = ((this.lo >> 62) & (3 as I64)) as I32
         if top_bits >= 2 {
@@ -108,6 +363,92 @@ impl Uuid {
     pub func eq(this, other: Uuid) -> Bool {
         return this.hi == other.hi and this.lo == other.lo
     }
+
+    /// Compare two UUIDs lexicographically (unsigned byte order).
+    /// Returns -1 if this < other, 0 if equal, 1 if this > other.
+    pub func compare(this, other: Uuid) -> I32 {
+        if this.hi != other.hi {
+            // Unsigned comparison of signed I64: XOR with sign bit
+            let flip: I64 = -9223372036854775808 as I64
+            let a: I64 = this.hi ^ flip
+            let b: I64 = other.hi ^ flip
+            if a < b { return -1 }
+            return 1
+        }
+        if this.lo != other.lo {
+            let flip: I64 = -9223372036854775808 as I64
+            let a: I64 = this.lo ^ flip
+            let b: I64 = other.lo ^ flip
+            if a < b { return -1 }
+            return 1
+        }
+        return 0
+    }
+
+    /// Extract the timestamp from a time-based UUID.
+    ///
+    /// For v1/v2: returns 100-nanosecond intervals since Gregorian epoch.
+    /// For v6: returns 100-nanosecond intervals since Gregorian epoch.
+    /// For v7: returns Unix epoch milliseconds.
+    /// For other versions: returns 0.
+    pub func timestamp(this) -> I64 {
+        let ver: I32 = this.version()
+        if ver == 1 or ver == 2 {
+            // v1 layout: hi = [time_low (32)] [time_mid (16)] [version (4)] [time_hi (12)]
+            let time_low: I64 = (this.hi >> 32) & 4294967295
+            let time_mid: I64 = (this.hi >> 16) & 65535
+            let time_hi: I64 = this.hi & 4095
+            return (time_hi << 48) | (time_mid << 32) | time_low
+        }
+        if ver == 6 {
+            // v6 layout: hi = [time_hi (32)] [time_mid (16)] [version (4)] [time_low (12)]
+            let time_hi: I64 = (this.hi >> 32) & 4294967295
+            let time_mid: I64 = (this.hi >> 16) & 65535
+            let time_low: I64 = this.hi & 4095
+            return (time_hi << 28) | (time_mid << 12) | time_low
+        }
+        if ver == 7 {
+            // v7 layout: hi = [timestamp_ms (48)] [version (4)] [random (12)]
+            return this.hi >> 16
+        }
+        return 0
+    }
+
+    // ========================================================================
+    // Conversion
+    // ========================================================================
+
+    /// Convert this UUID to a 16-byte Buffer in big-endian order.
+    pub func to_bytes(this) -> Buffer {
+        let buf: Buffer = Buffer::new(16)
+        buf.write_u64_be(this.hi, 0)
+        buf.write_u64_be(this.lo, 8)
+        return buf
+    }
+
+    /// Construct a UUID from a 16-byte Buffer (big-endian byte order).
+    pub func from_bytes(buf: ref Buffer) -> Outcome[Uuid, Str] {
+        if buf.len() < 16 {
+            return Err("uuid: buffer must be at least 16 bytes")
+        }
+        var hi: I64 = 0
+        var i: I64 = 0
+        loop (i < 8) {
+            hi = (hi << 8) | (buf.get(i) as I64)
+            i = i + 1
+        }
+        var lo: I64 = 0
+        i = 8
+        loop (i < 16) {
+            lo = (lo << 8) | (buf.get(i) as I64)
+            i = i + 1
+        }
+        return Ok(Uuid { hi: hi, lo: lo })
+    }
+
+    // ========================================================================
+    // Formatting
+    // ========================================================================
 
     /// Format as standard string: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     ///
@@ -202,6 +543,10 @@ impl Uuid {
         return Err("uuid: invalid length (expected 32 or 36)")
     }
 }
+
+// ============================================================================
+// Parse helpers (module-level)
+// ============================================================================
 
 /// Parse 32 hex characters (no hyphens) into a UUID.
 func parse_bare(s: Str) -> Outcome[Uuid, Str] {

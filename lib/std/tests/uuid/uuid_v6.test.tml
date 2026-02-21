@@ -1,0 +1,36 @@
+use test
+use std::uuid::Uuid
+use core::str
+
+@test
+func test_uuid_v6_version_and_variant() -> I32 {
+    let id = Uuid::v6()
+    assert_eq(id.version(), 6)
+    assert_eq(id.variant(), 2)
+    assert(not id.is_nil(), "v6 should not be nil")
+    assert_eq(str::len(id.to_string()), 36)
+    0
+}
+
+@test
+func test_uuid_v6_uniqueness() -> I32 {
+    let a = Uuid::v6()
+    let b = Uuid::v6()
+    assert(not a.eq(b), "two v6 UUIDs should differ")
+    0
+}
+
+@test
+func test_uuid_v6_timestamp_nonzero() -> I32 {
+    let id = Uuid::v6()
+    assert(id.timestamp() > 0, "v6 timestamp should be positive")
+    0
+}
+
+@test
+func test_uuid_v6_monotonic_ordering() -> I32 {
+    let a = Uuid::v6()
+    let b = Uuid::v6()
+    assert(b.compare(a) >= 0, "later v6 should sort >= earlier")
+    0
+}

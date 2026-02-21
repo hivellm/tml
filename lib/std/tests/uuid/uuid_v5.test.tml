@@ -1,0 +1,29 @@
+use test
+use std::uuid::Uuid
+
+@test
+func test_uuid_v5_version_and_variant() -> I32 {
+    let ns = Uuid::namespace_dns()
+    let id = Uuid::v5(ns, "example.com")
+    assert_eq(id.version(), 5)
+    assert_eq(id.variant(), 2)
+    0
+}
+
+@test
+func test_uuid_v5_deterministic() -> I32 {
+    let ns = Uuid::namespace_dns()
+    let a = Uuid::v5(ns, "example.com")
+    let b = Uuid::v5(ns, "example.com")
+    assert(a.eq(b), "same namespace+name should produce same UUID")
+    0
+}
+
+@test
+func test_uuid_v5_different_from_v3() -> I32 {
+    let ns = Uuid::namespace_dns()
+    let v3id = Uuid::v3(ns, "example.com")
+    let v5id = Uuid::v5(ns, "example.com")
+    assert(not v3id.eq(v5id), "v3 and v5 should differ for same input")
+    0
+}

@@ -1,0 +1,33 @@
+use test
+use std::uuid::Uuid
+
+@test
+func test_uuid_v8_version_and_variant() -> I32 {
+    let id = Uuid::v8(0, 0, 0)
+    assert_eq(id.version(), 8)
+    assert_eq(id.variant(), 2)
+    0
+}
+
+@test
+func test_uuid_v8_custom_data() -> I32 {
+    let id = Uuid::v8(123456, 789, 9876543210)
+    assert_eq(id.version(), 8)
+    assert_eq(id.variant(), 2)
+    assert(not id.is_nil(), "v8 with data should not be nil")
+    0
+}
+
+@test
+func test_uuid_v8_parse_roundtrip() -> I32 {
+    let id = Uuid::v8(281474976710655, 4095, 4611686018427387903)
+    let s = id.to_string()
+    when Uuid::parse(s) {
+        Ok(parsed) => {
+            assert(id.eq(parsed), "roundtrip should preserve UUID")
+            assert_eq(parsed.version(), 8)
+        }
+        Err(e) => assert(false, "parse should succeed")
+    }
+    0
+}
