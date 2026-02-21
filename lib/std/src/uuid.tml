@@ -13,6 +13,7 @@
 //! ```
 
 use core::str
+use core::encoding::hex
 use std::random::Rng
 use std::time::time_ns
 
@@ -31,21 +32,7 @@ func nibble_at(val: I64, pos: I32) -> I32 {
     return ((val >> (shift as I64)) & (15 as I64)) as I32
 }
 
-/// Helper: write a lowercase hex character to a buffer.
-func hex_char(n: I32) -> U8 {
-    if n < 10 {
-        return (n + 48) as U8
-    }
-    return (n + 87) as U8
-}
-
-/// Helper: parse a hex character to its nibble value, or -1 if invalid.
-func parse_hex(c: I32) -> I32 {
-    if c >= 48 and c <= 57 { return c - 48 }
-    if c >= 97 and c <= 102 { return c - 87 }
-    if c >= 65 and c <= 70 { return c - 55 }
-    return -1
-}
+// hex_char and parse_hex replaced by core::encoding::hex
 
 impl Uuid {
     /// The nil UUID (all zeros): 00000000-0000-0000-0000-000000000000
@@ -134,7 +121,7 @@ impl Uuid {
         // Group 1: 8 hex chars from hi bits 63-32
         var i: I32 = 15
         loop (i >= 8) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex_char(nibble_at(this.hi, i))) }
+            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
             pos = pos + 1
             i = i - 1
         }
@@ -146,7 +133,7 @@ impl Uuid {
         // Group 2: 4 hex chars from hi bits 31-16
         i = 7
         loop (i >= 4) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex_char(nibble_at(this.hi, i))) }
+            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
             pos = pos + 1
             i = i - 1
         }
@@ -158,7 +145,7 @@ impl Uuid {
         // Group 3: 4 hex chars from hi bits 15-0
         i = 3
         loop (i >= 0) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex_char(nibble_at(this.hi, i))) }
+            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
             pos = pos + 1
             i = i - 1
         }
@@ -170,7 +157,7 @@ impl Uuid {
         // Group 4: 4 hex chars from lo bits 63-48
         i = 15
         loop (i >= 12) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex_char(nibble_at(this.lo, i))) }
+            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.lo, i))) }
             pos = pos + 1
             i = i - 1
         }
@@ -182,7 +169,7 @@ impl Uuid {
         // Group 5: 12 hex chars from lo bits 47-0
         i = 11
         loop (i >= 0) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex_char(nibble_at(this.lo, i))) }
+            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.lo, i))) }
             pos = pos + 1
             i = i - 1
         }
@@ -225,7 +212,7 @@ func parse_bare(s: Str) -> Outcome[Uuid, Str] {
     // First 16 hex chars -> hi
     loop (i < 16) {
         let c: I32 = str::char_at(s, i)
-        let v: I32 = parse_hex(c)
+        let v: I32 = hex::char_to_nibble(c)
         if v == -1 {
             return Err("uuid: invalid hex character")
         }
@@ -236,7 +223,7 @@ func parse_bare(s: Str) -> Outcome[Uuid, Str] {
     // Next 16 hex chars -> lo
     loop (i < 32) {
         let c: I32 = str::char_at(s, i)
-        let v: I32 = parse_hex(c)
+        let v: I32 = hex::char_to_nibble(c)
         if v == -1 {
             return Err("uuid: invalid hex character")
         }
@@ -266,7 +253,7 @@ func parse_hyphenated(s: Str) -> Outcome[Uuid, Str] {
             // Skip hyphens
             i = i + 1
         } else {
-            let v: I32 = parse_hex(c)
+            let v: I32 = hex::char_to_nibble(c)
             if v == -1 {
                 return Err("uuid: invalid hex character")
             }

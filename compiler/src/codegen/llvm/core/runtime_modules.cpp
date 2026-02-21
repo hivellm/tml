@@ -255,6 +255,27 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
     }
 
+    // --- Transitive import expansion ---
+    // When module A imports module B, and B imports module C, we must also
+    // process C. Without this, cross-library imports (e.g., std::uuid importing
+    // core::encoding::hex) would leave C's functions unresolved at link time.
+    {
+        std::vector<std::string> worklist(imported_module_paths.begin(),
+                                          imported_module_paths.end());
+        while (!worklist.empty()) {
+            std::string path = std::move(worklist.back());
+            worklist.pop_back();
+            auto it = all_modules.find(path);
+            if (it == all_modules.end())
+                continue;
+            for (const auto& dep : it->second.private_imports) {
+                if (imported_module_paths.insert(dep).second) {
+                    worklist.push_back(dep);
+                }
+            }
+        }
+    }
+
     // --- Compute conditional sync module requirements ---
     // Only include sync essential modules when sync/thread is actually imported.
     // This avoids processing ~1400 lines of atomic.tml + mutex/condvar for non-sync tests.
