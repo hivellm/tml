@@ -114,7 +114,7 @@
         },
         {
           "name": "constant.other.preprocessor.symbol.tml",
-          "match": "\\b(WINDOWS|LINUX|MACOS|X86_64|ARM64|AARCH64|X86|ARM|DEBUG|RELEASE|TML_VERSION)\\b"
+          "match": "\\b(WINDOWS|LINUX|MACOS|ANDROID|IOS|FREEBSD|UNIX|POSIX|X86_64|X86|ARM64|AARCH64|ARM|WASM32|RISCV64|PTR_32|PTR_64|LITTLE_ENDIAN|BIG_ENDIAN|MSVC|GNU|MUSL|DEBUG|RELEASE|TEST|TML_VERSION)\\b"
         },
         {
           "name": "entity.name.constant.preprocessor.tml",
@@ -161,7 +161,7 @@
       "patterns": [
         {
           "name": "meta.directive.tml",
-          "match": "@(test|bench|benchmark|when|unless|auto|hint|deprecated|stable|unstable|lowlevel|export|doc|extern|link)\\b",
+          "match": "@(test|bench|benchmark|when|unless|derive|auto|simd|should_panic|hint|deprecated|stable|unstable|lowlevel|export|doc|extern|link)\\b",
           "captures": {
             "1": {
               "name": "storage.modifier.directive.tml"
@@ -170,7 +170,7 @@
         },
         {
           "name": "meta.directive.with-args.tml",
-          "begin": "@(test|when|unless|auto|hint|deprecated|doc|extern|link)\\s*\\(",
+          "begin": "@(test|when|unless|derive|auto|simd|should_panic|hint|deprecated|doc|extern|link)\\s*\\(",
           "end": "\\)",
           "beginCaptures": {
             "1": {
@@ -241,7 +241,7 @@
         },
         {
           "name": "storage.type.builtin.tml",
-          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration|Layout|Allocator|Iterator|IntoIterator|FromIterator|Text)\\b"
+          "match": "\\b(List|Map|HashMap|HashSet|Set|Vec|Buffer|BTreeMap|BTreeSet|Deque|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration|Layout|Allocator|Iterator|IntoIterator|FromIterator|Text|Regex|Uuid|Version|DateTime|SystemTime|Xoshiro256|ThreadRng)\\b"
         },
         {
           "name": "constant.language.enum-variant.tml",
@@ -459,11 +459,11 @@
       "patterns": [
         {
           "name": "support.function.builtin.atomic.tml",
-          "match": "\\b(atomic_load|atomic_store|atomic_add|atomic_sub|atomic_exchange|atomic_cas|atomic_and|atomic_or|atomic_xor)\\b"
+          "match": "\\b(atomic_load_i32|atomic_load_i64|atomic_store_i32|atomic_store_i64|atomic_fetch_add_i32|atomic_fetch_add_i64|atomic_fetch_sub_i32|atomic_fetch_sub_i64|atomic_swap_i32|atomic_swap_i64|atomic_compare_exchange_i32|atomic_compare_exchange_i64|atomic_and_i32|atomic_and_i64|atomic_or_i32|atomic_or_i64|atomic_load|atomic_store|atomic_add|atomic_sub|atomic_exchange|atomic_cas|atomic_and|atomic_or|atomic_xor)\\b"
         },
         {
           "name": "support.function.builtin.fence.tml",
-          "match": "\\b(fence|fence_acquire|fence_release)\\b"
+          "match": "\\b(atomic_fence|atomic_fence_acquire|atomic_fence_release|fence|fence_acquire|fence_release)\\b"
         },
         {
           "name": "support.function.builtin.sync.tml",
@@ -471,11 +471,11 @@
         },
         {
           "name": "support.function.builtin.memory.tml",
-          "match": "\\b(alloc|dealloc|mem_alloc|mem_alloc_zeroed|mem_realloc|mem_free|mem_copy|mem_move|mem_set|mem_zero|mem_compare|mem_eq|alloc_global|alloc_global_zeroed|dealloc_global|realloc_global|alloc_single|alloc_array|alloc_array_zeroed|dealloc_single|dealloc_array|ptr_offset|read_i32|read_i64|write_i32|write_i64)\\b"
+          "match": "\\b(alloc|dealloc|mem_alloc|mem_alloc_zeroed|mem_realloc|mem_free|mem_copy|mem_move|mem_set|mem_zero|mem_compare|mem_eq|alloc_global|alloc_global_zeroed|dealloc_global|realloc_global|alloc_single|alloc_array|alloc_array_zeroed|dealloc_single|dealloc_array|ptr_offset|ptr_read|ptr_write|copy_nonoverlapping|read_i32|read_i64|write_i32|write_i64)\\b"
         },
         {
           "name": "support.function.builtin.io.tml",
-          "match": "\\b(print|println|eprint|eprintln|panic|assert|assert_eq|assert_ne|dbg)\\b"
+          "match": "\\b(print|println|eprint|eprintln|panic|assert|assert_eq|assert_ne|assert_true|assert_false|assert_lt|assert_gt|assert_lte|assert_gte|assert_in_range|assert_str_len|assert_str_empty|assert_str_not_empty|dbg)\\b"
         },
         {
           "name": "support.function.builtin.string.tml",
@@ -487,7 +487,7 @@
         },
         {
           "name": "support.function.builtin.meta.tml",
-          "match": "\\b(size_of|align_of|drop|forget)\\b"
+          "match": "\\b(size_of|align_of|drop|forget|__FILE__|__DIRNAME__|__LINE__)\\b"
         },
         {
           "name": "support.function.builtin.type-method.tml",

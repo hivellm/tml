@@ -6,24 +6,32 @@ Syntax highlighting, autocompletion, and language support for TML (To Machine La
 
 - **Syntax Highlighting**: Full syntax highlighting for TML language
   - Keywords (func, type, behavior, impl, dyn, class, interface, etc.)
-  - Types (I32, U64, F64, Str, Bool, Instant, Duration, etc.)
+  - Types (I32, U64, F64, Str, Bool, Text, Instant, Duration, etc.)
+  - Collection types: `Vec[T]`, `HashMap[K,V]`, `HashSet[T]`, `BTreeMap[K,V]`, `BTreeSet[T]`, `Deque[T]`, `Buffer`
+  - Wrapper types: `Maybe[T]`, `Outcome[T,E]`, `Heap[T]`, `Shared[T]`, `Sync[T]`
   - Builtin enums: `Maybe[T]` (Just/Nothing), `Outcome[T,E]` (Ok/Err), `Ordering`
   - Operators (and, or, not, +, -, *, /, etc.)
   - Literals (integers, floats, strings, characters)
   - Comments (line, block, doc, AI comments)
-  - Directives (@test, @bench, @stable, @deprecated, @extern, @link, etc.)
+  - Directives (@test, @bench, @derive, @simd, @should_panic, @extern, @link, etc.)
+  - Type-specific atomic intrinsics (`atomic_load_i32`, `atomic_store_i64`, etc.)
+  - Modern memory intrinsics (`ptr_read`, `ptr_write`, `copy_nonoverlapping`, etc.)
+  - Compile-time constants (`__FILE__`, `__DIRNAME__`, `__LINE__`)
   - Builtin methods (hash, duplicate, to_string, is_just, unwrap, etc.)
   - Static type methods (Type::from, Type::default)
+  - Extended assertion functions (assert_eq, assert_ne, assert_true, assert_lt, assert_in_range, etc.)
+  - Preprocessor directives (#if, #ifdef, #elif, #endif) with platform symbols
   - Markdown code blocks (```tml)
 
 - **IntelliSense / Autocompletion**:
-  - All TML keywords (50+ including OOP keywords)
-  - Primitive and collection types
-  - Wrapper types (Maybe, Outcome, Heap, Shared, Sync)
-  - Builtin functions (print, println, panic, assert, etc.)
+  - All TML keywords (57 including OOP keywords)
+  - Primitive and collection types (Vec, HashMap, HashSet, BTreeMap, BTreeSet, Deque, Buffer)
+  - Wrapper types (Maybe, Outcome, Heap, Shared, Sync, Text)
+  - Builtin functions (print, println, panic, assert, assert_eq, assert_ne, assert_true, etc.)
+  - 35+ module completions for `use` statements (std::json, std::regex, std::crypto, etc.)
   - Code snippets for common patterns (func, class, interface, when, etc.)
   - OOP snippets (override, virtual, abstract, extends, implements)
-  - Import statement completion (`use std::io::*`)
+  - Import statement completion (`use std::json::*`, `use std::regex::*`)
   - Effects (pure, io, async, throws, unsafe, alloc, diverges, nondet)
   - Capabilities (Read, Write, Fs, Net, Env, Time, Random, Exec)
   - Contracts (requires, ensures, invariant, assert, assume)
@@ -60,7 +68,7 @@ Syntax highlighting, autocompletion, and language support for TML (To Machine La
   - Support for compiler JSON error format
 
 - **Language Configuration**:
-  - Auto-closing brackets, quotes, and parentheses
+  - Auto-closing brackets, quotes, backticks, and parentheses
   - Comment toggling (Ctrl+/)
   - Block commenting (Ctrl+Shift+A)
   - Bracket matching
@@ -250,6 +258,18 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 - Diagnostics are disabled if the compiler is not found
 
 ## Release Notes
+
+### 0.18.0
+
+- **Type-Specific Atomic Intrinsics** - Highlighting for `atomic_load_i32`, `atomic_store_i64`, `atomic_cas_i32`, etc.
+- **Fence & Memory Intrinsics** - `atomic_fence`, `ptr_read`, `ptr_write`, `copy_nonoverlapping`
+- **Extended Assertions** - 10 new builtins: `assert_true`, `assert_false`, `assert_lt`, `assert_gt`, `assert_lte`, `assert_gte`, `assert_in_range`, `assert_str_len`, `assert_str_empty`, `assert_str_not_empty`
+- **Compile-Time Constants** - `__FILE__`, `__DIRNAME__`, `__LINE__`
+- **Backtick Auto-Closing** - Template literal backticks now auto-close
+- **35+ Module Completions** - std::json, std::regex, std::crypto, std::compress, std::random, std::search, std::datetime, std::os, std::url, std::uuid, std::semver, std::glob, and more
+- **Collection & Wrapper Types** - Vec, HashMap, HashSet, BTreeMap, BTreeSet, Deque, Buffer, Text
+- **New Directives** - `@derive`, `@simd`, `@should_panic`
+- **Extended Preprocessor Symbols** - ANDROID, IOS, FREEBSD, UNIX, POSIX, WASM32, RISCV64, PTR_32, PTR_64, and more
 
 ### 0.13.0
 

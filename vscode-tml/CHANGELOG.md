@@ -2,6 +2,32 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.18.0] - 2026-02-21
+
+### Added
+- **Type-Specific Atomic Intrinsics** - Syntax highlighting for `atomic_load_i32`, `atomic_load_i64`, `atomic_store_i32`, `atomic_store_i64`, `atomic_add_i32`, `atomic_add_i64`, `atomic_sub_i32`, `atomic_sub_i64`, `atomic_cas_i32`, `atomic_cas_i64`, `atomic_exchange_i32`, `atomic_exchange_i64`, `atomic_and_i32`, `atomic_and_i64`, `atomic_or_i32`, `atomic_or_i64`, `atomic_xor_i32`, `atomic_xor_i64`
+- **Fence Intrinsics** - Added `atomic_fence`, `atomic_fence_acquire`, `atomic_fence_release`
+- **Modern Memory Intrinsics** - Added `ptr_read`, `ptr_write`, `copy_nonoverlapping`
+- **Extended Assertions** - 10 new assertion builtins: `assert_true`, `assert_false`, `assert_lt`, `assert_gt`, `assert_lte`, `assert_gte`, `assert_in_range`, `assert_str_len`, `assert_str_empty`, `assert_str_not_empty`
+- **Compile-Time Constants** - Highlighting for `__FILE__`, `__DIRNAME__`, `__LINE__`
+- **Backtick Auto-Closing** - Template literal backticks now auto-close in editor
+- **Expanded Module Completions** - 35+ modules in LSP: std::json, std::regex, std::crypto, std::crypto::hash, std::compress, std::random, std::search, std::hash, std::url, std::uuid, std::semver, std::glob, std::os, std::text, std::process, std::path, std::log, std::datetime, core::encoding
+- **Collection Type Completions** - Vec, HashMap, HashSet, BTreeMap, BTreeSet, Deque, Buffer
+- **Text Wrapper Type** - Added `Text` to wrapper types with documentation
+- **@derive Directive** - Syntax highlighting for `@derive` (replaces `@auto`)
+- **@simd Directive** - Syntax highlighting for `@simd` SIMD vector operations
+- **@should_panic Directive** - Test directive for expected panics
+- **Extended Preprocessor Symbols** - ANDROID, IOS, FREEBSD, UNIX, POSIX, WASM32, RISCV64, PTR_32, PTR_64, LITTLE_ENDIAN, BIG_ENDIAN, MSVC, GNU, MUSL, TEST
+- **Additional Type Highlighting** - Regex, Uuid, Version, DateTime, SystemTime, Xoshiro256, ThreadRng
+
+### Changed
+- Updated `TML_MODULES` in LSP server from 16 to 35 entries
+- Updated `TML_COLLECTION_TYPES` to match current stdlib (removed Map/Set aliases)
+- Updated `TML_WRAPPER_TYPES` with Text type and corrected Heap/Sync descriptions
+- Moved `Text` from primitive types to wrapper types
+- Updated keyword count from 50+ to 57 in documentation
+- Updated README with comprehensive release notes for 0.14-0.17
+
 ## [0.13.0] - 2026-01-15
 
 ### Added
@@ -231,10 +257,7 @@ All notable changes to the "tml-language" extension will be documented in this f
 - Go to definition
 - Find references
 - Symbol search
-- Context-aware completions
-- Semantic highlighting
+- Context-aware completions (type-aware)
 - Refactoring support
-- Error diagnostics (requires compiler integration)
-- Formatting provider
+- Formatting provider (via `tml format`)
 - Debugger support
-- Build task integration
