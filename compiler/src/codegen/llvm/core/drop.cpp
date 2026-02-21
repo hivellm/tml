@@ -238,7 +238,37 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
     }
 }
 
+void LLVMIRGen::register_heap_str_for_drop(const std::string& var_name,
+                                           const std::string& var_reg) {
+    if (!drop_scopes_.empty()) {
+        DropInfo di;
+        di.var_name = var_name;
+        di.var_reg = var_reg;
+        di.type_name = "Str";
+        di.llvm_type = "ptr";
+        di.is_heap_str = true;
+        drop_scopes_.back().push_back(di);
+    }
+}
+
 void LLVMIRGen::emit_drop_call(const DropInfo& info) {
+    // Heap-allocated Str: free the pointer directly
+    if (info.is_heap_str) {
+        std::string ptr_val = fresh_reg();
+        emit_line("  " + ptr_val + " = load ptr, ptr " + info.var_reg);
+        // Only free non-null pointers (null check guards against uninitialized paths)
+        std::string is_null = fresh_reg();
+        emit_line("  " + is_null + " = icmp eq ptr " + ptr_val + ", null");
+        std::string bb_free = fresh_label();
+        std::string bb_done = fresh_label();
+        emit_line("  br i1 " + is_null + ", label %" + bb_done + ", label %" + bb_free);
+        emit_line(bb_free + ":");
+        emit_line("  call void @free(ptr " + ptr_val + ")");
+        emit_line("  br label %" + bb_done);
+        emit_line(bb_done + ":");
+        return;
+    }
+
     // Load the value from the variable's alloca
     std::string value_reg = fresh_reg();
     emit_line("  " + value_reg + " = load " + info.llvm_type + ", ptr " + info.var_reg);

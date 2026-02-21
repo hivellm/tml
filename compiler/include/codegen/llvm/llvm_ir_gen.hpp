@@ -472,10 +472,11 @@ public:
     /// Tracks variables that need `drop()` called when their scope exits.
     /// Used to implement automatic resource cleanup.
     struct DropInfo {
-        std::string var_name;  ///< Variable name.
-        std::string var_reg;   ///< LLVM register for the value.
-        std::string type_name; ///< TML type name (e.g., "DroppableResource").
-        std::string llvm_type; ///< LLVM type (e.g., "%struct.DroppableResource").
+        std::string var_name;     ///< Variable name.
+        std::string var_reg;      ///< LLVM register for the value.
+        std::string type_name;    ///< TML type name (e.g., "DroppableResource").
+        std::string llvm_type;    ///< LLVM type (e.g., "%struct.DroppableResource").
+        bool is_heap_str = false; ///< True if this is a heap-allocated Str needing free().
     };
 
 private:
@@ -503,6 +504,7 @@ private:
     void pop_drop_scope();
     void register_for_drop(const std::string& var_name, const std::string& var_reg,
                            const std::string& type_name, const std::string& llvm_type);
+    void register_heap_str_for_drop(const std::string& var_name, const std::string& var_reg);
     void emit_scope_drops(); // Emit drops for current scope only
     void emit_all_drops();   // Emit drops for all scopes (for return)
     void emit_drop_call(const DropInfo& info);

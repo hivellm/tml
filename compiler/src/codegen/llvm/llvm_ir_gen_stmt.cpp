@@ -42,6 +42,26 @@ static std::string extract_type_name_for_drop(const std::string& llvm_type) {
     return "";
 }
 
+// Helper to check if an expression produces a HEAP-ALLOCATED Str that needs free.
+// CONSERVATIVE: only returns true for operations that are GUARANTEED to heap-allocate.
+// We CANNOT auto-free function/method call results because they may return string
+// literals (global constants). E.g., `err.message()` returns "DNS lookup failed: ..."
+// which is a global constant, not a heap allocation.
+static bool is_heap_str_producer(const parser::Expr& expr) {
+    // Interpolated strings always heap-allocate via snprintf+malloc
+    if (expr.is<parser::InterpolatedStringExpr>())
+        return true;
+    // Template literals always heap-allocate
+    if (expr.is<parser::TemplateLiteralExpr>())
+        return true;
+    // String literals are global constants — no free
+    // Function calls / method calls — UNSAFE to free (may return literals)
+    // Identifiers — aliases, would double-free
+    // Binary expressions — may or may not allocate (depends on types)
+    // Everything else: be conservative, don't free
+    return false;
+}
+
 void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
     if (stmt.is<parser::LetStmt>()) {
         gen_let_stmt(stmt.as<parser::LetStmt>());
@@ -640,7 +660,17 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             semantic_type =
                 resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
         }
+        // Infer semantic type from init expression when no annotation present
+        if (!semantic_type) {
+            semantic_type = infer_expr_type(*let.init.value());
+        }
         locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
+
+        // Register heap Str for automatic free at scope exit.
+        // is_heap_str_producer guarantees the expression allocates on the heap.
+        if (is_heap_str_producer(*let.init.value())) {
+            register_heap_str_for_drop(var_name, alloca_reg);
+        }
         return;
     }
 
@@ -945,6 +975,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // Register for drop if type implements Drop
     std::string type_name = extract_type_name_for_drop(var_type);
     register_for_drop(var_name, alloca_reg, type_name, var_type);
+
+    // Register heap-allocated Str variables for automatic free at scope exit.
+    // is_heap_str_producer checks if the init expression GUARANTEES a heap allocation
+    // (interpolated strings, template literals). These always produce Str (ptr).
+    if (var_type == "ptr" && let.init.has_value() && is_heap_str_producer(*let.init.value())) {
+        register_heap_str_for_drop(var_name, alloca_reg);
+    }
 
     // Emit debug info for the variable (if enabled and debug level >= 2)
     // Level 1 only emits function scopes, level 2+ includes local variables
@@ -1332,6 +1369,11 @@ void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
         // Register for drop if type implements Drop
         std::string type_name = extract_type_name_for_drop(var_type);
         register_for_drop(const_decl.name, alloca_reg, type_name, var_type);
+
+        // Register heap Str for automatic free
+        if (var_type == "ptr" && is_heap_str_producer(*const_decl.value)) {
+            register_heap_str_for_drop(const_decl.name, alloca_reg);
+        }
     }
     // Other nested declarations (func, type, etc.) are handled elsewhere or ignored
 }
