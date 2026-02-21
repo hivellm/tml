@@ -68,10 +68,33 @@ For multi-line strings, use raw string syntax:
 )"},
 
         {"L003", R"(
-Invalid escape sequence [L003]
+Invalid number literal [L003]
 
-A string literal contains a backslash followed by a character that is not
-a recognized escape sequence. TML supports the following escape sequences:
+A numeric literal has an invalid format. This can happen with invalid
+type suffixes, malformed exponents, or digits outside the valid range
+for the number base.
+
+Example of erroneous code:
+
+    let x = 42i99          // 'i99' is not a valid integer suffix
+    let y = 3.14f16        // 'f16' is not a valid float suffix
+    let z = 1.0e            // missing exponent digits
+
+Valid integer suffixes: i8, i16, i32, i64, u8, u16, u32, u64
+Valid float suffixes: f32, f64
+
+How to fix:
+
+    let x = 42i32          // valid integer suffix
+    let y = 3.14f64        // valid float suffix
+    let z = 1.0e10         // valid exponent
+)"},
+
+        {"L004", R"(
+Invalid escape sequence [L004]
+
+A string or template literal contains a backslash followed by a character
+that is not a recognized escape sequence. TML supports these escapes:
 
     \\    backslash
     \"    double quote
@@ -92,44 +115,140 @@ How to fix:
     let s = "helloq world"      // or remove the backslash
 )"},
 
-        {"L004", R"(
-Invalid number literal [L004]
+        {"L005", R"(
+Unterminated character literal [L005]
 
-A numeric literal has an invalid format. This can happen with binary,
-octal, or hexadecimal literals that contain invalid digits.
+A character literal was opened with a single quote `'` but never closed.
+Character literals must contain exactly one character (or escape sequence)
+and end with a closing single quote.
 
 Example of erroneous code:
 
-    let x = 0b123       // binary only allows 0 and 1
-    let y = 0o89        // octal only allows 0-7
-    let z = 0xGH        // hex only allows 0-9, a-f, A-F
+    let c = 'a             // missing closing quote
 
 How to fix:
 
-    let x = 0b101       // valid binary
-    let y = 0o77        // valid octal
-    let z = 0xFF        // valid hexadecimal
+    let c = 'a'            // add closing quote
 )"},
 
-        {"L005", R"(
-Integer overflow [L005]
+        {"L006", R"(
+Empty character literal [L006]
 
-An integer literal is too large for the target type. Each integer type
-has a maximum value:
-
-    I8:   -128 to 127              U8:  0 to 255
-    I16:  -32768 to 32767          U16: 0 to 65535
-    I32:  -2147483648 to 2147483647    U32: 0 to 4294967295
-    I64:  -2^63 to 2^63-1         U64: 0 to 2^64-1
+A character literal contains no characters. Character literals must
+contain exactly one character or escape sequence.
 
 Example of erroneous code:
 
-    let x: U8 = 256        // max U8 is 255
+    let c = ''              // empty character literal
 
 How to fix:
 
-    let x: U8 = 255        // use a value within range
-    let x: U16 = 256       // or use a larger type
+    let c = ' '             // space character
+    let c = '\0'            // null character
+)"},
+
+        {"L008", R"(
+Invalid hexadecimal literal [L008]
+
+A hexadecimal literal (prefixed with `0x`) contains invalid digits or
+has no digits after the prefix. Hex digits are 0-9, a-f, A-F.
+
+Example of erroneous code:
+
+    let x = 0xGH           // 'G' and 'H' are not valid hex digits
+    let y = 0x              // no digits after prefix
+
+How to fix:
+
+    let x = 0xFF           // valid hexadecimal
+    let y = 0x1A           // valid hexadecimal
+)"},
+
+        {"L009", R"(
+Invalid binary literal [L009]
+
+A binary literal (prefixed with `0b`) contains digits other than 0 or 1,
+or has no digits after the prefix.
+
+Example of erroneous code:
+
+    let x = 0b123          // '2' and '3' are not binary digits
+    let y = 0b              // no digits after prefix
+
+How to fix:
+
+    let x = 0b101          // valid binary
+    let y = 0b1100_1010    // underscores allowed for readability
+)"},
+
+        {"L010", R"(
+Invalid octal literal [L010]
+
+An octal literal (prefixed with `0o`) contains digits 8 or 9, which
+are not valid in octal, or has no digits after the prefix.
+
+Example of erroneous code:
+
+    let x = 0o89           // '8' and '9' are not valid octal digits
+    let y = 0o              // no digits after prefix
+
+How to fix:
+
+    let x = 0o77           // valid octal (decimal 63)
+    let y = 0o755          // valid octal (decimal 493)
+)"},
+
+        {"L012", R"(
+Unterminated block comment [L012]
+
+A block comment was opened with `/*` but the closing `*/` was not found.
+Block comments can be nested in TML.
+
+Example of erroneous code:
+
+    /* This comment
+       never ends...
+
+How to fix:
+
+    /* This comment
+       is properly closed */
+
+For nested comments, ensure all levels are closed:
+
+    /* outer /* inner */ still outer */
+)"},
+
+        {"L013", R"(
+Unterminated raw string literal [L013]
+
+A raw string literal was opened but never closed. Raw strings use the
+syntax `r#"..."#` where the number of `#` symbols must match.
+
+Example of erroneous code:
+
+    let s = r#"hello
+        world
+
+How to fix:
+
+    let s = r#"hello
+        world"#
+)"},
+
+        {"L015", R"(
+Unterminated template literal [L015]
+
+A template (interpolated) string literal was opened but never closed.
+Template literals use backtick syntax and support `${expr}` interpolation.
+
+Example of erroneous code:
+
+    let s = `hello ${name}
+
+How to fix:
+
+    let s = `hello ${name}`
 )"},
 
         // ====================================================================
