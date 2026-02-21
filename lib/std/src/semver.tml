@@ -15,6 +15,7 @@
 //! ```
 
 use core::str
+use core::fmt::helpers
 
 /// A semantic version: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 pub type Version {
@@ -244,9 +245,9 @@ impl VersionReq {
 
 /// Format version components to string.
 func format_version(major: I64, minor: I64, patch: I64, pre: Str, build_meta: Str) -> Str {
-    let maj: Str = i64_to_str(major)
-    let min: Str = i64_to_str(minor)
-    let pat: Str = i64_to_str(patch)
+    let maj: Str = helpers::i64_to_str(major)
+    let min: Str = helpers::i64_to_str(minor)
+    let pat: Str = helpers::i64_to_str(patch)
     let ver: Str = maj + "." + min + "." + pat
 
     let has_pre: Bool = str::len(pre) > 0
@@ -516,40 +517,6 @@ func str_to_i64(s: Str) -> I64 {
         i = i + 1
     }
     return val
-}
-
-/// Convert a non-negative I64 to its decimal string representation.
-func i64_to_str(n: I64) -> Str {
-    if n == 0 {
-        return "0"
-    }
-    let buf: *Unit = lowlevel { mem_alloc(21 as I64) }
-    let dst: I64 = buf as I64
-    var pos: I32 = 20
-    var val: I64 = n
-    if val < 0 { val = 0 - val }
-    loop (val > 0) {
-        pos = pos - 1
-        let digit: I32 = (val % 10) as I32
-        lowlevel { ptr_write[U8]((dst + pos as I64) as *U8, (digit + 48) as U8) }
-        val = val / 10
-    }
-    if n < 0 {
-        pos = pos - 1
-        lowlevel { ptr_write[U8]((dst + pos as I64) as *U8, 45 as U8) }
-    }
-    let len: I32 = 20 - pos
-    let out: *Unit = lowlevel { mem_alloc((len + 1) as I64) }
-    let rdst: I64 = out as I64
-    var i: I32 = 0
-    loop (i < len) {
-        let byt: U8 = lowlevel { ptr_read[U8]((dst + (pos + i) as I64) as *U8) }
-        lowlevel { ptr_write[U8]((rdst + i as I64) as *U8, byt) }
-        i = i + 1
-    }
-    lowlevel { ptr_write[U8]((rdst + len as I64) as *U8, 0 as U8) }
-    lowlevel { mem_free(buf) }
-    return out as Str
 }
 
 /// Lexicographic comparison of two strings. Returns -1, 0, or 1.

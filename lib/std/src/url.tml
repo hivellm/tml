@@ -19,6 +19,7 @@
 //! ```
 
 use core::str
+use core::fmt::helpers
 use std::collections::List
 
 /// A parsed URL per RFC 3986.
@@ -64,33 +65,6 @@ func find_char_or_neg(s: Str, from: I64, slen: I64, target: I32) -> I64 {
         i = i + 1
     }
     return -1
-}
-
-/// Convert a non-negative I64 to a Str.
-func i64_to_str(n: I64) -> Str {
-    if n == 0 {
-        return "0"
-    }
-    let buf: *Unit = lowlevel { mem_alloc(21 as I64) }
-    var val: I64 = n
-    if val < 0 { val = 0 - val }
-    var pos: I64 = 20
-    loop (val > 0) {
-        pos = pos - 1
-        let digit: I64 = val % 10
-        lowlevel { ptr_write[U8]((buf as I64 + pos) as *U8, (digit + 48) as U8) }
-        val = val / 10
-    }
-    if n < 0 {
-        pos = pos - 1
-        lowlevel { ptr_write[U8]((buf as I64 + pos) as *U8, 45 as U8) }
-    }
-    let out_len: I64 = 20 - pos
-    let out: *Unit = lowlevel { mem_alloc(out_len + 1) }
-    lowlevel { copy_nonoverlapping((buf as I64 + pos) as *U8, out as *U8, out_len) }
-    lowlevel { ptr_write[U8]((out as I64 + out_len) as *U8, 0 as U8) }
-    lowlevel { mem_free(buf) }
-    return out as Str
 }
 
 /// Parse a decimal integer from a string. Returns -1 if invalid.
@@ -244,7 +218,7 @@ func url_to_string_impl(scheme: Str, userinfo: Str, host: Str, port: I64, path: 
     }
     result = result + host
     if port >= 0 {
-        result = result + ":" + i64_to_str(port)
+        result = result + ":" + helpers::i64_to_str(port)
     }
     result = result + path
     if str::len(raw_query) > 0 {
@@ -290,7 +264,7 @@ impl Url {
         }
         result = result + this.host
         if this.port >= 0 {
-            result = result + ":" + i64_to_str(this.port)
+            result = result + ":" + helpers::i64_to_str(this.port)
         }
         return result
     }
@@ -298,7 +272,7 @@ impl Url {
     /// Get host:port or just host if no port.
     pub func host_port(this) -> Str {
         if this.port >= 0 {
-            return this.host + ":" + i64_to_str(this.port)
+            return this.host + ":" + helpers::i64_to_str(this.port)
         }
         return this.host
     }
