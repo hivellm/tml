@@ -509,14 +509,11 @@ func is_numeric(s: Str) -> Bool {
 
 /// Parse a string of digits to I64.
 func str_to_i64(s: Str) -> I64 {
-    let slen: I64 = str::len(s)
-    var val: I64 = 0
-    var i: I64 = 0
-    loop (i < slen) {
-        val = val * 10 + (str::char_at(s, i) - 48) as I64
-        i = i + 1
+    let result: Maybe[I64] = str::parse_i64(s)
+    when result {
+        Just(n) => return n
+        Nothing => return 0
     }
-    return val
 }
 
 /// Lexicographic comparison of two strings. Returns -1, 0, or 1.

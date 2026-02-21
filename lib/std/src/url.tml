@@ -69,17 +69,11 @@ func find_char_or_neg(s: Str, from: I64, slen: I64, target: I32) -> I64 {
 
 /// Parse a decimal integer from a string. Returns -1 if invalid.
 func parse_port_str(s: Str) -> I64 {
-    let slen: I64 = str::len(s)
-    if slen == 0 { return -1 }
-    var result: I64 = 0
-    var i: I64 = 0
-    loop (i < slen) {
-        let c: I32 = str::char_at(s, i)
-        if c < 48 or c > 57 { return -1 }
-        result = result * 10 + (c - 48) as I64
-        i = i + 1
+    let result: Maybe[I64] = str::parse_i64(s)
+    when result {
+        Just(n) => return n
+        Nothing => return -1
     }
-    return result
 }
 
 /// Check if a character is a valid scheme character.

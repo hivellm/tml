@@ -15,7 +15,7 @@
 use core::str
 
 /// Maps a nibble value (0-15) to a lowercase hex ASCII character code.
-func nibble_to_lower(n: I32) -> U8 {
+pub func nibble_to_lower(n: I32) -> U8 {
     if n < 10 {
         return (n + 48) as U8   // '0' = 48
     }
@@ -23,7 +23,7 @@ func nibble_to_lower(n: I32) -> U8 {
 }
 
 /// Maps a nibble value (0-15) to an uppercase hex ASCII character code.
-func nibble_to_upper(n: I32) -> U8 {
+pub func nibble_to_upper(n: I32) -> U8 {
     if n < 10 {
         return (n + 48) as U8   // '0' = 48
     }
@@ -32,7 +32,7 @@ func nibble_to_upper(n: I32) -> U8 {
 
 /// Maps a hex ASCII character code to its nibble value (0-15).
 /// Returns -1 for invalid characters.
-func char_to_nibble(c: I32) -> I32 {
+pub func char_to_nibble(c: I32) -> I32 {
     if c >= 48 and c <= 57 {
         return c - 48            // '0'-'9' -> 0-9
     }
