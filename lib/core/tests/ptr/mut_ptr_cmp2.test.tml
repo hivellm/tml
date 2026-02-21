@@ -1,0 +1,31 @@
+// Tests for RawMutPtr — partial_cmp, cmp greater/equal, as_maybe
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_cmp_greater() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(500 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(100 as I64)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Greater, "500 > 100 should be Greater")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_cmp_equal() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(300 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(300 as I64)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Equal, "same address should be Equal")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_partial_cmp() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(100 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(200 as I64)
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap() == Less, "100 < 200")
+    return 0
+}

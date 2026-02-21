@@ -800,6 +800,60 @@ If you encounter this error, try:
 )"},
 
         // ====================================================================
+        // Preprocessor errors (PP)
+        // ====================================================================
+
+        {"PP001", R"(
+Preprocessor error [PP001]
+
+An error occurred during preprocessing of conditional compilation directives
+(`#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#define`).
+
+This usually means a directive is malformed or has a syntax error.
+
+Example of erroneous code:
+
+    #if                          // missing condition
+    func platform_code() { }
+    #endif
+
+    #ifdef                       // missing symbol name
+    func debug_code() { }
+    #endif
+
+How to fix:
+
+    #if WINDOWS
+    func platform_code() { }
+    #endif
+
+    #ifdef DEBUG
+    func debug_code() { }
+    #endif
+
+Common causes:
+- Missing condition after `#if`
+- Missing symbol name after `#ifdef` or `#ifndef`
+- Mismatched `#if`/`#endif` pairs
+- Unknown preprocessor directive
+)"},
+
+        {"PP002", R"(
+Preprocessor warning [PP002]
+
+A non-fatal issue was detected during preprocessing. The code will still
+compile, but the warning indicates a potential problem.
+
+Common causes:
+- Redefining an already-defined symbol with `#define`
+- Using `#elif` or `#else` after an `#else` block
+- Empty `#if` blocks that could be simplified
+
+These warnings can usually be resolved by cleaning up the conditional
+compilation structure.
+)"},
+
+        // ====================================================================
         // General errors (E)
         // ====================================================================
 
@@ -916,6 +970,7 @@ int run_explain(const std::string& code, bool /*verbose*/) {
     std::cerr << "Available error code categories:\n";
     std::cerr << "  L001-L015   Lexer errors (tokenization)\n";
     std::cerr << "  P001-P065   Parser errors (syntax)\n";
+    std::cerr << "  PP001-PP002 Preprocessor errors (conditional compilation)\n";
     std::cerr << "  T001-T054   Type errors (type checking)\n";
     std::cerr << "  B001-B017   Borrow errors (ownership/lifetimes)\n";
     std::cerr << "  C001-C014   Codegen errors (code generation)\n";

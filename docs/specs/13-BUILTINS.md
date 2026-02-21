@@ -452,7 +452,25 @@ assert(cond)
 assert(cond, msg)
 assert_eq(a, b)
 assert_ne(a, b)
+assert_true(a)       // asserts a == true
+assert_false(a)      // asserts a == false
+assert_lt(a, b)      // asserts a < b
+assert_gt(a, b)      // asserts a > b
+assert_lte(a, b)     // asserts a <= b
+assert_gte(a, b)     // asserts a >= b
+assert_in_range(val, min, max)  // asserts min <= val <= max
+assert_str_len(s, expected_len) // asserts s.len() == expected_len
+assert_str_empty(s)             // asserts s.is_empty()
+assert_str_not_empty(s)         // asserts not s.is_empty()
 debug_assert(cond)   // only in debug
+```
+
+### 7.3.1 Compile-Time Constants
+
+```tml
+__FILE__             // Str: source file path (forward-slash normalized)
+__DIRNAME__          // Str: directory of source file
+__LINE__             // I64: current line number
 ```
 
 ### 7.4 Memory
@@ -485,26 +503,31 @@ mem_eq(a: *Unit, b: *Unit, size: I64) -> Bool          // Memory equality
 Thread-safe atomic operations for lock-free programming. All atomic operations use sequentially consistent ordering by default.
 
 ```tml
-// Load and Store
-atomic_load(ptr: *Unit) -> I32           // Thread-safe read
-atomic_store(ptr: *Unit, val: I32) -> Unit  // Thread-safe write
+// Load and Store (type-specific: I32 and I64 variants)
+atomic_load_i32(ptr: *Unit) -> I32           // Thread-safe read (I32)
+atomic_load_i64(ptr: *Unit) -> I64           // Thread-safe read (I64)
+atomic_store_i32(ptr: *Unit, val: I32) -> Unit  // Thread-safe write (I32)
+atomic_store_i64(ptr: *Unit, val: I64) -> Unit  // Thread-safe write (I64)
 
 // Arithmetic (fetch-and-op, returns old value)
-atomic_add(ptr: *Unit, val: I32) -> I32  // Atomic addition
-atomic_sub(ptr: *Unit, val: I32) -> I32  // Atomic subtraction
+atomic_fetch_add_i32(ptr: *Unit, val: I32) -> I32  // Atomic add (I32)
+atomic_fetch_add_i64(ptr: *Unit, val: I64) -> I64  // Atomic add (I64)
+atomic_fetch_sub_i32(ptr: *Unit, val: I32) -> I32  // Atomic sub (I32)
+atomic_fetch_sub_i64(ptr: *Unit, val: I64) -> I64  // Atomic sub (I64)
 
 // Exchange
-atomic_exchange(ptr: *Unit, val: I32) -> I32  // Atomic swap
+atomic_swap_i32(ptr: *Unit, val: I32) -> I32  // Atomic swap (I32)
+atomic_swap_i64(ptr: *Unit, val: I64) -> I64  // Atomic swap (I64)
 
-// Compare-and-Swap
-atomic_cas(ptr: *Unit, expected: I32, new: I32) -> Bool
-// Returns true if swap succeeded (value was expected)
-// Returns false if swap failed (value was not expected)
+// Compare-and-Exchange
+atomic_compare_exchange_i32(ptr: *Unit, expected: I32, new: I32) -> I32  // CAS (I32)
+atomic_compare_exchange_i64(ptr: *Unit, expected: I64, new: I64) -> I64  // CAS (I64)
+// Returns the previous value. Compare with expected to check success.
 
-// Bitwise operations (fetch-and-op, returns old value)
-atomic_and(ptr: *Unit, val: I32) -> I32  // Atomic AND
-atomic_or(ptr: *Unit, val: I32) -> I32   // Atomic OR
-atomic_xor(ptr: *Unit, val: I32) -> I32  // Atomic XOR
+// Memory Fences
+atomic_fence()                 // Full sequentially consistent fence
+atomic_fence_acquire()         // Acquire fence
+atomic_fence_release()         // Release fence
 ```
 
 **Example:**

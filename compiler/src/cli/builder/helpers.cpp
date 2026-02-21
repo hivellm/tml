@@ -1256,7 +1256,7 @@ void emit_preprocessor_diagnostic(DiagnosticEmitter& emitter,
                                   const preprocessor::PreprocessorDiagnostic& diag,
                                   const std::string& filename) {
     Diagnostic d;
-    d.code = diag.severity == preprocessor::DiagnosticSeverity::Error ? "P001" : "P002";
+    d.code = diag.severity == preprocessor::DiagnosticSeverity::Error ? "PP001" : "PP002";
     d.severity = diag.severity == preprocessor::DiagnosticSeverity::Error
                      ? DiagnosticSeverity::Error
                      : DiagnosticSeverity::Warning;

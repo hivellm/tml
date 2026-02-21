@@ -1,0 +1,27 @@
+// Tests for RawMutPtr — as_maybe null, to_usize, as_const
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_raw_mut_ptr_as_maybe_null() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::null_ptr()
+    let result: Maybe[RawMutPtr[I32]] = ptr.as_maybe()
+    assert(result.is_nothing(), "null ptr should return Nothing")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_to_usize() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(12345 as I64)
+    assert_eq(ptr.to_usize(), 12345 as I64, "to_usize should return address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_as_const() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(5000 as I64)
+    let cptr: RawPtr[I32] = ptr.as_const()
+    assert_eq(cptr.addr(), 5000 as I64, "as_const should preserve address")
+    return 0
+}

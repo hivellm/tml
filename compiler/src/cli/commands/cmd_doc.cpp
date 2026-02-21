@@ -27,7 +27,7 @@ static void emit_parser_errors(DiagnosticEmitter& emitter,
     for (const auto& error : errors) {
         Diagnostic diag;
         diag.severity = DiagnosticSeverity::Error;
-        diag.code = "P001";
+        diag.code = error.code.empty() ? "P001" : error.code;
         diag.message = error.message;
         diag.primary_span = error.span;
         diag.notes = error.notes;
@@ -130,8 +130,21 @@ int run_doc(const DocOptions& options) {
 
         if (!pp_result.success()) {
             for (const auto& pp_diag : pp_result.errors()) {
-                TML_LOG_ERROR("doc", file << ":" << pp_diag.line << ":" << pp_diag.column << ": "
-                                          << pp_diag.message);
+                std::string code = pp_diag.severity == preprocessor::DiagnosticSeverity::Warning
+                                       ? "PP002"
+                                       : "PP001";
+                SourceLocation loc;
+                loc.file = file;
+                loc.line = static_cast<uint32_t>(pp_diag.line);
+                loc.column = static_cast<uint32_t>(pp_diag.column);
+                loc.offset = 0;
+                loc.length = 0;
+                SourceSpan pp_span{loc, loc};
+                if (pp_diag.severity == preprocessor::DiagnosticSeverity::Warning) {
+                    diag.warning(code, pp_diag.message, pp_span);
+                } else {
+                    diag.error(code, pp_diag.message, pp_span);
+                }
             }
             continue;
         }
@@ -147,7 +160,7 @@ int run_doc(const DocOptions& options) {
 
         if (lex.has_errors()) {
             for (const auto& err : lex.errors()) {
-                diag.error("L001", err.message, err.span);
+                diag.error(err.code.empty() ? "L001" : err.code, err.message, err.span);
             }
             continue;
         }

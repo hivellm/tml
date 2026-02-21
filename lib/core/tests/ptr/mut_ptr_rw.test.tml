@@ -1,0 +1,46 @@
+// Tests for RawMutPtr — read, write, replace using mem_alloc
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_write_read() -> I32 {
+    let p: *Unit = alloc(8)
+    let addr: I64 = p as I64
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(addr)
+    ptr.write(42 as I64)
+    let result: I64 = ptr.read()
+    assert_eq(result, 42 as I64, "write then read should return 42")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_replace() -> I32 {
+    let p: *Unit = alloc(8)
+    let addr: I64 = p as I64
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(addr)
+    ptr.write(10 as I64)
+    let old: I64 = ptr.replace(20 as I64)
+    assert_eq(old, 10 as I64, "replace should return old value")
+    assert_eq(ptr.read(), 20 as I64, "after replace, new value should be 20")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_swap() -> I32 {
+    let pa: *Unit = alloc(8)
+    let pb: *Unit = alloc(8)
+    let addr_a: I64 = pa as I64
+    let addr_b: I64 = pb as I64
+    let a: RawMutPtr[I64] = RawMutPtr::from_addr(addr_a)
+    let b: RawMutPtr[I64] = RawMutPtr::from_addr(addr_b)
+    a.write(100 as I64)
+    b.write(200 as I64)
+    a.swap(b)
+    assert_eq(a.read(), 200 as I64, "a should have b's value after swap")
+    assert_eq(b.read(), 100 as I64, "b should have a's value after swap")
+    dealloc(pa)
+    dealloc(pb)
+    return 0
+}

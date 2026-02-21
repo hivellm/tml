@@ -50,15 +50,15 @@
 
 ## Interoperability
 
-- [Building Libraries and C Interoperability](ch12-00-libraries-and-ffi.md)
+- [Foreign Function Interface](ch12-00-ffi.md)
 
-## Project Organization
+## Advanced Topics
 
 - [Modules and Code Organization](ch13-00-modules.md)
-
-## Data Interchange
-
 - [Working with JSON](ch14-00-json.md)
+- [Object-Oriented Programming](ch15-00-oop.md)
+- [Cryptography](ch16-00-crypto.md)
+- [Compression](ch17-00-compression.md)
 
 ## Appendix
 

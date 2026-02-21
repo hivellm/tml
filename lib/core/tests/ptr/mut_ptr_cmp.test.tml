@@ -1,0 +1,28 @@
+// Tests for RawMutPtr — eq, cmp, partial_cmp
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_eq_same() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(1000 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(1000 as I64)
+    assert(a.eq(ref b), "same address should be equal")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_eq_different() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(1000 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(2000 as I64)
+    assert(not a.eq(ref b), "different addresses should not be equal")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_cmp_less() -> I32 {
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(100 as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(200 as I64)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Less, "100 < 200 should be Less")
+    return 0
+}

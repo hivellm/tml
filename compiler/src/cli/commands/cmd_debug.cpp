@@ -48,7 +48,7 @@ namespace tml::cli {
 /// Emits all lexer errors using the diagnostic emitter.
 static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
     for (const auto& error : lex.errors()) {
-        emitter.error("L001", error.message, error.span);
+        emitter.error(error.code.empty() ? "L001" : error.code, error.message, error.span);
     }
 }
 
@@ -56,7 +56,7 @@ static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer
 static void emit_parser_error(DiagnosticEmitter& emitter, const parser::ParseError& error) {
     Diagnostic diag;
     diag.severity = DiagnosticSeverity::Error;
-    diag.code = "P001";
+    diag.code = error.code.empty() ? "P001" : error.code;
     diag.message = error.message;
     diag.primary_span = error.span;
     diag.notes = error.notes;

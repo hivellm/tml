@@ -33,6 +33,16 @@ let y = 20
 println("Values: {} and {}", x, y)  // Values: 10 and 20
 ```
 
+### String Interpolation
+
+TML also supports direct string interpolation with `{expr}` syntax:
+
+```tml
+let name = "Alice"
+let age = 30
+println("Hello, {name}! You are {age} years old.")
+```
+
 ### Precision Format Specifiers
 
 Use `{:.N}` to specify decimal precision for floating-point numbers:
@@ -50,21 +60,6 @@ let x: I32 = 42
 println("{:.2}", x)    // 42.00
 ```
 
-### Mixed Format Examples
-
-```tml
-// Benchmarking output
-let name: Str = "test"
-let time: F64 = 0.266
-let runs: I64 = 10
-println("{}: {:.3} ms (avg of {} runs)", name, time, runs)
-// Output: "test: 0.266 ms (avg of 10 runs)"
-
-// Scientific values
-let temperature: F64 = 36.847
-println("Temperature: {:.1}°C", temperature)  // Temperature: 36.8°C
-```
-
 **Supported Types:**
 - `Str` - Direct output
 - `I8`, `I16`, `I32`, `I64`, `I128` - Integer formatting
@@ -79,71 +74,99 @@ Memory operations use `*Unit` as an opaque pointer type (similar to `void*` in C
 > **Tip:** The `core::ptr` module provides `Ptr` as a convenient alias for `*Unit`:
 > ```tml
 > use core::ptr::Ptr
-> let mem: Ptr = alloc(4)  // Equivalent to: let mem: *Unit = alloc(4)
+> let mem: Ptr = mem_alloc(64)
 > ```
+
+### Modern Memory Intrinsics (Preferred)
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `mem_alloc(size)` | `(I64) -> *Unit` | Allocate `size` bytes |
+| `mem_free(ptr)` | `(*Unit) -> Unit` | Free allocated memory |
+| `ptr_read[T](ptr)` | `(*Unit) -> T` | Read typed value from pointer |
+| `ptr_write[T](ptr, val)` | `(*Unit, T) -> Unit` | Write typed value to pointer |
+| `ptr_offset(ptr, n)` | `(*Unit, I64) -> *Unit` | Offset pointer by `n` bytes |
+| `copy_nonoverlapping(src, dst, n)` | `(*Unit, *Unit, I64) -> Unit` | Copy `n` bytes (memcpy) |
+
+```tml
+let mem = mem_alloc(16)
+ptr_write[I64](mem, 42)
+let val = ptr_read[I64](mem)
+println("{val}")  // 42
+mem_free(mem)
+```
+
+### Legacy Memory Functions (Still Supported)
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `alloc(size)` | `(I32) -> *Unit` | Allocate bytes (size * 4 bytes) |
-| `alloc(size)` | `(I64) -> *Unit` | Allocate bytes |
 | `dealloc(ptr)` | `(*Unit) -> Unit` | Free memory |
 | `read_i32(ptr)` | `(*Unit) -> I32` | Read 32-bit int |
 | `write_i32(ptr, val)` | `(*Unit, I32) -> Unit` | Write 32-bit int |
-| `ptr_offset(ptr, n)` | `(*Unit, I32) -> *Unit` | Offset pointer by n elements (4 bytes each) |
+
+## Compile-Time Constants
+
+| Constant | Type | Description |
+|----------|------|-------------|
+| `__FILE__` | `Str` | Path of the current source file |
+| `__DIRNAME__` | `Str` | Directory containing the current source file |
+| `__LINE__` | `I64` | Current line number |
 
 ```tml
-let mem: *Unit = alloc(4)  // allocate space for 4 I32 values
-write_i32(mem, 42)
-println(read_i32(mem))  // 42
-dealloc(mem)
-```
-
-### Array-like Usage
-
-```tml
-let arr: *Unit = alloc(3)  // allocate 3 elements
-
-// Write values at offsets
-write_i32(arr, 10)                      // arr[0] = 10
-write_i32(ptr_offset(arr, 1), 20)       // arr[1] = 20
-write_i32(ptr_offset(arr, 2), 30)       // arr[2] = 30
-
-// Read values
-let val0: I32 = read_i32(arr)                     // 10
-let val1: I32 = read_i32(ptr_offset(arr, 1))      // 20
-let val2: I32 = read_i32(ptr_offset(arr, 2))      // 30
-
-dealloc(arr)
+println("File: {__FILE__}")
+println("Dir: {__DIRNAME__}")
+println("Line: {__LINE__}")
 ```
 
 ## Atomic Functions
 
-Atomic operations use `*Unit` as an opaque pointer type for thread-safe memory access.
+Atomic operations for thread-safe memory access. All functions use type-specific variants.
+
+### I32 Atomics
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `atomic_load(ptr)` | `(*Unit) -> I32` | Atomic read |
-| `atomic_store(ptr, val)` | `(*Unit, I32) -> Unit` | Atomic write |
-| `atomic_add(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and add |
-| `atomic_sub(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and subtract |
-| `atomic_exchange(ptr, val)` | `(*Unit, I32) -> I32` | Swap |
-| `atomic_cas(ptr, exp, des)` | `(*Unit, I32, I32) -> Bool` | Compare-and-swap |
-| `atomic_and(ptr, val)` | `(*Unit, I32) -> I32` | Atomic AND |
-| `atomic_or(ptr, val)` | `(*Unit, I32) -> I32` | Atomic OR |
+| `atomic_load_i32(ptr)` | `(*Unit) -> I32` | Atomic read |
+| `atomic_store_i32(ptr, val)` | `(*Unit, I32) -> Unit` | Atomic write |
+| `atomic_fetch_add_i32(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and add |
+| `atomic_fetch_sub_i32(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and subtract |
+| `atomic_swap_i32(ptr, val)` | `(*Unit, I32) -> I32` | Swap |
+| `atomic_compare_exchange_i32(ptr, exp, des)` | `(*Unit, I32, I32) -> I32` | Compare-and-exchange |
+| `atomic_and_i32(ptr, val)` | `(*Unit, I32) -> I32` | Atomic AND |
+| `atomic_or_i32(ptr, val)` | `(*Unit, I32) -> I32` | Atomic OR |
+
+### I64 Atomics
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `atomic_load_i64(ptr)` | `(*Unit) -> I64` | Atomic read |
+| `atomic_store_i64(ptr, val)` | `(*Unit, I64) -> Unit` | Atomic write |
+| `atomic_fetch_add_i64(ptr, val)` | `(*Unit, I64) -> I64` | Fetch and add |
+| `atomic_fetch_sub_i64(ptr, val)` | `(*Unit, I64) -> I64` | Fetch and subtract |
+| `atomic_swap_i64(ptr, val)` | `(*Unit, I64) -> I64` | Swap |
+| `atomic_compare_exchange_i64(ptr, exp, des)` | `(*Unit, I64, I64) -> I64` | Compare-and-exchange |
 
 ```tml
-let counter: *Unit = alloc(1)
-atomic_store(counter, 0)
+let counter = mem_alloc(4)
+atomic_store_i32(counter, 0)
 
-// Atomic increment
-let old: I32 = atomic_add(counter, 1)
-println(old)  // 0
+let old = atomic_fetch_add_i32(counter, 1)
+println("{old}")  // 0
 
-let value: I32 = atomic_load(counter)
-println(value)  // 1
+let value = atomic_load_i32(counter)
+println("{value}")  // 1
 
-dealloc(counter)
+mem_free(counter)
 ```
+
+## Memory Fences
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `atomic_fence()` | `() -> Unit` | Full memory barrier (SeqCst) |
+| `atomic_fence_acquire()` | `() -> Unit` | Acquire fence |
+| `atomic_fence_release()` | `() -> Unit` | Release fence |
 
 ## Synchronization Functions
 
@@ -155,24 +178,15 @@ dealloc(counter)
 | `spin_unlock(ptr)` | `(*Unit) -> Unit` | Release spinlock |
 | `spin_trylock(ptr)` | `(*Unit) -> Bool` | Try acquire |
 
-```tml
-let lock: *Unit = alloc(1)
-atomic_store(lock, 0)  // Initialize lock
-
-spin_lock(lock)
-// Critical section
-spin_unlock(lock)
-
-dealloc(lock)
-```
-
-### Memory Fences
+### Mutex
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `fence()` | `() -> Unit` | Full memory barrier |
-| `fence_acquire()` | `() -> Unit` | Acquire fence |
-| `fence_release()` | `() -> Unit` | Release fence |
+| `mutex_create()` | `() -> ptr` | Create mutex |
+| `mutex_lock(m)` | `(ptr) -> Unit` | Acquire lock |
+| `mutex_unlock(m)` | `(ptr) -> Unit` | Release lock |
+| `mutex_try_lock(m)` | `(ptr) -> Bool` | Try acquire |
+| `mutex_destroy(m)` | `(ptr) -> Unit` | Free mutex |
 
 ## Channel Functions
 
@@ -186,16 +200,6 @@ dealloc(lock)
 | `channel_len(ch)` | `(ptr) -> I32` | Get length |
 | `channel_close(ch)` | `(ptr) -> Unit` | Close channel |
 | `channel_destroy(ch)` | `(ptr) -> Unit` | Free channel |
-
-## Mutex Functions
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `mutex_create()` | `() -> ptr` | Create mutex |
-| `mutex_lock(m)` | `(ptr) -> Unit` | Acquire lock |
-| `mutex_unlock(m)` | `(ptr) -> Unit` | Release lock |
-| `mutex_try_lock(m)` | `(ptr) -> Bool` | Try acquire |
-| `mutex_destroy(m)` | `(ptr) -> Unit` | Free mutex |
 
 ## WaitGroup Functions
 
@@ -221,49 +225,45 @@ dealloc(lock)
 
 ### Deprecated Time Functions
 
-⚠️ **These functions are deprecated. Use the `Instant` API instead.**
+These functions are deprecated. Use the `Instant` API instead.
 
 | Function | Signature | Status |
 |----------|-----------|--------|
-| `time_ms()` | `() -> I32` | ⚠️ Deprecated (use `Instant::now()`) |
-| `time_us()` | `() -> I64` | ⚠️ Deprecated (use `Instant::now()`) |
-| `time_ns()` | `() -> I64` | ⚠️ Deprecated (use `Instant::now()`) |
+| `time_ms()` | `() -> I32` | Deprecated (use `Instant::now()`) |
+| `time_us()` | `() -> I64` | Deprecated (use `Instant::now()`) |
+| `time_ns()` | `() -> I64` | Deprecated (use `Instant::now()`) |
 
 ### Instant API (Recommended)
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `Instant::now()` | `() -> I64` | High-resolution timestamp (μs) |
-| `Instant::elapsed(start)` | `(I64) -> I64` | Duration since start (μs) |
+| `Instant::now()` | `() -> I64` | High-resolution timestamp (microseconds) |
+| `Instant::elapsed(start)` | `(I64) -> I64` | Duration since start (microseconds) |
 | `Duration::as_secs_f64(us)` | `(I64) -> F64` | Duration in seconds as float |
 | `Duration::as_millis_f64(us)` | `(I64) -> F64` | Duration in milliseconds as float |
 
-**Example:**
 ```tml
-// Measure execution time with format specifier
-let start: I64 = Instant::now()
+let start = Instant::now()
 expensive_computation()
-let elapsed: I64 = Instant::elapsed(start)
-let ms: F64 = Duration::as_millis_f64(elapsed)
-println("Time: {:.3} ms", ms)  // e.g., "Time: 0.266 ms"
+let elapsed = Instant::elapsed(start)
+let ms = Duration::as_millis_f64(elapsed)
+println("Time: {:.3} ms", ms)
 ```
 
-**Benchmarking Example:**
-```tml
-func benchmark(name: Str, iterations: I64, runs: I64) {
-    let mut total_us: I64 = 0
+## Debug / Test Assertions
 
-    for _ in 0 to runs {
-        let start: I64 = Instant::now()
-        // Run benchmark iterations times
-        for _ in 0 to iterations {
-            expensive_operation()
-        }
-        let elapsed: I64 = Instant::elapsed(start)
-        total_us += elapsed
-    }
-
-    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
-    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
-}
-```
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `assert(cond)` | `(Bool) -> Unit` | Assert condition is true |
+| `assert_eq(a, b)` | `(T, T) -> Unit` | Assert values are equal |
+| `assert_ne(a, b)` | `(T, T) -> Unit` | Assert values are not equal |
+| `assert_true(a)` | `(Bool) -> Unit` | Assert value is true |
+| `assert_false(a)` | `(Bool) -> Unit` | Assert value is false |
+| `assert_lt(a, b)` | `(T, T) -> Unit` | Assert a < b |
+| `assert_gt(a, b)` | `(T, T) -> Unit` | Assert a > b |
+| `assert_lte(a, b)` | `(T, T) -> Unit` | Assert a <= b |
+| `assert_gte(a, b)` | `(T, T) -> Unit` | Assert a >= b |
+| `assert_in_range(val, min, max)` | `(T, T, T) -> Unit` | Assert min <= val <= max |
+| `assert_str_len(s, len)` | `(Str, I64) -> Unit` | Assert string length |
+| `assert_str_empty(s)` | `(Str) -> Unit` | Assert string is empty |
+| `assert_str_not_empty(s)` | `(Str) -> Unit` | Assert string is not empty |

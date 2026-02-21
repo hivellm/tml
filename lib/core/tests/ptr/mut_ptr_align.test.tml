@@ -1,0 +1,27 @@
+// Tests for RawMutPtr — is_aligned, as_maybe, to_usize
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_is_aligned_true() -> I32 {
+    // 0x1000 is aligned for I64 (align=8)
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0x1000 as I64)
+    assert(ptr.is_aligned(), "0x1000 should be 8-byte aligned")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_is_aligned_false() -> I32 {
+    // 0x1001 is NOT aligned for I64 (align=8)
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0x1001 as I64)
+    assert(not ptr.is_aligned(), "0x1001 should not be 8-byte aligned")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_as_maybe_non_null() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(1000 as I64)
+    let result: Maybe[RawMutPtr[I32]] = ptr.as_maybe()
+    assert(result.is_just(), "non-null ptr should return Just")
+    return 0
+}

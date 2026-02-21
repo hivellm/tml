@@ -3,69 +3,117 @@
 The following list contains keywords reserved for current or future use
 by TML. These cannot be used as identifiers.
 
-## Currently Used Keywords
+## Currently Used Keywords (57 reserved words)
+
+### Declarations
 
 | Keyword | Description |
 |---------|-------------|
-| `and` | Logical AND operator |
-| `as` | Type casting |
-| `async` | Asynchronous function marker |
-| `await` | Wait for async result |
-| `behavior` | Define a behavior (trait) |
-| `break` | Exit a loop |
-| `const` | Constant declaration |
-| `continue` | Skip to next loop iteration |
-| `crate` | Reference to current crate |
-| `decorator` | Function decorator |
-| `do` | Closure/lambda syntax |
-| `else` | Alternative branch |
-| `false` | Boolean false literal |
-| `for` | For loop |
 | `func` | Function declaration |
-| `if` | Conditional branch |
-| `impl` | Implementation block |
-| `in` | Used in for loops |
-| `let` | Variable declaration |
-| `loop` | Infinite loop |
-| `lowlevel` | Unsafe code block |
-| `mod` | Module declaration |
-| `mut` | Mutable modifier |
-| `not` | Logical NOT operator |
-| `or` | Logical OR operator |
-| `pub` | Public visibility |
-| `quote` | Macro quoting |
-| `ref` | Reference type |
-| `return` | Return from function |
-| `super` | Parent module |
-| `then` | Used after conditions |
-| `this` | Current instance |
-| `This` | Current type |
-| `through` | Inclusive range end |
-| `to` | Exclusive range end |
-| `true` | Boolean true literal |
 | `type` | Type/struct declaration |
+| `behavior` | Define a behavior (trait) |
+| `impl` | Implementation block |
+| `mod` | Module declaration |
 | `use` | Import declaration |
+| `pub` | Public visibility |
+| `let` | Variable declaration |
+| `const` | Constant declaration |
+| `decorator` | Function decorator |
+| `where` | Generic constraints |
+
+### Control Flow
+
+| Keyword | Description |
+|---------|-------------|
+| `if` | Conditional branch |
+| `then` | Used after conditions |
+| `else` | Alternative branch |
 | `when` | Pattern matching |
-| `while` | While loop |
+| `loop` | Unified loop keyword |
+| `while` | While loop condition |
+| `for` | For loop |
+| `in` | Used in for loops |
+| `to` | Exclusive range end |
+| `through` | Inclusive range end |
+| `break` | Exit a loop |
+| `continue` | Skip to next loop iteration |
+| `return` | Return from function |
+| `do` | Closure/lambda syntax |
+
+### Logical Operators
+
+| Keyword | Description |
+|---------|-------------|
+| `and` | Logical AND (short-circuit) |
+| `or` | Logical OR (short-circuit) |
+| `not` | Logical negation |
+
+### Types and References
+
+| Keyword | Description |
+|---------|-------------|
+| `this` | Current instance |
+| `This` | Current type (in impl blocks) |
+| `as` | Type casting |
+| `dyn` | Dynamic dispatch |
+| `mut` | Mutable modifier |
+| `ref` | Reference type |
+| `lowlevel` | Unsafe/low-level code block |
+| `life` | Lifetime annotation (reserved) |
+
+### Modules
+
+| Keyword | Description |
+|---------|-------------|
+| `crate` | Reference to current crate |
+| `super` | Parent module |
 | `with` | Context expression |
 
-## Additional Keywords
+### Async (reserved for future)
 
 | Keyword | Description |
 |---------|-------------|
-| `where` | Generic constraints (e.g., `where T: Add`) |
+| `async` | Asynchronous function marker |
+| `await` | Wait for async result |
+| `quote` | Macro quoting |
 
-## Reserved for Future Use
+### OOP Keywords (reserved for future C#-style OOP)
 
-These keywords are reserved but not yet implemented:
-
-| Keyword | Planned Use |
+| Keyword | Description |
 |---------|-------------|
-| `match` | Alternative to `when` |
-| `enum` | Alternative to sum types |
-| `trait` | Alternative to `behavior` |
-| `yield` | Generator functions |
-| `macro` | Macro definitions |
+| `class` | Class declaration |
+| `interface` | Interface declaration |
+| `extends` | Inheritance |
+| `implements` | Interface implementation |
+| `override` | Method override |
+| `virtual` | Virtual method |
+| `abstract` | Abstract class/method |
+| `sealed` | Non-inheritable class |
+| `namespace` | Namespace declaration |
+| `base` | Base class reference |
+| `protected` | Protected visibility |
+| `private` | Private visibility |
+| `static` | Static member |
+| `new` | Constructor |
+| `prop` | Property declaration |
+
+## Literals
+
+> **Note:** These are lexed as literals, not as keywords.
+
+| Token | Description |
+|-------|-------------|
+| `true` | Boolean true literal |
+| `false` | Boolean false literal |
+| `null` | Null pointer literal (`Ptr[Unit]`) |
+
+## Compile-Time Constants
+
+| Constant | Type | Description |
+|----------|------|-------------|
+| `__FILE__` | `Str` | Current source file path |
+| `__DIRNAME__` | `Str` | Directory of current source file |
+| `__LINE__` | `I64` | Current line number |
 
 ## Naming Conventions
 

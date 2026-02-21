@@ -555,7 +555,7 @@ DirectiveArg  = Ident (':' Value)?
 ```tml
 @test
 @when(os: linux)
-@auto(debug, duplicate, equal)
+@derive(PartialEq, Hash, Debug)
 @deprecated("Use new_func instead")
 @hint(inline: always)
 @lowlevel
@@ -570,7 +570,7 @@ DirectiveArg  = Ident (':' Value)?
 | `@benchmark` | Marks benchmark function |
 | `@when(...)` | Conditional compilation |
 | `@unless(...)` | Negative conditional |
-| `@auto(...)` | Auto-generate implementations |
+| `@derive(...)` | Auto-derive behavior implementations |
 | `@hint(...)` | Compiler optimization hints |
 | `@deprecated(...)` | Marks as obsolete |
 | `@lowlevel` | Allows low-level operations |
@@ -599,17 +599,21 @@ func debug_only() { ... }
 func not_windows() { ... }
 ```
 
-### 8.3 Auto-Generation Directives
+### 8.3 Derive Directives
+
+> **Note:** `@auto(...)` has been renamed to `@derive(...)`. The old syntax is no longer supported.
 
 ```tml
-@auto(debug)              // Generate debug representation
-@auto(duplicate)          // Generate .duplicate() method
-@auto(equal)              // Generate equality comparison
-@auto(order)              // Generate ordering
-@auto(hash)               // Generate hashing
-@auto(format)             // Generate string formatting
+@derive(Debug)            // Generate debug_string() method
+@derive(Duplicate)        // Generate .duplicate() method
+@derive(PartialEq)        // Generate equality comparison (eq)
+@derive(PartialOrd)       // Generate partial ordering (partial_cmp)
+@derive(Ord)              // Generate total ordering (cmp)
+@derive(Hash)             // Generate hashing (FNV-1a)
+@derive(Default)          // Generate default() static method
+@derive(Reflect)          // Generate variant_name/variant_tag (enums)
 
-@auto(debug, duplicate, equal)  // Multiple at once
+@derive(PartialEq, Hash, Debug)  // Multiple at once
 type Point { x: F64, y: F64 }
 ```
 

@@ -494,6 +494,15 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     if (intrinsic_name == "ptr_read") {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            // If the pointer argument is i64 (e.g., RawMutPtr.addr field),
+            // convert it to ptr with inttoptr
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
 
             // Infer element type from the argument's semantic pointer type
             // This works even when func_sig is null (e.g., imported module functions)
@@ -515,6 +524,16 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     if (intrinsic_name == "ptr_write") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            // If the pointer argument is i64 (e.g., RawMutPtr.addr field),
+            // convert it to ptr with inttoptr
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
             std::string val = gen_expr(*call.args[1]);
             std::string val_type = last_expr_type_;
             emit_line("  store " + val_type + " " + val + ", ptr " + ptr);

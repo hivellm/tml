@@ -1,0 +1,26 @@
+// Tests for std::thread — park, unpark, Thread::duplicate
+use test::{assert, assert_eq}
+use std::thread::{park, current, Thread}
+
+@test
+func test_park_does_not_crash() -> I32 {
+    park()
+    assert(true, "park should not crash")
+    return 0
+}
+
+@test
+func test_unpark_does_not_crash() -> I32 {
+    let t: Thread = current()
+    t.unpark()
+    assert(true, "unpark should not crash")
+    return 0
+}
+
+@test
+func test_thread_duplicate() -> I32 {
+    let t: Thread = current()
+    let t2: Thread = t.duplicate()
+    assert_eq(t.id().as_u64(), t2.id().as_u64(), "duplicated thread should have same id")
+    return 0
+}

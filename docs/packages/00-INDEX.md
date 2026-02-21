@@ -48,14 +48,32 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::crypto](./05-CRYPTO.md) | Cryptographic primitives (hash, HMAC, cipher, sign, KDF, CSPRNG) | None |
 | [std::uuid](./17-UUID.md) | UUID generation | `io::random` |
 
+### Math and Science Packages
+
+| Package | Description | Capabilities Required |
+|---------|-------------|----------------------|
+| std::math | Mathematical functions (sin, cos, sqrt, pow, etc.) | None |
+| std::random | Random number generation (Xoshiro256, ThreadRng) | None |
+| std::search | Search algorithms (BM25, HNSW, cosine distance) | None |
+| std::hash | Non-cryptographic hashing (FNV-1a, SipHash) | None |
+
 ### Utility Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std::datetime](./16-DATETIME.md) | Date and time handling | `io::time` |
+| [std::datetime](./16-DATETIME.md) | Date and time handling (SystemTime, DateTime) | `io::time` |
 | [std::log](./18-LOG.md) | Logging framework | `io::file` (optional) |
 | [std::args](./19-ARGS.md) | Command-line argument parsing | `io::process.env` |
 | [std::env](./21-ENV.md) | Environment variables | `io::process.env` |
+| std::os | OS-level operations | `io::process` |
+| std::glob | File glob pattern matching | `io::file` |
+| std::url | URL parsing and manipulation | None |
+| std::uuid | UUID generation (v4, v7) | `io::random` |
+| std::semver | Semantic versioning | None |
+| std::text | Extended text operations (Text type with SSO) | None |
+| std::profiler | Runtime profiling | `io::time` |
+| std::exception | Exception handling | None |
+| core::encoding | Binary encoding (big/little endian, base64, hex, utf8) | None |
 
 ## Dependency Graph
 
@@ -154,8 +172,9 @@ use std::fmt::{format, Display}
 | `String` | builtin | UTF-8 string |
 | `Maybe[T]` | builtin | Optional value |
 | `Outcome[T, E]` | builtin | Success or error |
-| `Box[T]` | std::alloc | Heap allocation |
-| `Arc[T]` | std::sync | Atomic reference counted |
+| `Heap[T]` | std::alloc | Heap allocation (owned) |
+| `Sync[T]` | std::sync | Atomic reference counted |
+| `Shared[T]` | std::sync | Reference counted (non-atomic) |
 | `Mutex[T]` | std::sync | Mutual exclusion lock |
 | `Digest` | std::crypto::hash | Cryptographic hash result |
 | `Cipher` | std::crypto::cipher | Symmetric encryption context |

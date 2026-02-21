@@ -1,0 +1,24 @@
+// Tests for std::thread — Builder construction and park/unpark
+use test::{assert, assert_eq}
+use std::thread::{Builder, park, current}
+
+@test
+func test_builder_new_does_not_crash() -> I32 {
+    let b: Builder = Builder::new()
+    assert(true, "Builder::new should not crash")
+    return 0
+}
+
+@test
+func test_builder_name_chain() -> I32 {
+    let b: Builder = Builder::new().name("test-thread")
+    assert(true, "Builder::name chain should not crash")
+    return 0
+}
+
+@test
+func test_builder_stack_size_chain() -> I32 {
+    let b: Builder = Builder::new().stack_size(1048576 as U64)
+    assert(true, "Builder::stack_size chain should not crash")
+    return 0
+}

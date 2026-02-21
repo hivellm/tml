@@ -102,6 +102,65 @@ std
 ├── log            # Logging
 │   ├── logger     # Logger behavior
 │   └── macros     # log_*, println
+├── regex          # Regular expressions (Thompson's NFA)
+│   ├── regex      # Regex type, Match type
+│   └── nfa        # NFA construction and matching
+├── math           # Mathematical functions
+│   ├── trig       # sin, cos, tan, asin, acos, atan, atan2
+│   ├── hyper      # sinh, cosh, tanh
+│   ├── exp        # exp, ln, log2, log10, pow
+│   ├── round      # floor, ceil, round, trunc
+│   └── util       # abs, sqrt, cbrt, min, max, clamp
+├── datetime       # Date and time manipulation
+│   └── datetime   # DateTime type (UTC, parsing, formatting)
+├── os             # Operating system utilities
+│   ├── env        # Environment variables
+│   ├── process    # Process execution (exec, exec_status)
+│   └── sysinfo    # CPU, memory, hostname, platform
+├── random         # Pseudo-random number generation
+│   ├── rng        # Rng type (xoshiro256**)
+│   └── convenience# random_i64, random_range, shuffle
+├── glob           # Glob pattern matching
+│   ├── pattern    # In-memory pattern matching
+│   └── walk       # Directory walking with glob
+├── search         # Text and vector search
+│   ├── bm25       # BM25 full-text search index
+│   ├── hnsw       # HNSW approximate nearest neighbor
+│   └── distance   # SIMD distance functions
+├── crypto         # Cryptographic primitives
+│   ├── random     # CSPRNG (BCrypt/getrandom/SecRandom)
+│   ├── hash       # SHA-256, SHA-512, MD5, BLAKE3
+│   ├── hmac       # HMAC authentication
+│   ├── cipher     # AES-GCM, ChaCha20-Poly1305
+│   ├── kdf        # PBKDF2, HKDF, Argon2
+│   ├── x509       # Certificate handling
+│   └── dh         # Diffie-Hellman key exchange
+├── hash           # Fast non-cryptographic hashing
+│   ├── fnv        # FNV-1a (32/64-bit)
+│   ├── murmur     # MurmurHash2 (32/64-bit)
+│   └── etag       # HTTP ETag helpers
+├── url            # URL parsing (RFC 3986)
+│   ├── url        # Url type, parse, build
+│   └── query      # QueryPair, UrlBuilder
+├── uuid           # UUID generation
+├── semver         # Semantic versioning (parse, compare)
+├── compress       # Compression
+│   └── zlib       # deflate/inflate via zlib FFI
+├── text           # Dynamic string with SSO
+│   └── text       # Text type (Small String Optimization)
+├── exception      # Exception class hierarchy
+├── profiler       # Performance profiling
+├── encoding       # Text and binary encodings
+│   ├── hex        # Hexadecimal encoding/decoding
+│   ├── base64     # Base64 encoding/decoding
+│   ├── percent    # URL percent-encoding
+│   ├── base8      # Base8 (octal) encoding
+│   ├── base16     # Base16 encoding
+│   ├── base36     # Base36 encoding
+│   ├── base45     # Base45 encoding
+│   ├── base62     # Base62 encoding
+│   ├── base91     # Base91 encoding
+│   └── base64url  # URL-safe Base64 encoding
 └── test           # Testing framework
     ├── assert     # Assertions
     └── runner     # Test runner

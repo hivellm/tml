@@ -179,6 +179,12 @@ tml test --no-check-leaks    # Disable leak checking
 # Verbose
 tml test --verbose
 
+# Show per-test timing profile
+tml test --profile
+
+# Stop on first failure
+tml test --fail-fast
+
 # Timeout (seconds)
 tml test --timeout=30
 
@@ -409,7 +415,22 @@ tml rlib validate mylib.rlib
 # - JSON metadata format
 ```
 
-### 2.14 tml clean — Cleanup
+### 2.14 tml explain — Error Code Explanation
+
+```bash
+# Explain a compiler error code
+tml explain T001     # Type error explanation
+tml explain B001     # Borrow checker error explanation
+tml explain L003     # Linter error explanation
+tml explain P005     # Parse error explanation
+
+# Output includes:
+# - Error description
+# - Common causes
+# - Fix examples with code snippets
+```
+
+### 2.15 tml clean — Cleanup
 
 ```bash
 tml clean           # remove build/ (FUTURE)

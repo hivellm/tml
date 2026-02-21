@@ -251,82 +251,103 @@ public lowlevel func volatile_copy[T](src: *const T, dst: *mut T, count: U64)
 
 ## 5. Atomic Intrinsics
 
+> **Implementation Note:** Atomic intrinsics in TML use **type-specific function names** rather than generics. Each atomic operation has `_i32` and `_i64` variants.
+
 ### 5.1 Atomic Load/Store
 
 ```tml
-/// Atomic load
-public func atomic_load[T](ptr: *const T, order: MemoryOrdering) -> T
-    where T: AtomicType
+/// Atomic load (I32)
+public func atomic_load_i32(ptr: *Unit) -> I32
 
-/// Atomic store
-public func atomic_store[T](ptr: *mut T, value: T, order: MemoryOrdering)
-    where T: AtomicType
+/// Atomic load (I64)
+public func atomic_load_i64(ptr: *Unit) -> I64
+
+/// Atomic store (I32)
+public func atomic_store_i32(ptr: *Unit, value: I32)
+
+/// Atomic store (I64)
+public func atomic_store_i64(ptr: *Unit, value: I64)
 ```
 
 ### 5.2 Atomic Read-Modify-Write
 
 ```tml
-/// Atomic exchange
-public func atomic_xchg[T](ptr: *mut T, value: T, order: MemoryOrdering) -> T
+/// Atomic fetch-and-add
+public func atomic_fetch_add_i32(ptr: *Unit, value: I32) -> I32
+public func atomic_fetch_add_i64(ptr: *Unit, value: I64) -> I64
 
-/// Atomic compare-exchange (strong)
-public func atomic_cxchg[T](
-    ptr: *mut T,
-    old: T,
-    new: T,
-    success_order: MemoryOrdering,
-    failure_order: MemoryOrdering
-) -> (T, Bool)
+/// Atomic fetch-and-subtract
+public func atomic_fetch_sub_i32(ptr: *Unit, value: I32) -> I32
+public func atomic_fetch_sub_i64(ptr: *Unit, value: I64) -> I64
 
-/// Atomic compare-exchange (weak)
-public func atomic_cxchg_weak[T](
-    ptr: *mut T,
-    old: T,
-    new: T,
-    success_order: MemoryOrdering,
-    failure_order: MemoryOrdering
-) -> (T, Bool)
+/// Atomic swap (exchange)
+public func atomic_swap_i32(ptr: *Unit, value: I32) -> I32
+public func atomic_swap_i64(ptr: *Unit, value: I64) -> I64
 
-/// Atomic add
-public func atomic_add[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic subtract
-public func atomic_sub[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
+/// Atomic compare-exchange (returns old value)
+public func atomic_compare_exchange_i32(ptr: *Unit, expected: I32, desired: I32) -> I32
+public func atomic_compare_exchange_i64(ptr: *Unit, expected: I64, desired: I64) -> I64
 
 /// Atomic AND
-public func atomic_and[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
+public func atomic_and_i32(ptr: *Unit, value: I32) -> I32
+public func atomic_and_i64(ptr: *Unit, value: I64) -> I64
 
 /// Atomic OR
-public func atomic_or[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic XOR
-public func atomic_xor[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic NAND
-public func atomic_nand[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic max
-public func atomic_max[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic min
-public func atomic_min[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic unsigned max
-public func atomic_umax[T: UnsignedInteger](ptr: *mut T, value: T, order: MemoryOrdering) -> T
-
-/// Atomic unsigned min
-public func atomic_umin[T: UnsignedInteger](ptr: *mut T, value: T, order: MemoryOrdering) -> T
+public func atomic_or_i32(ptr: *Unit, value: I32) -> I32
+public func atomic_or_i64(ptr: *Unit, value: I64) -> I64
 ```
 
 ### 5.3 Fence
 
 ```tml
-/// Memory fence
-public func atomic_fence(order: MemoryOrdering)
+/// Full memory fence (SeqCst)
+public func atomic_fence()
 
-/// Single-thread fence (compiler barrier)
-public func atomic_singlethread_fence(order: MemoryOrdering)
+/// Acquire fence
+public func atomic_fence_acquire()
+
+/// Release fence
+public func atomic_fence_release()
 ```
+
+## 5b. SIMD Intrinsics
+
+TML supports SIMD (Single Instruction, Multiple Data) operations via the `@simd` decorator. When applied to a function, element-wise arithmetic on arrays emits direct LLVM vector instructions.
+
+### 5b.1 @simd Decorator
+
+```tml
+/// The @simd decorator instructs the compiler to emit LLVM vector ops
+/// for element-wise arithmetic in the annotated function.
+@simd
+func add_arrays(a: [F64; 4], b: [F64; 4]) -> [F64; 4] {
+    // Emits <4 x double> fadd instead of scalar loop
+    return [a[0]+b[0], a[1]+b[1], a[2]+b[2], a[3]+b[3]]
+}
+```
+
+### 5b.2 Supported Operations
+
+| Operation | LLVM Instruction | Types |
+|-----------|-----------------|-------|
+| `+` | `fadd` / `add` | F32, F64, I32, I64 |
+| `-` | `fsub` / `sub` | F32, F64, I32, I64 |
+| `*` | `fmul` / `mul` | F32, F64, I32, I64 |
+| `/` | `fdiv` / `sdiv` | F32, F64, I32, I64 |
+
+### 5b.3 Vector Widths
+
+The compiler supports fixed-size arrays as SIMD vectors:
+
+| TML Type | LLVM Vector Type |
+|----------|-----------------|
+| `[F32; 4]` | `<4 x float>` |
+| `[F64; 2]` | `<2 x double>` |
+| `[F64; 4]` | `<4 x double>` |
+| `[I32; 4]` | `<4 x i32>` |
+| `[I32; 8]` | `<8 x i32>` |
+| `[I64; 2]` | `<2 x i64>` |
+| `[I64; 4]` | `<4 x i64>` |
 
 ## 6. Float Intrinsics
 

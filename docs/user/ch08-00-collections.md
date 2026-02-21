@@ -1,6 +1,6 @@
 # Collections
 
-TML provides built-in support for dynamic collections: Lists (dynamic arrays), HashMaps, and Buffers.
+TML provides built-in support for dynamic collections: Lists (dynamic arrays), HashMaps, Buffers, and more. All collection types are implemented in pure TML using memory intrinsics.
 
 ## Arrays and Lists
 
@@ -34,55 +34,49 @@ let last = arr[4]    // 50
 
 ### List Methods
 
-TML supports method-call syntax for list operations:
+TML `List[T]` is a growable array with method-call syntax:
 
 ```tml
-let arr = [1, 2, 3]
+use std::collections::List
 
-// Get length
-let len = arr.len()        // 3
+var items: List[I64] = List[I64].new(16)  // Create with capacity 16
+items.push(10)
+items.push(20)
+items.push(30)
 
-// Get element at index
-let val = arr.get(0)       // 1
-
-// Set element at index
-arr.set(0, 100)            // arr[0] is now 100
-
-// Add element to end
-arr.push(4)                // arr is now [100, 2, 3, 4]
-
-// Remove and return last element
-let last = arr.pop()       // returns 4
-
-// Check if empty
-let is_empty = list_is_empty(arr)  // false
-
-// Get capacity
-let cap = arr.capacity()   // internal buffer size
-
-// Clear all elements
-arr.clear()                // arr is now []
+let len: I64 = items.len()          // 3
+let first: I64 = items.get(0)       // 10
+items.set(0, 100)                    // items[0] is now 100
+let last: I64 = items.pop()         // returns 30
+let has: Bool = items.contains(10)   // false (was replaced with 100)
+items.clear()                        // empty the list
 ```
 
-### Function-Call Syntax
+**Common Methods:**
 
-You can also use function-call syntax:
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `new(capacity: I64) -> List[T]` | Create with initial capacity |
+| `push` | `push(mut this, item: T)` | Append element |
+| `pop` | `pop(mut this) -> T` | Remove and return last |
+| `get` | `get(this, index: I64) -> T` | Get element at index |
+| `set` | `set(mut this, index: I64, value: T)` | Set element at index |
+| `len` | `len(this) -> I64` | Number of elements |
+| `is_empty` | `is_empty(this) -> Bool` | True if empty |
+| `clear` | `clear(mut this)` | Remove all elements |
+| `contains` | `contains(this, item: T) -> Bool` | Linear search |
+
+### Vec[T] — Ergonomic Alias
+
+`Vec[T]` is an alias for `List[T]` with the same API:
 
 ```tml
-let list = list_create(4)  // Create with capacity 4
+use std::collections::Vec
 
-list_push(list, 10)
-list_push(list, 20)
-
-let len = list_len(list)          // 2
-let first = list_get(list, 0)     // 10
-
-list_set(list, 0, 100)
-
-let popped = list_pop(list)       // 20
-list_clear(list)
-
-list_destroy(list)  // Clean up when done
+var v: Vec[I32] = Vec[I32].new(8)
+v.push(1)
+v.push(2)
+v.push(3)
 ```
 
 ### Example: Sum of Elements
@@ -90,166 +84,122 @@ list_destroy(list)  // Clean up when done
 ```tml
 func sum_list() -> I32 {
     let arr = [10, 20, 30, 40, 50]
-
-    let mut total = 0
-    for i in 5 {
-        total = total + arr[i]
+    let mut total: I32 = 0
+    loop i in 0 to arr.len() {
+        total = total + arr.get(i)
     }
-
-    list_destroy(arr)
     return total  // 150
 }
 ```
 
 ## HashMap
 
-HashMaps store key-value pairs with O(1) average lookup time.
-
-### Creating a HashMap
+HashMaps store key-value pairs with O(1) average lookup time. Implemented in pure TML.
 
 ```tml
-let map = hashmap_create(16)  // Create with capacity 16
+use std::collections::HashMap
+
+var scores = HashMap[Str, I32]::new(16)
+scores.set("Alice", 100)
+scores.set("Bob", 85)
+
+let s: I32 = scores.get("Alice")      // 100
+let has: Bool = scores.has("Charlie")  // false
+scores.remove("Bob")
 ```
 
-### HashMap Operations
+**Common Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `new(capacity: I64) -> HashMap[K, V]` | Create with capacity |
+| `set` | `set(mut this, key: K, value: V)` | Insert or update |
+| `get` | `get(this, key: K) -> V` | Get value (panics if missing) |
+| `has` | `has(this, key: K) -> Bool` | Check if key exists |
+| `remove` | `remove(mut this, key: K) -> Bool` | Remove by key |
+| `len` | `len(this) -> I64` | Number of entries |
+| `is_empty` | `is_empty(this) -> Bool` | True if empty |
+| `clear` | `clear(mut this)` | Remove all entries |
+
+## BTreeMap and BTreeSet
+
+Sorted collections using binary search. O(log n) operations with sorted iteration.
 
 ```tml
-let map = hashmap_create(16)
+use std::collections::BTreeMap
 
-// Set values
-hashmap_set(map, 1, 100)
-hashmap_set(map, 2, 200)
-hashmap_set(map, 3, 300)
+var m: BTreeMap = BTreeMap::create()
+m.insert(3, 30)
+m.insert(1, 10)
+m.insert(2, 20)
 
-// Get values
-let val = hashmap_get(map, 1)  // 100
-
-// Check if key exists
-let exists = hashmap_has(map, 2)  // true
-
-// Get number of entries
-let len = hashmap_len(map)  // 3
-
-// Remove a key
-let removed = hashmap_remove(map, 1)  // true
-
-// Clear all entries
-hashmap_clear(map)
-
-// Clean up
-hashmap_destroy(map)
+let v: I64 = m.get(1)          // 10
+let min: I64 = m.min_key()     // 1
+let max: I64 = m.max_key()     // 3
 ```
 
-### Example: Counting Occurrences
+```tml
+use std::collections::BTreeSet
+
+var s: BTreeSet = BTreeSet::create()
+s.insert(5)
+s.insert(2)
+s.insert(8)
+
+let has: Bool = s.contains(5)  // true
+let min: I64 = s.min()         // 2
+```
+
+## Deque
+
+Double-ended queue backed by a ring buffer. O(1) push/pop at both ends.
 
 ```tml
-func count_values() {
-    let counts = hashmap_create(16)
+use std::collections::Deque
 
-    // Count some values (key = value, count = count)
-    hashmap_set(counts, 1, 3)   // value 1 appears 3 times
-    hashmap_set(counts, 2, 5)   // value 2 appears 5 times
-    hashmap_set(counts, 3, 2)   // value 3 appears 2 times
+var dq: Deque[I64] = Deque::create[I64]()
+dq.push_back(1)
+dq.push_front(0)
 
-    let has_key = hashmap_has(counts, 2)
-    if has_key {
-        let count = hashmap_get(counts, 2)
-        println(count)  // 5
-    }
-
-    hashmap_destroy(counts)
-}
+let front: Maybe[I64] = dq.pop_front()  // Just(0)
+let back: Maybe[I64] = dq.pop_back()    // Just(1)
 ```
 
 ## Buffer
 
-Buffers are byte arrays useful for I/O and binary data.
-
-### Creating a Buffer
+Byte buffer for binary data. Implemented in pure TML.
 
 ```tml
-let buf = buffer_create(32)  // Create with capacity 32 bytes
-```
+use std::collections::Buffer
 
-### Buffer Operations
-
-```tml
-let buf = buffer_create(32)
+var buf = Buffer::new(1024)
 
 // Write bytes
-buffer_write_byte(buf, 65)  // Write 'A' (ASCII 65)
-buffer_write_byte(buf, 66)  // Write 'B'
-buffer_write_byte(buf, 67)  // Write 'C'
-
-// Write 32-bit integer
-buffer_write_i32(buf, 12345678)
-
-// Get buffer info
-let len = buffer_len(buf)           // Number of bytes written
-let cap = buffer_capacity(buf)      // Total capacity
-let rem = buffer_remaining(buf)     // Bytes left to read
+buf.write_u8(0xFF)
+buf.write_i32(42)
 
 // Read bytes (advances read position)
-let b1 = buffer_read_byte(buf)      // 65
-let b2 = buffer_read_byte(buf)      // 66
+let b: U8 = buf.read_u8()
+let val: I32 = buf.read_i32()
 
-// Read 32-bit integer
-let val = buffer_read_i32(buf)
+// Buffer info
+let len: I64 = buf.len()
+let cap: I64 = buf.capacity()
+let rem: I64 = buf.remaining()
 
-// Reset read position to beginning
-buffer_reset_read(buf)
-
-// Clear buffer
-buffer_clear(buf)
-
-// Clean up
-buffer_destroy(buf)
-```
-
-### Example: Binary Protocol
-
-```tml
-func encode_message() {
-    let buf = buffer_create(64)
-
-    // Write header (message type = 1)
-    buffer_write_byte(buf, 1)
-
-    // Write payload length
-    buffer_write_i32(buf, 100)
-
-    // Write checksum
-    buffer_write_i32(buf, 12345)
-
-    // Now read it back
-    let msg_type = buffer_read_byte(buf)
-    let length = buffer_read_i32(buf)
-    let checksum = buffer_read_i32(buf)
-
-    println(msg_type)   // 1
-    println(length)     // 100
-    println(checksum)   // 12345
-
-    buffer_destroy(buf)
-}
+// Reset and clear
+buf.reset_read()
+buf.clear()
 ```
 
 ## Memory Management
 
-All collections allocate memory that must be freed:
+All collection types in TML are implemented in pure TML using memory intrinsics (`mem_alloc`, `mem_free`, `ptr_read`, `ptr_write`). Collections that implement the `Drop` behavior are automatically cleaned up when they go out of scope.
+
+For types without automatic Drop, use the appropriate cleanup method:
 
 ```tml
-let arr = [1, 2, 3]
-// ... use the array ...
-list_destroy(arr)  // Free memory
-
-let map = hashmap_create(16)
+var map = HashMap[Str, I32]::new(16)
 // ... use the map ...
-hashmap_destroy(map)  // Free memory
-
-let buf = buffer_create(32)
-// ... use the buffer ...
-buffer_destroy(buf)  // Free memory
+map.destroy()  // Free memory when done
 ```
-
-**Important:** Always call the appropriate `destroy` function when you're done with a collection to avoid memory leaks.

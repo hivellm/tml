@@ -135,54 +135,33 @@ func test_with_context(ctx: TestContext) {
 }
 ```
 
-## 4. Property-Based Testing
+## 4. Property-Based Testing (FUTURE)
 
-### 4.1 @property Directive
+> **Status:** Not yet implemented. This section describes planned features.
+
+### 4.1 @property Directive (Planned)
 
 ```tml
 @property
 func prop_addition_commutative(a: I32, b: I32) -> Bool {
     return a + b == b + a
 }
-
-@property
-func prop_list_reverse_twice[T: Equal](list: List[T]) -> Bool {
-    return list.reverse().reverse() == list
-}
 ```
 
-### 4.2 Configuration
-
-```tml
-@property(samples = 1000)
-func prop_with_more_samples(x: I32) -> Bool {
-    return x * 0 == 0
-}
-
-@property(seed = 12345)
-func prop_reproducible(x: I32) -> Bool {
-    return x + 0 == x
-}
-```
-
-### 4.3 Custom Generators
+### 4.2 Custom Generators (Planned)
 
 ```tml
 @generator
 func gen_positive_int() -> I32 {
     return random_range(1, I32.MAX)
 }
-
-@property
-func prop_sqrt_positive(@gen(gen_positive_int) x: I32) -> Bool {
-    let sq: F64 = (x as F64).sqrt()
-    return sq >= 0.0
-}
 ```
 
-## 5. Mocking
+## 5. Mocking (FUTURE)
 
-### 5.1 Mock Behaviors
+> **Status:** Not yet implemented. This section describes planned features.
+
+### 5.1 Mock Behaviors (Planned)
 
 ```tml
 behavior HttpClient {
@@ -191,37 +170,11 @@ behavior HttpClient {
 
 @mock
 type MockHttpClient {}
-
-extend MockHttpClient with HttpClient {
-    func get(this, url: String) -> Outcome[Response, Error] {
-        return Ok(Response { status: 200, body: "mocked" })
-    }
-}
-
-@test
-func test_with_mock() {
-    let client: MockHttpClient = MockHttpClient {}
-    let service: Service = Service.new(client)
-    let result: Outcome[Data, Error] = service.fetch_data()
-    assert(result.is_ok())
-}
 ```
 
-### 5.2 Spy and Verification
+### 5.2 Spy and Verification (Planned)
 
-```tml
-@test
-func test_call_count() {
-    let spy: Spy[func(String) -> Unit] = Spy.new[func(String) -> Unit]()
-
-    let service: Service = Service.with_logger(spy.func())
-    service.process()
-    service.process()
-
-    assert_eq(spy.call_count(), 2)
-    assert_eq(spy.calls()[0], ("first call",))
-}
-```
+Spy/verification framework for recording and asserting function calls.
 
 ## 6. Benchmarks
 

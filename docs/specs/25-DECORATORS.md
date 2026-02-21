@@ -298,7 +298,12 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@deprecated(since, removal)` | Any | With version info |
 | `@must_use` | Func/Type | Warn if result unused |
 | `@must_use(msg)` | Func/Type | Custom unused warning |
-| `@auto(...)` | Type | Auto-implement behaviors |
+| `@derive(...)` | Type | Auto-implement behaviors (see Section 9) |
+| `@simd` | Func | Enable SIMD vector operations on arrays |
+| `@should_panic` | Func | Expect test to panic |
+| `@should_panic(message)` | Func | Expect panic with specific message |
+| `@extern("c")` | Func | FFI: bind to C function |
+| `@link("lib")` | Module | FFI: link to native library |
 | `@when(...)` | Any | Conditional compilation |
 | `@doc(...)` | Any | Documentation |
 | `@allow(...)` | Any | Suppress specific warnings |
@@ -347,31 +352,34 @@ func experimental_feature() -> () {
 - `@deprecated` APIs have migration period (minimum 1 minor version)
 - Compiler warns about unstable/deprecated API usage by default
 
-## 9. Auto Decorator
+## 9. @derive Decorator
 
-### 9.1 Standard Auto-Implementations
+The `@derive` decorator automatically generates behavior implementations for structs and enums. This is the primary mechanism for reducing boilerplate code.
+
+> **Note:** Earlier documentation used `@auto(...)` syntax. The canonical name is **`@derive(...)`**.
+
+### 9.1 Standard Derive Implementations
 
 ```tml
-@auto(equal, order, hash, debug, duplicate, default)
+@derive(PartialEq, Ord, Hash, Debug, Duplicate, Default)
 type Point = {
     x: F64,
     y: F64,
 }
 ```
 
-### 9.2 Available Standard Implementations
+### 9.2 Available Derives
 
-| Name | Generated |
-|--------|-----------|
-| `equal` | `==`, `!=` |
-| `order` | `<`, `>`, `<=`, `>=`, `cmp` |
-| `hash` | `hash()` |
-| `debug` | `debug_fmt()` |
-| `format` | `fmt()` |
-| `duplicate` | `duplicate()` |
-| `default` | `default()` |
-| `serialize` | Serialization support |
-| `deserialize` | Deserialization support |
+| Name | Generated Method | Description |
+|--------|-----------|-------------|
+| `PartialEq` | `eq(ref this, other: ref Self) -> Bool` | Field-by-field equality |
+| `PartialOrd` | `partial_cmp(ref this, other: ref Self) -> Maybe[Ordering]` | Lexicographic partial ordering |
+| `Ord` | `cmp(ref this, other: ref Self) -> Ordering` | Total ordering |
+| `Hash` | `hash(ref this) -> I64` | FNV-1a hash of all fields |
+| `Debug` | `debug_string(ref this) -> Str` | String representation for debugging |
+| `Duplicate` | `duplicate(ref this) -> Self` | Field-by-field copy |
+| `Default` | `default() -> Self` | Zero-initialized instance (static method) |
+| `Reflect` | `variant_name(this) -> Str`, `variant_tag(this) -> I64` | Runtime type introspection (enums) |
 
 ### 9.3 Custom Auto
 
