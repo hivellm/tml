@@ -380,15 +380,29 @@ impl Text {
     // Conversion
     // ========================================================================
 
-    /// Get the string data as a Str (borrows from Text)
+    /// Get the string data as a Str (returns a fresh heap copy).
     pub func as_str(this) -> Str {
         let data: *U8 = text_get_data(this.handle)
         let addr: I64 = data as I64
         if addr == 0 {
             return ""
         }
-        // The data buffer is always null-terminated, so we can cast directly to Str
-        data as Str
+        let slen: I64 = text_get_len(this.handle)
+        if slen == 0 {
+            return ""
+        }
+        let buf: *Unit = lowlevel { mem_alloc(slen + 1) }
+        var i: I64 = 0
+        loop (i < slen) {
+            let sp: *U8 = (addr + i) as *U8
+            let dp: *U8 = (buf as I64 + i) as *U8
+            let byte: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, byte) }
+            i = i + 1
+        }
+        let null_p: *U8 = (buf as I64 + slen) as *U8
+        lowlevel { ptr_write[U8](null_p, 0 as U8) }
+        return buf as Str
     }
 
     /// Clone this Text (deep copy)

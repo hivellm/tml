@@ -56,12 +56,31 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     emit_line(label_then + ":");
     current_block_ = label_then;
     block_terminated_ = false;
+    size_t temps_before_then = temp_drops_.size();
     std::string then_val = gen_expr(*if_expr.then_branch);
     std::string then_type = last_expr_type_;
     bool then_terminated = block_terminated_;
     std::string then_end_block = current_block_; // Track actual block that flows to end
     if (!block_terminated_) {
+        // Drop Str temps created within this branch before branching to merge
+        if (temp_drops_.size() > temps_before_then) {
+            for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then);
+                 it != temp_drops_.end(); ++it) {
+                if (it->is_heap_str) {
+                    emit_drop_call(*it);
+                }
+            }
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then),
+                              temp_drops_.end());
+        }
         emit_line("  br label %" + label_end);
+    } else {
+        // Branch terminated (return/break) — discard temps without emitting drops
+        // (the return/break path handles its own cleanup)
+        if (temp_drops_.size() > temps_before_then) {
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then),
+                              temp_drops_.end());
+        }
     }
 
     // Else block
@@ -73,12 +92,29 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         emit_line(label_else + ":");
         current_block_ = label_else;
         block_terminated_ = false;
+        size_t temps_before_else = temp_drops_.size();
         else_val = gen_expr(*if_expr.else_branch.value());
         else_type = last_expr_type_;
         else_terminated = block_terminated_;
         else_end_block = current_block_; // This may differ from label_else if nested if
         if (!block_terminated_) {
+            // Drop Str temps created within this branch before branching to merge
+            if (temp_drops_.size() > temps_before_else) {
+                for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else);
+                     it != temp_drops_.end(); ++it) {
+                    if (it->is_heap_str) {
+                        emit_drop_call(*it);
+                    }
+                }
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else),
+                                  temp_drops_.end());
+            }
             emit_line("  br label %" + label_end);
+        } else {
+            if (temp_drops_.size() > temps_before_else) {
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else),
+                                  temp_drops_.end());
+            }
         }
     }
 
@@ -155,6 +191,7 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
     // True branch
     emit_line(label_true + ":");
     block_terminated_ = false;
+    size_t temps_before_true = temp_drops_.size();
     std::string true_val = gen_expr(*ternary.true_value);
     std::string true_type = last_expr_type_;
     // Store result
@@ -167,12 +204,29 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
         } else {
             emit_line("  store " + true_type + " " + true_val + ", ptr " + result_ptr);
         }
+        // Drop Str temps created within this branch
+        if (temp_drops_.size() > temps_before_true) {
+            for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_true);
+                 it != temp_drops_.end(); ++it) {
+                if (it->is_heap_str) {
+                    emit_drop_call(*it);
+                }
+            }
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_true),
+                              temp_drops_.end());
+        }
         emit_line("  br label %" + label_end);
+    } else {
+        if (temp_drops_.size() > temps_before_true) {
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_true),
+                              temp_drops_.end());
+        }
     }
 
     // False branch
     emit_line(label_false + ":");
     block_terminated_ = false;
+    size_t temps_before_false = temp_drops_.size();
     std::string false_val = gen_expr(*ternary.false_value);
     std::string false_type = last_expr_type_;
     // Store result
@@ -185,7 +239,23 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
         } else {
             emit_line("  store " + false_type + " " + false_val + ", ptr " + result_ptr);
         }
+        // Drop Str temps created within this branch
+        if (temp_drops_.size() > temps_before_false) {
+            for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_false);
+                 it != temp_drops_.end(); ++it) {
+                if (it->is_heap_str) {
+                    emit_drop_call(*it);
+                }
+            }
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_false),
+                              temp_drops_.end());
+        }
         emit_line("  br label %" + label_end);
+    } else {
+        if (temp_drops_.size() > temps_before_false) {
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_false),
+                              temp_drops_.end());
+        }
     }
 
     // End block - load result
@@ -325,18 +395,50 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
     }
 
     // Execute then branch
+    size_t temps_before_then2 = temp_drops_.size();
     std::string then_val = gen_expr(*if_let.then_branch);
     if (!block_terminated_) {
+        if (temp_drops_.size() > temps_before_then2) {
+            for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then2);
+                 it != temp_drops_.end(); ++it) {
+                if (it->is_heap_str) {
+                    emit_drop_call(*it);
+                }
+            }
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then2),
+                              temp_drops_.end());
+        }
         emit_line("  br label %" + label_end);
+    } else {
+        if (temp_drops_.size() > temps_before_then2) {
+            temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then2),
+                              temp_drops_.end());
+        }
     }
 
     // Else block
     if (if_let.else_branch.has_value()) {
         emit_line(label_else + ":");
         block_terminated_ = false;
+        size_t temps_before_else2 = temp_drops_.size();
         std::string else_val = gen_expr(*if_let.else_branch.value());
         if (!block_terminated_) {
+            if (temp_drops_.size() > temps_before_else2) {
+                for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else2);
+                     it != temp_drops_.end(); ++it) {
+                    if (it->is_heap_str) {
+                        emit_drop_call(*it);
+                    }
+                }
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else2),
+                                  temp_drops_.end());
+            }
             emit_line("  br label %" + label_end);
+        } else {
+            if (temp_drops_.size() > temps_before_else2) {
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else2),
+                                  temp_drops_.end());
+            }
         }
     }
 

@@ -177,6 +177,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     current_impl_type_ = type_name; // Set impl type for 'this' field access
     locals_.clear();
     block_terminated_ = false;
+    temp_drops_.clear();
 
     // Determine return type
     std::string ret_type = "void";
@@ -613,6 +614,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     auto saved_locals = locals_;
     auto saved_type_subs = current_type_subs_;
     auto saved_where_constraints = current_where_constraints_;
+    auto saved_temp_drops = temp_drops_;
 
     // Extract where constraints from impl-level generic bounds (e.g., T: PartialOrd)
     current_where_constraints_.clear();
@@ -659,6 +661,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string method_name = mangled_type_name + "_" + full_method_name;
     current_func_ = method_name;
     current_impl_type_ = mangled_type_name;
+    locals_.clear();
+    block_terminated_ = false;
+    temp_drops_.clear();
 
     // Build full type_subs including method-level type parameters
     auto full_type_subs = type_subs;
@@ -1006,6 +1011,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_where_constraints_ = saved_where_constraints;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
+    temp_drops_ = saved_temp_drops;
     current_scope_id_ = 0;
     current_debug_loc_id_ = 0;
 }

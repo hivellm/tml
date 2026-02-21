@@ -29,16 +29,17 @@
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
+    std::string result;
     if (expr.is<parser::LiteralExpr>()) {
         return gen_literal(expr.as<parser::LiteralExpr>());
     } else if (expr.is<parser::IdentExpr>()) {
         return gen_ident(expr.as<parser::IdentExpr>());
     } else if (expr.is<parser::BinaryExpr>()) {
-        return gen_binary(expr.as<parser::BinaryExpr>());
+        result = gen_binary(expr.as<parser::BinaryExpr>());
     } else if (expr.is<parser::UnaryExpr>()) {
         return gen_unary(expr.as<parser::UnaryExpr>());
     } else if (expr.is<parser::CallExpr>()) {
-        return gen_call(expr.as<parser::CallExpr>());
+        result = gen_call(expr.as<parser::CallExpr>());
     } else if (expr.is<parser::IfExpr>()) {
         return gen_if(expr.as<parser::IfExpr>());
     } else if (expr.is<parser::TernaryExpr>()) {
@@ -96,15 +97,15 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
     } else if (expr.is<parser::PathExpr>()) {
         return gen_path(expr.as<parser::PathExpr>());
     } else if (expr.is<parser::MethodCallExpr>()) {
-        return gen_method_call(expr.as<parser::MethodCallExpr>());
+        result = gen_method_call(expr.as<parser::MethodCallExpr>());
     } else if (expr.is<parser::ClosureExpr>()) {
         return gen_closure(expr.as<parser::ClosureExpr>());
     } else if (expr.is<parser::LowlevelExpr>()) {
         return gen_lowlevel(expr.as<parser::LowlevelExpr>());
     } else if (expr.is<parser::InterpolatedStringExpr>()) {
-        return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
+        result = gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
     } else if (expr.is<parser::TemplateLiteralExpr>()) {
-        return gen_template_literal(expr.as<parser::TemplateLiteralExpr>());
+        result = gen_template_literal(expr.as<parser::TemplateLiteralExpr>());
     } else if (expr.is<parser::CastExpr>()) {
         return gen_cast(expr.as<parser::CastExpr>());
     } else if (expr.is<parser::IsExpr>()) {
@@ -119,10 +120,21 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_base_expr(expr.as<parser::BaseExpr>());
     } else if (expr.is<parser::NewExpr>()) {
         return gen_new_expr(expr.as<parser::NewExpr>());
+    } else {
+        report_error("Unsupported expression type", expr.span, "C002");
+        return "0";
     }
 
-    report_error("Unsupported expression type", expr.span, "C002");
-    return "0";
+    // NOTE: Phase 4b (automatic Str temp tracking) was attempted here but disabled.
+    // Tracking Str temps from call/method/binary/interpolated expressions caused
+    // heap corruption in complex patterns (glob, fmt) because:
+    // 1. Assignment `var = expr` — the temp would be freed at statement end even though
+    //    the variable now owns the value
+    // 2. Nested function calls — inner calls produce temps that outer calls consume
+    // 3. Library code patterns where Str pointers are stored in collections
+    // The safe approach is Phase 4a (let/var binding drops) + Phase 3 (discarded returns).
+    // Phase 4b requires a more sophisticated ownership analysis to be safe.
+    return result;
 }
 
 } // namespace tml::codegen

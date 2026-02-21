@@ -48,11 +48,11 @@ static bool is_semantic_str(const types::TypePtr& sem_type) {
            sem_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
 }
 
-// Helper to check if an expression GUARANTEES a heap-allocated Str.
-// Only returns true for expressions that always produce uniquely-owned heap Str.
-// Does NOT include CallExpr/MethodCallExpr because those may return borrowed
-// pointers into internal buffers (e.g., Glob::next() returns into its paths array).
-// Until TML has ownership annotations, we must be conservative to avoid double-free.
+// Helper to check if an expression produces a heap-allocated Str.
+// Returns true for expressions that produce uniquely-owned heap Str.
+// tml_str_free validates heap pointers before freeing, so it's safe to
+// call on any pointer — global constants and stack pointers are skipped.
+// All Str-returning stdlib functions allocate fresh heap memory.
 static bool is_heap_str_producer(const parser::Expr& expr) {
     // Interpolated strings always heap-allocate via snprintf+malloc
     if (expr.is<parser::InterpolatedStringExpr>())
@@ -63,9 +63,15 @@ static bool is_heap_str_producer(const parser::Expr& expr) {
     // Binary expressions on strings (concatenation) heap-allocate
     if (expr.is<parser::BinaryExpr>())
         return true;
-    // String literals are global constants — never free
+    // Function/method calls returning Str: stdlib functions allocate fresh heap Str.
+    // tml_str_free safely validates heap pointers, so even if a function returns
+    // a global constant or empty string "", the free is a no-op.
+    if (expr.is<parser::CallExpr>())
+        return true;
+    if (expr.is<parser::MethodCallExpr>())
+        return true;
+    // String literals are global constants — tml_str_free skips them (not heap)
     // Identifiers are aliases — freeing would double-free the original
-    // CallExpr/MethodCallExpr excluded — may return borrowed pointers (double-free risk)
     return false;
 }
 
@@ -685,6 +691,11 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         if ((is_semantic_str(semantic_var_type) || is_semantic_str(semantic_type)) &&
             is_heap_str_producer(*let.init.value())) {
             register_heap_str_for_drop(var_name, alloca_reg);
+            // Remove the temp_drop that gen_expr registered for this same Str value,
+            // since the variable's scope-based drop now owns the cleanup.
+            if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
+                temp_drops_.pop_back();
+            }
         }
         return;
     }
@@ -992,12 +1003,15 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     register_for_drop(var_name, alloca_reg, type_name, var_type);
 
     // Register heap-allocated Str variables for automatic free at scope exit.
-    // is_heap_str_producer checks if the init expression GUARANTEES a heap allocation
-    // (interpolated strings, template literals). These always produce Str (ptr).
+    // is_heap_str_producer checks if the init expression produces heap Str.
     if (var_type == "ptr" && let.init.has_value() &&
         (is_semantic_str(semantic_var_type) || is_semantic_str(semantic_type)) &&
         is_heap_str_producer(*let.init.value())) {
         register_heap_str_for_drop(var_name, alloca_reg);
+        // Remove the temp_drop that gen_expr registered for this same Str value.
+        if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
+            temp_drops_.pop_back();
+        }
     }
 
     // Emit debug info for the variable (if enabled and debug level >= 2)
@@ -1417,6 +1431,9 @@ void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
         if (var_type == "ptr" && is_semantic_str(semantic_type) &&
             is_heap_str_producer(*const_decl.value)) {
             register_heap_str_for_drop(const_decl.name, alloca_reg);
+            if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
+                temp_drops_.pop_back();
+            }
         }
     }
     // Other nested declarations (func, type, etc.) are handled elsewhere or ignored

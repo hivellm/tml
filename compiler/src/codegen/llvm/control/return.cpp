@@ -61,6 +61,11 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
             std::string val = gen_expr(*ret.value.value());
             emit_line("  store " + closure_return_type_ + " " + val + ", ptr " +
                       closure_return_alloca_);
+            // Remove Str temp if closure returns a Str — ownership transfers to caller
+            if (last_expr_type_ == "ptr" && !temp_drops_.empty() &&
+                temp_drops_.back().is_heap_str) {
+                temp_drops_.pop_back();
+            }
         }
         emit_line("  br label %" + closure_return_label_);
         block_terminated_ = true;
@@ -82,6 +87,12 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
         if (ret.value.value()->is<parser::IdentExpr>()) {
             const auto& ident = ret.value.value()->as<parser::IdentExpr>();
             mark_var_consumed(ident.name);
+        }
+
+        // If the return value is a Str temp from a call, remove it from temp_drops_.
+        // The caller takes ownership; freeing it here would cause use-after-free.
+        if (val_type == "ptr" && !temp_drops_.empty() && temp_drops_.back().is_heap_str) {
+            temp_drops_.pop_back();
         }
     }
 

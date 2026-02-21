@@ -926,6 +926,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Execute arm body
+        size_t temps_before_arm = temp_drops_.size();
         std::string arm_value = gen_expr(*arm.body);
         std::string arm_type = last_expr_type_;
 
@@ -954,14 +955,42 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
+            // Drop Str temps created within this arm
+            if (temp_drops_.size() > temps_before_arm) {
+                for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm);
+                     it != temp_drops_.end(); ++it) {
+                    if (it->is_heap_str) {
+                        emit_drop_call(*it);
+                    }
+                }
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
+                                  temp_drops_.end());
+            }
             // Drop arm-scoped variables before leaving the arm
             emit_scope_drops();
             emit_line("  br label %" + label_end);
         } else if (!block_terminated_) {
             // Void arm - just branch to end
+            // Drop Str temps created within this arm
+            if (temp_drops_.size() > temps_before_arm) {
+                for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm);
+                     it != temp_drops_.end(); ++it) {
+                    if (it->is_heap_str) {
+                        emit_drop_call(*it);
+                    }
+                }
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
+                                  temp_drops_.end());
+            }
             // Drop arm-scoped variables before leaving the arm
             emit_scope_drops();
             emit_line("  br label %" + label_end);
+        } else {
+            // Arm terminated (return/break) — discard branch-local temps
+            if (temp_drops_.size() > temps_before_arm) {
+                temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
+                                  temp_drops_.end());
+            }
         }
 
         // Pop drop scope and restore locals (arm bindings are out of scope)
