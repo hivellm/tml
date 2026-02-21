@@ -60,36 +60,12 @@ pub func u64_to_str(value: U64) -> Str {
 
 // Internal: convert a digit 0-9 (as I64) to its string character
 func i64_digit_char(d: I64) -> Str {
-    when d {
-        0 => return "0",
-        1 => return "1",
-        2 => return "2",
-        3 => return "3",
-        4 => return "4",
-        5 => return "5",
-        6 => return "6",
-        7 => return "7",
-        8 => return "8",
-        9 => return "9",
-        _ => return "?"
-    }
+    return digit_to_char(d as I32)
 }
 
 // Internal: convert a digit 0-9 (as U64) to its string character
 func u64_digit_char(d: U64) -> Str {
-    when d {
-        0 => return "0",
-        1 => return "1",
-        2 => return "2",
-        3 => return "3",
-        4 => return "4",
-        5 => return "5",
-        6 => return "6",
-        7 => return "7",
-        8 => return "8",
-        9 => return "9",
-        _ => return "?"
-    }
+    return digit_to_char(d as I32)
 }
 
 /// Converts an I8 to string (widen to I64, then convert).
@@ -128,50 +104,17 @@ pub func u32_to_str(value: U32) -> Str {
 
 /// Converts a U8 to its binary string representation (without prefix).
 pub func u8_to_binary_str(n: U8) -> Str {
-    if n == 0 { return "0" }
-    var result: Str = ""
-    var val: U8 = n
-    loop (val != 0) {
-        if val % 2 == 1 {
-            result = "1" + result
-        } else {
-            result = "0" + result
-        }
-        val = val / 2
-    }
-    return result
+    return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U16 to its binary string representation (without prefix).
 pub func u16_to_binary_str(n: U16) -> Str {
-    if n == 0 { return "0" }
-    var result: Str = ""
-    var val: U16 = n
-    loop (val != 0) {
-        if val % 2 == 1 {
-            result = "1" + result
-        } else {
-            result = "0" + result
-        }
-        val = val / 2
-    }
-    return result
+    return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U32 to its binary string representation (without prefix).
 pub func u32_to_binary_str(n: U32) -> Str {
-    if n == 0 { return "0" }
-    var result: Str = ""
-    var val: U32 = n
-    loop (val != 0) {
-        if val % 2 == 1 {
-            result = "1" + result
-        } else {
-            result = "0" + result
-        }
-        val = val / 2
-    }
-    return result
+    return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U64 to its binary string representation (without prefix).

@@ -13,6 +13,7 @@
 //! ```
 
 use core::str
+use core::encoding::hex
 
 /// Returns true if the byte is an unreserved character per RFC 3986.
 /// Unreserved: A-Z, a-z, 0-9, '-', '.', '_', '~'
@@ -25,22 +26,6 @@ func is_unreserved(b: I32) -> Bool {
     if b == 95 { return true }               // _
     if b == 126 { return true }              // ~
     return false
-}
-
-/// Maps a nibble (0-15) to uppercase hex character code.
-func nibble_to_hex(n: I32) -> U8 {
-    if n < 10 {
-        return (n + 48) as U8   // '0'
-    }
-    return (n + 55) as U8       // 'A'
-}
-
-/// Maps a hex character to its value (0-15), or -1 for invalid.
-func hex_to_val(c: I32) -> I32 {
-    if c >= 48 and c <= 57 { return c - 48 }       // '0'-'9'
-    if c >= 65 and c <= 70 { return c - 55 }       // 'A'-'F'
-    if c >= 97 and c <= 102 { return c - 87 }      // 'a'-'f'
-    return -1
 }
 
 /// Percent-encode a string for use in URLs.
@@ -74,8 +59,8 @@ pub func encode(input: Str) -> Str {
             di = di + 1
         } else {
             lowlevel { ptr_write[U8]((dst + di) as *U8, 37 as U8) }        // '%'
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, nibble_to_hex(b / 16)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, nibble_to_hex(b % 16)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, hex::nibble_to_upper(b / 16)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, hex::nibble_to_upper(b % 16)) }
             di = di + 3
         }
         si = si + 1
@@ -112,8 +97,8 @@ pub func encode_form(input: Str) -> Str {
             di = di + 1
         } else {
             lowlevel { ptr_write[U8]((dst + di) as *U8, 37 as U8) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, nibble_to_hex(b / 16)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, nibble_to_hex(b % 16)) }
+            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, hex::nibble_to_upper(b / 16)) }
+            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, hex::nibble_to_upper(b % 16)) }
             di = di + 3
         }
         si = si + 1
@@ -153,8 +138,8 @@ pub func decode(input: Str) -> Outcome[Str, Str] {
             }
             let hi_byte: U8 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) }
             let lo_byte: U8 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) }
-            let hi: I32 = hex_to_val(hi_byte as I32)
-            let lo: I32 = hex_to_val(lo_byte as I32)
+            let hi: I32 = hex::char_to_nibble(hi_byte as I32)
+            let lo: I32 = hex::char_to_nibble(lo_byte as I32)
             if hi == -1 or lo == -1 {
                 lowlevel { mem_free(buf) }
                 return Err("percent: invalid hex digit in escape")
@@ -201,8 +186,8 @@ pub func decode_form(input: Str) -> Outcome[Str, Str] {
             }
             let hi_byte: U8 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) }
             let lo_byte: U8 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) }
-            let hi: I32 = hex_to_val(hi_byte as I32)
-            let lo: I32 = hex_to_val(lo_byte as I32)
+            let hi: I32 = hex::char_to_nibble(hi_byte as I32)
+            let lo: I32 = hex::char_to_nibble(lo_byte as I32)
             if hi == -1 or lo == -1 {
                 lowlevel { mem_free(buf) }
                 return Err("percent: invalid hex digit in escape")
