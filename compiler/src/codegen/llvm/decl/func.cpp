@@ -520,7 +520,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     for (const auto& decorator : func.decorators) {
         if (decorator.name == "should_panic") {
             has_should_panic = true;
-            break;
+        } else if (decorator.name == "allocates") {
+            allocating_functions_.insert(func.name);
         }
     }
     // In suite mode (force_internal_linkage), all functions including main get internal linkage

@@ -1243,6 +1243,12 @@ void LLVMIRGen::emit_referenced_library_definitions() {
     output_ << "\n; Lazy library definitions (only functions actually used)\n";
     output_ << all_lazy_defs;
 
+    // Scan lazily-generated definitions for runtime function references
+    // (e.g., @f32_to_string from lowlevel blocks) so finalize_runtime_decls()
+    // emits the necessary declarations. finalize_runtime_decls() deduplicates
+    // against already-declared/defined functions in the output.
+    scan_for_runtime_refs(all_lazy_defs);
+
     TML_DEBUG_LN("[LAZY_LIB] Generated "
                  << generated.size() << " of "
                  << (pending_library_methods_.size() + pending_library_funcs_.size())
@@ -1274,6 +1280,16 @@ void LLVMIRGen::emit_referenced_library_definitions() {
 
         for (const auto& ref : all_refs) {
             if (defined_or_declared.count(ref) == 0) {
+                // Skip functions that will be provided by the runtime catalog
+                // (e.g., @tml_str_free, @tml_random_seed). These are emitted
+                // later by finalize_runtime_decls() and are not truly unresolved.
+                std::string name_no_at = ref.size() > 1 ? ref.substr(1) : ref;
+                if (runtime_catalog_index_.count(name_no_at) > 0) {
+                    // Ensure it's marked as needed so finalize_runtime_decls emits it
+                    require_runtime_decl(name_no_at);
+                    continue;
+                }
+
                 // Check if it's in pending but wasn't resolved
                 bool in_pending = pending_library_methods_.count(ref) > 0 ||
                                   pending_library_funcs_.count(ref) > 0;

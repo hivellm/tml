@@ -145,62 +145,28 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
                 is_str_temp = true;
             }
         } else if (expr.is<parser::CallExpr>()) {
-            // Track Str temporaries from free function calls (e.g., str::join, encode).
-            // Free functions returning Str almost always allocate fresh heap memory.
-            // Use infer_expr_type to confirm return type is owned Str (not ref Str).
-            auto sem = infer_expr_type(expr);
-            if (sem && sem->is<types::PrimitiveType>() &&
-                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                is_str_temp = true;
+            // Track Str temporaries from @allocates free functions.
+            const auto& call = expr.as<parser::CallExpr>();
+            std::string func_name;
+            if (call.callee->is<parser::IdentExpr>()) {
+                func_name = call.callee->as<parser::IdentExpr>().name;
+            } else if (call.callee->is<parser::PathExpr>()) {
+                const auto& path = call.callee->as<parser::PathExpr>().path;
+                if (!path.segments.empty()) {
+                    func_name = path.segments.back();
+                }
+            }
+            if (!func_name.empty() && allocating_functions_.count(func_name)) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
+                }
             }
         } else if (expr.is<parser::MethodCallExpr>()) {
-            // Track Str temporaries from method calls that are KNOWN to allocate
-            // fresh heap Str. Collection getters (get, first, last, peek) return
-            // borrowed references and must NOT be freed.
-            // Whitelist approach: only auto-free methods that demonstrably allocate.
+            // Track Str temporaries from @allocates methods.
             const auto& mcall = expr.as<parser::MethodCallExpr>();
-            const std::string& method = mcall.method;
-            static const std::unordered_set<std::string> allocating_methods = {
-                // Display/Debug behaviors — always allocate fresh Str
-                "to_string",
-                "debug_string",
-                // String transform methods — allocate new string
-                "to_uppercase",
-                "to_lowercase",
-                "to_ascii_uppercase",
-                "to_ascii_lowercase",
-                "trim",
-                "trim_start",
-                "trim_end",
-                "trim_left",
-                "trim_right",
-                "replace",
-                "replace_first",
-                "replacen",
-                "repeat",
-                "pad_left",
-                "pad_right",
-                "pad_start",
-                "pad_end",
-                "reverse",
-                "center",
-                "substring",
-                "substr",
-                // Encoding methods
-                "encode",
-                "decode",
-                // Format methods
-                "format",
-                "to_hex",
-                "to_binary",
-                "to_octal",
-                // Join/collect
-                "join",
-                "collect",
-                // Duplicate (creates owned copy)
-                "duplicate",
-            };
-            if (allocating_methods.count(method)) {
+            if (allocating_functions_.count(mcall.method)) {
                 auto sem = infer_expr_type(expr);
                 if (sem && sem->is<types::PrimitiveType>() &&
                     sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {

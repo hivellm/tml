@@ -300,10 +300,33 @@ void LLVMIRGen::finalize_runtime_decls() {
         }
     }
 
+    // Collect functions already declared/defined in the current IR output
+    // to avoid emitting duplicate declarations (redefinition errors).
+    std::unordered_set<std::string> already_in_ir;
+    if (!options_.library_ir_only) {
+        std::string current_ir = output_.str();
+        std::istringstream stream(current_ir);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (line.find("define ") != std::string::npos ||
+                line.find("declare ") != std::string::npos) {
+                auto at_pos = line.find('@');
+                if (at_pos != std::string::npos) {
+                    size_t start = at_pos + 1;
+                    size_t end = start;
+                    while (end < line.size() &&
+                           (std::isalnum(line[end]) || line[end] == '_' || line[end] == '.'))
+                        end++;
+                    already_in_ir.insert(line.substr(start, end - start));
+                }
+            }
+        }
+    }
+
     std::ostringstream decls;
     decls << "; Runtime declarations (on-demand)\n";
     for (const auto& entry : runtime_catalog_) {
-        if (needed_runtime_decls_.count(entry.name)) {
+        if (needed_runtime_decls_.count(entry.name) && !already_in_ir.count(entry.name)) {
             decls << entry.ir_text << "\n";
         }
     }

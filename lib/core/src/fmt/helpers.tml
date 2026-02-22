@@ -9,6 +9,7 @@
 
 /// Converts an I64 to its decimal string representation.
 /// Pure TML: extracts digits via % 10 and builds string with concatenation.
+@allocates
 pub func i64_to_str(value: I64) -> Str {
     if value == 0 {
         return "0"
@@ -43,6 +44,7 @@ pub func i64_to_str(value: I64) -> Str {
 }
 
 /// Converts a U64 to its decimal string representation.
+@allocates
 pub func u64_to_str(value: U64) -> Str {
     if value == 0 {
         return "0"
@@ -69,31 +71,37 @@ func u64_digit_char(d: U64) -> Str {
 }
 
 /// Converts an I8 to string (widen to I64, then convert).
+@allocates
 pub func i8_to_str(value: I8) -> Str {
     return i64_to_str(value as I64)
 }
 
 /// Converts an I16 to string.
+@allocates
 pub func i16_to_str(value: I16) -> Str {
     return i64_to_str(value as I64)
 }
 
 /// Converts an I32 to string.
+@allocates
 pub func i32_to_str(value: I32) -> Str {
     return i64_to_str(value as I64)
 }
 
 /// Converts a U8 to string.
+@allocates
 pub func u8_to_str(value: U8) -> Str {
     return u64_to_str(value as U64)
 }
 
 /// Converts a U16 to string.
+@allocates
 pub func u16_to_str(value: U16) -> Str {
     return u64_to_str(value as U64)
 }
 
 /// Converts a U32 to string.
+@allocates
 pub func u32_to_str(value: U32) -> Str {
     return u64_to_str(value as U64)
 }
@@ -103,21 +111,25 @@ pub func u32_to_str(value: U32) -> Str {
 // ============================================================================
 
 /// Converts a U8 to its binary string representation (without prefix).
+@allocates
 pub func u8_to_binary_str(n: U8) -> Str {
     return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U16 to its binary string representation (without prefix).
+@allocates
 pub func u16_to_binary_str(n: U16) -> Str {
     return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U32 to its binary string representation (without prefix).
+@allocates
 pub func u32_to_binary_str(n: U32) -> Str {
     return u64_to_binary_str(n as U64)
 }
 
 /// Converts a U64 to its binary string representation (without prefix).
+@allocates
 pub func u64_to_binary_str(n: U64) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
@@ -134,21 +146,25 @@ pub func u64_to_binary_str(n: U64) -> Str {
 }
 
 /// Converts an I8 to its binary string representation (two's complement).
+@allocates
 pub func i8_to_binary_str(n: I8) -> Str {
     return u8_to_binary_str(n as U8)
 }
 
 /// Converts an I16 to its binary string representation (two's complement).
+@allocates
 pub func i16_to_binary_str(n: I16) -> Str {
     return u16_to_binary_str(n as U16)
 }
 
 /// Converts an I32 to its binary string representation (two's complement).
+@allocates
 pub func i32_to_binary_str(n: I32) -> Str {
     return u32_to_binary_str(n as U32)
 }
 
 /// Converts an I64 to its binary string representation (two's complement).
+@allocates
 pub func i64_to_binary_str(n: I64) -> Str {
     return u64_to_binary_str(n as U64)
 }
@@ -158,6 +174,7 @@ pub func i64_to_binary_str(n: I64) -> Str {
 // ============================================================================
 
 /// Converts a U64 to its octal string representation (without prefix).
+@allocates
 pub func u64_to_octal_str(n: U64) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
@@ -176,6 +193,7 @@ pub func u64_to_octal_str(n: U64) -> Str {
 
 /// Converts a U64 to its hexadecimal string representation (without prefix).
 /// If `upper` is true, uses uppercase letters (A-F), otherwise lowercase (a-f).
+@allocates
 pub func u64_to_hex_str(n: U64, upper: Bool) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
@@ -193,6 +211,7 @@ pub func u64_to_hex_str(n: U64, upper: Bool) -> Str {
 // ============================================================================
 
 /// Converts a decimal digit (0-9) to its character representation.
+@allocates
 pub func digit_to_char(d: I32) -> Str {
     when d {
         0 => return "0",
@@ -211,6 +230,7 @@ pub func digit_to_char(d: I32) -> Str {
 
 /// Converts a hexadecimal digit (0-15) to its character representation.
 /// If `upper` is true, uses uppercase letters (A-F), otherwise lowercase (a-f).
+@allocates
 pub func hex_digit(d: I32, upper: Bool) -> Str {
     when d {
         0 => return "0",
@@ -245,6 +265,7 @@ pub func string_len(s: Str) -> I64 {
 }
 
 /// Converts a character (byte value) to a single-character string (pure TML).
+@allocates
 pub func char_to_str(c: Char) -> Str {
     let code: U32 = c as U32
     let byte: U8 = code as U8
@@ -257,6 +278,7 @@ pub func char_to_str(c: Char) -> Str {
 }
 
 /// Repeats a string n times.
+@allocates
 pub func repeat_string(s: Str, n: I64) -> Str {
     if n <= 0 {
         return ""
@@ -271,11 +293,13 @@ pub func repeat_string(s: Str, n: I64) -> Str {
 }
 
 /// Returns a slice of a string from start to end (exclusive).
+@allocates
 pub func string_slice(s: Str, start: I64, end: I64) -> Str {
     return str::substring(s, start, end)
 }
 
 /// Pads a string on the left to reach the specified width.
+@allocates
 pub func pad_left(s: Str, width: I64, fill: Str) -> Str {
     let len: I64 = string_len(s)
     if len >= width {
@@ -286,6 +310,7 @@ pub func pad_left(s: Str, width: I64, fill: Str) -> Str {
 }
 
 /// Pads a string on the right to reach the specified width.
+@allocates
 pub func pad_right(s: Str, width: I64, fill: Str) -> Str {
     let len: I64 = string_len(s)
     if len >= width {
@@ -296,6 +321,7 @@ pub func pad_right(s: Str, width: I64, fill: Str) -> Str {
 }
 
 /// Pads a string on both sides to center it within the specified width.
+@allocates
 pub func pad_center(s: Str, width: I64, fill: Str) -> Str {
     let len: I64 = string_len(s)
     if len >= width {
@@ -313,6 +339,7 @@ pub func pad_center(s: Str, width: I64, fill: Str) -> Str {
 
 /// Formats an integer with a sign prefix based on sign mode.
 /// sign_mode: 0 = minus only, 1 = plus/minus, 2 = space/minus
+@allocates
 pub func format_with_sign(value: I64, sign_mode: I32) -> Str {
     let is_negative: Bool = value < 0
     let abs_value: I64 = if is_negative { 0 - value } else { value }
@@ -348,6 +375,7 @@ pub func format_with_sign(value: I64, sign_mode: I32) -> Str {
 }
 
 /// Escapes special characters in a string for debug output.
+@allocates
 pub func escape_string(s: Str) -> Str {
     // For now, just return the string as-is
     // A full implementation would escape \n, \t, \r, \\, \", etc.
@@ -355,6 +383,7 @@ pub func escape_string(s: Str) -> Str {
 }
 
 /// Escapes a single character for debug output.
+@allocates
 pub func escape_char(c: Char) -> Str {
     // For now, just convert to string
     // A full implementation would escape special characters

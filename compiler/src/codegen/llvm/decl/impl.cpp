@@ -161,6 +161,14 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         return;
     }
 
+    // Record @allocates decorator for Phase 4b Str temp tracking
+    for (const auto& decorator : method.decorators) {
+        if (decorator.name == "allocates") {
+            allocating_functions_.insert(method.name);
+            break;
+        }
+    }
+
     std::string method_name = type_name + "_" + method.name;
 
     // Skip if already generated (can happen with re-exports across modules)

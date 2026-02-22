@@ -46,6 +46,7 @@ use core::fmt::helpers::{
 
 /// Converts an `I8` to its decimal string representation.
 impl Display for I8 {
+    @allocates
     pub func to_string(this) -> Str {
         return i8_to_str(this)
     }
@@ -53,6 +54,7 @@ impl Display for I8 {
 
 /// Converts an `I16` to its decimal string representation.
 impl Display for I16 {
+    @allocates
     pub func to_string(this) -> Str {
         return i16_to_str(this)
     }
@@ -60,6 +62,7 @@ impl Display for I16 {
 
 /// Converts an `I32` to its decimal string representation.
 impl Display for I32 {
+    @allocates
     pub func to_string(this) -> Str {
         return i32_to_str(this)
     }
@@ -67,6 +70,7 @@ impl Display for I32 {
 
 /// Converts an `I64` to its decimal string representation.
 impl Display for I64 {
+    @allocates
     pub func to_string(this) -> Str {
         return i64_to_str(this)
     }
@@ -74,6 +78,7 @@ impl Display for I64 {
 
 /// Converts a `U8` to its decimal string representation.
 impl Display for U8 {
+    @allocates
     pub func to_string(this) -> Str {
         return u8_to_str(this)
     }
@@ -81,6 +86,7 @@ impl Display for U8 {
 
 /// Converts a `U16` to its decimal string representation.
 impl Display for U16 {
+    @allocates
     pub func to_string(this) -> Str {
         return u16_to_str(this)
     }
@@ -88,6 +94,7 @@ impl Display for U16 {
 
 /// Converts a `U32` to its decimal string representation.
 impl Display for U32 {
+    @allocates
     pub func to_string(this) -> Str {
         return u32_to_str(this)
     }
@@ -95,6 +102,7 @@ impl Display for U32 {
 
 /// Converts a `U64` to its decimal string representation.
 impl Display for U64 {
+    @allocates
     pub func to_string(this) -> Str {
         return u64_to_str(this)
     }
@@ -102,6 +110,7 @@ impl Display for U64 {
 
 /// Converts an `F32` to its string representation.
 impl Display for F32 {
+    @allocates
     pub func to_string(this) -> Str {
         return lowlevel { f32_to_string(this) }
     }
@@ -109,6 +118,7 @@ impl Display for F32 {
 
 /// Converts an `F64` to its string representation.
 impl Display for F64 {
+    @allocates
     pub func to_string(this) -> Str {
         return lowlevel { f64_to_string(this) }
     }
@@ -133,6 +143,7 @@ impl Display for Str {
 
 /// Converts a `Char` to a one-character string.
 impl Display for Char {
+    @allocates
     pub func to_string(this) -> Str {
         return char_to_str(this)
     }
@@ -151,6 +162,7 @@ impl Display for Unit {
 
 /// Debug output for `I8` (same as Display for numbers).
 impl Debug for I8 {
+    @allocates
     pub func debug_string(this) -> Str {
         return i8_to_str(this)
     }
@@ -158,6 +170,7 @@ impl Debug for I8 {
 
 /// Debug output for `I16`.
 impl Debug for I16 {
+    @allocates
     pub func debug_string(this) -> Str {
         return i16_to_str(this)
     }
@@ -165,6 +178,7 @@ impl Debug for I16 {
 
 /// Debug output for `I32`.
 impl Debug for I32 {
+    @allocates
     pub func debug_string(this) -> Str {
         return i32_to_str(this)
     }
@@ -172,6 +186,7 @@ impl Debug for I32 {
 
 /// Debug output for `I64`.
 impl Debug for I64 {
+    @allocates
     pub func debug_string(this) -> Str {
         return i64_to_str(this)
     }
@@ -179,6 +194,7 @@ impl Debug for I64 {
 
 /// Debug output for `U8`.
 impl Debug for U8 {
+    @allocates
     pub func debug_string(this) -> Str {
         return u8_to_str(this)
     }
@@ -186,6 +202,7 @@ impl Debug for U8 {
 
 /// Debug output for `U16`.
 impl Debug for U16 {
+    @allocates
     pub func debug_string(this) -> Str {
         return u16_to_str(this)
     }
@@ -193,6 +210,7 @@ impl Debug for U16 {
 
 /// Debug output for `U32`.
 impl Debug for U32 {
+    @allocates
     pub func debug_string(this) -> Str {
         return u32_to_str(this)
     }
@@ -200,6 +218,7 @@ impl Debug for U32 {
 
 /// Debug output for `U64`.
 impl Debug for U64 {
+    @allocates
     pub func debug_string(this) -> Str {
         return u64_to_str(this)
     }
@@ -207,6 +226,7 @@ impl Debug for U64 {
 
 /// Debug output for `F32`.
 impl Debug for F32 {
+    @allocates
     pub func debug_string(this) -> Str {
         return lowlevel { f32_to_string(this) }
     }
@@ -214,6 +234,7 @@ impl Debug for F32 {
 
 /// Debug output for `F64`.
 impl Debug for F64 {
+    @allocates
     pub func debug_string(this) -> Str {
         return lowlevel { f64_to_string(this) }
     }
@@ -231,6 +252,7 @@ impl Debug for Bool {
 
 /// Debug output for `Str` (wraps in double quotes).
 impl Debug for Str {
+    @allocates
     pub func debug_string(this) -> Str {
         // Debug output includes quotes
         return "\"" + this + "\""
@@ -239,6 +261,7 @@ impl Debug for Str {
 
 /// Debug output for `Char` (wraps in single quotes).
 impl Debug for Char {
+    @allocates
     pub func debug_string(this) -> Str {
         return "'" + char_to_str(this) + "'"
     }
@@ -257,6 +280,7 @@ impl Debug for Unit {
 
 /// Display for `Maybe[T]`: `"Just(value)"` or `"Nothing"`.
 impl[T: Display] Display for Maybe[T] {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Just(val) => return "Just(" + val.to_string() + ")",
@@ -267,6 +291,7 @@ impl[T: Display] Display for Maybe[T] {
 
 /// Debug for `Maybe[T]`: `"Just(debug)"` or `"Nothing"`.
 impl[T: Debug] Debug for Maybe[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Just(val) => return "Just(" + val.debug_string() + ")",
@@ -281,6 +306,7 @@ impl[T: Debug] Debug for Maybe[T] {
 
 /// Display for `Outcome[T, E]`: `"Ok(value)"` or `"Err(error)"`.
 impl[T: Display, E: Display] Display for Outcome[T, E] {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Ok(val) => return "Ok(" + val.to_string() + ")",
@@ -291,6 +317,7 @@ impl[T: Display, E: Display] Display for Outcome[T, E] {
 
 /// Debug for `Outcome[T, E]`: `"Ok(debug)"` or `"Err(debug)"`.
 impl[T: Debug, E: Debug] Debug for Outcome[T, E] {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Ok(val) => return "Ok(" + val.debug_string() + ")",

@@ -90,6 +90,11 @@ auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, 
     skip_newlines();
 
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Parse decorators before visibility (e.g., @allocates pub func ...)
+        auto method_decos_result = parse_decorators();
+        if (is_err(method_decos_result))
+            return unwrap_err(method_decos_result);
+        auto method_decorators = std::move(unwrap(method_decos_result));
         auto method_vis = parse_visibility();
 
         // Check for associated type binding: type Name = ConcreteType or type Name[T] =
@@ -135,7 +140,7 @@ auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, 
             auto& const_decl = unwrap(const_result)->as<ConstDecl>();
             constants.push_back(std::move(const_decl));
         } else {
-            auto func_result = parse_func_decl(method_vis);
+            auto func_result = parse_func_decl(method_vis, std::move(method_decorators));
             if (is_err(func_result))
                 return func_result;
 

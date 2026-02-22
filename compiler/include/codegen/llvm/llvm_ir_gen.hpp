@@ -545,6 +545,11 @@ private:
     void
     consume_str_temp_if_arg(const std::string& reg); // Remove specific temp (passed as call arg)
 
+    // @allocates decorator tracking
+    // Functions/methods marked @allocates are known to return freshly heap-allocated values.
+    // Used by Phase 4b to auto-free Str temporaries at statement end.
+    std::unordered_set<std::string> allocating_functions_;
+
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
     std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)
