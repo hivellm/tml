@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (85%) — Phases 1-9, 11, 12 complete. Phase 10, 13-17 not started
+**Status**: In Progress (90%) — Phases 1-12 complete. Phase 10 (SQLite), 13 (Mock/Property), 14 (Integration) not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -215,52 +215,26 @@
 - [x] 12.1.5 Implement `Matches`: `has`, `get_str`, `get_positional`, `positional_count`
 - [x] 12.1.6 Write unit tests (24 tests: basic 4, positional 3, errors 5, defaults 4, help 4, mixed 4)
 
-## Phase 13: Template Engine
-
-> **Priority**: Low | **File**: `lib/std/src/template.tml`
-
-- [ ] 13.1.1 Design template syntax: `{{ variable }}`, `{% if %}`, `{% for %}`
-- [ ] 13.1.2 Implement template parser and renderer
-- [ ] 13.1.3 Write unit tests
-
-## Phase 14: Image I/O
-
-> **Priority**: Low | **Dir**: `lib/std/src/image/`
-
-- [ ] 14.1.1 Design `Image` struct: width, height, pixel format
-- [ ] 14.1.2 Implement PNG decode/encode (uses `std::zlib`)
-- [ ] 14.1.3 Implement JPEG decode/encode (baseline DCT)
-- [ ] 14.1.4 Write unit tests
-
-## Phase 15: Internationalization
-
-> **Priority**: Low | **File**: `lib/std/src/i18n.tml`
-
-- [ ] 15.1.1 Implement `Locale::current()`, `Locale::from_tag(tag)` (BCP 47)
-- [ ] 15.1.2 Implement locale-aware number, date, currency formatting
-- [ ] 15.1.3 Implement string collation
-- [ ] 15.1.4 Write unit tests
-
-## Phase 16: Test Framework — Mock and Property Testing
+## Phase 13: Test Framework — Mock and Property Testing
 
 > **Priority**: Medium
 
-### 16.1 Mocking Framework (`lib/test/src/mock.tml`)
-- [ ] 16.1.1 Design `Mock[T]` type for creating mock objects from behaviors
-- [ ] 16.1.2 Implement `when(method).returns(value)`, call counting, `verify()`
-- [ ] 16.1.3 Write unit tests
+### 13.1 Mocking Framework (`lib/test/src/mock.tml`)
+- [ ] 13.1.1 Design `Mock[T]` type for creating mock objects from behaviors
+- [ ] 13.1.2 Implement `when(method).returns(value)`, call counting, `verify()`
+- [ ] 13.1.3 Write unit tests
 
-### 16.2 Property-Based Testing (`lib/test/src/property.tml`)
-- [ ] 16.2.1 Design `Arbitrary[T]` behavior — generate random values
-- [ ] 16.2.2 Implement `prop_test(name, f)` with random inputs
-- [ ] 16.2.3 Implement shrinking — minimize failing input
-- [ ] 16.2.4 Write unit tests
+### 13.2 Property-Based Testing (`lib/test/src/property.tml`)
+- [ ] 13.2.1 Design `Arbitrary[T]` behavior — generate random values
+- [ ] 13.2.2 Implement `prop_test(name, f)` with random inputs
+- [ ] 13.2.3 Implement shrinking — minimize failing input
+- [ ] 13.2.4 Write unit tests
 
-## Phase 17: Integration and Validation
+## Phase 14: Integration and Validation
 
 > **Priority**: High | **Depends on**: All previous phases
 
-- [ ] 17.1.1 Run full test suite with coverage
-- [ ] 17.1.2 Cross-module integration tests
-- [ ] 17.1.3 Update all mod.tml files with new exports
-- [ ] 17.1.4 Update coverage report
+- [ ] 14.1.1 Run full test suite with coverage
+- [ ] 14.1.2 Cross-module integration tests
+- [ ] 14.1.3 Update all mod.tml files with new exports
+- [ ] 14.1.4 Update coverage report
