@@ -672,6 +672,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Emit loop metadata (generic instantiations may contain loops)
         emit_loop_metadata();
 
+        // Final sweep: scan the complete library IR for runtime function references
+        scan_for_runtime_refs(output_.str());
+
         // Finalize runtime declarations and splice into output
         finalize_runtime_decls();
         std::string result = output_.str();
@@ -680,6 +683,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
             auto pos = result.find(placeholder);
             if (pos != std::string::npos) {
                 result.replace(pos, placeholder.size(), deferred_runtime_decls_);
+            }
+        }
+
+        // Update cached_preamble_headers_ with spliced declarations
+        // so capture_library_state() gets the finalized preamble
+        {
+            const std::string placeholder = "; {{RUNTIME_DECLS_PLACEHOLDER}}\n";
+            auto pos = cached_preamble_headers_.find(placeholder);
+            if (pos != std::string::npos) {
+                cached_preamble_headers_.replace(pos, placeholder.size(), deferred_runtime_decls_);
             }
         }
 
@@ -1765,6 +1778,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Emit debug info metadata at the end
     emit_debug_info_footer();
+
+    // Final sweep: scan the complete IR output for any runtime function references
+    // that were missed by emit_line() auto-detection. This catches references emitted
+    // via emit() (which doesn't scan) — notably, void call instructions in call_user.cpp
+    // use emit() for the function name part, bypassing emit_line()'s auto-detection.
+    // Also catches references from generate_pending_instantiations() which generates
+    // library method bodies (e.g., Text::print calling @print) outside the lazy path.
+    scan_for_runtime_refs(output_.str());
 
     // Finalize runtime declarations and splice into output
     finalize_runtime_decls();
