@@ -134,7 +134,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // Reflection intrinsics
         "field_count", "variant_count", "field_name", "field_type_id", "field_offset",
         // Memory copy/set intrinsics
-        "copy_nonoverlapping", "copy", "write_bytes"};
+        "copy_nonoverlapping", "copy", "write_bytes",
+        // SIMD vector intrinsics
+        "simd_load", "simd_store", "simd_extract", "simd_insert", "simd_splat"};
 
     // Extract base name for intrinsic matching - handles qualified paths like
     // "core::intrinsics::sqrt" by extracting just "sqrt"
@@ -160,6 +162,17 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // Function signature lookup (used by some intrinsics for type info)
     auto func_sig = env_.lookup_func(fn_name);
 
+    // Helper: check if a type string is a float type (scalar or vector)
+    // Matches "float", "double", "<N x float>", "<N x double>"
+    auto is_float_type = [](const std::string& t) -> bool {
+        if (t == "float" || t == "double")
+            return true;
+        if (t.starts_with("<") &&
+            (t.find("x float>") != std::string::npos || t.find("x double>") != std::string::npos))
+            return true;
+        return false;
+    };
+
     // ============================================================================
     // Arithmetic Intrinsics
     // ============================================================================
@@ -172,7 +185,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fadd " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = add " + a_type + " " + a + ", " + b);
@@ -191,7 +204,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fsub " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = sub " + a_type + " " + a + ", " + b);
@@ -210,7 +223,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fmul " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = mul " + a_type + " " + a + ", " + b);
@@ -229,7 +242,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fdiv " + a_type + " " + a + ", " + b);
             } else {
                 // Default to signed division for now
@@ -249,7 +262,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = frem " + a_type + " " + a + ", " + b);
             } else {
                 // Default to signed remainder
@@ -268,7 +281,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string a_type = last_expr_type_;
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fneg " + a_type + " " + a);
             } else {
                 emit_line("  " + result + " = sub " + a_type + " 0, " + a);
@@ -291,7 +304,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp oeq " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = icmp eq " + a_type + " " + a + ", " + b);
@@ -310,7 +323,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp one " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = icmp ne " + a_type + " " + a + ", " + b);
@@ -329,7 +342,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp olt " + a_type + " " + a + ", " + b);
             } else {
                 // Default to signed comparison
@@ -349,7 +362,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp ole " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = icmp sle " + a_type + " " + a + ", " + b);
@@ -368,7 +381,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp ogt " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = icmp sgt " + a_type + " " + a + ", " + b);
@@ -387,7 +400,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
 
-            if (a_type == "float" || a_type == "double") {
+            if (is_float_type(a_type)) {
                 emit_line("  " + result + " = fcmp oge " + a_type + " " + a + ", " + b);
             } else {
                 emit_line("  " + result + " = icmp sge " + a_type + " " + a + ", " + b);
@@ -1231,6 +1244,169 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             // Cast would need type argument resolution
             // For now, just return the value
             return val;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // SIMD Vector Intrinsics
+    // ============================================================================
+
+    // Helper lambda: resolve SIMD type name from the first generic type argument [V]
+    auto resolve_simd_from_generics = [&](int arg_index =
+                                              0) -> std::pair<std::string, const SimdTypeInfo*> {
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics &&
+                static_cast<int>(path_expr.generics->args.size()) > arg_index) {
+                const auto& type_arg = path_expr.generics->args[arg_index];
+                if (type_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*type_arg.as_type(), current_type_subs_);
+                    if (resolved && resolved->is<types::NamedType>()) {
+                        const auto& name = resolved->as<types::NamedType>().name;
+                        auto it = simd_types_.find(name);
+                        if (it != simd_types_.end()) {
+                            return {name, &it->second};
+                        }
+                    }
+                }
+            }
+        }
+        return {"", nullptr};
+    };
+
+    // simd_load[V](ptr: ref V) -> V
+    // Loads the entire @simd struct as a raw LLVM vector value.
+    if (intrinsic_name == "simd_load") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+
+            auto [name, info] = resolve_simd_from_generics();
+            if (info) {
+                std::string vec_type = simd_vec_type_str(*info);
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = load " + vec_type + ", ptr " + ptr);
+                last_expr_type_ = vec_type;
+                return result;
+            }
+
+            // Fallback: try to infer from argument's semantic type
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type) {
+                const types::Type* inner_type = nullptr;
+                if (arg_type->is<types::RefType>()) {
+                    inner_type = arg_type->as<types::RefType>().inner.get();
+                }
+                if (inner_type && inner_type->is<types::NamedType>()) {
+                    const auto& sname = inner_type->as<types::NamedType>().name;
+                    auto it = simd_types_.find(sname);
+                    if (it != simd_types_.end()) {
+                        std::string vec_type = simd_vec_type_str(it->second);
+                        std::string result = fresh_reg();
+                        emit_line("  " + result + " = load " + vec_type + ", ptr " + ptr);
+                        last_expr_type_ = vec_type;
+                        return result;
+                    }
+                }
+            }
+        }
+        return "0";
+    }
+
+    // simd_store[V](ptr: mut ref V, val: V)
+    // Stores a raw LLVM vector value back to a @simd struct.
+    if (intrinsic_name == "simd_store") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+
+            // If val_type is already a vector type string, use it directly
+            if (val_type.starts_with("<")) {
+                emit_line("  store " + val_type + " " + val + ", ptr " + ptr);
+            } else {
+                // Resolve from generics
+                auto [name, info] = resolve_simd_from_generics();
+                if (info) {
+                    std::string vec_type = simd_vec_type_str(*info);
+                    emit_line("  store " + vec_type + " " + val + ", ptr " + ptr);
+                }
+            }
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // simd_extract[V, T](vec: V, idx: I32) -> T
+    // Extracts a single element from a SIMD vector by lane index.
+    if (intrinsic_name == "simd_extract") {
+        if (call.args.size() >= 2) {
+            std::string vec = gen_expr(*call.args[0]);
+            std::string vec_type = last_expr_type_; // Should be "<N x T>" from simd_load
+            std::string idx = gen_expr(*call.args[1]);
+
+            // Parse element type from vector type string "<N x T>" -> "T"
+            std::string elem_type = "i32"; // Default
+            if (vec_type.starts_with("<")) {
+                auto x_pos = vec_type.find(" x ");
+                if (x_pos != std::string::npos) {
+                    elem_type = vec_type.substr(x_pos + 3);
+                    if (elem_type.back() == '>') {
+                        elem_type.pop_back();
+                    }
+                }
+            }
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = extractelement " + vec_type + " " + vec + ", i32 " + idx);
+            last_expr_type_ = elem_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // simd_insert[V, T](vec: V, elem: T, idx: I32) -> V
+    // Inserts a single element into a SIMD vector at lane index.
+    if (intrinsic_name == "simd_insert") {
+        if (call.args.size() >= 3) {
+            std::string vec = gen_expr(*call.args[0]);
+            std::string vec_type = last_expr_type_; // "<N x T>"
+            std::string elem = gen_expr(*call.args[1]);
+            std::string elem_type = last_expr_type_;
+            std::string idx = gen_expr(*call.args[2]);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = insertelement " + vec_type + " " + vec + ", " +
+                      elem_type + " " + elem + ", i32 " + idx);
+            last_expr_type_ = vec_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // simd_splat[V, T](val: T) -> V
+    // Broadcasts a scalar value to all lanes of a SIMD vector.
+    if (intrinsic_name == "simd_splat") {
+        if (!call.args.empty()) {
+            std::string val = gen_expr(*call.args[0]);
+            std::string val_type = last_expr_type_;
+
+            auto [name, info] = resolve_simd_from_generics();
+            if (info) {
+                std::string vec_type = simd_vec_type_str(*info);
+                // Build vector via insertelement chain from undef
+                std::string current = "undef";
+                for (int i = 0; i < info->lane_count; ++i) {
+                    std::string next = fresh_reg();
+                    emit_line("  " + next + " = insertelement " + vec_type + " " + current + ", " +
+                              val_type + " " + val + ", i32 " + std::to_string(i));
+                    current = next;
+                }
+                last_expr_type_ = vec_type;
+                return current;
+            }
         }
         return "0";
     }

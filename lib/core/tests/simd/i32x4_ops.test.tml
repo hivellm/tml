@@ -93,3 +93,23 @@ func test_i32x4_select() -> I32 {
     assert_eq(c.get(3), 40)  // from b (false)
     0
 }
+
+@test
+func test_i32x4_le() -> I32 {
+    let a: I32x4 = I32x4::new(1, 5, 3, 7)
+    let b: I32x4 = I32x4::new(2, 4, 3, 8)
+    let m: Mask4 = a.le(b)
+    // e0: 1<=2 true, e1: 5<=4 false, e2: 3<=3 true, e3: 7<=8 true
+    assert_eq(m.count(), 3)
+    0
+}
+
+@test
+func test_i32x4_ge() -> I32 {
+    let a: I32x4 = I32x4::new(1, 5, 3, 7)
+    let b: I32x4 = I32x4::new(2, 4, 3, 8)
+    let m: Mask4 = a.ge(b)
+    // e0: 1>=2 false, e1: 5>=4 true, e2: 3>=3 true, e3: 7>=8 false
+    assert_eq(m.count(), 2)
+    0
+}

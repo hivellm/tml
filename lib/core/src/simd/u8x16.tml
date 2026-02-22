@@ -1,6 +1,10 @@
 //! 16-lane U8 SIMD vector type.
 
 use core::simd::mask::Mask16
+use core::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert,
+    llvm_add, llvm_sub
+}
 
 /// A 16-lane vector of U8 values (128 bits total).
 @simd
@@ -44,54 +48,38 @@ impl U8x16 {
 
     /// Get lane by index (0-15). Returns 0 for out-of-bounds.
     pub func get(this, idx: I32) -> U8 {
-        if idx == 0 { return this.e0 }
-        if idx == 1 { return this.e1 }
-        if idx == 2 { return this.e2 }
-        if idx == 3 { return this.e3 }
-        if idx == 4 { return this.e4 }
-        if idx == 5 { return this.e5 }
-        if idx == 6 { return this.e6 }
-        if idx == 7 { return this.e7 }
-        if idx == 8 { return this.e8 }
-        if idx == 9 { return this.e9 }
-        if idx == 10 { return this.e10 }
-        if idx == 11 { return this.e11 }
-        if idx == 12 { return this.e12 }
-        if idx == 13 { return this.e13 }
-        if idx == 14 { return this.e14 }
-        if idx == 15 { return this.e15 }
-        return 0 as U8
+        if idx < 0 or idx > 15 { return 0 as U8 }
+        lowlevel {
+            let v = simd_load[U8x16](ref this)
+            return simd_extract[U8x16, U8](v, idx)
+        }
     }
 
     // -- Arithmetic --
 
     pub func add(this, other: U8x16) -> U8x16 {
-        return U8x16 {
-            e0: this.e0 + other.e0, e1: this.e1 + other.e1,
-            e2: this.e2 + other.e2, e3: this.e3 + other.e3,
-            e4: this.e4 + other.e4, e5: this.e5 + other.e5,
-            e6: this.e6 + other.e6, e7: this.e7 + other.e7,
-            e8: this.e8 + other.e8, e9: this.e9 + other.e9,
-            e10: this.e10 + other.e10, e11: this.e11 + other.e11,
-            e12: this.e12 + other.e12, e13: this.e13 + other.e13,
-            e14: this.e14 + other.e14, e15: this.e15 + other.e15
+        lowlevel {
+            let a = simd_load[U8x16](ref this)
+            let b = simd_load[U8x16](ref other)
+            let r = llvm_add(a, b)
+            var result: U8x16 = U8x16::zero()
+            simd_store[U8x16](mut ref result, r)
+            return result
         }
     }
 
     pub func sub(this, other: U8x16) -> U8x16 {
-        return U8x16 {
-            e0: this.e0 - other.e0, e1: this.e1 - other.e1,
-            e2: this.e2 - other.e2, e3: this.e3 - other.e3,
-            e4: this.e4 - other.e4, e5: this.e5 - other.e5,
-            e6: this.e6 - other.e6, e7: this.e7 - other.e7,
-            e8: this.e8 - other.e8, e9: this.e9 - other.e9,
-            e10: this.e10 - other.e10, e11: this.e11 - other.e11,
-            e12: this.e12 - other.e12, e13: this.e13 - other.e13,
-            e14: this.e14 - other.e14, e15: this.e15 - other.e15
+        lowlevel {
+            let a = simd_load[U8x16](ref this)
+            let b = simd_load[U8x16](ref other)
+            let r = llvm_sub(a, b)
+            var result: U8x16 = U8x16::zero()
+            simd_store[U8x16](mut ref result, r)
+            return result
         }
     }
 
-    // -- Comparison --
+    // -- Comparison (scalar — returns Mask16) --
 
     pub func eq(this, other: U8x16) -> Mask16 {
         return Mask16 {
@@ -109,10 +97,27 @@ impl U8x16 {
     // -- Horizontal --
 
     pub func sum(this) -> U8 {
-        return this.e0 + this.e1 + this.e2 + this.e3
-             + this.e4 + this.e5 + this.e6 + this.e7
-             + this.e8 + this.e9 + this.e10 + this.e11
-             + this.e12 + this.e13 + this.e14 + this.e15
+        lowlevel {
+            let v = simd_load[U8x16](ref this)
+            let e0 = simd_extract[U8x16, U8](v, 0)
+            let e1 = simd_extract[U8x16, U8](v, 1)
+            let e2 = simd_extract[U8x16, U8](v, 2)
+            let e3 = simd_extract[U8x16, U8](v, 3)
+            let e4 = simd_extract[U8x16, U8](v, 4)
+            let e5 = simd_extract[U8x16, U8](v, 5)
+            let e6 = simd_extract[U8x16, U8](v, 6)
+            let e7 = simd_extract[U8x16, U8](v, 7)
+            let e8 = simd_extract[U8x16, U8](v, 8)
+            let e9 = simd_extract[U8x16, U8](v, 9)
+            let e10 = simd_extract[U8x16, U8](v, 10)
+            let e11 = simd_extract[U8x16, U8](v, 11)
+            let e12 = simd_extract[U8x16, U8](v, 12)
+            let e13 = simd_extract[U8x16, U8](v, 13)
+            let e14 = simd_extract[U8x16, U8](v, 14)
+            let e15 = simd_extract[U8x16, U8](v, 15)
+            return e0 + e1 + e2 + e3 + e4 + e5 + e6 + e7
+                 + e8 + e9 + e10 + e11 + e12 + e13 + e14 + e15
+        }
     }
 }
 

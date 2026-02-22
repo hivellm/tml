@@ -1,6 +1,10 @@
 //! 4-lane F32 SIMD vector type.
 
 use core::simd::mask::Mask4
+use core::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert, simd_splat,
+    llvm_add, llvm_sub, llvm_mul, llvm_div
+}
 
 /// A 4-lane vector of F32 values (128 bits total).
 @simd
@@ -25,60 +29,81 @@ impl F32x4 {
     }
 
     pub func get(this, idx: I32) -> F32 {
-        if idx == 0 { return this.e0 }
-        if idx == 1 { return this.e1 }
-        if idx == 2 { return this.e2 }
-        if idx == 3 { return this.e3 }
-        return 0.0 as F32
+        if idx < 0 or idx > 3 { return 0.0 as F32 }
+        lowlevel {
+            let v = simd_load[F32x4](ref this)
+            return simd_extract[F32x4, F32](v, idx)
+        }
     }
 
     pub func set(this, idx: I32, val: F32) -> F32x4 {
-        var r: F32x4 = F32x4 { e0: this.e0, e1: this.e1, e2: this.e2, e3: this.e3 }
-        if idx == 0 { r.e0 = val }
-        if idx == 1 { r.e1 = val }
-        if idx == 2 { r.e2 = val }
-        if idx == 3 { r.e3 = val }
-        return r
+        lowlevel {
+            let v = simd_load[F32x4](ref this)
+            let w = simd_insert[F32x4, F32](v, val, idx)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, w)
+            return result
+        }
     }
 
     // -- Arithmetic --
 
     pub func add(this, other: F32x4) -> F32x4 {
-        return F32x4 {
-            e0: this.e0 + other.e0, e1: this.e1 + other.e1,
-            e2: this.e2 + other.e2, e3: this.e3 + other.e3
+        lowlevel {
+            let a = simd_load[F32x4](ref this)
+            let b = simd_load[F32x4](ref other)
+            let r = llvm_add(a, b)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, r)
+            return result
         }
     }
 
     pub func sub(this, other: F32x4) -> F32x4 {
-        return F32x4 {
-            e0: this.e0 - other.e0, e1: this.e1 - other.e1,
-            e2: this.e2 - other.e2, e3: this.e3 - other.e3
+        lowlevel {
+            let a = simd_load[F32x4](ref this)
+            let b = simd_load[F32x4](ref other)
+            let r = llvm_sub(a, b)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, r)
+            return result
         }
     }
 
     pub func mul(this, other: F32x4) -> F32x4 {
-        return F32x4 {
-            e0: this.e0 * other.e0, e1: this.e1 * other.e1,
-            e2: this.e2 * other.e2, e3: this.e3 * other.e3
+        lowlevel {
+            let a = simd_load[F32x4](ref this)
+            let b = simd_load[F32x4](ref other)
+            let r = llvm_mul(a, b)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, r)
+            return result
         }
     }
 
     pub func div(this, other: F32x4) -> F32x4 {
-        return F32x4 {
-            e0: this.e0 / other.e0, e1: this.e1 / other.e1,
-            e2: this.e2 / other.e2, e3: this.e3 / other.e3
+        lowlevel {
+            let a = simd_load[F32x4](ref this)
+            let b = simd_load[F32x4](ref other)
+            let r = llvm_div(a, b)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, r)
+            return result
         }
     }
 
     pub func neg(this) -> F32x4 {
-        return F32x4 {
-            e0: (0.0 as F32) - this.e0, e1: (0.0 as F32) - this.e1,
-            e2: (0.0 as F32) - this.e2, e3: (0.0 as F32) - this.e3
+        lowlevel {
+            let z = simd_splat[F32x4, F32](0.0 as F32)
+            let a = simd_load[F32x4](ref this)
+            let r = llvm_sub(z, a)
+            var result: F32x4 = F32x4::zero()
+            simd_store[F32x4](mut ref result, r)
+            return result
         }
     }
 
-    // -- Comparison --
+    // -- Comparison (scalar — returns Mask4) --
 
     pub func eq(this, other: F32x4) -> Mask4 {
         return Mask4 {
@@ -111,23 +136,42 @@ impl F32x4 {
     // -- Horizontal --
 
     pub func sum(this) -> F32 {
-        return this.e0 + this.e1 + this.e2 + this.e3
+        lowlevel {
+            let v = simd_load[F32x4](ref this)
+            let e0 = simd_extract[F32x4, F32](v, 0)
+            let e1 = simd_extract[F32x4, F32](v, 1)
+            let e2 = simd_extract[F32x4, F32](v, 2)
+            let e3 = simd_extract[F32x4, F32](v, 3)
+            return e0 + e1 + e2 + e3
+        }
     }
 
     pub func hmin(this) -> F32 {
-        var m: F32 = this.e0
-        if this.e1 < m { m = this.e1 }
-        if this.e2 < m { m = this.e2 }
-        if this.e3 < m { m = this.e3 }
-        return m
+        lowlevel {
+            let v = simd_load[F32x4](ref this)
+            var m: F32 = simd_extract[F32x4, F32](v, 0)
+            let e1 = simd_extract[F32x4, F32](v, 1)
+            let e2 = simd_extract[F32x4, F32](v, 2)
+            let e3 = simd_extract[F32x4, F32](v, 3)
+            if e1 < m { m = e1 }
+            if e2 < m { m = e2 }
+            if e3 < m { m = e3 }
+            return m
+        }
     }
 
     pub func hmax(this) -> F32 {
-        var m: F32 = this.e0
-        if this.e1 > m { m = this.e1 }
-        if this.e2 > m { m = this.e2 }
-        if this.e3 > m { m = this.e3 }
-        return m
+        lowlevel {
+            let v = simd_load[F32x4](ref this)
+            var m: F32 = simd_extract[F32x4, F32](v, 0)
+            let e1 = simd_extract[F32x4, F32](v, 1)
+            let e2 = simd_extract[F32x4, F32](v, 2)
+            let e3 = simd_extract[F32x4, F32](v, 3)
+            if e1 > m { m = e1 }
+            if e2 > m { m = e2 }
+            if e3 > m { m = e3 }
+            return m
+        }
     }
 
     pub func min(this, other: F32x4) -> F32x4 {

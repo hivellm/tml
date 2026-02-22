@@ -482,3 +482,29 @@ pub func field_type_id[T](index: I64) -> U64
 /// Index must be a compile-time constant less than field_count[T]().
 @intrinsic
 pub func field_offset[T](index: I64) -> I64
+
+// ============================================================================
+// SIMD Vector Intrinsics
+// ============================================================================
+
+/// Load an entire @simd vector as a raw LLVM vector value.
+/// V must be a @simd type. The result is the LLVM vector (e.g., <4 x i32>).
+@intrinsic
+pub func simd_load[V](ptr: ref V) -> V
+
+/// Store a raw LLVM vector value back to a @simd struct.
+@intrinsic
+pub func simd_store[V](ptr: mut ref V, val: V)
+
+/// Extract a single element from a SIMD vector by lane index.
+/// V is the @simd type, T is its element type.
+@intrinsic
+pub func simd_extract[V, T](vec: V, idx: I32) -> T
+
+/// Insert a single element into a SIMD vector at lane index. Returns new vector.
+@intrinsic
+pub func simd_insert[V, T](vec: V, elem: T, idx: I32) -> V
+
+/// Broadcast a scalar value to all lanes of a SIMD vector.
+@intrinsic
+pub func simd_splat[V, T](val: T) -> V

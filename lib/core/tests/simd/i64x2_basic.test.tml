@@ -117,3 +117,24 @@ use core::simd::mask::Mask2
     if r.get(1) != (2 as I64) { return 2 }
     return 0
 }
+
+@test func test_bxor() -> I32 {
+    let a = I64x2::new(0xFF as I64, 0x0F as I64)
+    let b = I64x2::new(0x0F as I64, 0x0F as I64)
+    let c = a.bxor(b)
+    if c.get(0) != (0xF0 as I64) { return 1 }
+    if c.get(1) != (0 as I64) { return 2 }
+    return 0
+}
+
+@test func test_min_max() -> I32 {
+    let a = I64x2::new(3 as I64, 7 as I64)
+    let b = I64x2::new(5 as I64, 2 as I64)
+    let lo = a.min(b)
+    if lo.get(0) != (3 as I64) { return 1 }
+    if lo.get(1) != (2 as I64) { return 2 }
+    let hi = a.max(b)
+    if hi.get(0) != (5 as I64) { return 3 }
+    if hi.get(1) != (7 as I64) { return 4 }
+    return 0
+}

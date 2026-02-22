@@ -1,6 +1,10 @@
 //! 2-lane F64 SIMD vector type.
 
 use core::simd::mask::Mask2
+use core::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert, simd_splat,
+    llvm_add, llvm_sub, llvm_mul, llvm_div
+}
 
 /// A 2-lane vector of F64 values (128 bits total).
 @simd
@@ -23,41 +27,81 @@ impl F64x2 {
     }
 
     pub func get(this, idx: I32) -> F64 {
-        if idx == 0 { return this.e0 }
-        if idx == 1 { return this.e1 }
-        return 0.0
+        if idx < 0 or idx > 1 { return 0.0 }
+        lowlevel {
+            let v = simd_load[F64x2](ref this)
+            return simd_extract[F64x2, F64](v, idx)
+        }
     }
 
     pub func set(this, idx: I32, val: F64) -> F64x2 {
-        var r: F64x2 = F64x2 { e0: this.e0, e1: this.e1 }
-        if idx == 0 { r.e0 = val }
-        if idx == 1 { r.e1 = val }
-        return r
+        lowlevel {
+            let v = simd_load[F64x2](ref this)
+            let w = simd_insert[F64x2, F64](v, val, idx)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, w)
+            return result
+        }
     }
 
     // -- Arithmetic --
 
     pub func add(this, other: F64x2) -> F64x2 {
-        return F64x2 { e0: this.e0 + other.e0, e1: this.e1 + other.e1 }
+        lowlevel {
+            let a = simd_load[F64x2](ref this)
+            let b = simd_load[F64x2](ref other)
+            let r = llvm_add(a, b)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, r)
+            return result
+        }
     }
 
     pub func sub(this, other: F64x2) -> F64x2 {
-        return F64x2 { e0: this.e0 - other.e0, e1: this.e1 - other.e1 }
+        lowlevel {
+            let a = simd_load[F64x2](ref this)
+            let b = simd_load[F64x2](ref other)
+            let r = llvm_sub(a, b)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, r)
+            return result
+        }
     }
 
     pub func mul(this, other: F64x2) -> F64x2 {
-        return F64x2 { e0: this.e0 * other.e0, e1: this.e1 * other.e1 }
+        lowlevel {
+            let a = simd_load[F64x2](ref this)
+            let b = simd_load[F64x2](ref other)
+            let r = llvm_mul(a, b)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, r)
+            return result
+        }
     }
 
     pub func div(this, other: F64x2) -> F64x2 {
-        return F64x2 { e0: this.e0 / other.e0, e1: this.e1 / other.e1 }
+        lowlevel {
+            let a = simd_load[F64x2](ref this)
+            let b = simd_load[F64x2](ref other)
+            let r = llvm_div(a, b)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, r)
+            return result
+        }
     }
 
     pub func neg(this) -> F64x2 {
-        return F64x2 { e0: 0.0 - this.e0, e1: 0.0 - this.e1 }
+        lowlevel {
+            let z = simd_splat[F64x2, F64](0.0)
+            let a = simd_load[F64x2](ref this)
+            let r = llvm_sub(z, a)
+            var result: F64x2 = F64x2::zero()
+            simd_store[F64x2](mut ref result, r)
+            return result
+        }
     }
 
-    // -- Comparison --
+    // -- Comparison (scalar — returns Mask2) --
 
     pub func eq(this, other: F64x2) -> Mask2 {
         return Mask2 { m0: this.e0 == other.e0, m1: this.e1 == other.e1 }
@@ -78,17 +122,32 @@ impl F64x2 {
     // -- Horizontal --
 
     pub func sum(this) -> F64 {
-        return this.e0 + this.e1
+        lowlevel {
+            let v = simd_load[F64x2](ref this)
+            let e0 = simd_extract[F64x2, F64](v, 0)
+            let e1 = simd_extract[F64x2, F64](v, 1)
+            return e0 + e1
+        }
     }
 
     pub func hmin(this) -> F64 {
-        if this.e1 < this.e0 { return this.e1 }
-        return this.e0
+        lowlevel {
+            let v = simd_load[F64x2](ref this)
+            let e0 = simd_extract[F64x2, F64](v, 0)
+            let e1 = simd_extract[F64x2, F64](v, 1)
+            if e1 < e0 { return e1 }
+            return e0
+        }
     }
 
     pub func hmax(this) -> F64 {
-        if this.e1 > this.e0 { return this.e1 }
-        return this.e0
+        lowlevel {
+            let v = simd_load[F64x2](ref this)
+            let e0 = simd_extract[F64x2, F64](v, 0)
+            let e1 = simd_extract[F64x2, F64](v, 1)
+            if e1 > e0 { return e1 }
+            return e0
+        }
     }
 
     pub func min(this, other: F64x2) -> F64x2 {

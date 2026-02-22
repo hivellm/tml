@@ -1,6 +1,11 @@
 //! 4-lane I32 SIMD vector type.
 
 use core::simd::mask::Mask4
+use core::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert, simd_splat,
+    llvm_add, llvm_sub, llvm_mul, llvm_div,
+    llvm_and, llvm_or, llvm_xor, llvm_shl, llvm_shr
+}
 
 /// A 4-lane vector of I32 values (128 bits total).
 @simd
@@ -29,66 +34,87 @@ impl I32x4 {
 
     /// Get lane by index (0-3). Returns 0 for out-of-bounds.
     pub func get(this, idx: I32) -> I32 {
-        if idx == 0 { return this.e0 }
-        if idx == 1 { return this.e1 }
-        if idx == 2 { return this.e2 }
-        if idx == 3 { return this.e3 }
-        return 0
+        if idx < 0 or idx > 3 { return 0 }
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            return simd_extract[I32x4, I32](v, idx)
+        }
     }
 
     /// Return a new vector with lane `idx` replaced by `val`.
     pub func set(this, idx: I32, val: I32) -> I32x4 {
-        var r: I32x4 = I32x4 { e0: this.e0, e1: this.e1, e2: this.e2, e3: this.e3 }
-        if idx == 0 { r.e0 = val }
-        if idx == 1 { r.e1 = val }
-        if idx == 2 { r.e2 = val }
-        if idx == 3 { r.e3 = val }
-        return r
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            let w = simd_insert[I32x4, I32](v, val, idx)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, w)
+            return result
+        }
     }
 
     // -- Arithmetic --
 
     /// Element-wise addition.
     pub func add(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 + other.e0, e1: this.e1 + other.e1,
-            e2: this.e2 + other.e2, e3: this.e3 + other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_add(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise subtraction.
     pub func sub(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 - other.e0, e1: this.e1 - other.e1,
-            e2: this.e2 - other.e2, e3: this.e3 - other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_sub(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise multiplication.
     pub func mul(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 * other.e0, e1: this.e1 * other.e1,
-            e2: this.e2 * other.e2, e3: this.e3 * other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_mul(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise division.
     pub func div(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 / other.e0, e1: this.e1 / other.e1,
-            e2: this.e2 / other.e2, e3: this.e3 / other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_div(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise negation.
     pub func neg(this) -> I32x4 {
-        return I32x4 {
-            e0: 0 - this.e0, e1: 0 - this.e1,
-            e2: 0 - this.e2, e3: 0 - this.e3
+        lowlevel {
+            let z = simd_splat[I32x4, I32](0)
+            let a = simd_load[I32x4](ref this)
+            let r = llvm_sub(z, a)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
-    // -- Comparison --
+    // -- Comparison (scalar — returns Mask4, not a SIMD type) --
 
     /// Element-wise equality.
     pub func eq(this, other: I32x4) -> Mask4 {
@@ -142,41 +168,61 @@ impl I32x4 {
 
     /// Element-wise bitwise AND.
     pub func band(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 & other.e0, e1: this.e1 & other.e1,
-            e2: this.e2 & other.e2, e3: this.e3 & other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_and(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise bitwise OR.
     pub func bor(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 | other.e0, e1: this.e1 | other.e1,
-            e2: this.e2 | other.e2, e3: this.e3 | other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_or(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise bitwise XOR.
     pub func bxor(this, other: I32x4) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 ^ other.e0, e1: this.e1 ^ other.e1,
-            e2: this.e2 ^ other.e2, e3: this.e3 ^ other.e3
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let b = simd_load[I32x4](ref other)
+            let r = llvm_xor(a, b)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise left shift.
     pub func shift_left(this, n: I32) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 << n, e1: this.e1 << n,
-            e2: this.e2 << n, e3: this.e3 << n
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let s = simd_splat[I32x4, I32](n)
+            let r = llvm_shl(a, s)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
     /// Element-wise arithmetic right shift.
     pub func shift_right(this, n: I32) -> I32x4 {
-        return I32x4 {
-            e0: this.e0 >> n, e1: this.e1 >> n,
-            e2: this.e2 >> n, e3: this.e3 >> n
+        lowlevel {
+            let a = simd_load[I32x4](ref this)
+            let s = simd_splat[I32x4, I32](n)
+            let r = llvm_shr(a, s)
+            var result: I32x4 = I32x4::zero()
+            simd_store[I32x4](mut ref result, r)
+            return result
         }
     }
 
@@ -184,30 +230,56 @@ impl I32x4 {
 
     /// Sum of all lanes.
     pub func sum(this) -> I32 {
-        return this.e0 + this.e1 + this.e2 + this.e3
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            let e0 = simd_extract[I32x4, I32](v, 0)
+            let e1 = simd_extract[I32x4, I32](v, 1)
+            let e2 = simd_extract[I32x4, I32](v, 2)
+            let e3 = simd_extract[I32x4, I32](v, 3)
+            return e0 + e1 + e2 + e3
+        }
     }
 
     /// Product of all lanes.
     pub func product(this) -> I32 {
-        return this.e0 * this.e1 * this.e2 * this.e3
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            let e0 = simd_extract[I32x4, I32](v, 0)
+            let e1 = simd_extract[I32x4, I32](v, 1)
+            let e2 = simd_extract[I32x4, I32](v, 2)
+            let e3 = simd_extract[I32x4, I32](v, 3)
+            return e0 * e1 * e2 * e3
+        }
     }
 
     /// Minimum lane value.
     pub func hmin(this) -> I32 {
-        var m: I32 = this.e0
-        if this.e1 < m { m = this.e1 }
-        if this.e2 < m { m = this.e2 }
-        if this.e3 < m { m = this.e3 }
-        return m
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            var m: I32 = simd_extract[I32x4, I32](v, 0)
+            let e1 = simd_extract[I32x4, I32](v, 1)
+            let e2 = simd_extract[I32x4, I32](v, 2)
+            let e3 = simd_extract[I32x4, I32](v, 3)
+            if e1 < m { m = e1 }
+            if e2 < m { m = e2 }
+            if e3 < m { m = e3 }
+            return m
+        }
     }
 
     /// Maximum lane value.
     pub func hmax(this) -> I32 {
-        var m: I32 = this.e0
-        if this.e1 > m { m = this.e1 }
-        if this.e2 > m { m = this.e2 }
-        if this.e3 > m { m = this.e3 }
-        return m
+        lowlevel {
+            let v = simd_load[I32x4](ref this)
+            var m: I32 = simd_extract[I32x4, I32](v, 0)
+            let e1 = simd_extract[I32x4, I32](v, 1)
+            let e2 = simd_extract[I32x4, I32](v, 2)
+            let e3 = simd_extract[I32x4, I32](v, 3)
+            if e1 > m { m = e1 }
+            if e2 > m { m = e2 }
+            if e3 > m { m = e3 }
+            return m
+        }
     }
 
     /// Element-wise minimum.
