@@ -11,11 +11,12 @@ use backtrace::Backtrace
 @test
 func bench_capture_single() -> I32 {
     // Verify single capture completes
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let count: I32 = bt.frame_count()
 
     // Should capture at least 1 frame
     assert(count > 0, "Should capture at least one frame")
+    bt.free()
     return 0
 }
 
@@ -24,7 +25,8 @@ func bench_capture_100x() -> I32 {
     // Verify 100 captures complete quickly
     var i: I32 = 0
     loop (i < 100) {
-        let _bt: Backtrace = Backtrace::capture()
+        var bt: Backtrace = Backtrace::capture()
+        bt.free()
         i = i + 1
     }
     return 0
@@ -33,8 +35,8 @@ func bench_capture_100x() -> I32 {
 @test
 func bench_capture_with_skip() -> I32 {
     // Verify capture_from works
-    let bt0: Backtrace = Backtrace::capture_from(0)
-    let bt2: Backtrace = Backtrace::capture_from(2)
+    var bt0: Backtrace = Backtrace::capture_from(0)
+    var bt2: Backtrace = Backtrace::capture_from(2)
 
     // Skipping frames should result in fewer frames
     let c0: I32 = bt0.frame_count()
@@ -43,6 +45,8 @@ func bench_capture_with_skip() -> I32 {
     assert(c0 > 0, "bt0 should have frames")
     // c2 may be equal if skip removes internal frames only
     assert(c2 >= 0, "bt2 should have non-negative frames")
+    bt0.free()
+    bt2.free()
     return 0
 }
 
@@ -52,7 +56,7 @@ func bench_capture_with_skip() -> I32 {
 
 @test
 func bench_resolve_single() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
 
     // Resolve should complete
     bt.resolve()
@@ -60,12 +64,13 @@ func bench_resolve_single() -> I32 {
     // After resolve, backtrace should be usable
     let s: Str = bt.to_string()
     assert(s.len() > 0, "to_string should produce output")
+    bt.free()
     return 0
 }
 
 @test
 func bench_resolve_idempotent() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
 
     // First resolve
     bt.resolve()
@@ -77,6 +82,7 @@ func bench_resolve_idempotent() -> I32 {
 
     // Results should be identical
     assert_eq(s1, s2, "Idempotent resolve should produce same output")
+    bt.free()
     return 0
 }
 
@@ -85,9 +91,10 @@ func bench_resolve_10x() -> I32 {
     // Verify 10 full resolve cycles complete
     var i: I32 = 0
     loop (i < 10) {
-        let mut bt: Backtrace = Backtrace::capture()
+        var bt: Backtrace = Backtrace::capture()
         bt.resolve()
         let _s: Str = bt.to_string()
+        bt.free()
         i = i + 1
     }
     return 0
@@ -99,17 +106,18 @@ func bench_resolve_10x() -> I32 {
 
 @test
 func bench_frame_count_limit() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let count: I32 = bt.frame_count()
 
     // Frame count should be under the 128 limit
     assert(count < 128, "Frame count should be under 128")
+    bt.free()
     return 0
 }
 
 @test
 func bench_to_string_format() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     bt.resolve()
     let s: Str = bt.to_string()
 
@@ -120,6 +128,7 @@ func bench_to_string_format() -> I32 {
     // Each frame is roughly 50-200 chars, with frame count usually under 50
     // So total should be under 10KB
     assert(len < 10000, "String should be under 10KB")
+    bt.free()
     return 0
 }
 
@@ -170,11 +179,12 @@ func nested_2() -> I32 {
 }
 
 func nested_1() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let count: I32 = bt.frame_count()
 
     // Should capture at least 1 frame (adjusted from 10 due to tail call optimization)
     // In optimized builds, the nested calls may be tail-call optimized away
     assert(count >= 1, "Should capture at least one frame")
+    bt.free()
     return 0
 }

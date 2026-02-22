@@ -234,6 +234,14 @@ impl Backtrace {
         let s: Str = this.to_string()
         print(s)
     }
+
+    /// Frees the native backtrace handle.
+    pub func free(mut this) {
+        if this.handle != null {
+            ffi_backtrace_free(this.handle)
+            this.handle = null
+        }
+    }
 }
 
 // ============================================================================
@@ -262,13 +270,14 @@ pub func resolve_frame(addr: *Unit) -> Maybe[BacktraceSymbol] {
     // Create a temporary backtrace with just this address
     // This is a simplified approach - in a full implementation,
     // we would call the FFI directly for single-address resolution
-    let bt: Backtrace = Backtrace::capture_from(0)
+    var bt: Backtrace = Backtrace::capture_from(0)
     if bt.handle == null {
         return Nothing
     }
 
     // For now, return Nothing as single-frame resolution
     // would require additional FFI support
+    bt.free()
     return Nothing
 }
 

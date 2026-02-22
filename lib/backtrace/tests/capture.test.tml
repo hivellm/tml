@@ -20,17 +20,18 @@ use backtrace::symbol::BacktraceSymbol
 
 @test
 func test_capture_returns_backtrace() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let count: I32 = bt.frame_count()
     // On Windows without frame pointers, we may only get 1-2 frames
     assert(count >= 0, "backtrace should not return negative")
+    bt.free()
     return 0
 }
 
 @test
 func test_capture_from_skip() -> I32 {
-    let bt1: Backtrace = Backtrace::capture()
-    let bt2: Backtrace = Backtrace::capture_from(1)
+    var bt1: Backtrace = Backtrace::capture()
+    var bt2: Backtrace = Backtrace::capture_from(1)
 
     let count1: I32 = bt1.frame_count()
     let count2: I32 = bt2.frame_count()
@@ -38,6 +39,8 @@ func test_capture_from_skip() -> I32 {
     // Both should be non-negative
     assert(count1 >= 0, "capture should not return negative")
     assert(count2 >= 0, "capture_from should not return negative")
+    bt1.free()
+    bt2.free()
     return 0
 }
 
@@ -47,7 +50,7 @@ func test_capture_from_skip() -> I32 {
 
 @test
 func test_status_captured() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let status: BacktraceStatus = bt.status()
 
     // After capture, status should be Captured (not resolved yet)
@@ -56,12 +59,13 @@ func test_status_captured() -> I32 {
         BacktraceStatus::Unsupported => {},  // OK if platform doesn't support
         BacktraceStatus::Resolved => assert(false, "should not be resolved yet")
     }
+    bt.free()
     return 0
 }
 
 @test
 func test_status_resolved() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     bt.resolve()
     let status: BacktraceStatus = bt.status()
 
@@ -71,6 +75,7 @@ func test_status_resolved() -> I32 {
         BacktraceStatus::Captured => assert(false, "should be resolved"),
         BacktraceStatus::Unsupported => {}  // OK if platform doesn't support
     }
+    bt.free()
     return 0
 }
 
@@ -80,7 +85,7 @@ func test_status_resolved() -> I32 {
 
 @test
 func test_frame_access() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let count: I32 = bt.frame_count()
 
     // frame() is currently stubbed to return Nothing due to codegen
@@ -95,12 +100,13 @@ func test_frame_access() -> I32 {
             Nothing => {}
         }
     }
+    bt.free()
     return 0
 }
 
 @test
 func test_frame_out_of_bounds() -> I32 {
-    let bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
 
     // Negative index should return Nothing
     let neg: Maybe[BacktraceFrame] = bt.frame(-1)
@@ -116,6 +122,7 @@ func test_frame_out_of_bounds() -> I32 {
         Just(_) => assert(false, "out of bounds should return Nothing"),
         Nothing => {}
     }
+    bt.free()
     return 0
 }
 
@@ -125,30 +132,33 @@ func test_frame_out_of_bounds() -> I32 {
 
 @test
 func test_to_string_produces_output() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let s: Str = bt.to_string()
     let len: I64 = s.len()
     // Even with 0 frames, to_string produces some output
     assert(len > 0, "to_string should produce output")
+    bt.free()
     return 0
 }
 
 @test
 func test_format_short() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let s: Str = bt.format(PrintFmt::Short)
     // Short format should produce some output
     let len: I64 = s.len()
     assert(len >= 0, "short format should work")
+    bt.free()
     return 0
 }
 
 @test
 func test_format_full() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     let s: Str = bt.format(PrintFmt::Full)
     let len: I64 = s.len()
     assert(len > 0, "full format should produce output")
+    bt.free()
     return 0
 }
 
@@ -158,7 +168,7 @@ func test_format_full() -> I32 {
 
 @test
 func test_resolve_is_idempotent() -> I32 {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
 
     // Call resolve multiple times - should not crash
     bt.resolve()
@@ -169,6 +179,7 @@ func test_resolve_is_idempotent() -> I32 {
     let s: Str = bt.to_string()
     let len: I64 = s.len()
     assert(len > 0, "to_string should work after multiple resolves")
+    bt.free()
     return 0
 }
 
@@ -178,17 +189,19 @@ func test_resolve_is_idempotent() -> I32 {
 
 @test
 func test_capture_backtrace_convenience() -> I32 {
-    let bt: Backtrace = capture_backtrace(0)
+    var bt: Backtrace = capture_backtrace(0)
     let count: I32 = bt.frame_count()
     assert(count >= 0, "capture_backtrace should return valid backtrace")
+    bt.free()
     return 0
 }
 
 @test
 func test_trace_frames() -> I32 {
-    let bt: Backtrace = trace_frames()
+    var bt: Backtrace = trace_frames()
     let count: I32 = bt.frame_count()
     assert(count >= 0, "trace_frames should return valid backtrace")
+    bt.free()
     return 0
 }
 

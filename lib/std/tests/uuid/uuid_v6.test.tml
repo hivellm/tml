@@ -31,6 +31,8 @@ func test_uuid_v6_timestamp_nonzero() -> I32 {
 func test_uuid_v6_monotonic_ordering() -> I32 {
     let a = Uuid::v6()
     let b = Uuid::v6()
-    assert(b.compare(a) >= 0, "later v6 should sort >= earlier")
+    // v6 timestamps should be non-decreasing; full UUID comparison
+    // may differ due to random clock_seq within the same tick.
+    assert(b.timestamp() >= a.timestamp(), "later v6 should have >= timestamp")
     0
 }
