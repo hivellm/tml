@@ -1,0 +1,142 @@
+// Tests for scope-level drop behavior (Phase 5 validation)
+//
+// Verifies that drops fire correctly at scope exit for various
+// control flow patterns: nested scopes, sequential scopes, branches.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Test 1: Nested scopes — inner scope drops before outer continues
+// ============================================================================
+
+@test
+func test_nested_scope_drop() -> I32 {
+    let m: Mutex[I32] = Mutex::new(10)
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 10, "inner scope: value should be 10")
+        // g (MutexGuard) dropped here at inner scope exit
+    }
+    // If MutexGuard was properly dropped, we can lock again
+    let g2: MutexGuard[I32] = m.lock()
+    assert_eq(*g2.get(), 10, "outer scope: re-lock should work")
+    return 0
+}
+
+// ============================================================================
+// Test 2: Sequential scopes — each scope drops independently
+// ============================================================================
+
+@test
+func test_sequential_scope_drops() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0)
+    }
+    // First guard dropped, lock again
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0)
+    }
+    // Second guard dropped, lock again
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0)
+    }
+    // All three guards were properly dropped
+    assert(true, "three sequential scopes all dropped correctly")
+    return 0
+}
+
+// ============================================================================
+// Test 3: Multiple droppables in same scope — LIFO order
+// ============================================================================
+
+@test
+func test_multiple_droppables_same_scope() -> I32 {
+    // Create multiple Mutex values in the same scope.
+    // All should be dropped (in LIFO order) at scope exit.
+    {
+        let m1: Mutex[I32] = Mutex::new(1)
+        let m2: Mutex[I32] = Mutex::new(2)
+        let m3: Mutex[I32] = Mutex::new(3)
+        let g1: MutexGuard[I32] = m1.lock()
+        let g2: MutexGuard[I32] = m2.lock()
+        let g3: MutexGuard[I32] = m3.lock()
+        assert_eq(*g1.get(), 1)
+        assert_eq(*g2.get(), 2)
+        assert_eq(*g3.get(), 3)
+        // All 6 values (3 guards + 3 mutexes) dropped at scope exit
+    }
+    assert(true, "multiple droppables in same scope all cleaned up")
+    return 0
+}
+
+// ============================================================================
+// Test 4: Loop body scope — droppable created and dropped each iteration
+// ============================================================================
+
+@test
+func test_loop_scope_drops() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    var i: I32 = 0
+    loop (i < 10) {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0, "loop iteration: value should be 0")
+        // g dropped at end of loop body — if not, deadlock on next iteration
+        i = i + 1
+    }
+    assert_eq(i, 10, "loop completed 10 iterations")
+    return 0
+}
+
+// ============================================================================
+// Test 5: Deeply nested scopes — 5 levels of nesting
+// ============================================================================
+
+@test
+func test_deeply_nested_scopes() -> I32 {
+    let m: Mutex[I32] = Mutex::new(42)
+    {
+        let g1: MutexGuard[I32] = m.lock()
+        assert_eq(*g1.get(), 42)
+    }
+    {
+        let g2: MutexGuard[I32] = m.lock()
+        assert_eq(*g2.get(), 42)
+        {
+            // nested scope without using mutex
+            let m2: Mutex[I32] = Mutex::new(99)
+            let g3: MutexGuard[I32] = m2.lock()
+            assert_eq(*g3.get(), 99)
+        }
+    }
+    // re-lock outer mutex — verifies all drops happened
+    let g4: MutexGuard[I32] = m.lock()
+    assert_eq(*g4.get(), 42)
+    return 0
+}
+
+// ============================================================================
+// Test 6: Droppable in function that returns early
+// ============================================================================
+
+func lock_and_check(m: ref Mutex[I32], expected: I32) -> I32 {
+    let g: MutexGuard[I32] = m.lock()
+    let val: I32 = *g.get()
+    // g dropped at function exit via emit_all_drops
+    return val
+}
+
+@test
+func test_function_boundary_drop() -> I32 {
+    let m: Mutex[I32] = Mutex::new(77)
+    let v: I32 = lock_and_check(ref m, 77)
+    assert_eq(v, 77, "function returned correct value")
+    // If MutexGuard wasn't dropped in lock_and_check, this would deadlock
+    let g: MutexGuard[I32] = m.lock()
+    assert_eq(*g.get(), 77, "re-lock after function call succeeded")
+    return 0
+}

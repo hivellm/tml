@@ -1,0 +1,130 @@
+// Tests for complex ownership patterns (Phase 5 validation)
+//
+// Exercises interactions between nested types, multiple droppable fields,
+// deeply nested wrappers, and function parameter boundaries.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Types with multiple and nested droppable fields
+// ============================================================================
+
+type TripleMutex {
+    a: Mutex[I32],
+    b: Mutex[I32],
+    c: Mutex[I32]
+}
+
+type InnerWrapper {
+    mutex: Mutex[I32],
+    value: I32
+}
+
+type MiddleWrapper {
+    inner: InnerWrapper,
+    extra: I32
+}
+
+type OuterDeep {
+    middle: MiddleWrapper,
+    tag: I32
+}
+
+// ============================================================================
+// Test 1: Struct with 3 droppable fields — all must drop
+// ============================================================================
+
+@test
+func test_triple_mutex_all_dropped() -> I32 {
+    {
+        let tm: TripleMutex = TripleMutex {
+            a: Mutex::new(10),
+            b: Mutex::new(20),
+            c: Mutex::new(30)
+        }
+        let ga: MutexGuard[I32] = tm.a.lock()
+        let gb: MutexGuard[I32] = tm.b.lock()
+        let gc: MutexGuard[I32] = tm.c.lock()
+        assert_eq(*ga.get(), 10)
+        assert_eq(*gb.get(), 20)
+        assert_eq(*gc.get(), 30)
+        // 6 drops: 3 guards + 3 mutexes
+    }
+    assert(true, "triple mutex all dropped without crash")
+    return 0
+}
+
+// ============================================================================
+// Test 2: 3-level nesting — Outer → Middle → Inner → Mutex
+// ============================================================================
+
+@test
+func test_three_level_nested_drop() -> I32 {
+    {
+        let deep: OuterDeep = OuterDeep {
+            middle: MiddleWrapper {
+                inner: InnerWrapper {
+                    mutex: Mutex::new(42),
+                    value: 1
+                },
+                extra: 2
+            },
+            tag: 3
+        }
+        assert_eq(deep.tag, 3)
+        assert_eq(deep.middle.extra, 2)
+        assert_eq(deep.middle.inner.value, 1)
+        // OuterDeep → MiddleWrapper → InnerWrapper → Mutex drops recursively
+    }
+    assert(true, "3-level nested drop succeeded")
+    return 0
+}
+
+// ============================================================================
+// Test 3: Multiple droppable locals created in sequence
+// ============================================================================
+
+@test
+func test_sequential_droppable_creation() -> I32 {
+    {
+        let m1: Mutex[I32] = Mutex::new(1)
+        let m2: Mutex[I32] = Mutex::new(2)
+        let m3: Mutex[I32] = Mutex::new(3)
+        let m4: Mutex[I32] = Mutex::new(4)
+        let m5: Mutex[I32] = Mutex::new(5)
+
+        // Lock and check each
+        let g1: MutexGuard[I32] = m1.lock()
+        assert_eq(*g1.get(), 1)
+        let g2: MutexGuard[I32] = m2.lock()
+        assert_eq(*g2.get(), 2)
+        let g3: MutexGuard[I32] = m3.lock()
+        assert_eq(*g3.get(), 3)
+        let g4: MutexGuard[I32] = m4.lock()
+        assert_eq(*g4.get(), 4)
+        let g5: MutexGuard[I32] = m5.lock()
+        assert_eq(*g5.get(), 5)
+        // 10 drops at scope exit
+    }
+    assert(true, "5 mutex + 5 guard drops succeeded")
+    return 0
+}
+
+// ============================================================================
+// Test 4: Function receives droppable, function boundary drop
+// ============================================================================
+
+func use_mutex(m: Mutex[I32]) -> I32 {
+    let g: MutexGuard[I32] = m.lock()
+    let val: I32 = *g.get()
+    // g and m both dropped at function exit
+    return val
+}
+
+@test
+func test_function_parameter_drop() -> I32 {
+    let result: I32 = use_mutex(Mutex::new(99))
+    assert_eq(result, 99, "function received and dropped mutex correctly")
+    return 0
+}

@@ -1,0 +1,100 @@
+// Stress tests for the automatic drop system (Phase 5 validation)
+//
+// Higher-volume tests to catch edge cases under repetition.
+// If any drop is missed, Mutex tests will deadlock.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Test 1: 100 sequential mutex lock/unlock cycles
+// ============================================================================
+
+@test
+func test_100_mutex_cycles() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    var i: I32 = 0
+    loop (i < 100) {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0)
+        // g dropped at end of loop body — if missed, deadlock next iteration
+        i = i + 1
+    }
+    assert_eq(i, 100, "completed 100 mutex cycles")
+    return 0
+}
+
+// ============================================================================
+// Test 2: 100 independent mutex create-and-drop cycles
+// ============================================================================
+
+@test
+func test_100_mutex_create_destroy() -> I32 {
+    var i: I32 = 0
+    loop (i < 100) {
+        let m: Mutex[I32] = Mutex::new(i)
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), i)
+        // both g and m dropped each iteration
+        i = i + 1
+    }
+    assert_eq(i, 100, "created and destroyed 100 mutexes")
+    return 0
+}
+
+// ============================================================================
+// Test 3: Rapid temporary drops — make_mutex as expression statement
+// ============================================================================
+
+func make_mutex(val: I32) -> Mutex[I32] {
+    return Mutex::new(val)
+}
+
+@test
+func test_rapid_temp_drops() -> I32 {
+    var i: I32 = 0
+    loop (i < 100) {
+        // Returned Mutex is a temporary — should be dropped at statement end
+        make_mutex(i)
+        i = i + 1
+    }
+    assert_eq(i, 100, "100 temporary mutex drops succeeded")
+    return 0
+}
+
+// ============================================================================
+// Test 4: String interpolation stress — 100 heap strings created and freed
+// ============================================================================
+
+@test
+func test_string_interp_stress() -> I32 {
+    var i: I32 = 0
+    loop (i < 100) {
+        let s: Str = "iteration {i}"
+        assert_eq(s.len() > 0, true)
+        // s is heap-allocated (interpolation) — freed at loop body exit
+        i = i + 1
+    }
+    assert_eq(i, 100, "100 string interpolation drops succeeded")
+    return 0
+}
+
+// ============================================================================
+// Test 5: Mixed mutex + string drops in same loop
+// ============================================================================
+
+@test
+func test_mixed_drops_in_loop() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    var i: I32 = 0
+    loop (i < 50) {
+        let g: MutexGuard[I32] = m.lock()
+        let s: Str = "lock {i}"
+        assert_eq(*g.get(), 0)
+        assert_eq(s.len() > 0, true)
+        // g (MutexGuard) and s (heap string) both dropped
+        i = i + 1
+    }
+    assert_eq(i, 50, "50 mixed drop iterations succeeded")
+    return 0
+}

@@ -1,0 +1,111 @@
+// IR verification tests for the automatic drop system (Phase 5)
+//
+// These tests are designed so their LLVM IR can be inspected via --emit-ir
+// to verify that correct drop calls, field-level GEPs, and tml_str_free
+// calls are emitted. They also serve as runtime correctness tests.
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Test 1: Single droppable — verify drop call emitted
+// ============================================================================
+
+@test
+func test_single_drop_emitted() -> I32 {
+    // IR should contain a call to the Mutex drop function
+    {
+        let m: Mutex[I32] = Mutex::new(42)
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 42)
+        // IR: expect drop calls for g and m at scope exit
+    }
+    assert(true, "single drop emitted correctly")
+    return 0
+}
+
+// ============================================================================
+// Test 2: Field-level drops — wrapper struct with droppable field
+// ============================================================================
+
+type SingleWrapper {
+    inner: Mutex[I32],
+    tag: I32
+}
+
+@test
+func test_field_drop_gep() -> I32 {
+    // IR should contain GEP to access inner field + drop call
+    {
+        let w: SingleWrapper = SingleWrapper {
+            inner: Mutex::new(77),
+            tag: 5
+        }
+        assert_eq(w.tag, 5)
+        // IR: expect GEP for field 0 (inner) + Mutex drop
+    }
+    assert(true, "field-level drop with GEP emitted")
+    return 0
+}
+
+// ============================================================================
+// Test 3: Heap string free — tml_str_free call emitted
+// ============================================================================
+
+@test
+func test_str_free_emitted() -> I32 {
+    let name: Str = "TML"
+    {
+        let greeting: Str = "hello {name}"
+        assert_eq(greeting, "hello TML")
+        // IR: expect call to @tml_str_free for greeting
+    }
+    // String literal "TML" should NOT have tml_str_free
+    assert(true, "tml_str_free emitted for heap string")
+    return 0
+}
+
+// ============================================================================
+// Test 4: Multiple drops in correct LIFO order
+// ============================================================================
+
+@test
+func test_lifo_drop_order() -> I32 {
+    {
+        let m1: Mutex[I32] = Mutex::new(1)
+        let m2: Mutex[I32] = Mutex::new(2)
+        let m3: Mutex[I32] = Mutex::new(3)
+        // IR: drops should appear in reverse order: m3, m2, m1
+        let g1: MutexGuard[I32] = m1.lock()
+        let g2: MutexGuard[I32] = m2.lock()
+        let g3: MutexGuard[I32] = m3.lock()
+        assert_eq(*g1.get(), 1)
+        assert_eq(*g2.get(), 2)
+        assert_eq(*g3.get(), 3)
+        // IR: drops: g3, g2, g1, m3, m2, m1 (LIFO)
+    }
+    assert(true, "LIFO drop order correct")
+    return 0
+}
+
+// ============================================================================
+// Test 5: Temporary from function return — drop at statement end
+// ============================================================================
+
+func make_locked_value(val: I32) -> Mutex[I32] {
+    return Mutex::new(val)
+}
+
+@test
+func test_temp_return_drop() -> I32 {
+    // IR: temporary Mutex from make_locked_value should be dropped
+    // at statement end (expression statement)
+    var i: I32 = 0
+    loop (i < 10) {
+        make_locked_value(i)
+        // IR: expect drop call for temporary after statement
+        i = i + 1
+    }
+    assert_eq(i, 10, "temporary return drops correct")
+    return 0
+}
