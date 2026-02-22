@@ -38,7 +38,7 @@ func test_uuid_nil_variant() -> I32 {
 func test_uuid_eq() -> I32 {
     let a = Uuid::nil()
     let b = Uuid::nil()
-    assert(a.eq(b), "two nil UUIDs should be equal")
+    assert(a.eq(ref b), "two nil UUIDs should be equal")
     0
 }
 
@@ -46,7 +46,7 @@ func test_uuid_eq() -> I32 {
 func test_uuid_neq() -> I32 {
     let nil = Uuid::nil()
     let max = Uuid::max()
-    assert(not nil.eq(max), "nil and max should not be equal")
+    assert(not nil.eq(ref max), "nil and max should not be equal")
     0
 }
 

@@ -1,0 +1,117 @@
+use test
+use std::uuid::Uuid
+use core::str
+
+// === Hash behavior (derived) ===
+
+@test
+func test_uuid_hash_same_values() -> I32 {
+    let a = Uuid { hi: 123, lo: 456 }
+    let b = Uuid { hi: 123, lo: 456 }
+    let h1: I64 = a.hash()
+    let h2: I64 = b.hash()
+    assert(h1 == h2, "same UUIDs should have same hash")
+    0
+}
+
+@test
+func test_uuid_hash_different_values() -> I32 {
+    let a = Uuid { hi: 123, lo: 456 }
+    let b = Uuid { hi: 789, lo: 101 }
+    let h1: I64 = a.hash()
+    let h2: I64 = b.hash()
+    assert(h1 != h2, "different UUIDs should have different hashes")
+    0
+}
+
+@test
+func test_uuid_hash_nil_deterministic() -> I32 {
+    let a = Uuid::nil()
+    let b = Uuid::nil()
+    let h1: I64 = a.hash()
+    let h2: I64 = b.hash()
+    assert(h1 == h2, "nil UUID hash should be deterministic")
+    0
+}
+
+// === Ord behavior (derived via cmp) ===
+
+@test
+func test_uuid_cmp_equal() -> I32 {
+    let a = Uuid::nil()
+    let b = Uuid::nil()
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Equal, "nil == nil should be Equal")
+    0
+}
+
+@test
+func test_uuid_cmp_less_by_hi() -> I32 {
+    let a = Uuid { hi: 1, lo: 0 }
+    let b = Uuid { hi: 2, lo: 0 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Less, "hi=1 < hi=2")
+    0
+}
+
+@test
+func test_uuid_cmp_greater_by_hi() -> I32 {
+    let a = Uuid { hi: 5, lo: 0 }
+    let b = Uuid { hi: 3, lo: 0 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Greater, "hi=5 > hi=3")
+    0
+}
+
+@test
+func test_uuid_cmp_less_by_lo() -> I32 {
+    let a = Uuid { hi: 10, lo: 1 }
+    let b = Uuid { hi: 10, lo: 99 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Less, "same hi, lo=1 < lo=99")
+    0
+}
+
+@test
+func test_uuid_cmp_greater_by_lo() -> I32 {
+    let a = Uuid { hi: 10, lo: 99 }
+    let b = Uuid { hi: 10, lo: 1 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Greater, "same hi, lo=99 > lo=1")
+    0
+}
+
+// === Debug behavior (derived) ===
+
+@test
+func test_uuid_debug_string_contains_type() -> I32 {
+    let id = Uuid::nil()
+    let s: Str = id.debug_string()
+    assert(s.contains("Uuid"), "debug_string should contain type name")
+    0
+}
+
+@test
+func test_uuid_debug_string_contains_fields() -> I32 {
+    let id = Uuid { hi: 42, lo: 7 }
+    let s: Str = id.debug_string()
+    assert(s.contains("hi:"), "debug_string should contain field 'hi'")
+    assert(s.contains("lo:"), "debug_string should contain field 'lo'")
+    0
+}
+
+// === Display (manual to_string) ===
+
+@test
+func test_uuid_display_nil() -> I32 {
+    let id = Uuid::nil()
+    assert_eq(id.to_string(), "00000000-0000-0000-0000-000000000000")
+    0
+}
+
+@test
+func test_uuid_display_max() -> I32 {
+    let id = Uuid::max()
+    assert_eq(id.to_string(), "ffffffff-ffff-ffff-ffff-ffffffffffff")
+    0
+}

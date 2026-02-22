@@ -20,7 +20,7 @@ func test_uuid_to_bytes_roundtrip() -> I32 {
     let original = Uuid::v4()
     let buf: Buffer = original.to_bytes()
     when Uuid::from_bytes(ref buf) {
-        Ok(restored) => assert(original.eq(restored), "roundtrip should preserve")
+        Ok(restored) => assert(original.eq(ref restored), "roundtrip should preserve")
         Err(e) => assert(false, "from_bytes should succeed")
     }
     buf.destroy()

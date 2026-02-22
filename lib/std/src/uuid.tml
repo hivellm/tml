@@ -359,11 +359,6 @@ impl Uuid {
         return this.hi == 0 and this.lo == 0
     }
 
-    /// Check equality with another UUID.
-    pub func eq(this, other: Uuid) -> Bool {
-        return this.hi == other.hi and this.lo == other.lo
-    }
-
     /// Compare two UUIDs lexicographically (unsigned byte order).
     /// Returns -1 if this < other, 0 if equal, 1 if this > other.
     pub func compare(this, other: Uuid) -> I32 {
@@ -541,6 +536,47 @@ impl Uuid {
             return parse_bare(s)
         }
         return Err("uuid: invalid length (expected 32 or 36)")
+    }
+}
+
+// ============================================================================
+// Behavior implementations
+// ============================================================================
+
+impl Hash for Uuid {
+    pub func hash(this) -> I64 {
+        return this.hi * 31 + this.lo
+    }
+}
+
+impl PartialEq for Uuid {
+    pub func eq(this, other: ref Uuid) -> Bool {
+        return this.hi == other.hi and this.lo == other.lo
+    }
+}
+
+impl Eq for Uuid {}
+
+impl PartialOrd for Uuid {
+    pub func partial_cmp(this, other: ref Uuid) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for Uuid {
+    pub func cmp(this, other: ref Uuid) -> Ordering {
+        if this.hi < other.hi { return Ordering::Less }
+        if this.hi > other.hi { return Ordering::Greater }
+        if this.lo < other.lo { return Ordering::Less }
+        if this.lo > other.lo { return Ordering::Greater }
+        return Ordering::Equal
+    }
+}
+
+impl Debug for Uuid {
+    @allocates
+    pub func debug_string(this) -> Str {
+        return "Uuid { hi: " + this.hi.to_string() + ", lo: " + this.lo.to_string() + " }"
     }
 }
 

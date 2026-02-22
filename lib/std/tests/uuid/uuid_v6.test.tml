@@ -16,7 +16,7 @@ func test_uuid_v6_version_and_variant() -> I32 {
 func test_uuid_v6_uniqueness() -> I32 {
     let a = Uuid::v6()
     let b = Uuid::v6()
-    assert(not a.eq(b), "two v6 UUIDs should differ")
+    assert(not a.eq(ref b), "two v6 UUIDs should differ")
     0
 }
 

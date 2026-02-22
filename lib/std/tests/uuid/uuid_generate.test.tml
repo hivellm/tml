@@ -18,6 +18,6 @@ func test_uuid_v4_version_and_variant() -> I32 {
 func test_uuid_v4_uniqueness() -> I32 {
     let a = Uuid::v4()
     let b = Uuid::v4()
-    assert(not a.eq(b), "two v4 UUIDs should be different")
+    assert(not a.eq(ref b), "two v4 UUIDs should be different")
     0
 }

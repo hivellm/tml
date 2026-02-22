@@ -15,7 +15,7 @@ func test_uuid_v3_deterministic() -> I32 {
     let ns = Uuid::namespace_dns()
     let a = Uuid::v3(ns, "example.com")
     let b = Uuid::v3(ns, "example.com")
-    assert(a.eq(b), "same namespace+name should produce same UUID")
+    assert(a.eq(ref b), "same namespace+name should produce same UUID")
     0
 }
 
@@ -24,7 +24,7 @@ func test_uuid_v3_different_names() -> I32 {
     let ns = Uuid::namespace_dns()
     let a = Uuid::v3(ns, "example.com")
     let b = Uuid::v3(ns, "example.org")
-    assert(not a.eq(b), "different names should produce different UUIDs")
+    assert(not a.eq(ref b), "different names should produce different UUIDs")
     0
 }
 
@@ -32,6 +32,6 @@ func test_uuid_v3_different_names() -> I32 {
 func test_uuid_v3_different_namespaces() -> I32 {
     let a = Uuid::v3(Uuid::namespace_dns(), "test")
     let b = Uuid::v3(Uuid::namespace_url(), "test")
-    assert(not a.eq(b), "different namespaces should produce different UUIDs")
+    assert(not a.eq(ref b), "different namespaces should produce different UUIDs")
     0
 }

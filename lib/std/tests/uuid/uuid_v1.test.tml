@@ -16,7 +16,7 @@ func test_uuid_v1_version_and_variant() -> I32 {
 func test_uuid_v1_uniqueness() -> I32 {
     let a = Uuid::v1()
     let b = Uuid::v1()
-    assert(not a.eq(b), "two v1 UUIDs should be different")
+    assert(not a.eq(ref b), "two v1 UUIDs should be different")
     0
 }
 
@@ -33,7 +33,7 @@ func test_uuid_v1_parse_roundtrip() -> I32 {
     let s = id.to_string()
     when Uuid::parse(s) {
         Ok(parsed) => {
-            assert(id.eq(parsed), "roundtrip should preserve UUID")
+            assert(id.eq(ref parsed), "roundtrip should preserve UUID")
             assert_eq(parsed.version(), 1)
         }
         Err(e) => assert(false, "parse should succeed")

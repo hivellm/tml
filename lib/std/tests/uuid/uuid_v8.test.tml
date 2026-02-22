@@ -24,7 +24,7 @@ func test_uuid_v8_parse_roundtrip() -> I32 {
     let s = id.to_string()
     when Uuid::parse(s) {
         Ok(parsed) => {
-            assert(id.eq(parsed), "roundtrip should preserve UUID")
+            assert(id.eq(ref parsed), "roundtrip should preserve UUID")
             assert_eq(parsed.version(), 8)
         }
         Err(e) => assert(false, "parse should succeed")
