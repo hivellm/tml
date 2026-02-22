@@ -1,0 +1,38 @@
+use test
+use core::bitset::{BitSet, BitSetIter}
+
+@test
+func test_bitset_iter_empty() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    var it: BitSetIter = bs.iter()
+    assert(it.next().is_nothing())
+    return 0
+}
+
+@test
+func test_bitset_iter_single() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(42)
+    var it: BitSetIter = bs.iter()
+    assert_eq(it.next().unwrap(), 42)
+    assert(it.next().is_nothing())
+    return 0
+}
+
+@test
+func test_bitset_iter_multiple() -> I32 {
+    var bs: BitSet = BitSet::new(256)
+    bs.set(0)
+    bs.set(5)
+    bs.set(63)
+    bs.set(64)
+    bs.set(200)
+    var it: BitSetIter = bs.iter()
+    assert_eq(it.next().unwrap(), 0)
+    assert_eq(it.next().unwrap(), 5)
+    assert_eq(it.next().unwrap(), 63)
+    assert_eq(it.next().unwrap(), 64)
+    assert_eq(it.next().unwrap(), 200)
+    assert(it.next().is_nothing())
+    return 0
+}

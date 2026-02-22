@@ -1,0 +1,37 @@
+use test
+use core::bitset::BitSet
+
+@test
+func test_bitset_new() -> I32 {
+    var bs: BitSet = BitSet::new(256)
+    assert_eq(bs.len(), 256)
+    assert(bs.is_empty())
+    assert_eq(bs.count_ones(), 0)
+    return 0
+}
+
+@test
+func test_bitset_set_get() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(0)
+    bs.set(63)
+    bs.set(64)
+    bs.set(127)
+    assert(bs.get(0))
+    assert(bs.get(63))
+    assert(bs.get(64))
+    assert(bs.get(127))
+    assert(bs.get(1) == false)
+    assert(bs.get(62) == false)
+    return 0
+}
+
+@test
+func test_bitset_clear() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(42)
+    assert(bs.get(42))
+    bs.clear(42)
+    assert(bs.get(42) == false)
+    return 0
+}

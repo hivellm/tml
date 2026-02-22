@@ -1,0 +1,103 @@
+use test
+use core::bitset::BitSet
+
+@test
+func test_bitset_reset() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(10)
+    bs.set(50)
+    bs.set(100)
+    assert_eq(bs.count_ones(), 3)
+    bs.reset()
+    assert_eq(bs.count_ones(), 0)
+    assert(bs.is_empty())
+    return 0
+}
+
+@test
+func test_bitset_set_all() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set_all()
+    assert_eq(bs.count_ones(), 128)
+    assert_eq(bs.count_zeros(), 0)
+    return 0
+}
+
+@test
+func test_bitset_union_with() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(0)
+    a.set(10)
+    b.set(10)
+    b.set(20)
+    a.union_with(ref b)
+    assert(a.get(0))
+    assert(a.get(10))
+    assert(a.get(20))
+    assert_eq(a.count_ones(), 3)
+    return 0
+}
+
+@test
+func test_bitset_intersect_with() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(0)
+    a.set(10)
+    a.set(20)
+    b.set(10)
+    b.set(20)
+    b.set(30)
+    a.intersect_with(ref b)
+    assert(a.get(0) == false)
+    assert(a.get(10))
+    assert(a.get(20))
+    assert(a.get(30) == false)
+    assert_eq(a.count_ones(), 2)
+    return 0
+}
+
+@test
+func test_bitset_difference_with() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(0)
+    a.set(10)
+    a.set(20)
+    b.set(10)
+    b.set(30)
+    a.difference_with(ref b)
+    assert(a.get(0))
+    assert(a.get(10) == false)
+    assert(a.get(20))
+    assert_eq(a.count_ones(), 2)
+    return 0
+}
+
+@test
+func test_bitset_symmetric_difference_with() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(0)
+    a.set(10)
+    b.set(10)
+    b.set(20)
+    a.symmetric_difference_with(ref b)
+    assert(a.get(0))
+    assert(a.get(10) == false)
+    assert(a.get(20))
+    assert_eq(a.count_ones(), 2)
+    return 0
+}
+
+@test
+func test_bitset_invert() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(0)
+    bs.invert()
+    assert(bs.get(0) == false)
+    assert(bs.get(1))
+    assert_eq(bs.count_ones(), 127)
+    return 0
+}

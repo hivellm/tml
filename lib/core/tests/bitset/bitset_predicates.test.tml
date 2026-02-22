@@ -1,0 +1,79 @@
+use test
+use core::bitset::BitSet
+
+@test
+func test_bitset_is_subset() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(10)
+    a.set(20)
+    b.set(10)
+    b.set(20)
+    b.set(30)
+    assert(a.is_subset(ref b))
+    assert(b.is_subset(ref a) == false)
+    return 0
+}
+
+@test
+func test_bitset_is_superset() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(10)
+    a.set(20)
+    a.set(30)
+    b.set(10)
+    b.set(20)
+    assert(a.is_superset(ref b))
+    assert(b.is_superset(ref a) == false)
+    return 0
+}
+
+@test
+func test_bitset_is_disjoint() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    a.set(0)
+    a.set(10)
+    b.set(20)
+    b.set(30)
+    assert(a.is_disjoint(ref b))
+    b.set(10)
+    assert(a.is_disjoint(ref b) == false)
+    return 0
+}
+
+@test
+func test_bitset_equals() -> I32 {
+    var a: BitSet = BitSet::new(128)
+    var b: BitSet = BitSet::new(128)
+    assert(a.equals(ref b))
+    a.set(42)
+    assert(a.equals(ref b) == false)
+    b.set(42)
+    assert(a.equals(ref b))
+    return 0
+}
+
+@test
+func test_bitset_all_ones() -> I32 {
+    var bs: BitSet = BitSet::all_ones(128)
+    assert_eq(bs.count_ones(), 128)
+    assert(bs.get(0))
+    assert(bs.get(63))
+    assert(bs.get(64))
+    assert(bs.get(127))
+    return 0
+}
+
+@test
+func test_bitset_out_of_range() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.set(-1)
+    bs.set(128)
+    bs.set(1000)
+    assert(bs.is_empty())
+    assert(bs.get(-1) == false)
+    assert(bs.get(128) == false)
+    return 0
+}

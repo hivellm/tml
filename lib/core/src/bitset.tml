@@ -1,0 +1,472 @@
+//! BitSet — Compact fixed-size boolean array using 1 bit per value.
+//!
+//! This module provides `BitSet`, a space-efficient data structure for storing
+//! and manipulating sets of non-negative integers. Each value uses 1 bit of
+//! storage instead of 1 byte, making it ideal for large boolean arrays and
+//! set operations.
+//!
+//! # Performance
+//!
+//! - Get/set/clear: O(1)
+//! - Count ones/zeros: O(n/64) using hardware popcount
+//! - Set operations (union, intersection, etc.): O(n/64)
+//! - Memory: ceil(n/64) * 8 bytes + 24 bytes overhead
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::bitset::BitSet
+//!
+//! var bits: BitSet = BitSet::new(256)
+//! bits.set(42)
+//! bits.set(100)
+//! assert(bits.get(42))
+//! assert_eq(bits.count_ones(), 2)
+//! bits.clear(42)
+//! assert(bits.get(42) == false)
+//! ```
+
+// ============================================================================
+// BitSet
+// ============================================================================
+
+/// A fixed-size bitset backed by a heap-allocated array of U64 words.
+///
+/// Bits are indexed from 0 to `capacity - 1`. Each U64 word stores 64 bits.
+/// Out-of-range indices are silently ignored on set/clear and return false on get.
+pub type BitSet {
+    /// Pointer to heap-allocated U64 array (stored as I64 for arithmetic)
+    words: I64,
+    /// Number of U64 words in the array
+    word_count: I64,
+    /// Total number of bits this bitset can hold
+    capacity: I64,
+}
+
+impl BitSet {
+    /// Creates a new bitset with the given capacity (number of bits).
+    ///
+    /// All bits are initially zero (unset). The capacity is rounded up to the
+    /// nearest multiple of 64.
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - Maximum number of bits (minimum: 64)
+    pub func new(capacity: I64) -> BitSet {
+        let cap: I64 = if capacity < 64 { 64 } else { capacity }
+        let wc: I64 = (cap + 63) / 64
+        let byte_size: I64 = wc * 8
+
+        let buf: *Unit = mem_alloc(byte_size)
+        let buf_i64: I64 = buf as I64
+
+        // Zero-initialize all words
+        var i: I64 = 0
+        loop (i < wc) {
+            let word_ptr: *U64 = (buf_i64 + i * 8) as *U64
+            lowlevel { ptr_write(word_ptr, 0_u64) }
+            i = i + 1
+        }
+
+        BitSet {
+            words: buf_i64,
+            word_count: wc,
+            capacity: wc * 64,
+        }
+    }
+
+    /// Creates a bitset with all bits set to 1 up to the given capacity.
+    pub func all_ones(capacity: I64) -> BitSet {
+        var bs: BitSet = BitSet::new(capacity)
+        var i: I64 = 0
+        loop (i < bs.word_count) {
+            let word_ptr: *U64 = (bs.words + i * 8) as *U64
+            lowlevel { ptr_write(word_ptr, 18446744073709551615_u64) }
+            i = i + 1
+        }
+        return bs
+    }
+
+    /// Returns the capacity (maximum number of bits) of this bitset.
+    pub func len(this) -> I64 {
+        return this.capacity
+    }
+
+    /// Returns true if no bits are set.
+    pub func is_empty(this) -> Bool {
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            let word: U64 = lowlevel { ptr_read(word_ptr) }
+            if word != 0_u64 {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Sets the bit at the given index to 1.
+    ///
+    /// If `index` is out of range, this is a no-op.
+    pub func set(mut this, index: I64) {
+        if index < 0 or index >= this.capacity {
+            return
+        }
+        let word_idx: I64 = index / 64
+        let bit_idx: I64 = index - word_idx * 64
+        let word_ptr: *U64 = (this.words + word_idx * 8) as *U64
+        let word: U64 = lowlevel { ptr_read(word_ptr) }
+        let mask: U64 = 1_u64 << (bit_idx as I32)
+        lowlevel { ptr_write(word_ptr, word | mask) }
+    }
+
+    /// Clears the bit at the given index (sets to 0).
+    ///
+    /// If `index` is out of range, this is a no-op.
+    pub func clear(mut this, index: I64) {
+        if index < 0 or index >= this.capacity {
+            return
+        }
+        let word_idx: I64 = index / 64
+        let bit_idx: I64 = index - word_idx * 64
+        let word_ptr: *U64 = (this.words + word_idx * 8) as *U64
+        let word: U64 = lowlevel { ptr_read(word_ptr) }
+        let bit: U64 = 1_u64 << (bit_idx as I32)
+        let mask: U64 = bit ^ 18446744073709551615_u64
+        lowlevel { ptr_write(word_ptr, word & mask) }
+    }
+
+    /// Toggles the bit at the given index (flips 0↔1).
+    ///
+    /// If `index` is out of range, this is a no-op.
+    pub func toggle(mut this, index: I64) {
+        if index < 0 or index >= this.capacity {
+            return
+        }
+        let word_idx: I64 = index / 64
+        let bit_idx: I64 = index - word_idx * 64
+        let word_ptr: *U64 = (this.words + word_idx * 8) as *U64
+        let word: U64 = lowlevel { ptr_read(word_ptr) }
+        let mask: U64 = 1_u64 << (bit_idx as I32)
+        lowlevel { ptr_write(word_ptr, word ^ mask) }
+    }
+
+    /// Returns true if the bit at the given index is set.
+    ///
+    /// Returns false if `index` is out of range.
+    pub func get(this, index: I64) -> Bool {
+        if index < 0 or index >= this.capacity {
+            return false
+        }
+        let word_idx: I64 = index / 64
+        let bit_idx: I64 = index - word_idx * 64
+        let word_ptr: *U64 = (this.words + word_idx * 8) as *U64
+        let word: U64 = lowlevel { ptr_read(word_ptr) }
+        let mask: U64 = 1_u64 << (bit_idx as I32)
+        return (word & mask) != 0_u64
+    }
+
+    /// Returns the number of bits set to 1 (population count).
+    ///
+    /// Uses hardware `ctpop` for O(n/64) performance.
+    pub func count_ones(this) -> I64 {
+        var count: I64 = 0
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            let word: U64 = lowlevel { ptr_read(word_ptr) }
+            let bits: U64 = lowlevel { ctpop(word) }
+            count = count + (bits as I64)
+            i = i + 1
+        }
+        return count
+    }
+
+    /// Returns the number of bits set to 0.
+    pub func count_zeros(this) -> I64 {
+        return this.capacity - this.count_ones()
+    }
+
+    /// Clears all bits (sets everything to 0).
+    pub func reset(mut this) {
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            lowlevel { ptr_write(word_ptr, 0_u64) }
+            i = i + 1
+        }
+    }
+
+    /// Sets all bits to 1.
+    pub func set_all(mut this) {
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            lowlevel { ptr_write(word_ptr, 18446744073709551615_u64) }
+            i = i + 1
+        }
+    }
+
+    /// Returns the index of the first set bit, or -1 if no bits are set.
+    pub func first_set(this) -> I64 {
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            let word: U64 = lowlevel { ptr_read(word_ptr) }
+            if word != 0_u64 {
+                let tz: U64 = lowlevel { cttz(word) }
+                return i * 64 + (tz as I64)
+            }
+            i = i + 1
+        }
+        return -1
+    }
+
+    /// Returns the index of the last set bit, or -1 if no bits are set.
+    pub func last_set(this) -> I64 {
+        var i: I64 = this.word_count - 1
+        loop (i >= 0) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            let word: U64 = lowlevel { ptr_read(word_ptr) }
+            if word != 0_u64 {
+                let lz: U64 = lowlevel { ctlz(word) }
+                return i * 64 + 63 - (lz as I64)
+            }
+            i = i - 1
+        }
+        return -1
+    }
+
+    // ========================================================================
+    // Set Operations
+    // ========================================================================
+
+    /// Performs bitwise OR with another bitset (union).
+    ///
+    /// Both bitsets must have the same capacity. Modifies `this` in place.
+    pub func union_with(mut this, other: ref BitSet) {
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            lowlevel { ptr_write(self_ptr, a | b) }
+            i = i + 1
+        }
+    }
+
+    /// Performs bitwise AND with another bitset (intersection).
+    ///
+    /// Both bitsets must have the same capacity. Modifies `this` in place.
+    pub func intersect_with(mut this, other: ref BitSet) {
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            lowlevel { ptr_write(self_ptr, a & b) }
+            i = i + 1
+        }
+    }
+
+    /// Performs bitwise AND-NOT with another bitset (difference: this - other).
+    ///
+    /// Clears bits in `this` that are set in `other`. Modifies `this` in place.
+    pub func difference_with(mut this, other: ref BitSet) {
+        let all_ones: U64 = 18446744073709551615_u64
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            lowlevel { ptr_write(self_ptr, a & (b ^ all_ones)) }
+            i = i + 1
+        }
+    }
+
+    /// Performs bitwise XOR with another bitset (symmetric difference).
+    ///
+    /// Modifies `this` in place.
+    pub func symmetric_difference_with(mut this, other: ref BitSet) {
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            lowlevel { ptr_write(self_ptr, a ^ b) }
+            i = i + 1
+        }
+    }
+
+    /// Inverts all bits (bitwise NOT).
+    pub func invert(mut this) {
+        let all_ones: U64 = 18446744073709551615_u64
+        var i: I64 = 0
+        loop (i < this.word_count) {
+            let word_ptr: *U64 = (this.words + i * 8) as *U64
+            let word: U64 = lowlevel { ptr_read(word_ptr) }
+            lowlevel { ptr_write(word_ptr, word ^ all_ones) }
+            i = i + 1
+        }
+    }
+
+    // ========================================================================
+    // Set Predicates
+    // ========================================================================
+
+    /// Returns true if `this` is a subset of `other` (all set bits in `this` are also set in `other`).
+    pub func is_subset(this, other: ref BitSet) -> Bool {
+        let all_ones: U64 = 18446744073709551615_u64
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            // a & ~b != 0 means a has bits not in b
+            if (a & (b ^ all_ones)) != 0_u64 {
+                return false
+            }
+            i = i + 1
+        }
+        // Check remaining words in this (beyond other's size)
+        loop (i < this.word_count) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            if a != 0_u64 {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if `this` is a superset of `other`.
+    pub func is_superset(this, other: ref BitSet) -> Bool {
+        return other.is_subset(ref this)
+    }
+
+    /// Returns true if `this` and `other` have no bits in common.
+    pub func is_disjoint(this, other: ref BitSet) -> Bool {
+        let n: I64 = if this.word_count < other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            let self_ptr: *U64 = (this.words + i * 8) as *U64
+            let other_ptr: *U64 = (other.words + i * 8) as *U64
+            let a: U64 = lowlevel { ptr_read(self_ptr) }
+            let b: U64 = lowlevel { ptr_read(other_ptr) }
+            if (a & b) != 0_u64 {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if both bitsets have the same bits set.
+    pub func equals(this, other: ref BitSet) -> Bool {
+        let n: I64 = if this.word_count > other.word_count { this.word_count } else { other.word_count }
+        var i: I64 = 0
+        loop (i < n) {
+            var a: U64 = 0_u64
+            var b: U64 = 0_u64
+            if i < this.word_count {
+                let self_ptr: *U64 = (this.words + i * 8) as *U64
+                a = lowlevel { ptr_read(self_ptr) }
+            }
+            if i < other.word_count {
+                let other_ptr: *U64 = (other.words + i * 8) as *U64
+                b = lowlevel { ptr_read(other_ptr) }
+            }
+            if a != b {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    // ========================================================================
+    // Iterator
+    // ========================================================================
+
+    /// Returns an iterator over the indices of all set bits.
+    pub func iter(this) -> BitSetIter {
+        var first_word: U64 = 0_u64
+        if this.word_count > 0 {
+            let p: *U64 = this.words as *U64
+            first_word = lowlevel { ptr_read(p) }
+        }
+        return BitSetIter {
+            words: this.words,
+            word_count: this.word_count,
+            capacity: this.capacity,
+            word_idx: 0,
+            current_word: first_word,
+        }
+    }
+}
+
+/// Iterator over the set bit indices of a `BitSet`.
+///
+/// Yields each index where the bit is 1, in ascending order.
+/// Uses `cttz` (count trailing zeros) for efficient scanning.
+pub type BitSetIter {
+    words: I64,
+    word_count: I64,
+    capacity: I64,
+    word_idx: I64,
+    current_word: U64,
+}
+
+impl Iterator for BitSetIter {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        // Skip zero words
+        loop (this.current_word == 0_u64 and this.word_idx < this.word_count) {
+            this.word_idx = this.word_idx + 1
+            if this.word_idx < this.word_count {
+                let ptr: *U64 = (this.words + this.word_idx * 8) as *U64
+                this.current_word = lowlevel { ptr_read(ptr) }
+            }
+        }
+
+        if this.word_idx >= this.word_count {
+            return Nothing
+        }
+
+        // Find lowest set bit via cttz
+        let tz: U64 = lowlevel { cttz(this.current_word) }
+        let bit_index: I64 = this.word_idx * 64 + (tz as I64)
+
+        if bit_index >= this.capacity {
+            return Nothing
+        }
+
+        // Clear the lowest set bit: word &= word - 1
+        this.current_word = this.current_word & (this.current_word - 1_u64)
+
+        return Just(bit_index)
+    }
+}
+
+impl Drop for BitSet {
+    func drop(mut this) {
+        if this.words != (0 as I64) {
+            let ptr: *Unit = this.words as *Unit
+            mem_free(ptr)
+            this.words = 0 as I64
+        }
+    }
+}

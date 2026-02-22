@@ -1,0 +1,57 @@
+use test
+use core::bitset::BitSet
+
+@test
+func test_bitset_toggle() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    bs.toggle(10)
+    assert(bs.get(10))
+    bs.toggle(10)
+    assert(bs.get(10) == false)
+    return 0
+}
+
+@test
+func test_bitset_count_ones() -> I32 {
+    var bs: BitSet = BitSet::new(256)
+    assert_eq(bs.count_ones(), 0)
+    bs.set(0)
+    bs.set(63)
+    bs.set(64)
+    bs.set(127)
+    bs.set(200)
+    assert_eq(bs.count_ones(), 5)
+    return 0
+}
+
+@test
+func test_bitset_count_zeros() -> I32 {
+    var bs: BitSet = BitSet::new(128)
+    assert_eq(bs.count_zeros(), 128)
+    bs.set(0)
+    bs.set(1)
+    assert_eq(bs.count_zeros(), 126)
+    return 0
+}
+
+@test
+func test_bitset_first_set() -> I32 {
+    var bs: BitSet = BitSet::new(256)
+    assert_eq(bs.first_set(), -1)
+    bs.set(100)
+    assert_eq(bs.first_set(), 100)
+    bs.set(50)
+    assert_eq(bs.first_set(), 50)
+    return 0
+}
+
+@test
+func test_bitset_last_set() -> I32 {
+    var bs: BitSet = BitSet::new(256)
+    assert_eq(bs.last_set(), -1)
+    bs.set(50)
+    assert_eq(bs.last_set(), 50)
+    bs.set(200)
+    assert_eq(bs.last_set(), 200)
+    return 0
+}
