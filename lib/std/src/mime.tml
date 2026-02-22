@@ -1,0 +1,512 @@
+//! MIME type parsing, comparison, and extension lookup.
+//!
+//! Implements MIME type handling per RFC 2045/2046.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::mime::Mime
+//!
+//! let m = Mime::parse("text/html; charset=utf-8")
+//! when m {
+//!     Ok(mime) => print(mime.to_string())
+//!     Err(e) => print(e)
+//! }
+//! ```
+
+use core::str
+
+// === Mime type struct ===
+
+/// A parsed MIME type: type/subtype with optional parameters.
+pub type Mime {
+    type_name: Str,   // e.g. "text", "application", "image"
+    subtype: Str,     // e.g. "plain", "json", "png"
+    suffix: Str,      // e.g. "xml" from "application/svg+xml" (empty if none)
+    param_str: Str    // raw parameters string (e.g. "charset=utf-8")
+}
+
+impl Mime {
+    /// Create a new MIME type without parameters.
+    pub func new(type_name: Str, subtype: Str) -> Mime {
+        return Mime { type_name: type_name, subtype: subtype, suffix: "", param_str: "" }
+    }
+
+    /// Create a new MIME type with parameters.
+    pub func with_params(type_name: Str, subtype: Str, params: Str) -> Mime {
+        return Mime { type_name: type_name, subtype: subtype, suffix: "", param_str: params }
+    }
+
+    /// Parse a MIME type string (e.g. "text/plain; charset=utf-8").
+    pub func parse(s: Str) -> Outcome[Mime, Str] {
+        return parse_mime_impl(s)
+    }
+
+    /// Get the type part (e.g. "text").
+    pub func get_type(this) -> Str {
+        return this.type_name
+    }
+
+    /// Get the subtype part (e.g. "plain").
+    pub func get_subtype(this) -> Str {
+        return this.subtype
+    }
+
+    /// Get the structured syntax suffix (e.g. "xml" from "application/svg+xml").
+    pub func get_suffix(this) -> Str {
+        return this.suffix
+    }
+
+    /// Get the full essence (type/subtype without params).
+    pub func essence(this) -> Str {
+        if str::len(this.suffix) > 0 {
+            return this.type_name + "/" + this.subtype + "+" + this.suffix
+        }
+        return this.type_name + "/" + this.subtype
+    }
+
+    /// Get the parameter string (e.g. "charset=utf-8").
+    pub func get_params(this) -> Str {
+        return this.param_str
+    }
+
+    /// Get a specific parameter value by key (case-insensitive).
+    pub func get_param(this, key: Str) -> Maybe[Str] {
+        return find_param(this.param_str, key)
+    }
+
+    /// Check if this is a text/* type.
+    pub func is_text(this) -> Bool {
+        return this.type_name == "text"
+    }
+
+    /// Check if this is an image/* type.
+    pub func is_image(this) -> Bool {
+        return this.type_name == "image"
+    }
+
+    /// Check if this is an audio/* type.
+    pub func is_audio(this) -> Bool {
+        return this.type_name == "audio"
+    }
+
+    /// Check if this is a video/* type.
+    pub func is_video(this) -> Bool {
+        return this.type_name == "video"
+    }
+
+    /// Check if this is an application/* type.
+    pub func is_application(this) -> Bool {
+        return this.type_name == "application"
+    }
+
+    /// Check equality of type/subtype (ignoring parameters).
+    pub func eq(this, other: Mime) -> Bool {
+        return this.type_name == other.type_name and
+               this.subtype == other.subtype and
+               this.suffix == other.suffix
+    }
+
+    /// Format as "type/subtype[+suffix][; params]".
+    @allocates
+    pub func to_string(this) -> Str {
+        return format_mime(this.type_name, this.subtype, this.suffix, this.param_str)
+    }
+}
+
+// === Common MIME type constants ===
+
+/// text/plain
+pub func TEXT_PLAIN() -> Mime {
+    return Mime { type_name: "text", subtype: "plain", suffix: "", param_str: "" }
+}
+
+/// text/html
+pub func TEXT_HTML() -> Mime {
+    return Mime { type_name: "text", subtype: "html", suffix: "", param_str: "" }
+}
+
+/// text/css
+pub func TEXT_CSS() -> Mime {
+    return Mime { type_name: "text", subtype: "css", suffix: "", param_str: "" }
+}
+
+/// text/javascript
+pub func TEXT_JAVASCRIPT() -> Mime {
+    return Mime { type_name: "text", subtype: "javascript", suffix: "", param_str: "" }
+}
+
+/// text/xml
+pub func TEXT_XML() -> Mime {
+    return Mime { type_name: "text", subtype: "xml", suffix: "", param_str: "" }
+}
+
+/// text/csv
+pub func TEXT_CSV() -> Mime {
+    return Mime { type_name: "text", subtype: "csv", suffix: "", param_str: "" }
+}
+
+/// application/json
+pub func APPLICATION_JSON() -> Mime {
+    return Mime { type_name: "application", subtype: "json", suffix: "", param_str: "" }
+}
+
+/// application/xml
+pub func APPLICATION_XML() -> Mime {
+    return Mime { type_name: "application", subtype: "xml", suffix: "", param_str: "" }
+}
+
+/// application/octet-stream
+pub func APPLICATION_OCTET_STREAM() -> Mime {
+    return Mime { type_name: "application", subtype: "octet-stream", suffix: "", param_str: "" }
+}
+
+/// application/pdf
+pub func APPLICATION_PDF() -> Mime {
+    return Mime { type_name: "application", subtype: "pdf", suffix: "", param_str: "" }
+}
+
+/// application/x-www-form-urlencoded
+pub func APPLICATION_FORM_URLENCODED() -> Mime {
+    return Mime { type_name: "application", subtype: "x-www-form-urlencoded", suffix: "", param_str: "" }
+}
+
+/// multipart/form-data
+pub func MULTIPART_FORM_DATA() -> Mime {
+    return Mime { type_name: "multipart", subtype: "form-data", suffix: "", param_str: "" }
+}
+
+/// image/png
+pub func IMAGE_PNG() -> Mime {
+    return Mime { type_name: "image", subtype: "png", suffix: "", param_str: "" }
+}
+
+/// image/jpeg
+pub func IMAGE_JPEG() -> Mime {
+    return Mime { type_name: "image", subtype: "jpeg", suffix: "", param_str: "" }
+}
+
+/// image/gif
+pub func IMAGE_GIF() -> Mime {
+    return Mime { type_name: "image", subtype: "gif", suffix: "", param_str: "" }
+}
+
+/// image/svg+xml
+pub func IMAGE_SVG() -> Mime {
+    return Mime { type_name: "image", subtype: "svg", suffix: "xml", param_str: "" }
+}
+
+/// image/webp
+pub func IMAGE_WEBP() -> Mime {
+    return Mime { type_name: "image", subtype: "webp", suffix: "", param_str: "" }
+}
+
+/// audio/mpeg
+pub func AUDIO_MPEG() -> Mime {
+    return Mime { type_name: "audio", subtype: "mpeg", suffix: "", param_str: "" }
+}
+
+/// video/mp4
+pub func VIDEO_MP4() -> Mime {
+    return Mime { type_name: "video", subtype: "mp4", suffix: "", param_str: "" }
+}
+
+/// application/wasm
+pub func APPLICATION_WASM() -> Mime {
+    return Mime { type_name: "application", subtype: "wasm", suffix: "", param_str: "" }
+}
+
+// === Extension lookup ===
+
+/// Look up a MIME type by file extension (without the leading dot).
+///
+/// Returns the most common MIME type for the extension, or Nothing if unknown.
+pub func from_extension(ext: Str) -> Maybe[Mime] {
+    let e: Str = str::to_lowercase(ext)
+
+    // Text types
+    if e == "txt"  { return Just(TEXT_PLAIN()) }
+    if e == "html" or e == "htm" { return Just(TEXT_HTML()) }
+    if e == "css"  { return Just(TEXT_CSS()) }
+    if e == "js" or e == "mjs" { return Just(TEXT_JAVASCRIPT()) }
+    if e == "xml"  { return Just(TEXT_XML()) }
+    if e == "csv"  { return Just(TEXT_CSV()) }
+
+    // Application types
+    if e == "json" { return Just(APPLICATION_JSON()) }
+    if e == "pdf"  { return Just(APPLICATION_PDF()) }
+    if e == "wasm" { return Just(APPLICATION_WASM()) }
+    if e == "zip"  { return Just(Mime::new("application", "zip")) }
+    if e == "gz" or e == "gzip" { return Just(Mime::new("application", "gzip")) }
+    if e == "tar"  { return Just(Mime::new("application", "x-tar")) }
+    if e == "7z"   { return Just(Mime::new("application", "x-7z-compressed")) }
+    if e == "rar"  { return Just(Mime::new("application", "vnd.rar")) }
+    if e == "xls"  { return Just(Mime::new("application", "vnd.ms-excel")) }
+    if e == "xlsx" { return Just(Mime::new("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet")) }
+    if e == "doc"  { return Just(Mime::new("application", "msword")) }
+    if e == "docx" { return Just(Mime::new("application", "vnd.openxmlformats-officedocument.wordprocessingml.document")) }
+
+    // Image types
+    if e == "png"  { return Just(IMAGE_PNG()) }
+    if e == "jpg" or e == "jpeg" { return Just(IMAGE_JPEG()) }
+    if e == "gif"  { return Just(IMAGE_GIF()) }
+    if e == "svg"  { return Just(IMAGE_SVG()) }
+    if e == "webp" { return Just(IMAGE_WEBP()) }
+    if e == "ico"  { return Just(Mime::new("image", "x-icon")) }
+    if e == "bmp"  { return Just(Mime::new("image", "bmp")) }
+    if e == "tiff" or e == "tif" { return Just(Mime::new("image", "tiff")) }
+    if e == "avif" { return Just(Mime::new("image", "avif")) }
+
+    // Audio types
+    if e == "mp3"  { return Just(AUDIO_MPEG()) }
+    if e == "wav"  { return Just(Mime::new("audio", "wav")) }
+    if e == "ogg"  { return Just(Mime::new("audio", "ogg")) }
+    if e == "flac" { return Just(Mime::new("audio", "flac")) }
+    if e == "aac"  { return Just(Mime::new("audio", "aac")) }
+    if e == "weba" { return Just(Mime::new("audio", "webm")) }
+
+    // Video types
+    if e == "mp4"  { return Just(VIDEO_MP4()) }
+    if e == "webm" { return Just(Mime::new("video", "webm")) }
+    if e == "avi"  { return Just(Mime::new("video", "x-msvideo")) }
+    if e == "mkv"  { return Just(Mime::new("video", "x-matroska")) }
+    if e == "mov"  { return Just(Mime::new("video", "quicktime")) }
+
+    // Font types
+    if e == "woff"  { return Just(Mime::new("font", "woff")) }
+    if e == "woff2" { return Just(Mime::new("font", "woff2")) }
+    if e == "ttf"   { return Just(Mime::new("font", "ttf")) }
+    if e == "otf"   { return Just(Mime::new("font", "otf")) }
+
+    // Unknown
+    return Nothing
+}
+
+// === Internal parsing ===
+
+/// Parse a MIME type string: "type/subtype[+suffix][; param=value[; ...]]"
+func parse_mime_impl(s: Str) -> Outcome[Mime, Str] {
+    let slen: I64 = str::len(s)
+    if slen == 0 {
+        return Err("mime: empty input")
+    }
+
+    // Find the '/' separator
+    let slash: I64 = find_char(s, 0, slen, 47)  // '/'
+    if slash >= slen {
+        return Err("mime: missing '/' separator")
+    }
+    if slash == 0 {
+        return Err("mime: empty type")
+    }
+
+    let type_name: Str = str::to_lowercase(str::substring(s, 0, slash))
+
+    // Validate type name (RFC 2045 token chars)
+    if not is_valid_token(type_name) {
+        return Err("mime: invalid type name")
+    }
+
+    // After the slash, parse subtype (may include +suffix) and optional params
+    let after_slash: I64 = slash + 1
+    if after_slash >= slen {
+        return Err("mime: empty subtype")
+    }
+
+    // Find ';' for parameters
+    let semi: I64 = find_char(s, after_slash, slen, 59)  // ';'
+
+    // The subtype+suffix portion is between slash+1 and semicolon (or end)
+    let subtype_raw: Str = str::to_lowercase(trim_right(str::substring(s, after_slash, semi)))
+
+    if str::len(subtype_raw) == 0 {
+        return Err("mime: empty subtype")
+    }
+
+    // Check for structured syntax suffix (+xml, +json, etc.)
+    let subtype_len: I64 = str::len(subtype_raw)
+    let plus: I64 = find_char(subtype_raw, 0, subtype_len, 43)  // '+'
+    var subtype: Str = subtype_raw
+    var suffix: Str = ""
+
+    if plus < subtype_len {
+        subtype = str::substring(subtype_raw, 0, plus)
+        suffix = str::substring(subtype_raw, plus + 1, subtype_len)
+        if str::len(subtype) == 0 {
+            return Err("mime: empty subtype before '+'")
+        }
+        if str::len(suffix) == 0 {
+            return Err("mime: empty suffix after '+'")
+        }
+    }
+
+    // Parse parameters
+    var param_str: Str = ""
+    if semi < slen {
+        // Skip ';' and leading whitespace
+        var pstart: I64 = semi + 1
+        let raw_params: Str = str::substring(s, pstart, slen)
+        param_str = trim_left(raw_params)
+    }
+
+    return Ok(Mime {
+        type_name: type_name,
+        subtype: subtype,
+        suffix: suffix,
+        param_str: param_str
+    })
+}
+
+/// Format a MIME type back to string.
+func format_mime(type_name: Str, subtype: Str, suffix: Str, param_str: Str) -> Str {
+    var result: Str = type_name + "/" + subtype
+    if str::len(suffix) > 0 {
+        result = result + "+" + suffix
+    }
+    if str::len(param_str) > 0 {
+        result = result + "; " + param_str
+    }
+    return result
+}
+
+/// Find a parameter value by key in a param string like "charset=utf-8; boundary=abc".
+func find_param(params: Str, key: Str) -> Maybe[Str] {
+    let plen: I64 = str::len(params)
+    if plen == 0 { return Nothing }
+
+    let lower_key: Str = str::to_lowercase(key)
+    var pos: I64 = 0
+
+    loop (pos < plen) {
+        // Skip whitespace
+        pos = skip_ws(params, pos, plen)
+        if pos >= plen { return Nothing }
+
+        // Find '=' for this parameter
+        let eq_pos: I64 = find_char(params, pos, plen, 61)  // '='
+        if eq_pos >= plen { return Nothing }
+
+        let param_key: Str = str::to_lowercase(trim_right(str::substring(params, pos, eq_pos)))
+
+        // Find the end of the value (next ';' or end of string)
+        let val_start: I64 = eq_pos + 1
+        let semi: I64 = find_char(params, val_start, plen, 59)  // ';'
+        let param_val: Str = trim_both(str::substring(params, val_start, semi))
+
+        if param_key == lower_key {
+            // Strip quotes if present
+            return Just(unquote(param_val))
+        }
+
+        // Move past the semicolon
+        pos = semi + 1
+    }
+
+    return Nothing
+}
+
+// === String helpers ===
+
+/// Find the first occurrence of a character starting at `from`.
+func find_char(s: Str, from: I64, slen: I64, target: I32) -> I64 {
+    var i: I64 = from
+    loop (i < slen) {
+        if str::char_at(s, i) == target {
+            return i
+        }
+        i = i + 1
+    }
+    return slen
+}
+
+/// Check if a string is a valid RFC 2045 token.
+func is_valid_token(s: Str) -> Bool {
+    let slen: I64 = str::len(s)
+    if slen == 0 { return false }
+    var i: I64 = 0
+    loop (i < slen) {
+        let c: I32 = str::char_at(s, i)
+        if not is_token_char(c) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+/// Check if a character is a valid RFC 2045 token character.
+func is_token_char(c: I32) -> Bool {
+    // a-z
+    if c >= 97 and c <= 122 { return true }
+    // A-Z
+    if c >= 65 and c <= 90 { return true }
+    // 0-9
+    if c >= 48 and c <= 57 { return true }
+    // Special token chars: ! # $ % & ' * + - . ^ _ ` | ~
+    if c == 33 { return true }   // !
+    if c == 35 { return true }   // #
+    if c == 36 { return true }   // $
+    if c == 37 { return true }   // %
+    if c == 38 { return true }   // &
+    if c == 39 { return true }   // '
+    if c == 42 { return true }   // *
+    if c == 43 { return true }   // +
+    if c == 45 { return true }   // -
+    if c == 46 { return true }   // .
+    if c == 94 { return true }   // ^
+    if c == 95 { return true }   // _
+    if c == 96 { return true }   // `
+    if c == 124 { return true }  // |
+    if c == 126 { return true }  // ~
+    return false
+}
+
+/// Skip whitespace characters starting at `pos`.
+func skip_ws(s: Str, pos: I64, slen: I64) -> I64 {
+    var p: I64 = pos
+    loop (p < slen) {
+        let c: I32 = str::char_at(s, p)
+        if c != 32 and c != 9 { return p }  // space, tab
+        p = p + 1
+    }
+    return p
+}
+
+/// Trim trailing whitespace from a string.
+func trim_right(s: Str) -> Str {
+    let slen: I64 = str::len(s)
+    if slen == 0 { return s }
+    var end: I64 = slen
+    loop (end > 0) {
+        let c: I32 = str::char_at(s, end - 1)
+        if c != 32 and c != 9 { return str::substring(s, 0, end) }
+        end = end - 1
+    }
+    return ""
+}
+
+/// Trim leading whitespace from a string.
+func trim_left(s: Str) -> Str {
+    let slen: I64 = str::len(s)
+    var start: I64 = 0
+    loop (start < slen) {
+        let c: I32 = str::char_at(s, start)
+        if c != 32 and c != 9 { return str::substring(s, start, slen) }
+        start = start + 1
+    }
+    return ""
+}
+
+/// Trim both leading and trailing whitespace.
+func trim_both(s: Str) -> Str {
+    return trim_left(trim_right(s))
+}
+
+/// Remove surrounding double quotes if present.
+func unquote(s: Str) -> Str {
+    let slen: I64 = str::len(s)
+    if slen >= 2 {
+        if str::char_at(s, 0) == 34 and str::char_at(s, slen - 1) == 34 {
+            return str::substring(s, 1, slen - 1)
+        }
+    }
+    return s
+}

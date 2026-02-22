@@ -1,0 +1,44 @@
+use test
+use std::mime::Mime
+
+// === Parse error cases ===
+
+@test
+func test_parse_empty() -> I32 {
+    let result = Mime::parse("")
+    when result {
+        Ok(m) => assert(false, "empty should fail")
+        Err(e) => assert(e == "mime: empty input", e)
+    }
+    0
+}
+
+@test
+func test_parse_no_slash() -> I32 {
+    let result = Mime::parse("textplain")
+    when result {
+        Ok(m) => assert(false, "missing slash should fail")
+        Err(e) => assert(e == "mime: missing '/' separator", e)
+    }
+    0
+}
+
+@test
+func test_parse_empty_type() -> I32 {
+    let result = Mime::parse("/plain")
+    when result {
+        Ok(m) => assert(false, "empty type should fail")
+        Err(e) => assert(e == "mime: empty type", e)
+    }
+    0
+}
+
+@test
+func test_parse_empty_subtype() -> I32 {
+    let result = Mime::parse("text/")
+    when result {
+        Ok(m) => assert(false, "empty subtype should fail")
+        Err(e) => assert(e == "mime: empty subtype", e)
+    }
+    0
+}

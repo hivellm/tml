@@ -1,0 +1,111 @@
+use test
+use std::mime::Mime
+
+// === get_param ===
+
+@test
+func test_get_param_charset() -> I32 {
+    let result = Mime::parse("text/html; charset=utf-8")
+    when result {
+        Ok(m) => {
+            let param = m.get_param("charset")
+            when param {
+                Just(v) => assert_eq(v, "utf-8")
+                Nothing => assert(false, "charset param should exist")
+            }
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_get_param_missing() -> I32 {
+    let result = Mime::parse("text/plain")
+    when result {
+        Ok(m) => {
+            let param = m.get_param("charset")
+            when param {
+                Just(v) => assert(false, "no params should be Nothing")
+                Nothing => assert(true, "correct")
+            }
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_get_param_quoted() -> I32 {
+    let result = Mime::parse("multipart/form-data; boundary=\"----abc\"")
+    when result {
+        Ok(m) => {
+            let param = m.get_param("boundary")
+            when param {
+                Just(v) => assert_eq(v, "----abc")
+                Nothing => assert(false, "boundary param should exist")
+            }
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+// === Type checkers ===
+
+@test
+func test_is_text() -> I32 {
+    let m = Mime::new("text", "plain")
+    assert(m.is_text(), "should be text")
+    assert(not m.is_image(), "should not be image")
+    0
+}
+
+@test
+func test_is_application() -> I32 {
+    let m = Mime::new("application", "json")
+    assert(m.is_application(), "should be application")
+    assert(not m.is_text(), "should not be text")
+    0
+}
+
+// === eq ===
+
+@test
+func test_eq_same() -> I32 {
+    let a = Mime::new("text", "plain")
+    let b = Mime::new("text", "plain")
+    assert(a.eq(b), "same type/subtype should be equal")
+    0
+}
+
+@test
+func test_eq_different() -> I32 {
+    let a = Mime::new("text", "plain")
+    let b = Mime::new("text", "html")
+    assert(not a.eq(b), "different subtypes should not be equal")
+    0
+}
+
+@test
+func test_eq_ignores_params() -> I32 {
+    let a = Mime::with_params("text", "html", "charset=utf-8")
+    let b = Mime::new("text", "html")
+    assert(a.eq(b), "eq should ignore params")
+    0
+}
+
+// === Case normalization ===
+
+@test
+func test_parse_normalizes_case() -> I32 {
+    let result = Mime::parse("TEXT/HTML")
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_type(), "text")
+            assert_eq(m.get_subtype(), "html")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

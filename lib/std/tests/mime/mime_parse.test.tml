@@ -1,0 +1,58 @@
+use test
+use std::mime::Mime
+
+// === Basic parsing ===
+
+@test
+func test_parse_simple() -> I32 {
+    let result = Mime::parse("text/plain")
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_type(), "text")
+            assert_eq(m.get_subtype(), "plain")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_application_json() -> I32 {
+    let result = Mime::parse("application/json")
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_type(), "application")
+            assert_eq(m.get_subtype(), "json")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_with_params() -> I32 {
+    let result = Mime::parse("text/html; charset=utf-8")
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_type(), "text")
+            assert_eq(m.get_subtype(), "html")
+            assert_eq(m.get_params(), "charset=utf-8")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_with_suffix() -> I32 {
+    let result = Mime::parse("application/svg+xml")
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_type(), "application")
+            assert_eq(m.get_subtype(), "svg")
+            assert_eq(m.get_suffix(), "xml")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

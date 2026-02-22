@@ -1,0 +1,74 @@
+use test
+use std::mime::Mime
+use std::mime
+
+// === to_string formatting ===
+
+@test
+func test_format_simple() -> I32 {
+    let m = Mime::new("text", "plain")
+    assert_eq(m.to_string(), "text/plain")
+    0
+}
+
+@test
+func test_format_with_params() -> I32 {
+    let m = Mime::with_params("text", "html", "charset=utf-8")
+    assert_eq(m.to_string(), "text/html; charset=utf-8")
+    0
+}
+
+@test
+func test_format_with_suffix() -> I32 {
+    let result = Mime::parse("application/atom+xml")
+    when result {
+        Ok(m) => assert_eq(m.to_string(), "application/atom+xml")
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+// === essence ===
+
+@test
+func test_essence_simple() -> I32 {
+    let m = Mime::with_params("text", "html", "charset=utf-8")
+    assert_eq(m.essence(), "text/html")
+    0
+}
+
+@test
+func test_essence_with_suffix() -> I32 {
+    let result = Mime::parse("application/svg+xml; charset=utf-8")
+    when result {
+        Ok(m) => assert_eq(m.essence(), "application/svg+xml")
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+// === Constants ===
+
+@test
+func test_constant_text_plain() -> I32 {
+    let m = mime::TEXT_PLAIN()
+    assert_eq(m.get_type(), "text")
+    assert_eq(m.get_subtype(), "plain")
+    0
+}
+
+@test
+func test_constant_application_json() -> I32 {
+    let m = mime::APPLICATION_JSON()
+    assert_eq(m.get_type(), "application")
+    assert_eq(m.get_subtype(), "json")
+    0
+}
+
+@test
+func test_constant_image_png() -> I32 {
+    let m = mime::IMAGE_PNG()
+    assert(m.is_image(), "should be image type")
+    assert_eq(m.get_subtype(), "png")
+    0
+}

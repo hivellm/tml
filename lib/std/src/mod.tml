@@ -34,6 +34,7 @@
 //! | [`datetime`] | UTC date and time from Unix timestamps |
 //! | [`alloc`] | Specialized allocators (Arena, Pool, Cache, SOO) |
 //! | [`io`] | I/O error types (IoError, IoErrorKind) |
+//! | [`mime`] | MIME type parsing and extension lookup |
 
 pub mod traits
 pub mod oop
@@ -66,3 +67,4 @@ pub mod io
 pub mod uuid       // UUID v4/v7 generation, parsing, formatting
 pub mod semver     // Semantic versioning parse, compare, ranges
 pub mod url        // URL parsing and building per RFC 3986
+pub mod mime       // MIME type parsing and extension lookup

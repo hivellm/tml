@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (75%) — Phases 1-6, 8-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 7, 10, 12-17 not started
+**Status**: In Progress (80%) — Phases 1-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 10, 12-17 not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -126,12 +126,12 @@
 
 > **Priority**: Low | **File**: `lib/std/src/mime.tml`
 
-- [ ] 7.1.1 Create `lib/std/src/mime.tml`
-- [ ] 7.1.2 Define `Mime` struct: type, subtype, parameters
-- [ ] 7.1.3 Implement `Mime::parse(s: Str) -> Outcome[Mime, MimeError]`
-- [ ] 7.1.4 Implement `from_extension(ext: Str) -> Maybe[Mime]`
-- [ ] 7.1.5 Define common constants: `TEXT_PLAIN`, `TEXT_HTML`, `APPLICATION_JSON`, etc.
-- [ ] 7.1.6 Write unit tests
+- [x] 7.1.1 Create `lib/std/src/mime.tml`
+- [x] 7.1.2 Define `Mime` struct: type_name, subtype, suffix, param_str
+- [x] 7.1.3 Implement `Mime::parse(s: Str) -> Outcome[Mime, Str]`
+- [x] 7.1.4 Implement `from_extension(ext: Str) -> Maybe[Mime]` (50+ extensions)
+- [x] 7.1.5 Define common constants: `TEXT_PLAIN`, `TEXT_HTML`, `APPLICATION_JSON`, etc. (20 constants)
+- [x] 7.1.6 Write unit tests (31 tests: parse, errors, format, constants, extensions, methods)
 
 ## Phase 8: UUID Module
 
@@ -145,8 +145,8 @@
 - [x] 8.1.6 Implement `Uuid::v4()` — random via std::random
 - [x] 8.1.7 Implement `Uuid::v7()` — Unix epoch time + random (RFC 9562)
 - [x] 8.1.8 Implement all UUID versions (v1-v8) per RFC 9562
-- [ ] 8.1.9 Implement `Hash`, `Eq`, `Ord`, `Display`, `Debug` behaviors
-- [x] 8.1.10 Write unit tests (20 tests: basic, generate, v7, parse)
+- [x] 8.1.9 Implement `Hash`, `Eq`, `Ord`, `Display`, `Debug` behaviors (manual impls, 62 tests)
+- [x] 8.1.10 Write unit tests (62 tests: basic, generate, v1-v8, parse, convert, behaviors)
 
 > Commit `11d9d61`: feat(std): implement all UUID versions (v1-v8) per RFC 9562
 

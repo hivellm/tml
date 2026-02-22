@@ -1,0 +1,73 @@
+use test
+use std::mime
+
+// === Extension lookup ===
+
+@test
+func test_ext_html() -> I32 {
+    let result = mime::from_extension("html")
+    when result {
+        Just(m) => {
+            assert_eq(m.get_type(), "text")
+            assert_eq(m.get_subtype(), "html")
+        }
+        Nothing => assert(false, "html should resolve")
+    }
+    0
+}
+
+@test
+func test_ext_json() -> I32 {
+    let result = mime::from_extension("json")
+    when result {
+        Just(m) => {
+            assert_eq(m.get_type(), "application")
+            assert_eq(m.get_subtype(), "json")
+        }
+        Nothing => assert(false, "json should resolve")
+    }
+    0
+}
+
+@test
+func test_ext_png() -> I32 {
+    let result = mime::from_extension("png")
+    when result {
+        Just(m) => assert(m.is_image(), "png should be image")
+        Nothing => assert(false, "png should resolve")
+    }
+    0
+}
+
+@test
+func test_ext_mp4() -> I32 {
+    let result = mime::from_extension("mp4")
+    when result {
+        Just(m) => {
+            assert_eq(m.get_type(), "video")
+            assert_eq(m.get_subtype(), "mp4")
+        }
+        Nothing => assert(false, "mp4 should resolve")
+    }
+    0
+}
+
+@test
+func test_ext_unknown() -> I32 {
+    let result = mime::from_extension("xyz123")
+    when result {
+        Just(m) => assert(false, "unknown ext should return Nothing")
+        Nothing => assert(true, "correctly returned Nothing")
+    }
+    0
+}
+
+@test
+func test_ext_case_insensitive() -> I32 {
+    let result = mime::from_extension("HTML")
+    when result {
+        Just(m) => assert_eq(m.get_type(), "text")
+        Nothing => assert(false, "HTML (uppercase) should resolve")
+    }
+    0
+}
