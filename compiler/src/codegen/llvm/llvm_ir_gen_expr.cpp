@@ -133,7 +133,11 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
     //   - CallExpr/MethodCallExpr returning Str: stdlib functions allocate fresh heap Str
     // tml_str_free validates heap pointers (HeapValidate on Windows), so calling it
     // on non-heap pointers (globals, stack) is safe — they are skipped.
-    if (!result.empty() && result[0] == '%' && last_expr_type_ == "ptr") {
+    //
+    // IMPORTANT: Skip tracking inside library function bodies (in_library_body_).
+    // Library functions manage their own allocations — e.g., split() stores
+    // substring() results in a List. Auto-freeing those temps causes use-after-free.
+    if (!in_library_body_ && !result.empty() && result[0] == '%' && last_expr_type_ == "ptr") {
         bool is_str_temp = false;
         if (expr.is<parser::InterpolatedStringExpr>() || expr.is<parser::TemplateLiteralExpr>()) {
             is_str_temp = true;

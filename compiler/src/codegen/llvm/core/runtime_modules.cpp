@@ -1061,6 +1061,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
     // Save codegen state
     auto saved_module_prefix = current_module_prefix_;
     auto saved_submodule = current_submodule_name_;
+    auto saved_in_library_body = in_library_body_;
+    in_library_body_ = true;
 
     // We generate definitions by temporarily using output_ (since gen_impl_method
     // and gen_func_decl write to it via emit_line). We save the original IR,
@@ -1224,6 +1226,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
     // Restore codegen state
     current_module_prefix_ = saved_module_prefix;
     current_submodule_name_ = saved_submodule;
+    in_library_body_ = saved_in_library_body;
 
     // Collect any new type definitions generated during lazy pass
     // (e.g., MutexGuard__BarrierState from generic struct instantiation).

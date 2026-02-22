@@ -643,8 +643,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
             current_submodule_name_ = saved_submodule;
         }
 
-        // Generate pending generic instantiations triggered by library functions
-        generate_pending_instantiations();
+        // Generate pending generic instantiations triggered by library functions.
+        // Set in_library_body_ to disable Phase 4b Str temp tracking — library
+        // generic instantiations (List[Str], HashMap[Str,X], etc.) manage their own
+        // allocations and must not have temps auto-freed.
+        {
+            auto saved_lib = in_library_body_;
+            in_library_body_ = true;
+            generate_pending_instantiations();
+            in_library_body_ = saved_lib;
+        }
 
         // Update cached_imported_func_code_ to include instantiation-generated code.
         // Without this, workers using library_decls_only=false would miss instantiations
@@ -757,7 +765,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Generate any pending generic instantiations collected during first pass
     // This happens after structs/enums are registered but before function codegen
-    generate_pending_instantiations();
+    {
+        auto saved_lib = in_library_body_;
+        in_library_body_ = true;
+        generate_pending_instantiations();
+        in_library_body_ = saved_lib;
+    }
 
     // Emit dyn types for all registered behaviors before function generation
     // This must happen BEFORE saving output_ to ensure dyn types appear before functions
@@ -1224,7 +1237,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
     func_output.str(output_.str());
     output_.str("");
     // Generate pending generic instantiations (types go to type_defs_buffer_, funcs go to output_)
-    generate_pending_instantiations();
+    {
+        auto saved_lib = in_library_body_;
+        in_library_body_ = true;
+        generate_pending_instantiations();
+        in_library_body_ = saved_lib;
+    }
 
     // Save generic function code
     std::stringstream generic_func_output;

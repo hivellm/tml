@@ -550,6 +550,11 @@ private:
     // Used by Phase 4b to auto-free Str temporaries at statement end.
     std::unordered_set<std::string> allocating_functions_;
 
+    // Library body context flag — when true, Phase 4b Str temp tracking is disabled.
+    // Library functions manage their own allocations (e.g., split() stores substring()
+    // results in a List). Auto-freeing those temps causes use-after-free.
+    bool in_library_body_ = false;
+
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
     std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)
