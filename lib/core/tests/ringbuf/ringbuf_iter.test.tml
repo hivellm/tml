@@ -1,0 +1,42 @@
+use test
+use core::ringbuf::{RingBuf, RingBufIter}
+
+@test
+func test_ringbuf_iter_empty() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    var it: RingBufIter = rb.iter()
+    assert(it.next().is_nothing())
+    return 0
+}
+
+@test
+func test_ringbuf_iter_elements() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    rb.push_back(10)
+    rb.push_back(20)
+    rb.push_back(30)
+    var it: RingBufIter = rb.iter()
+    assert_eq(it.next().unwrap(), 10)
+    assert_eq(it.next().unwrap(), 20)
+    assert_eq(it.next().unwrap(), 30)
+    assert(it.next().is_nothing())
+    return 0
+}
+
+@test
+func test_ringbuf_iter_wraparound() -> I32 {
+    var rb: RingBuf = RingBuf::new(3)
+    rb.push_back(1)
+    rb.push_back(2)
+    rb.push_back(3)
+    // Remove front, add new at back — causes wraparound
+    rb.pop_front()
+    rb.push_back(4)
+    // Now elements are [2, 3, 4] but physically wrapped
+    var it: RingBufIter = rb.iter()
+    assert_eq(it.next().unwrap(), 2)
+    assert_eq(it.next().unwrap(), 3)
+    assert_eq(it.next().unwrap(), 4)
+    assert(it.next().is_nothing())
+    return 0
+}

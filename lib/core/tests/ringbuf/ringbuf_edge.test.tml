@@ -1,0 +1,78 @@
+use test
+use core::ringbuf::RingBuf
+
+@test
+func test_ringbuf_clear() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    rb.push_back(1)
+    rb.push_back(2)
+    rb.push_back(3)
+    rb.clear()
+    assert(rb.is_empty())
+    assert_eq(rb.len(), 0)
+    assert_eq(rb.capacity(), 4)
+    // Should be usable again after clear
+    rb.push_back(99)
+    assert_eq(rb.front().unwrap(), 99)
+    return 0
+}
+
+@test
+func test_ringbuf_contains() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    rb.push_back(10)
+    rb.push_back(20)
+    rb.push_back(30)
+    assert(rb.contains(20))
+    assert(rb.contains(99) == false)
+    return 0
+}
+
+@test
+func test_ringbuf_empty_pop() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    assert(rb.pop_front().is_nothing())
+    assert(rb.pop_back().is_nothing())
+    assert(rb.front().is_nothing())
+    assert(rb.back().is_nothing())
+    return 0
+}
+
+@test
+func test_ringbuf_remaining() -> I32 {
+    var rb: RingBuf = RingBuf::new(3)
+    assert_eq(rb.remaining(), 3)
+    rb.push_back(1)
+    assert_eq(rb.remaining(), 2)
+    rb.push_back(2)
+    rb.push_back(3)
+    assert_eq(rb.remaining(), 0)
+    return 0
+}
+
+@test
+func test_ringbuf_mixed_ops() -> I32 {
+    var rb: RingBuf = RingBuf::new(4)
+    rb.push_back(1)
+    rb.push_front(0)
+    rb.push_back(2)
+    rb.push_front(-1)
+    // Should be: -1, 0, 1, 2
+    assert_eq(rb.pop_front().unwrap(), -1)
+    assert_eq(rb.pop_front().unwrap(), 0)
+    assert_eq(rb.pop_front().unwrap(), 1)
+    assert_eq(rb.pop_front().unwrap(), 2)
+    return 0
+}
+
+@test
+func test_ringbuf_capacity_1() -> I32 {
+    var rb: RingBuf = RingBuf::new(1)
+    assert_eq(rb.capacity(), 1)
+    assert(rb.push_back(42))
+    assert(rb.is_full())
+    assert(rb.push_back(99) == false)
+    assert_eq(rb.pop_front().unwrap(), 42)
+    assert(rb.is_empty())
+    return 0
+}

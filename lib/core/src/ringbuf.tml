@@ -1,0 +1,260 @@
+//! RingBuf — Fixed-capacity circular buffer.
+//!
+//! A `RingBuf` is a fixed-size circular buffer backed by a heap-allocated
+//! array. It supports efficient O(1) push/pop at both ends. When full,
+//! push operations return false.
+//!
+//! # Performance
+//!
+//! - push_back/push_front: O(1)
+//! - pop_back/pop_front: O(1)
+//! - front/back/get: O(1)
+//! - Memory: capacity * 8 bytes + overhead
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::ringbuf::RingBuf
+//!
+//! var rb: RingBuf = RingBuf::new(4)
+//! rb.push_back(10)
+//! rb.push_back(20)
+//! rb.push_back(30)
+//! assert_eq(rb.len(), 3)
+//! assert_eq(rb.pop_front(), Just(10))
+//! ```
+
+// ============================================================================
+// RingBuf
+// ============================================================================
+
+/// A fixed-capacity circular buffer backed by a heap-allocated I64 array.
+///
+/// Elements are I64 values. The buffer uses a head index and length
+/// to track the logical window into the backing array.
+pub type RingBuf {
+    /// Pointer to heap-allocated I64 array
+    data: I64,
+    /// Index of the front element
+    head: I64,
+    /// Number of elements currently stored
+    length: I64,
+    /// Maximum number of elements
+    cap: I64,
+}
+
+impl RingBuf {
+    /// Creates a new empty ring buffer with the given capacity.
+    ///
+    /// Capacity must be at least 1.
+    pub func new(capacity: I64) -> RingBuf {
+        let cap: I64 = if capacity < 1 { 1 } else { capacity }
+        let byte_size: I64 = cap * 8
+        let buf: *Unit = mem_alloc(byte_size)
+        let buf_i64: I64 = buf as I64
+
+        // Zero-initialize
+        var i: I64 = 0
+        loop (i < cap) {
+            let ptr: *I64 = (buf_i64 + i * 8) as *I64
+            lowlevel { ptr_write(ptr, 0) }
+            i = i + 1
+        }
+
+        RingBuf {
+            data: buf_i64,
+            head: 0,
+            length: 0,
+            cap: cap,
+        }
+    }
+
+    /// Returns the number of elements currently in the buffer.
+    pub func len(this) -> I64 {
+        return this.length
+    }
+
+    /// Returns the maximum capacity of the buffer.
+    pub func capacity(this) -> I64 {
+        return this.cap
+    }
+
+    /// Returns true if the buffer has no elements.
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
+    }
+
+    /// Returns true if the buffer is at full capacity.
+    pub func is_full(this) -> Bool {
+        return this.length == this.cap
+    }
+
+    /// Returns the number of additional elements the buffer can hold.
+    pub func remaining(this) -> I64 {
+        return this.cap - this.length
+    }
+
+    /// Adds an element to the back of the buffer.
+    ///
+    /// Returns true if the element was added, false if the buffer is full.
+    pub func push_back(mut this, value: I64) -> Bool {
+        if this.length >= this.cap {
+            return false
+        }
+        let idx: I64 = (this.head + this.length) % this.cap
+        let ptr: *I64 = (this.data + idx * 8) as *I64
+        lowlevel { ptr_write(ptr, value) }
+        this.length = this.length + 1
+        return true
+    }
+
+    /// Adds an element to the front of the buffer.
+    ///
+    /// Returns true if the element was added, false if the buffer is full.
+    pub func push_front(mut this, value: I64) -> Bool {
+        if this.length >= this.cap {
+            return false
+        }
+        this.head = (this.head - 1 + this.cap) % this.cap
+        let ptr: *I64 = (this.data + this.head * 8) as *I64
+        lowlevel { ptr_write(ptr, value) }
+        this.length = this.length + 1
+        return true
+    }
+
+    /// Removes and returns the element at the front.
+    ///
+    /// Returns `Nothing` if the buffer is empty.
+    pub func pop_front(mut this) -> Maybe[I64] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let ptr: *I64 = (this.data + this.head * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        this.head = (this.head + 1) % this.cap
+        this.length = this.length - 1
+        return Just(item)
+    }
+
+    /// Removes and returns the element at the back.
+    ///
+    /// Returns `Nothing` if the buffer is empty.
+    pub func pop_back(mut this) -> Maybe[I64] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let tail: I64 = (this.head + this.length - 1) % this.cap
+        let ptr: *I64 = (this.data + tail * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        this.length = this.length - 1
+        return Just(item)
+    }
+
+    /// Returns the front element without removing it.
+    ///
+    /// Returns `Nothing` if the buffer is empty.
+    pub func front(this) -> Maybe[I64] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let ptr: *I64 = (this.data + this.head * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        return Just(item)
+    }
+
+    /// Returns the back element without removing it.
+    ///
+    /// Returns `Nothing` if the buffer is empty.
+    pub func back(this) -> Maybe[I64] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let tail: I64 = (this.head + this.length - 1) % this.cap
+        let ptr: *I64 = (this.data + tail * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        return Just(item)
+    }
+
+    /// Returns the element at the given logical index (0 = front).
+    ///
+    /// Returns `Nothing` if the index is out of range.
+    pub func get(this, index: I64) -> Maybe[I64] {
+        if index < 0 or index >= this.length {
+            return Nothing
+        }
+        let phys: I64 = (this.head + index) % this.cap
+        let ptr: *I64 = (this.data + phys * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        return Just(item)
+    }
+
+    /// Clears all elements from the buffer without deallocating.
+    pub func clear(mut this) {
+        this.head = 0
+        this.length = 0
+    }
+
+    /// Returns true if the buffer contains the given value.
+    pub func contains(this, value: I64) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            let phys: I64 = (this.head + i) % this.cap
+            let ptr: *I64 = (this.data + phys * 8) as *I64
+            let item: I64 = lowlevel { ptr_read(ptr) }
+            if item == value {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    // ========================================================================
+    // Iterator
+    // ========================================================================
+
+    /// Returns an iterator over the elements in front-to-back order.
+    pub func iter(this) -> RingBufIter {
+        return RingBufIter {
+            data: this.data,
+            head: this.head,
+            length: this.length,
+            cap: this.cap,
+            index: 0,
+        }
+    }
+}
+
+/// Iterator over the elements of a `RingBuf` in front-to-back order.
+pub type RingBufIter {
+    data: I64,
+    head: I64,
+    length: I64,
+    cap: I64,
+    index: I64,
+}
+
+impl Iterator for RingBufIter {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let phys: I64 = (this.head + this.index) % this.cap
+        let ptr: *I64 = (this.data + phys * 8) as *I64
+        let item: I64 = lowlevel { ptr_read(ptr) }
+        this.index = this.index + 1
+        return Just(item)
+    }
+}
+
+impl Drop for RingBuf {
+    func drop(mut this) {
+        if this.data != (0 as I64) {
+            let ptr: *Unit = this.data as *Unit
+            mem_free(ptr)
+            this.data = 0 as I64
+        }
+    }
+}
