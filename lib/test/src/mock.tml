@@ -1,0 +1,263 @@
+//! Mock framework for test doubles.
+//!
+//! Provides a string-based mock context that records function calls,
+//! allows setting return values, and verifies expected interactions.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use test::mock::MockContext
+//!
+//! let mock = MockContext::new()
+//!
+//! // Set up expectations
+//! mock.when_called("get_name", "returns", "Alice")
+//! mock.when_called("get_age", "returns", "30")
+//!
+//! // Simulate calls
+//! let name = mock.call_str("get_name", "")
+//! let age = mock.call_i64("get_age", "")
+//!
+//! // Verify interactions
+//! assert(mock.was_called("get_name"), "get_name should have been called")
+//! assert_eq(mock.call_count("get_name"), 1)
+//! mock.verify_called("get_name", 1) // panics if count doesn't match
+//! mock.destroy()
+//! ```
+
+use core::str
+use std::collections::HashMap
+use std::collections::List
+
+// ============================================================================
+// Expectation — a single mock expectation
+// ============================================================================
+
+/// An expected return value for a function/args combination.
+type Expectation {
+    func_name: Str,
+    args_pattern: Str,  // empty = match any args
+    return_str: Str,
+    return_i64: I64,
+    has_i64: Bool
+}
+
+// ============================================================================
+// CallRecord — a single recorded call
+// ============================================================================
+
+/// A record of a function call made through the mock.
+type CallRecord {
+    func_name: Str,
+    args: Str
+}
+
+// ============================================================================
+// MockContext — main mock object
+// ============================================================================
+
+/// A mock context that records calls and returns configured values.
+///
+/// Use `when_called` to set up return values, then `call_str` or `call_i64`
+/// to simulate calls. Use `was_called`, `call_count`, and `verify_called`
+/// to check interactions.
+pub type MockContext {
+    expectations: List[Expectation],
+    calls: List[CallRecord]
+}
+
+impl MockContext {
+    /// Create a new empty mock context.
+    pub func new() -> MockContext {
+        return MockContext {
+            expectations: List[Expectation]::new(8),
+            calls: List[CallRecord]::new(16)
+        }
+    }
+
+    /// Set a string return value for a function.
+    /// `args_pattern` can be empty to match any args, or a specific string to match exact args.
+    pub func when_called(this, func_name: Str, args_pattern: Str, return_val: Str) {
+        this.expectations.push(Expectation {
+            func_name: func_name,
+            args_pattern: args_pattern,
+            return_str: return_val,
+            return_i64: 0,
+            has_i64: false
+        })
+    }
+
+    /// Set an I64 return value for a function.
+    pub func when_called_i64(this, func_name: Str, args_pattern: Str, return_val: I64) {
+        this.expectations.push(Expectation {
+            func_name: func_name,
+            args_pattern: args_pattern,
+            return_str: "",
+            return_i64: return_val,
+            has_i64: true
+        })
+    }
+
+    /// Simulate a function call and return the configured string value.
+    /// Records the call for later verification.
+    pub func call_str(this, func_name: Str, args: Str) -> Str {
+        // Record the call
+        this.calls.push(CallRecord { func_name: func_name, args: args })
+
+        // Find matching expectation (last match wins for overrides)
+        var result: Str = ""
+        var i: I64 = 0
+        loop (i < this.expectations.len()) {
+            let exp: Expectation = this.expectations.get(i)
+            if exp.func_name == func_name {
+                if str::len(exp.args_pattern) == 0 or exp.args_pattern == args {
+                    result = exp.return_str
+                }
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Simulate a function call and return the configured I64 value.
+    /// Records the call for later verification.
+    pub func call_i64(this, func_name: Str, args: Str) -> I64 {
+        // Record the call
+        this.calls.push(CallRecord { func_name: func_name, args: args })
+
+        // Find matching expectation (last match wins)
+        var result: I64 = 0
+        var i: I64 = 0
+        loop (i < this.expectations.len()) {
+            let exp: Expectation = this.expectations.get(i)
+            if exp.func_name == func_name {
+                if str::len(exp.args_pattern) == 0 or exp.args_pattern == args {
+                    if exp.has_i64 {
+                        result = exp.return_i64
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Simulate a call without needing a return value (for void-like functions).
+    pub func call_void(this, func_name: Str, args: Str) {
+        this.calls.push(CallRecord { func_name: func_name, args: args })
+    }
+
+    /// Check if a function was called at least once.
+    pub func was_called(this, func_name: Str) -> Bool {
+        var i: I64 = 0
+        loop (i < this.calls.len()) {
+            let rec: CallRecord = this.calls.get(i)
+            if rec.func_name == func_name {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /// Check if a function was called with specific args.
+    pub func was_called_with(this, func_name: Str, args: Str) -> Bool {
+        var i: I64 = 0
+        loop (i < this.calls.len()) {
+            let rec: CallRecord = this.calls.get(i)
+            if rec.func_name == func_name and rec.args == args {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /// Count how many times a function was called.
+    pub func call_count(this, func_name: Str) -> I64 {
+        var count: I64 = 0
+        var i: I64 = 0
+        loop (i < this.calls.len()) {
+            let rec: CallRecord = this.calls.get(i)
+            if rec.func_name == func_name {
+                count = count + 1
+            }
+            i = i + 1
+        }
+        return count
+    }
+
+    /// Count how many times a function was called with specific args.
+    pub func call_count_with(this, func_name: Str, args: Str) -> I64 {
+        var count: I64 = 0
+        var i: I64 = 0
+        loop (i < this.calls.len()) {
+            let rec: CallRecord = this.calls.get(i)
+            if rec.func_name == func_name and rec.args == args {
+                count = count + 1
+            }
+            i = i + 1
+        }
+        return count
+    }
+
+    /// Assert a function was called exactly `expected` times. Panics on mismatch.
+    pub func verify_called(this, func_name: Str, expected: I64) {
+        let actual: I64 = this.call_count(func_name)
+        if actual != expected {
+            assert(false, "Mock verification failed: expected " + func_name + " to be called " + expected.to_string() + " time(s), but was called " + actual.to_string() + " time(s)")
+        }
+    }
+
+    /// Assert a function was never called. Panics if it was.
+    pub func verify_not_called(this, func_name: Str) {
+        let count: I64 = this.call_count(func_name)
+        if count > 0 {
+            assert(false, "Mock verification failed: expected " + func_name + " to not be called, but was called " + count.to_string() + " time(s)")
+        }
+    }
+
+    /// Get the args from the Nth call to a function (0-indexed).
+    /// Returns empty string if not found.
+    pub func get_call_args(this, func_name: Str, call_index: I64) -> Str {
+        var count: I64 = 0
+        var i: I64 = 0
+        loop (i < this.calls.len()) {
+            let rec: CallRecord = this.calls.get(i)
+            if rec.func_name == func_name {
+                if count == call_index {
+                    return rec.args
+                }
+                count = count + 1
+            }
+            i = i + 1
+        }
+        return ""
+    }
+
+    /// Get the total number of recorded calls across all functions.
+    pub func total_calls(this) -> I64 {
+        return this.calls.len()
+    }
+
+    /// Reset all recorded calls (keeps expectations).
+    pub func reset_calls(this) {
+        // Clear calls list by creating a new one
+        this.calls.destroy()
+        this.calls = List[CallRecord]::new(16)
+    }
+
+    /// Reset everything (calls and expectations).
+    pub func reset(this) {
+        this.expectations.destroy()
+        this.calls.destroy()
+        this.expectations = List[Expectation]::new(8)
+        this.calls = List[CallRecord]::new(16)
+    }
+
+    /// Clean up resources.
+    pub func destroy(this) {
+        this.expectations.destroy()
+        this.calls.destroy()
+    }
+}

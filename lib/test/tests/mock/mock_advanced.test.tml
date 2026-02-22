@@ -1,0 +1,91 @@
+use test
+use test::mock::MockContext
+
+@test
+func test_args_pattern_matching() -> I32 {
+    let mock = MockContext::new()
+    // Default for any args
+    mock.when_called("lookup", "", "default")
+    // Specific override for "key1"
+    mock.when_called("lookup", "key1", "value1")
+
+    let r1 = mock.call_str("lookup", "key1")
+    assert_eq(r1, "value1")
+
+    let r2 = mock.call_str("lookup", "key2")
+    assert_eq(r2, "default")
+
+    mock.destroy()
+    0
+}
+
+@test
+func test_get_call_args() -> I32 {
+    let mock = MockContext::new()
+    mock.call_void("send", "hello")
+    mock.call_void("send", "world")
+    mock.call_void("send", "!")
+
+    assert_eq(mock.get_call_args("send", 0), "hello")
+    assert_eq(mock.get_call_args("send", 1), "world")
+    assert_eq(mock.get_call_args("send", 2), "!")
+    assert_eq(mock.get_call_args("send", 99), "")
+    mock.destroy()
+    0
+}
+
+@test
+func test_total_calls() -> I32 {
+    let mock = MockContext::new()
+    mock.call_void("a", "")
+    mock.call_void("b", "")
+    mock.call_void("a", "")
+    assert_eq(mock.total_calls(), 3)
+    mock.destroy()
+    0
+}
+
+@test
+func test_reset_calls_keeps_expectations() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("greet", "", "hi")
+    mock.call_str("greet", "")
+    assert_eq(mock.call_count("greet"), 1)
+
+    mock.reset_calls()
+    assert_eq(mock.call_count("greet"), 0)
+
+    // Expectations still work
+    let v = mock.call_str("greet", "")
+    assert_eq(v, "hi")
+    assert_eq(mock.call_count("greet"), 1)
+    mock.destroy()
+    0
+}
+
+@test
+func test_full_reset() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("x", "", "val")
+    mock.call_str("x", "")
+
+    mock.reset()
+    assert_eq(mock.call_count("x"), 0)
+    // Expectations also gone
+    let v = mock.call_str("x", "")
+    assert_eq(v, "")
+    mock.destroy()
+    0
+}
+
+@test
+func test_last_match_wins() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("get", "", "first")
+    mock.when_called("get", "", "second")
+
+    let v = mock.call_str("get", "")
+    assert_eq(v, "second")
+    mock.destroy()
+    0
+}

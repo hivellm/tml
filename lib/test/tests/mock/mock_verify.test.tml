@@ -1,0 +1,69 @@
+use test
+use test::mock::MockContext
+
+@test
+func test_was_called_tracks() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("save", "", "ok")
+    assert(not mock.was_called("save"), "not called yet")
+    mock.call_str("save", "")
+    assert(mock.was_called("save"), "should be called now")
+    mock.destroy()
+    0
+}
+
+@test
+func test_call_count() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("fetch", "", "data")
+    mock.call_str("fetch", "")
+    mock.call_str("fetch", "")
+    mock.call_str("fetch", "")
+    assert_eq(mock.call_count("fetch"), 3)
+    assert_eq(mock.call_count("other"), 0)
+    mock.destroy()
+    0
+}
+
+@test
+func test_was_called_with_args() -> I32 {
+    let mock = MockContext::new()
+    mock.call_void("log", "info")
+    mock.call_void("log", "error")
+    assert(mock.was_called_with("log", "info"), "should find info call")
+    assert(mock.was_called_with("log", "error"), "should find error call")
+    assert(not mock.was_called_with("log", "debug"), "debug not called")
+    mock.destroy()
+    0
+}
+
+@test
+func test_call_count_with_args() -> I32 {
+    let mock = MockContext::new()
+    mock.call_void("emit", "click")
+    mock.call_void("emit", "hover")
+    mock.call_void("emit", "click")
+    assert_eq(mock.call_count_with("emit", "click"), 2)
+    assert_eq(mock.call_count_with("emit", "hover"), 1)
+    assert_eq(mock.call_count_with("emit", "scroll"), 0)
+    mock.destroy()
+    0
+}
+
+@test
+func test_verify_called_passes() -> I32 {
+    let mock = MockContext::new()
+    mock.call_void("run", "")
+    mock.call_void("run", "")
+    mock.verify_called("run", 2)  // should not panic
+    mock.destroy()
+    0
+}
+
+@test
+func test_verify_not_called_passes() -> I32 {
+    let mock = MockContext::new()
+    mock.verify_not_called("never")  // should not panic
+    mock.destroy()
+    0
+}

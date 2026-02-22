@@ -1,0 +1,42 @@
+use test
+use test::mock::MockContext
+
+@test
+func test_new_mock_no_calls() -> I32 {
+    let mock = MockContext::new()
+    assert_eq(mock.total_calls(), 0)
+    assert(not mock.was_called("anything"), "nothing called yet")
+    mock.destroy()
+    0
+}
+
+@test
+func test_call_str_returns_configured() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called("get_name", "", "Alice")
+    let result = mock.call_str("get_name", "")
+    assert_eq(result, "Alice")
+    mock.destroy()
+    0
+}
+
+@test
+func test_call_i64_returns_configured() -> I32 {
+    let mock = MockContext::new()
+    mock.when_called_i64("get_age", "", 30)
+    let result = mock.call_i64("get_age", "")
+    assert_eq(result, 30)
+    mock.destroy()
+    0
+}
+
+@test
+func test_unconfigured_returns_default() -> I32 {
+    let mock = MockContext::new()
+    let s = mock.call_str("unknown", "")
+    assert_eq(s, "")
+    let n = mock.call_i64("unknown", "")
+    assert_eq(n, 0)
+    mock.destroy()
+    0
+}

@@ -220,9 +220,9 @@
 > **Priority**: Medium
 
 ### 13.1 Mocking Framework (`lib/test/src/mock.tml`)
-- [ ] 13.1.1 Design `Mock[T]` type for creating mock objects from behaviors
-- [ ] 13.1.2 Implement `when(method).returns(value)`, call counting, `verify()`
-- [ ] 13.1.3 Write unit tests
+- [x] 13.1.1 Design `MockContext` type with string-based call recording and expectations
+- [x] 13.1.2 Implement `when_called`/`when_called_i64`, `call_str`/`call_i64`/`call_void`, `was_called`/`was_called_with`, `call_count`/`call_count_with`, `verify_called`/`verify_not_called`, `get_call_args`, `reset`/`reset_calls`
+- [x] 13.1.3 Write unit tests (16 tests: basic 4, verify 6, advanced 6)
 
 ### 13.2 Property-Based Testing (`lib/test/src/property.tml`)
 - [ ] 13.2.1 Design `Arbitrary[T]` behavior — generate random values
