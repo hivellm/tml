@@ -77,7 +77,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Add::add");
             emit_coverage(types::primitive_kind_to_string(kind) + "::add");
             if (call.args.empty()) {
-                report_error("add() requires an argument", call.span, "C008");
+                report_error("add() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -95,7 +95,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Sub::sub");
             emit_coverage(types::primitive_kind_to_string(kind) + "::sub");
             if (call.args.empty()) {
-                report_error("sub() requires an argument", call.span, "C008");
+                report_error("sub() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -113,7 +113,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Mul::mul");
             emit_coverage(types::primitive_kind_to_string(kind) + "::mul");
             if (call.args.empty()) {
-                report_error("mul() requires an argument", call.span, "C008");
+                report_error("mul() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -131,7 +131,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Div::div");
             emit_coverage(types::primitive_kind_to_string(kind) + "::div");
             if (call.args.empty()) {
-                report_error("div() requires an argument", call.span, "C008");
+                report_error("div() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -151,7 +151,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Rem::rem");
             emit_coverage(types::primitive_kind_to_string(kind) + "::rem");
             if (call.args.empty()) {
-                report_error("rem() requires an argument", call.span, "C008");
+                report_error("rem() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -183,7 +183,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage(types::primitive_kind_to_string(kind) + "::cmp");
             emit_coverage("Ord::cmp");
             if (call.args.empty()) {
-                report_error("cmp() requires an argument", call.span, "C008");
+                report_error("cmp() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other_ptr = gen_expr(*call.args[0]);
@@ -217,7 +217,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage(types::primitive_kind_to_string(kind) + "::partial_cmp");
             emit_coverage("Ord::partial_cmp");
             if (call.args.empty()) {
-                report_error("partial_cmp() requires an argument", call.span, "C008");
+                report_error("partial_cmp() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other_ptr = gen_expr(*call.args[0]);
@@ -281,7 +281,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "max") {
             emit_coverage("Ord::max");
             if (call.args.empty()) {
-                report_error("max() requires an argument", call.span, "C008");
+                report_error("max() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -303,7 +303,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "min") {
             emit_coverage("Ord::min");
             if (call.args.empty()) {
-                report_error("min() requires an argument", call.span, "C008");
+                report_error("min() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -326,7 +326,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "clamp") {
             emit_coverage("Ord::clamp");
             if (call.args.size() < 2) {
-                report_error("clamp() requires two arguments", call.span, "C008");
+                report_error("clamp() requires two arguments", call.span, "C018");
                 return "0";
             }
             std::string min_raw = gen_expr(*call.args[0]);
@@ -436,7 +436,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "pow" && is_integer) {
             emit_coverage("I32::pow");
             if (call.args.empty()) {
-                report_error("pow() requires an exponent argument", call.span, "C008");
+                report_error("pow() requires an exponent argument", call.span, "C015");
                 return "0";
             }
             std::string exp = gen_expr(*call.args[0]);
@@ -475,7 +475,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("AddAssign::add_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::add_assign");
             if (call.args.empty()) {
-                report_error("add_assign() requires an argument", call.span, "C008");
+                report_error("add_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -497,7 +497,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("SubAssign::sub_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::sub_assign");
             if (call.args.empty()) {
-                report_error("sub_assign() requires an argument", call.span, "C008");
+                report_error("sub_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -519,7 +519,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("MulAssign::mul_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::mul_assign");
             if (call.args.empty()) {
-                report_error("mul_assign() requires an argument", call.span, "C008");
+                report_error("mul_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -541,7 +541,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("DivAssign::div_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::div_assign");
             if (call.args.empty()) {
-                report_error("div_assign() requires an argument", call.span, "C008");
+                report_error("div_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -563,7 +563,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("RemAssign::rem_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::rem_assign");
             if (call.args.empty()) {
-                report_error("rem_assign() requires an argument", call.span, "C008");
+                report_error("rem_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -588,7 +588,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitAndAssign::bitand_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitand_assign");
             if (call.args.empty()) {
-                report_error("bitand_assign() requires an argument", call.span, "C008");
+                report_error("bitand_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -604,7 +604,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitOrAssign::bitor_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitor_assign");
             if (call.args.empty()) {
-                report_error("bitor_assign() requires an argument", call.span, "C008");
+                report_error("bitor_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -620,7 +620,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitXorAssign::bitxor_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitxor_assign");
             if (call.args.empty()) {
-                report_error("bitxor_assign() requires an argument", call.span, "C008");
+                report_error("bitxor_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -636,7 +636,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("ShlAssign::shl_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::shl_assign");
             if (call.args.empty()) {
-                report_error("shl_assign() requires an argument", call.span, "C008");
+                report_error("shl_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -676,7 +676,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("ShrAssign::shr_assign");
             emit_coverage(types::primitive_kind_to_string(kind) + "::shr_assign");
             if (call.args.empty()) {
-                report_error("shr_assign() requires an argument", call.span, "C008");
+                report_error("shr_assign() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -725,7 +725,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitAnd::bitand");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitand");
             if (call.args.empty()) {
-                report_error("bitand() requires an argument", call.span, "C008");
+                report_error("bitand() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -740,7 +740,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitOr::bitor");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitor");
             if (call.args.empty()) {
-                report_error("bitor() requires an argument", call.span, "C008");
+                report_error("bitor() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -755,7 +755,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("BitXor::bitxor");
             emit_coverage(types::primitive_kind_to_string(kind) + "::bitxor");
             if (call.args.empty()) {
-                report_error("bitxor() requires an argument", call.span, "C008");
+                report_error("bitxor() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -780,7 +780,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Shl::shift_left");
             emit_coverage(types::primitive_kind_to_string(kind) + "::shift_left");
             if (call.args.empty()) {
-                report_error("shift_left() requires an argument", call.span, "C008");
+                report_error("shift_left() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -801,7 +801,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_coverage("Shr::shift_right");
             emit_coverage(types::primitive_kind_to_string(kind) + "::shift_right");
             if (call.args.empty()) {
-                report_error("shift_right() requires an argument", call.span, "C008");
+                report_error("shift_right() requires an argument", call.span, "C015");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -900,7 +900,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("WrappingAdd::wrapping_add");
         emit_coverage(types::primitive_kind_to_string(kind) + "::wrapping_add");
         if (call.args.empty()) {
-            report_error("wrapping_add() requires an argument", call.span, "C008");
+            report_error("wrapping_add() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -914,7 +914,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("WrappingSub::wrapping_sub");
         emit_coverage(types::primitive_kind_to_string(kind) + "::wrapping_sub");
         if (call.args.empty()) {
-            report_error("wrapping_sub() requires an argument", call.span, "C008");
+            report_error("wrapping_sub() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -928,7 +928,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("WrappingMul::wrapping_mul");
         emit_coverage(types::primitive_kind_to_string(kind) + "::wrapping_mul");
         if (call.args.empty()) {
-            report_error("wrapping_mul() requires an argument", call.span, "C008");
+            report_error("wrapping_mul() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -955,7 +955,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("SaturatingAdd::saturating_add");
         emit_coverage(types::primitive_kind_to_string(kind) + "::saturating_add");
         if (call.args.empty()) {
-            report_error("saturating_add() requires an argument", call.span, "C008");
+            report_error("saturating_add() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -971,7 +971,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("SaturatingSub::saturating_sub");
         emit_coverage(types::primitive_kind_to_string(kind) + "::saturating_sub");
         if (call.args.empty()) {
-            report_error("saturating_sub() requires an argument", call.span, "C008");
+            report_error("saturating_sub() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -987,7 +987,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         emit_coverage("SaturatingMul::saturating_mul");
         emit_coverage(types::primitive_kind_to_string(kind) + "::saturating_mul");
         if (call.args.empty()) {
-            report_error("saturating_mul() requires an argument", call.span, "C008");
+            report_error("saturating_mul() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);

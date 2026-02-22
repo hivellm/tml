@@ -538,7 +538,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     }
 
     if (struct_type.empty() || struct_ptr.empty()) {
-        report_error("Cannot resolve field access object", field.span, "C003");
+        report_error("Cannot resolve field access object", field.span, "C027");
         return "0";
     }
 
@@ -620,7 +620,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             size_t idx = std::stoul(field.field);
 
             if (idx >= tuple_type.elements.size()) {
-                report_error("Tuple index out of bounds: " + field.field, field.span, "C003");
+                report_error("Tuple index out of bounds: " + field.field, field.span, "C027");
                 return "0";
             }
 

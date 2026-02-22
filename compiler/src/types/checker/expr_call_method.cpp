@@ -310,13 +310,13 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         if (call.method == "read") {
             // p.read() -> T - dereference the pointer and read the value
             if (!call.args.empty()) {
-                error("Pointer read() takes no arguments", call.receiver->span, "T049");
+                error("Pointer read() takes no arguments", call.receiver->span, "T080");
             }
             return inner;
         } else if (call.method == "write") {
             // p.write(value) -> () - write value through the pointer
             if (call.args.size() != 1) {
-                error("Pointer write() requires exactly one argument", call.receiver->span, "T049");
+                error("Pointer write() requires exactly one argument", call.receiver->span, "T081");
             } else {
                 TypePtr arg_type = check_expr(*call.args[0]);
                 TypePtr resolved_inner = env_.resolve(inner);
@@ -324,21 +324,21 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 if (!types_compatible(resolved_inner, resolved_arg)) {
                     error("Type mismatch in pointer write: expected " + type_to_string(inner) +
                               ", got " + type_to_string(arg_type),
-                          call.args[0]->span, "T001");
+                          call.args[0]->span, "T057");
                 }
             }
             return make_unit();
         } else if (call.method == "is_null") {
             // p.is_null() -> Bool
             if (!call.args.empty()) {
-                error("Pointer is_null() takes no arguments", call.receiver->span, "T049");
+                error("Pointer is_null() takes no arguments", call.receiver->span, "T082");
             }
             return make_bool();
         } else if (call.method == "offset") {
             // p.offset(count) -> *T - returns pointer offset by count elements
             if (call.args.size() != 1) {
                 error("Pointer offset() requires exactly one argument", call.receiver->span,
-                      "T049");
+                      "T083");
             } else {
                 TypePtr arg_type = check_expr(*call.args[0]);
                 // Allow I32 or I64 for offset
@@ -347,12 +347,12 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                                       arg_type->as<PrimitiveType>().kind == PrimitiveKind::I64));
                 if (!valid_offset) {
                     error("Pointer offset() requires I32 or I64 argument", call.args[0]->span,
-                          "T001");
+                          "T057");
                 }
             }
             return receiver_type; // Return same pointer type
         } else {
-            error("Unknown pointer method '" + call.method + "'", call.receiver->span, "T049");
+            error("Unknown pointer method '" + call.method + "'", call.receiver->span, "T084");
             return make_unit();
         }
     }
@@ -500,7 +500,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 }
             }
             error("Unknown method '" + call.method + "' on class '" + class_type.name + "'",
-                  call.receiver->span, "T006");
+                  call.receiver->span, "T078");
         }
     }
 
@@ -527,7 +527,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 }
             }
             error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
-                  call.receiver->span, "T006");
+                  call.receiver->span, "T079");
         }
     }
 

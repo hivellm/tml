@@ -915,7 +915,7 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
     if (!types_equal(init_type, declared_type)) {
         error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
                   ", found " + type_to_string(init_type),
-              const_decl.value->span, "T001");
+              const_decl.value->span, "T055");
         return;
     }
 
@@ -1203,7 +1203,7 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
         if (!types_equal(init_type, declared_type)) {
             error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
                       ", found " + type_to_string(init_type),
-                  const_decl.value->span, "T001");
+                  const_decl.value->span, "T055");
         }
     }
 

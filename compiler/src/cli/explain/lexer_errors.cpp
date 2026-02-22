@@ -1,6 +1,6 @@
 //! # Lexer Error Explanations
 //!
-//! Error codes L001-L015 for tokenization errors.
+//! Error codes L001-L020 for tokenization errors.
 
 #include "cli/explain/explain_internal.hpp"
 
@@ -236,6 +236,109 @@ Example of erroneous code:
 How to fix:
 
     let s = `hello ${name}`
+)EX"},
+
+        {"L016", R"EX(
+Invalid integer type suffix [L016]
+
+A numeric literal has an integer type suffix that is not recognized.
+
+Example of erroneous code:
+
+    let x = 42i99              // 'i99' is not a valid suffix
+    let y = 0xFF_u3            // 'u3' is not a valid suffix
+    let z = 0b1010i7           // 'i7' is not a valid suffix
+
+Valid integer suffixes:
+    i8, i16, i32, i64, i128    — signed integer types
+    u8, u16, u32, u64, u128    — unsigned integer types
+
+How to fix:
+
+    let x = 42i32              // correct
+    let y = 0xFF_u8            // correct
+    let z = 0b1010i32          // correct
+
+Related: L003 (general invalid number)
+)EX"},
+
+        {"L017", R"EX(
+Invalid float type suffix [L017]
+
+A numeric literal has a float type suffix that is not recognized.
+
+Example of erroneous code:
+
+    let x = 3.14f16            // 'f16' is not a valid suffix
+    let y = 42f128             // 'f128' is not a valid suffix
+
+Valid float suffixes:
+    f32    — 32-bit floating point
+    f64    — 64-bit floating point
+
+How to fix:
+
+    let x = 3.14f32            // correct
+    let y = 42f64              // correct
+
+Related: L003 (general invalid number)
+)EX"},
+
+        {"L018", R"EX(
+Missing exponent digits [L018]
+
+A floating-point literal has an exponent indicator (e or E) but no
+digits follow it.
+
+Example of erroneous code:
+
+    let x = 1.0e               // missing exponent digits
+    let y = 2.5E+              // sign present but no digits
+    let z = 3e-                // sign present but no digits
+
+How to fix:
+
+    let x = 1.0e10             // correct
+    let y = 2.5E+3             // correct
+    let z = 3e-2               // correct
+
+Related: L003 (general invalid number)
+)EX"},
+
+        {"L019", R"EX(
+Invalid floating-point number [L019]
+
+A floating-point literal could not be parsed as a valid number.
+This can happen when the number is out of range for 64-bit floats
+or has an otherwise malformed format.
+
+Example of erroneous code:
+
+    let x = 1.0e99999          // overflow: out of F64 range
+
+How to fix: use a value within the valid floating-point range:
+
+    let x = 1.0e308            // near max F64
+
+Related: L003 (general invalid number), L011 (number overflow)
+)EX"},
+
+        {"L020", R"EX(
+Invalid integer number [L020]
+
+A decimal integer literal could not be parsed as a valid number.
+This typically happens when the number exceeds the maximum value
+for a 64-bit unsigned integer.
+
+Example of erroneous code:
+
+    let x = 99999999999999999999  // exceeds U64 max
+
+How to fix: use a value within the valid integer range:
+
+    let x = 9_223_372_036_854_775_807   // I64 max
+
+Related: L003 (general invalid number), L011 (number overflow)
 )EX"},
 
     };

@@ -679,7 +679,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "write") {
             if (call.args.empty()) {
-                report_error("Ptr.write() requires a value argument", call.span, "C008");
+                report_error("Ptr.write() requires a value argument", call.span, "C019");
                 return "void";
             }
             std::string val = gen_expr(*call.args[0]);
@@ -688,7 +688,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "offset") {
             if (call.args.empty()) {
-                report_error("Ptr.offset() requires an offset argument", call.span, "C008");
+                report_error("Ptr.offset() requires an offset argument", call.span, "C019");
                 return receiver;
             }
             std::string offset = gen_expr(*call.args[0]);
@@ -820,7 +820,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (method == "then_cmp") {
                 emit_coverage("Ordering::then_cmp");
                 if (call.args.empty()) {
-                    report_error("then_cmp() requires an argument", call.span, "C008");
+                    report_error("then_cmp() requires an argument", call.span, "C015");
                     return "0";
                 }
                 std::string other = gen_expr(*call.args[0]);
@@ -1019,7 +1019,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "write_str") {
             if (call.args.empty()) {
-                report_error("write_str requires a content argument", call.span, "C008");
+                report_error("write_str requires a content argument", call.span, "C015");
                 return "0";
             }
             std::string content_arg = gen_expr(*call.args[0]);

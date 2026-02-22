@@ -905,7 +905,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
             }
         }
         error("Unknown field: " + field.field + " on class " + class_type.name, field.object->span,
-              "T005");
+              "T073");
     }
 
     if (obj_type->is<NamedType>()) {
@@ -941,7 +941,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                 }
             }
             error("Unknown field: " + field.field + " on class " + named.name, field.object->span,
-                  "T005");
+                  "T073");
             return make_unit();
         }
 
@@ -970,7 +970,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                         }
                     }
                     error("Unknown field: " + field.field + " on Ptr[" + inner_named.name + "]",
-                          field.object->span, "T005");
+                          field.object->span, "T074");
                     return make_unit();
                 }
             }
@@ -1257,7 +1257,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
     }
 
     if (!class_def->base_class.has_value()) {
-        error("Class '" + class_type.name + "' has no base class", base.span, "T046");
+        error("Class '" + class_type.name + "' has no base class", base.span, "T076");
         return make_unit();
     }
 
@@ -1284,7 +1284,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
         }
 
         error("Method '" + base.member + "' not found in base class '" + base_class_name + "'",
-              base.span, "T006");
+              base.span, "T077");
         return make_unit();
     } else {
         // Field access on base class
@@ -1295,7 +1295,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
         }
 
         error("Field '" + base.member + "' not found in base class '" + base_class_name + "'",
-              base.span, "T005");
+              base.span, "T067");
         return make_unit();
     }
 }
@@ -1313,7 +1313,7 @@ auto TypeChecker::check_new(const parser::NewExpr& new_expr) -> TypePtr {
     auto class_def = env_.lookup_class(class_name);
 
     if (!class_def.has_value()) {
-        error("Class '" + class_name + "' not found", new_expr.span, "T046");
+        error("Class '" + class_name + "' not found", new_expr.span, "T075");
         return make_unit();
     }
 

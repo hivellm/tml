@@ -2,7 +2,7 @@
 // Tests multiple type checking error codes in a single file.
 // All errors here are caught at the type-check phase.
 
-// @expect-error T001 Type mismatch
+// @expect-error T056 Type mismatch
 // @expect-error T001 Binary operator
 // @expect-error T001 Undefined variable
 // @expect-error T004

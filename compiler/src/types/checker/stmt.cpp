@@ -78,7 +78,7 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
             if (!types_compatible(resolved_var, resolved_init)) {
                 error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
                           type_to_string(resolved_init),
-                      let.span, "T001");
+                      let.span, "T056");
             }
         }
     } else {
@@ -114,7 +114,7 @@ auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
         if (!types_compatible(resolved_var, resolved_init)) {
             error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
                       type_to_string(resolved_init),
-                  var.span, "T001");
+                  var.span, "T056");
         }
     } else {
         // No type annotation - infer from initializer
@@ -155,7 +155,7 @@ auto TypeChecker::check_let_else(const parser::LetElseStmt& let_else) -> TypePtr
     if (!types_compatible(resolved_scrutinee, resolved_init)) {
         error("Type mismatch in let-else: expected " + type_to_string(resolved_scrutinee) +
                   ", found " + type_to_string(resolved_init),
-              let_else.span, "T001");
+              let_else.span, "T056");
     }
 
     // Check the else block - it should diverge (have type Never)
@@ -193,7 +193,7 @@ auto TypeChecker::check_nested_decl(const parser::Decl& decl, SourceSpan span) -
                     error("Type mismatch in const declaration: expected " +
                               type_to_string(resolved_const) + ", found " +
                               type_to_string(resolved_value),
-                          d.span, "T001");
+                          d.span, "T055");
                 }
 
                 // Bind the constant name in current scope (immutable)
@@ -231,7 +231,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
                 if (!type->is<TupleType>()) {
                     error("Cannot destructure non-tuple type with tuple pattern", pattern.span,
-                          "T035");
+                          "T068");
                     return;
                 }
                 auto& tuple = type->as<TupleType>();
@@ -250,7 +250,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Extract enum name from type, resolving type aliases
                 if (!type->is<NamedType>()) {
                     error("Pattern expects enum type, but got different type", pattern.span,
-                          "T035");
+                          "T069");
                     return;
                 }
 
@@ -380,7 +380,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Struct pattern destructuring: Point { x, y }
                 if (!type->is<NamedType>()) {
                     error("Cannot destructure non-struct type with struct pattern", pattern.span,
-                          "T035");
+                          "T070");
                     return;
                 }
 
@@ -406,7 +406,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                     auto it = field_types.find(field_name);
                     if (it == field_types.end()) {
                         error("Unknown field '" + field_name + "' in struct '" + struct_name + "'",
-                              pattern.span, "T005");
+                              pattern.span, "T072");
                         continue;
                     }
 
@@ -420,7 +420,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Array pattern destructuring: [a, b, c] or [head, ..rest]
                 if (!type->is<ArrayType>()) {
                     error("Cannot destructure non-array type with array pattern", pattern.span,
-                          "T035");
+                          "T071");
                     return;
                 }
 

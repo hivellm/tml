@@ -870,7 +870,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 return result;
             }
         }
-        report_error("Compound assignment requires a variable on the left side", bin.span, "C003");
+        report_error("Compound assignment requires a variable on the left side", bin.span, "C023");
         return "0";
     }
 

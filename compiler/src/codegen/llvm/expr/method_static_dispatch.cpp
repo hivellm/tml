@@ -1117,7 +1117,7 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                 }
             }
 
-            report_error("Unknown static method: " + type_name + "." + method, call.span, "C006");
+            report_error("Unknown static method: " + type_name + "." + method, call.span, "C035");
             return "0";
         }
     }

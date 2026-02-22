@@ -519,7 +519,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 }
             }
         }
-        report_error("Can only take reference of variables", unary.span, "C003");
+        report_error("Can only take reference of variables", unary.span, "C026");
         last_expr_type_ = "ptr";
         return "null";
     }
@@ -808,7 +808,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 return old_val;
             }
         }
-        report_error("Can only increment variables", unary.span, "C003");
+        report_error("Can only increment variables", unary.span, "C026");
         return "0";
     }
 
@@ -831,7 +831,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 return old_val;
             }
         }
-        report_error("Can only decrement variables", unary.span, "C003");
+        report_error("Can only decrement variables", unary.span, "C026");
         return "0";
     }
 

@@ -64,7 +64,7 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
     // Look up vtable slot for this method
     auto it = class_vtable_layout_.find(class_name);
     if (it == class_vtable_layout_.end()) {
-        report_error("Unknown class for virtual dispatch: " + class_name, SourceSpan{}, "C005");
+        report_error("Unknown class for virtual dispatch: " + class_name, SourceSpan{}, "C028");
         return "null";
     }
 
@@ -77,7 +77,7 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
     }
 
     if (vtable_slot == SIZE_MAX) {
-        report_error("Method not found in vtable: " + method_name, SourceSpan{}, "C006");
+        report_error("Method not found in vtable: " + method_name, SourceSpan{}, "C033");
         return "null";
     }
 
@@ -279,14 +279,14 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
     }
 
     if (current_class.empty()) {
-        report_error("Cannot determine current class for base expression", base.span, "C005");
+        report_error("Cannot determine current class for base expression", base.span, "C029");
         return "null";
     }
 
     // Look up base class from type environment
     auto class_def = env_.lookup_class(current_class);
     if (!class_def || !class_def->base_class) {
-        report_error("Class has no base class", base.span, "C005");
+        report_error("Class has no base class", base.span, "C030");
         return "null";
     }
 
@@ -340,7 +340,7 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
         // Field access on base class
         auto base_class_def = env_.lookup_class(base_class);
         if (!base_class_def) {
-            report_error("Base class not found", base.span, "C005");
+            report_error("Base class not found", base.span, "C031");
             return "null";
         }
 
@@ -355,7 +355,7 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
         }
 
         if (field_idx < 0) {
-            report_error("Field not found in base class: " + base.member, base.span, "C006");
+            report_error("Field not found in base class: " + base.member, base.span, "C034");
             return "null";
         }
 
@@ -383,13 +383,13 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
     if (!new_expr.class_type.segments.empty()) {
         class_name = new_expr.class_type.segments.back();
     } else {
-        report_error("Invalid class name in new expression", new_expr.span, "C003");
+        report_error("Invalid class name in new expression", new_expr.span, "T066");
         return "null";
     }
 
     auto it = class_types_.find(class_name);
     if (it == class_types_.end()) {
-        report_error("Unknown class: " + class_name, new_expr.span, "C005");
+        report_error("Unknown class: " + class_name, new_expr.span, "C032");
         return "null";
     }
 

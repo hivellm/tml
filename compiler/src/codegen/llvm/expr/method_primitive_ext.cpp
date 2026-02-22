@@ -32,7 +32,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
                                                               : "CheckedMul";
         emit_coverage(behavior_name + "::" + method);
         if (call.args.empty()) {
-            report_error(method + "() requires an argument", call.span, "C008");
+            report_error(method + "() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -116,7 +116,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
     if (method == "checked_div" && is_integer) {
         emit_coverage("CheckedDiv::checked_div");
         if (call.args.empty()) {
-            report_error("checked_div() requires an argument", call.span, "C008");
+            report_error("checked_div() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -185,7 +185,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
     if (method == "checked_rem" && is_integer) {
         emit_coverage("CheckedRem::checked_rem");
         if (call.args.empty()) {
-            report_error("checked_rem() requires an argument", call.span, "C008");
+            report_error("checked_rem() requires an argument", call.span, "C015");
             return "0";
         }
         std::string other = gen_expr(*call.args[0]);
@@ -492,7 +492,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         emit_coverage("overflow::" + method);
 
         if (call.args.empty()) {
-            report_error(method + "() requires one argument", call.span, "C008");
+            report_error(method + "() requires one argument", call.span, "C015");
             return "0";
         }
         std::string rhs = gen_expr(*call.args[0]);

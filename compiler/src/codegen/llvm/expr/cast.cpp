@@ -287,7 +287,7 @@ auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
     }
 
     if (target_name.empty()) {
-        report_error("Invalid type in 'is' expression", is_expr.span, "C003");
+        report_error("Invalid type in 'is' expression", is_expr.span, "C025");
         last_expr_type_ = "i1";
         return "false";
     }

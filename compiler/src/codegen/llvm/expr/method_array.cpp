@@ -68,7 +68,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "get") {
         emit_coverage("Array::get");
         if (call.args.empty()) {
-            report_error("get requires an index argument", call.span, "C008");
+            report_error("get requires an index argument", call.span, "C015");
             return "0";
         }
 
@@ -224,7 +224,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "map") {
         emit_coverage("Array::map");
         if (call.args.empty()) {
-            report_error("map requires a closure argument", call.span, "C008");
+            report_error("map requires a closure argument", call.span, "C016");
             return "0";
         }
 
@@ -267,7 +267,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "eq") {
         emit_coverage("Array::eq");
         if (call.args.empty()) {
-            report_error("eq requires an argument", call.span, "C008");
+            report_error("eq requires an argument", call.span, "C015");
             return "0";
         }
 
@@ -322,7 +322,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "ne") {
         emit_coverage("Array::ne");
         if (call.args.empty()) {
-            report_error("ne requires an argument", call.span, "C008");
+            report_error("ne requires an argument", call.span, "C015");
             return "0";
         }
 
@@ -378,7 +378,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "cmp") {
         emit_coverage("Array::cmp");
         if (call.args.empty()) {
-            report_error("cmp requires an argument", call.span, "C008");
+            report_error("cmp requires an argument", call.span, "C015");
             return "0";
         }
 

@@ -260,7 +260,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        report_error("Cannot call non-function field", call.span, "C003");
+        report_error("Cannot call non-function field", call.span, "C024");
         return "0";
     } else {
         report_error("Complex callee not supported", call.span, "C002");

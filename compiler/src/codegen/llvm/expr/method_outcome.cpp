@@ -116,7 +116,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "unwrap_or") {
         emit_coverage("Outcome::unwrap_or");
         if (call.args.empty()) {
-            report_error("unwrap_or requires an argument", call.span, "C008");
+            report_error("unwrap_or requires an argument", call.span, "C015");
             return "0";
         }
         std::string default_val = gen_expr(*call.args[0]);
@@ -298,7 +298,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "contains") {
         emit_coverage("Outcome::contains");
         if (call.args.empty()) {
-            report_error("contains requires an argument", call.span, "C008");
+            report_error("contains requires an argument", call.span, "C015");
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
@@ -361,7 +361,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "contains_err") {
         emit_coverage("Outcome::contains_err");
         if (call.args.empty()) {
-            report_error("contains_err requires an argument", call.span, "C008");
+            report_error("contains_err requires an argument", call.span, "C015");
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
@@ -425,7 +425,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "alt") {
         emit_coverage("Outcome::alt");
         if (call.args.empty()) {
-            report_error("alt requires an argument", call.span, "C008");
+            report_error("alt requires an argument", call.span, "C015");
             return receiver;
         }
         std::string other = gen_expr(*call.args[0]);
@@ -443,7 +443,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "also") {
         emit_coverage("Outcome::also");
         if (call.args.empty()) {
-            report_error("also requires an argument", call.span, "C008");
+            report_error("also requires an argument", call.span, "C015");
             return receiver;
         }
         std::string other = gen_expr(*call.args[0]);
@@ -499,13 +499,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "is_ok_and") {
         emit_coverage("Outcome::is_ok_and");
         if (call.args.empty()) {
-            report_error("is_ok_and requires a predicate argument", call.span, "C008");
+            report_error("is_ok_and requires a predicate argument", call.span, "C017");
             return "false";
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("is_ok_and requires a closure or function reference", call.span, "C003");
+            report_error("is_ok_and requires a closure or function reference", call.span, "C021");
             return "false";
         }
 
@@ -594,13 +594,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "is_err_and") {
         emit_coverage("Outcome::is_err_and");
         if (call.args.empty()) {
-            report_error("is_err_and requires a predicate argument", call.span, "C008");
+            report_error("is_err_and requires a predicate argument", call.span, "C017");
             return "false";
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("is_err_and requires a closure or function reference", call.span, "C003");
+            report_error("is_err_and requires a closure or function reference", call.span, "C021");
             return "false";
         }
 
@@ -689,14 +689,14 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "unwrap_or_else") {
         emit_coverage("Outcome::unwrap_or_else");
         if (call.args.empty()) {
-            report_error("unwrap_or_else requires a function argument", call.span, "C008");
+            report_error("unwrap_or_else requires a function argument", call.span, "C017");
             return "0";
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
             report_error("unwrap_or_else requires a closure or function reference", call.span,
-                         "C003");
+                         "C021");
             return "0";
         }
 
@@ -792,13 +792,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "map") {
         emit_coverage("Outcome::map");
         if (call.args.empty()) {
-            report_error("map requires a function argument", call.span, "C008");
+            report_error("map requires a function argument", call.span, "C017");
             return receiver;
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("map requires a closure or function reference", call.span, "C003");
+            report_error("map requires a closure or function reference", call.span, "C021");
             return receiver;
         }
 
@@ -942,13 +942,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "map_or") {
         emit_coverage("Outcome::map_or");
         if (call.args.size() < 2) {
-            report_error("map_or requires a default value and a function", call.span, "C008");
+            report_error("map_or requires a default value and a function", call.span, "C018");
             return "0";
         }
         bool is_closure = call.args[1]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[1]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("map_or requires a closure or function reference", call.span, "C003");
+            report_error("map_or requires a closure or function reference", call.span, "C021");
             return "0";
         }
 
@@ -1039,13 +1039,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "and_then") {
         emit_coverage("Outcome::and_then");
         if (call.args.empty()) {
-            report_error("and_then requires a function argument", call.span, "C008");
+            report_error("and_then requires a function argument", call.span, "C017");
             return receiver;
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("and_then requires a closure or function reference", call.span, "C003");
+            report_error("and_then requires a closure or function reference", call.span, "C021");
             return receiver;
         }
 
@@ -1135,13 +1135,13 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     if (method == "or_else") {
         emit_coverage("Outcome::or_else");
         if (call.args.empty()) {
-            report_error("or_else requires a function argument", call.span, "C008");
+            report_error("or_else requires a function argument", call.span, "C017");
             return receiver;
         }
         bool is_closure = call.args[0]->is<parser::ClosureExpr>();
         bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
         if (!is_closure && !is_func_ref) {
-            report_error("or_else requires a closure or function reference", call.span, "C003");
+            report_error("or_else requires a closure or function reference", call.span, "C021");
             return receiver;
         }
 

@@ -115,7 +115,7 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
             if (!field_found) {
                 std::string type_kind = struct_def->is_union ? "union" : "struct";
                 error("Unknown field '" + field_name + "' in " + type_kind + " '" + name + "'",
-                      struct_expr.span, "T005");
+                      struct_expr.span, "T059");
             }
             check_expr(*field_expr, expected_field_type);
         }
@@ -125,10 +125,10 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
         if (struct_def->is_union) {
             if (provided_fields.empty()) {
                 error("Union literal requires exactly one field initializer", struct_expr.span,
-                      "T005");
+                      "T060");
             } else if (provided_fields.size() > 1) {
                 error("Union literal can only initialize one field at a time", struct_expr.span,
-                      "T005");
+                      "T060");
             }
         } else {
             // Regular struct - check all fields without defaults are provided
@@ -142,7 +142,7 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
                 if (base_name != name) {
                     error("Struct update base has type '" + base_name + "' but expected '" + name +
                               "'",
-                          struct_expr.span, "T005");
+                          struct_expr.span, "T062");
                 }
             } else {
                 // No base - all fields without defaults must be provided
@@ -152,7 +152,7 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
                         if (!fld.has_default) {
                             error("Missing field '" + fld.name +
                                       "' in struct literal (no default value)",
-                                  struct_expr.span, "T005");
+                                  struct_expr.span, "T061");
                         }
                     }
                 }

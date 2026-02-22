@@ -678,7 +678,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                                     const parser::ClassMethod& method) {
     if (!cls.extends.has_value()) {
         error("Cannot override method '" + method.name + "': class has no base class", method.span,
-              "T006");
+              "T063");
         return;
     }
 
@@ -709,7 +709,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                 if (!is_virtual && !parent_method.is_override) {
                     error("Cannot override non-virtual method '" + method.name + "' from '" +
                               current + "'",
-                          method.span, "T006");
+                          method.span, "T064");
                     return;
                 }
 
@@ -764,7 +764,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                     if (!types_equal(override_param_type, parent_param_type)) {
                         error("Override method '" + method.name + "' parameter " +
                                   std::to_string(i + 1) + " has different type than base method",
-                              method.span, "T001");
+                              method.span, "T058");
                         return;
                     }
                 }
@@ -785,7 +785,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
 
     if (!found) {
         error("Method '" + method.name + "' marked as override but not found in any base class",
-              method.span, "T006");
+              method.span, "T065");
     }
 }
 
@@ -866,7 +866,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
                                               iface_name + "'. Expected '" +
                                               type_to_string(expected_param_type) + "' but got '" +
                                               type_to_string(actual_param_type) + "'",
-                                          cls_method.span, "T001");
+                                          cls_method.span, "T058");
                                 }
                             }
                             param_idx++;

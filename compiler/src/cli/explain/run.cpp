@@ -132,12 +132,12 @@ int run_explain(const std::string& code, bool /*verbose*/) {
 
     // Show available categories
     std::cerr << "Available error code categories:\n";
-    std::cerr << "  L001-L015   Lexer errors (tokenization)\n";
+    std::cerr << "  L001-L020   Lexer errors (tokenization)\n";
     std::cerr << "  P001-P065   Parser errors (syntax)\n";
     std::cerr << "  PP001-PP002 Preprocessor errors (conditional compilation)\n";
-    std::cerr << "  T001-T054   Type errors (type checking)\n";
+    std::cerr << "  T001-T084   Type errors (type checking)\n";
     std::cerr << "  B001-B017   Borrow errors (ownership/lifetimes)\n";
-    std::cerr << "  C001-C014   Codegen errors (code generation)\n";
+    std::cerr << "  C001-C035   Codegen errors (code generation)\n";
     std::cerr << "  E001-E006   General errors\n";
 
     return 1;
