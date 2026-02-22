@@ -1,0 +1,44 @@
+use test
+
+// Test 1: String literal in assert_eq (should not leak)
+@test
+func test_no_leak_literal() -> I32 {
+    assert_eq("hello", "hello", "literal comparison")
+    return 0
+}
+
+// Test 2: to_string() result in assert_eq as temporary
+@test
+func test_leak_to_string_in_assert() -> I32 {
+    let x: I32 = 42
+    assert_eq(x.to_string(), "42", "to_string in assert_eq")
+    return 0
+}
+
+// Test 3: debug_string() result as temporary
+@test
+func test_leak_debug_string_in_assert() -> I32 {
+    let x: I32 = 42
+    assert_eq(x.debug_string(), "42", "debug_string in assert_eq")
+    return 0
+}
+
+// Test 4: Multiple to_string() calls in same function
+@test
+func test_leak_multiple_to_string() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    let sa: Str = a.to_string()
+    let sb: Str = b.to_string()
+    assert_eq(sa, "10", "first")
+    assert_eq(sb, "20", "second")
+    return 0
+}
+
+// Test 5: Discarded function return (string returned but not assigned)
+@test
+func test_leak_discarded_return() -> I32 {
+    let x: I32 = 42
+    x.to_string()  // return value discarded — should this be freed?
+    return 0
+}
