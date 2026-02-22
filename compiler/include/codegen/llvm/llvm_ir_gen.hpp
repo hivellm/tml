@@ -519,6 +519,7 @@ private:
     void register_for_drop(const std::string& var_name, const std::string& var_reg,
                            const std::string& type_name, const std::string& llvm_type);
     void register_heap_str_for_drop(const std::string& var_name, const std::string& var_reg);
+    bool is_heap_str_producer(const parser::Expr& expr) const;
     void emit_scope_drops(); // Emit drops for current scope only
     void emit_all_drops();   // Emit drops for all scopes (for return)
     void emit_drop_call(const DropInfo& info);

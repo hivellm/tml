@@ -53,7 +53,7 @@ static bool is_semantic_str(const types::TypePtr& sem_type) {
 // tml_str_free validates heap pointers before freeing, so it's safe to
 // call on any pointer — global constants and stack pointers are skipped.
 // All Str-returning stdlib functions allocate fresh heap memory.
-static bool is_heap_str_producer(const parser::Expr& expr) {
+bool LLVMIRGen::is_heap_str_producer(const parser::Expr& expr) const {
     // Interpolated strings always heap-allocate via snprintf+malloc
     if (expr.is<parser::InterpolatedStringExpr>())
         return true;
@@ -63,13 +63,27 @@ static bool is_heap_str_producer(const parser::Expr& expr) {
     // Binary expressions on strings (concatenation) heap-allocate
     if (expr.is<parser::BinaryExpr>())
         return true;
-    // Function/method calls returning Str: stdlib functions allocate fresh heap Str.
-    // tml_str_free safely validates heap pointers, so even if a function returns
-    // a global constant or empty string "", the free is a no-op.
-    if (expr.is<parser::CallExpr>())
-        return true;
-    if (expr.is<parser::MethodCallExpr>())
-        return true;
+    // Function/method calls returning Str: only those marked @allocates produce
+    // fresh heap-allocated Str. Non-@allocates functions may return borrowed
+    // pointers (e.g., FFI functions returning const char* from C data structures).
+    // Auto-freeing borrowed pointers causes double-free / heap corruption.
+    if (expr.is<parser::CallExpr>()) {
+        const auto& call = expr.as<parser::CallExpr>();
+        std::string func_name;
+        if (call.callee->is<parser::IdentExpr>()) {
+            func_name = call.callee->as<parser::IdentExpr>().name;
+        } else if (call.callee->is<parser::PathExpr>()) {
+            const auto& path = call.callee->as<parser::PathExpr>().path;
+            if (!path.segments.empty()) {
+                func_name = path.segments.back();
+            }
+        }
+        return !func_name.empty() && allocating_functions_.count(func_name) > 0;
+    }
+    if (expr.is<parser::MethodCallExpr>()) {
+        const auto& mcall = expr.as<parser::MethodCallExpr>();
+        return allocating_functions_.count(mcall.method) > 0;
+    }
     // String literals are global constants — tml_str_free skips them (not heap)
     // Identifiers are aliases — freeing would double-free the original
     return false;
