@@ -1,0 +1,34 @@
+use test
+use std::os::signal
+
+@test
+func test_register_sigint() -> I32 {
+    let ok = signal::register(signal::SIGINT())
+    assert(ok, "should register SIGINT")
+    // No signal sent, check should return false
+    assert(not signal::check(signal::SIGINT()), "no signal pending")
+    // Reset
+    let reset_ok = signal::reset(signal::SIGINT())
+    assert(reset_ok, "should reset SIGINT")
+    0
+}
+
+@test
+func test_ignore_signal() -> I32 {
+    let ok = signal::ignore(signal::SIGTERM())
+    assert(ok, "should ignore SIGTERM")
+    0
+}
+
+@test
+func test_check_clears_flag() -> I32 {
+    // Register, raise, check should be true, second check should be false
+    signal::register(signal::SIGINT())
+    signal::raise_signal(signal::SIGINT())
+    let first = signal::check(signal::SIGINT())
+    assert(first, "first check should find the signal")
+    let second = signal::check(signal::SIGINT())
+    assert(not second, "second check should be clear")
+    signal::reset(signal::SIGINT())
+    0
+}

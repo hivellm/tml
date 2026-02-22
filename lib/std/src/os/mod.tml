@@ -1,0 +1,406 @@
+//! Operating system information and utilities.
+//!
+//! This module provides platform-independent access to operating system
+//! information, modeled after the Node.js `os` module.
+//!
+//! # Submodules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`subprocess`] | Child process spawning and management |
+//! | [`signal`] | Signal handling (polling-based) |
+//! | [`pipe`] | Anonymous pipe creation |
+
+pub mod subprocess  // Child process spawning and management
+pub mod signal      // Signal handling (polling-based)
+pub mod pipe        // Anonymous pipe creation
+
+// ============================================================================
+// Platform Constants
+// ============================================================================
+
+/// OS-specific end-of-line marker.
+#if WINDOWS
+pub const EOL: Str = "\r\n"
+#else
+pub const EOL: Str = "\n"
+#endif
+
+/// Platform-specific null device path.
+#if WINDOWS
+pub const DEV_NULL: Str = "\\\\.\\nul"
+#else
+pub const DEV_NULL: Str = "/dev/null"
+#endif
+
+/// Priority constants for [`get_priority`] and [`set_priority`].
+pub const PRIORITY_LOW: I32 = 19
+pub const PRIORITY_BELOW_NORMAL: I32 = 10
+pub const PRIORITY_NORMAL: I32 = 0
+pub const PRIORITY_ABOVE_NORMAL: I32 = -7
+pub const PRIORITY_HIGH: I32 = -14
+pub const PRIORITY_HIGHEST: I32 = -20
+
+// ============================================================================
+// FFI declarations (private)
+// ============================================================================
+
+@extern("tml_os_arch")
+func ffi_arch() -> Str
+
+@extern("tml_os_platform")
+func ffi_platform() -> Str
+
+@extern("tml_os_type")
+func ffi_os_type() -> Str
+
+@extern("tml_os_machine")
+func ffi_machine() -> Str
+
+@extern("tml_os_release")
+func ffi_release() -> Str
+
+@extern("tml_os_version")
+func ffi_version() -> Str
+
+@extern("tml_os_hostname")
+func ffi_hostname() -> Str
+
+@extern("tml_os_homedir")
+func ffi_homedir() -> Str
+
+@extern("tml_os_tmpdir")
+func ffi_tmpdir() -> Str
+
+@extern("tml_os_uptime")
+func ffi_uptime() -> I64
+
+@extern("tml_os_totalmem")
+func ffi_totalmem() -> U64
+
+@extern("tml_os_freemem")
+func ffi_freemem() -> U64
+
+@extern("tml_os_endianness")
+func ffi_endianness() -> Str
+
+@extern("tml_os_cpu_count")
+func ffi_cpu_count() -> I32
+
+@extern("tml_os_cpu_model")
+func ffi_cpu_model(index: I32) -> Str
+
+@extern("tml_os_cpu_speed")
+func ffi_cpu_speed(index: I32) -> I64
+
+@extern("tml_os_loadavg_1")
+func ffi_loadavg_1() -> F64
+
+@extern("tml_os_loadavg_5")
+func ffi_loadavg_5() -> F64
+
+@extern("tml_os_loadavg_15")
+func ffi_loadavg_15() -> F64
+
+@extern("tml_os_username")
+func ffi_username() -> Str
+
+@extern("tml_os_uid")
+func ffi_uid() -> I64
+
+@extern("tml_os_gid")
+func ffi_gid() -> I64
+
+@extern("tml_os_shell")
+func ffi_shell() -> Str
+
+@extern("tml_os_pid")
+func ffi_pid() -> I32
+
+@extern("tml_os_env_has")
+func ffi_env_has(name: Str) -> I32
+
+@extern("tml_os_env_get")
+func ffi_env_get(name: Str) -> Str
+
+@extern("tml_os_env_set")
+func ffi_env_set(name: Str, value: Str) -> I32
+
+@extern("tml_os_env_unset")
+func ffi_env_unset(name: Str) -> I32
+
+@extern("tml_os_exit")
+func ffi_exit(code: I32)
+
+@extern("tml_os_args_count")
+func ffi_args_count() -> I32
+
+@extern("tml_os_args_get")
+func ffi_args_get(index: I32) -> Str
+
+@extern("tml_os_get_priority")
+func ffi_get_priority(pid: I32) -> I32
+
+@extern("tml_os_set_priority")
+func ffi_set_priority(pid: I32, priority: I32) -> I32
+
+@extern("tml_os_current_dir")
+func ffi_current_dir() -> Str
+
+@extern("tml_os_set_current_dir")
+func ffi_set_current_dir(path: Str) -> I32
+
+@extern("tml_os_exec")
+func ffi_exec(command: Str) -> Str
+
+@extern("tml_os_exec_status")
+func ffi_exec_status(command: Str) -> I32
+
+// ============================================================================
+// Public API - System Information
+// ============================================================================
+
+/// Returns the CPU architecture (`"x64"`, `"arm64"`, `"ia32"`, ...).
+pub func arch() -> Str {
+    return ffi_arch()
+}
+
+/// Returns the OS platform (`"win32"`, `"linux"`, `"darwin"`, ...).
+pub func platform() -> Str {
+    return ffi_platform()
+}
+
+/// Returns the OS name (`"Windows_NT"`, `"Linux"`, `"Darwin"`).
+pub func os_type() -> Str {
+    return ffi_os_type()
+}
+
+/// Returns the machine type (`"x86_64"`, `"aarch64"`, ...).
+pub func machine() -> Str {
+    return ffi_machine()
+}
+
+/// Returns the OS release version string.
+pub func release() -> Str {
+    return ffi_release()
+}
+
+/// Returns a string identifying the kernel version.
+pub func version() -> Str {
+    return ffi_version()
+}
+
+/// Returns the hostname of the operating system.
+pub func hostname() -> Str {
+    return ffi_hostname()
+}
+
+/// Returns the current user's home directory path.
+pub func homedir() -> Str {
+    return ffi_homedir()
+}
+
+/// Returns the OS default temp directory path.
+pub func tmpdir() -> Str {
+    return ffi_tmpdir()
+}
+
+/// Returns the system uptime in seconds.
+pub func uptime() -> I64 {
+    return ffi_uptime()
+}
+
+/// Returns the total amount of system memory in bytes.
+pub func totalmem() -> U64 {
+    return ffi_totalmem()
+}
+
+/// Returns the amount of free system memory in bytes.
+pub func freemem() -> U64 {
+    return ffi_freemem()
+}
+
+/// Returns the endianness of the CPU (`"LE"` or `"BE"`).
+pub func endianness() -> Str {
+    return ffi_endianness()
+}
+
+/// Returns the number of logical CPU cores.
+pub func cpu_count() -> I32 {
+    return ffi_cpu_count()
+}
+
+/// Returns the CPU model name for a given core index.
+pub func cpu_model(index: I32) -> Str {
+    return ffi_cpu_model(index)
+}
+
+/// Returns the CPU speed in MHz for a given core index.
+pub func cpu_speed(index: I32) -> I64 {
+    return ffi_cpu_speed(index)
+}
+
+/// Returns the 1-minute load average (0.0 on Windows).
+pub func loadavg_1() -> F64 {
+    return ffi_loadavg_1()
+}
+
+/// Returns the 5-minute load average (0.0 on Windows).
+pub func loadavg_5() -> F64 {
+    return ffi_loadavg_5()
+}
+
+/// Returns the 15-minute load average (0.0 on Windows).
+pub func loadavg_15() -> F64 {
+    return ffi_loadavg_15()
+}
+
+/// Returns the current username.
+pub func username() -> Str {
+    return ffi_username()
+}
+
+/// Returns the current user ID (-1 on Windows).
+pub func uid() -> I64 {
+    return ffi_uid()
+}
+
+/// Returns the current group ID (-1 on Windows).
+pub func gid() -> I64 {
+    return ffi_gid()
+}
+
+/// Returns the current user's default shell.
+pub func shell() -> Str {
+    return ffi_shell()
+}
+
+/// Returns the current process ID.
+pub func pid() -> I32 {
+    return ffi_pid()
+}
+
+// ============================================================================
+// Environment Variables
+// ============================================================================
+
+/// Gets the value of an environment variable.
+/// Returns `Just(value)` if the variable exists, `Nothing` otherwise.
+pub func env_get(name: Str) -> Maybe[Str] {
+    if ffi_env_has(name) == 0 {
+        return Nothing
+    }
+    return Just(ffi_env_get(name))
+}
+
+/// Sets an environment variable. Returns `true` on success.
+pub func env_set(name: Str, value: Str) -> Bool {
+    return ffi_env_set(name, value) == 0
+}
+
+/// Removes an environment variable. Returns `true` on success.
+pub func env_unset(name: Str) -> Bool {
+    return ffi_env_unset(name) == 0
+}
+
+// ============================================================================
+// Process Priority
+// ============================================================================
+
+/// Gets the scheduling priority of a process.
+/// A `pid` of `0` means the current process.
+pub func get_priority(pid: I32) -> I32 {
+    return ffi_get_priority(pid)
+}
+
+/// Sets the scheduling priority of a process.
+/// Returns `true` on success.
+pub func set_priority(pid: I32, priority: I32) -> Bool {
+    return ffi_set_priority(pid, priority) == 0
+}
+
+// ============================================================================
+// Command-Line Arguments
+// ============================================================================
+
+/// Returns the number of command-line arguments.
+pub func args_count() -> I32 {
+    return ffi_args_count()
+}
+
+/// Returns the command-line argument at the given index.
+/// Returns an empty string if the index is out of bounds.
+pub func args_get(index: I32) -> Str {
+    return ffi_args_get(index)
+}
+
+// ============================================================================
+// Process Control
+// ============================================================================
+
+/// Terminates the current process with the given exit code.
+///
+/// An exit code of `0` indicates success, any other value indicates an error.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// os::process_exit(0)  // Exit successfully
+/// os::process_exit(1)  // Exit with error
+/// ```
+pub func process_exit(code: I32) {
+    ffi_exit(code)
+}
+
+// ============================================================================
+// Working Directory
+// ============================================================================
+
+/// Returns the current working directory.
+///
+/// Returns an empty string if the directory cannot be determined.
+pub func current_dir() -> Str {
+    return ffi_current_dir()
+}
+
+/// Changes the current working directory.
+/// Returns `true` on success, `false` on failure.
+pub func set_current_dir(path: Str) -> Bool {
+    return ffi_set_current_dir(path) == 0
+}
+
+// ============================================================================
+// Process Execution
+// ============================================================================
+
+/// Executes a shell command and returns its stdout output.
+///
+/// Returns the command's stdout as a string. On error, returns an empty string.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// let output: Str = os::exec("echo hello")
+/// ```
+pub func exec(command: Str) -> Str {
+    return ffi_exec(command)
+}
+
+/// Executes a shell command and returns its exit code.
+///
+/// Returns the process exit code (0 = success). Returns -1 on error.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// let status: I32 = os::exec_status("echo hello")
+/// ```
+pub func exec_status(command: Str) -> I32 {
+    return ffi_exec_status(command)
+}

@@ -1,0 +1,83 @@
+//! Anonymous pipe support for inter-process communication.
+//!
+//! Provides a simple API for creating anonymous pipes that can be used
+//! for communication between parent and child processes.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::pipe
+//!
+//! let result = pipe::create()
+//! when result {
+//!     Ok(p) => {
+//!         // p.read_fd and p.write_fd are the pipe ends
+//!         p.close()
+//!     }
+//!     Err(e) => print("error: " + e + "\n")
+//! }
+//! ```
+
+use core::intrinsics
+
+// ============================================================================
+// FFI declarations
+// ============================================================================
+
+@extern("tml_pipe_create")
+func ffi_create(read_fd: ref I64, write_fd: ref I64) -> I32
+
+@extern("tml_pipe_close")
+func ffi_close(fd: I64)
+
+// ============================================================================
+// Pipe — an anonymous pipe pair
+// ============================================================================
+
+/// An anonymous pipe with a read end and a write end.
+pub type Pipe {
+    read_fd: I64,
+    write_fd: I64
+}
+
+impl Pipe {
+    /// Close both ends of the pipe.
+    pub func close(this) {
+        if this.read_fd != 0 {
+            ffi_close(this.read_fd)
+        }
+        if this.write_fd != 0 {
+            ffi_close(this.write_fd)
+        }
+    }
+
+    /// Close only the read end.
+    pub func close_read(this) {
+        if this.read_fd != 0 {
+            ffi_close(this.read_fd)
+        }
+    }
+
+    /// Close only the write end.
+    pub func close_write(this) {
+        if this.write_fd != 0 {
+            ffi_close(this.write_fd)
+        }
+    }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Create an anonymous pipe pair.
+/// Returns a Pipe with read_fd and write_fd on success.
+pub func create() -> Outcome[Pipe, Str] {
+    var read_fd: I64 = 0
+    var write_fd: I64 = 0
+    let ok: I32 = ffi_create(ref read_fd, ref write_fd)
+    if ok == 1 {
+        return Ok(Pipe { read_fd: read_fd, write_fd: write_fd })
+    }
+    return Err("failed to create pipe")
+}

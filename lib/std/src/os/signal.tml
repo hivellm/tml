@@ -1,0 +1,95 @@
+//! Signal handling for responding to OS signals.
+//!
+//! Provides a simple polling-based API for registering interest in signals
+//! and checking if they have been received.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::signal
+//!
+//! // Register for SIGINT (Ctrl+C)
+//! signal::register(signal::SIGINT)
+//!
+//! // In a loop, check if signal was received
+//! if signal::check(signal::SIGINT) {
+//!     print("Caught Ctrl+C!\n")
+//! }
+//! ```
+
+// ============================================================================
+// Signal Constants (as functions for cross-module access)
+// ============================================================================
+
+/// Interrupt signal (Ctrl+C). Value: 2.
+pub func SIGINT() -> I32 { return 2 }
+
+/// Termination signal. Value: 15.
+pub func SIGTERM() -> I32 { return 15 }
+
+/// Hangup signal (Unix). Value: 1.
+pub func SIGHUP() -> I32 { return 1 }
+
+/// User-defined signal 1 (Unix). Value: 10.
+pub func SIGUSR1() -> I32 { return 10 }
+
+/// User-defined signal 2 (Unix). Value: 12.
+pub func SIGUSR2() -> I32 { return 12 }
+
+/// Alarm signal (Unix). Value: 14.
+pub func SIGALRM() -> I32 { return 14 }
+
+// ============================================================================
+// FFI declarations
+// ============================================================================
+
+@extern("tml_signal_register")
+func ffi_register(signum: I32) -> I32
+
+@extern("tml_signal_reset")
+func ffi_reset(signum: I32) -> I32
+
+@extern("tml_signal_ignore")
+func ffi_ignore(signum: I32) -> I32
+
+@extern("tml_signal_check")
+func ffi_check(signum: I32) -> I32
+
+@extern("tml_signal_raise")
+func ffi_raise(signum: I32) -> I32
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Register a handler for the given signal.
+/// After registration, use `check()` to poll for signal receipt.
+/// Returns true on success.
+pub func register(signum: I32) -> Bool {
+    return ffi_register(signum) == 1
+}
+
+/// Reset a signal to its default behavior.
+/// Returns true on success.
+pub func reset(signum: I32) -> Bool {
+    return ffi_reset(signum) == 1
+}
+
+/// Ignore a signal (it will be silently discarded).
+/// Returns true on success.
+pub func ignore(signum: I32) -> Bool {
+    return ffi_ignore(signum) == 1
+}
+
+/// Check if a signal has been received since last check.
+/// Returns true if the signal was received (and clears the flag).
+/// This is a polling-based API — call in your main loop.
+pub func check(signum: I32) -> Bool {
+    return ffi_check(signum) == 1
+}
+
+/// Send a signal to the current process.
+/// Returns true on success.
+pub func raise_signal(signum: I32) -> Bool {
+    return ffi_raise(signum) == 1
+}

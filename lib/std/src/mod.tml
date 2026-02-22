@@ -25,7 +25,7 @@
 //! | [`hash`] | Fast non-crypto hashes (FNV-1a, Murmur2) for ETags |
 //! | [`zlib`] | Compression (gzip, deflate, brotli, zstd) |
 //! | [`log`] | Structured logging with level-based filtering |
-//! | [`os`] | Operating system information and utilities |
+//! | [`os`] | OS info, subprocess, signal, pipe |
 //! | [`search`] | Vector search and text retrieval (BM25, HNSW, SIMD) |
 //! | [`glob`] | High-performance glob pattern matching |
 //! | [`math`] | Mathematical functions and constants |
@@ -35,6 +35,7 @@
 //! | [`alloc`] | Specialized allocators (Arena, Pool, Cache, SOO) |
 //! | [`io`] | I/O error types (IoError, IoErrorKind) |
 //! | [`mime`] | MIME type parsing and extension lookup |
+//! | [`cli`] | CLI argument parsing framework |
 
 pub mod traits
 pub mod oop
@@ -68,3 +69,4 @@ pub mod uuid       // UUID v4/v7 generation, parsing, formatting
 pub mod semver     // Semantic versioning parse, compare, ranges
 pub mod url        // URL parsing and building per RFC 3986
 pub mod mime       // MIME type parsing and extension lookup
+pub mod cli        // CLI argument parsing framework

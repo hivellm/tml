@@ -1,0 +1,52 @@
+use test
+use core::str
+use std::os::subprocess::{Command, Stdio}
+
+@test
+func test_output_captures_stdout() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo hello world")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "should succeed")
+            // cmd /c echo adds trailing \r\n on Windows
+            assert(str::contains(out.stdout, "hello world"), "stdout should contain output")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_output_exit_code_nonzero() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c exit 42")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(not out.success(), "should not be success")
+            assert_eq(out.exit_code, 42)
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_spawn_and_wait() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo test")
+        .stdout(Stdio::piped())
+        .spawn()
+    when result {
+        Ok(child) => {
+            assert(child.id() > 0, "child should have a PID")
+            let code = child.wait()
+            assert_eq(code, 0)
+            child.destroy()
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

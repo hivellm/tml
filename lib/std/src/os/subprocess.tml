@@ -1,0 +1,271 @@
+//! Subprocess management for spawning and interacting with child processes.
+//!
+//! Provides a builder-style API for creating and managing child processes
+//! with configurable stdio redirection.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::subprocess::{Command, Stdio}
+//!
+//! // Run a command and get output
+//! let result = Command::new("echo")
+//!     .arg("hello")
+//!     .stdout(Stdio::Piped)
+//!     .output()
+//! when result {
+//!     Ok(out) => print(out.stdout)
+//!     Err(e) => print("error: " + e + "\n")
+//! }
+//!
+//! // Run and get just the exit code
+//! let status = Command::new("ls").status()
+//! ```
+
+use core::str
+
+// ============================================================================
+// Stdio — controls how child process stdio is configured
+// ============================================================================
+
+/// Controls how a child process's standard I/O stream is handled.
+///
+/// - `Inherit` (0): Child shares the parent's stream
+/// - `Piped` (1): A pipe is created between parent and child
+/// - `Null` (2): Stream is redirected to null device
+pub type Stdio {
+    mode: I32
+}
+
+impl Stdio {
+    /// Child inherits the parent's stream.
+    pub func inherit() -> Stdio {
+        return Stdio { mode: 0 }
+    }
+
+    /// A pipe is created for communication.
+    pub func piped() -> Stdio {
+        return Stdio { mode: 1 }
+    }
+
+    /// Stream is redirected to the null device.
+    pub func devnull() -> Stdio {
+        return Stdio { mode: 2 }
+    }
+}
+
+// ============================================================================
+// FFI declarations
+// ============================================================================
+
+@extern("tml_process_spawn")
+func ffi_spawn(program: Str, args: Str, cwd: Str,
+               stdout_mode: I32, stderr_mode: I32) -> I64
+
+@extern("tml_process_wait")
+func ffi_wait(handle: I64) -> I32
+
+@extern("tml_process_kill")
+func ffi_kill(handle: I64) -> I32
+
+@extern("tml_process_id")
+func ffi_id(handle: I64) -> I32
+
+@extern("tml_process_read_stdout")
+func ffi_read_stdout(handle: I64) -> Str
+
+@extern("tml_process_read_stderr")
+func ffi_read_stderr(handle: I64) -> Str
+
+@extern("tml_process_destroy")
+func ffi_destroy(handle: I64)
+
+// ============================================================================
+// Command — builder for subprocess configuration
+// ============================================================================
+
+/// Builder for configuring and spawning a child process.
+pub type Command {
+    program: Str,
+    arg_str: Str,      // space-separated arguments
+    work_dir: Str,
+    stdout_cfg: Stdio,
+    stderr_cfg: Stdio
+}
+
+impl Command {
+    /// Create a new command for the given program.
+    pub func new(program: Str) -> Command {
+        return Command {
+            program: program,
+            arg_str: "",
+            work_dir: "",
+            stdout_cfg: Stdio::inherit(),
+            stderr_cfg: Stdio::inherit()
+        }
+    }
+
+    /// Add a single argument.
+    pub func arg(this, a: Str) -> Command {
+        var new_args: Str = this.arg_str
+        if str::len(new_args) > 0 {
+            new_args = new_args + " " + a
+        } else {
+            new_args = a
+        }
+        return Command {
+            program: this.program,
+            arg_str: new_args,
+            work_dir: this.work_dir,
+            stdout_cfg: this.stdout_cfg,
+            stderr_cfg: this.stderr_cfg
+        }
+    }
+
+    /// Set the working directory for the child process.
+    pub func current_dir(this, dir: Str) -> Command {
+        return Command {
+            program: this.program,
+            arg_str: this.arg_str,
+            work_dir: dir,
+            stdout_cfg: this.stdout_cfg,
+            stderr_cfg: this.stderr_cfg
+        }
+    }
+
+    /// Configure stdout handling.
+    pub func stdout(this, cfg: Stdio) -> Command {
+        return Command {
+            program: this.program,
+            arg_str: this.arg_str,
+            work_dir: this.work_dir,
+            stdout_cfg: cfg,
+            stderr_cfg: this.stderr_cfg
+        }
+    }
+
+    /// Configure stderr handling.
+    pub func stderr(this, cfg: Stdio) -> Command {
+        return Command {
+            program: this.program,
+            arg_str: this.arg_str,
+            work_dir: this.work_dir,
+            stdout_cfg: this.stdout_cfg,
+            stderr_cfg: cfg
+        }
+    }
+
+    /// Spawn the process and return a Child handle.
+    pub func spawn(this) -> Outcome[Child, Str] {
+        let handle: I64 = ffi_spawn(
+            this.program, this.arg_str, this.work_dir,
+            this.stdout_cfg.mode, this.stderr_cfg.mode
+        )
+        if handle == 0 {
+            return Err("failed to spawn process: " + this.program)
+        }
+        return Ok(Child { handle: handle })
+    }
+
+    /// Run the process, wait for it, and return stdout + stderr + exit code.
+    /// Automatically pipes stdout and stderr.
+    @allocates
+    pub func output(this) -> Outcome[Output, Str] {
+        let cmd = Command {
+            program: this.program,
+            arg_str: this.arg_str,
+            work_dir: this.work_dir,
+            stdout_cfg: Stdio::piped(),
+            stderr_cfg: Stdio::piped()
+        }
+        let result = cmd.spawn()
+        when result {
+            Ok(child) => {
+                let stdout_str: Str = ffi_read_stdout(child.handle)
+                let stderr_str: Str = ffi_read_stderr(child.handle)
+                let code: I32 = ffi_wait(child.handle)
+                ffi_destroy(child.handle)
+                return Ok(Output {
+                    stdout: stdout_str,
+                    stderr: stderr_str,
+                    exit_code: code
+                })
+            }
+            Err(e) => return Err(e)
+        }
+    }
+
+    /// Run the process and wait for its exit code.
+    pub func status(this) -> Outcome[I32, Str] {
+        let result = this.spawn()
+        when result {
+            Ok(child) => {
+                let code: I32 = ffi_wait(child.handle)
+                ffi_destroy(child.handle)
+                return Ok(code)
+            }
+            Err(e) => return Err(e)
+        }
+    }
+}
+
+// ============================================================================
+// Child — a running child process
+// ============================================================================
+
+/// A handle to a running child process.
+pub type Child {
+    handle: I64
+}
+
+impl Child {
+    /// Wait for the child to exit and return exit code.
+    pub func wait(this) -> I32 {
+        return ffi_wait(this.handle)
+    }
+
+    /// Kill the child process. Returns true on success.
+    pub func kill(this) -> Bool {
+        return ffi_kill(this.handle) == 1
+    }
+
+    /// Get the OS process ID.
+    pub func id(this) -> I32 {
+        return ffi_id(this.handle)
+    }
+
+    /// Read all stdout (only works when stdout was Piped).
+    @allocates
+    pub func read_stdout(this) -> Str {
+        return ffi_read_stdout(this.handle)
+    }
+
+    /// Read all stderr (only works when stderr was Piped).
+    @allocates
+    pub func read_stderr(this) -> Str {
+        return ffi_read_stderr(this.handle)
+    }
+
+    /// Destroy the child handle. Must be called when done.
+    pub func destroy(this) {
+        ffi_destroy(this.handle)
+    }
+}
+
+// ============================================================================
+// Output — result of Command::output()
+// ============================================================================
+
+/// Captured output from a completed child process.
+pub type Output {
+    stdout: Str,
+    stderr: Str,
+    exit_code: I32
+}
+
+impl Output {
+    /// Check if the process exited successfully (code 0).
+    pub func success(this) -> Bool {
+        return this.exit_code == 0
+    }
+}

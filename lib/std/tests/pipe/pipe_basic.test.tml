@@ -1,0 +1,43 @@
+use test
+use std::os::pipe
+
+@test
+func test_create_pipe() -> I32 {
+    let result = pipe::create()
+    when result {
+        Ok(p) => {
+            assert(p.read_fd != 0, "read_fd should be valid")
+            assert(p.write_fd != 0, "write_fd should be valid")
+            assert(p.read_fd != p.write_fd, "fds should be different")
+            p.close()
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_close_read_end() -> I32 {
+    let result = pipe::create()
+    when result {
+        Ok(p) => {
+            p.close_read()
+            p.close_write()
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_close_write_end() -> I32 {
+    let result = pipe::create()
+    when result {
+        Ok(p) => {
+            p.close_write()
+            p.close_read()
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

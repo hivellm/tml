@@ -1,0 +1,41 @@
+use test
+use std::os::subprocess::{Command, Stdio}
+
+@test
+func test_command_status_echo() -> I32 {
+    // echo always succeeds with exit code 0
+    let result = Command::new("cmd")
+        .arg("/c echo hello")
+        .status()
+    when result {
+        Ok(code) => assert_eq(code, 0)
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_command_output_echo() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo hello")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "should exit with 0")
+            assert_eq(out.exit_code, 0)
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_command_nonexistent() -> I32 {
+    let result = Command::new("nonexistent_program_xyz123")
+        .status()
+    when result {
+        Ok(code) => assert(false, "should fail to spawn nonexistent program")
+        Err(e) => assert(true, "correctly failed")
+    }
+    0
+}

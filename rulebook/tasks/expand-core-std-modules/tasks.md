@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (80%) — Phases 1-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 10, 12-17 not started
+**Status**: In Progress (85%) — Phases 1-9, 11, 12 complete. Phase 10, 13-17 not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -178,37 +178,42 @@
 
 ## Phase 11: OS Integration
 
-> **Priority**: High
+> **Priority**: High | **Dir**: `lib/std/src/os/` (subprocess, signal, pipe as submodules)
 
-### 11.1 Subprocess (`lib/std/src/subprocess.tml`)
-- [ ] 11.1.1 Design `Command` builder: `new`, `arg`, `args`, `env`, `current_dir`
-- [ ] 11.1.2 Implement `stdin`, `stdout`, `stderr` config (Inherit, Piped, Null)
-- [ ] 11.1.3 Implement `spawn`, `output`, `status`
-- [ ] 11.1.4 Implement `Child::wait`, `Child::kill`, `Child::id`
-- [ ] 11.1.5 Platform: `CreateProcess` (Windows), `fork/exec` (Unix)
-- [ ] 11.1.6 Write unit tests
+### 11.1 Subprocess (`lib/std/src/os/subprocess.tml`)
+- [x] 11.1.1 Design `Command` builder: `new`, `arg`, `current_dir`, `stdout`, `stderr`
+- [x] 11.1.2 Implement `Stdio` config: `inherit()`, `piped()`, `devnull()`
+- [x] 11.1.3 Implement `spawn`, `output`, `status`
+- [x] 11.1.4 Implement `Child::wait`, `Child::kill`, `Child::id`, `Child::read_stdout`, `Child::read_stderr`, `Child::destroy`
+- [x] 11.1.5 Platform: `CreateProcess` (Windows), `fork/exec` (Unix) in `compiler/runtime/os/os.c`
+- [x] 11.1.6 Write unit tests (6 tests: basic 3, output 3)
 
-### 11.2 Signal Handling (`lib/std/src/signal.tml`)
-- [ ] 11.2.1 Define `Signal` enum: `SIGINT`, `SIGTERM`, `SIGHUP`, `SIGUSR1`, `SIGUSR2`
-- [ ] 11.2.2 Implement `signal::on`, `signal::reset`, `signal::ignore`, `signal::wait`
-- [ ] 11.2.3 Platform: `SetConsoleCtrlHandler` (Windows), `sigaction` (Unix)
-- [ ] 11.2.4 Write unit tests
+### 11.2 Signal Handling (`lib/std/src/os/signal.tml`)
+- [x] 11.2.1 Define signal constants as functions: `SIGINT`, `SIGTERM`, `SIGHUP`, `SIGUSR1`, `SIGUSR2`, `SIGALRM`
+- [x] 11.2.2 Implement `register`, `reset`, `ignore`, `check`, `raise_signal` (polling-based)
+- [x] 11.2.3 Platform: `SetConsoleCtrlHandler` (Windows), `sigaction` (Unix) in `compiler/runtime/os/os.c`
+- [x] 11.2.4 Write unit tests (3 tests)
 
-### 11.3 Pipes / IPC (`lib/std/src/pipe.tml`)
-- [ ] 11.3.1 Implement anonymous pipes: `pipe() -> Outcome[(PipeReader, PipeWriter), IoError]`
-- [ ] 11.3.2 Implement named pipes
-- [ ] 11.3.3 Platform: `CreateNamedPipe` (Windows), `mkfifo` (Unix)
-- [ ] 11.3.4 Write unit tests
+### 11.3 Pipes / IPC (`lib/std/src/os/pipe.tml`)
+- [x] 11.3.1 Implement anonymous pipes: `pipe::create() -> Outcome[Pipe, Str]`
+- [x] 11.3.2 Implement `Pipe::close`, `close_read`, `close_write`
+- [x] 11.3.3 Platform: `CreatePipe` (Windows), `pipe` (Unix) in `compiler/runtime/os/os.c`
+- [x] 11.3.4 Write unit tests (3 tests)
+
+### 11.4 Directory reorganization
+- [x] 11.4.1 Moved `os.tml` → `os/mod.tml` with submodule exports
+- [x] 11.4.2 All 115 existing OS tests passing after migration
 
 ## Phase 12: CLI Argument Parsing
 
 > **Priority**: Medium | **File**: `lib/std/src/cli.tml`
 
-- [ ] 12.1.1 Design `App` builder: `new`, `version`, `description`, `arg`, `subcommand`
-- [ ] 12.1.2 Design `Arg` builder: `new`, `short`, `long`, `required`, `default_value`
-- [ ] 12.1.3 Implement `App::parse() -> Outcome[Matches, CliError]`
-- [ ] 12.1.4 Implement automatic `--help` and `--version` generation
-- [ ] 12.1.5 Write unit tests
+- [x] 12.1.1 Design `App` builder: `new`, `version`, `description`, `arg`
+- [x] 12.1.2 Design `Arg` builder: `new`, `short`, `long`, `flag`, `required`, `default`, `positional`, `help`
+- [x] 12.1.3 Implement `App::parse() -> Outcome[Matches, Str]` and `parse_from` for testing
+- [x] 12.1.4 Implement automatic `--help` and `--version` generation
+- [x] 12.1.5 Implement `Matches`: `has`, `get_str`, `get_positional`, `positional_count`
+- [x] 12.1.6 Write unit tests (24 tests: basic 4, positional 3, errors 5, defaults 4, help 4, mixed 4)
 
 ## Phase 13: Template Engine
 
