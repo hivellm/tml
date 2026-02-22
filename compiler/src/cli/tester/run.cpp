@@ -23,6 +23,7 @@
 #include "tester_internal.hpp"
 
 #include <algorithm>
+#include <fstream>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -541,6 +542,28 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.coverage && !opts.patterns.empty()) {
         TML_LOG_ERROR("test", "Coverage cannot be used with test filters");
         return 1;
+    }
+
+    // Check for crash marker from previous run — identifies which test
+    // caused a silent crash (HEAP_CORRUPTION, etc.) that killed the process.
+    {
+        auto marker_path = fs::path("build") / "debug" / ".current_test";
+        if (fs::exists(marker_path)) {
+            std::ifstream marker(marker_path);
+            std::string crash_test, crash_file, crash_suite;
+            if (std::getline(marker, crash_test) && std::getline(marker, crash_file)) {
+                std::getline(marker, crash_suite);
+                TML_LOG_WARN("test", "Previous test run crashed during: "
+                                         << crash_test << " (" << crash_file
+                                         << ", suite: " << crash_suite << ")");
+                std::cerr << "\n[WARNING] Previous test run crashed during: " << crash_test
+                          << "\n  File:  " << crash_file << "\n  Suite: " << crash_suite
+                          << "\n  Fix this test to prevent silent crashes.\n\n";
+            }
+            marker.close();
+            std::error_code ec;
+            fs::remove(marker_path, ec);
+        }
     }
 
     // Print header (Rust-style)

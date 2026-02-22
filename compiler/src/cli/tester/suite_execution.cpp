@@ -501,6 +501,19 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                    << test_info.test_name);
                     tml::log::Logger::instance().flush();
 
+                    // Write crash marker to disk — survives process death from fatal
+                    // crashes (HEAP_CORRUPTION, etc.) that kill before SEH can run.
+                    {
+                        auto marker_path = fs::path("build") / "debug" / ".current_test";
+                        std::ofstream marker(marker_path, std::ios::trunc);
+                        if (marker) {
+                            marker << test_info.test_name << "\n"
+                                   << test_info.file_path << "\n"
+                                   << suite.name << "\n";
+                            marker.flush();
+                        }
+                    }
+
                     set_crash_context("running", suite.name.c_str(), test_info.test_name.c_str(),
                                       test_info.file_path.c_str());
 
@@ -592,6 +605,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     }
 
                     collector.add(std::move(result));
+
+                    // Clear crash marker — test completed (passed or failed gracefully)
+                    {
+                        auto marker_path = fs::path("build") / "debug" / ".current_test";
+                        std::error_code ec;
+                        fs::remove(marker_path, ec);
+                    }
 
                     if (opts.fail_fast && !run_success) {
                         fail_fast_triggered.store(true);
@@ -708,6 +728,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 clear_crash_context();
+
+                // Final cleanup of crash marker after suite completes
+                {
+                    auto marker_path = fs::path("build") / "debug" / ".current_test";
+                    std::error_code ec;
+                    fs::remove(marker_path, ec);
+                }
             }
         };
 
