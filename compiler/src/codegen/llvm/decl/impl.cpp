@@ -178,6 +178,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     locals_.clear();
     block_terminated_ = false;
     temp_drops_.clear();
+    pending_str_temps_.clear();
 
     // Determine return type
     std::string ret_type = "void";
@@ -664,6 +665,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     locals_.clear();
     block_terminated_ = false;
     temp_drops_.clear();
+    pending_str_temps_.clear();
 
     // Build full type_subs including method-level type parameters
     auto full_type_subs = type_subs;

@@ -46,6 +46,24 @@ void LLVMIRGen::emit(const std::string& code) {
 }
 
 void LLVMIRGen::emit_line(const std::string& code) {
+    // Auto-detect runtime function references for dead declaration elimination.
+    // Scans for @symbol patterns and marks them as needed in the catalog.
+    if (!runtime_catalog_index_.empty() && needed_runtime_decls_.size() < runtime_catalog_.size()) {
+        size_t pos = code.find('@');
+        while (pos != std::string::npos) {
+            pos++; // skip '@'
+            size_t end = pos;
+            while (end < code.size() && (std::isalnum(static_cast<unsigned char>(code[end])) ||
+                                         code[end] == '_' || code[end] == '.'))
+                end++;
+            if (end > pos) {
+                auto it = runtime_catalog_index_.find(code.substr(pos, end - pos));
+                if (it != runtime_catalog_index_.end())
+                    require_runtime_decl(runtime_catalog_[it->second].name);
+            }
+            pos = code.find('@', end);
+        }
+    }
     output_ << code << "\n";
 }
 

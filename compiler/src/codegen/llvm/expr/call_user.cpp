@@ -414,6 +414,11 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 param_takes_ownership = false;
                 param_is_ref = true;
             }
+            // Str is Copy (pointer copy, not move) — caller retains drop responsibility
+            if (resolved_param->is<types::PrimitiveType>() &&
+                resolved_param->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                param_takes_ownership = false;
+            }
         }
 
         std::string val;

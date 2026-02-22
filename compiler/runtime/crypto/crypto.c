@@ -148,7 +148,7 @@ TML_EXPORT const char* crypto_random_uuid(void) {
     fill_random_bytes(bytes, 16);
     bytes[6] = (bytes[6] & 0x0F) | 0x40;
     bytes[8] = (bytes[8] & 0x3F) | 0x80;
-    char* uuid = (char*)malloc(37);
+    char* uuid = (char*)mem_alloc(37);
     if (!uuid)
         return "";
     static const char hex[] = "0123456789abcdef";
@@ -967,12 +967,12 @@ TML_EXPORT void crypto_cipher_destroy(void* h) {
 TML_EXPORT const char* crypto_bytes_to_str(void* handle) {
     TmlBuffer* buf = (TmlBuffer*)handle;
     if (!buf || buf->length <= 0) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
-    char* str = (char*)malloc(buf->length + 1);
+    char* str = (char*)mem_alloc(buf->length + 1);
     if (!str)
         return "";
     memcpy(str, buf->data, buf->length);
@@ -1036,12 +1036,12 @@ TML_EXPORT void* crypto_buffer_slice(void* handle, int64_t offset, int64_t lengt
 TML_EXPORT const char* crypto_bytes_to_hex(void* handle) {
     TmlBuffer* buf = (TmlBuffer*)handle;
     if (!buf || buf->length <= 0) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
-    char* hex = (char*)malloc(buf->length * 2 + 1);
+    char* hex = (char*)mem_alloc(buf->length * 2 + 1);
     if (!hex)
         return "";
     static const char hex_chars[] = "0123456789abcdef";
@@ -1104,14 +1104,14 @@ static const char base64_chars[] =
 TML_EXPORT const char* crypto_bytes_to_base64(void* handle) {
     TmlBuffer* buf = (TmlBuffer*)handle;
     if (!buf || buf->length <= 0) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
     size_t input_len = (size_t)buf->length;
     size_t output_len = 4 * ((input_len + 2) / 3);
-    char* output = (char*)malloc(output_len + 1);
+    char* output = (char*)mem_alloc((int64_t)(output_len + 1));
     if (!output)
         return "";
     size_t i, j;
@@ -1217,7 +1217,7 @@ TML_EXPORT void* crypto_base64url_to_bytes(const char* b64url) {
     size_t input_len = strlen(b64url);
     size_t padding = (4 - (input_len % 4)) % 4;
     size_t padded_len = input_len + padding;
-    char* padded = (char*)malloc(padded_len + 1);
+    char* padded = (char*)mem_alloc((int64_t)(padded_len + 1));
     if (!padded)
         return NULL;
     for (size_t i = 0; i < input_len; i++) {
@@ -1232,7 +1232,7 @@ TML_EXPORT void* crypto_base64url_to_bytes(const char* b64url) {
         padded[i] = '=';
     padded[padded_len] = '\0';
     void* result = crypto_base64_to_bytes(padded);
-    free(padded);
+    mem_free(padded);
     return result;
 }
 
@@ -1526,7 +1526,7 @@ TML_EXPORT uint32_t crypto_murmur2_32_bytes(void* handle, uint32_t seed) {
 }
 
 TML_EXPORT const char* crypto_u32_to_hex(uint32_t value) {
-    char* hex = (char*)malloc(9);
+    char* hex = (char*)mem_alloc(9);
     if (!hex)
         return "";
     static const char hex_chars[] = "0123456789abcdef";
@@ -1539,7 +1539,7 @@ TML_EXPORT const char* crypto_u32_to_hex(uint32_t value) {
 }
 
 TML_EXPORT const char* crypto_u64_to_hex(uint64_t value) {
-    char* hex = (char*)malloc(17);
+    char* hex = (char*)mem_alloc(17);
     if (!hex)
         return "";
     static const char hex_chars[] = "0123456789abcdef";

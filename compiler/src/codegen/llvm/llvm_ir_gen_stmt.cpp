@@ -91,6 +91,10 @@ void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
     // must be dropped at statement end. This is safe even for gen_expr_stmt
     // which already calls emit_temp_drops() — double call is a no-op.
     emit_temp_drops();
+
+    // Free any heap Str temporaries that weren't consumed by let/var bindings.
+    // E.g., assert_eq(x.to_string(), "42", "msg") — to_string() result is freed here.
+    flush_str_temps();
 }
 
 // Helper to check if an expression is boolean-typed (without variable lookup)
@@ -696,6 +700,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
                 temp_drops_.pop_back();
             }
+            // Also remove from pending_str_temps_ — let binding now owns the Str.
+            consume_last_str_temp();
         }
         return;
     }
@@ -1013,6 +1019,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
             temp_drops_.pop_back();
         }
+        // Also remove from pending_str_temps_ — var binding now owns the Str.
+        consume_last_str_temp();
     }
 
     // Emit debug info for the variable (if enabled and debug level >= 2)
@@ -1435,6 +1443,7 @@ void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
             if (!temp_drops_.empty() && temp_drops_.back().is_heap_str) {
                 temp_drops_.pop_back();
             }
+            consume_last_str_temp();
         }
     }
     // Other nested declarations (func, type, etc.) are handled elsewhere or ignored

@@ -353,7 +353,7 @@ TML_EXPORT const char* crypto_jwk_extract_k(const char* jwk) {
     if (!k_end)
         return tml_strdup("");
     size_t len = k_end - k_start;
-    char* result = (char*)malloc(len + 1);
+    char* result = (char*)mem_alloc((int64_t)(len + 1));
     if (!result)
         return tml_strdup("");
     memcpy(result, k_start, len);

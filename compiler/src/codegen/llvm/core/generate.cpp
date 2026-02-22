@@ -595,6 +595,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
     type_defs_buffer_.str(""); // Clear for main module processing
 
     // Emit imported module functions AFTER their type dependencies
+    // Scan for runtime refs since this bypasses emit_line()
+    scan_for_runtime_refs(imported_func_code);
     output_ << imported_func_code;
 
     // In library_ir_only mode, we only want the library IR (headers + types + library functions).
@@ -670,7 +672,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Emit loop metadata (generic instantiations may contain loops)
         emit_loop_metadata();
 
+        // Finalize runtime declarations and splice into output
+        finalize_runtime_decls();
         std::string result = output_.str();
+        {
+            const std::string placeholder = "; {{RUNTIME_DECLS_PLACEHOLDER}}\n";
+            auto pos = result.find(placeholder);
+            if (pos != std::string::npos) {
+                result.replace(pos, placeholder.size(), deferred_runtime_decls_);
+            }
+        }
 
         if (!errors_.empty()) {
             return errors_;
@@ -1228,6 +1239,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Emit generated closure functions
     for (const auto& closure_func : module_functions_) {
+        scan_for_runtime_refs(closure_func);
         emit(closure_func);
     }
 
@@ -1754,11 +1766,32 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Emit debug info metadata at the end
     emit_debug_info_footer();
 
+    // Finalize runtime declarations and splice into output
+    finalize_runtime_decls();
+    std::string final_output = output_.str();
+    {
+        const std::string placeholder = "; {{RUNTIME_DECLS_PLACEHOLDER}}\n";
+        auto pos = final_output.find(placeholder);
+        if (pos != std::string::npos) {
+            final_output.replace(pos, placeholder.size(), deferred_runtime_decls_);
+        }
+    }
+
+    // Update cached_preamble_headers_ with spliced declarations
+    // so capture_library_state() gets the finalized preamble
+    {
+        const std::string placeholder = "; {{RUNTIME_DECLS_PLACEHOLDER}}\n";
+        auto pos = cached_preamble_headers_.find(placeholder);
+        if (pos != std::string::npos) {
+            cached_preamble_headers_.replace(pos, placeholder.size(), deferred_runtime_decls_);
+        }
+    }
+
     if (!errors_.empty()) {
         return errors_;
     }
 
-    return output_.str();
+    return final_output;
 }
 
 } // namespace tml::codegen

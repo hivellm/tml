@@ -927,6 +927,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
         // Execute arm body
         size_t temps_before_arm = temp_drops_.size();
+        size_t str_temps_before_arm = pending_str_temps_.size();
         std::string arm_value = gen_expr(*arm.body);
         std::string arm_type = last_expr_type_;
 
@@ -966,6 +967,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
                                   temp_drops_.end());
             }
+            // Flush Str temps created within this arm
+            if (pending_str_temps_.size() > str_temps_before_arm) {
+                require_runtime_decl("tml_str_free");
+                for (auto it =
+                         pending_str_temps_.begin() + static_cast<ptrdiff_t>(str_temps_before_arm);
+                     it != pending_str_temps_.end(); ++it) {
+                    emit_line("  call void @tml_str_free(ptr " + *it + ")");
+                }
+                pending_str_temps_.erase(pending_str_temps_.begin() +
+                                             static_cast<ptrdiff_t>(str_temps_before_arm),
+                                         pending_str_temps_.end());
+            }
             // Drop arm-scoped variables before leaving the arm
             emit_scope_drops();
             emit_line("  br label %" + label_end);
@@ -982,6 +995,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
                                   temp_drops_.end());
             }
+            // Flush Str temps created within this arm
+            if (pending_str_temps_.size() > str_temps_before_arm) {
+                require_runtime_decl("tml_str_free");
+                for (auto it =
+                         pending_str_temps_.begin() + static_cast<ptrdiff_t>(str_temps_before_arm);
+                     it != pending_str_temps_.end(); ++it) {
+                    emit_line("  call void @tml_str_free(ptr " + *it + ")");
+                }
+                pending_str_temps_.erase(pending_str_temps_.begin() +
+                                             static_cast<ptrdiff_t>(str_temps_before_arm),
+                                         pending_str_temps_.end());
+            }
             // Drop arm-scoped variables before leaving the arm
             emit_scope_drops();
             emit_line("  br label %" + label_end);
@@ -990,6 +1015,11 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             if (temp_drops_.size() > temps_before_arm) {
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
                                   temp_drops_.end());
+            }
+            if (pending_str_temps_.size() > str_temps_before_arm) {
+                pending_str_temps_.erase(pending_str_temps_.begin() +
+                                             static_cast<ptrdiff_t>(str_temps_before_arm),
+                                         pending_str_temps_.end());
             }
         }
 

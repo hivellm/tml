@@ -66,7 +66,12 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                 temp_drops_.back().is_heap_str) {
                 temp_drops_.pop_back();
             }
+            if (last_expr_type_ == "ptr" && !pending_str_temps_.empty()) {
+                consume_last_str_temp();
+            }
         }
+        // Free remaining Str intermediates before leaving closure
+        flush_str_temps();
         emit_line("  br label %" + closure_return_label_);
         block_terminated_ = true;
         return "void";
@@ -94,7 +99,16 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
         if (val_type == "ptr" && !temp_drops_.empty() && temp_drops_.back().is_heap_str) {
             temp_drops_.pop_back();
         }
+        // Also remove from pending_str_temps_ — return transfers ownership to caller.
+        if (val_type == "ptr" && !pending_str_temps_.empty()) {
+            consume_last_str_temp();
+        }
     }
+
+    // Free any remaining Str intermediates before returning.
+    // E.g., in `return a.to_string() + "C"`, the to_string() temp must be freed
+    // before `ret` since we're leaving the function.
+    flush_str_temps();
 
     // Emit lifetime.end for all allocas before returning
     emit_all_lifetime_ends();

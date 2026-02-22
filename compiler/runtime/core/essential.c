@@ -450,17 +450,20 @@ void print_bool(int32_t b) {
 // ============================================================================
 // These wrap variadic snprintf, which TML cannot call directly via @extern.
 // Called from TML lowlevel blocks in core::fmt::impls and core::fmt::float.
+// Use mem_alloc instead of malloc so the memory tracker can track these
+// allocations and tml_str_free can properly deregister them.
+extern void* mem_alloc(int64_t);
 
-/** @brief Formats a double using %g format. Returns malloc'd string. */
+/** @brief Formats a double using %g format. Returns heap-allocated string. */
 TML_EXPORT char* f64_to_string(double val) {
-    char* buf = (char*)malloc(32);
+    char* buf = (char*)mem_alloc(32);
     snprintf(buf, 32, "%g", val);
     return buf;
 }
 
-/** @brief Formats a float using %g format. Returns malloc'd string. */
+/** @brief Formats a float using %g format. Returns heap-allocated string. */
 TML_EXPORT char* f32_to_string(float val) {
-    char* buf = (char*)malloc(32);
+    char* buf = (char*)mem_alloc(32);
     snprintf(buf, 32, "%g", (double)val);
     return buf;
 }
@@ -471,7 +474,7 @@ TML_EXPORT char* f64_to_string_precision(double val, int64_t prec) {
         prec = 0;
     if (prec > 20)
         prec = 20;
-    char* buf = (char*)malloc(64);
+    char* buf = (char*)mem_alloc(64);
     snprintf(buf, 64, "%.*f", (int)prec, val);
     return buf;
 }
@@ -483,7 +486,7 @@ TML_EXPORT char* f32_to_string_precision(float val, int64_t prec) {
 
 /** @brief Formats a double in scientific notation (%e or %E). */
 TML_EXPORT char* f64_to_exp_string(double val, int32_t uppercase) {
-    char* buf = (char*)malloc(32);
+    char* buf = (char*)mem_alloc(32);
     snprintf(buf, 32, uppercase ? "%E" : "%e", val);
     return buf;
 }
@@ -1191,22 +1194,27 @@ TML_EXPORT void tml_free(void* ptr) {
 TML_EXPORT void tml_str_free(void* ptr) {
     if (!ptr)
         return;
+    // Use mem_free (declared in mem.c, linked into same binary) instead of
+    // raw free() so that the memory tracker deregisters this allocation.
+    // Without this, tml_str_free would bypass tracking and cause false-positive
+    // leak reports in coverage/debug mode.
+    extern void mem_free(void*);
 #ifdef _WIN32
     HANDLE heap = GetProcessHeap();
     if (HeapValidate(heap, 0, ptr)) {
-        free(ptr);
+        mem_free(ptr);
     }
 #elif defined(__GLIBC__) || defined(__linux__)
     // malloc_usable_size returns 0 for non-heap pointers on glibc
     extern size_t malloc_usable_size(void*);
     if (malloc_usable_size(ptr) > 0) {
-        free(ptr);
+        mem_free(ptr);
     }
 #elif defined(__APPLE__)
     // On macOS, malloc_size returns 0 for non-heap pointers
     extern size_t malloc_size(const void*);
     if (malloc_size(ptr) > 0) {
-        free(ptr);
+        mem_free(ptr);
     }
 #else
     // Fallback: don't free (leak is safer than crash)

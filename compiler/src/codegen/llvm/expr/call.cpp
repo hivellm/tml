@@ -1285,6 +1285,11 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 if (param_type->is<types::RefType>()) {
                     param_takes_ownership = false;
                 }
+                // Str is Copy (pointer copy, not move) — caller retains drop responsibility
+                if (param_type->is<types::PrimitiveType>() &&
+                    param_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    param_takes_ownership = false;
+                }
             }
             std::string val = gen_expr(*call.args[i]);
             expected_enum_type_.clear(); // Clear after generating argument

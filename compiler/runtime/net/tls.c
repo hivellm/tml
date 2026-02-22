@@ -25,6 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Use mem_alloc so the memory tracker can track these allocations
+extern void* mem_alloc(int64_t);
+
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
@@ -476,7 +479,7 @@ TML_EXPORT const char* tls_stream_get_cipher(void* ssl_handle) {
  */
 TML_EXPORT char* tls_stream_get_alpn(void* ssl_handle) {
     if (!ssl_handle) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -486,12 +489,12 @@ TML_EXPORT char* tls_stream_get_alpn(void* ssl_handle) {
     unsigned int len = 0;
     SSL_get0_alpn_selected(ssl, &data, &len);
     if (!data || len == 0) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
-    char* result = (char*)malloc(len + 1);
+    char* result = (char*)mem_alloc((int64_t)(len + 1));
     if (!result)
         return NULL;
     memcpy(result, data, len);
@@ -505,7 +508,7 @@ TML_EXPORT char* tls_stream_get_alpn(void* ssl_handle) {
  */
 TML_EXPORT char* tls_stream_get_peer_cn(void* ssl_handle) {
     if (!ssl_handle) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -513,7 +516,7 @@ TML_EXPORT char* tls_stream_get_peer_cn(void* ssl_handle) {
     SSL* ssl = (SSL*)ssl_handle;
     X509* cert = SSL_get_peer_certificate(ssl);
     if (!cert) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -525,7 +528,7 @@ TML_EXPORT char* tls_stream_get_peer_cn(void* ssl_handle) {
     X509_free(cert);
 
     size_t len = strlen(cn);
-    char* result = (char*)malloc(len + 1);
+    char* result = (char*)mem_alloc((int64_t)(len + 1));
     if (!result)
         return NULL;
     memcpy(result, cn, len + 1);
@@ -538,7 +541,7 @@ TML_EXPORT char* tls_stream_get_peer_cn(void* ssl_handle) {
  */
 TML_EXPORT char* tls_stream_get_peer_cert_pem(void* ssl_handle) {
     if (!ssl_handle) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -546,7 +549,7 @@ TML_EXPORT char* tls_stream_get_peer_cert_pem(void* ssl_handle) {
     SSL* ssl = (SSL*)ssl_handle;
     X509* cert = SSL_get_peer_certificate(ssl);
     if (!cert) {
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -555,7 +558,7 @@ TML_EXPORT char* tls_stream_get_peer_cert_pem(void* ssl_handle) {
     BIO* bio = BIO_new(BIO_s_mem());
     if (!bio) {
         X509_free(cert);
-        char* empty = (char*)malloc(1);
+        char* empty = (char*)mem_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
@@ -567,13 +570,13 @@ TML_EXPORT char* tls_stream_get_peer_cert_pem(void* ssl_handle) {
 
     char* result = NULL;
     if (len > 0 && data) {
-        result = (char*)malloc(len + 1);
+        result = (char*)mem_alloc((int64_t)(len + 1));
         if (result) {
             memcpy(result, data, len);
             result[len] = '\0';
         }
     } else {
-        result = (char*)malloc(1);
+        result = (char*)mem_alloc(1);
         if (result)
             result[0] = '\0';
     }
@@ -747,21 +750,21 @@ TML_EXPORT const char* tls_stream_get_cipher(void* h) {
 }
 TML_EXPORT char* tls_stream_get_alpn(void* h) {
     (void)h;
-    char* e = (char*)malloc(1);
+    char* e = (char*)mem_alloc(1);
     if (e)
         e[0] = '\0';
     return e;
 }
 TML_EXPORT char* tls_stream_get_peer_cn(void* h) {
     (void)h;
-    char* e = (char*)malloc(1);
+    char* e = (char*)mem_alloc(1);
     if (e)
         e[0] = '\0';
     return e;
 }
 TML_EXPORT char* tls_stream_get_peer_cert_pem(void* h) {
     (void)h;
-    char* e = (char*)malloc(1);
+    char* e = (char*)mem_alloc(1);
     if (e)
         e[0] = '\0';
     return e;

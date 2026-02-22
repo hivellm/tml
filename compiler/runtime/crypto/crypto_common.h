@@ -28,6 +28,14 @@
 #endif
 
 // ============================================================================
+// Memory allocation — use mem_alloc/mem_free so the memory tracker can track
+// ============================================================================
+
+extern void* mem_alloc(int64_t);
+extern void* mem_realloc(void*, int64_t);
+extern void mem_free(void*);
+
+// ============================================================================
 // Buffer structure (matching TML's std::collections::Buffer ABI)
 // ============================================================================
 
@@ -66,7 +74,7 @@ static inline char* tml_strdup(const char* s) {
     if (!s)
         return NULL;
     size_t len = strlen(s);
-    char* copy = (char*)malloc(len + 1);
+    char* copy = (char*)mem_alloc((int64_t)(len + 1));
     if (!copy)
         return NULL;
     memcpy(copy, s, len + 1);
@@ -116,7 +124,7 @@ static inline char* tml_bio_to_str(BIO* bio) {
     long len = BIO_get_mem_data(bio, &data);
     if (len <= 0 || !data)
         return tml_strdup("");
-    char* result = (char*)malloc(len + 1);
+    char* result = (char*)mem_alloc((int64_t)(len + 1));
     if (!result)
         return NULL;
     memcpy(result, data, len);

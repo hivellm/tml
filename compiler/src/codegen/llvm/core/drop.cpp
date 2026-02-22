@@ -326,6 +326,7 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
     // tml_str_free validates the pointer is a genuine heap allocation
     // before calling free(), so it's safe for global string constants too.
     if (info.is_heap_str) {
+        require_runtime_decl("tml_str_free");
         std::string ptr_val = fresh_reg();
         emit_line("  " + ptr_val + " = load ptr, ptr " + info.var_reg);
         emit_line("  call void @tml_str_free(ptr " + ptr_val + ")");
@@ -630,6 +631,43 @@ void LLVMIRGen::emit_temp_drops() {
         emit_drop_call(*it);
     }
     temp_drops_.clear();
+}
+
+void LLVMIRGen::flush_str_temps() {
+    if (pending_str_temps_.empty()) {
+        return;
+    }
+    // Don't emit frees after a terminator (ret/br/unreachable) — the block is already
+    // terminated and emitting instructions would create invalid LLVM IR. The temps will
+    // be cleaned up by the enclosing scope (if/when branch handler or function exit).
+    if (block_terminated_) {
+        return;
+    }
+    // Ensure tml_str_free is declared in the final IR
+    require_runtime_decl("tml_str_free");
+    // Free in reverse order (LIFO)
+    for (auto it = pending_str_temps_.rbegin(); it != pending_str_temps_.rend(); ++it) {
+        emit_line("  call void @tml_str_free(ptr " + *it + ")");
+    }
+    pending_str_temps_.clear();
+}
+
+void LLVMIRGen::consume_last_str_temp() {
+    if (!pending_str_temps_.empty()) {
+        pending_str_temps_.pop_back();
+    }
+}
+
+void LLVMIRGen::consume_str_temp_if_arg(const std::string& reg) {
+    // When a Str temp is passed as an argument to a function/method call,
+    // the callee may take ownership (e.g., list.push(substring(...))).
+    // Remove it from pending_str_temps_ to prevent use-after-free.
+    for (auto it = pending_str_temps_.begin(); it != pending_str_temps_.end(); ++it) {
+        if (*it == reg) {
+            pending_str_temps_.erase(it);
+            return;
+        }
+    }
 }
 
 } // namespace tml::codegen

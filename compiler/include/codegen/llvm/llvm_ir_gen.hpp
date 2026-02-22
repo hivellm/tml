@@ -370,6 +370,19 @@ private:
     std::string cached_imported_type_defs_;
     std::string cached_preamble_headers_; ///< Preamble IR (for filtering declarations)
 
+    // ======== Dead Declaration Elimination (Phase 3) ========
+    // Runtime declarations are registered in a catalog during init, then only
+    // declarations actually referenced during codegen are emitted into the final IR.
+    struct RuntimeDecl {
+        std::string name;              ///< Symbol name (e.g., "printf")
+        std::string ir_text;           ///< Full IR text (may be multi-line for define)
+        std::vector<std::string> deps; ///< Dependencies (other catalog entries needed)
+    };
+    std::vector<RuntimeDecl> runtime_catalog_;
+    std::unordered_map<std::string, size_t> runtime_catalog_index_;
+    std::unordered_set<std::string> needed_runtime_decls_;
+    std::string deferred_runtime_decls_; ///< Built by finalize_runtime_decls()
+
     // Current function context
     std::string current_func_;
     std::string current_ret_type_;        // Return type of current function
@@ -522,6 +535,15 @@ private:
                                        const std::string& llvm_type,
                                        const std::string& existing_alloca = "");
     void emit_temp_drops();
+
+    // Str temporary tracking (Phase 4b)
+    // Tracks heap-allocated Str values from call/method/binary/interpolated expressions.
+    // These are freed at statement end via tml_str_free, unless consumed by a let/var binding.
+    std::vector<std::string> pending_str_temps_;
+    void flush_str_temps();       // Free all pending Str temps
+    void consume_last_str_temp(); // Remove last temp (consumed by let/var/assign)
+    void
+    consume_str_temp_if_arg(const std::string& reg); // Remove specific temp (passed as call arg)
 
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
@@ -1348,6 +1370,10 @@ private:
     // Module structure
     void emit_header();
     void emit_runtime_decls();
+    void init_runtime_catalog(); ///< Populate catalog of all possible runtime decls
+    void require_runtime_decl(const std::string& name); ///< Mark a runtime decl as needed
+    void finalize_runtime_decls(); ///< Emit only needed decls into deferred buffer
+    void scan_for_runtime_refs(const std::string& text); ///< Scan text block for @symbol refs
     void emit_module_lowlevel_decls();
     void
     emit_module_pure_tml_functions(); // Generate code for pure TML functions from imported modules
@@ -1474,8 +1500,6 @@ private:
     auto gen_struct_expr(const parser::StructExpr& s) -> std::string;
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
     auto gen_simd_struct_expr_ptr(const parser::StructExpr& s, const SimdTypeInfo& info)
-        -> std::string;
-    auto try_gen_simd_vector_op(const parser::StructExpr& s, const SimdTypeInfo& info)
         -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;
     auto gen_array(const parser::ArrayExpr& arr) -> std::string;

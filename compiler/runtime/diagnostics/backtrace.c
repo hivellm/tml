@@ -14,6 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Use mem_alloc/mem_free so the memory tracker can track these allocations
+extern void* mem_alloc(int64_t);
+extern void mem_free(void*);
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -503,7 +507,7 @@ char* backtrace_format(const Backtrace* bt) {
     // Average frame: "  NN: function_name\n             at file:line\n" = ~150 bytes
     // Account for filtered frames by using actual count
     size_t buffer_size = (size_t)bt->frame_count * 180 + 128;
-    char* result = (char*)malloc(buffer_size);
+    char* result = (char*)mem_alloc((int64_t)buffer_size);
     if (!result) {
         return NULL;
     }
@@ -546,7 +550,7 @@ char* backtrace_format(const Backtrace* bt) {
 
     // If all frames were filtered, show a message
     if (display_index == 0) {
-        free(result);
+        mem_free(result);
         return _strdup("  <all frames filtered as internal>\n");
     }
 
@@ -560,7 +564,7 @@ char* backtrace_format_json(const Backtrace* bt) {
 
     // Estimate buffer size: each JSON frame object ~256 bytes
     size_t buffer_size = (size_t)bt->frame_count * 300 + 64;
-    char* result = (char*)malloc(buffer_size);
+    char* result = (char*)mem_alloc((int64_t)buffer_size);
     if (!result) {
         return NULL;
     }
@@ -651,7 +655,7 @@ char* backtrace_format_json(const Backtrace* bt) {
     }
 
     if (display_index == 0) {
-        free(result);
+        mem_free(result);
         return _strdup("[]");
     }
 
@@ -670,7 +674,7 @@ void backtrace_print(int32_t skip) {
     char* formatted = backtrace_format(bt);
     if (formatted) {
         RT_ERROR("runtime", "%s", formatted);
-        free(formatted);
+        mem_free(formatted);
     }
 
     backtrace_free(bt);

@@ -68,7 +68,7 @@ static char* get_fingerprint(X509* cert, const EVP_MD* md) {
     }
     /* Each byte -> "xx:" (3 chars) minus trailing colon, plus NUL */
     size_t hex_len = (size_t)len * 3;
-    char* hex = (char*)malloc(hex_len);
+    char* hex = (char*)mem_alloc((int64_t)hex_len);
     if (!hex)
         return tml_strdup("");
     size_t pos = 0;
@@ -674,7 +674,7 @@ TML_EXPORT const char* crypto_x509_extract_pem_cert(const char* pem, int64_t ind
             if (*end == '\n')
                 end++;
             size_t cert_len = (size_t)(end - p);
-            char* result = (char*)malloc(cert_len + 1);
+            char* result = (char*)mem_alloc((int64_t)(cert_len + 1));
             if (!result)
                 return tml_strdup("");
             memcpy(result, p, cert_len);

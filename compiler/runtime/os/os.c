@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Use mem_alloc/mem_realloc/mem_free so the memory tracker can track string allocations
+extern void* mem_alloc(int64_t);
+extern void* mem_realloc(void*, int64_t);
+extern void mem_free(void*);
+
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
@@ -942,7 +947,7 @@ TML_EXPORT const char* tml_os_exec(const char* command) {
 
     size_t cap = 4096;
     size_t len = 0;
-    char* buf = (char*)malloc(cap);
+    char* buf = (char*)mem_alloc((int64_t)cap);
     if (!buf) {
 #ifdef _WIN32
         _pclose(fp);
@@ -957,9 +962,9 @@ TML_EXPORT const char* tml_os_exec(const char* command) {
         size_t n = strlen(tmp);
         if (len + n + 1 > cap) {
             cap = (len + n + 1) * 2;
-            char* newbuf = (char*)realloc(buf, cap);
+            char* newbuf = (char*)mem_realloc(buf, (int64_t)cap);
             if (!newbuf) {
-                free(buf);
+                mem_free(buf);
                 break;
             }
             buf = newbuf;

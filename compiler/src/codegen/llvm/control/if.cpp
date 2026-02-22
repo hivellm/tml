@@ -57,6 +57,7 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     current_block_ = label_then;
     block_terminated_ = false;
     size_t temps_before_then = temp_drops_.size();
+    size_t str_temps_before_then = pending_str_temps_.size();
     std::string then_val = gen_expr(*if_expr.then_branch);
     std::string then_type = last_expr_type_;
     bool then_terminated = block_terminated_;
@@ -73,6 +74,18 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
             temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then),
                               temp_drops_.end());
         }
+        // Flush Str temps created within this branch (they're only valid here)
+        if (pending_str_temps_.size() > str_temps_before_then) {
+            require_runtime_decl("tml_str_free");
+            for (auto it =
+                     pending_str_temps_.begin() + static_cast<ptrdiff_t>(str_temps_before_then);
+                 it != pending_str_temps_.end(); ++it) {
+                emit_line("  call void @tml_str_free(ptr " + *it + ")");
+            }
+            pending_str_temps_.erase(pending_str_temps_.begin() +
+                                         static_cast<ptrdiff_t>(str_temps_before_then),
+                                     pending_str_temps_.end());
+        }
         emit_line("  br label %" + label_end);
     } else {
         // Branch terminated (return/break) — discard temps without emitting drops
@@ -80,6 +93,11 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         if (temp_drops_.size() > temps_before_then) {
             temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_then),
                               temp_drops_.end());
+        }
+        if (pending_str_temps_.size() > str_temps_before_then) {
+            pending_str_temps_.erase(pending_str_temps_.begin() +
+                                         static_cast<ptrdiff_t>(str_temps_before_then),
+                                     pending_str_temps_.end());
         }
     }
 
@@ -93,6 +111,7 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         current_block_ = label_else;
         block_terminated_ = false;
         size_t temps_before_else = temp_drops_.size();
+        size_t str_temps_before_else = pending_str_temps_.size();
         else_val = gen_expr(*if_expr.else_branch.value());
         else_type = last_expr_type_;
         else_terminated = block_terminated_;
@@ -109,11 +128,28 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else),
                                   temp_drops_.end());
             }
+            // Flush Str temps created within this branch
+            if (pending_str_temps_.size() > str_temps_before_else) {
+                require_runtime_decl("tml_str_free");
+                for (auto it =
+                         pending_str_temps_.begin() + static_cast<ptrdiff_t>(str_temps_before_else);
+                     it != pending_str_temps_.end(); ++it) {
+                    emit_line("  call void @tml_str_free(ptr " + *it + ")");
+                }
+                pending_str_temps_.erase(pending_str_temps_.begin() +
+                                             static_cast<ptrdiff_t>(str_temps_before_else),
+                                         pending_str_temps_.end());
+            }
             emit_line("  br label %" + label_end);
         } else {
             if (temp_drops_.size() > temps_before_else) {
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_else),
                                   temp_drops_.end());
+            }
+            if (pending_str_temps_.size() > str_temps_before_else) {
+                pending_str_temps_.erase(pending_str_temps_.begin() +
+                                             static_cast<ptrdiff_t>(str_temps_before_else),
+                                         pending_str_temps_.end());
             }
         }
     }

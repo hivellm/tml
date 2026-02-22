@@ -125,15 +125,93 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return "0";
     }
 
-    // NOTE: Phase 4b (automatic Str temp tracking) was attempted here but disabled.
-    // Tracking Str temps from call/method/binary/interpolated expressions caused
-    // heap corruption in complex patterns (glob, fmt) because:
-    // 1. Assignment `var = expr` — the temp would be freed at statement end even though
-    //    the variable now owns the value
-    // 2. Nested function calls — inner calls produce temps that outer calls consume
-    // 3. Library code patterns where Str pointers are stored in collections
-    // The safe approach is Phase 4a (let/var binding drops) + Phase 3 (discarded returns).
-    // Phase 4b requires a more sophisticated ownership analysis to be safe.
+    // Phase 4b: Track Str temporaries for cleanup at statement end.
+    // Track expressions that produce heap-allocated Str values:
+    //   - InterpolatedStringExpr: snprintf + malloc
+    //   - TemplateLiteralExpr: snprintf + malloc
+    //   - BinaryExpr(Add) on Str: str_concat_opt → malloc
+    //   - CallExpr/MethodCallExpr returning Str: stdlib functions allocate fresh heap Str
+    // tml_str_free validates heap pointers (HeapValidate on Windows), so calling it
+    // on non-heap pointers (globals, stack) is safe — they are skipped.
+    if (!result.empty() && result[0] == '%' && last_expr_type_ == "ptr") {
+        bool is_str_temp = false;
+        if (expr.is<parser::InterpolatedStringExpr>() || expr.is<parser::TemplateLiteralExpr>()) {
+            is_str_temp = true;
+        } else if (expr.is<parser::BinaryExpr>() &&
+                   expr.as<parser::BinaryExpr>().op == parser::BinaryOp::Add) {
+            auto sem = infer_expr_type(expr);
+            if (sem && sem->is<types::PrimitiveType>() &&
+                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                is_str_temp = true;
+            }
+        } else if (expr.is<parser::CallExpr>()) {
+            // Track Str temporaries from free function calls (e.g., str::join, encode).
+            // Free functions returning Str almost always allocate fresh heap memory.
+            // Use infer_expr_type to confirm return type is owned Str (not ref Str).
+            auto sem = infer_expr_type(expr);
+            if (sem && sem->is<types::PrimitiveType>() &&
+                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                is_str_temp = true;
+            }
+        } else if (expr.is<parser::MethodCallExpr>()) {
+            // Track Str temporaries from method calls that are KNOWN to allocate
+            // fresh heap Str. Collection getters (get, first, last, peek) return
+            // borrowed references and must NOT be freed.
+            // Whitelist approach: only auto-free methods that demonstrably allocate.
+            const auto& mcall = expr.as<parser::MethodCallExpr>();
+            const std::string& method = mcall.method;
+            static const std::unordered_set<std::string> allocating_methods = {
+                // Display/Debug behaviors — always allocate fresh Str
+                "to_string",
+                "debug_string",
+                // String transform methods — allocate new string
+                "to_uppercase",
+                "to_lowercase",
+                "to_ascii_uppercase",
+                "to_ascii_lowercase",
+                "trim",
+                "trim_start",
+                "trim_end",
+                "trim_left",
+                "trim_right",
+                "replace",
+                "replace_first",
+                "replacen",
+                "repeat",
+                "pad_left",
+                "pad_right",
+                "pad_start",
+                "pad_end",
+                "reverse",
+                "center",
+                "substring",
+                "substr",
+                // Encoding methods
+                "encode",
+                "decode",
+                // Format methods
+                "format",
+                "to_hex",
+                "to_binary",
+                "to_octal",
+                // Join/collect
+                "join",
+                "collect",
+                // Duplicate (creates owned copy)
+                "duplicate",
+            };
+            if (allocating_methods.count(method)) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
+                }
+            }
+        }
+        if (is_str_temp) {
+            pending_str_temps_.push_back(result);
+        }
+    }
     return result;
 }
 

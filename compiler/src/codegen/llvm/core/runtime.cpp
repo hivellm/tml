@@ -3,12 +3,19 @@
 //! This file emits the target header and runtime type/function declarations.
 //! Module import codegen is in runtime_modules.cpp.
 //!
+//! ## Dead Declaration Elimination (Phase 3)
+//!
+//! Runtime function declarations are registered in a catalog during init.
+//! During codegen, emit_line() auto-detects @symbol references and marks
+//! them as needed. At finalization, only needed declarations are emitted.
+//!
 //! ## Emitted Sections
 //!
 //! | Method                         | Emits                         |
 //! |--------------------------------|-------------------------------|
 //! | `emit_header`                  | Target triple, comments       |
-//! | `emit_runtime_decls`           | Struct types, C functions     |
+//! | `emit_runtime_decls`           | Struct types, catalog init    |
+//! | `finalize_runtime_decls`       | Only needed function declares |
 //!
 //! ## Runtime Types
 //!
@@ -16,10 +23,6 @@
 //! |-----------------|---------------------|---------------------|
 //! | `%struct.tml_str` | `{ ptr, i64 }`    | String slice        |
 //! | `%struct.Ordering` | `{ i32 }`        | Comparison result   |
-//!
-//! ## External Functions
-//!
-//! Declares C standard library functions: printf, puts, malloc, free, exit.
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
@@ -27,6 +30,7 @@
 #include "parser/parser.hpp"
 
 #include <filesystem>
+#include <sstream>
 #include <unordered_set>
 
 namespace tml::codegen {
@@ -36,6 +40,280 @@ void LLVMIRGen::emit_header() {
     emit_line("target triple = \"" + options_.target_triple + "\"");
     emit_line("");
 }
+
+// ============================================================================
+// Runtime Declaration Catalog
+// ============================================================================
+
+void LLVMIRGen::init_runtime_catalog() {
+    runtime_catalog_.clear();
+    runtime_catalog_index_.clear();
+    needed_runtime_decls_.clear();
+
+    auto add = [&](const std::string& name, const std::string& ir,
+                   std::vector<std::string> deps = {}) {
+        size_t idx = runtime_catalog_.size();
+        runtime_catalog_.push_back({name, ir, std::move(deps)});
+        runtime_catalog_index_[name] = idx;
+    };
+
+    // --- C stdlib functions ---
+    add("printf", "declare i32 @printf(ptr, ...)");
+    add("puts", "declare i32 @puts(ptr)");
+    add("putchar", "declare i32 @putchar(i32)");
+    add("malloc", "declare ptr @malloc(i64)");
+    add("free", "declare void @free(ptr)");
+    add("tml_str_free", "declare void @tml_str_free(ptr)");
+    add("exit", "declare void @exit(i32) noreturn");
+    add("strlen", "declare i64 @strlen(ptr)");
+    add("strcmp", "declare i32 @strcmp(ptr, ptr)");
+    add("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
+
+    // --- LLVM intrinsics ---
+    add("llvm.memcpy.p0.p0.i64", "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
+    add("llvm.memmove.p0.p0.i64", "declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
+    add("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
+    add("llvm.assume", "declare void @llvm.assume(i1) nounwind");
+
+    // --- TML runtime ---
+    add("panic", "declare void @panic(ptr) noreturn");
+    add("assert_tml_loc", "declare void @assert_tml_loc(i32, ptr, ptr, i32) noreturn");
+
+    // --- Panic catching ---
+    add("tml_run_should_panic", "declare i32 @tml_run_should_panic(ptr)");
+    add("tml_panic_message_contains", "declare i32 @tml_panic_message_contains(ptr)");
+
+    // --- Backtrace ---
+    add("tml_enable_backtrace_on_panic", "declare void @tml_enable_backtrace_on_panic()");
+
+    // --- Coverage (conditional, but registered for completeness) ---
+    add("tml_cover_func", "declare void @tml_cover_func(ptr)");
+    add("print_coverage_report", "declare void @print_coverage_report()");
+    add("write_coverage_json", "declare void @write_coverage_json(ptr)");
+    add("write_coverage_html", "declare void @write_coverage_html(ptr)");
+
+    // --- Debug intrinsics ---
+    add("llvm.dbg.declare",
+        "declare void @llvm.dbg.declare(metadata, metadata, metadata) nounwind readnone");
+    add("llvm.dbg.value",
+        "declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone");
+
+    // --- LLVM instrumentation profile ---
+    add("llvm.instrprof.increment",
+        "declare void @llvm.instrprof.increment(ptr, i64, i32, i32) #1");
+
+    // --- Stack management ---
+    add("llvm.stacksave", "declare ptr @llvm.stacksave() nounwind");
+    add("llvm.stackrestore", "declare void @llvm.stackrestore(ptr) nounwind");
+
+    // --- Lifetime intrinsics ---
+    add("llvm.lifetime.start.p0",
+        "declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) nounwind");
+    add("llvm.lifetime.end.p0",
+        "declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
+
+    // --- I/O functions ---
+    add("print", "declare void @print(ptr)");
+    add("println", "declare void @println(ptr)");
+    add("print_i32", "declare void @print_i32(i32)");
+    add("print_i64", "declare void @print_i64(i64)");
+    add("print_f64", "declare void @print_f64(double)");
+    add("print_bool", "declare void @print_bool(i32)");
+
+    // --- Float formatting (C runtime) ---
+    add("f64_to_string", "declare ptr @f64_to_string(double)");
+    add("f32_to_string", "declare ptr @f32_to_string(float)");
+    add("f64_to_string_precision", "declare ptr @f64_to_string_precision(double, i64)");
+    add("f32_to_string_precision", "declare ptr @f32_to_string_precision(float, i64)");
+    add("f64_to_exp_string", "declare ptr @f64_to_exp_string(double, i32)");
+    add("f32_to_exp_string", "declare ptr @f32_to_exp_string(float, i32)");
+
+    // --- Random seed ---
+    add("tml_random_seed", "declare i64 @tml_random_seed()");
+
+    // --- Memory functions ---
+    add("mem_alloc", "declare ptr @mem_alloc(i64)");
+    add("mem_alloc_zeroed", "declare ptr @mem_alloc_zeroed(i64)");
+    add("mem_realloc", "declare ptr @mem_realloc(ptr, i64)");
+    add("mem_free", "declare void @mem_free(ptr)");
+    add("mem_copy", "declare void @mem_copy(ptr, ptr, i64)");
+    add("mem_move", "declare void @mem_move(ptr, ptr, i64)");
+    add("mem_set", "declare void @mem_set(ptr, i32, i64)");
+    add("mem_zero", "declare void @mem_zero(ptr, i64)");
+    add("mem_compare", "declare i32 @mem_compare(ptr, ptr, i64)");
+    add("mem_eq", "declare i32 @mem_eq(ptr, ptr, i64)");
+
+    // --- Object pool ---
+    add("pool_acquire", "declare ptr @pool_acquire(ptr, i64)");
+    add("pool_release", "declare void @pool_release(ptr, ptr)");
+    add("tls_pool_acquire", "declare ptr @tls_pool_acquire(ptr, i64)");
+    add("tls_pool_release", "declare void @tls_pool_release(ptr, ptr, i64)");
+
+    // --- Atomic operations ---
+    add("atomic_fetch_add_i32", "declare i32 @atomic_fetch_add_i32(ptr, i32)");
+    add("atomic_fetch_sub_i32", "declare i32 @atomic_fetch_sub_i32(ptr, i32)");
+    add("atomic_load_i32", "declare i32 @atomic_load_i32(ptr)");
+    add("atomic_store_i32", "declare void @atomic_store_i32(ptr, i32)");
+    add("atomic_compare_exchange_i32", "declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
+    add("atomic_swap_i32", "declare i32 @atomic_swap_i32(ptr, i32)");
+    add("atomic_fence", "declare void @atomic_fence()");
+    add("atomic_fence_acquire", "declare void @atomic_fence_acquire()");
+    add("atomic_fence_release", "declare void @atomic_fence_release()");
+
+    // --- Log runtime ---
+    add("rt_log_msg", "declare void @rt_log_msg(i32, ptr, ptr)");
+    add("rt_log_set_level", "declare void @rt_log_set_level(i32)");
+    add("rt_log_get_level", "declare i32 @rt_log_get_level()");
+    add("rt_log_enabled", "declare i32 @rt_log_enabled(i32)");
+    add("rt_log_set_filter", "declare void @rt_log_set_filter(ptr)");
+    add("rt_log_module_enabled", "declare i32 @rt_log_module_enabled(i32, ptr)");
+    add("rt_log_structured", "declare void @rt_log_structured(i32, ptr, ptr, ptr)");
+    add("rt_log_set_format", "declare void @rt_log_set_format(i32)");
+    add("rt_log_get_format", "declare i32 @rt_log_get_format()");
+    add("rt_log_open_file", "declare i32 @rt_log_open_file(ptr)");
+    add("rt_log_close_file", "declare void @rt_log_close_file()");
+    add("rt_log_init_from_env", "declare i32 @rt_log_init_from_env()");
+
+    // --- Inline IR definitions (multi-line, with dependencies) ---
+
+    // str_eq depends on strcmp
+    add("str_eq",
+        "; String utilities (inline IR)\n"
+        "define internal i32 @str_eq(ptr %a, ptr %b) {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %both_null = and i1 %a_null, %b_null\n"
+        "  br i1 %both_null, label %ret_true, label %check_either\n"
+        "ret_true:\n"
+        "  ret i32 1\n"
+        "check_either:\n"
+        "  %either_null = or i1 %a_null, %b_null\n"
+        "  br i1 %either_null, label %ret_false, label %compare\n"
+        "ret_false:\n"
+        "  ret i32 0\n"
+        "compare:\n"
+        "  %cmp = call i32 @strcmp(ptr %a, ptr %b)\n"
+        "  %eq = icmp eq i32 %cmp, 0\n"
+        "  %result = zext i1 %eq to i32\n"
+        "  ret i32 %result\n"
+        "}",
+        {"strcmp"});
+
+    // .str.empty global needed by str_concat_opt
+    add(".str.empty", "@.str.empty = private constant [1 x i8] c\"\\00\"");
+
+    // str_concat_opt depends on strlen, mem_alloc, memcpy, .str.empty
+    // Uses mem_alloc instead of malloc so the memory tracker can track
+    // the allocation and tml_str_free can properly deregister it.
+    add("str_concat_opt",
+        "define internal ptr @str_concat_opt(ptr %a, ptr %b) {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_a = call i64 @strlen(ptr %a_safe)\n"
+        "  %len_b = call i64 @strlen(ptr %b_safe)\n"
+        "  %total = add i64 %len_a, %len_b\n"
+        "  %alloc = add i64 %total, 1\n"
+        "  %buf = call ptr @mem_alloc(i64 %alloc)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %a_safe, i64 %len_a, i1 false)\n"
+        "  %dst = getelementptr i8, ptr %buf, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end = getelementptr i8, ptr %buf, i64 %total\n"
+        "  store i8 0, ptr %end\n"
+        "  ret ptr %buf\n"
+        "}",
+        {"strlen", "mem_alloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
+    // Black box functions (no dependencies)
+    add("black_box_i32", "; Black box (inline IR)\n"
+                         "define internal i32 @black_box_i32(i32 %val) noinline {\n"
+                         "entry:\n"
+                         "  call void asm sideeffect \"\", \"r\"(i32 %val)\n"
+                         "  ret i32 %val\n"
+                         "}");
+    add("black_box_i64", "define internal i64 @black_box_i64(i64 %val) noinline {\n"
+                         "entry:\n"
+                         "  call void asm sideeffect \"\", \"r\"(i64 %val)\n"
+                         "  ret i64 %val\n"
+                         "}");
+    add("black_box_f64", "define internal double @black_box_f64(double %val) noinline {\n"
+                         "entry:\n"
+                         "  call void asm sideeffect \"\", \"r\"(double %val)\n"
+                         "  ret double %val\n"
+                         "}");
+
+    // --- Format string globals ---
+    add(".fmt.int", "@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");
+    add(".fmt.int.no_nl", "@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");
+    add(".fmt.i64", "@.fmt.i64 = private constant [5 x i8] c\"%ld\\0A\\00\"");
+    add(".fmt.i64.no_nl", "@.fmt.i64.no_nl = private constant [4 x i8] c\"%ld\\00\"");
+    add(".fmt.float", "@.fmt.float = private constant [4 x i8] c\"%f\\0A\\00\"");
+    add(".fmt.float.no_nl", "@.fmt.float.no_nl = private constant [3 x i8] c\"%f\\00\"");
+    add(".fmt.float3", "@.fmt.float3 = private constant [6 x i8] c\"%.3f\\0A\\00\"");
+    add(".fmt.float3.no_nl", "@.fmt.float3.no_nl = private constant [5 x i8] c\"%.3f\\00\"");
+    add(".fmt.str.no_nl", "@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");
+    add(".str.true", "@.str.true = private constant [5 x i8] c\"true\\00\"");
+    add(".str.false", "@.str.false = private constant [6 x i8] c\"false\\00\"");
+    add(".str.space", "@.str.space = private constant [2 x i8] c\" \\00\"");
+    add(".str.newline", "@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");
+}
+
+void LLVMIRGen::require_runtime_decl(const std::string& name) {
+    if (needed_runtime_decls_.count(name))
+        return; // already marked
+    auto it = runtime_catalog_index_.find(name);
+    if (it == runtime_catalog_index_.end())
+        return; // not a catalog entry
+    needed_runtime_decls_.insert(name);
+    // Transitively require dependencies
+    for (const auto& dep : runtime_catalog_[it->second].deps)
+        require_runtime_decl(dep);
+}
+
+void LLVMIRGen::scan_for_runtime_refs(const std::string& text) {
+    if (runtime_catalog_index_.empty() || needed_runtime_decls_.size() >= runtime_catalog_.size())
+        return;
+    size_t pos = text.find('@');
+    while (pos != std::string::npos) {
+        pos++; // skip '@'
+        size_t end = pos;
+        while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) ||
+                                     text[end] == '_' || text[end] == '.'))
+            end++;
+        if (end > pos) {
+            auto it = runtime_catalog_index_.find(text.substr(pos, end - pos));
+            if (it != runtime_catalog_index_.end())
+                require_runtime_decl(runtime_catalog_[it->second].name);
+        }
+        pos = text.find('@', end);
+    }
+}
+
+void LLVMIRGen::finalize_runtime_decls() {
+    // In library_ir_only mode, force ALL declarations (workers may need any of them)
+    if (options_.library_ir_only) {
+        for (const auto& entry : runtime_catalog_) {
+            needed_runtime_decls_.insert(entry.name);
+        }
+    }
+
+    std::ostringstream decls;
+    decls << "; Runtime declarations (on-demand)\n";
+    for (const auto& entry : runtime_catalog_) {
+        if (needed_runtime_decls_.count(entry.name)) {
+            decls << entry.ir_text << "\n";
+        }
+    }
+    decls << "\n";
+    deferred_runtime_decls_ = decls.str();
+}
+
+// ============================================================================
+// emit_runtime_decls — emits types + initializes catalog (no function declares)
+// ============================================================================
 
 void LLVMIRGen::emit_runtime_decls() {
     // String type: { ptr, i64 } (pointer to data, length)
@@ -49,120 +327,6 @@ void LLVMIRGen::emit_runtime_decls() {
     struct_fields_["Ordering"] = {{"value", 0, "i32", types::make_i32()}};
 
     // --- On-demand type declarations (Phase 51) ---
-    // These struct types are only emitted when their associated modules are imported.
-
-    // HashMapIter type for iterating over HashMap entries
-    // Only needed when std::collections is imported.
-    // NOTE: Deferred to after import scan below (needs_collections flag).
-
-    // Thread types (from std::thread) - needed for @extern function declarations
-    // Only needed when std::thread is imported.
-    // NOTE: Deferred to after import scan below (needs_thread flag).
-
-    // External C functions
-    emit_line("; External function declarations");
-    emit_line("declare i32 @printf(ptr, ...)");
-    emit_line("declare i32 @puts(ptr)");
-    emit_line("declare i32 @putchar(i32)");
-    emit_line("declare ptr @malloc(i64)");
-    emit_line("declare void @free(ptr)");
-    emit_line("declare void @tml_str_free(ptr)");
-    emit_line("declare void @exit(i32) noreturn");
-    emit_line("declare i64 @strlen(ptr)");
-    emit_line("declare i32 @strcmp(ptr, ptr)");
-    emit_line("declare i32 @memcmp(ptr, ptr, i64)");
-    // snprintf — removed in Phase 46 (no longer needed: float formatting moved to C runtime)
-    emit_line("");
-
-    // LLVM intrinsics for optimized codegen
-    emit_line("; LLVM intrinsics");
-    emit_line("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
-    emit_line("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
-    emit_line("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
-    emit_line("declare void @llvm.assume(i1) nounwind");
-    emit_line("");
-
-    // TML runtime functions
-    emit_line("; TML runtime functions");
-    emit_line("declare void @panic(ptr) noreturn");
-    emit_line("declare void @assert_tml_loc(i32, ptr, ptr, i32) noreturn");
-    emit_line("");
-
-    // Panic catching for @should_panic tests
-    emit_line("; Panic catching (for @should_panic tests)");
-    emit_line("declare i32 @tml_run_should_panic(ptr)");
-    emit_line("declare i32 @tml_panic_message_contains(ptr)");
-    emit_line("");
-
-    // Backtrace support (--backtrace flag enables printing stack trace on panic)
-    emit_line("; Backtrace support");
-    emit_line("declare void @tml_enable_backtrace_on_panic()");
-    emit_line("");
-
-    // Note: TML test assertions are in the test module's TML code (call panic() internally)
-
-    // TML code coverage functions (only when coverage is enabled)
-    if (options_.coverage_enabled) {
-        emit_line("; TML code coverage");
-        emit_line("declare void @tml_cover_func(ptr)");
-        emit_line("declare void @print_coverage_report()");
-        emit_line("declare void @write_coverage_json(ptr)");
-        emit_line("declare void @write_coverage_html(ptr)");
-        emit_line("");
-        // Register in declared_externals_ to prevent duplicate declarations
-        // when test::coverage module is imported (it has @extern("tml_cover_func"))
-        declared_externals_.insert("tml_cover_func");
-        declared_externals_.insert("print_coverage_report");
-        declared_externals_.insert("write_coverage_json");
-        declared_externals_.insert("write_coverage_html");
-    }
-
-    // Debug intrinsics (for DWARF debug info)
-    if (options_.emit_debug_info) {
-        emit_line("; Debug intrinsics");
-        emit_line("declare void @llvm.dbg.declare(metadata, metadata, metadata) nounwind readnone");
-        emit_line("declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone");
-        emit_line("");
-    }
-
-    // LLVM instrumentation profile intrinsic (for source-based coverage)
-    if (options_.llvm_source_coverage) {
-        emit_line("; LLVM instrumentation profile intrinsics (source-based coverage)");
-        emit_line("declare void @llvm.instrprof.increment(ptr, i64, i32, i32) #1");
-        emit_line("");
-    }
-
-    // Stack save/restore intrinsics (for loop alloca cleanup)
-    emit_line("; Stack management intrinsics");
-    emit_line("declare ptr @llvm.stacksave() nounwind");
-    emit_line("declare void @llvm.stackrestore(ptr) nounwind");
-    emit_line("");
-
-    // Lifetime intrinsics (for stack slot optimization)
-    emit_line("; Lifetime intrinsics for stack optimization");
-    emit_line("declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) nounwind");
-    emit_line("declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
-    emit_line("");
-
-    // I/O functions
-    emit_line("; I/O functions (check output suppression)");
-    emit_line("declare void @print(ptr)");
-    emit_line("declare void @println(ptr)");
-    emit_line("declare void @print_i32(i32)");
-    emit_line("declare void @print_i64(i64)");
-    emit_line("declare void @print_f64(double)");
-    emit_line("declare void @print_bool(i32)");
-    emit_line("");
-
-    // float_to_precision, float_to_exp — removed in Phase 36 (dead declares)
-    // Builtins/string.cpp handlers that called these were also dead code.
-
-    // nextafter — removed in Phase 38 (dead declare: handler removed, 0 TML callers)
-
-    // Integer/bool to_string — removed in Phase 44 (now TML Display behavior impls)
-    // i64_to_str — removed in Phase 45 (string interpolation now uses TML Display dispatch)
-
-    // --- On-demand runtime declares (Phase 51) ---
     // Compute which optional categories are needed based on imports.
     // In library_ir_only mode (shared library for test suites), emit everything
     // because the shared lib is linked against multiple workers with varying imports.
@@ -170,7 +334,6 @@ void LLVMIRGen::emit_runtime_decls() {
     bool needs_logging = options_.library_ir_only;
     bool needs_collections = options_.library_ir_only;
     bool needs_thread = options_.library_ir_only;
-    // needs_glob removed (Phase 42) — glob now uses @extern FFI in glob.tml
 
     if (!options_.library_ir_only) {
         const auto& imports = env_.all_imports();
@@ -206,60 +369,76 @@ void LLVMIRGen::emit_runtime_decls() {
     }
     emit_line("");
 
-    // Typed atomic operations — only when sync/thread modules are imported
-    if (needs_sync_atomics) {
-        emit_line("; Typed atomic operations runtime");
-        emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
-        declared_externals_.insert("atomic_fetch_add_i32");
-        emit_line("declare i32 @atomic_fetch_sub_i32(ptr, i32)");
-        declared_externals_.insert("atomic_fetch_sub_i32");
-        emit_line("declare i32 @atomic_load_i32(ptr)");
-        declared_externals_.insert("atomic_load_i32");
-        emit_line("declare void @atomic_store_i32(ptr, i32)");
-        declared_externals_.insert("atomic_store_i32");
-        emit_line("declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
-        declared_externals_.insert("atomic_compare_exchange_i32");
-        emit_line("declare i32 @atomic_swap_i32(ptr, i32)");
-        declared_externals_.insert("atomic_swap_i32");
-        emit_line("declare void @atomic_fence()");
-        declared_externals_.insert("atomic_fence");
-        emit_line("declare void @atomic_fence_acquire()");
-        declared_externals_.insert("atomic_fence_acquire");
-        emit_line("declare void @atomic_fence_release()");
-        declared_externals_.insert("atomic_fence_release");
-        emit_line("");
+    // Initialize the runtime declaration catalog
+    init_runtime_catalog();
+
+    // Force-require conditional categories based on imports
+    if (options_.coverage_enabled) {
+        require_runtime_decl("tml_cover_func");
+        require_runtime_decl("print_coverage_report");
+        require_runtime_decl("write_coverage_json");
+        require_runtime_decl("write_coverage_html");
+        declared_externals_.insert("tml_cover_func");
+        declared_externals_.insert("print_coverage_report");
+        declared_externals_.insert("write_coverage_json");
+        declared_externals_.insert("write_coverage_html");
     }
 
-    // Log runtime declarations — only when std::log is imported
-    if (needs_logging) {
-        emit_line("; Log runtime");
-        emit_line("declare void @rt_log_msg(i32, ptr, ptr)");
-        declared_externals_.insert("rt_log_msg");
-        emit_line("declare void @rt_log_set_level(i32)");
-        declared_externals_.insert("rt_log_set_level");
-        emit_line("declare i32 @rt_log_get_level()");
-        declared_externals_.insert("rt_log_get_level");
-        emit_line("declare i32 @rt_log_enabled(i32)");
-        declared_externals_.insert("rt_log_enabled");
-        emit_line("");
+    if (options_.emit_debug_info) {
+        require_runtime_decl("llvm.dbg.declare");
+        require_runtime_decl("llvm.dbg.value");
+    }
 
-        emit_line("declare void @rt_log_set_filter(ptr)");
+    if (options_.llvm_source_coverage) {
+        require_runtime_decl("llvm.instrprof.increment");
+    }
+
+    if (needs_sync_atomics) {
+        require_runtime_decl("atomic_fetch_add_i32");
+        require_runtime_decl("atomic_fetch_sub_i32");
+        require_runtime_decl("atomic_load_i32");
+        require_runtime_decl("atomic_store_i32");
+        require_runtime_decl("atomic_compare_exchange_i32");
+        require_runtime_decl("atomic_swap_i32");
+        require_runtime_decl("atomic_fence");
+        require_runtime_decl("atomic_fence_acquire");
+        require_runtime_decl("atomic_fence_release");
+        declared_externals_.insert("atomic_fetch_add_i32");
+        declared_externals_.insert("atomic_fetch_sub_i32");
+        declared_externals_.insert("atomic_load_i32");
+        declared_externals_.insert("atomic_store_i32");
+        declared_externals_.insert("atomic_compare_exchange_i32");
+        declared_externals_.insert("atomic_swap_i32");
+        declared_externals_.insert("atomic_fence");
+        declared_externals_.insert("atomic_fence_acquire");
+        declared_externals_.insert("atomic_fence_release");
+    }
+
+    if (needs_logging) {
+        require_runtime_decl("rt_log_msg");
+        require_runtime_decl("rt_log_set_level");
+        require_runtime_decl("rt_log_get_level");
+        require_runtime_decl("rt_log_enabled");
+        require_runtime_decl("rt_log_set_filter");
+        require_runtime_decl("rt_log_module_enabled");
+        require_runtime_decl("rt_log_structured");
+        require_runtime_decl("rt_log_set_format");
+        require_runtime_decl("rt_log_get_format");
+        require_runtime_decl("rt_log_open_file");
+        require_runtime_decl("rt_log_close_file");
+        require_runtime_decl("rt_log_init_from_env");
+        declared_externals_.insert("rt_log_msg");
+        declared_externals_.insert("rt_log_set_level");
+        declared_externals_.insert("rt_log_get_level");
+        declared_externals_.insert("rt_log_enabled");
         declared_externals_.insert("rt_log_set_filter");
-        emit_line("declare i32 @rt_log_module_enabled(i32, ptr)");
         declared_externals_.insert("rt_log_module_enabled");
-        emit_line("declare void @rt_log_structured(i32, ptr, ptr, ptr)");
         declared_externals_.insert("rt_log_structured");
-        emit_line("declare void @rt_log_set_format(i32)");
         declared_externals_.insert("rt_log_set_format");
-        emit_line("declare i32 @rt_log_get_format()");
         declared_externals_.insert("rt_log_get_format");
-        emit_line("declare i32 @rt_log_open_file(ptr)");
         declared_externals_.insert("rt_log_open_file");
-        emit_line("declare void @rt_log_close_file()");
         declared_externals_.insert("rt_log_close_file");
-        emit_line("declare i32 @rt_log_init_from_env()");
         declared_externals_.insert("rt_log_init_from_env");
-        emit_line("");
 
         // Register log functions in functions_ map for lowlevel calls
         functions_["rt_log_msg"] =
@@ -284,113 +463,11 @@ void LLVMIRGen::emit_runtime_decls() {
         functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
     }
 
-    // Glob runtime declarations removed (Phase 42) — now @extern FFI in glob.tml
-
-    // String utilities — inline LLVM IR implementations (Phase 31)
-    // These replace the previous C runtime declarations from string.c.
-    // By using 'define' instead of 'declare', the functions are compiled
-    // directly into each module without needing the C runtime library.
-
-    // str_eq: null-safe string equality using libc strcmp
-    emit_line("; String utilities (inline IR — no C runtime dependency)");
-    emit_line("define internal i32 @str_eq(ptr %a, ptr %b) {");
-    emit_line("entry:");
-    emit_line("  %a_null = icmp eq ptr %a, null");
-    emit_line("  %b_null = icmp eq ptr %b, null");
-    emit_line("  %both_null = and i1 %a_null, %b_null");
-    emit_line("  br i1 %both_null, label %ret_true, label %check_either");
-    emit_line("ret_true:");
-    emit_line("  ret i32 1");
-    emit_line("check_either:");
-    emit_line("  %either_null = or i1 %a_null, %b_null");
-    emit_line("  br i1 %either_null, label %ret_false, label %compare");
-    emit_line("ret_false:");
-    emit_line("  ret i32 0");
-    emit_line("compare:");
-    emit_line("  %cmp = call i32 @strcmp(ptr %a, ptr %b)");
-    emit_line("  %eq = icmp eq i32 %cmp, 0");
-    emit_line("  %result = zext i1 %eq to i32");
-    emit_line("  ret i32 %result");
-    emit_line("}");
-    emit_line("");
-
-    // str_concat_opt: null-safe string concatenation using strlen+malloc+memcpy
-    emit_line("@.str.empty = private constant [1 x i8] c\"\\00\"");
-    emit_line("define internal ptr @str_concat_opt(ptr %a, ptr %b) {");
-    emit_line("entry:");
-    emit_line("  %a_null = icmp eq ptr %a, null");
-    emit_line("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
-    emit_line("  %b_null = icmp eq ptr %b, null");
-    emit_line("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
-    emit_line("  %len_a = call i64 @strlen(ptr %a_safe)");
-    emit_line("  %len_b = call i64 @strlen(ptr %b_safe)");
-    emit_line("  %total = add i64 %len_a, %len_b");
-    emit_line("  %alloc = add i64 %total, 1");
-    emit_line("  %buf = call ptr @malloc(i64 %alloc)");
-    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %a_safe, i64 %len_a, i1 false)");
-    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %len_a");
-    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)");
-    emit_line("  %end = getelementptr i8, ptr %buf, i64 %total");
-    emit_line("  store i8 0, ptr %end");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
-
-    // str_hash — removed in Phase 34 (dead code, pure TML impl in core::hash)
-
-    // Phase 44: i32_to_string, i64_to_string, bool_to_string removed.
-    // Phase 45: i64_to_str, f64_to_str removed — string interpolation now uses TML Display.
-    // Phase 46: str_as_bytes removed — Str::as_bytes() now returns `this` directly (identity).
-    // All integer/bool formatting now handled by TML Display behavior impls.
-
-    // ========================================================================
-    // Math utilities — inline LLVM IR implementations (Phase 32)
-    // These replace the previous C runtime declarations from math.c.
-    // ========================================================================
-
-    // --- Black box: prevent optimization using inline asm side-effect ---
-    // define internal: LLVM strips unused internal definitions, so always safe to emit.
-    emit_line("; Black box (inline IR — Phase 32)");
-    emit_line("define internal i32 @black_box_i32(i32 %val) noinline {");
-    emit_line("entry:");
-    emit_line("  call void asm sideeffect \"\", \"r\"(i32 %val)");
-    emit_line("  ret i32 %val");
-    emit_line("}");
-    emit_line("define internal i64 @black_box_i64(i64 %val) noinline {");
-    emit_line("entry:");
-    emit_line("  call void asm sideeffect \"\", \"r\"(i64 %val)");
-    emit_line("  ret i64 %val");
-    emit_line("}");
-    emit_line("define internal double @black_box_f64(double %val) noinline {");
-    emit_line("entry:");
-    emit_line("  call void asm sideeffect \"\", \"r\"(double %val)");
-    emit_line("  ret double %val");
-    emit_line("}");
-    emit_line("");
-
-    // --- Float formatting (Phase 46: moved from inline IR to C runtime in essential.c) ---
-    // These wrap variadic snprintf, which TML cannot call directly.
-    // Always emitted: string interpolation on floats triggers Display without explicit import.
-    emit_line("; Float formatting (C runtime — Phase 46)");
-    emit_line("declare ptr @f64_to_string(double)");
-    emit_line("declare ptr @f32_to_string(float)");
-    emit_line("declare ptr @f64_to_string_precision(double, i64)");
-    emit_line("declare ptr @f32_to_string_precision(float, i64)");
-    emit_line("declare ptr @f64_to_exp_string(double, i32)");
-    emit_line("declare ptr @f32_to_exp_string(float, i32)");
-    emit_line("");
-
-    // Random seed — used by core::hash (FNV-1a seed) and std::random
-    emit_line("declare i64 @tml_random_seed()");
-    emit_line("");
+    // Register functions_ map entries for lowlevel calls (lightweight, no IR emitted)
     functions_["random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
     functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
-
-    // Register I/O functions for lowlevel calls (used by text.tml print/println methods)
     functions_["print_str"] = FuncInfo{"@print", "void (ptr)", "void", {"ptr"}};
     functions_["println_str"] = FuncInfo{"@println", "void (ptr)", "void", {"ptr"}};
-
-    // Register float formatting C runtime functions for lowlevel calls from core::fmt
     functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};
     functions_["f32_to_string"] = FuncInfo{"@f32_to_string", "ptr (float)", "ptr", {"float"}};
     functions_["f64_to_string_precision"] =
@@ -402,48 +479,8 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["f32_to_exp_string"] =
         FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
 
-    // Memory functions (matches runtime/mem.c)
-    emit_line("; Memory functions");
-    emit_line("declare ptr @mem_alloc(i64)");
-    emit_line("declare ptr @mem_alloc_zeroed(i64)");
-    emit_line("declare ptr @mem_realloc(ptr, i64)");
-    emit_line("declare void @mem_free(ptr)");
-    emit_line("declare void @mem_copy(ptr, ptr, i64)");
-    emit_line("declare void @mem_move(ptr, ptr, i64)");
-    emit_line("declare void @mem_set(ptr, i32, i64)");
-    emit_line("declare void @mem_zero(ptr, i64)");
-    emit_line("declare i32 @mem_compare(ptr, ptr, i64)");
-    emit_line("declare i32 @mem_eq(ptr, ptr, i64)");
-    emit_line("");
-
-    // Object pool functions (for @pool classes)
-    emit_line("; Object pool functions");
-    emit_line("declare ptr @pool_acquire(ptr, i64)");
-    emit_line("declare void @pool_release(ptr, ptr)");
-    emit_line("");
-
-    // Thread-local pool functions (for @pool(thread_local: true) classes)
-    emit_line("; Thread-local pool functions");
-    emit_line("declare ptr @tls_pool_acquire(ptr, i64)");
-    emit_line("declare void @tls_pool_release(ptr, ptr, i64)");
-    emit_line("");
-
-    // Format strings for print/println
-    // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)
-    emit_line("; Format strings");
-    emit_line("@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");        // %d\n\0 = 4 bytes
-    emit_line("@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");      // %d\0 = 3 bytes
-    emit_line("@.fmt.i64 = private constant [5 x i8] c\"%ld\\0A\\00\"");       // %ld\n\0 = 5 bytes
-    emit_line("@.fmt.i64.no_nl = private constant [4 x i8] c\"%ld\\00\"");     // %ld\0 = 4 bytes
-    emit_line("@.fmt.float = private constant [4 x i8] c\"%f\\0A\\00\"");      // %f\n\0 = 4 bytes
-    emit_line("@.fmt.float.no_nl = private constant [3 x i8] c\"%f\\00\"");    // %f\0 = 3 bytes
-    emit_line("@.fmt.float3 = private constant [6 x i8] c\"%.3f\\0A\\00\"");   // %.3f\n\0 = 6 bytes
-    emit_line("@.fmt.float3.no_nl = private constant [5 x i8] c\"%.3f\\00\""); // %.3f\0 = 5 bytes
-    emit_line("@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");      // %s\0 = 3 bytes
-    emit_line("@.str.true = private constant [5 x i8] c\"true\\00\"");         // true\0 = 5 bytes
-    emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");       // false\0 = 6 bytes
-    emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");           // " "\0 = 2 bytes
-    emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");      // \n\0 = 2 bytes
+    // Placeholder for deferred declarations (will be replaced in generate())
+    emit_line("; {{RUNTIME_DECLS_PLACEHOLDER}}");
     emit_line("");
 }
 

@@ -148,6 +148,12 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                     emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
                               it->second.reg);
+
+                    // If assigning a heap Str to a var, consume the pending Str temp
+                    // so it won't be double-freed at statement end.
+                    if (target_type == "ptr" && !pending_str_temps_.empty()) {
+                        consume_last_str_temp();
+                    }
                 }
             }
         } else if (bin.left->is<parser::UnaryExpr>()) {

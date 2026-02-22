@@ -422,6 +422,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     consumed_vars_.clear();
     block_terminated_ = false;
     temp_drops_.clear();
+    pending_str_temps_.clear();
 
     // Store the return type for use in gen_return
     current_ret_type_ = ret_type;
@@ -824,6 +825,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     consumed_vars_.clear();
     block_terminated_ = false;
     temp_drops_.clear();
+    pending_str_temps_.clear();
     current_type_subs_ = subs;
 
     // Extract where constraints for bounded generic method dispatch
