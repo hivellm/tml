@@ -1,0 +1,87 @@
+use test
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_mixed_flags_and_values() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-v")
+    argv.push("--output")
+    argv.push("out.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("verbose"), "verbose should be set")
+            assert_eq(m.get_str("output", ""), "out.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_mixed_with_positionals() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+        .arg(Arg::new("file").positional())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-v")
+    argv.push("input.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("verbose"), "verbose should be set")
+            assert_eq(m.positional_count(), 1)
+            assert_eq(m.get_positional(0, ""), "input.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_equals_syntax_with_flag() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+        .arg(Arg::new("format").short("f").long("format"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--format=csv")
+    argv.push("-v")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("verbose"), "verbose should be set")
+            assert_eq(m.get_str("format", ""), "csv")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_short_value_arg() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-o")
+    argv.push("result.json")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("output", ""), "result.json")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

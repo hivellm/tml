@@ -1,0 +1,71 @@
+use test
+use core::str
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_help_flag_returns_err() -> I32 {
+    let app = App::new("myapp")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--help")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "help should return Err with help text")
+        Err(e) => {
+            assert(str::contains(e, "Usage: myapp"), "should contain usage line")
+            assert(str::contains(e, "--verbose"), "should list verbose flag")
+        }
+    }
+    0
+}
+
+@test
+func test_help_short_flag() -> I32 {
+    let app = App::new("myapp")
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-h")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "help should return Err")
+        Err(e) => assert(str::contains(e, "Usage: myapp"), "should contain usage")
+    }
+    0
+}
+
+@test
+func test_version_flag() -> I32 {
+    let app = App::new("myapp").version("1.2.3")
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--version")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "version should return Err")
+        Err(e) => assert_eq(e, "myapp 1.2.3")
+    }
+    0
+}
+
+@test
+func test_help_string_method() -> I32 {
+    let app = App::new("myapp")
+        .version("2.0.0")
+        .description("My awesome app")
+        .arg(Arg::new("output").short("o").long("output").help("Output file"))
+        .arg(Arg::new("verbose").short("v").long("verbose").flag().help("Enable verbose"))
+
+    let help = app.help_string()
+    assert(str::contains(help, "My awesome app"), "should contain description")
+    assert(str::contains(help, "Usage: myapp"), "should contain usage")
+    assert(str::contains(help, "Version: 2.0.0"), "should contain version")
+    assert(str::contains(help, "-o, --output"), "should list output arg")
+    assert(str::contains(help, "-v, --verbose"), "should list verbose flag")
+    assert(str::contains(help, "--help"), "should list help option")
+    0
+}

@@ -1,0 +1,61 @@
+use test
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_parse_positional() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("file").positional())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("hello.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.positional_count(), 1)
+            assert_eq(m.get_positional(0, ""), "hello.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_multiple_positionals() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("src").positional())
+        .arg(Arg::new("dst").positional())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("input.txt")
+    argv.push("output.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.positional_count(), 2)
+            assert_eq(m.get_positional(0, ""), "input.txt")
+            assert_eq(m.get_positional(1, ""), "output.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_positional_fallback() -> I32 {
+    let app = App::new("test")
+
+    let argv: List[Str] = List[Str]::new(4)
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_positional(0, "default"), "default")
+            assert_eq(m.get_positional(5, "none"), "none")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

@@ -1,0 +1,76 @@
+use test
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_parse_long_flag() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--verbose")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("verbose"), "verbose flag should be set")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_short_flag() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-v")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("verbose"), "verbose flag should be set via -v")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_long_value() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--output")
+    argv.push("file.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("output", ""), "file.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_parse_long_equals() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--output=file.txt")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("output", ""), "file.txt")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

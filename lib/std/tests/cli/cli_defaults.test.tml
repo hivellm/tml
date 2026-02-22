@@ -1,0 +1,74 @@
+use test
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_default_value_applied() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("format").short("f").long("format").default("json"))
+
+    let argv: List[Str] = List[Str]::new(4)
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert(m.has("format"), "default should be applied")
+            assert_eq(m.get_str("format", ""), "json")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_default_overridden() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("format").short("f").long("format").default("json"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--format")
+    argv.push("yaml")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("format", ""), "yaml")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_get_str_fallback() -> I32 {
+    let app = App::new("test")
+
+    let argv: List[Str] = List[Str]::new(4)
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("nonexistent", "fallback"), "fallback")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_required_with_default_not_needed() -> I32 {
+    // required + default: default satisfies the requirement
+    let app = App::new("test")
+        .arg(Arg::new("mode").long("mode").required().default("auto"))
+
+    let argv: List[Str] = List[Str]::new(4)
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => {
+            assert_eq(m.get_str("mode", ""), "auto")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

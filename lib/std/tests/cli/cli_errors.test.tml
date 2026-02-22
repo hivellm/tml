@@ -1,0 +1,82 @@
+use test
+use std::cli::{App, Arg}
+use std::collections::List
+
+@test
+func test_unknown_long_option() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--unknown")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "should fail on unknown option")
+        Err(e) => assert_eq(e, "unknown option: --unknown")
+    }
+    0
+}
+
+@test
+func test_unknown_short_option() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("verbose").short("v").long("verbose").flag())
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-x")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "should fail on unknown short option")
+        Err(e) => assert_eq(e, "unknown option: -x")
+    }
+    0
+}
+
+@test
+func test_missing_required_arg() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output").required())
+
+    let argv: List[Str] = List[Str]::new(4)
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "should fail on missing required arg")
+        Err(e) => assert_eq(e, "missing required argument: output")
+    }
+    0
+}
+
+@test
+func test_missing_value_for_long() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("--output")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "should fail when value missing")
+        Err(e) => assert_eq(e, "option --output requires a value")
+    }
+    0
+}
+
+@test
+func test_missing_value_for_short() -> I32 {
+    let app = App::new("test")
+        .arg(Arg::new("output").short("o").long("output"))
+
+    let argv: List[Str] = List[Str]::new(4)
+    argv.push("-o")
+
+    let result = app.parse_from(ref argv)
+    when result {
+        Ok(m) => assert(false, "should fail when value missing")
+        Err(e) => assert_eq(e, "option -o requires a value")
+    }
+    0
+}

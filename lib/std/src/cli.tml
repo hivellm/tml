@@ -1,0 +1,473 @@
+//! CLI argument parsing framework.
+//!
+//! Provides a builder-style API for defining command-line interfaces with
+//! named arguments, flags, positional arguments, and subcommands.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::cli::{App, Arg}
+//!
+//! let app = App::new("myapp")
+//!     .version("1.0.0")
+//!     .description("My application")
+//!     .arg(Arg::new("output").short("o").long("output").help("Output file"))
+//!     .arg(Arg::new("verbose").short("v").long("verbose").flag())
+//!
+//! let matches = app.parse()
+//! when matches {
+//!     Ok(m) => {
+//!         if m.has("verbose") { print("verbose mode\n") }
+//!         let out = m.get_str("output", "default.txt")
+//!     }
+//!     Err(e) => print(e + "\n")
+//! }
+//! ```
+
+use core::str
+use core::fmt::helpers
+use std::os
+use std::collections::List
+use std::collections::HashMap
+
+// ============================================================================
+// Arg — defines a single CLI argument
+// ============================================================================
+
+/// Defines a single CLI argument or flag.
+pub type Arg {
+    name: Str,          // internal name / key
+    short_flag: Str,    // single-char flag e.g. "-v" (empty if none)
+    long_flag: Str,     // long flag e.g. "--verbose" (empty if none)
+    help_text: Str,     // help description
+    is_flag: Bool,      // true = boolean flag (no value), false = takes value
+    is_required: Bool,  // true = must be provided
+    default_val: Str,   // default value (empty if none)
+    is_positional: Bool // true = positional argument (no flag prefix)
+}
+
+impl Arg {
+    /// Create a new argument with the given name.
+    pub func new(name: Str) -> Arg {
+        return Arg {
+            name: name,
+            short_flag: "",
+            long_flag: "",
+            help_text: "",
+            is_flag: false,
+            is_required: false,
+            default_val: "",
+            is_positional: false
+        }
+    }
+
+    /// Set the short flag (e.g. "v" for -v).
+    pub func short(this, s: Str) -> Arg {
+        return Arg {
+            name: this.name, short_flag: s, long_flag: this.long_flag,
+            help_text: this.help_text, is_flag: this.is_flag,
+            is_required: this.is_required, default_val: this.default_val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Set the long flag (e.g. "verbose" for --verbose).
+    pub func long(this, l: Str) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: l,
+            help_text: this.help_text, is_flag: this.is_flag,
+            is_required: this.is_required, default_val: this.default_val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Set the help description.
+    pub func help(this, h: Str) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: this.long_flag,
+            help_text: h, is_flag: this.is_flag,
+            is_required: this.is_required, default_val: this.default_val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Mark this as a boolean flag (no value).
+    pub func flag(this) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: this.long_flag,
+            help_text: this.help_text, is_flag: true,
+            is_required: this.is_required, default_val: this.default_val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Mark this argument as required.
+    pub func required(this) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: this.long_flag,
+            help_text: this.help_text, is_flag: this.is_flag,
+            is_required: true, default_val: this.default_val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Set a default value.
+    pub func default(this, val: Str) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: this.long_flag,
+            help_text: this.help_text, is_flag: this.is_flag,
+            is_required: this.is_required, default_val: val,
+            is_positional: this.is_positional
+        }
+    }
+
+    /// Mark this as a positional argument.
+    pub func positional(this) -> Arg {
+        return Arg {
+            name: this.name, short_flag: this.short_flag, long_flag: this.long_flag,
+            help_text: this.help_text, is_flag: this.is_flag,
+            is_required: this.is_required, default_val: this.default_val,
+            is_positional: true
+        }
+    }
+}
+
+// ============================================================================
+// App — CLI application builder
+// ============================================================================
+
+/// CLI application definition with arguments and metadata.
+pub type App {
+    name: Str,
+    ver: Str,
+    desc: Str,
+    args: List[Arg]
+}
+
+impl App {
+    /// Create a new CLI app with the given name.
+    pub func new(name: Str) -> App {
+        return App {
+            name: name,
+            ver: "",
+            desc: "",
+            args: List[Arg]::new(8)
+        }
+    }
+
+    /// Set the version string.
+    pub func version(this, v: Str) -> App {
+        return App { name: this.name, ver: v, desc: this.desc, args: this.args }
+    }
+
+    /// Set the description.
+    pub func description(this, d: Str) -> App {
+        return App { name: this.name, ver: this.ver, desc: d, args: this.args }
+    }
+
+    /// Add an argument definition.
+    pub func arg(this, a: Arg) -> App {
+        this.args.push(a)
+        return App { name: this.name, ver: this.ver, desc: this.desc, args: this.args }
+    }
+
+    /// Parse command-line arguments from std::os::args.
+    pub func parse(this) -> Outcome[Matches, Str] {
+        let argc: I32 = os::args_count()
+        // Collect args into a list of strings (skip argv[0] = program name)
+        let argv: List[Str] = List[Str]::new(argc as I64)
+        var i: I32 = 1
+        loop (i < argc) {
+            argv.push(os::args_get(i))
+            i = i + 1
+        }
+        return parse_args(ref this, ref argv)
+    }
+
+    /// Parse from a provided list of argument strings (for testing).
+    pub func parse_from(this, argv: ref List[Str]) -> Outcome[Matches, Str] {
+        return parse_args(ref this, argv)
+    }
+
+    /// Generate a help string.
+    @allocates
+    pub func help_string(this) -> Str {
+        return generate_help(ref this)
+    }
+}
+
+// ============================================================================
+// Matches — parsed argument values
+// ============================================================================
+
+/// The result of parsing CLI arguments.
+pub type Matches {
+    values: HashMap[Str, Str],
+    positionals: List[Str]
+}
+
+impl Matches {
+    /// Check if a flag or argument was provided.
+    pub func has(this, name: Str) -> Bool {
+        return this.values.has(name)
+    }
+
+    /// Get the value of an argument, or a default if not provided.
+    pub func get_str(this, name: Str, fallback: Str) -> Str {
+        if this.values.has(name) {
+            return this.values.get(name)
+        }
+        return fallback
+    }
+
+    /// Get positional argument by index, or fallback.
+    pub func get_positional(this, index: I64, fallback: Str) -> Str {
+        if index >= 0 and index < this.positionals.len() {
+            return this.positionals.get(index)
+        }
+        return fallback
+    }
+
+    /// Get count of positional arguments.
+    pub func positional_count(this) -> I64 {
+        return this.positionals.len()
+    }
+
+    /// Clean up resources.
+    pub func destroy(this) {
+        this.values.destroy()
+        this.positionals.destroy()
+    }
+}
+
+// ============================================================================
+// Internal parsing
+// ============================================================================
+
+/// Parse argument list against app definition.
+func parse_args(app: ref App, argv: ref List[Str]) -> Outcome[Matches, Str] {
+    let values: HashMap[Str, Str] = HashMap[Str, Str]::new(16)
+    let positionals: List[Str] = List[Str]::new(4)
+    let argc: I64 = argv.len()
+    var i: I64 = 0
+
+    loop (i < argc) {
+        let arg_str: Str = argv.get(i)
+        let alen: I64 = str::len(arg_str)
+
+        // Check for --help / -h
+        if arg_str == "--help" or arg_str == "-h" {
+            return Err(generate_help(app))
+        }
+
+        // Check for --version / -V
+        if arg_str == "--version" or arg_str == "-V" {
+            if str::len(app.ver) > 0 {
+                return Err(app.name + " " + app.ver)
+            }
+            return Err(app.name)
+        }
+
+        // Long flag: --name or --name=value
+        if alen > 2 and str::char_at(arg_str, 0) == 45 and str::char_at(arg_str, 1) == 45 {
+            let long_part: Str = str::substring(arg_str, 2, alen)
+            // Check for --name=value
+            let eq_pos: I64 = find_char_in(long_part, 61)  // '='
+            if eq_pos >= 0 {
+                let key: Str = str::substring(long_part, 0, eq_pos)
+                let val: Str = str::substring(long_part, eq_pos + 1, str::len(long_part))
+                let resolved = resolve_long(app, key)
+                if str::len(resolved) == 0 {
+                    return Err("unknown option: --" + key)
+                }
+                values.set(resolved, val)
+                i = i + 1
+            } else {
+                let resolved = resolve_long(app, long_part)
+                if str::len(resolved) == 0 {
+                    return Err("unknown option: --" + long_part)
+                }
+                // Check if it's a flag
+                if is_flag_arg(app, resolved) {
+                    values.set(resolved, "true")
+                    i = i + 1
+                } else {
+                    // Needs a value
+                    if i + 1 >= argc {
+                        return Err("option --" + long_part + " requires a value")
+                    }
+                    i = i + 1
+                    values.set(resolved, argv.get(i))
+                    i = i + 1
+                }
+            }
+        }
+        // Short flag: -v or -o value
+        else if alen > 1 and str::char_at(arg_str, 0) == 45 and str::char_at(arg_str, 1) != 45 {
+            let short_part: Str = str::substring(arg_str, 1, alen)
+            let resolved = resolve_short(app, short_part)
+            if str::len(resolved) == 0 {
+                return Err("unknown option: -" + short_part)
+            }
+            if is_flag_arg(app, resolved) {
+                values.set(resolved, "true")
+                i = i + 1
+            } else {
+                if i + 1 >= argc {
+                    return Err("option -" + short_part + " requires a value")
+                }
+                i = i + 1
+                values.set(resolved, argv.get(i))
+                i = i + 1
+            }
+        }
+        // Positional argument
+        else {
+            positionals.push(arg_str)
+            i = i + 1
+        }
+    }
+
+    // Apply defaults for missing arguments
+    var j: I64 = 0
+    loop (j < app.args.len()) {
+        let def: Arg = app.args.get(j)
+        if not def.is_positional and not values.has(def.name) {
+            if str::len(def.default_val) > 0 {
+                values.set(def.name, def.default_val)
+            }
+        }
+        j = j + 1
+    }
+
+    // Check required arguments
+    var k: I64 = 0
+    loop (k < app.args.len()) {
+        let def: Arg = app.args.get(k)
+        if def.is_required and not def.is_positional and not values.has(def.name) {
+            return Err("missing required argument: " + def.name)
+        }
+        k = k + 1
+    }
+
+    return Ok(Matches { values: values, positionals: positionals })
+}
+
+/// Find an Arg by its long flag name, return the arg name.
+func resolve_long(app: ref App, long_name: Str) -> Str {
+    var i: I64 = 0
+    loop (i < app.args.len()) {
+        let def: Arg = app.args.get(i)
+        if def.long_flag == long_name {
+            return def.name
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Find an Arg by its short flag, return the arg name.
+func resolve_short(app: ref App, short_name: Str) -> Str {
+    var i: I64 = 0
+    loop (i < app.args.len()) {
+        let def: Arg = app.args.get(i)
+        if def.short_flag == short_name {
+            return def.name
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Check if a named argument is a flag.
+func is_flag_arg(app: ref App, name: Str) -> Bool {
+    var i: I64 = 0
+    loop (i < app.args.len()) {
+        let def: Arg = app.args.get(i)
+        if def.name == name {
+            return def.is_flag
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Find the first occurrence of a character. Returns -1 if not found.
+func find_char_in(s: Str, target: I32) -> I64 {
+    let slen: I64 = str::len(s)
+    var i: I64 = 0
+    loop (i < slen) {
+        if str::char_at(s, i) == target { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Generate help text for the app.
+func generate_help(app: ref App) -> Str {
+    var result: Str = ""
+
+    // Header
+    if str::len(app.desc) > 0 {
+        result = app.desc + "\n\n"
+    }
+
+    result = result + "Usage: " + app.name
+    if app.args.len() > 0 {
+        result = result + " [OPTIONS]"
+    }
+
+    // Show positional arg names
+    var p: I64 = 0
+    loop (p < app.args.len()) {
+        let def: Arg = app.args.get(p)
+        if def.is_positional {
+            if def.is_required {
+                result = result + " <" + def.name + ">"
+            } else {
+                result = result + " [" + def.name + "]"
+            }
+        }
+        p = p + 1
+    }
+    result = result + "\n"
+
+    // Version
+    if str::len(app.ver) > 0 {
+        result = result + "Version: " + app.ver + "\n"
+    }
+
+    // Options
+    if app.args.len() > 0 {
+        result = result + "\nOptions:\n"
+        var i: I64 = 0
+        loop (i < app.args.len()) {
+            let def: Arg = app.args.get(i)
+            if not def.is_positional {
+                var line: Str = "  "
+                if str::len(def.short_flag) > 0 {
+                    line = line + "-" + def.short_flag
+                    if str::len(def.long_flag) > 0 {
+                        line = line + ", "
+                    }
+                } else {
+                    line = line + "    "
+                }
+                if str::len(def.long_flag) > 0 {
+                    line = line + "--" + def.long_flag
+                }
+                if not def.is_flag {
+                    line = line + " <" + def.name + ">"
+                }
+                if str::len(def.help_text) > 0 {
+                    line = line + "  " + def.help_text
+                }
+                result = result + line + "\n"
+            }
+            i = i + 1
+        }
+        result = result + "  -h, --help  Show this help message\n"
+    }
+
+    return result
+}
