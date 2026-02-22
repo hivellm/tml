@@ -1,0 +1,23 @@
+use test
+use std::math
+
+@test
+func test_copysign_positive_to_negative() -> I32 {
+    let result: F64 = math::copysign(3.0, -1.0)
+    assert_eq(result, -3.0)
+    return 0
+}
+
+@test
+func test_copysign_negative_to_positive() -> I32 {
+    let result: F64 = math::copysign(-5.0, 1.0)
+    assert_eq(result, 5.0)
+    return 0
+}
+
+@test
+func test_copysign_same_sign() -> I32 {
+    let result: F64 = math::copysign(7.0, 2.0)
+    assert_eq(result, 7.0)
+    return 0
+}

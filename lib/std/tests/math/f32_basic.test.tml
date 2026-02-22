@@ -1,0 +1,23 @@
+use test
+use std::math
+
+@test
+func test_sin_f32() -> I32 {
+    let result: F32 = math::sin_f32(0.0)
+    assert_eq(result, 0.0)
+    return 0
+}
+
+@test
+func test_cos_f32() -> I32 {
+    let result: F32 = math::cos_f32(0.0)
+    assert_eq(result, 1.0)
+    return 0
+}
+
+@test
+func test_sqrt_f32() -> I32 {
+    let result: F32 = math::sqrt_f32(4.0)
+    assert_eq(result, 2.0)
+    return 0
+}

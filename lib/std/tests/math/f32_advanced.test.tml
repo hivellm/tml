@@ -1,0 +1,100 @@
+use test
+use std::math
+
+@test
+func test_exp_f32() -> I32 {
+    let result: F32 = math::exp_f32(0.0)
+    assert_eq(result, 1.0)
+    return 0
+}
+
+@test
+func test_ln_f32() -> I32 {
+    let result: F32 = math::ln_f32(1.0)
+    assert_eq(result, 0.0)
+    return 0
+}
+
+@test
+func test_pow_f32() -> I32 {
+    let result: F32 = math::pow_f32(2.0, 3.0)
+    assert_eq(result, 8.0)
+    return 0
+}
+
+@test
+func test_floor_f32() -> I32 {
+    let result: F32 = math::floor_f32(4.0)
+    assert_eq(result, 4.0)
+    return 0
+}
+
+@test
+func test_ceil_f32() -> I32 {
+    let result: F32 = math::ceil_f32(3.0)
+    assert_eq(result, 3.0)
+    return 0
+}
+
+@test
+func test_round_f32() -> I32 {
+    let result: F32 = math::round_f32(4.0)
+    assert_eq(result, 4.0)
+    return 0
+}
+
+@test
+func test_trunc_f32() -> I32 {
+    let result: F32 = math::trunc_f32(4.0)
+    assert_eq(result, 4.0)
+    return 0
+}
+
+@test
+func test_abs_f32() -> I32 {
+    let neg: F32 = -5.0
+    let result: F32 = math::abs_f32(neg)
+    assert_eq(result, 5.0)
+    return 0
+}
+
+@test
+func test_mul_add_f32() -> I32 {
+    let result: F32 = math::mul_add_f32(2.0, 3.0, 4.0)
+    assert_eq(result, 10.0)
+    return 0
+}
+
+@test
+func test_fract_f32() -> I32 {
+    // 3.75 = 3 + 3/4, exact in F32
+    let result: F32 = math::fract_f32(3.75)
+    assert_eq(result, 0.75)
+    return 0
+}
+
+@test
+func test_signum_f32() -> I32 {
+    let neg: F32 = -3.0
+    let neg_one: F32 = -1.0
+    assert_eq(math::signum_f32(42.0), 1.0)
+    assert_eq(math::signum_f32(neg), neg_one)
+    assert_eq(math::signum_f32(0.0), 0.0)
+    return 0
+}
+
+@test
+func test_min_max_f32() -> I32 {
+    assert_eq(math::min_f32(3.0, 5.0), 3.0)
+    assert_eq(math::max_f32(3.0, 5.0), 5.0)
+    return 0
+}
+
+@test
+func test_clamp_f32() -> I32 {
+    let neg: F32 = -1.0
+    assert_eq(math::clamp_f32(10.0, 0.0, 5.0), 5.0)
+    assert_eq(math::clamp_f32(neg, 0.0, 5.0), 0.0)
+    assert_eq(math::clamp_f32(3.0, 0.0, 5.0), 3.0)
+    return 0
+}

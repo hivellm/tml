@@ -15,7 +15,7 @@
 //! | [`LN_2`] | 0.69314... | Natural log of 2 |
 //! | [`LN_10`] | 2.30258... | Natural log of 10 |
 //!
-//! # Functions
+//! # Functions (F64)
 //!
 //! ## Trigonometric
 //! `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
@@ -24,14 +24,19 @@
 //! `sinh`, `cosh`, `tanh`
 //!
 //! ## Exponential & Logarithmic
-//! `exp`, `log`, `log2`, `log10`, `pow`
+//! `exp`, `ln`, `log2`, `log10`, `pow`
 //!
 //! ## Rounding
 //! `floor`, `ceil`, `round`, `trunc`
 //!
 //! ## Utility
 //! `abs`, `sqrt`, `cbrt`, `hypot`, `min`, `max`, `clamp`
-//! `to_radians`, `to_degrees`
+//! `to_radians`, `to_degrees`, `mul_add`, `fract`, `copysign`, `signum`
+//!
+//! # F32 Variants
+//!
+//! All functions have F32 variants with a `_f32` suffix:
+//! `sin_f32`, `cos_f32`, `sqrt_f32`, `mul_add_f32`, etc.
 
 use core::intrinsics
 
@@ -72,8 +77,11 @@ pub const FRAC_2_PI: F64 = 0.63661977236758134308
 /// 1/sqrt(2).
 pub const FRAC_1_SQRT_2: F64 = 0.70710678118654752440
 
+/// Pi as F32.
+pub const PI_F32: F32 = 3.14159265
+
 // ============================================================================
-// FFI declarations for libc math functions
+// FFI declarations for libc math functions (F64)
 // ============================================================================
 
 @extern("tan")
@@ -112,8 +120,45 @@ func ffi_cbrt(x: F64) -> F64
 @extern("hypot")
 func ffi_hypot(x: F64, y: F64) -> F64
 
+// FFI declarations for libc math functions (F32)
+@extern("tanf")
+func ffi_tanf(x: F32) -> F32
+
+@extern("asinf")
+func ffi_asinf(x: F32) -> F32
+
+@extern("acosf")
+func ffi_acosf(x: F32) -> F32
+
+@extern("atanf")
+func ffi_atanf(x: F32) -> F32
+
+@extern("atan2f")
+func ffi_atan2f(y: F32, x: F32) -> F32
+
+@extern("sinhf")
+func ffi_sinhf(x: F32) -> F32
+
+@extern("coshf")
+func ffi_coshf(x: F32) -> F32
+
+@extern("tanhf")
+func ffi_tanhf(x: F32) -> F32
+
+@extern("log2f")
+func ffi_log2f(x: F32) -> F32
+
+@extern("log10f")
+func ffi_log10f(x: F32) -> F32
+
+@extern("cbrtf")
+func ffi_cbrtf(x: F32) -> F32
+
+@extern("hypotf")
+func ffi_hypotf(x: F32, y: F32) -> F32
+
 // ============================================================================
-// Trigonometric Functions
+// Trigonometric Functions (F64)
 // ============================================================================
 
 /// Sine of `x` (in radians).
@@ -152,7 +197,46 @@ pub func atan2(y: F64, x: F64) -> F64 {
 }
 
 // ============================================================================
-// Hyperbolic Functions
+// Trigonometric Functions (F32)
+// ============================================================================
+
+/// Sine (F32).
+pub func sin_f32(x: F32) -> F32 {
+    return intrinsics::sin[F32](x)
+}
+
+/// Cosine (F32).
+pub func cos_f32(x: F32) -> F32 {
+    return intrinsics::cos[F32](x)
+}
+
+/// Tangent (F32).
+pub func tan_f32(x: F32) -> F32 {
+    return ffi_tanf(x)
+}
+
+/// Arc sine (F32).
+pub func asin_f32(x: F32) -> F32 {
+    return ffi_asinf(x)
+}
+
+/// Arc cosine (F32).
+pub func acos_f32(x: F32) -> F32 {
+    return ffi_acosf(x)
+}
+
+/// Arc tangent (F32).
+pub func atan_f32(x: F32) -> F32 {
+    return ffi_atanf(x)
+}
+
+/// Two-argument arc tangent (F32).
+pub func atan2_f32(y: F32, x: F32) -> F32 {
+    return ffi_atan2f(y, x)
+}
+
+// ============================================================================
+// Hyperbolic Functions (F64)
 // ============================================================================
 
 /// Hyperbolic sine.
@@ -171,7 +255,26 @@ pub func tanh(x: F64) -> F64 {
 }
 
 // ============================================================================
-// Exponential & Logarithmic Functions
+// Hyperbolic Functions (F32)
+// ============================================================================
+
+/// Hyperbolic sine (F32).
+pub func sinh_f32(x: F32) -> F32 {
+    return ffi_sinhf(x)
+}
+
+/// Hyperbolic cosine (F32).
+pub func cosh_f32(x: F32) -> F32 {
+    return ffi_coshf(x)
+}
+
+/// Hyperbolic tangent (F32).
+pub func tanh_f32(x: F32) -> F32 {
+    return ffi_tanhf(x)
+}
+
+// ============================================================================
+// Exponential & Logarithmic Functions (F64)
 // ============================================================================
 
 /// Exponential function (e^x).
@@ -200,7 +303,36 @@ pub func pow(x: F64, y: F64) -> F64 {
 }
 
 // ============================================================================
-// Rounding Functions
+// Exponential & Logarithmic Functions (F32)
+// ============================================================================
+
+/// Exponential function (F32).
+pub func exp_f32(x: F32) -> F32 {
+    return intrinsics::exp[F32](x)
+}
+
+/// Natural logarithm (F32).
+pub func ln_f32(x: F32) -> F32 {
+    return intrinsics::log[F32](x)
+}
+
+/// Base-2 logarithm (F32).
+pub func log2_f32(x: F32) -> F32 {
+    return ffi_log2f(x)
+}
+
+/// Base-10 logarithm (F32).
+pub func log10_f32(x: F32) -> F32 {
+    return ffi_log10f(x)
+}
+
+/// Power function (F32).
+pub func pow_f32(x: F32, y: F32) -> F32 {
+    return intrinsics::pow[F32](x, y)
+}
+
+// ============================================================================
+// Rounding Functions (F64)
 // ============================================================================
 
 /// Round down to nearest integer.
@@ -224,7 +356,31 @@ pub func trunc(x: F64) -> F64 {
 }
 
 // ============================================================================
-// Utility Functions
+// Rounding Functions (F32)
+// ============================================================================
+
+/// Round down (F32).
+pub func floor_f32(x: F32) -> F32 {
+    return intrinsics::floor[F32](x)
+}
+
+/// Round up (F32).
+pub func ceil_f32(x: F32) -> F32 {
+    return intrinsics::ceil[F32](x)
+}
+
+/// Round to nearest integer (F32).
+pub func round_f32(x: F32) -> F32 {
+    return intrinsics::round[F32](x)
+}
+
+/// Truncate toward zero (F32).
+pub func trunc_f32(x: F32) -> F32 {
+    return intrinsics::trunc[F32](x)
+}
+
+// ============================================================================
+// Utility Functions (F64)
 // ============================================================================
 
 /// Absolute value.
@@ -274,4 +430,127 @@ pub func to_radians(degrees: F64) -> F64 {
 /// Convert radians to degrees.
 pub func to_degrees(radians: F64) -> F64 {
     return radians * 180.0 / PI
+}
+
+// ============================================================================
+// Utility Functions (F32)
+// ============================================================================
+
+/// Absolute value (F32).
+pub func abs_f32(x: F32) -> F32 {
+    if x < 0.0 { return -x }
+    return x
+}
+
+/// Square root (F32).
+pub func sqrt_f32(x: F32) -> F32 {
+    return intrinsics::sqrt[F32](x)
+}
+
+/// Cube root (F32).
+pub func cbrt_f32(x: F32) -> F32 {
+    return ffi_cbrtf(x)
+}
+
+/// Euclidean distance (F32).
+pub func hypot_f32(x: F32, y: F32) -> F32 {
+    return ffi_hypotf(x, y)
+}
+
+/// Minimum (F32).
+pub func min_f32(a: F32, b: F32) -> F32 {
+    if a < b { return a }
+    return b
+}
+
+/// Maximum (F32).
+pub func max_f32(a: F32, b: F32) -> F32 {
+    if a > b { return a }
+    return b
+}
+
+/// Clamp (F32).
+pub func clamp_f32(val: F32, lo: F32, hi: F32) -> F32 {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+/// Convert degrees to radians (F32).
+pub func to_radians_f32(degrees: F32) -> F32 {
+    // Compute in F64 then truncate to avoid F32 constant precision issues
+    let deg_f64: F64 = degrees as F64
+    let result: F64 = deg_f64 * PI / 180.0
+    return result as F32
+}
+
+/// Convert radians to degrees (F32).
+pub func to_degrees_f32(radians: F32) -> F32 {
+    let rad_f64: F64 = radians as F64
+    let result: F64 = rad_f64 * 180.0 / PI
+    return result as F32
+}
+
+// ============================================================================
+// Fused Multiply-Add
+// ============================================================================
+
+/// Fused multiply-add: `a * b + c` with a single rounding step.
+///
+/// More accurate than `a * b + c` because it avoids intermediate rounding.
+/// Uses the LLVM `fma` intrinsic which maps to hardware FMA instructions.
+pub func mul_add(a: F64, b: F64, c: F64) -> F64 {
+    return intrinsics::fma[F64](a, b, c)
+}
+
+/// Fused multiply-add (F32).
+pub func mul_add_f32(a: F32, b: F32, c: F32) -> F32 {
+    return intrinsics::fma[F32](a, b, c)
+}
+
+// ============================================================================
+// Additional Utility Functions
+// ============================================================================
+
+/// Returns the fractional part of `x` (i.e., `x - trunc(x)`).
+pub func fract(x: F64) -> F64 {
+    return x - intrinsics::trunc[F64](x)
+}
+
+/// Returns the fractional part (F32).
+pub func fract_f32(x: F32) -> F32 {
+    return x - intrinsics::trunc[F32](x)
+}
+
+/// Returns a value with the magnitude of `a` and the sign of `b`.
+pub func copysign(a: F64, b: F64) -> F64 {
+    let mag: F64 = intrinsics::fabs[F64](a)
+    if b < 0.0 { return -mag }
+    return mag
+}
+
+/// Copysign (F32).
+pub func copysign_f32(a: F32, b: F32) -> F32 {
+    let mag: F32 = abs_f32(a)
+    if b < 0.0 { return -mag }
+    return mag
+}
+
+/// Returns the sign of `x`: -1.0, 0.0, or 1.0.
+///
+/// Returns 0.0 for both positive and negative zero.
+pub func signum(x: F64) -> F64 {
+    if x > 0.0 { return 1.0 }
+    if x < 0.0 { return -1.0 }
+    return 0.0
+}
+
+/// Signum (F32).
+pub func signum_f32(x: F32) -> F32 {
+    if x > 0.0 { return 1.0 }
+    if x < 0.0 {
+        let neg: F32 = -1.0
+        return neg
+    }
+    return 0.0
 }

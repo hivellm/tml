@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (70%) — Phases 1-4, 8-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 5-7, 10, 12-17 not started
+**Status**: In Progress (75%) — Phases 1-6, 8-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 7, 10, 12-17 not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -45,9 +45,9 @@
 - [x] 1.1.7 Utility: `abs`, `min`, `max`, `clamp`, `to_radians`, `to_degrees`
 - [x] 1.1.8 Constants: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10`, `LOG2_E`, `LOG10_E`
 - [x] 1.1.9 C runtime linkage via `@extern("c")` for transcendental functions
-- [ ] 1.1.10 F32 variants for all functions (currently F64 only)
-- [ ] 1.1.11 `mul_add` (fused multiply-add)
-- [ ] 1.1.12 `fract`, `copysign`, `signum`
+- [x] 1.1.10 F32 variants for all functions (`_f32` suffix, 28 functions, 16 tests)
+- [x] 1.1.11 `mul_add` (fused multiply-add via `intrinsics::fma`, F64+F32, 3 tests)
+- [x] 1.1.12 `fract`, `copysign`, `signum` (F64+F32, 12 tests)
 
 ## Phase 2: Core Encoding Module
 
@@ -98,24 +98,29 @@
 
 > **Priority**: Medium | **File**: `lib/core/src/bitset.tml`
 
-- [ ] 5.1.1 Create `lib/core/src/bitset.tml`
-- [ ] 5.1.2 Implement `BitSet[N]` — fixed-size bitset backed by U64 array
-- [ ] 5.1.3 Implement `set`, `clear`, `toggle`, `get`, `count_ones`, `count_zeros`
-- [ ] 5.1.4 Implement set operations: `union`, `intersection`, `difference`, `symmetric_difference`
-- [ ] 5.1.5 Implement `is_subset`, `is_superset`, `is_disjoint`
-- [ ] 5.1.6 Implement `Iterator` for set bits
-- [ ] 5.1.7 Write unit tests
+- [x] 5.1.1 Create `lib/core/src/bitset.tml`
+- [x] 5.1.2 Implement `BitSet` — fixed-size bitset backed by heap-allocated U64 array
+- [x] 5.1.3 Implement `set`, `clear`, `toggle`, `get`, `count_ones`, `count_zeros`
+- [x] 5.1.4 Implement set operations: `union_with`, `intersect_with`, `difference_with`, `symmetric_difference_with`, `invert`
+- [x] 5.1.5 Implement `is_subset`, `is_superset`, `is_disjoint`, `equals`
+- [x] 5.1.6 Implement `Iterator` for set bits (`BitSetIter` using cttz scanning, 3 tests)
+- [x] 5.1.7 Write unit tests (24 tests: basic, ops, set operations, predicates, iterator)
+- [x] 5.1.8 Implement `first_set`, `last_set` using `cttz`/`ctlz` intrinsics
+- [x] 5.1.9 Implement `all_ones`, `reset`, `set_all`
+- [x] 5.1.10 Implement `Drop` for memory cleanup
 
 ## Phase 6: RingBuf Module
 
 > **Priority**: Medium | **File**: `lib/core/src/ringbuf.tml`
 
-- [ ] 6.1.1 Create `lib/core/src/ringbuf.tml`
-- [ ] 6.1.2 Implement `RingBuf[T, N]` — fixed-capacity circular buffer
-- [ ] 6.1.3 Implement `push_back`, `push_front`, `pop_front`, `pop_back`
-- [ ] 6.1.4 Implement `front`, `back`, `len`, `is_empty`, `is_full`
-- [ ] 6.1.5 Implement `Iterator` and `Index` operator
-- [ ] 6.1.6 Write unit tests
+- [x] 6.1.1 Create `lib/core/src/ringbuf.tml`
+- [x] 6.1.2 Implement `RingBuf` — fixed-capacity circular buffer (heap-backed I64 array)
+- [x] 6.1.3 Implement `push_back`, `push_front`, `pop_front`, `pop_back`
+- [x] 6.1.4 Implement `front`, `back`, `len`, `is_empty`, `is_full`, `remaining`, `capacity`
+- [x] 6.1.5 Implement `Iterator` (`RingBufIter` with circular index, 3 tests)
+- [x] 6.1.6 Write unit tests (17 tests: basic, ops, edge cases, wraparound, iterator)
+- [x] 6.1.7 Implement `clear`, `contains`, `get`
+- [x] 6.1.8 Implement `Drop` for memory cleanup
 
 ## Phase 7: MIME Module
 
