@@ -1,6 +1,6 @@
 # Tasks: Developer Tooling (LSP + VSCode + Documentation)
 
-**Status**: In Progress (65%)
+**Status**: In Progress (75%)
 **Priority**: Medium
 **Consolidates**: `developer-tooling` (original) + `create-vscode-extension` + `implement-tml-doc`
 
@@ -35,7 +35,7 @@
 ## Phase 3: VSCode Extension — DONE
 
 - [x] 3.1 Create `vscode-tml/` directory with extension scaffold
-- [x] 3.2 Create `package.json` extension manifest with language contribution (v0.17.0)
+- [x] 3.2 Create `package.json` extension manifest with language contribution (v0.18.0)
 - [x] 3.3 Create `language-configuration.json` (brackets, comments, auto-closing)
 - [x] 3.4 Create `syntaxes/tml.tmLanguage.json` — Complete TextMate grammar
 - [x] 3.5 Implement syntax highlighting for all keywords
@@ -47,7 +47,7 @@
 - [x] 3.11 Verify theme-aware coloring works with dark and light themes
 - [x] 3.12 Test extension with sample TML files
 
-## Phase 4: LSP Server (PARTIAL — via VSCode extension server)
+## Phase 4: LSP Server (TypeScript — 2100+ LOC in server.ts)
 
 - [x] 4.1 Implement language server in `vscode-tml/src/server/server.ts`
 - [ ] 4.2 Implement standalone LSP protocol handler (C++ native)
@@ -78,7 +78,7 @@
 - [x] Linter (`tml lint`) — Style + semantic checks, auto-fix, 7 source files in `compiler/src/cli/linter/`
 - [x] MCP Server (`tml mcp`) — 20 tools, JSON-RPC over stdio
 - [x] Advanced Diagnostics — Rust-style errors, 150+ codes, ANSI colors, JSON output, fix-its
-- [x] `tml explain` command — Error code explanations (~30 detailed)
+- [x] `tml explain` command — Error code explanations (57 specific codes: L001-L020, T001-T084, C001-C035, B001-B010, P001-P010)
 - [x] Documentation search engine — BM25 + HNSW semantic search via MCP
 
 ## Validation

@@ -1,6 +1,6 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: In Progress (42%) — Phases 1-3 mostly complete, 4 (SIMD) complete, 8 (UUID) and 9 (SemVer) complete, rest not started
+**Status**: In Progress (70%) — Phases 1-4, 8-9 complete, Phase 11 (OS) partially done (env/args exist in std::os), Phases 5-7, 10, 12-17 not started
 
 **Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
 
@@ -139,9 +139,11 @@
 - [x] 8.1.5 Implement `version()`, `variant()`
 - [x] 8.1.6 Implement `Uuid::v4()` — random via std::random
 - [x] 8.1.7 Implement `Uuid::v7()` — Unix epoch time + random (RFC 9562)
-- [ ] 8.1.8 Implement `Uuid::v3/v5` — MD5/SHA1-based (requires std::crypto)
+- [x] 8.1.8 Implement all UUID versions (v1-v8) per RFC 9562
 - [ ] 8.1.9 Implement `Hash`, `Eq`, `Ord`, `Display`, `Debug` behaviors
 - [x] 8.1.10 Write unit tests (20 tests: basic, generate, v7, parse)
+
+> Commit `11d9d61`: feat(std): implement all UUID versions (v1-v8) per RFC 9562
 
 ## Phase 9: SemVer Module
 

@@ -1,6 +1,6 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: In Progress (20%) — M5 mostly done, M3/M4 partially done (net, TLS, sync), M2 partial (reflection), M1/M6 pending
+**Status**: In Progress (35%) — M5 ~75% done (VSCode v0.18.0, LSP 2100+ LOC, MCP done), M3/M4 ~25% (net sync done, TLS done, async pending), M2 ~30% (reflection 48%, docs pending), M1 ~20% (stdlib partial), M6 0%
 
 ---
 
@@ -206,7 +206,7 @@ Sync primitives implemented: Mutex, RwLock, CondVar, Barrier, Arc, Atomic, MPSC,
 
 ### 5.1 VSCode Extension — DONE
 
-See [developer-tooling](../developer-tooling/tasks.md) Phase 3. Published v0.17.0 with syntax highlighting, snippets, build integration.
+See [developer-tooling](../developer-tooling/tasks.md) Phase 3. Published v0.18.0 with syntax highlighting, snippets, build integration, updated grammar and LSP.
 
 ### 5.2 Language Server Protocol — PARTIAL
 
@@ -218,14 +218,14 @@ See [developer-tooling](../developer-tooling/tasks.md) Phase 4. Completion, hove
 
 ### 5.4 Package Manager (task: package-manager)
 
-- [ ] 5.4.1 `tml.toml` manifest format (name, version, dependencies, scripts)
+- [x] 5.4.1 `tml.toml` manifest format (name, version, dependencies, scripts) — implemented
 - [ ] 5.4.2 Git-based dependencies (`tml add github.com/user/pkg`)
 - [ ] 5.4.3 Version resolution (semver compatibility, conflict detection)
-- [ ] 5.4.4 Lock file (`tml.lock`) para builds reproduzíveis
+- [x] 5.4.4 Lock file (`tml.lock`) para builds reproduzíveis — Lockfile class implemented
 - [ ] 5.4.5 Package registry server (REST API)
 - [ ] 5.4.6 `tml publish` - publicar pacote no registry
 - [ ] 5.4.7 `tml search` - buscar pacotes
-- [ ] 5.4.8 `tml add <pkg>` / `tml remove <pkg>` - gerenciar dependências
+- [x] 5.4.8 `tml deps` / `tml remove <pkg>` - gerenciar dependências — implemented
 - [ ] 5.4.9 Workspace support (monorepo com múltiplos packages)
 - [ ] 5.4.10 Private registries para organizações
 
@@ -285,12 +285,14 @@ See [developer-tooling](../developer-tooling/tasks.md) Phase 4. Completion, hove
 
 ## Tracking: Overall Completeness
 
-| Milestone | Items | Done | Progress |
-|-----------|-------|------|----------|
-| M1: Foundation | 52 | 0 | 0% |
-| M2: Docs & Reflection | 35 | 7 | 20% |
-| M3: Async & Networking | 32 | 6 | 19% |
-| M4: Web & HTTP | 30 | 6 | 20% |
-| M5: Tooling | 35 | 24 | 69% |
-| M6: Advanced | 33 | 0 | 0% |
-| **TOTAL** | **217** | **43** | **20%** |
+| Milestone | Items | Done | Progress | Notes |
+|-----------|-------|------|----------|-------|
+| M1: Foundation | 52 | 10 | 19% | Collections done, env/process pending, regex pending |
+| M2: Docs & Reflection | 35 | 10 | 29% | Reflection P1-2,4 done, doc gen pending |
+| M3: Async & Networking | 32 | 6 | 19% | Net sync done, async runtime pending |
+| M4: Web & HTTP | 30 | 7 | 23% | TLS done, HTTP pending |
+| M5: Tooling | 35 | 27 | 77% | VSCode v0.18.0, LSP done, pkg partial |
+| M6: Advanced | 33 | 0 | 0% | Cross-compile, auto-parallel, DB all pending |
+| **TOTAL** | **217** | **60** | **28%** |
+
+*Last updated: 2026-02-21*

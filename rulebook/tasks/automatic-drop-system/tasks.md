@@ -1,6 +1,6 @@
 # Tasks: Automatic Drop System
 
-**Status**: In Progress (60%)
+**Status**: In Progress (80%)
 
 ## Phase 1: Str Auto-Free (Guaranteed Heap Allocations)
 
@@ -35,15 +35,26 @@
 - [x] 2.8 Write tests: single field, double field, nested wrapper (4 tests)
 - [x] 2.9 Full test suite passes (7,160+ tests, zero regressions)
 
-## Phase 3: Temporary Value Drops
+## Phase 3: Temporary Value Drops — DONE
 
-- [ ] 3.1 Track temporary values from function returns
-- [ ] 3.2 Drop temporaries at statement end
-- [ ] 3.3 Handle method chains (`a.foo().bar()` — drop intermediate)
-- [ ] 3.4 Write tests for temporary drops
+- [x] 3.1 Track temporary values from function returns
+- [x] 3.2 Drop temporaries at statement end
+- [x] 3.3 Handle method chains (`a.foo().bar()` — drop intermediate)
+- [x] 3.4 Write tests for temporary drops
 
-## Phase 4: Validation
+> Commit `0b45338`: feat(codegen): Phase 3 — drop temporaries from discarded function/method returns
 
-- [ ] 4.1 Run full test suite with coverage + leak detection
-- [ ] 4.2 Verify zero (or near-zero) leaks
-- [ ] 4.3 Commit and update roadmap
+## Phase 4: Let/Var Binding Drops — DONE
+
+- [x] 4.1 Drop let/var bindings at scope exit
+- [x] 4.2 Branch-local temporaries cleanup
+- [x] 4.3 Function boundary cleanup
+
+> Commit `0c150fe`: feat(codegen): Phase 4 — let/var binding drops, branch-local temps, function boundary cleanup
+
+## Phase 5: Validation & Stress Testing
+
+- [ ] 5.1 Run full test suite with coverage + leak detection
+- [ ] 5.2 Verify zero (or near-zero) leaks under stress
+- [ ] 5.3 Test complex ownership patterns (moves + drops)
+- [ ] 5.4 Benchmark drop overhead vs manual free

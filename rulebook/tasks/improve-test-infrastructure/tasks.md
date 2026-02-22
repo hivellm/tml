@@ -1,6 +1,6 @@
 # Tasks: Improve Test Infrastructure
 
-**Status**: In Progress (20%)
+**Status**: In Progress (25%)
 
 ## Phase 1: Diagnostic / Error-Checking Tests
 
@@ -18,7 +18,11 @@
 **Completed Diagnostic Tests** (3 files, 15 expected errors):
 - `lib/core/tests/errors/lexer_errors.error.tml` - L002, L015
 - `lib/core/tests/errors/parser_errors.error.tml` - P001, P008
-- `lib/core/tests/errors/type_errors.error.tml` - T001 (×3), T004, T008, T013, T014, T016 (×2), T022, T030
+- `lib/core/tests/errors/type_errors.error.tml` - T056 (×3), T004, T008, T013, T014, T016 (×2), T022, T030
+
+**Note**: Error codes expanded from generic catch-alls to 57 specific codes (Feb 2026):
+- L001-L020 (lexer), T001-T084 (type), C001-C035 (codegen), B001-B010 (borrow), P001-P010 (parser)
+- All codes have `tml explain` documentation
 
 ## Phase 2: Edge Case / Boundary Tests
 
