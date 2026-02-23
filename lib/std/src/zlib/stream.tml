@@ -689,3 +689,45 @@ pub func create_unzip() -> Outcome[Unzip, ZlibError] {
 pub func create_unzip_with_options(options: ZlibOptions) -> Outcome[Unzip, ZlibError] {
     return Unzip::with_options(options)
 }
+
+impl Drop for Deflate {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for DeflateRaw {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Gzip {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Inflate {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for InflateRaw {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Gunzip {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Unzip {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

@@ -1133,3 +1133,39 @@ func test_hash_set_basic() -> I32 {
     set.destroy()
     return 0
 }
+
+impl[T] Drop for ArrayList[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl[T] Drop for HashSet[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl[T] Drop for Queue[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl[T] Drop for Stack[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl[T] Drop for LinkedList[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl[T] Drop for Vec[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

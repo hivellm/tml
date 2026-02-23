@@ -656,3 +656,21 @@ impl X509Store {
         }
     }
 }
+
+impl Drop for X509Certificate {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for X509Chain {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for X509Store {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

@@ -235,3 +235,9 @@ impl Bm25Index {
         }
     }
 }
+
+impl Drop for Bm25Index {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

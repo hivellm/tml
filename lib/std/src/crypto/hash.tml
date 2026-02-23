@@ -364,3 +364,15 @@ pub func sha512_256_bytes(data: ref Buffer) -> Digest {
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }
+
+impl Drop for Digest {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Hash {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

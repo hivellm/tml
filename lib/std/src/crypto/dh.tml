@@ -361,3 +361,9 @@ pub func diffie_hellman(
     dh.set_private_key(private_key)
     return dh.compute_secret(public_key)
 }
+
+impl Drop for DiffieHellman {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

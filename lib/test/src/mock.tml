@@ -261,3 +261,9 @@ impl MockContext {
         this.calls.destroy()
     }
 }
+
+impl Drop for MockContext {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

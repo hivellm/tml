@@ -967,3 +967,27 @@ pub func create_secret_key(data: Str, format: KeyFormat) -> CryptoResult[SecretK
         }
     }
 }
+
+impl Drop for SecretKey {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for PrivateKey {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for PublicKey {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for KeyPair {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

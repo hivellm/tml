@@ -553,3 +553,15 @@ pub func verify_rsa_pss(
     let result: Bool = crypto_verify_rsa_pss(key.handle, data, signature.data.handle, options.salt_length, options.mgf1_hash)
     return Ok(result)
 }
+
+impl Drop for Signer {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Verifier {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

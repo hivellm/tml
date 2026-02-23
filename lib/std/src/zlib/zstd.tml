@@ -639,3 +639,21 @@ pub func zstd_max_level() -> I32 {
 pub func zstd_default_level() -> I32 {
     return ZSTD_DEFAULT_CLEVEL
 }
+
+impl Drop for ZstdCompress {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for ZstdDecompress {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for ZstdDict {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

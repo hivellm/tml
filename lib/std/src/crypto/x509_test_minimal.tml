@@ -151,3 +151,9 @@ impl X509ChainMin {
 }
 
 // key_usage removed for test
+
+impl Drop for X509CertMin {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

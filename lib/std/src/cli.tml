@@ -471,3 +471,9 @@ func generate_help(app: ref App) -> Str {
 
     return result
 }
+
+impl Drop for Matches {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

@@ -1169,3 +1169,15 @@ func add_eps_cap(re: ref Regex, list: List[I64], caps: List[I64],
     }
     work.destroy()
 }
+
+impl Drop for Regex {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for Captures {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

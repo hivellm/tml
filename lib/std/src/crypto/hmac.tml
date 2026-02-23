@@ -197,3 +197,15 @@ pub func hmac_sha512(key: Str, data: Str) -> HmacDigest {
     let buffer: Buffer = Buffer { handle: handle }
     return HmacDigest { data: buffer }
 }
+
+impl Drop for Hmac {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for HmacDigest {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

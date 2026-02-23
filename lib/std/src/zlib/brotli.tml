@@ -472,3 +472,15 @@ impl BrotliDecompress {
         }
     }
 }
+
+impl Drop for BrotliCompress {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for BrotliDecompress {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

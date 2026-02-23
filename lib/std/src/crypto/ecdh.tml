@@ -426,3 +426,9 @@ pub func is_curve_supported(curve_name: Str) -> Bool {
     let result: Bool = crypto_is_curve_supported(curve_name)
     return result
 }
+
+impl Drop for Ecdh {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

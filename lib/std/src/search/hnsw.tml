@@ -287,3 +287,15 @@ impl TfIdfVectorizer {
         }
     }
 }
+
+impl Drop for HnswIndex {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+impl Drop for TfIdfVectorizer {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
