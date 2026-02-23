@@ -38,10 +38,12 @@ func test_x509_cert_min_destroy() -> I32 {
 
 @test
 func test_x509_cert_min_check_issued() -> I32 {
-    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
-    let cert2: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert2: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
     let issued: Bool = cert.check_issued(ref cert2)
     assert(issued, "self-signed cert should pass check_issued")
+    cert2.destroy()
+    cert.destroy()
     return 0
 }
 
@@ -49,9 +51,10 @@ func test_x509_cert_min_check_issued() -> I32 {
 
 @test
 func test_x509_cert_min_public_key() -> I32 {
-    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
     let pk = cert.public_key()
     assert(pk.size_bits() > (0 as I64), "public key has positive size")
+    cert.destroy()
     return 0
 }
 
@@ -59,11 +62,12 @@ func test_x509_cert_min_public_key() -> I32 {
 
 @test
 func test_x509_cert_min_verify() -> I32 {
-    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
     let pk = cert.public_key()
     let result = cert.verify(ref pk)
     assert(result.is_ok(), "verify should not error")
     assert(result.unwrap(), "self-signed cert should verify with own public key")
+    cert.destroy()
     return 0
 }
 
@@ -81,11 +85,12 @@ func test_x509_chain_min_new() -> I32 {
 @test
 func test_x509_chain_min_verify() -> I32 {
     let chain: X509ChainMin = X509ChainMin::new()
-    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
     let result = chain.verify(ref cert)
     assert(result.is_ok(), "verify should not error")
     // Empty chain, so cert won't be verified
     assert(not result.unwrap(), "empty chain should not verify cert")
+    cert.destroy()
     return 0
 }
 
@@ -94,9 +99,10 @@ func test_x509_chain_min_verify() -> I32 {
 @test
 func test_x509_chain_min_verify_chain() -> I32 {
     let chain: X509ChainMin = X509ChainMin::new()
-    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
     let result = chain.verify_chain(ref cert)
     assert(result.is_ok(), "verify_chain should not error")
     assert(not result.unwrap(), "empty chain should not verify_chain cert")
+    cert.destroy()
     return 0
 }

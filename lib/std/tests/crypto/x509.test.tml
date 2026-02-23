@@ -21,6 +21,8 @@ func parse_test_cert() -> X509Certificate {
 func test_x509_parse_pem_succeeds() -> I32 {
     let result = X509Certificate::from_pem(get_test_cert_pem())
     assert(result.is_ok(), "should parse valid PEM cert")
+    let mut cert: X509Certificate = result.unwrap()
+    cert.destroy()
     return 0
 }
 
@@ -230,6 +232,7 @@ func test_x509_to_der_from_der() -> I32 {
     let mut cert2: X509Certificate = result.unwrap()
     assert_eq(cert2.serial_number(), cert.serial_number(), "DER roundtrip serial match")
     cert2.destroy()
+    der.destroy()
     cert.destroy()
     return 0
 }
@@ -322,9 +325,10 @@ func test_x509_check_ip() -> I32 {
 func test_x509_check_private_key() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let result: Bool = cert.check_private_key(ref kp.private_key)
     assert(not result, "random private key should not match cert")
+    kp.destroy()
     cert.destroy()
     return 0
 }
@@ -366,6 +370,7 @@ func test_x509_store_verify_chain() -> I32 {
     let verify_cert: X509Certificate = parse_test_cert()
     let result = store.verify_chain(ref verify_cert, ref chain)
     assert(result.is_ok(), "store verify_chain should not error")
+    chain.destroy()
     store.destroy()
     return 0
 }
@@ -374,8 +379,9 @@ func test_x509_store_verify_chain() -> I32 {
 
 @test
 func test_x509_chain_new_and_len() -> I32 {
-    let chain: X509Chain = X509Chain::new()
+    let mut chain: X509Chain = X509Chain::new()
     assert_eq(chain.len(), 0 as I64, "new chain should be empty")
+    chain.destroy()
     return 0
 }
 

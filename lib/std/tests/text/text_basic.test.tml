@@ -7,6 +7,7 @@ func test_text_new_is_empty() -> I32 {
     let t = Text::new()
     assert_eq(t.len(), 0, "new Text should have len 0")
     assert(t.is_empty(), "new Text should be empty")
+    t.drop()
     return 0
 }
 
@@ -15,6 +16,7 @@ func test_text_from_str() -> I32 {
     let t = Text::from("hello")
     assert_eq(t.as_str(), "hello", "from str should preserve content")
     assert_eq(t.len(), 5, "len should be 5")
+    t.drop()
     return 0
 }
 
@@ -22,6 +24,7 @@ func test_text_from_str() -> I32 {
 func test_text_from_i64() -> I32 {
     let t = Text::from_i64(42)
     assert_eq(t.as_str(), "42", "from_i64(42) should be '42'")
+    t.drop()
     return 0
 }
 
@@ -31,5 +34,7 @@ func test_text_from_bool() -> I32 {
     assert_eq(t.as_str(), "true", "from_bool(true) should be 'true'")
     let f = Text::from_bool(false)
     assert_eq(f.as_str(), "false", "from_bool(false) should be 'false'")
+    t.drop()
+    f.drop()
     return 0
 }

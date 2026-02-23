@@ -7,6 +7,7 @@ func test_bool_from_json_true() -> I32 {
     let json = Json::new_bool(true)
     let result: Outcome[Bool, Str] = Bool::from_json(json)
     assert(result.is_ok(), "Bool::from_json(true) should be Ok")
+    json.drop()
     0
 }
 
@@ -15,6 +16,7 @@ func test_bool_from_json_false() -> I32 {
     let json = Json::new_bool(false)
     let result: Outcome[Bool, Str] = Bool::from_json(json)
     assert(result.is_ok(), "Bool::from_json(false) should be Ok")
+    json.drop()
     0
 }
 
@@ -23,6 +25,7 @@ func test_bool_from_json_wrong_type() -> I32 {
     let json = Json::int(42)
     let result: Outcome[Bool, Str] = Bool::from_json(json)
     assert(result.is_err(), "Bool::from_json(number) should be Err")
+    json.drop()
     0
 }
 
@@ -31,6 +34,7 @@ func test_i32_from_json_ok() -> I32 {
     let json = Json::int(42)
     let result: Outcome[I32, Str] = I32::from_json(json)
     assert(result.is_ok(), "I32::from_json(42) should be Ok")
+    json.drop()
     0
 }
 
@@ -39,6 +43,7 @@ func test_i32_from_json_wrong_type() -> I32 {
     let json = Json::new_bool(true)
     let result: Outcome[I32, Str] = I32::from_json(json)
     assert(result.is_err(), "I32::from_json(bool) should be Err")
+    json.drop()
     0
 }
 
@@ -47,6 +52,7 @@ func test_i64_from_json_ok() -> I32 {
     let json = Json::int(100)
     let result: Outcome[I64, Str] = I64::from_json(json)
     assert(result.is_ok(), "I64::from_json(100) should be Ok")
+    json.drop()
     0
 }
 
@@ -55,6 +61,7 @@ func test_f64_from_json_ok() -> I32 {
     let json = Json::float(3.14)
     let result: Outcome[F64, Str] = F64::from_json(json)
     assert(result.is_ok(), "F64::from_json(3.14) should be Ok")
+    json.drop()
     0
 }
 
@@ -63,6 +70,7 @@ func test_f64_from_json_wrong_type() -> I32 {
     let json = Json::string("not a number")
     let result: Outcome[F64, Str] = F64::from_json(json)
     assert(result.is_err(), "F64::from_json(string) should be Err")
+    json.drop()
     0
 }
 
@@ -71,6 +79,7 @@ func test_str_from_json_ok() -> I32 {
     let json = Json::string("hello")
     let result: Outcome[Str, Str] = Str::from_json(json)
     assert(result.is_ok(), "Str::from_json(hello) should be Ok")
+    json.drop()
     0
 }
 
@@ -79,5 +88,6 @@ func test_str_from_json_wrong_type() -> I32 {
     let json = Json::int(99)
     let result: Outcome[Str, Str] = Str::from_json(json)
     assert(result.is_err(), "Str::from_json(number) should be Err")
+    json.drop()
     0
 }

@@ -105,6 +105,12 @@ impl Captures {
         if gs < 0 or ge < 0 { return "" }
         return s.slice(gs, ge)
     }
+
+    /// Free all internal allocations.
+    pub func destroy(this) {
+        this._starts.destroy()
+        this._ends.destroy()
+    }
 }
 
 /// A compiled regular expression.
@@ -162,6 +168,7 @@ impl Regex {
         loop (sp <= slen) {
             let cap: Captures = nfa_exec_captures(ref this, s, slen, sp, ng)
             if cap._matched { return cap }
+            cap.destroy()
             sp = sp + 1
         }
         return make_empty_captures(ng)
@@ -224,6 +231,15 @@ impl Regex {
         return result
     }
 
+    /// Free all internal allocations.
+    pub func destroy(this) {
+        this._kinds.destroy()
+        this._chars.destroy()
+        this._next1.destroy()
+        this._next2.destroy()
+        this._class_ranges.destroy()
+    }
+
     /// Splits the string by the pattern. Returns flat list [start, end, ...] of segments.
     pub func split(this, s: Str) -> List[I64] {
         var results: List[I64] = List::new(8)
@@ -269,9 +285,19 @@ func compile_pattern(pattern: Str) -> Regex {
 
     let ok: Bool = to_postfix(pattern, plen, postfix, class_ranges, nc_box, ng_box)
     if not ok {
+        postfix.destroy()
+        class_ranges.destroy()
+        nc_box.destroy()
+        ng_box.destroy()
         return make_invalid()
     }
-    return build_nfa(postfix, class_ranges, nc_box.get(0), ng_box.get(0))
+    let nc_val: I64 = nc_box.get(0)
+    let ng_val: I64 = ng_box.get(0)
+    nc_box.destroy()
+    ng_box.destroy()
+    let result: Regex = build_nfa(postfix, class_ranges, nc_val, ng_val)
+    postfix.destroy()
+    return result
 }
 
 func make_invalid() -> Regex {
@@ -416,7 +442,11 @@ func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
         if ch == "\\" and not tok_handled {
             if nc { tokens.push(TOK_CONCAT) }
             pos = pos + 1
-            if pos >= plen { return false }
+            if pos >= plen {
+                tokens.destroy()
+                group_stack.destroy()
+                return false
+            }
             let esc: Str = pattern.slice(pos, pos + 1)
             pos = pos + 1
             var esc_handled: Bool = false
@@ -523,6 +553,9 @@ func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
         ops.pop()
         if top != -1 { postfix.push(top) }
     }
+    tokens.destroy()
+    ops.destroy()
+    group_stack.destroy()
     return true
 }
 
@@ -643,7 +676,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             nfa_h = true
         }
         if tok == TOK_CONCAT and not nfa_h {
-            if fstack.len() < 6 { return make_invalid() }
+            if fstack.len() < 6 {
+                fstack.destroy()
+                all_outs.destroy()
+                kinds.destroy()
+                chars.destroy()
+                next1.destroy()
+                next2.destroy()
+                return make_invalid()
+            }
             let bc: I64 = fstack.pop()
             let bo: I64 = fstack.pop()
             let bs: I64 = fstack.pop()
@@ -655,7 +696,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             nfa_h = true
         }
         if tok == TOK_ALT and not nfa_h {
-            if fstack.len() < 6 { return make_invalid() }
+            if fstack.len() < 6 {
+                fstack.destroy()
+                all_outs.destroy()
+                kinds.destroy()
+                chars.destroy()
+                next1.destroy()
+                next2.destroy()
+                return make_invalid()
+            }
             let bc: I64 = fstack.pop()
             let bo: I64 = fstack.pop()
             let bs: I64 = fstack.pop()
@@ -674,7 +723,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             nfa_h = true
         }
         if tok == TOK_STAR and not nfa_h {
-            if fstack.len() < 3 { return make_invalid() }
+            if fstack.len() < 3 {
+                fstack.destroy()
+                all_outs.destroy()
+                kinds.destroy()
+                chars.destroy()
+                next1.destroy()
+                next2.destroy()
+                return make_invalid()
+            }
             let ac: I64 = fstack.pop()
             let ao: I64 = fstack.pop()
             let as_: I64 = fstack.pop()
@@ -688,7 +745,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             nfa_h = true
         }
         if tok == TOK_PLUS and not nfa_h {
-            if fstack.len() < 3 { return make_invalid() }
+            if fstack.len() < 3 {
+                fstack.destroy()
+                all_outs.destroy()
+                kinds.destroy()
+                chars.destroy()
+                next1.destroy()
+                next2.destroy()
+                return make_invalid()
+            }
             let ac: I64 = fstack.pop()
             let ao: I64 = fstack.pop()
             let as_: I64 = fstack.pop()
@@ -702,7 +767,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             nfa_h = true
         }
         if tok == TOK_QUEST and not nfa_h {
-            if fstack.len() < 3 { return make_invalid() }
+            if fstack.len() < 3 {
+                fstack.destroy()
+                all_outs.destroy()
+                kinds.destroy()
+                chars.destroy()
+                next1.destroy()
+                next2.destroy()
+                return make_invalid()
+            }
             let ac: I64 = fstack.pop()
             let ao: I64 = fstack.pop()
             let as_: I64 = fstack.pop()
@@ -717,7 +790,15 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
         }
     }
 
-    if fstack.len() != 3 { return make_invalid() }
+    if fstack.len() != 3 {
+        fstack.destroy()
+        all_outs.destroy()
+        kinds.destroy()
+        chars.destroy()
+        next1.destroy()
+        next2.destroy()
+        return make_invalid()
+    }
     let fc: I64 = fstack.pop()
     let fo: I64 = fstack.pop()
     let fs: I64 = fstack.pop()
@@ -727,6 +808,9 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
     kinds.push(STATE_MATCH); chars.push(0); next1.push(-1); next2.push(-1)
     ns = ns + 1
     patch(next1, next2, all_outs, fo, fc, accept)
+
+    fstack.destroy()
+    all_outs.destroy()
 
     return Regex {
         _kinds: kinds, _chars: chars,
@@ -797,7 +881,12 @@ func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
 
     var pos: I64 = start_pos
     loop (pos < slen) {
-        if cur.len() == 0 { return last_match }
+        if cur.len() == 0 {
+            cur.destroy()
+            nxt.destroy()
+            vis.destroy()
+            return last_match
+        }
         let ch: I64 = regex_char_code(s, pos)
         gen = gen + 1
         i = 0
@@ -833,6 +922,9 @@ func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
             i = i + 1
         }
     }
+    cur.destroy()
+    nxt.destroy()
+    vis.destroy()
     return last_match
 }
 
@@ -994,7 +1086,16 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
         }
     }
 
+    // Destroy temporaries
+    cur_states.destroy()
+    nxt_states.destroy()
+    cur_caps.destroy()
+    nxt_caps.destroy()
+    vis.destroy()
+    tmp_cap.destroy()
+
     if not have_match {
+        best_caps.destroy()
         return make_empty_captures(ng)
     }
 
@@ -1007,6 +1108,7 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
         ends.push(best_caps.get(i * 2 + 1))
         i = i + 1
     }
+    best_caps.destroy()
     return Captures { _starts: starts, _ends: ends, _num_groups: ng, _matched: true }
 }
 
@@ -1065,4 +1167,5 @@ func add_eps_cap(re: ref Regex, list: List[I64], caps: List[I64],
             }
         }
     }
+    work.destroy()
 }

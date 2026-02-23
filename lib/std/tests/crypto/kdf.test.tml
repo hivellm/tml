@@ -101,11 +101,13 @@ func test_pbkdf2_sha256() -> I32 {
     when result {
         Ok(key) => {
             assert_eq(key.len(), 32 as I64, "pbkdf2 key 32 bytes")
+            key.destroy()
         }
         Err(_e) => {
             assert(false, "pbkdf2 should not fail")
         }
     }
+    salt.destroy()
     return 0
 }
 
@@ -119,12 +121,15 @@ func test_pbkdf2_deterministic() -> I32 {
             when r2 {
                 Ok(k2) => {
                     assert_eq(k1.len(), k2.len(), "same length")
+                    k2.destroy()
                 }
                 Err(_) => { assert(false, "r2 failed") }
             }
+            k1.destroy()
         }
         Err(_) => { assert(false, "r1 failed") }
     }
+    salt.destroy()
     return 0
 }
 
@@ -136,11 +141,13 @@ func test_scrypt_derive() -> I32 {
     when result {
         Ok(key) => {
             assert_eq(key.len(), 32 as I64, "scrypt key 32 bytes")
+            key.destroy()
         }
         Err(_e) => {
             assert(false, "scrypt should not fail")
         }
     }
+    salt.destroy()
     return 0
 }
 
@@ -152,11 +159,14 @@ func test_hkdf_sha256() -> I32 {
     when result {
         Ok(key) => {
             assert_eq(key.len(), 64 as I64, "hkdf key 64 bytes")
+            key.destroy()
         }
         Err(_e) => {
             assert(false, "hkdf should not fail")
         }
     }
+    ikm.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -170,6 +180,9 @@ func test_pbkdf2_bytes() -> I32 {
     assert(result.is_ok(), "pbkdf2_bytes should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 32 as I64, "pbkdf2_bytes key 32 bytes")
+    key.destroy()
+    password.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -184,6 +197,9 @@ func test_scrypt_bytes() -> I32 {
     assert(result.is_ok(), "scrypt_bytes should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 32 as I64, "scrypt_bytes key 32 bytes")
+    key.destroy()
+    password.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -198,6 +214,10 @@ func test_hkdf_bytes() -> I32 {
     assert(result.is_ok(), "hkdf_bytes should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 64 as I64, "hkdf_bytes key 64 bytes")
+    key.destroy()
+    ikm.destroy()
+    salt.destroy()
+    info.destroy()
     return 0
 }
 
@@ -209,6 +229,9 @@ func test_hkdf_extract() -> I32 {
     assert(result.is_ok(), "hkdf_extract should succeed")
     let prk: Buffer = result.unwrap()
     assert(prk.len() > (0 as I64), "PRK not empty")
+    prk.destroy()
+    ikm.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -222,6 +245,11 @@ func test_hkdf_expand() -> I32 {
     assert(result.is_ok(), "hkdf_expand should succeed")
     let okm: Buffer = result.unwrap()
     assert_eq(okm.len(), 48 as I64, "hkdf_expand output 48 bytes")
+    okm.destroy()
+    prk.destroy()
+    info.destroy()
+    ikm.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -234,6 +262,8 @@ func test_pbkdf2_sha512() -> I32 {
     assert(result.is_ok(), "pbkdf2 sha512 should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 64 as I64, "pbkdf2 sha512 key 64 bytes")
+    key.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -244,6 +274,8 @@ func test_pbkdf2_sha384() -> I32 {
     assert(result.is_ok(), "pbkdf2 sha384 should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 48 as I64, "pbkdf2 sha384 key 48 bytes")
+    key.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -254,6 +286,8 @@ func test_pbkdf2_sha1() -> I32 {
     assert(result.is_ok(), "pbkdf2 sha1 should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 20 as I64, "pbkdf2 sha1 key 20 bytes")
+    key.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -267,6 +301,9 @@ func test_hkdf_sha512() -> I32 {
     assert(result.is_ok(), "hkdf sha512 should succeed")
     let key: Buffer = result.unwrap()
     assert_eq(key.len(), 64 as I64, "hkdf sha512 key 64 bytes")
+    key.destroy()
+    ikm.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -283,6 +320,10 @@ func test_hkdf_deterministic() -> I32 {
     let k1: Buffer = r1.unwrap()
     let k2: Buffer = r2.unwrap()
     assert_eq(k1.len(), k2.len(), "hkdf deterministic same length")
+    k1.destroy()
+    k2.destroy()
+    ikm.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -299,6 +340,9 @@ func test_scrypt_deterministic() -> I32 {
     let k1: Buffer = r1.unwrap()
     let k2: Buffer = r2.unwrap()
     assert_eq(k1.len(), k2.len(), "scrypt deterministic same length")
+    k1.destroy()
+    k2.destroy()
+    salt.destroy()
     return 0
 }
 
@@ -315,7 +359,9 @@ func test_argon2_call() -> I32 {
     if result.is_ok() {
         let key: Buffer = result.unwrap()
         assert_eq(key.len(), 32 as I64, "argon2 key 32 bytes")
+        key.destroy()
     }
+    salt.destroy()
     return 0
 }
 
@@ -329,6 +375,9 @@ func test_argon2_bytes_call() -> I32 {
     if result.is_ok() {
         let key: Buffer = result.unwrap()
         assert_eq(key.len(), 32 as I64, "argon2_bytes key 32 bytes")
+        key.destroy()
     }
+    password.destroy()
+    salt.destroy()
     return 0
 }

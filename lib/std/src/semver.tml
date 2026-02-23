@@ -232,8 +232,7 @@ impl VersionReq {
             start = start + 1
         }
 
-        let ver_str: Str = str::substring(s, start, slen)
-        let ver_result = Version::parse(ver_str)
+        let ver_result = parse_version_from(s, start)
         when ver_result {
             Ok(ver) => return Ok(VersionReq { op: op, version: ver })
             Err(e) => return Err(e)
@@ -314,16 +313,21 @@ func parse_patch_part(s: Str, state: ParseState, slen: I64) -> Outcome[ParseStat
 
 /// Full version parse implementation using flat helper chain.
 func parse_version_impl(s: Str) -> Outcome[Version, Str] {
+    return parse_version_from(s, 0)
+}
+
+/// Parse a version starting at a given offset within the string.
+func parse_version_from(s: Str, from: I64) -> Outcome[Version, Str] {
     let slen: I64 = str::len(s)
-    if slen == 0 {
+    if from >= slen {
         return Err("semver: empty string")
     }
 
     // Skip optional leading 'v' or 'V'
-    var start: I64 = 0
-    let first: I32 = str::char_at(s, 0)
+    var start: I64 = from
+    let first: I32 = str::char_at(s, start)
     if first == 118 or first == 86 {
-        start = 1
+        start = start + 1
     }
 
     // Parse major.minor.patch using chained helpers
@@ -454,21 +458,17 @@ func compare_pre(a: Str, b: Str) -> I32 {
     var bi: I64 = 0
 
     loop (ai < alen and bi < blen) {
-        // Extract next dot-separated identifier from a
+        // Find end of next dot-separated identifier
         let a_end: I64 = find_char(a, ai, alen, 46)  // '.'
-        let a_ident: Str = str::substring(a, ai, a_end)
-
-        // Extract next dot-separated identifier from b
         let b_end: I64 = find_char(b, bi, blen, 46)  // '.'
-        let b_ident: Str = str::substring(b, bi, b_end)
 
-        let a_is_num: Bool = is_numeric(a_ident)
-        let b_is_num: Bool = is_numeric(b_ident)
+        let a_is_num: Bool = is_numeric_range(a, ai, a_end)
+        let b_is_num: Bool = is_numeric_range(b, bi, b_end)
 
         if a_is_num and b_is_num {
             // Both numeric: compare as integers
-            let a_val: I64 = str_to_i64(a_ident)
-            let b_val: I64 = str_to_i64(b_ident)
+            let a_val: I64 = parse_i64_range(a, ai, a_end)
+            let b_val: I64 = parse_i64_range(b, bi, b_end)
             if a_val < b_val { return -1 }
             if a_val > b_val { return 1 }
         } else if a_is_num and not b_is_num {
@@ -479,7 +479,7 @@ func compare_pre(a: Str, b: Str) -> I32 {
             return 1
         } else {
             // Both alphanumeric: lexicographic
-            let cmp: I32 = str_compare(a_ident, b_ident)
+            let cmp: I32 = str_compare_range(a, ai, a_end, b, bi, b_end)
             if cmp != 0 { return cmp }
         }
 
@@ -494,12 +494,11 @@ func compare_pre(a: Str, b: Str) -> I32 {
     return 0
 }
 
-/// Check if a string consists entirely of ASCII digits.
-func is_numeric(s: Str) -> Bool {
-    let slen: I64 = str::len(s)
-    if slen == 0 { return false }
-    var i: I64 = 0
-    loop (i < slen) {
+/// Check if a range [start, end) of a string consists entirely of ASCII digits.
+func is_numeric_range(s: Str, start: I64, end: I64) -> Bool {
+    if start >= end { return false }
+    var i: I64 = start
+    loop (i < end) {
         let c: I32 = str::char_at(s, i)
         if c < 48 or c > 57 { return false }
         i = i + 1
@@ -507,13 +506,38 @@ func is_numeric(s: Str) -> Bool {
     return true
 }
 
-/// Parse a string of digits to I64.
-func str_to_i64(s: Str) -> I64 {
-    let result: Maybe[I64] = str::parse_i64(s)
-    when result {
-        Just(n) => return n
-        Nothing => return 0
+/// Parse digits in range [start, end) to I64.
+func parse_i64_range(s: Str, start: I64, end: I64) -> I64 {
+    var value: I64 = 0
+    var i: I64 = start
+    loop (i < end) {
+        let c: I32 = str::char_at(s, i)
+        if c < 48 or c > 57 { return 0 }
+        value = value * 10 + (c - 48) as I64
+        i = i + 1
     }
+    return value
+}
+
+/// Lexicographic comparison of two string ranges. Returns -1, 0, or 1.
+func str_compare_range(a: Str, a_start: I64, a_end: I64, b: Str, b_start: I64, b_end: I64) -> I32 {
+    let alen: I64 = a_end - a_start
+    let blen: I64 = b_end - b_start
+    var min_len: I64 = alen
+    if blen < min_len { min_len = blen }
+
+    var i: I64 = 0
+    loop (i < min_len) {
+        let ac: I32 = str::char_at(a, a_start + i)
+        let bc: I32 = str::char_at(b, b_start + i)
+        if ac < bc { return -1 }
+        if ac > bc { return 1 }
+        i = i + 1
+    }
+
+    if alen < blen { return -1 }
+    if alen > blen { return 1 }
+    return 0
 }
 
 /// Lexicographic comparison of two strings. Returns -1, 0, or 1.

@@ -44,6 +44,7 @@ pub func parse_ipv4(s: Str) -> Outcome[Ipv4Addr, AddrParseError] {
 
     let parts: List[Str] = str::split(s, ".")
     if parts.len() != 4 {
+        parts.destroy()
         return Err(AddrParseError::new(InvalidIpv4))
     }
 
@@ -53,11 +54,15 @@ pub func parse_ipv4(s: Str) -> Outcome[Ipv4Addr, AddrParseError] {
     loop (i < 4) {
         when parse_u8(parts.get(i)) {
             Just(octet) => { octets[i] = octet }
-            Nothing => { return Err(AddrParseError::new(InvalidIpv4)) }
+            Nothing => {
+                parts.destroy()
+                return Err(AddrParseError::new(InvalidIpv4))
+            }
         }
         i = i + 1
     }
 
+    parts.destroy()
     Ok(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3]))
 }
 
@@ -107,6 +112,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         let parts: List[Str] = str::split(s, "::")
         if parts.len() > 2 {
             // Multiple :: not allowed
+            parts.destroy()
             return Err(AddrParseError::new(InvalidIpv6))
         }
 
@@ -118,6 +124,9 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
 
         let total: I64 = left.len() + right.len()
         if total > 8 {
+            left.destroy()
+            right.destroy()
+            parts.destroy()
             return Err(AddrParseError::new(InvalidIpv6))
         }
 
@@ -128,7 +137,12 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         loop (i < left.len()) {
             when parse_hex_u16(left.get(i)) {
                 Just(seg) => { segments[i] = seg }
-                Nothing => { return Err(AddrParseError::new(InvalidIpv6)) }
+                Nothing => {
+                    left.destroy()
+                    right.destroy()
+                    parts.destroy()
+                    return Err(AddrParseError::new(InvalidIpv6))
+                }
             }
             i = i + 1
         }
@@ -139,11 +153,19 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         loop (j < right.len()) {
             when parse_hex_u16(right.get(j)) {
                 Just(seg) => { segments[right_start + j] = seg }
-                Nothing => { return Err(AddrParseError::new(InvalidIpv6)) }
+                Nothing => {
+                    left.destroy()
+                    right.destroy()
+                    parts.destroy()
+                    return Err(AddrParseError::new(InvalidIpv6))
+                }
             }
             j = j + 1
         }
 
+        left.destroy()
+        right.destroy()
+        parts.destroy()
         Ok(Ipv6Addr::new(
             segments[0], segments[1], segments[2], segments[3],
             segments[4], segments[5], segments[6], segments[7]
@@ -152,6 +174,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         // No compression - must have exactly 8 parts
         let parts: List[Str] = str::split(s, ":")
         if parts.len() != 8 {
+            parts.destroy()
             return Err(AddrParseError::new(InvalidIpv6))
         }
 
@@ -160,11 +183,15 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         loop (i < 8) {
             when parse_hex_u16(parts.get(i)) {
                 Just(seg) => { segments[i] = seg }
-                Nothing => { return Err(AddrParseError::new(InvalidIpv6)) }
+                Nothing => {
+                    parts.destroy()
+                    return Err(AddrParseError::new(InvalidIpv6))
+                }
             }
             i = i + 1
         }
 
+        parts.destroy()
         Ok(Ipv6Addr::new(
             segments[0], segments[1], segments[2], segments[3],
             segments[4], segments[5], segments[6], segments[7]

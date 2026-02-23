@@ -7,6 +7,7 @@ func test_text_last_index_of() -> I32 {
     let t = Text::from("abcXdefXghi")
     assert_eq(t.last_index_of("X"), 7, "last_index_of X should be 7")
     assert_eq(t.last_index_of("z"), -1, "last_index_of missing should be -1")
+    t.drop()
     0
 }
 
@@ -15,6 +16,8 @@ func test_text_trim_start() -> I32 {
     let t = Text::from("   hello")
     let trimmed = t.trim_start()
     assert_eq(trimmed.as_str(), "hello", "trim_start should remove leading spaces")
+    trimmed.drop()
+    t.drop()
     0
 }
 
@@ -23,6 +26,8 @@ func test_text_trim_end() -> I32 {
     let t = Text::from("hello   ")
     let trimmed = t.trim_end()
     assert_eq(trimmed.as_str(), "hello", "trim_end should remove trailing spaces")
+    trimmed.drop()
+    t.drop()
     0
 }
 
@@ -31,6 +36,8 @@ func test_text_replace_first() -> I32 {
     let t = Text::from("aXbXc")
     let r = t.replace("X", "-")
     assert_eq(r.as_str(), "a-bXc", "replace should only replace first occurrence")
+    r.drop()
+    t.drop()
     0
 }
 
@@ -39,6 +46,8 @@ func test_text_pad_start() -> I32 {
     let t = Text::from("hi")
     let padded = t.pad_start(5, 48)
     assert_eq(padded.as_str(), "000hi", "pad_start with '0' to len 5")
+    padded.drop()
+    t.drop()
     0
 }
 
@@ -47,5 +56,7 @@ func test_text_pad_end() -> I32 {
     let t = Text::from("hi")
     let padded = t.pad_end(5, 46)
     assert_eq(padded.as_str(), "hi...", "pad_end with '.' to len 5")
+    padded.drop()
+    t.drop()
     0
 }

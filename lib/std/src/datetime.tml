@@ -323,9 +323,10 @@ func parse_int_slice(s: Str, start: I64, end: I64) -> I64 {
     var result: I64 = 0
     var i: I64 = start
     loop (i < end) {
-        let ch: Str = s.slice(i, i + 1)
-        let d: I64 = parse_digit_char(ch)
-        if d < 0 { return -1 }
+        let c: I32 = s.char_at(i)
+        // '0' = 48, '9' = 57
+        if c < 48 or c > 57 { return -1 }
+        let d: I64 = (c - 48) as I64
         result = result * 10 + d
         i = i + 1
     }

@@ -10,6 +10,7 @@ use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack}
 func test_arraylist_with_capacity() -> I32 {
     let list: ArrayList[I32] = ArrayList::with_capacity(32 as I64)
     assert(list.is_empty(), "with_capacity creates empty list")
+    list.destroy()
     return 0
 }
 
@@ -20,6 +21,7 @@ func test_arraylist_insert() -> I32 {
     list.add(30 as I32)
     list.insert(1 as I64, 20 as I32)
     assert_eq(list.count(), 3 as I64, "insert increases count")
+    list.destroy()
     return 0
 }
 
@@ -32,6 +34,7 @@ func test_arraylist_reverse() -> I32 {
     list.reverse()
     assert_eq(list.get(0 as I64), 3 as I32, "reverse first element")
     assert_eq(list.get(2 as I64), 1 as I32, "reverse last element")
+    list.destroy()
     return 0
 }
 
@@ -43,6 +46,7 @@ func test_arraylist_reverse() -> I32 {
 func test_hashset_with_capacity() -> I32 {
     let s: HashSet[I64] = HashSet::with_capacity(64 as I64)
     assert(s.is_empty(), "with_capacity creates empty set")
+    s.destroy()
     return 0
 }
 
@@ -54,6 +58,7 @@ func test_hashset_clear() -> I32 {
     assert_eq(s.count(), 2 as I64, "count after adds")
     s.clear()
     assert(s.is_empty(), "clear empties set")
+    s.destroy()
     return 0
 }
 
@@ -65,6 +70,7 @@ func test_hashset_clear() -> I32 {
 func test_queue_with_capacity() -> I32 {
     let q: Queue[I32] = Queue::with_capacity(32 as I64)
     assert(q.is_empty(), "with_capacity creates empty queue")
+    q.destroy()
     return 0
 }
 
@@ -74,6 +80,7 @@ func test_queue_add() -> I32 {
     q.add(10 as I32)
     q.add(20 as I32)
     assert_eq(q.count(), 2 as I64, "add adds to queue")
+    q.destroy()
     return 0
 }
 
@@ -84,6 +91,7 @@ func test_queue_clear() -> I32 {
     q.add(2 as I32)
     q.clear()
     assert(q.is_empty(), "clear empties queue")
+    q.destroy()
     return 0
 }
 
@@ -95,6 +103,7 @@ func test_queue_clear() -> I32 {
 func test_stack_with_capacity() -> I32 {
     let s: Stack[I32] = Stack::with_capacity(32 as I64)
     assert(s.is_empty(), "with_capacity creates empty stack")
+    s.destroy()
     return 0
 }
 
@@ -104,6 +113,7 @@ func test_stack_add() -> I32 {
     s.add(10 as I32)
     s.add(20 as I32)
     assert_eq(s.count(), 2 as I64, "add adds to stack")
+    s.destroy()
     return 0
 }
 
@@ -114,6 +124,7 @@ func test_stack_clear() -> I32 {
     s.add(2 as I32)
     s.clear()
     assert(s.is_empty(), "clear empties stack")
+    s.destroy()
     return 0
 }
 
@@ -126,6 +137,7 @@ func test_stack_remove() -> I32 {
     let removed: Bool = s.remove(20 as I64)
     assert(removed, "remove should find and remove element")
     assert_eq(s.count(), 2 as I64, "count after remove")
+    s.destroy()
     return 0
 }
 
@@ -136,6 +148,7 @@ func test_stack_contains() -> I32 {
     s.add(20 as I64)
     assert(s.contains(10 as I64), "contains should find element")
     assert(not s.contains(99 as I64), "contains should not find missing element")
+    s.destroy()
     return 0
 }
 
@@ -147,6 +160,7 @@ func test_queue_remove() -> I32 {
     q.add(30 as I64)
     let removed: Bool = q.remove(20 as I64)
     assert(removed, "remove should find and remove element")
+    q.destroy()
     return 0
 }
 
@@ -157,5 +171,6 @@ func test_queue_contains() -> I32 {
     q.add(20 as I64)
     assert(q.contains(10 as I64), "contains should find element")
     assert(not q.contains(99 as I64), "contains should not find missing element")
+    q.destroy()
     return 0
 }

@@ -15,9 +15,11 @@ func test_parse_positional() -> I32 {
         Ok(m) => {
             assert_eq(m.positional_count(), 1)
             assert_eq(m.get_positional(0, ""), "hello.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -37,9 +39,11 @@ func test_parse_multiple_positionals() -> I32 {
             assert_eq(m.positional_count(), 2)
             assert_eq(m.get_positional(0, ""), "input.txt")
             assert_eq(m.get_positional(1, ""), "output.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -54,8 +58,10 @@ func test_positional_fallback() -> I32 {
         Ok(m) => {
             assert_eq(m.get_positional(0, "default"), "default")
             assert_eq(m.get_positional(5, "none"), "none")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }

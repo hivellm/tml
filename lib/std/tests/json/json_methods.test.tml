@@ -22,6 +22,7 @@ func test_json_get_field() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\"}")
     let val: Maybe[Json] = j.get("name")
     assert(val.is_just(), "get name should be Just")
+    j.drop()
     return 0
 }
 
@@ -30,6 +31,7 @@ func test_json_get_field_missing() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\"}")
     let val: Maybe[Json] = j.get("missing")
     assert(val.is_nothing(), "get missing should be Nothing")
+    j.drop()
     return 0
 }
 
@@ -38,6 +40,7 @@ func test_json_get_string() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Bob\"}")
     let val: Maybe[Str] = j.get_string("name")
     assert(val.is_just(), "get_string name should be Just")
+    j.drop()
     return 0
 }
 
@@ -46,6 +49,7 @@ func test_json_get_i64() -> I32 {
     let j: Json = parse_or_panic("{\"age\": 30}")
     let val: Maybe[I64] = j.get_i64("age")
     assert(val.is_just(), "get_i64 age should be Just")
+    j.drop()
     return 0
 }
 
@@ -54,6 +58,7 @@ func test_json_has() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\"}")
     assert(j.has("name"), "has name should be true")
     assert(not j.has("missing"), "has missing should be false")
+    j.drop()
     return 0
 }
 
@@ -62,6 +67,7 @@ func test_json_at_method() -> I32 {
     let j: Json = parse_or_panic("[10, 20, 30]")
     let val: Maybe[Json] = j.at(1)
     assert(val.is_just(), "at(1) should be Just")
+    j.drop()
     return 0
 }
 
@@ -70,6 +76,7 @@ func test_json_at_out_of_bounds() -> I32 {
     let j: Json = parse_or_panic("[10, 20]")
     let val: Maybe[Json] = j.at(5)
     assert(val.is_nothing(), "at(5) should be Nothing for 2-elem array")
+    j.drop()
     return 0
 }
 
@@ -82,6 +89,7 @@ func test_json_get_path_simple() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\"}")
     let val: Maybe[Json] = j.get_path("name")
     assert(val.is_just(), "get_path name should be Just")
+    j.drop()
     return 0
 }
 
@@ -90,6 +98,7 @@ func test_json_get_path_nested() -> I32 {
     let j: Json = parse_or_panic("{\"user\": {\"name\": \"Alice\"}}")
     let val: Maybe[Json] = j.get_path("user.name")
     assert(val.is_just(), "get_path user.name should be Just")
+    j.drop()
     return 0
 }
 
@@ -98,6 +107,7 @@ func test_json_get_path_array_index() -> I32 {
     let j: Json = parse_or_panic("{\"items\": [10, 20, 30]}")
     let val: Maybe[Json] = j.get_path("items[1]")
     assert(val.is_just(), "get_path items[1] should be Just")
+    j.drop()
     return 0
 }
 
@@ -106,6 +116,7 @@ func test_json_get_path_string() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\"}")
     let val: Maybe[Str] = j.get_path_string("name")
     assert(val.is_just(), "get_path_string name should be Just")
+    j.drop()
     return 0
 }
 
@@ -114,6 +125,7 @@ func test_json_get_path_i64() -> I32 {
     let j: Json = parse_or_panic("{\"age\": 30}")
     let val: Maybe[I64] = j.get_path_i64("age")
     assert(val.is_just(), "get_path_i64 age should be Just")
+    j.drop()
     return 0
 }
 
@@ -126,6 +138,7 @@ func test_json_key_at() -> I32 {
     let j: Json = parse_or_panic("{\"a\": 1, \"b\": 2}")
     let key: Maybe[Str] = j.key_at(0)
     assert(key.is_just(), "key_at(0) should be Just")
+    j.drop()
     return 0
 }
 
@@ -134,6 +147,7 @@ func test_json_value_at() -> I32 {
     let j: Json = parse_or_panic("{\"a\": 1, \"b\": 2}")
     let val: Maybe[Json] = j.value_at(0)
     assert(val.is_just(), "value_at(0) should be Just")
+    j.drop()
     return 0
 }
 
@@ -146,6 +160,7 @@ func test_json_entry_at_valid() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"TML\", \"version\": 1}")
     let entry: Maybe[(Str, Json)] = j.entry_at(0)
     assert(entry.is_just(), "entry_at(0) should return Just")
+    j.drop()
     return 0
 }
 
@@ -161,6 +176,7 @@ func test_json_object_get_returns_maybe() -> I32 {
     assert(v.is_just(), "get existing key returns Just")
     let missing: Maybe[Json] = o.get("z")
     assert(missing.is_nothing(), "get missing key returns Nothing")
+    j.drop()
     return 0
 }
 
@@ -170,6 +186,7 @@ func test_json_object_get_string() -> I32 {
     let o: JsonObject = j.as_object().unwrap()
     let v: Maybe[Str] = o.get_string("name")
     assert(v.is_just(), "get_string for string field")
+    j.drop()
     return 0
 }
 
@@ -179,6 +196,7 @@ func test_json_object_get_i64() -> I32 {
     let o: JsonObject = j.as_object().unwrap()
     let v: Maybe[I64] = o.get_i64("count")
     assert(v.is_just(), "get_i64 for number field")
+    j.drop()
     return 0
 }
 
@@ -188,6 +206,7 @@ func test_json_object_get_f64() -> I32 {
     let o: JsonObject = j.as_object().unwrap()
     let v: Maybe[F64] = o.get_f64("pi")
     assert(v.is_just(), "get_f64 for float field")
+    j.drop()
     return 0
 }
 
@@ -197,6 +216,7 @@ func test_json_object_get_bool() -> I32 {
     let o: JsonObject = j.as_object().unwrap()
     let v: Maybe[Bool] = o.get_bool("active")
     assert(v.is_just(), "get_bool for bool field")
+    j.drop()
     return 0
 }
 
@@ -206,6 +226,7 @@ func test_json_object_value_at() -> I32 {
     let o: JsonObject = j.as_object().unwrap()
     let v: Maybe[Json] = o.value_at(0)
     assert(v.is_just(), "value_at(0) should return Just")
+    j.drop()
     return 0
 }
 
@@ -217,6 +238,7 @@ func test_json_object_value_at() -> I32 {
 func test_json_array_new() -> I32 {
     let arr: JsonArray = JsonArray::new()
     assert(arr.is_empty(), "new array should be empty")
+    arr.drop()
     return 0
 }
 
@@ -226,6 +248,7 @@ func test_json_array_get() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let v: Maybe[Json] = arr.get(1)
     assert(v.is_just(), "get(1) should return Just")
+    j.drop()
     return 0
 }
 
@@ -235,6 +258,7 @@ func test_json_array_get_string() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let v: Maybe[Str] = arr.get_string(0)
     assert(v.is_just(), "get_string(0)")
+    j.drop()
     return 0
 }
 
@@ -244,6 +268,7 @@ func test_json_array_get_i64() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let v: Maybe[I64] = arr.get_i64(0)
     assert(v.is_just(), "get_i64(0)")
+    j.drop()
     return 0
 }
 
@@ -253,6 +278,7 @@ func test_json_array_get_f64() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let v: Maybe[F64] = arr.get_f64(0)
     assert(v.is_just(), "get_f64(0)")
+    j.drop()
     return 0
 }
 
@@ -262,6 +288,7 @@ func test_json_array_get_bool() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let v: Maybe[Bool] = arr.get_bool(0)
     assert(v.is_just(), "get_bool(0)")
+    j.drop()
     return 0
 }
 
@@ -271,6 +298,7 @@ func test_json_array_to_string() -> I32 {
     let arr: JsonArray = j.as_array().unwrap()
     let s: Str = arr.to_string()
     assert(s.len() > 0, "array to_string produces output")
+    j.drop()
     return 0
 }
 
@@ -283,6 +311,7 @@ func test_obj_new() -> I32 {
     let obj: JsonObject = JsonObject::new()
     assert(obj.is_empty(), "new object should be empty")
     assert(obj.len() == 0, "new object len should be 0")
+    obj.drop()
     return 0
 }
 
@@ -291,6 +320,7 @@ func test_obj_has() -> I32 {
     let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
     let maybe_obj: Maybe[JsonObject] = j.as_object()
     assert(maybe_obj.is_just(), "should be object")
+    j.drop()
     return 0
 }
 
@@ -299,6 +329,7 @@ func test_obj_to_string() -> I32 {
     let obj: JsonObject = JsonObject::new()
     let s: Str = obj.to_string()
     assert(s.len() > 0, "empty object to_string should produce output")
+    obj.drop()
     return 0
 }
 

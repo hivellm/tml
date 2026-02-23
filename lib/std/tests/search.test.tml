@@ -397,6 +397,7 @@ func test_bm25_search_finds_fox() -> I32 {
     let first: Bm25Result = results.get(0)
     assert(first.score > 0.0, "first result should have positive score")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -410,6 +411,7 @@ func test_bm25_search_no_match() -> I32 {
     let results: List[Bm25Result] = idx.search("nonexistent", 10)
     assert_eq(results.len(), 0, "search for nonexistent term should return 0")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -427,6 +429,7 @@ func test_bm25_search_respects_limit() -> I32 {
     let results: List[Bm25Result] = idx.search("common", 5)
     assert(results.len() <= 5, "search with limit 5 should return at most 5")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -449,6 +452,7 @@ func test_bm25_multi_field_name_boost() -> I32 {
     let top: Bm25Result = results.get(0)
     assert_eq(top.doc_id, 0, "doc with 'split' in name should rank first")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -484,6 +488,7 @@ func test_bm25_score_descending() -> I32 {
     let r1: Bm25Result = results.get(1)
     assert(r0.score >= r1.score, "results should be sorted by score descending")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -503,6 +508,7 @@ func test_bm25_set_k1() -> I32 {
     // Should still work after changing k1
     let results: List[Bm25Result] = idx.search("test", 10)
     assert(results.len() >= 1, "search should work with custom k1")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -516,6 +522,7 @@ func test_bm25_set_b() -> I32 {
     idx.build()
     let results: List[Bm25Result] = idx.search("hello", 10)
     assert(results.len() >= 1, "search should work with custom b")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -539,6 +546,7 @@ func test_bm25_set_field_boosts() -> I32 {
     assert(results.len() >= 1, "should find results with custom boosts")
     let top: Bm25Result = results.get(0)
     assert_eq(top.doc_id, 0, "doc with 'target' in name should rank first with 5x boost")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -557,6 +565,7 @@ func test_bm25_multi_word_query() -> I32 {
 
     let results: List[Bm25Result] = idx.search("quick program", 10)
     assert(results.len() >= 1, "multi-word query should find results")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -582,6 +591,9 @@ func test_bm25_add_document_all_fields() -> I32 {
     let r3: List[Bm25Result] = idx.search("tokenizes source", 10)
     assert(r3.len() >= 1, "should find by doc text")
 
+    r1.destroy()
+    r2.destroy()
+    r3.destroy()
     idx.destroy()
     return 0
 }
@@ -667,6 +679,7 @@ func test_hnsw_search_nearest() -> I32 {
     let nearest: HnswResult = results.get(0)
     assert_eq(nearest.doc_id, 0, "nearest to [0.9,0.1,0] should be doc 0")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -687,6 +700,7 @@ func test_hnsw_search_k_limit() -> I32 {
     let results: List[HnswResult] = idx.search(&q, 3)
     assert(results.len() <= 3, "search with k=3 should return at most 3")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -710,6 +724,7 @@ func test_hnsw_distance_ascending() -> I32 {
     let r1: HnswResult = results.get(1)
     assert(r0.distance <= r1.distance, "results should be sorted by distance ascending")
 
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -797,6 +812,7 @@ func test_hnsw_search_empty_index() -> I32 {
     var q: [F32; 3] = [1.0, 0.0, 0.0]
     let results: List[HnswResult] = idx.search(&q, 5)
     assert_eq(results.len(), 0, "search on empty index should return 0 results")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -814,6 +830,7 @@ func test_hnsw_cosine_distance_identical() -> I32 {
     assert_eq(r.doc_id, 0, "should find the inserted doc")
     // Cosine distance to itself should be ~0
     assert(r.distance < 0.01, "cosine distance to self should be near 0")
+    results.destroy()
     idx.destroy()
     return 0
 }
@@ -908,6 +925,7 @@ func test_tfidf_hnsw_pipeline() -> I32 {
     let results: List[HnswResult] = hnsw.search(&query_vec, 3)
     assert(results.len() >= 1, "should find at least 1 result for 'fox'")
 
+    results.destroy()
     hnsw.destroy()
     vectorizer.destroy()
     return 0

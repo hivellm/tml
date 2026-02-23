@@ -15,6 +15,7 @@ func test_arraylist_create() -> I32 {
     let list: ArrayList[I32] = ArrayList::create()
     assert_eq(list.count(), 0 as I64, "new ArrayList is empty")
     assert(list.is_empty(), "new ArrayList is_empty")
+    list.destroy()
     return 0
 }
 
@@ -28,6 +29,7 @@ func test_arraylist_add_get() -> I32 {
     assert_eq(list.get(0 as I64), 10 as I32, "get(0) is 10")
     assert_eq(list.get(1 as I64), 20 as I32, "get(1) is 20")
     assert_eq(list.get(2 as I64), 30 as I32, "get(2) is 30")
+    list.destroy()
     return 0
 }
 
@@ -40,6 +42,7 @@ func test_arraylist_set_clear() -> I32 {
     assert_eq(list.get(0 as I64), 99 as I32, "set updates value")
     list.clear()
     assert(list.is_empty(), "clear empties list")
+    list.destroy()
     return 0
 }
 
@@ -55,6 +58,7 @@ func test_arraylist_contains() -> I32 {
     list.add(15 as I32)
     assert(list.contains(10 as I32), "contains existing element")
     assert(not list.contains(99 as I32), "not contains missing element")
+    list.destroy()
     return 0
 }
 
@@ -66,6 +70,7 @@ func test_arraylist_index_of() -> I32 {
     list.add(300 as I32)
     assert_eq(list.index_of(200 as I32), 1 as I64, "index_of finds element")
     assert_eq(list.index_of(999 as I32), -1 as I64, "index_of returns -1 for missing")
+    list.destroy()
     return 0
 }
 
@@ -79,6 +84,7 @@ func test_arraylist_remove() -> I32 {
     assert(removed, "remove returns true")
     assert_eq(list.count(), 2 as I64, "count after remove")
     assert(not list.contains(2 as I32), "removed element not found")
+    list.destroy()
     return 0
 }
 
@@ -98,6 +104,8 @@ func test_arraylist_add_range() -> I32 {
 
     list1.add_range(ref list2)
     assert_eq(list1.count(), 4 as I64, "list1 should have 4 items after add_range")
+    list1.destroy()
+    list2.destroy()
     return 0
 }
 
@@ -109,6 +117,7 @@ func test_arraylist_add_range() -> I32 {
 func test_arraylist_with_capacity() -> I32 {
     let list: ArrayList[I32] = ArrayList::with_capacity(32 as I64)
     assert(list.is_empty(), "with_capacity creates empty list")
+    list.destroy()
     return 0
 }
 
@@ -119,6 +128,7 @@ func test_arraylist_insert() -> I32 {
     list.add(30 as I32)
     list.insert(1 as I64, 20 as I32)
     assert_eq(list.count(), 3 as I64, "insert increases count")
+    list.destroy()
     return 0
 }
 
@@ -131,6 +141,7 @@ func test_arraylist_reverse() -> I32 {
     list.reverse()
     assert_eq(list.get(0 as I64), 3 as I32, "reverse first element")
     assert_eq(list.get(2 as I64), 1 as I32, "reverse last element")
+    list.destroy()
     return 0
 }
 
@@ -143,6 +154,7 @@ func test_hashset_create() -> I32 {
     let set: HashSet[I32] = HashSet::create()
     assert_eq(set.count(), 0 as I64, "new HashSet is empty")
     assert(set.is_empty(), "new HashSet is_empty")
+    set.destroy()
     return 0
 }
 
@@ -154,6 +166,7 @@ func test_hashset_add_unique() -> I32 {
     let added2: Bool = set.add(10 as I32)
     assert(not added2, "duplicate add should return false")
     assert_eq(set.count(), 1 as I64, "count should be 1 after duplicate")
+    set.destroy()
     return 0
 }
 
@@ -169,6 +182,7 @@ func test_hashset_contains_remove() -> I32 {
     assert(removed, "remove returns true")
     assert(not set.contains(2 as I32), "removed element not found")
     assert_eq(set.count(), 2 as I64, "count after remove")
+    set.destroy()
     return 0
 }
 
@@ -180,6 +194,7 @@ func test_hashset_contains_remove() -> I32 {
 func test_hashset_with_capacity() -> I32 {
     let s: HashSet[I64] = HashSet::with_capacity(64 as I64)
     assert(s.is_empty(), "with_capacity creates empty set")
+    s.destroy()
     return 0
 }
 
@@ -191,6 +206,7 @@ func test_hashset_clear() -> I32 {
     assert_eq(s.count(), 2 as I64, "count after adds")
     s.clear()
     assert(s.is_empty(), "clear empties set")
+    s.destroy()
     return 0
 }
 
@@ -203,6 +219,7 @@ func test_queue_create() -> I32 {
     let q: Queue[I32] = Queue::create()
     assert_eq(q.count(), 0 as I64, "new Queue is empty")
     assert(q.is_empty(), "new Queue is_empty")
+    q.destroy()
     return 0
 }
 
@@ -216,6 +233,7 @@ func test_queue_enqueue_dequeue() -> I32 {
     let first: Maybe[I32] = q.dequeue()
     assert(first.is_just(), "dequeue returns Just")
     assert_eq(q.count(), 2 as I64, "count after dequeue")
+    q.destroy()
     return 0
 }
 
@@ -228,6 +246,7 @@ func test_queue_peek_empty() -> I32 {
     let val: Maybe[I32] = q.peek()
     assert(val.is_just(), "peek on non-empty returns Just")
     assert_eq(q.count(), 1 as I64, "peek does not remove")
+    q.destroy()
     return 0
 }
 
@@ -239,6 +258,7 @@ func test_queue_peek_empty() -> I32 {
 func test_queue_with_capacity() -> I32 {
     let q: Queue[I32] = Queue::with_capacity(32 as I64)
     assert(q.is_empty(), "with_capacity creates empty queue")
+    q.destroy()
     return 0
 }
 
@@ -248,6 +268,7 @@ func test_queue_add() -> I32 {
     q.add(10 as I32)
     q.add(20 as I32)
     assert_eq(q.count(), 2 as I64, "add adds to queue")
+    q.destroy()
     return 0
 }
 
@@ -258,6 +279,7 @@ func test_queue_clear() -> I32 {
     q.add(2 as I32)
     q.clear()
     assert(q.is_empty(), "clear empties queue")
+    q.destroy()
     return 0
 }
 
@@ -269,6 +291,7 @@ func test_queue_remove() -> I32 {
     q.add(30 as I64)
     let removed: Bool = q.remove(20 as I64)
     assert(removed, "remove should find and remove element")
+    q.destroy()
     return 0
 }
 
@@ -279,6 +302,7 @@ func test_queue_contains() -> I32 {
     q.add(20 as I64)
     assert(q.contains(10 as I64), "contains should find element")
     assert(not q.contains(99 as I64), "contains should not find missing element")
+    q.destroy()
     return 0
 }
 
@@ -291,6 +315,7 @@ func test_queue_grow() -> I32 {
         i = i + 1
     }
     assert_eq(q.count(), 20 as I64, "queue should have 20 items after grow")
+    q.destroy()
     return 0
 }
 
@@ -303,6 +328,7 @@ func test_stack_create() -> I32 {
     let s: Stack[I32] = Stack::create()
     assert_eq(s.count(), 0 as I64, "new Stack is empty")
     assert(s.is_empty(), "new Stack is_empty")
+    s.destroy()
     return 0
 }
 
@@ -316,6 +342,7 @@ func test_stack_push_pop() -> I32 {
     let top: Maybe[I32] = s.pop()
     assert(top.is_just(), "pop returns Just")
     assert_eq(s.count(), 2 as I64, "count after pop")
+    s.destroy()
     return 0
 }
 
@@ -328,6 +355,7 @@ func test_stack_peek_empty() -> I32 {
     let val: Maybe[I32] = s.peek()
     assert(val.is_just(), "peek on non-empty returns Just")
     assert_eq(s.count(), 1 as I64, "peek does not remove")
+    s.destroy()
     return 0
 }
 
@@ -339,6 +367,7 @@ func test_stack_peek_empty() -> I32 {
 func test_stack_with_capacity() -> I32 {
     let s: Stack[I32] = Stack::with_capacity(32 as I64)
     assert(s.is_empty(), "with_capacity creates empty stack")
+    s.destroy()
     return 0
 }
 
@@ -348,6 +377,7 @@ func test_stack_add() -> I32 {
     s.add(10 as I32)
     s.add(20 as I32)
     assert_eq(s.count(), 2 as I64, "add adds to stack")
+    s.destroy()
     return 0
 }
 
@@ -358,6 +388,7 @@ func test_stack_clear() -> I32 {
     s.add(2 as I32)
     s.clear()
     assert(s.is_empty(), "clear empties stack")
+    s.destroy()
     return 0
 }
 
@@ -370,6 +401,7 @@ func test_stack_remove() -> I32 {
     let removed: Bool = s.remove(20 as I64)
     assert(removed, "remove should find and remove element")
     assert_eq(s.count(), 2 as I64, "count after remove")
+    s.destroy()
     return 0
 }
 
@@ -380,6 +412,7 @@ func test_stack_contains() -> I32 {
     s.add(20 as I64)
     assert(s.contains(10 as I64), "contains should find element")
     assert(not s.contains(99 as I64), "contains should not find missing element")
+    s.destroy()
     return 0
 }
 
@@ -392,6 +425,7 @@ func test_linkedlist_create() -> I32 {
     let list: LinkedList[I64] = LinkedList::create()
     assert(list.is_empty(), "new LinkedList should be empty")
     assert_eq(list.count(), 0 as I64, "new LinkedList count is 0")
+    list.destroy()
     return 0
 }
 
@@ -402,6 +436,7 @@ func test_linkedlist_add() -> I32 {
     list.add(20 as I64)
     assert_eq(list.count(), 2 as I64, "count after 2 adds")
     assert(not list.is_empty(), "not empty after add")
+    list.destroy()
     return 0
 }
 
@@ -412,6 +447,7 @@ func test_linkedlist_add_first_last() -> I32 {
     list.add_first(5 as I64)
     list.add_last(15 as I64)
     assert_eq(list.count(), 3 as I64, "count after add_first/add_last")
+    list.destroy()
     return 0
 }
 
@@ -425,6 +461,7 @@ func test_linkedlist_first_last() -> I32 {
     assert(f.is_just(), "first should return Just")
     let l: Maybe[I64] = list.last()
     assert(l.is_just(), "last should return Just")
+    list.destroy()
     return 0
 }
 
@@ -436,6 +473,7 @@ func test_linkedlist_remove_first() -> I32 {
     let v: Maybe[I64] = list.remove_first()
     assert(v.is_just(), "remove_first should return Just")
     assert_eq(list.count(), 1 as I64, "count after remove_first")
+    list.destroy()
     return 0
 }
 
@@ -447,6 +485,7 @@ func test_linkedlist_remove_last() -> I32 {
     let v: Maybe[I64] = list.remove_last()
     assert(v.is_just(), "remove_last should return Just")
     assert_eq(list.count(), 1 as I64, "count after remove_last")
+    list.destroy()
     return 0
 }
 
@@ -458,6 +497,7 @@ func test_linkedlist_clear() -> I32 {
     list.clear()
     assert(list.is_empty(), "clear empties list")
     assert_eq(list.count(), 0 as I64, "count is 0 after clear")
+    list.destroy()
     return 0
 }
 
@@ -468,6 +508,7 @@ func test_linkedlist_contains() -> I32 {
     list.add(20 as I64)
     assert(list.contains(10 as I64), "contains should find 10")
     assert(not list.contains(99 as I64), "contains should not find 99")
+    list.destroy()
     return 0
 }
 
@@ -480,5 +521,6 @@ func test_linkedlist_remove() -> I32 {
     let removed: Bool = list.remove(20 as I64)
     assert(removed, "remove should find and remove element")
     assert_eq(list.count(), 2 as I64, "count after remove")
+    list.destroy()
     return 0
 }

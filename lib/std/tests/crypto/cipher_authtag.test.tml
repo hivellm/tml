@@ -108,6 +108,7 @@ func test_authtag_from_bytes() -> I32 {
     let buf: Buffer = random_bytes(16 as I64)
     let tag: AuthTag = AuthTag::from_bytes(buf)
     assert_eq(tag.len(), 16 as I64, "from_bytes preserves length")
+    tag.data.destroy()
     return 0
 }
 

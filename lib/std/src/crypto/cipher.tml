@@ -677,7 +677,9 @@ pub func aes_encrypt(key: ref Buffer, iv: ref Buffer, plaintext: ref Buffer) -> 
     }
 
     cipher.update_bytes(plaintext)
-    return cipher.finalize()
+    let result: Buffer = cipher.finalize()!
+    cipher.destroy()
+    return Ok(result)
 }
 
 /// Decrypts data using AES-CBC.
@@ -695,7 +697,9 @@ pub func aes_decrypt(key: ref Buffer, iv: ref Buffer, ciphertext: ref Buffer) ->
     }
 
     decipher.update_bytes(ciphertext)
-    return decipher.finalize()
+    let result: Buffer = decipher.finalize()!
+    decipher.destroy()
+    return Ok(result)
 }
 
 /// Encrypts data using AES-GCM (AEAD).
@@ -716,6 +720,7 @@ pub func aes_gcm_encrypt(
 
     let ct: Buffer = cipher.finalize()!
     let tag: AuthTag = cipher.get_auth_tag()!
+    cipher.destroy()
 
     return Ok((ct, tag))
 }
@@ -738,7 +743,9 @@ pub func aes_gcm_decrypt(
     decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
 
-    return decipher.finalize()
+    let result: Buffer = decipher.finalize()!
+    decipher.destroy()
+    return Ok(result)
 }
 
 /// Encrypts data using ChaCha20-Poly1305 (AEAD).
@@ -769,6 +776,7 @@ pub func chacha20_poly1305_encrypt(
 
     let ct: Buffer = cipher.finalize()!
     let tag: AuthTag = cipher.get_auth_tag()!
+    cipher.destroy()
 
     return Ok((ct, tag))
 }
@@ -799,7 +807,9 @@ pub func chacha20_poly1305_decrypt(
     decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
 
-    return decipher.finalize()
+    let result: Buffer = decipher.finalize()!
+    decipher.destroy()
+    return Ok(result)
 }
 
 /// Encrypts data using XChaCha20-Poly1305 (extended nonce AEAD).
@@ -828,6 +838,7 @@ pub func xchacha20_poly1305_encrypt(
 
     let ct: Buffer = cipher.finalize()!
     let tag: AuthTag = cipher.get_auth_tag()!
+    cipher.destroy()
 
     return Ok((ct, tag))
 }
@@ -858,7 +869,9 @@ pub func xchacha20_poly1305_decrypt(
     decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
 
-    return decipher.finalize()
+    let result: Buffer = decipher.finalize()!
+    decipher.destroy()
+    return Ok(result)
 }
 
 /// Encrypts a string and returns base64-encoded result with IV prepended.
@@ -882,6 +895,12 @@ pub func encrypt_string(key: ref Buffer, plaintext: Str) -> Outcome[Str, CryptoE
 
     // Return base64
     let b64: Str = ffi_crypto_bytes_to_base64(result.handle)
+
+    iv.destroy()
+    plaintext_buf.destroy()
+    aad.destroy()
+    ct.destroy()
+    result.destroy()
     return Ok(b64)
 }
 
@@ -914,5 +933,11 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     let plaintext: Buffer = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)!
 
     let result: Str = ffi_crypto_bytes_to_str(plaintext.handle)
+
+    data.destroy()
+    iv.destroy()
+    ciphertext.destroy()
+    aad.destroy()
+    plaintext.destroy()
     return Ok(result)
 }

@@ -8,6 +8,7 @@ func test_shorthand_digit() -> I32 {
     let re: Regex = Regex::new("\\d+")
     assert(re.is_match("abc123"), "\\d+ should match digits in abc123")
     assert(not re.is_match("abc"), "\\d+ should not match abc")
+    re.destroy()
     return 0
 }
 
@@ -16,6 +17,7 @@ func test_shorthand_word() -> I32 {
     let re: Regex = Regex::new("\\w+")
     assert(re.is_match("hello"), "\\w+ should match hello")
     assert(re.is_match("test_123"), "\\w+ should match test_123")
+    re.destroy()
     return 0
 }
 
@@ -24,6 +26,7 @@ func test_shorthand_space() -> I32 {
     let re: Regex = Regex::new("a\\sb")
     assert(re.is_match("a b"), "a\\sb should match 'a b'")
     assert(not re.is_match("ab"), "a\\sb should not match 'ab'")
+    re.destroy()
     return 0
 }
 
@@ -32,6 +35,7 @@ func test_negated_shorthand() -> I32 {
     let re: Regex = Regex::new("\\D+")
     assert(re.is_match("abc"), "\\D+ should match abc")
     assert(not re.is_match("123"), "\\D+ should not match 123")
+    re.destroy()
     return 0
 }
 
@@ -40,6 +44,7 @@ func test_anchor_start() -> I32 {
     let re: Regex = Regex::new("^hello")
     assert(re.is_match("hello world"), "^hello should match start")
     assert(not re.is_match("say hello"), "^hello should not match mid")
+    re.destroy()
     return 0
 }
 
@@ -48,6 +53,7 @@ func test_anchor_end() -> I32 {
     let re: Regex = Regex::new("world$")
     assert(re.is_match("hello world"), "world$ should match end")
     assert(not re.is_match("world hello"), "world$ should not match mid")
+    re.destroy()
     return 0
 }
 
@@ -60,6 +66,7 @@ func test_find_position() -> I32 {
     assert_eq(m.end(), 6, "end should be 6")
     let g: Str = m.group("abc123def")
     assert_eq(g, "123", "group should be '123'")
+    re.destroy()
     return 0
 }
 
@@ -68,6 +75,7 @@ func test_find_no_match() -> I32 {
     let re: Regex = Regex::new("\\d+")
     let m: Match = re.find("abcdef")
     assert(not m.matched(), "should not find digits")
+    re.destroy()
     return 0
 }
 
@@ -76,6 +84,7 @@ func test_replace_first() -> I32 {
     let re: Regex = Regex::new("\\d+")
     let r: Str = re.replace("abc123def456", "NUM")
     assert_eq(r, "abcNUMdef456", "replace first match")
+    re.destroy()
     return 0
 }
 
@@ -84,6 +93,7 @@ func test_replace_all() -> I32 {
     let re: Regex = Regex::new("\\d+")
     let r: Str = re.replace_all("abc123def456", "N")
     assert_eq(r, "abcNdefN", "replace all matches")
+    re.destroy()
     return 0
 }
 
@@ -99,6 +109,8 @@ func test_find_all() -> I32 {
     assert_eq(results.get(3), 5, "second match end")
     assert_eq(results.get(4), 6, "third match start")
     assert_eq(results.get(5), 9, "third match end")
+    results.destroy()
+    re.destroy()
     return 0
 }
 
@@ -114,5 +126,7 @@ func test_split() -> I32 {
     assert_eq(parts.get(3), 3, "second segment end")
     assert_eq(parts.get(4), 4, "third segment start")
     assert_eq(parts.get(5), 5, "third segment end")
+    parts.destroy()
+    re.destroy()
     return 0
 }

@@ -14,9 +14,11 @@ func test_parse_long_flag() -> I32 {
     when result {
         Ok(m) => {
             assert(m.has("verbose"), "verbose flag should be set")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -32,9 +34,11 @@ func test_parse_short_flag() -> I32 {
     when result {
         Ok(m) => {
             assert(m.has("verbose"), "verbose flag should be set via -v")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -51,9 +55,11 @@ func test_parse_long_value() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("output", ""), "file.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -69,8 +75,10 @@ func test_parse_long_equals() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("output", ""), "file.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }

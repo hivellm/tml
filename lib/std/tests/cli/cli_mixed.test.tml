@@ -18,9 +18,11 @@ func test_mixed_flags_and_values() -> I32 {
         Ok(m) => {
             assert(m.has("verbose"), "verbose should be set")
             assert_eq(m.get_str("output", ""), "out.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -40,9 +42,11 @@ func test_mixed_with_positionals() -> I32 {
             assert(m.has("verbose"), "verbose should be set")
             assert_eq(m.positional_count(), 1)
             assert_eq(m.get_positional(0, ""), "input.txt")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -61,9 +65,11 @@ func test_equals_syntax_with_flag() -> I32 {
         Ok(m) => {
             assert(m.has("verbose"), "verbose should be set")
             assert_eq(m.get_str("format", ""), "csv")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -80,8 +86,10 @@ func test_short_value_arg() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("output", ""), "result.json")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }

@@ -7,6 +7,7 @@ func test_literal_match() -> I32 {
     let re: Regex = Regex::new("hello")
     assert(re.is_match("hello world"), "should match 'hello' in 'hello world'")
     assert(not re.is_match("goodbye"), "should not match 'goodbye'")
+    re.destroy()
     return 0
 }
 
@@ -16,6 +17,7 @@ func test_dot_any() -> I32 {
     assert(re.is_match("hello"), "h.llo should match hello")
     assert(re.is_match("hallo"), "h.llo should match hallo")
     assert(not re.is_match("hllo"), "h.llo should not match hllo")
+    re.destroy()
     return 0
 }
 
@@ -26,6 +28,7 @@ func test_star_quantifier() -> I32 {
     assert(re.is_match("abc"), "ab*c should match abc")
     assert(re.is_match("abbc"), "ab*c should match abbc")
     assert(re.is_match("abbbc"), "ab*c should match abbbc")
+    re.destroy()
     return 0
 }
 
@@ -35,6 +38,7 @@ func test_plus_quantifier() -> I32 {
     assert(not re.is_match("ac"), "ab+c should not match ac")
     assert(re.is_match("abc"), "ab+c should match abc")
     assert(re.is_match("abbc"), "ab+c should match abbc")
+    re.destroy()
     return 0
 }
 
@@ -44,6 +48,7 @@ func test_question_quantifier() -> I32 {
     assert(re.is_match("ac"), "ab?c should match ac")
     assert(re.is_match("abc"), "ab?c should match abc")
     assert(not re.is_match("abbc"), "ab?c should not match abbc")
+    re.destroy()
     return 0
 }
 
@@ -53,6 +58,7 @@ func test_alternation() -> I32 {
     assert(re.is_match("cat"), "cat|dog should match cat")
     assert(re.is_match("dog"), "cat|dog should match dog")
     assert(not re.is_match("fish"), "cat|dog should not match fish")
+    re.destroy()
     return 0
 }
 
@@ -62,6 +68,7 @@ func test_grouping() -> I32 {
     assert(re.is_match("ab"), "(ab)+ should match ab")
     assert(re.is_match("abab"), "(ab)+ should match abab")
     assert(not re.is_match("ba"), "(ab)+ should not match ba at start")
+    re.destroy()
     return 0
 }
 
@@ -72,6 +79,7 @@ func test_char_class() -> I32 {
     assert(re.is_match("bx"), "[abc]x should match bx")
     assert(re.is_match("cx"), "[abc]x should match cx")
     assert(not re.is_match("dx"), "[abc]x should not match dx")
+    re.destroy()
     return 0
 }
 
@@ -80,6 +88,7 @@ func test_char_class_range() -> I32 {
     let re: Regex = Regex::new("[a-z]+")
     assert(re.is_match("hello"), "[a-z]+ should match hello")
     assert(not re.is_match("12345"), "[a-z]+ should not match digits only")
+    re.destroy()
     return 0
 }
 
@@ -88,5 +97,6 @@ func test_negated_char_class() -> I32 {
     let re: Regex = Regex::new("[^0-9]+")
     assert(re.is_match("hello"), "[^0-9]+ should match hello")
     assert(not re.is_match("12345"), "[^0-9]+ should not match digits only")
+    re.destroy()
     return 0
 }

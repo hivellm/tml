@@ -133,9 +133,12 @@ func test_cipher_from_name_invalid() -> I32 {
 func test_cipher_algorithm_getter() -> I32 {
     let key: Buffer = random_bytes(32 as I64)
     let iv: Buffer = random_bytes(16 as I64)
-    let cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
     let alg: CipherAlgorithm = cipher.algorithm()
     assert_eq(alg.name(), "aes-256-cbc", "cipher algorithm should be AES-256-CBC")
+    cipher.destroy()
+    key.destroy()
+    iv.destroy()
     return 0
 }
 
@@ -145,9 +148,12 @@ func test_cipher_algorithm_getter() -> I32 {
 func test_decipher_algorithm_getter() -> I32 {
     let key: Buffer = random_bytes(32 as I64)
     let iv: Buffer = random_bytes(12 as I64)
-    let decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
     let alg: CipherAlgorithm = decipher.algorithm()
     assert_eq(alg.name(), "aes-256-gcm", "decipher algorithm should be AES-256-GCM")
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
     return 0
 }
 
@@ -400,6 +406,8 @@ func test_aes_128_gcm_roundtrip() -> I32 {
     decipher.destroy()
     key.destroy()
     nonce.destroy()
+    aad.destroy()
+    plaintext.destroy()
     return 0
 }
 
@@ -427,6 +435,8 @@ func test_aes_192_gcm_roundtrip() -> I32 {
     decipher.destroy()
     key.destroy()
     nonce.destroy()
+    aad.destroy()
+    plaintext.destroy()
     return 0
 }
 
@@ -516,6 +526,8 @@ func test_aes_256_gcm_with_aad() -> I32 {
     decipher.destroy()
     key.destroy()
     nonce.destroy()
+    aad.destroy()
+    plaintext.destroy()
     return 0
 }
 

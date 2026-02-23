@@ -12,6 +12,7 @@ func test_query_pairs_simple() -> I32 {
             assert_eq(pairs.get(0).value, "1")
             assert_eq(pairs.get(1).key, "b")
             assert_eq(pairs.get(1).value, "2")
+            pairs.destroy()
         }
         Err(e) => assert(false, "parse should succeed")
     }
@@ -25,6 +26,7 @@ func test_query_pairs_empty() -> I32 {
         Ok(url) => {
             let pairs = url.query_pairs()
             assert_eq(pairs.len(), 0 as I64)
+            pairs.destroy()
         }
         Err(e) => assert(false, "parse should succeed")
     }
@@ -40,6 +42,7 @@ func test_query_pairs_single() -> I32 {
             assert_eq(pairs.len(), 1 as I64)
             assert_eq(pairs.get(0).key, "key")
             assert_eq(pairs.get(0).value, "value")
+            pairs.destroy()
         }
         Err(e) => assert(false, "parse should succeed")
     }
@@ -55,6 +58,7 @@ func test_query_pairs_no_value() -> I32 {
             assert_eq(pairs.len(), 1 as I64)
             assert_eq(pairs.get(0).key, "flag")
             assert_eq(pairs.get(0).value, "")
+            pairs.destroy()
         }
         Err(e) => assert(false, "parse should succeed")
     }

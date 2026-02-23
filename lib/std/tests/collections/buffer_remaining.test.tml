@@ -11,6 +11,7 @@ func test_buffer_remaining_full() -> I32 {
     buf.reset_read()
     let rem = buf.remaining()
     assert_eq(rem, 3 as I64, "remaining should be 3 after writing 3 bytes")
+    buf.destroy()
     0
 }
 
@@ -24,6 +25,7 @@ func test_buffer_remaining_after_read() -> I32 {
     let _ = buf.read_byte()
     let rem = buf.remaining()
     assert_eq(rem, 2 as I64, "remaining should be 2 after reading 1 byte")
+    buf.destroy()
     0
 }
 
@@ -33,6 +35,7 @@ func test_buffer_remaining_empty() -> I32 {
     buf.reset_read()
     let rem = buf.remaining()
     assert_eq(rem, 0 as I64, "remaining should be 0 for empty buffer")
+    buf.destroy()
     0
 }
 
@@ -43,6 +46,7 @@ func test_buffer_includes_found() -> I32 {
     buf.write_byte(20)
     buf.write_byte(30)
     assert(buf.includes(20, 0 as I64), "buffer should include 20")
+    buf.destroy()
     0
 }
 
@@ -52,6 +56,7 @@ func test_buffer_includes_not_found() -> I32 {
     buf.write_byte(10)
     buf.write_byte(20)
     assert(not buf.includes(99, 0 as I64), "buffer should not include 99")
+    buf.destroy()
     0
 }
 
@@ -63,5 +68,6 @@ func test_buffer_includes_with_start() -> I32 {
     buf.write_byte(30)
     assert(not buf.includes(10, 1 as I64), "10 should not be found after index 1")
     assert(buf.includes(20, 1 as I64), "20 should be found at index 1")
+    buf.destroy()
     0
 }

@@ -14,9 +14,11 @@ func test_default_value_applied() -> I32 {
         Ok(m) => {
             assert(m.has("format"), "default should be applied")
             assert_eq(m.get_str("format", ""), "json")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -33,9 +35,11 @@ func test_default_overridden() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("format", ""), "yaml")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -49,9 +53,11 @@ func test_get_str_fallback() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("nonexistent", "fallback"), "fallback")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }
 
@@ -67,8 +73,10 @@ func test_required_with_default_not_needed() -> I32 {
     when result {
         Ok(m) => {
             assert_eq(m.get_str("mode", ""), "auto")
+            m.destroy()
         }
         Err(e) => assert(false, e)
     }
+    argv.destroy()
     0
 }

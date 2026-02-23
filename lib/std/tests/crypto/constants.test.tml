@@ -90,6 +90,7 @@ func test_bytes_to_hex_roundtrip() -> I32 {
     let buf: Buffer = Buffer::from_string("hello")
     let hex: Str = constants::bytes_to_hex(ref buf)
     assert_eq(hex, "68656c6c6f", "hello hex encoding")
+    buf.destroy()
     return 0
 }
 
@@ -97,6 +98,8 @@ func test_bytes_to_hex_roundtrip() -> I32 {
 func test_hex_to_bytes_valid() -> I32 {
     let result = constants::hex_to_bytes("68656c6c6f")
     assert(result.is_just(), "valid hex should decode")
+    let decoded: Buffer = result.unwrap()
+    decoded.destroy()
     return 0
 }
 
@@ -112,6 +115,7 @@ func test_bytes_to_base64() -> I32 {
     let buf: Buffer = Buffer::from_string("hello")
     let b64: Str = constants::bytes_to_base64(ref buf)
     assert_eq(b64, "aGVsbG8=", "hello base64 encoding")
+    buf.destroy()
     return 0
 }
 
@@ -119,6 +123,8 @@ func test_bytes_to_base64() -> I32 {
 func test_base64_to_bytes_valid() -> I32 {
     let result = constants::base64_to_bytes("aGVsbG8=")
     assert(result.is_just(), "valid base64 should decode")
+    let decoded: Buffer = result.unwrap()
+    decoded.destroy()
     return 0
 }
 
@@ -127,6 +133,7 @@ func test_bytes_to_base64url() -> I32 {
     let buf: Buffer = Buffer::from_string("hello")
     let b64url: Str = constants::bytes_to_base64url(ref buf)
     assert_eq(b64url, "aGVsbG8", "hello base64url encoding")
+    buf.destroy()
     return 0
 }
 
@@ -134,6 +141,8 @@ func test_bytes_to_base64url() -> I32 {
 func test_base64url_to_bytes_valid() -> I32 {
     let result = constants::base64url_to_bytes("aGVsbG8")
     assert(result.is_just(), "valid base64url should decode")
+    let decoded: Buffer = result.unwrap()
+    decoded.destroy()
     return 0
 }
 
@@ -178,6 +187,7 @@ func test_hex_roundtrip_decoded_length() -> I32 {
     assert(result.is_just(), "valid hex decodes")
     let decoded: Buffer = result.unwrap()
     assert_eq(decoded.len(), 5 as I64, "decoded length is 5 bytes")
+    decoded.destroy()
     return 0
 }
 

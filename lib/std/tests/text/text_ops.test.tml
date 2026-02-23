@@ -7,6 +7,7 @@ func test_text_push_str() -> I32 {
     let t = Text::from("hello")
     t.push_str(" world")
     assert_eq(t.as_str(), "hello world", "push_str should append")
+    t.drop()
     return 0
 }
 
@@ -16,6 +17,7 @@ func test_text_clear() -> I32 {
     t.clear()
     assert(t.is_empty(), "after clear, should be empty")
     assert_eq(t.len(), 0, "after clear, len should be 0")
+    t.drop()
     return 0
 }
 
@@ -24,6 +26,7 @@ func test_text_with_capacity() -> I32 {
     let t = Text::with_capacity(100)
     assert(t.capacity() >= 100, "capacity should be at least 100")
     assert(t.is_empty(), "with_capacity should start empty")
+    t.drop()
     return 0
 }
 
@@ -32,6 +35,7 @@ func test_text_push_i64() -> I32 {
     let t = Text::from("val=")
     t.push_i64(42)
     assert_eq(t.as_str(), "val=42", "push_i64 should append number")
+    t.drop()
     return 0
 }
 
@@ -41,6 +45,7 @@ func test_text_byte_at() -> I32 {
     assert_eq(t.byte_at(0), 65, "byte_at(0) should be 65 (A)")
     assert_eq(t.byte_at(1), 66, "byte_at(1) should be 66 (B)")
     assert_eq(t.byte_at(3), -1, "byte_at out of bounds should be -1")
+    t.drop()
     return 0
 }
 
@@ -51,5 +56,7 @@ func test_text_clone() -> I32 {
     assert_eq(c.as_str(), "original", "clone should have same content")
     t.push_str("!")
     assert_eq(c.as_str(), "original", "clone should be independent")
+    c.drop()
+    t.drop()
     return 0
 }

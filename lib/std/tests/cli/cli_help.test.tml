@@ -13,12 +13,16 @@ func test_help_flag_returns_err() -> I32 {
 
     let result = app.parse_from(ref argv)
     when result {
-        Ok(m) => assert(false, "help should return Err with help text")
+        Ok(m) => {
+            assert(false, "help should return Err with help text")
+            m.destroy()
+        }
         Err(e) => {
             assert(str::contains(e, "Usage: myapp"), "should contain usage line")
             assert(str::contains(e, "--verbose"), "should list verbose flag")
         }
     }
+    argv.destroy()
     0
 }
 
@@ -31,9 +35,13 @@ func test_help_short_flag() -> I32 {
 
     let result = app.parse_from(ref argv)
     when result {
-        Ok(m) => assert(false, "help should return Err")
+        Ok(m) => {
+            assert(false, "help should return Err")
+            m.destroy()
+        }
         Err(e) => assert(str::contains(e, "Usage: myapp"), "should contain usage")
     }
+    argv.destroy()
     0
 }
 
@@ -46,9 +54,13 @@ func test_version_flag() -> I32 {
 
     let result = app.parse_from(ref argv)
     when result {
-        Ok(m) => assert(false, "version should return Err")
+        Ok(m) => {
+            assert(false, "version should return Err")
+            m.destroy()
+        }
         Err(e) => assert_eq(e, "myapp 1.2.3")
     }
+    argv.destroy()
     0
 }
 

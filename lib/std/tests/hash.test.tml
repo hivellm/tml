@@ -414,54 +414,60 @@ func test_etag_strong_deterministic() -> I32 {
 
 @test
 func test_fnv1a32_bytes_basic() -> I32 {
-    let buf: Buffer = Buffer::from_string("hello")
+    var buf: Buffer = Buffer::from_string("hello")
     let hash: Hash32 = fnv1a32_bytes(buf)
     let hex: Str = hash.to_hex()
     assert(hex.len() > 0, "fnv1a32_bytes should produce hex output")
+    buf.destroy()
     return 0
 }
 
 @test
 func test_fnv1a64_bytes_basic() -> I32 {
-    let buf: Buffer = Buffer::from_string("hello")
+    var buf: Buffer = Buffer::from_string("hello")
     let hash: Hash64 = fnv1a64_bytes(buf)
     let hex: Str = hash.to_hex()
     assert(hex.len() > 0, "fnv1a64_bytes should produce hex output")
+    buf.destroy()
     return 0
 }
 
 @test
 func test_murmur2_32_bytes_basic() -> I32 {
-    let buf: Buffer = Buffer::from_string("hello")
+    var buf: Buffer = Buffer::from_string("hello")
     let hash: Hash32 = murmur2_32_bytes(buf, 0 as U32)
     let hex: Str = hash.to_hex()
     assert(hex.len() > 0, "murmur2_32_bytes should produce hex output")
+    buf.destroy()
     return 0
 }
 
 @test
 func test_murmur2_64_bytes_basic() -> I32 {
-    let buf: Buffer = Buffer::from_string("hello")
+    var buf: Buffer = Buffer::from_string("hello")
     let hash: Hash64 = murmur2_64_bytes(buf, 0 as U64)
     let hex: Str = hash.to_hex()
     assert(hex.len() > 0, "murmur2_64_bytes should produce hex output")
+    buf.destroy()
     return 0
 }
 
 @test
 func test_etag_strong_bytes_format() -> I32 {
-    let buf: Buffer = Buffer::from_string("content")
+    var buf: Buffer = Buffer::from_string("content")
     let etag: Str = etag_strong_bytes(buf)
     assert(etag.starts_with("\""), "strong etag should start with quote")
     assert(etag.ends_with("\""), "strong etag should end with quote")
+    buf.destroy()
     return 0
 }
 
 @test
 func test_etag_weak_bytes_format() -> I32 {
-    let buf: Buffer = Buffer::from_string("content")
+    var buf: Buffer = Buffer::from_string("content")
     let etag: Str = etag_weak_bytes(buf)
     assert(etag.starts_with("W/\""), "weak etag should start with W/\"")
     assert(etag.ends_with("\""), "weak etag should end with quote")
+    buf.destroy()
     return 0
 }

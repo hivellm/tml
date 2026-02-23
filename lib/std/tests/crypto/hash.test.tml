@@ -186,9 +186,10 @@ func test_hash_algorithm_block_size() -> I32 {
 
 @test
 func test_digest_bytes() -> I32 {
-    let d: Digest = sha256("test")
+    let mut d: Digest = sha256("test")
     let b: ref Buffer = d.bytes()
     assert(b.len() > (0 as I64), "digest bytes should have length > 0")
+    d.destroy()
     return 0
 }
 
@@ -206,6 +207,8 @@ func test_hash_copy() -> I32 {
     let hex1: Str = d1.to_hex()
     let hex2: Str = d2.to_hex()
     assert(hex1 != hex2, "copied hashes with different data should differ")
+    d1.destroy()
+    d2.destroy()
     h1.destroy()
     h2.destroy()
     return 0
@@ -223,6 +226,7 @@ func test_hash_update_bytes() -> I32 {
     let d: Digest = h.digest()
     let hex: Str = d.to_hex()
     assert(hex.len() > 0, "update_bytes should produce a valid hash")
+    d.destroy()
     h.destroy()
     buf.destroy()
     return 0
@@ -235,8 +239,9 @@ func test_md5_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
     buf.write_u8(0x42, 1)
-    let d: Digest = md5_bytes(ref buf)
+    let mut d: Digest = md5_bytes(ref buf)
     assert(d.to_hex().len() > 0, "md5_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -245,8 +250,9 @@ func test_md5_bytes() -> I32 {
 func test_sha1_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
-    let d: Digest = sha1_bytes(ref buf)
+    let mut d: Digest = sha1_bytes(ref buf)
     assert(d.to_hex().len() > 0, "sha1_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -255,8 +261,9 @@ func test_sha1_bytes() -> I32 {
 func test_sha256_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
-    let d: Digest = sha256_bytes(ref buf)
+    let mut d: Digest = sha256_bytes(ref buf)
     assert(d.to_hex().len() > 0, "sha256_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -265,8 +272,9 @@ func test_sha256_bytes() -> I32 {
 func test_sha384_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
-    let d: Digest = sha384_bytes(ref buf)
+    let mut d: Digest = sha384_bytes(ref buf)
     assert(d.to_hex().len() > 0, "sha384_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -275,8 +283,9 @@ func test_sha384_bytes() -> I32 {
 func test_sha512_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
-    let d: Digest = sha512_bytes(ref buf)
+    let mut d: Digest = sha512_bytes(ref buf)
     assert(d.to_hex().len() > 0, "sha512_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -285,8 +294,9 @@ func test_sha512_bytes() -> I32 {
 func test_sha512_256_bytes() -> I32 {
     let buf: Buffer = Buffer.new(3)
     buf.write_u8(0x41, 0)
-    let d: Digest = sha512_256_bytes(ref buf)
+    let mut d: Digest = sha512_256_bytes(ref buf)
     assert(d.to_hex().len() > 0, "sha512_256_bytes hex")
+    d.destroy()
     buf.destroy()
     return 0
 }
@@ -295,17 +305,21 @@ func test_sha512_256_bytes() -> I32 {
 
 @test
 func test_hash_determinism() -> I32 {
-    let d1: Digest = sha256("same input")
-    let d2: Digest = sha256("same input")
+    let mut d1: Digest = sha256("same input")
+    let mut d2: Digest = sha256("same input")
     assert_eq(d1.to_hex(), d2.to_hex(), "sha256 is deterministic")
+    d1.destroy()
+    d2.destroy()
     return 0
 }
 
 @test
 func test_hash_different_inputs() -> I32 {
-    let d1: Digest = sha256("input1")
-    let d2: Digest = sha256("input2")
+    let mut d1: Digest = sha256("input1")
+    let mut d2: Digest = sha256("input2")
     assert(d1.to_hex() != d2.to_hex(), "different inputs produce different hashes")
+    d1.destroy()
+    d2.destroy()
     return 0
 }
 
@@ -412,17 +426,22 @@ func test_md5_abc() -> I32 {
 
 @test
 func test_digest_lengths() -> I32 {
-    let d_md5: Digest = md5("x")
-    let d_sha1: Digest = sha1("x")
-    let d_sha256: Digest = sha256("x")
-    let d_sha384: Digest = sha384("x")
-    let d_sha512: Digest = sha512("x")
+    let mut d_md5: Digest = md5("x")
+    let mut d_sha1: Digest = sha1("x")
+    let mut d_sha256: Digest = sha256("x")
+    let mut d_sha384: Digest = sha384("x")
+    let mut d_sha512: Digest = sha512("x")
 
     assert_eq(d_md5.bytes().len(), 16 as I64, "MD5 = 16 bytes")
     assert_eq(d_sha1.bytes().len(), 20 as I64, "SHA1 = 20 bytes")
     assert_eq(d_sha256.bytes().len(), 32 as I64, "SHA256 = 32 bytes")
     assert_eq(d_sha384.bytes().len(), 48 as I64, "SHA384 = 48 bytes")
     assert_eq(d_sha512.bytes().len(), 64 as I64, "SHA512 = 64 bytes")
+    d_md5.destroy()
+    d_sha1.destroy()
+    d_sha256.destroy()
+    d_sha384.destroy()
+    d_sha512.destroy()
     return 0
 }
 

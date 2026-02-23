@@ -462,7 +462,7 @@ impl SoaVec {
             }
             i = i + 1
         }
-        this.columns.clear()
+        this.columns.destroy()
         this.row_count = 0
         this.capacity = 0
     }

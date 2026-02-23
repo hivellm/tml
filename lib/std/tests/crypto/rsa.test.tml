@@ -82,9 +82,10 @@ func test_rsa_keygen_2048() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
     let result = generate_rsa_key_pair(ref opts)
     assert(result.is_ok(), "RSA 2048 keygen should succeed")
-    let kp: KeyPair = result.unwrap()
+    let mut kp: KeyPair = result.unwrap()
     let bits: I64 = kp.public_key.size_bits()
     assert_eq(bits, 2048 as I64, "RSA pub key should be 2048 bits")
+    kp.destroy()
     return 0
 }
 
@@ -93,7 +94,7 @@ func test_rsa_keygen_2048() -> I32 {
 @test
 func test_rsa_encrypt_decrypt_pkcs1() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("hello RSA")
     let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::Pkcs1)
     assert(enc_result.is_ok(), "RSA PKCS1 encrypt should succeed")
@@ -103,13 +104,17 @@ func test_rsa_encrypt_decrypt_pkcs1() -> I32 {
     assert(dec_result.is_ok(), "RSA PKCS1 decrypt should succeed")
     let decrypted: Buffer = dec_result.unwrap()
     assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    decrypted.destroy()
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
 @test
 func test_rsa_encrypt_decrypt_oaep_sha256() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("OAEP test")
     let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha256)
     assert(enc_result.is_ok(), "RSA OAEP encrypt should succeed")
@@ -118,6 +123,10 @@ func test_rsa_encrypt_decrypt_oaep_sha256() -> I32 {
     assert(dec_result.is_ok(), "RSA OAEP decrypt should succeed")
     let decrypted: Buffer = dec_result.unwrap()
     assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    decrypted.destroy()
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -126,7 +135,7 @@ func test_rsa_encrypt_decrypt_oaep_sha256() -> I32 {
 @test
 func test_rsa_encrypt_decrypt_oaep_custom() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("OAEP custom")
     let oaep_opts: OaepOptions = OaepOptions::sha384()
     let enc_result = public_encrypt_oaep(ref kp.public_key, ref data, ref oaep_opts)
@@ -134,6 +143,9 @@ func test_rsa_encrypt_decrypt_oaep_custom() -> I32 {
     let encrypted: Buffer = enc_result.unwrap()
     let dec_result = private_decrypt_oaep(ref kp.private_key, ref encrypted, ref oaep_opts)
     assert(dec_result.is_ok(), "RSA OAEP custom decrypt should succeed")
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -142,12 +154,14 @@ func test_rsa_encrypt_decrypt_oaep_custom() -> I32 {
 @test
 func test_rsa_encrypt_decrypt_str() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let enc_result = public_encrypt_str(ref kp.public_key, "hello RSA str", RsaPadding::Pkcs1)
     assert(enc_result.is_ok(), "RSA str encrypt should succeed")
     let encrypted: Buffer = enc_result.unwrap()
     let dec_result = private_decrypt_str(ref kp.private_key, ref encrypted, RsaPadding::Pkcs1)
     assert(dec_result.is_ok(), "RSA str decrypt should succeed")
+    encrypted.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -156,13 +170,16 @@ func test_rsa_encrypt_decrypt_str() -> I32 {
 @test
 func test_rsa_private_encrypt_public_decrypt() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("sign-like data")
     let enc_result = private_encrypt(ref kp.private_key, ref data, RsaPadding::Pkcs1)
     assert(enc_result.is_ok(), "private_encrypt should succeed")
     let encrypted: Buffer = enc_result.unwrap()
     let dec_result = public_decrypt(ref kp.public_key, ref encrypted, RsaPadding::Pkcs1)
     assert(dec_result.is_ok(), "public_decrypt should succeed")
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -171,7 +188,7 @@ func test_rsa_private_encrypt_public_decrypt() -> I32 {
 @test
 func test_rsa_encrypt_decrypt_oaep_sha1() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("OAEP SHA1")
     let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha1)
     assert(enc_result.is_ok(), "RSA OAEP SHA1 encrypt should succeed")
@@ -180,6 +197,10 @@ func test_rsa_encrypt_decrypt_oaep_sha1() -> I32 {
     assert(dec_result.is_ok(), "RSA OAEP SHA1 decrypt should succeed")
     let decrypted: Buffer = dec_result.unwrap()
     assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    decrypted.destroy()
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -188,7 +209,7 @@ func test_rsa_encrypt_decrypt_oaep_sha1() -> I32 {
 @test
 func test_rsa_encrypt_decrypt_oaep_sha512() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("SHA512")
     let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha512)
     assert(enc_result.is_ok(), "RSA OAEP SHA512 encrypt should succeed")
@@ -197,6 +218,10 @@ func test_rsa_encrypt_decrypt_oaep_sha512() -> I32 {
     assert(dec_result.is_ok(), "RSA OAEP SHA512 decrypt should succeed")
     let decrypted: Buffer = dec_result.unwrap()
     assert_eq(decrypted.len(), 6 as I64, "decrypted length should be 6")
+    decrypted.destroy()
+    encrypted.destroy()
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -228,10 +253,12 @@ func test_oaep_options_sha256() -> I32 {
 @test
 func test_rsa_hybrid_encrypt_ok() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let data: Buffer = Buffer::from_string("hello hybrid")
     let enc_result = hybrid_encrypt(ref kp.public_key, ref data)
     assert(enc_result.is_ok(), "hybrid_encrypt should succeed")
+    data.destroy()
+    kp.destroy()
     return 0
 }
 
@@ -240,10 +267,13 @@ func test_rsa_hybrid_encrypt_ok() -> I32 {
 @test
 func test_rsa_hybrid_decrypt_too_short() -> I32 {
     let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
-    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let fake_key: Buffer = Buffer::from_string("not-a-real-encrypted-key")
     let short_data: Buffer = Buffer::from_string("short")
     let result = hybrid_decrypt(ref kp.private_key, ref fake_key, ref short_data)
     assert(result.is_err(), "hybrid_decrypt should fail with short data")
+    fake_key.destroy()
+    short_data.destroy()
+    kp.destroy()
     return 0
 }

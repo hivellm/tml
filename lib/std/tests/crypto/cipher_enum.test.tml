@@ -133,6 +133,7 @@ func test_cbc_set_aad_fails() -> I32 {
     assert(result.is_err(), "CBC should reject AAD")
 
     cipher.destroy()
+    aad.destroy()
     key.destroy()
     iv.destroy()
     return 0

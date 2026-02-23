@@ -112,6 +112,7 @@ func test_random_fill() -> I32 {
     assert(buf.len() == (16 as I64), "buffer should be 16 bytes")
     random_fill(buf)
     assert(buf.len() == (16 as I64), "buffer should remain 16 bytes after fill")
+    buf.destroy()
     return 0
 }
 
@@ -123,6 +124,7 @@ func test_random_fill_range() -> I32 {
     let result = random_fill_range(buf, 8 as I64, 16 as I64)
     assert(result.is_ok(), "fill_range should succeed")
     assert(buf.len() == (32 as I64), "buffer size unchanged")
+    buf.destroy()
     return 0
 }
 
@@ -131,6 +133,7 @@ func test_random_fill_range_invalid() -> I32 {
     let mut buf: Buffer = random_bytes(16 as I64)
     let result = random_fill_range(buf, -1 as I64, 8 as I64)
     assert(result.is_err(), "negative offset should fail")
+    buf.destroy()
     return 0
 }
 
@@ -168,6 +171,8 @@ func test_timing_safe_equal_buf_same() -> I32 {
     let a: Buffer = Buffer::from_string("hello")
     let b: Buffer = Buffer::from_string("hello")
     assert(timing_safe_equal(ref a, ref b), "same buffers equal")
+    a.destroy()
+    b.destroy()
     return 0
 }
 
@@ -176,6 +181,8 @@ func test_timing_safe_equal_buf_diff() -> I32 {
     let a: Buffer = Buffer::from_string("hello")
     let b: Buffer = Buffer::from_string("world")
     assert(not timing_safe_equal(ref a, ref b), "different buffers not equal")
+    a.destroy()
+    b.destroy()
     return 0
 }
 
@@ -188,6 +195,7 @@ func test_generate_prime() -> I32 {
     let prime: Buffer = result.unwrap()
     assert(prime.len() > (0 as I64), "prime not empty")
     assert(check_prime(ref prime), "generated prime should pass primality test")
+    prime.destroy()
     return 0
 }
 
@@ -195,6 +203,7 @@ func test_generate_prime() -> I32 {
 func test_check_prime_rounds() -> I32 {
     let prime: Buffer = generate_prime(128 as I64).unwrap()
     assert(check_prime_rounds(ref prime, 20 as I64), "prime should pass with 20 rounds")
+    prime.destroy()
     return 0
 }
 
@@ -205,6 +214,7 @@ func test_generate_safe_prime() -> I32 {
     let prime: Buffer = result.unwrap()
     assert(prime.len() > (0 as I64), "safe prime not empty")
     assert(check_prime(ref prime), "safe prime should pass primality test")
+    prime.destroy()
     return 0
 }
 
@@ -215,6 +225,7 @@ func test_get_random_values() -> I32 {
     let mut buf: Buffer = random_bytes(32 as I64)
     get_random_values(buf)
     assert(buf.len() == (32 as I64), "buffer size should remain 32")
+    buf.destroy()
     return 0
 }
 

@@ -14,6 +14,8 @@ func test_captures_basic() -> I32 {
     assert_eq(g1, "123", "group 1 should be first digits")
     let g2: Str = cap.get(2, "foo 123-456 bar")
     assert_eq(g2, "456", "group 2 should be second digits")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -26,6 +28,8 @@ func test_captures_no_match() -> I32 {
     assert_eq(cap.end(0), -1, "unmatched group end should be -1")
     let g: Str = cap.get(0, "hello world")
     assert_eq(g, "", "unmatched get should return empty")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -38,6 +42,8 @@ func test_captures_single_group() -> I32 {
     assert_eq(g0, "hello world", "group 0 full match")
     let g1: Str = cap.get(1, "say hello world!")
     assert_eq(g1, "world", "group 1 should be word after hello")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -48,6 +54,8 @@ func test_captures_alternation() -> I32 {
     assert(cap.matched(), "should match")
     let g1: Str = cap.get(1, "my dog")
     assert_eq(g1, "dog", "group 1 = dog")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -60,6 +68,8 @@ func test_captures_positions() -> I32 {
     assert_eq(cap.end(0), 6, "full match ends at 6")
     assert_eq(cap.start(1), 4, "group 1 starts at 4")
     assert_eq(cap.end(1), 6, "group 1 ends at 6")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -71,6 +81,8 @@ func test_captures_no_groups() -> I32 {
     assert_eq(cap.num_groups(), 1, "only group 0 for no-group regex")
     let g0: Str = cap.get(0, "abc 42 def")
     assert_eq(g0, "42", "group 0 full match")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -84,6 +96,8 @@ func test_captures_out_of_bounds() -> I32 {
     assert_eq(cap.start(99), -1, "large group returns -1")
     let g: Str = cap.get(99, "a")
     assert_eq(g, "", "out of bounds get returns empty")
+    cap.destroy()
+    re.destroy()
     return 0
 }
 
@@ -101,5 +115,7 @@ func test_captures_multiple_groups() -> I32 {
     assert_eq(g2, "host", "group 2 = host")
     let g3: Str = cap.get(3, "email: user@host.com ok")
     assert_eq(g3, "com", "group 3 = com")
+    cap.destroy()
+    re.destroy()
     return 0
 }
