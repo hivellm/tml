@@ -31,9 +31,10 @@ extern void* mem_alloc(int64_t);
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
-#include <wincrypt.h>
 #include <windows.h>
 #include <winsock2.h>
+#undef WIN32_LEAN_AND_MEAN
+#include <wincrypt.h>
 #pragma comment(lib, "crypt32.lib")
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
