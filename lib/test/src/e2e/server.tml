@@ -23,7 +23,7 @@ use std::net::udp::UdpSocket
 
 /// A TCP test server that listens on localhost with an ephemeral port.
 pub type TcpTestServer {
-    listener: TcpListener,
+    pub listener: TcpListener,
     bound_port: U16,
 }
 
@@ -70,7 +70,7 @@ impl TcpTestServer {
         when this.listener.accept() {
             Ok(result) => {
                 let stream: TcpStream = result.0
-                var buf: [U8; 256] = [0 as U8; 256]
+                var buf: [U8; 32] = [0 as U8; 32]
                 when stream.read(mut ref buf) {
                     Ok(n) => {
                         if n > 0 {
@@ -96,7 +96,7 @@ impl TcpTestServer {
 
 /// A UDP test server bound to localhost with an ephemeral port.
 pub type UdpTestServer {
-    socket: UdpSocket,
+    pub socket: UdpSocket,
     bound_port: U16,
 }
 
@@ -132,7 +132,7 @@ impl UdpTestServer {
 
     /// Receive a datagram and echo it back to the sender.
     pub func echo_one(this) -> Outcome[I64, Str] {
-        var buf: [U8; 256] = [0 as U8; 256]
+        var buf: [U8; 32] = [0 as U8; 32]
         when this.socket.recv_from(mut ref buf) {
             Ok(result) => {
                 let n: I64 = result.0

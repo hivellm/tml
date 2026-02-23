@@ -1,0 +1,18 @@
+// Tests for UDP echo using the e2e framework
+use test::{assert, assert_eq}
+use test::e2e::server::UdpTestServer
+use test::e2e::client::UdpTestClient
+use test::e2e::response::TestResult
+
+@test
+func test_udp_echo_basic() -> I32 {
+    let server: UdpTestServer = UdpTestServer::new().unwrap()
+    let c: UdpTestClient = UdpTestClient::new(server.addr())
+    let c2: UdpTestClient = c.send_byte(72)
+    let c3: UdpTestClient = c2.send_byte(73)
+    let c4: UdpTestClient = c3.expect_n(2)
+    let result: TestResult = c4.run(ref server)
+    assert(result.ok(), result.error_msg())
+    assert_eq(result.received_len(), 2 as I64)
+    0
+}

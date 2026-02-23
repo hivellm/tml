@@ -131,7 +131,7 @@ impl TlsTestServer {
     /// Accept a TLS connection, read data, echo it back.
     pub func echo_one(this) -> Outcome[I64, Str] {
         let tls_stream: TlsStream = this.accept_tls()!
-        var buf: [U8; 256] = [0 as U8; 256]
+        var buf: [U8; 32] = [0 as U8; 32]
         when tls_stream.read(mut ref buf) {
             Err(_) => return Err("TLS read failed")
             Ok(n) => {
@@ -161,7 +161,7 @@ impl TlsTestServer {
 pub type TlsTestClient {
     target: SocketAddr,
     timeout_ms: I64,
-    send_buf: [U8; 256],
+    send_buf: [U8; 32],
     send_len: I64,
     expect_len: I64,
     ca_path: Str,
@@ -173,7 +173,7 @@ impl TlsTestClient {
         TlsTestClient {
             target: addr,
             timeout_ms: 5000,
-            send_buf: [0 as U8; 256],
+            send_buf: [0 as U8; 32],
             send_len: 0,
             expect_len: 0,
             ca_path: "",
@@ -206,9 +206,9 @@ impl TlsTestClient {
 
     /// Append a single byte to the send buffer.
     pub func send_byte(this, b: I32) -> TlsTestClient {
-        var buf: [U8; 256] = this.send_buf
+        var buf: [U8; 32] = this.send_buf
         let idx: I64 = this.send_len
-        if idx < 256 {
+        if idx < 32 {
             buf[idx] = b as U8
         }
         TlsTestClient {
@@ -279,7 +279,7 @@ impl TlsTestClient {
 
                                 // 6. Client reads response
                                 if this.expect_len > 0 {
-                                    var recv_buf: [U8; 256] = [0 as U8; 256]
+                                    var recv_buf: [U8; 32] = [0 as U8; 32]
                                     when tls_client.read(mut ref recv_buf) {
                                         Err(_) => return TestResult::fail("TLS read failed")
                                         Ok(n) => {
