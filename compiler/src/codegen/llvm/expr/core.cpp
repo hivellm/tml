@@ -609,9 +609,20 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
 
     std::string result = segment_strs[0];
     for (size_t i = 1; i < segment_strs.size(); ++i) {
+        std::string old_result = result;
         std::string new_result = fresh_reg();
         emit_line("  " + new_result + " = call ptr @str_concat_opt(ptr " + result + ", ptr " +
                   segment_strs[i] + ")");
+        // Free the previous intermediate (old concat result or conversion temp).
+        // Only free heap-allocated temps (registers starting with '%'), not
+        // static string constants (globals starting with '@').
+        if (!old_result.empty() && old_result[0] == '%') {
+            emit_line("  call void @tml_str_free(ptr " + old_result + ")");
+        }
+        // Free segment conversion results (e.g., I32_to_string) after consumption.
+        if (!segment_strs[i].empty() && segment_strs[i][0] == '%') {
+            emit_line("  call void @tml_str_free(ptr " + segment_strs[i] + ")");
+        }
         result = new_result;
     }
 

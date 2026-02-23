@@ -3,6 +3,9 @@
 // Contains the function name, source file path, and line/column numbers
 // when debug information is available.
 
+@extern("tml_str_free")
+func str_free(s: Str)
+
 /// Resolved symbol information for a single stack frame.
 ///
 /// This type contains the demangled function name, source file path,
@@ -136,6 +139,7 @@ impl BacktraceSymbol {
     /// Formats the symbol as a string.
     ///
     /// Format: "function_name at file:line:col"
+    @allocates
     pub func to_string(this) -> Str {
         // Copy Maybe[Str] fields to local variables to avoid codegen bug
         let name_opt: Maybe[Str] = this.name
@@ -159,6 +163,22 @@ impl BacktraceSymbol {
                 }
             },
             Nothing => return name_str
+        }
+    }
+}
+
+impl Drop for BacktraceSymbol {
+    func drop(mut this) {
+        // Free Str fields inside Maybe[Str] to prevent leaks
+        let n: Maybe[Str] = this.name
+        when n {
+            Just(s) => str_free(s),
+            Nothing => {}
+        }
+        let f: Maybe[Str] = this.filename
+        when f {
+            Just(s) => str_free(s),
+            Nothing => {}
         }
     }
 }

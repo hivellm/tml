@@ -55,8 +55,8 @@ func ffi_backtrace_clear_cache()
 @extern("tml_str_from_cstr")
 func tml_str_from_cstr(cstr: *Unit) -> Str
 
-@extern("tml_free")
-func tml_free(ptr: *Unit)
+@extern("mem_free")
+func mem_free(ptr: *Unit)
 
 // ============================================================================
 // Enums
@@ -189,6 +189,7 @@ impl Backtrace {
     }
 
     /// Formats the backtrace as a string.
+    @allocates
     pub func to_string(mut this) -> Str {
         if this.handle == null {
             return "  <no backtrace>\n"
@@ -204,7 +205,7 @@ impl Backtrace {
         }
 
         let result: Str = tml_str_from_cstr(cstr)
-        tml_free(cstr)
+        mem_free(cstr)
         return result
     }
 
@@ -215,6 +216,7 @@ impl Backtrace {
     ///
     /// Note: Both formats currently use the FFI formatter due to cross-module
     /// codegen limitations. Short format may be implemented in the future.
+    @allocates
     pub func format(mut this, fmt: PrintFmt) -> Str {
         if this.handle == null {
             return "  <no backtrace>\n"
@@ -241,6 +243,12 @@ impl Backtrace {
             ffi_backtrace_free(this.handle)
             this.handle = null
         }
+    }
+}
+
+impl Drop for Backtrace {
+    func drop(mut this) {
+        this.free()
     }
 }
 

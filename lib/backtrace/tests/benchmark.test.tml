@@ -16,7 +16,7 @@ func bench_capture_single() -> I32 {
 
     // Should capture at least 1 frame
     assert(count > 0, "Should capture at least one frame")
-    bt.free()
+
     return 0
 }
 
@@ -26,7 +26,7 @@ func bench_capture_100x() -> I32 {
     var i: I32 = 0
     loop (i < 100) {
         var bt: Backtrace = Backtrace::capture()
-        bt.free()
+    
         i = i + 1
     }
     return 0
@@ -45,8 +45,6 @@ func bench_capture_with_skip() -> I32 {
     assert(c0 > 0, "bt0 should have frames")
     // c2 may be equal if skip removes internal frames only
     assert(c2 >= 0, "bt2 should have non-negative frames")
-    bt0.free()
-    bt2.free()
     return 0
 }
 
@@ -64,7 +62,7 @@ func bench_resolve_single() -> I32 {
     // After resolve, backtrace should be usable
     let s: Str = bt.to_string()
     assert(s.len() > 0, "to_string should produce output")
-    bt.free()
+
     return 0
 }
 
@@ -91,7 +89,7 @@ func bench_resolve_idempotent() -> I32 {
         diff = -diff
     }
     assert(diff < 256, "Resolve output should be structurally similar")
-    bt.free()
+
     return 0
 }
 
@@ -103,7 +101,7 @@ func bench_resolve_10x() -> I32 {
         var bt: Backtrace = Backtrace::capture()
         bt.resolve()
         let _s: Str = bt.to_string()
-        bt.free()
+    
         i = i + 1
     }
     return 0
@@ -120,7 +118,7 @@ func bench_frame_count_limit() -> I32 {
 
     // Frame count should be under the 128 limit
     assert(count < 128, "Frame count should be under 128")
-    bt.free()
+
     return 0
 }
 
@@ -137,7 +135,7 @@ func bench_to_string_format() -> I32 {
     // Each frame is roughly 50-200 chars, with frame count usually under 50
     // So total should be under 10KB
     assert(len < 10000, "String should be under 10KB")
-    bt.free()
+
     return 0
 }
 
@@ -194,6 +192,6 @@ func nested_1() -> I32 {
     // Should capture at least 1 frame (adjusted from 10 due to tail call optimization)
     // In optimized builds, the nested calls may be tail-call optimized away
     assert(count >= 1, "Should capture at least one frame")
-    bt.free()
+
     return 0
 }

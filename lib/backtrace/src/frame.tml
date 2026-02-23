@@ -103,6 +103,7 @@ impl BacktraceFrame {
     }
 
     /// Formats the frame as a string.
+    @allocates
     pub func format(this, index: I32) -> Str {
         let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
         when sym_opt {
@@ -134,6 +135,7 @@ impl BacktraceFrame {
     }
 
     /// Formats the frame as a single line.
+    @allocates
     pub func to_string(this) -> Str {
         let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
         when sym_opt {

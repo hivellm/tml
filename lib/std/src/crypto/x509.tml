@@ -17,6 +17,9 @@ use std::crypto::error::{CryptoError, CryptoResult}
 use std::crypto::key::{PublicKey, KeyType}
 use std::collections::{Buffer, List}
 
+@extern("tml_str_free")
+func str_free(s: Str)
+
 // ============================================================================
 // FFI declarations for crypto_x509.c functions
 // ============================================================================
@@ -350,16 +353,19 @@ impl X509Certificate {
     }
 
     /// Returns the serial number as a hex string.
+    @allocates
     pub func serial_number(this) -> Str {
         return ffi_x509_get_serial(this.handle)
     }
 
     /// Returns the "not before" date as ISO 8601 string.
+    @allocates
     pub func valid_from(this) -> Str {
         return ffi_x509_get_not_before(this.handle)
     }
 
     /// Returns the "not after" date as ISO 8601 string.
+    @allocates
     pub func valid_to(this) -> Str {
         return ffi_x509_get_not_after(this.handle)
     }
@@ -375,16 +381,19 @@ impl X509Certificate {
     }
 
     /// Returns the SHA-1 fingerprint as hex string.
+    @allocates
     pub func fingerprint(this) -> Str {
         return ffi_x509_fingerprint_sha1(this.handle)
     }
 
     /// Returns the SHA-256 fingerprint as hex string.
+    @allocates
     pub func fingerprint256(this) -> Str {
         return ffi_x509_fingerprint_sha256(this.handle)
     }
 
     /// Returns the SHA-512 fingerprint as hex string.
+    @allocates
     pub func fingerprint512(this) -> Str {
         return ffi_x509_fingerprint_sha512(this.handle)
     }
@@ -398,6 +407,7 @@ impl X509Certificate {
     }
 
     /// Returns the signature algorithm.
+    @allocates
     pub func signature_algorithm(this) -> Str {
         return ffi_x509_get_sig_alg(this.handle)
     }
@@ -466,6 +476,7 @@ impl X509Certificate {
     }
 
     /// Exports the certificate to PEM format.
+    @allocates
     pub func to_pem(this) -> Str {
         return ffi_x509_to_pem(this.handle)
     }
@@ -477,6 +488,7 @@ impl X509Certificate {
     }
 
     /// Returns raw text representation of the certificate.
+    @allocates
     pub func to_text(this) -> Str {
         return ffi_x509_to_text(this.handle)
     }
@@ -523,9 +535,11 @@ impl X509Chain {
         loop (added < count) {
             let cert_pem: Str = ffi_x509_extract_pem_cert(pem, offset)
             if cert_pem == "" {
+                str_free(cert_pem)
                 break
             }
             let cert = X509Certificate::from_pem(cert_pem)!
+            str_free(cert_pem)
             this.certs.push(cert.handle as I64)
             added = added + 1
             offset = offset + 1

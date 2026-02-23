@@ -226,12 +226,14 @@ impl Signature {
     }
 
     /// Returns the signature as a hexadecimal string.
+    @allocates
     pub func to_hex(this) -> Str {
         let hex: Str = crypto_bytes_to_hex(this.data.handle)
         return hex
     }
 
     /// Returns the signature as a base64 string.
+    @allocates
     pub func to_base64(this) -> Str {
         let b64: Str = crypto_bytes_to_base64(this.data.handle)
         return b64
