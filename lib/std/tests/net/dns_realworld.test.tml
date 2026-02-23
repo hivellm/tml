@@ -1,0 +1,151 @@
+// DNS real-world resolution tests — verifies actual network DNS lookups
+use test::{assert, assert_eq}
+use std::net::dns
+use std::net::dns::LookupResult
+use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+
+// ============================================================================
+// google.com DNS resolution
+// ============================================================================
+
+@test
+func test_dns_lookup_google() -> I32 {
+    let result = dns::lookup("google.com")
+    assert(result.is_ok(), "lookup google.com should succeed")
+    let addr: Ipv4Addr = result.unwrap()
+    assert(not addr.is_loopback(), "google.com should not be loopback")
+    assert(not addr.is_unspecified(), "google.com should not be 0.0.0.0")
+    assert(not addr.is_private(), "google.com should not be private IP")
+    0
+}
+
+@test
+func test_dns_lookup_all_google() -> I32 {
+    let result = dns::lookup_all("google.com", 16)
+    assert(result.is_ok(), "lookup_all google.com should succeed")
+    let lr: LookupResult = result.unwrap()
+    assert(lr.count() > 0, "google.com should have at least one address")
+    assert(lr.ipv4_count() > 0, "google.com should have IPv4 addresses")
+    let first = lr.first()
+    assert(first.is_just(), "first() should return Just")
+    // Verify out-of-bounds returns Nothing
+    let total_v4: I32 = lr.ipv4_count()
+    assert(lr.get_v4(total_v4).is_nothing(), "get_v4 out of bounds should be Nothing")
+    0
+}
+
+@test
+func test_dns_lookup_ip_google() -> I32 {
+    let result = dns::lookup_ip("google.com")
+    assert(result.is_ok(), "lookup_ip google.com should succeed")
+    0
+}
+
+// ============================================================================
+// cloudflare.com DNS resolution
+// ============================================================================
+
+@test
+func test_dns_lookup_cloudflare() -> I32 {
+    let result = dns::lookup("one.one.one.one")
+    assert(result.is_ok(), "lookup one.one.one.one should succeed")
+    let addr: Ipv4Addr = result.unwrap()
+    assert(not addr.is_loopback(), "cloudflare should not be loopback")
+    0
+}
+
+// ============================================================================
+// github.com DNS resolution
+// ============================================================================
+
+@test
+func test_dns_lookup_github() -> I32 {
+    let result = dns::lookup("github.com")
+    assert(result.is_ok(), "lookup github.com should succeed")
+    0
+}
+
+@test
+func test_dns_lookup_all_github() -> I32 {
+    let result = dns::lookup_all("github.com", 16)
+    assert(result.is_ok(), "lookup_all github.com should succeed")
+    let lr: LookupResult = result.unwrap()
+    let total = lr.count()
+    let v4 = lr.ipv4_count()
+    let v6 = lr.ipv6_count()
+    assert_eq(total, v4 + v6, "count should equal v4_count + v6_count")
+    0
+}
+
+// ============================================================================
+// IPv6 lookups (may not work on all networks)
+// ============================================================================
+
+@test
+func test_dns_lookup6_google() -> I32 {
+    let result = dns::lookup6("google.com")
+    // IPv6 may not be available on all systems, just check no crash
+    if result.is_ok() {
+        let addr: Ipv6Addr = result.unwrap()
+        assert(not addr.is_loopback(), "google.com IPv6 should not be loopback")
+    }
+    0
+}
+
+@test
+func test_dns_lookup_all6_google() -> I32 {
+    let result = dns::lookup_all6("google.com", 16)
+    if result.is_ok() {
+        let lr: LookupResult = result.unwrap()
+        assert_eq(lr.ipv4_count(), 0, "lookup_all6 should return no IPv4")
+        assert(lr.ipv6_count() > 0, "google.com should have AAAA records")
+    }
+    0
+}
+
+// ============================================================================
+// IPv4-only lookup
+// ============================================================================
+
+@test
+func test_dns_lookup_all4_google() -> I32 {
+    let result = dns::lookup_all4("google.com", 16)
+    assert(result.is_ok(), "lookup_all4 google.com should succeed")
+    let lr: LookupResult = result.unwrap()
+    assert(lr.ipv4_count() > 0, "google.com should have IPv4 addresses")
+    assert_eq(lr.ipv6_count(), 0, "lookup_all4 should return no IPv6")
+    let v4 = lr.get_v4(0)
+    assert(v4.is_just(), "get_v4(0) should return Just")
+    0
+}
+
+// ============================================================================
+// Reverse DNS
+// ============================================================================
+
+@test
+func test_dns_reverse_google() -> I32 {
+    let lookup_result = dns::lookup("google.com")
+    assert(lookup_result.is_ok(), "lookup google.com for reverse test")
+    let addr: Ipv4Addr = lookup_result.unwrap()
+    let rev = dns::reverse4(addr)
+    // Reverse may or may not succeed depending on PTR records
+    if rev.is_ok() {
+        let hostname: Str = rev.unwrap()
+        assert(hostname.len() > 0, "reverse hostname should be non-empty")
+        print("  reverse(" + addr.octet0().to_string() + "." + addr.octet1().to_string() + "." + addr.octet2().to_string() + "." + addr.octet3().to_string() + ") = " + hostname + "\n")
+    }
+    0
+}
+
+@test
+func test_dns_reverse_via_ipaddr() -> I32 {
+    let ip: Ipv4Addr = dns::lookup("google.com").unwrap()
+    let addr: IpAddr = IpAddr::V4(ip)
+    let rev = dns::reverse(addr)
+    // Just check no crash
+    if rev.is_ok() {
+        assert(rev.unwrap().len() > 0, "reverse hostname should be non-empty")
+    }
+    0
+}

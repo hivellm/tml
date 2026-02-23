@@ -1,0 +1,67 @@
+// TLS integration test: real connection to google.com:443
+// Tests DNS resolution, TCP connect, TLS handshake, and certificate inspection.
+use test::{assert, assert_eq}
+use std::net::dns
+use std::net::ip::Ipv4Addr
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::tcp::TcpStream
+use std::net::tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
+use std::net::tls
+use std::net::sys::RawSocket
+
+// ============================================================================
+// TLS handshake + version/cipher/CN + ALPN inspection
+// ============================================================================
+
+@test
+func test_tls_google_connect() -> I32 {
+    let ip: Ipv4Addr = dns::lookup("google.com").unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::None())
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
+
+    let ver: Str = stream.version()
+    print("  TLS version: " + ver + "\n")
+    assert(ver == "TLSv1.3" or ver == "TLSv1.2", "should negotiate TLS 1.2+")
+
+    let cipher: Str = stream.cipher()
+    print("  Cipher: " + cipher + "\n")
+    assert(cipher.len() > 0, "cipher should not be empty")
+
+    let cn: Str = stream.peer_cn()
+    print("  Peer CN: " + cn + "\n")
+    assert(cn.len() > 0, "peer CN should not be empty")
+
+    let alpn: Str = stream.alpn()
+    print("  ALPN: '" + alpn + "'\n")
+
+    stream.shutdown()
+    0
+}
+
+// ============================================================================
+// Certificate PEM export
+// ============================================================================
+
+@test
+func test_tls_google_peer_cert_pem() -> I32 {
+    let ip: Ipv4Addr = dns::lookup("google.com").unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::None())
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
+
+    let pem: Str = stream.peer_cert_pem()
+    assert(pem.len() > 100, "peer cert PEM should be substantial")
+    assert(pem.contains("BEGIN CERTIFICATE"), "PEM should contain BEGIN CERTIFICATE")
+
+    stream.shutdown()
+    0
+}
