@@ -10,7 +10,7 @@ use std::collections::Buffer
 
 @test
 func test_buffer_new() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
     assert_eq(buf.len(), 0 as I64, "new buffer should have len 0")
     let cap: I64 = buf.capacity()
     assert(cap >= (64 as I64), "capacity should be at least 64")
@@ -20,7 +20,7 @@ func test_buffer_new() -> I32 {
 
 @test
 func test_buffer_default() -> I32 {
-    let buf: Buffer = Buffer.default()
+    var buf: Buffer = Buffer.default()
     assert_eq(buf.len(), 0 as I64, "default buffer should have len 0")
     let cap: I64 = buf.capacity()
     assert(cap >= (64 as I64), "default capacity")
@@ -30,7 +30,7 @@ func test_buffer_default() -> I32 {
 
 @test
 func test_buffer_write_read_byte() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_byte(65)  // A
     buf.write_byte(66)  // B
@@ -55,7 +55,7 @@ func test_buffer_write_read_byte() -> I32 {
 
 @test
 func test_buffer_write_read_i32() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_i32(42)
     buf.write_i32(-100)
@@ -78,7 +78,7 @@ func test_buffer_write_read_i32() -> I32 {
 
 @test
 func test_buffer_write_read_i64() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_i64(1000000000000 as I64)
     buf.write_i64(-9999999999 as I64)
@@ -97,7 +97,7 @@ func test_buffer_write_read_i64() -> I32 {
 
 @test
 func test_buffer_remaining() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_i32(1)
     buf.write_i32(2)
@@ -120,7 +120,7 @@ func test_buffer_remaining() -> I32 {
 
 @test
 func test_buffer_clear() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_i32(100)
     buf.write_i32(200)
@@ -138,7 +138,7 @@ func test_buffer_clear() -> I32 {
 
 @test
 func test_buffer_reset_read() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_i32(42)
 
@@ -156,7 +156,7 @@ func test_buffer_reset_read() -> I32 {
 
 @test
 func test_buffer_mixed_types() -> I32 {
-    let buf: Buffer = Buffer.new(64)
+    var buf: Buffer = Buffer.new(64)
 
     buf.write_byte(255)
     buf.write_i32(12345)
@@ -187,7 +187,7 @@ func test_buffer_mixed_types() -> I32 {
 
 @test
 func test_buffer_get_set() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(10)
     buf.write_byte(20)
     buf.write_byte(30)
@@ -209,7 +209,7 @@ func test_buffer_get_set() -> I32 {
 
 @test
 func test_buffer_u8_read_write() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u8(255, 0)
     buf.write_u8(128, 1)
@@ -225,7 +225,7 @@ func test_buffer_u8_read_write() -> I32 {
 
 @test
 func test_buffer_i8_read() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u8(127, 0)   // max positive i8
     buf.write_u8(128, 1)   // -128 as i8
@@ -245,7 +245,7 @@ func test_buffer_i8_read() -> I32 {
 
 @test
 func test_buffer_u16_le() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u16_le(0x1234, 0)
     buf.write_u16_le(65535, 2)
@@ -263,7 +263,7 @@ func test_buffer_u16_le() -> I32 {
 
 @test
 func test_buffer_u16_be() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u16_be(0x1234, 0)
 
@@ -279,7 +279,7 @@ func test_buffer_u16_be() -> I32 {
 
 @test
 func test_buffer_i16_le() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u16_le(32767, 0)   // max positive i16
     buf.write_u16_le(65535, 2)   // -1 as i16
@@ -297,7 +297,7 @@ func test_buffer_i16_le() -> I32 {
 
 @test
 func test_buffer_u32_le() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u32_le(0x12345678, 0)
 
@@ -315,7 +315,7 @@ func test_buffer_u32_le() -> I32 {
 
 @test
 func test_buffer_u32_be() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_u32_be(0x12345678, 0)
 
@@ -337,7 +337,7 @@ func test_buffer_u32_be() -> I32 {
 
 @test
 func test_buffer_u64_le() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
 
     let value: I64 = 0x123456789ABCDEF0
     buf.write_u64_le(value, 0)
@@ -350,7 +350,7 @@ func test_buffer_u64_le() -> I32 {
 
 @test
 func test_buffer_u64_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
 
     let value: I64 = 0x123456789ABCDEF0
     buf.write_u64_be(value, 0)
@@ -367,7 +367,7 @@ func test_buffer_u64_be() -> I32 {
 
 @test
 func test_buffer_f32_le() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
 
     buf.write_f32_le(3.14 as F32, 0)
 
@@ -384,7 +384,7 @@ func test_buffer_f32_le() -> I32 {
 
 @test
 func test_buffer_f64_le() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
 
     // Note: Due to a known precision issue with float literals in codegen
     // (std::to_string truncates to 6 digits), we use a relaxed tolerance
@@ -409,7 +409,7 @@ func test_buffer_f64_le() -> I32 {
 
 @test
 func test_buffer_fill() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(0)
     buf.write_byte(0)
     buf.write_byte(0)
@@ -428,7 +428,7 @@ func test_buffer_fill() -> I32 {
 
 @test
 func test_buffer_fill_all() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(0)
     buf.write_byte(0)
     buf.write_byte(0)
@@ -445,14 +445,14 @@ func test_buffer_fill_all() -> I32 {
 
 @test
 func test_buffer_slice() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(1)
     buf.write_byte(2)
     buf.write_byte(3)
     buf.write_byte(4)
     buf.write_byte(5)
 
-    let slice: Buffer = buf.slice(1, 4)
+    var slice: Buffer = buf.slice(1, 4)
 
     assert_eq(slice.len(), 3 as I64, "slice length")
     assert_eq(slice.get(0), 2, "slice[0]")
@@ -466,13 +466,13 @@ func test_buffer_slice() -> I32 {
 
 @test
 func test_buffer_copy_to() -> I32 {
-    let src: Buffer = Buffer.new(8)
+    var src: Buffer = Buffer.new(8)
     src.write_byte(10)
     src.write_byte(20)
     src.write_byte(30)
     src.write_byte(40)
 
-    let dst: Buffer = Buffer.new(8)
+    var dst: Buffer = Buffer.new(8)
     dst.write_byte(0)
     dst.write_byte(0)
     dst.write_byte(0)
@@ -493,7 +493,7 @@ func test_buffer_copy_to() -> I32 {
 
 @test
 func test_buffer_swap16() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_u16_le(0x1234, 0)
     buf.write_u16_le(0xABCD, 2)
 
@@ -515,17 +515,17 @@ func test_buffer_swap16() -> I32 {
 
 @test
 func test_buffer_compare() -> I32 {
-    let buf1: Buffer = Buffer.new(8)
+    var buf1: Buffer = Buffer.new(8)
     buf1.write_byte(1)
     buf1.write_byte(2)
     buf1.write_byte(3)
 
-    let buf2: Buffer = Buffer.new(8)
+    var buf2: Buffer = Buffer.new(8)
     buf2.write_byte(1)
     buf2.write_byte(2)
     buf2.write_byte(3)
 
-    let buf3: Buffer = Buffer.new(8)
+    var buf3: Buffer = Buffer.new(8)
     buf3.write_byte(1)
     buf3.write_byte(2)
     buf3.write_byte(4)
@@ -542,15 +542,15 @@ func test_buffer_compare() -> I32 {
 
 @test
 func test_buffer_equals() -> I32 {
-    let buf1: Buffer = Buffer.new(8)
+    var buf1: Buffer = Buffer.new(8)
     buf1.write_byte(10)
     buf1.write_byte(20)
 
-    let buf2: Buffer = Buffer.new(8)
+    var buf2: Buffer = Buffer.new(8)
     buf2.write_byte(10)
     buf2.write_byte(20)
 
-    let buf3: Buffer = Buffer.new(8)
+    var buf3: Buffer = Buffer.new(8)
     buf3.write_byte(10)
     buf3.write_byte(30)
 
@@ -565,7 +565,7 @@ func test_buffer_equals() -> I32 {
 
 @test
 func test_buffer_index_of() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(1)
     buf.write_byte(2)
     buf.write_byte(3)
@@ -582,7 +582,7 @@ func test_buffer_index_of() -> I32 {
 
 @test
 func test_buffer_last_index_of() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(1)
     buf.write_byte(2)
     buf.write_byte(3)
@@ -598,7 +598,7 @@ func test_buffer_last_index_of() -> I32 {
 
 @test
 func test_buffer_includes() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(1)
     buf.write_byte(2)
     buf.write_byte(3)
@@ -616,7 +616,7 @@ func test_buffer_includes() -> I32 {
 
 @test
 func test_buffer_to_hex() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(0xDE)
     buf.write_byte(0xAD)
     buf.write_byte(0xBE)
@@ -631,7 +631,7 @@ func test_buffer_to_hex() -> I32 {
 
 @test
 func test_buffer_from_hex() -> I32 {
-    let buf: Buffer = Buffer::from_hex("cafebabe")
+    var buf: Buffer = Buffer::from_hex("cafebabe")
 
     assert_eq(buf.len(), 4 as I64, "from_hex length")
     assert_eq(buf.get(0), 0xCA, "from_hex byte 0")
@@ -645,7 +645,7 @@ func test_buffer_from_hex() -> I32 {
 
 @test
 func test_buffer_to_string() -> I32 {
-    let buf: Buffer = Buffer.new(8)
+    var buf: Buffer = Buffer.new(8)
     buf.write_byte(72)   // H
     buf.write_byte(105)  // i
     buf.write_byte(33)   // !
@@ -659,7 +659,7 @@ func test_buffer_to_string() -> I32 {
 
 @test
 func test_buffer_from_string() -> I32 {
-    let buf: Buffer = Buffer::from_string("ABC")
+    var buf: Buffer = Buffer::from_string("ABC")
 
     assert_eq(buf.len(), 3 as I64, "from_string length")
     assert_eq(buf.get(0), 65, "from_string A")
@@ -672,7 +672,7 @@ func test_buffer_from_string() -> I32 {
 
 @test
 func test_buffer_hex_roundtrip() -> I32 {
-    let original: Buffer = Buffer.new(8)
+    var original: Buffer = Buffer.new(8)
     original.write_byte(0x01)
     original.write_byte(0x23)
     original.write_byte(0x45)
@@ -683,7 +683,7 @@ func test_buffer_hex_roundtrip() -> I32 {
     original.write_byte(0xEF)
 
     let hex: Str = original.to_hex()
-    let restored: Buffer = Buffer::from_hex(hex)
+    var restored: Buffer = Buffer::from_hex(hex)
 
     assert(original.equals(ref restored), "hex roundtrip")
 
@@ -754,7 +754,7 @@ func test_buffer_i16_be() -> I32 {
 
 @test
 func test_buffer_read_i16_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     // Write 0x1234 in big-endian manually (high byte first)
     buf.write_u8(0x12, 0)
     buf.write_u8(0x34, 1)
@@ -774,7 +774,7 @@ func test_buffer_read_i16_be() -> I32 {
 
 @test
 func test_buffer_read_i64_at() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_u64_le(123456789 as I64, 0)
 
     let v: I64 = buf.read_i64_at(0)
@@ -786,7 +786,7 @@ func test_buffer_read_i64_at() -> I32 {
 
 @test
 func test_buffer_read_i64_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_u64_be(0x0102030405060708, 0)
 
     let v: I64 = buf.read_i64_be(0)
@@ -798,7 +798,7 @@ func test_buffer_read_i64_be() -> I32 {
 
 @test
 func test_buffer_write_read_f32_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_f32_be(1.5 as F32, 0)
 
     let v: F32 = buf.read_f32_be(0)
@@ -814,7 +814,7 @@ func test_buffer_write_read_f32_be() -> I32 {
 
 @test
 func test_buffer_write_read_f64_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_f64_be(2.718281828, 0)
 
     let v: F64 = buf.read_f64_be(0)
@@ -830,7 +830,7 @@ func test_buffer_write_read_f64_be() -> I32 {
 
 @test
 func test_buffer_read_i32_at() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_u32_le(12345, 0)
     buf.write_u32_le(67890, 4)
 
@@ -846,7 +846,7 @@ func test_buffer_read_i32_at() -> I32 {
 
 @test
 func test_buffer_read_i32_be() -> I32 {
-    let buf: Buffer = Buffer.new(16)
+    var buf: Buffer = Buffer.new(16)
     buf.write_u32_be(0x12345678, 0)
 
     let v: I32 = buf.read_i32_be(0)

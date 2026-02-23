@@ -1,0 +1,12 @@
+use test
+use std::collections::Buffer
+
+@test
+func test_actual_slice() -> I32 {
+    var buf: Buffer = Buffer.new(8)
+    buf.write_byte(1)
+    buf.write_byte(2)
+    buf.write_byte(3)
+    var s: Buffer = buf.slice(0, 2)
+    return 0
+}

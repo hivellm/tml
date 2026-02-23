@@ -1,0 +1,16 @@
+use test
+use std::collections::Buffer
+
+@test
+func test_buffer_hex_roundtrip() -> I32 {
+    var original: Buffer = Buffer.new(8)
+    original.write_byte(0x01)
+    original.write_byte(0x23)
+    original.write_byte(0x45)
+    let hex: Str = original.to_hex()
+    var restored: Buffer = Buffer::from_hex(hex)
+    assert(original.equals(ref restored), "hex roundtrip")
+    original.destroy()
+    restored.destroy()
+    return 0
+}

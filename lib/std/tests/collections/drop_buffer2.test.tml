@@ -1,0 +1,77 @@
+use test
+use std::collections::Buffer
+
+@test
+func test_buffer_new() -> I32 {
+    var buf: Buffer = Buffer.new(64)
+    assert_eq(buf.len(), 0 as I64, "new buffer should have len 0")
+    let cap: I64 = buf.capacity()
+    assert(cap >= (64 as I64), "capacity should be at least 64")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_byte() -> I32 {
+    var buf: Buffer = Buffer.new(64)
+    buf.write_byte(65)
+    buf.write_byte(66)
+    buf.write_byte(67)
+    assert_eq(buf.len(), 3 as I64, "len after 3 bytes")
+    buf.reset_read()
+    let a: I32 = buf.read_byte()
+    assert_eq(a, 65, "read first byte")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_slice() -> I32 {
+    var buf: Buffer = Buffer.new(8)
+    buf.write_byte(1)
+    buf.write_byte(2)
+    buf.write_byte(3)
+    buf.write_byte(4)
+    buf.write_byte(5)
+    var slice: Buffer = buf.slice(1, 4)
+    assert_eq(slice.len(), 3 as I64, "slice length")
+    assert_eq(slice.get(0), 2, "slice[0]")
+    slice.destroy()
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_compare() -> I32 {
+    var buf1: Buffer = Buffer.new(8)
+    buf1.write_byte(1)
+    buf1.write_byte(2)
+    buf1.write_byte(3)
+    var buf2: Buffer = Buffer.new(8)
+    buf2.write_byte(1)
+    buf2.write_byte(2)
+    buf2.write_byte(3)
+    var buf3: Buffer = Buffer.new(8)
+    buf3.write_byte(1)
+    buf3.write_byte(2)
+    buf3.write_byte(4)
+    assert_eq(buf1.compare(ref buf2), 0, "equal buffers")
+    buf1.destroy()
+    buf2.destroy()
+    buf3.destroy()
+    return 0
+}
+
+@test
+func test_buffer_hex_roundtrip() -> I32 {
+    var original: Buffer = Buffer.new(8)
+    original.write_byte(0x01)
+    original.write_byte(0x23)
+    original.write_byte(0x45)
+    let hex: Str = original.to_hex()
+    var restored: Buffer = Buffer::from_hex(hex)
+    assert(original.equals(ref restored), "hex roundtrip")
+    original.destroy()
+    restored.destroy()
+    return 0
+}

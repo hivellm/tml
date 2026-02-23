@@ -1,0 +1,19 @@
+use test
+use std::collections::Buffer
+
+@test
+func test_buffer_drop_no_crash() -> I32 {
+    var buf: Buffer = Buffer.new(64)
+    buf.write_byte(42)
+    buf.destroy()
+    // Drop should fire here but handle is null — no double-free
+    return 0
+}
+
+@test
+func test_buffer_auto_drop() -> I32 {
+    var buf: Buffer = Buffer.new(64)
+    buf.write_byte(42)
+    // No manual destroy — Drop handles it at scope exit
+    return 0
+}
