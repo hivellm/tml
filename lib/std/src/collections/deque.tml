@@ -210,3 +210,9 @@ impl[T: PartialEq] Deque[T] {
         return false
     }
 }
+
+impl[T] Drop for Deque[T] {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

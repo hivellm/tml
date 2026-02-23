@@ -175,3 +175,9 @@ impl BTreeMap {
         let _v: I64 = this.values.pop()
     }
 }
+
+impl Drop for BTreeMap {
+    func drop(mut this) {
+        this.destroy()
+    }
+}

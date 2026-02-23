@@ -79,3 +79,9 @@ impl BTreeSet {
         return this.map.max_key()
     }
 }
+
+impl Drop for BTreeSet {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
