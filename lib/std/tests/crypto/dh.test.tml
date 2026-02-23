@@ -89,8 +89,6 @@ func test_dh_keygen_and_exchange() -> I32 {
     assert(a_secret.len() > (0 as I64), "secret not empty")
     assert_eq(a_secret.len(), b_secret.len(), "secrets same length")
 
-    alice.destroy()
-    bob.destroy()
     return 0
 }
 
@@ -137,7 +135,5 @@ func test_diffie_hellman_func() -> I32 {
     let secret: Buffer = result.unwrap()
     assert(secret.len() > (0 as I64), "DH secret not empty")
 
-    dh1.destroy()
-    dh2.destroy()
     return 0
 }

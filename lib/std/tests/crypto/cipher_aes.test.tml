@@ -29,11 +29,6 @@ func test_aes_encrypt_decrypt_roundtrip() -> I32 {
     }
     assert(pt.len() > (0 as I64), "plaintext not empty after decrypt")
 
-    plaintext.destroy()
-    ct.destroy()
-    pt.destroy()
-    key.destroy()
-    iv.destroy()
     return 0
 }
 
@@ -46,9 +41,6 @@ func test_aes_encrypt_invalid_key() -> I32 {
     let result = aes_encrypt(ref bad_key, ref iv, ref plaintext)
     assert(result.is_err(), "bad key should fail")
 
-    plaintext.destroy()
-    bad_key.destroy()
-    iv.destroy()
     return 0
 }
 
@@ -61,9 +53,6 @@ func test_aes_decrypt_invalid_key() -> I32 {
     let result = aes_decrypt(ref bad_key, ref iv, ref ct)
     assert(result.is_err(), "bad key should fail")
 
-    ct.destroy()
-    bad_key.destroy()
-    iv.destroy()
     return 0
 }
 
@@ -77,10 +66,6 @@ func test_chacha20_invalid_key_size() -> I32 {
     let result = chacha20_poly1305_encrypt(ref bad_key, ref nonce, ref pt, ref aad)
     assert(result.is_err(), "ChaCha20 requires 32-byte key")
 
-    pt.destroy()
-    aad.destroy()
-    bad_key.destroy()
-    nonce.destroy()
     return 0
 }
 
@@ -94,10 +79,6 @@ func test_chacha20_invalid_nonce_size() -> I32 {
     let result = chacha20_poly1305_encrypt(ref key, ref bad_nonce, ref pt, ref aad)
     assert(result.is_err(), "ChaCha20 requires 12-byte nonce")
 
-    pt.destroy()
-    aad.destroy()
-    key.destroy()
-    bad_nonce.destroy()
     return 0
 }
 
@@ -113,10 +94,6 @@ func test_chacha20_decrypt_invalid_key_size() -> I32 {
     let result = chacha20_poly1305_decrypt(ref bad_key, ref nonce, ref ct, ref aad, ref tag)
     assert(result.is_err(), "ChaCha20 decrypt requires 32-byte key")
 
-    ct.destroy()
-    aad.destroy()
-    bad_key.destroy()
-    nonce.destroy()
     return 0
 }
 
@@ -130,10 +107,6 @@ func test_xchacha20_invalid_key_size() -> I32 {
     let result = xchacha20_poly1305_encrypt(ref bad_key, ref nonce, ref pt, ref aad)
     assert(result.is_err(), "XChaCha20 requires 32-byte key")
 
-    pt.destroy()
-    aad.destroy()
-    bad_key.destroy()
-    nonce.destroy()
     return 0
 }
 
@@ -147,10 +120,6 @@ func test_xchacha20_invalid_nonce_size() -> I32 {
     let result = xchacha20_poly1305_encrypt(ref key, ref bad_nonce, ref pt, ref aad)
     assert(result.is_err(), "XChaCha20 requires 24-byte nonce")
 
-    pt.destroy()
-    aad.destroy()
-    key.destroy()
-    bad_nonce.destroy()
     return 0
 }
 
@@ -166,10 +135,6 @@ func test_xchacha20_decrypt_invalid_key_size() -> I32 {
     let result = xchacha20_poly1305_decrypt(ref bad_key, ref nonce, ref ct, ref aad, ref tag)
     assert(result.is_err(), "XChaCha20 decrypt requires 32-byte key")
 
-    ct.destroy()
-    aad.destroy()
-    bad_key.destroy()
-    nonce.destroy()
     return 0
 }
 
@@ -185,9 +150,5 @@ func test_xchacha20_decrypt_invalid_nonce_size() -> I32 {
     let result = xchacha20_poly1305_decrypt(ref key, ref bad_nonce, ref ct, ref aad, ref tag)
     assert(result.is_err(), "XChaCha20 decrypt requires 24-byte nonce")
 
-    ct.destroy()
-    aad.destroy()
-    key.destroy()
-    bad_nonce.destroy()
     return 0
 }

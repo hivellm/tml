@@ -93,6 +93,22 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
             const auto& ident = ret.value.value()->as<parser::IdentExpr>();
             mark_var_consumed(ident.name);
         }
+        // Also handle `return Ok(x)`, `return Err(x)`, `return Just(x)`, etc.
+        // These are CallExpr wrapping a local variable — the argument is moved
+        // into the enum variant and should not be dropped at function exit.
+        else if (ret.value.value()->is<parser::CallExpr>()) {
+            const auto& call = ret.value.value()->as<parser::CallExpr>();
+            for (const auto& arg : call.args) {
+                if (arg->is<parser::IdentExpr>()) {
+                    const auto& arg_ident = arg->as<parser::IdentExpr>();
+                    // Only consume if it's a local variable with a droppable type
+                    auto it = locals_.find(arg_ident.name);
+                    if (it != locals_.end()) {
+                        mark_var_consumed(arg_ident.name);
+                    }
+                }
+            }
+        }
 
         // If the return value is a Str temp from a call, remove it from temp_drops_.
         // The caller takes ownership; freeing it here would cause use-after-free.

@@ -729,6 +729,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                     // Store value to field
                     emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
+
+                    // Mark RHS variable as consumed (moved) when assigning a
+                    // struct/resource value into a field.  Without this, the local
+                    // variable's auto-drop fires at scope exit and double-frees the
+                    // resource that is now owned by the struct field.
+                    // Example: `this.keys = k`  — k is moved, must not be dropped.
+                    if (bin.right->is<parser::IdentExpr>()) {
+                        const auto& rhs_ident = bin.right->as<parser::IdentExpr>();
+                        // Only consume for types that get auto-dropped (struct types,
+                        // pointers).  Primitive ints/floats/bools are copies, not moves.
+                        if (field_type.starts_with("%struct.") || field_type == "ptr") {
+                            mark_var_consumed(rhs_ident.name);
+                        }
+                    }
                 }
             }
         } else if (bin.left->is<parser::PathExpr>()) {

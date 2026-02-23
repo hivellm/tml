@@ -250,27 +250,21 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
                                                << (generated_impl_methods_.find(drop_key) !=
                                                    generated_impl_methods_.end()));
             if (generated_impl_methods_.find(drop_key) == generated_impl_methods_.end()) {
-                // Build type_subs from mangled name
-                std::unordered_map<std::string, types::TypePtr> type_subs;
-                std::string remaining = type_name.substr(sep_pos + 2);
+                // Pass empty type_subs — generic.cpp's recovery logic will parse
+                // the mangled name and map type params correctly using the impl's
+                // actual generic param names (handles both single [T] and multi [K,V]).
+                std::unordered_map<std::string, types::TypePtr> empty_subs;
+                pending_impl_method_instantiations_.push_back(
+                    PendingImplMethod{type_name, "drop", empty_subs, base_type, "",
+                                      /*is_library_type=*/true});
+                generated_impl_methods_.insert(drop_key);
 
-                // Parse mangled type parameter (handles ptr_X, Nested__Y, etc.)
-                types::TypePtr type_arg = parse_mangled_type_for_drop(remaining);
-
-                if (type_arg) {
-                    type_subs["T"] = type_arg;
-                    pending_impl_method_instantiations_.push_back(
-                        PendingImplMethod{type_name, "drop", type_subs, base_type, "",
-                                          /*is_library_type=*/true});
-                    generated_impl_methods_.insert(drop_key);
-
-                    // Pre-register in functions_ so emit_drop_call can find it
-                    // Library types don't use suite prefix
-                    std::string method_name = type_name + "_drop";
-                    std::string func_llvm_name = "tml_" + type_name + "_drop";
-                    functions_[method_name] =
-                        FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
-                }
+                // Pre-register in functions_ so emit_drop_call can find it
+                // Library types don't use suite prefix
+                std::string method_name = type_name + "_drop";
+                std::string func_llvm_name = "tml_" + type_name + "_drop";
+                functions_[method_name] =
+                    FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
             }
         } else {
             // Non-generic type with Drop impl (e.g., Condvar, DroppableResource)
@@ -576,19 +570,15 @@ std::string LLVMIRGen::register_temp_for_drop(const std::string& value,
             std::string base_type = type_name.substr(0, sep_pos);
             std::string drop_key = "tml_" + type_name + "_drop";
             if (generated_impl_methods_.find(drop_key) == generated_impl_methods_.end()) {
-                std::unordered_map<std::string, types::TypePtr> type_subs;
-                std::string remaining = type_name.substr(sep_pos + 2);
-                types::TypePtr type_arg = parse_mangled_type_for_drop(remaining);
-                if (type_arg) {
-                    type_subs["T"] = type_arg;
-                    pending_impl_method_instantiations_.push_back(
-                        PendingImplMethod{type_name, "drop", type_subs, base_type, "",
-                                          /*is_library_type=*/true});
-                    generated_impl_methods_.insert(drop_key);
-                    std::string func_llvm_name = "tml_" + type_name + "_drop";
-                    functions_[type_name + "_drop"] =
-                        FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
-                }
+                // Pass empty type_subs — generic.cpp's recovery logic handles mapping
+                std::unordered_map<std::string, types::TypePtr> empty_subs;
+                pending_impl_method_instantiations_.push_back(
+                    PendingImplMethod{type_name, "drop", empty_subs, base_type, "",
+                                      /*is_library_type=*/true});
+                generated_impl_methods_.insert(drop_key);
+                std::string func_llvm_name = "tml_" + type_name + "_drop";
+                functions_[type_name + "_drop"] =
+                    FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
             }
         } else {
             std::string method_name = type_name + "_drop";

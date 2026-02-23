@@ -621,10 +621,9 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                       tuple_llvm_type + ", ptr " + payload_ptr + ", i32 0, i32 " +
                                       std::to_string(i));
 
-                            // For struct types, we just use the pointer directly
-                            // For primitives, we load the value
+                            // For struct types, alias the payload pointer (value
+                            // is moved out of the enum).
                             if (elem_type.starts_with("%struct.") || elem_type.starts_with("{")) {
-                                // Struct/tuple type - variable is the pointer
                                 locals_[ident.name] =
                                     VarInfo{elem_ptr, elem_type, elem_semantic_type, std::nullopt};
                             } else {
@@ -706,7 +705,11 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                     std::string bound_type =
                         payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
 
-                    // For struct/tuple types, the variable is a pointer to the payload
+                    // For struct/tuple types, the variable is a pointer to the payload.
+                    // The binding aliases the scrutinee's payload — the value is
+                    // "moved" out of the Outcome/enum.  The arm-scope drop logic
+                    // will handle cleanup: if the binding is used as the arm result
+                    // it gets marked consumed (no drop); otherwise it gets dropped.
                     if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
                         locals_[ident.name] =
                             VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
@@ -938,6 +941,39 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             if (!result_type_set && arm_type != "void") {
                 result_type = arm_type;
                 result_type_set = true;
+            }
+        }
+
+        // If the arm result is a droppable binding variable being moved out,
+        // mark it as consumed so emit_scope_drops() won't drop it.
+        // This handles patterns like `Ok(b) => b` where `b` should be moved
+        // into the when-expression result, not dropped at arm scope exit.
+        if (!block_terminated_ && arm_type != "void" && arm_type != "{}") {
+            // Check if arm body is directly an IdentExpr
+            if (arm.body->is<parser::IdentExpr>()) {
+                const auto& ident = arm.body->as<parser::IdentExpr>();
+                // Only consume if it's an arm-scoped binding (not an outer variable)
+                if (saved_locals.find(ident.name) == saved_locals.end() &&
+                    locals_.find(ident.name) != locals_.end()) {
+                    mark_var_consumed(ident.name);
+                }
+            }
+            // Check if arm body is a BlockExpr whose tail expression is an IdentExpr
+            else if (arm.body->is<parser::BlockExpr>()) {
+                const auto& block = arm.body->as<parser::BlockExpr>();
+                if (!block.stmts.empty()) {
+                    const auto& last_stmt = block.stmts.back();
+                    if (last_stmt->is<parser::ExprStmt>()) {
+                        const auto& expr_stmt = last_stmt->as<parser::ExprStmt>();
+                        if (expr_stmt.expr->is<parser::IdentExpr>()) {
+                            const auto& ident = expr_stmt.expr->as<parser::IdentExpr>();
+                            if (saved_locals.find(ident.name) == saved_locals.end() &&
+                                locals_.find(ident.name) != locals_.end()) {
+                                mark_var_consumed(ident.name);
+                            }
+                        }
+                    }
+                }
             }
         }
 

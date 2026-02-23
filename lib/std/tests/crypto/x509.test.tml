@@ -22,7 +22,6 @@ func test_x509_parse_pem_succeeds() -> I32 {
     let result = X509Certificate::from_pem(get_test_cert_pem())
     assert(result.is_ok(), "should parse valid PEM cert")
     let mut cert: X509Certificate = result.unwrap()
-    cert.destroy()
     return 0
 }
 
@@ -47,7 +46,6 @@ func test_x509_subject_cn() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let cn: Str = cert.subject().cn()
     assert_eq(cn, "test.example.com", "subject CN")
-    cert.destroy()
     return 0
 }
 
@@ -56,7 +54,6 @@ func test_x509_subject_org() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let org: Str = cert.subject().org()
     assert_eq(org, "TML Test Org", "subject O")
-    cert.destroy()
     return 0
 }
 
@@ -65,7 +62,6 @@ func test_x509_issuer_cn_self_signed() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let cn: Str = cert.issuer().cn()
     assert_eq(cn, "test.example.com", "issuer CN matches subject")
-    cert.destroy()
     return 0
 }
 
@@ -74,7 +70,6 @@ func test_x509_issuer_org() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let org: Str = cert.issuer().org()
     assert(org.len() > (0 as I64), "issuer org not empty")
-    cert.destroy()
     return 0
 }
 
@@ -85,7 +80,6 @@ func test_x509_serial_number() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let serial: Str = cert.serial_number()
     assert_eq(serial, "6823D594E231E423C3159AB53DAF3C1EE9D7D14B", "serial number")
-    cert.destroy()
     return 0
 }
 
@@ -96,7 +90,6 @@ func test_x509_valid_from() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let from: Str = cert.valid_from()
     assert_eq(from, "2026-02-10T11:22:55Z", "not before date")
-    cert.destroy()
     return 0
 }
 
@@ -105,7 +98,6 @@ func test_x509_valid_to() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let not_after: Str = cert.valid_to()
     assert_eq(not_after, "2036-02-08T11:22:55Z", "not after date")
-    cert.destroy()
     return 0
 }
 
@@ -115,7 +107,6 @@ func test_x509_valid_from_timestamp() -> I32 {
     let ts: I64 = cert.valid_from_date()
     assert(ts > 1770000000, "valid_from timestamp should be reasonable")
     assert(ts < 1780000000, "valid_from timestamp should be reasonable")
-    cert.destroy()
     return 0
 }
 
@@ -124,7 +115,6 @@ func test_x509_valid_to_timestamp() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let ts: I64 = cert.valid_to_date()
     assert(ts > 2080000000, "valid_to timestamp should be ~10 years later")
-    cert.destroy()
     return 0
 }
 
@@ -135,7 +125,6 @@ func test_x509_fingerprint_sha1() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let fp: Str = cert.fingerprint()
     assert_eq(fp, "a6:f7:ce:5f:ec:f0:78:29:8d:d3:e4:f3:63:22:75:26:1b:47:e7:5c", "SHA-1 fingerprint")
-    cert.destroy()
     return 0
 }
 
@@ -144,7 +133,6 @@ func test_x509_fingerprint_sha256() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let fp: Str = cert.fingerprint256()
     assert_eq(fp, "e7:26:e7:40:00:7e:24:b3:6f:24:22:f6:86:72:0e:84:79:2a:f8:e0:34:61:c7:49:dd:74:6d:51:b3:5a:21:e7", "SHA-256 fingerprint")
-    cert.destroy()
     return 0
 }
 
@@ -154,7 +142,6 @@ func test_x509_fingerprint512() -> I32 {
     let fp: Str = cert.fingerprint512()
     assert(fp.len() > (0 as I64), "SHA-512 fingerprint not empty")
     assert(fp.len() > (95 as I64), "SHA-512 fp should be ~192 chars with colons")
-    cert.destroy()
     return 0
 }
 
@@ -165,7 +152,6 @@ func test_x509_signature_algorithm() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let alg: Str = cert.signature_algorithm()
     assert_eq(alg, "RSA-SHA256", "signature algorithm")
-    cert.destroy()
     return 0
 }
 
@@ -175,7 +161,6 @@ func test_x509_signature_algorithm() -> I32 {
 func test_x509_is_ca() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     assert(cert.is_ca(), "test cert should be a CA")
-    cert.destroy()
     return 0
 }
 
@@ -190,7 +175,6 @@ func test_x509_key_usage() -> I32 {
     assert(ku.crl_sign, "should have cRLSign")
     assert(not ku.key_encipherment, "should not have keyEncipherment")
     assert(not ku.data_encipherment, "should not have dataEncipherment")
-    cert.destroy()
     return 0
 }
 
@@ -215,8 +199,6 @@ func test_x509_to_pem_roundtrip() -> I32 {
     let mut cert2: X509Certificate = result2.unwrap()
     assert_eq(cert2.subject().cn(), "test.example.com", "roundtrip subject CN")
     assert_eq(cert2.serial_number(), cert.serial_number(), "roundtrip serial")
-    cert2.destroy()
-    cert.destroy()
     return 0
 }
 
@@ -231,9 +213,6 @@ func test_x509_to_der_from_der() -> I32 {
     assert(result.is_ok(), "from_der should succeed")
     let mut cert2: X509Certificate = result.unwrap()
     assert_eq(cert2.serial_number(), cert.serial_number(), "DER roundtrip serial match")
-    cert2.destroy()
-    der.destroy()
-    cert.destroy()
     return 0
 }
 
@@ -244,7 +223,6 @@ func test_x509_to_text() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let text: Str = cert.to_text()
     assert(text.len() > (0 as I64), "text representation not empty")
-    cert.destroy()
     return 0
 }
 
@@ -256,7 +234,6 @@ func test_x509_public_key() -> I32 {
     let pk: PublicKey = cert.public_key()
     let bits: I64 = pk.size_bits()
     assert_eq(bits, 2048 as I64, "cert public key should be 2048 bits")
-    cert.destroy()
     return 0
 }
 
@@ -266,7 +243,6 @@ func test_x509_public_key() -> I32 {
 func test_x509_is_valid_now() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     assert(cert.is_valid_now(), "cert should be currently valid")
-    cert.destroy()
     return 0
 }
 
@@ -275,7 +251,6 @@ func test_x509_self_signed_check_issued() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let issued: Bool = cert.check_issued(ref cert)
     assert(issued, "self-signed cert should pass check_issued against itself")
-    cert.destroy()
     return 0
 }
 
@@ -286,7 +261,6 @@ func test_x509_verify_self_signed() -> I32 {
     let result = cert.verify(ref pk)
     assert(result.is_ok(), "verify should succeed")
     assert(result.unwrap(), "self-signed cert should verify with own public key")
-    cert.destroy()
     return 0
 }
 
@@ -297,7 +271,6 @@ func test_x509_check_host() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let no_match: Bool = cert.check_host("other.example.com")
     assert(not no_match, "should not match other.example.com")
-    cert.destroy()
     return 0
 }
 
@@ -306,7 +279,6 @@ func test_x509_check_email() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let result: Bool = cert.check_email("test@example.com")
     assert(not result, "should not match email without SAN")
-    cert.destroy()
     return 0
 }
 
@@ -315,7 +287,6 @@ func test_x509_check_ip() -> I32 {
     let mut cert: X509Certificate = parse_test_cert()
     let result: Bool = cert.check_ip("127.0.0.1")
     assert(not result, "should not match IP without SAN")
-    cert.destroy()
     return 0
 }
 
@@ -328,8 +299,6 @@ func test_x509_check_private_key() -> I32 {
     let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
     let result: Bool = cert.check_private_key(ref kp.private_key)
     assert(not result, "random private key should not match cert")
-    kp.destroy()
-    cert.destroy()
     return 0
 }
 
@@ -345,8 +314,6 @@ func test_x509_store_add_and_verify() -> I32 {
     assert(verify_result.is_ok(), "verify should not error")
     let verified: Bool = verify_result.unwrap()
     assert(verified, "self-signed cert should verify against store containing it")
-    store.destroy()
-    cert.destroy()
     return 0
 }
 
@@ -355,7 +322,6 @@ func test_x509_store_system() -> I32 {
     let result = X509Store::system()
     assert(result.is_ok(), "system store should succeed")
     let mut store: X509Store = result.unwrap()
-    store.destroy()
     return 0
 }
 
@@ -370,8 +336,6 @@ func test_x509_store_verify_chain() -> I32 {
     let verify_cert: X509Certificate = parse_test_cert()
     let result = store.verify_chain(ref verify_cert, ref chain)
     assert(result.is_ok(), "store verify_chain should not error")
-    chain.destroy()
-    store.destroy()
     return 0
 }
 
@@ -381,7 +345,6 @@ func test_x509_store_verify_chain() -> I32 {
 func test_x509_chain_new_and_len() -> I32 {
     let mut chain: X509Chain = X509Chain::new()
     assert_eq(chain.len(), 0 as I64, "new chain should be empty")
-    chain.destroy()
     return 0
 }
 
@@ -391,7 +354,6 @@ func test_x509_chain_add_cert() -> I32 {
     let cert: X509Certificate = parse_test_cert()
     chain.add_cert(cert)
     assert_eq(chain.len(), 1 as I64, "chain should have 1 cert")
-    chain.destroy()
     return 0
 }
 
@@ -404,7 +366,6 @@ func test_x509_chain_verify_self_signed() -> I32 {
     let result = chain.verify(ref cert)
     assert(result.is_ok(), "chain verify should not error")
     assert(result.unwrap(), "self-signed cert should verify against chain containing itself")
-    chain.destroy()
     return 0
 }
 
@@ -417,7 +378,6 @@ func test_x509_chain_verify_chain() -> I32 {
     let result = chain.verify_chain(ref cert)
     assert(result.is_ok(), "verify_chain should not error")
     assert(result.unwrap(), "self-signed should verify_chain")
-    chain.destroy()
     return 0
 }
 
@@ -430,7 +390,6 @@ func test_x509_chain_add_pem_bundle() -> I32 {
     let count: I64 = result.unwrap()
     assert_eq(count, 1 as I64, "should add 1 cert from bundle")
     assert_eq(chain.len(), 1 as I64, "chain length should be 1")
-    chain.destroy()
     return 0
 }
 
@@ -442,7 +401,6 @@ func test_x509_subject_alt_names() -> I32 {
     let names: List[Str] = cert.subject_alt_names()
     // test cert has no SANs, so the list should be empty (null handle returns empty list)
     assert_eq(names.len(), 0 as I64, "no SANs in test cert")
-    cert.destroy()
     return 0
 }
 
@@ -453,6 +411,5 @@ func test_x509_store_add_pem_file_nonexistent() -> I32 {
     let mut store: X509Store = X509Store::new()
     let result = store.add_pem_file("nonexistent_file.pem")
     assert(result.is_err(), "add_pem_file with nonexistent file should fail")
-    store.destroy()
     return 0
 }

@@ -163,7 +163,6 @@ func test_signature_from_bytes_and_accessors() -> I32 {
     let b64: Str = sig.to_base64()
     assert(b64.len() > (0 as I64), "base64 not empty")
 
-    kp.destroy()
     return 0
 }
 
@@ -178,7 +177,6 @@ func test_signature_from_hex() -> I32 {
     assert(parsed.is_ok(), "from_hex should succeed")
     let parsed_sig: Signature = parsed.unwrap()
     assert(parsed_sig.len() > (0 as I64), "parsed sig not empty")
-    kp.destroy()
     return 0
 }
 
@@ -193,7 +191,6 @@ func test_signature_from_base64() -> I32 {
     assert(parsed.is_ok(), "from_base64 should succeed")
     let parsed_sig: Signature = parsed.unwrap()
     assert(parsed_sig.len() > (0 as I64), "parsed sig not empty")
-    kp.destroy()
     return 0
 }
 
@@ -217,7 +214,6 @@ func test_signature_from_bytes() -> I32 {
     let sig: Signature = Signature::from_bytes(buf, SignatureAlgorithm::Ed25519)
     assert_eq(sig.algorithm().name(), "Ed25519", "from_bytes algorithm")
     assert(sig.len() > (0 as I64), "from_bytes has data")
-    buf.destroy()
     return 0
 }
 
@@ -227,7 +223,6 @@ func test_signature_from_der() -> I32 {
     let sig: Signature = Signature::from_der(ref buf, SignatureAlgorithm::EcdsaSha256)
     assert_eq(sig.algorithm().name(), "ECDSA-SHA256", "from_der algorithm")
     assert(sig.len() > (0 as I64), "from_der has data")
-    buf.destroy()
     return 0
 }
 
@@ -242,7 +237,6 @@ func test_signer_algorithm_and_destroy() -> I32 {
     assert_eq(alg.name(), "RSA-SHA256", "signer algorithm")
     signer.destroy()
     signer.destroy()
-    kp.destroy()
     return 0
 }
 
@@ -255,7 +249,6 @@ func test_verifier_algorithm_and_destroy() -> I32 {
     assert_eq(alg.name(), "RSA-SHA256", "verifier algorithm")
     verifier.destroy()
     verifier.destroy()
-    kp.destroy()
     return 0
 }
 
@@ -272,8 +265,6 @@ func test_sign_bytes_verify_bytes() -> I32 {
     let verify_result = verify_bytes(SignatureAlgorithm::RsaSha256, ref kp.public_key, ref data, ref sig)
     assert(verify_result.is_ok(), "verify_bytes should succeed")
     assert(verify_result.unwrap(), "verify_bytes should be valid")
-    data.destroy()
-    kp.destroy()
     return 0
 }
 
@@ -293,10 +284,6 @@ func test_signer_verifier_update_bytes() -> I32 {
     verifier.update_bytes(ref data)
     let valid: Bool = verifier.verify(ref sig).unwrap()
     assert(valid, "streaming bytes sign/verify should match")
-    signer.destroy()
-    verifier.destroy()
-    data.destroy()
-    kp.destroy()
     return 0
 }
 
@@ -313,7 +300,6 @@ func test_rsa_sha256_sign_verify() -> I32 {
     let verify_result = verify(SignatureAlgorithm::RsaSha256, ref kp.public_key, "hello world", ref sig)
     assert(verify_result.is_ok(), "RSA-SHA256 verify should succeed")
     assert(verify_result.unwrap(), "RSA-SHA256 signature should be valid")
-    kp.destroy()
     return 0
 }
 
@@ -325,7 +311,6 @@ func test_rsa_sha256_verify_wrong_data() -> I32 {
     let verify_result = verify(SignatureAlgorithm::RsaSha256, ref kp.public_key, "wrong", ref sig)
     assert(verify_result.is_ok(), "verify call should succeed")
     assert(not verify_result.unwrap(), "signature should be invalid for wrong data")
-    kp.destroy()
     return 0
 }
 
@@ -337,7 +322,6 @@ func test_rsa_sha256_helper_functions() -> I32 {
     assert(sig.len() > (0 as I64), "helper sig not empty")
     let valid: Bool = verify_rsa_sha256(ref kp.public_key, "test data", ref sig).unwrap()
     assert(valid, "helper verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -351,7 +335,6 @@ func test_rsa_sha512_sign_verify() -> I32 {
     assert(sig.len() > (0 as I64), "rsa sha512 sig not empty")
     let valid: Bool = verify_rsa_sha512(ref kp.public_key, "sha512 test", ref sig).unwrap()
     assert(valid, "rsa sha512 verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -368,7 +351,6 @@ func test_rsa_pss_sign_verify() -> I32 {
     assert(sig.len() > (0 as I64), "RSA-PSS sig not empty")
     let valid: Bool = verify_rsa_pss(ref kp.public_key, "pss test", ref sig, ref pss_opts).unwrap()
     assert(valid, "RSA-PSS verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -382,7 +364,6 @@ func test_ecdsa_sha256_sign_verify() -> I32 {
     assert(sig.len() > (0 as I64), "ecdsa sig not empty")
     let valid: Bool = verify_ecdsa_sha256(ref kp.public_key, "ecdsa test", ref sig).unwrap()
     assert(valid, "ecdsa verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -395,7 +376,6 @@ func test_ed25519_sign_verify() -> I32 {
     assert(sig.len() > (0 as I64), "ed25519 sig not empty")
     let valid: Bool = verify_ed25519(ref kp.public_key, "ed25519 test data", ref sig).unwrap()
     assert(valid, "ed25519 verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -405,7 +385,6 @@ func test_ed25519_verify_wrong_data() -> I32 {
     let sig: Signature = sign_ed25519(ref kp.private_key, "correct data").unwrap()
     let valid: Bool = verify_ed25519(ref kp.public_key, "wrong data", ref sig).unwrap()
     assert(not valid, "ed25519 verify should fail for wrong data")
-    kp.destroy()
     return 0
 }
 
@@ -418,7 +397,6 @@ func test_ed448_sign_verify() -> I32 {
     assert(sig.len() > (0 as I64), "ed448 sig not empty")
     let valid: Bool = verify_ed448(ref kp.public_key, "ed448 test data", ref sig).unwrap()
     assert(valid, "ed448 verify should pass")
-    kp.destroy()
     return 0
 }
 
@@ -428,6 +406,5 @@ func test_ed448_verify_wrong_data() -> I32 {
     let sig: Signature = sign_ed448(ref kp.private_key, "correct").unwrap()
     let valid: Bool = verify_ed448(ref kp.public_key, "wrong", ref sig).unwrap()
     assert(not valid, "ed448 verify should fail for wrong data")
-    kp.destroy()
     return 0
 }

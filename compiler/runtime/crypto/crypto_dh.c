@@ -623,7 +623,12 @@ TML_EXPORT void* crypto_dh_compute_secret(void* handle, void* other_pub_handle) 
     if (!peer_params)
         return NULL;
 
-    EVP_PKEY_CTX* from_ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
+    // Detect local key type (DH vs DHX) and use the same for the peer key.
+    // Named groups (ffdhe*, modp14+) use DHX; custom/legacy params use DH.
+    const char* key_type = EVP_PKEY_get0_type_name(dh->pkey);
+    const char* peer_type = (key_type && strcmp(key_type, "DHX") == 0) ? "DHX" : "DH";
+
+    EVP_PKEY_CTX* from_ctx = EVP_PKEY_CTX_new_from_name(NULL, peer_type, NULL);
     if (!from_ctx) {
         OSSL_PARAM_free(peer_params);
         return NULL;

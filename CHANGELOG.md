@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New skills: `/test-suite`, `/list-suites`, `/verify`
 
 ### Fixed
+- **Drop double-free crashes in crypto test suite** (2026-02-23) — Removed manual `destroy()` calls from tests where types now have Drop impls (auto-cleanup at scope exit). Fixed 4 test files: `cipher_aes.test` (10 tests), `sign.test` (34 tests), `x509.test` (40 tests), `dh.test` (9 tests). Root cause: manual destroy + auto-Drop = double-free → HEAP_CORRUPTION or ACCESS_VIOLATION.
+
+- **DH/DHX key type mismatch in `compute_secret`** (2026-02-23) — `crypto_dh.c` `compute_secret()` always built peer key as "DH" type, but named groups (ffdhe*, modp14+) create "DHX" keys via `EVP_PKEY_CTX_new_from_name`. Type mismatch caused `EVP_PKEY_derive_set_peer` to fail → returned Err → `.unwrap()` panicked → crash during panic cleanup. Fix: detect local key type with `EVP_PKEY_get0_type_name()` and use matching type for peer key.
+
+- **`when` codegen: arm bindings not consumed when used as result** (2026-02-23) — `when Ok(b) => b` pattern didn't mark the binding `b` as consumed, so auto-Drop fired on the binding AND on the result (same value). Added `mark_var_consumed()` in `when.cpp` when the arm body is an `IdentExpr` matching an arm binding.
+
+- **`return` codegen: args not consumed in `return Ok(x)`/`Err(x)`** (2026-02-23) — `return Ok(result)` didn't mark `result` as consumed, causing auto-Drop at function exit on an already-moved value. Extended `return.cpp` to call `mark_var_consumed()` for `CallExpr` args in return statements.
+
+- **`cipher.tml` parse error** (2026-02-23) — Fixed syntax error at line 890 in `finalize()` method and tuple destructuring.
+
+- **TLS linking failure on Windows** (2026-02-23) — Fixed `tls.c` include order causing LLD linking failures.
+
 - **Channel/WaitGroup codegen: struct type mapped to opaque ptr** (2026-02-23) — `llvm_type_name()` and `llvm_type_from_semantic()` in `types.cpp` hardcoded `Channel`/`WaitGroup` to bare `"ptr"` instead of `"%struct.Channel"`, causing invalid `getelementptr ptr, ptr` IR when accessing struct fields. Now maps to proper struct types.
 
 - **Double-free in tail expressions and impl method drop scopes** (2026-02-23) — Tail expressions (implicit return at end of function body) now mark returned variables as consumed and flush Str temps before dropping, matching explicit `return` behavior. Impl method bodies now have proper `push/pop_drop_scope` for RAII cleanup of local variables.
