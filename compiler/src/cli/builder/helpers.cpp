@@ -659,7 +659,14 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including time runtime: " << time_obj);
             }
 
-            // async.c removed — async executor dead code (Phase 30)
+            // concurrency/ - async.c (async executor, timer, yield, channel)
+            fs::path async_c = runtime_dir / "concurrency" / "async.c";
+            if (fs::exists(async_c)) {
+                std::string async_obj = ensure_c_compiled(to_forward_slashes(async_c.string()),
+                                                          deps_cache, clang, verbose);
+                objects.push_back(fs::path(async_obj));
+                TML_LOG_DEBUG("build", "Including async runtime: " << async_obj);
+            }
 
             // math.c removed — all functions migrated to inline LLVM IR (Phase 32)
 

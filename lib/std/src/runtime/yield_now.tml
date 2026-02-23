@@ -1,0 +1,48 @@
+//! Async yield operation.
+//!
+//! Provides a single-shot yield that returns Pending on first poll
+//! and Ready on second poll. Used to give other tasks a chance to run.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::runtime::yield_now::{YieldState, yield_poll}
+//!
+//! var state = YieldState::new()
+//! let r1 = yield_poll(mut ref state)  // Pending
+//! let r2 = yield_poll(mut ref state)  // Ready
+//! ```
+
+use std::runtime::sleep::PollResult
+
+// FFI declaration for C runtime yield (pointer-based to avoid ABI issues)
+@extern("tml_yield_poll_ptr")
+func ffi_yield_poll_ptr(state: mut ref YieldState, cx: *Unit, out: mut ref PollResult)
+
+/// State for an async yield operation.
+///
+/// Returns Pending on first poll, Ready on second.
+pub type YieldState {
+    yielded: I32,
+}
+
+impl YieldState {
+    /// Creates a new yield state.
+    pub func new() -> YieldState {
+        YieldState { yielded: 0 }
+    }
+
+    /// Polls the yield. Returns Pending first time, Ready second time.
+    pub func poll(mut this) -> PollResult {
+        var out: PollResult = PollResult { tag: 1, _pad: 0, value: 0 }
+        ffi_yield_poll_ptr(mut ref this, null, mut ref out)
+        out
+    }
+}
+
+/// Polls a yield operation.
+pub func yield_poll(state: mut ref YieldState) -> PollResult {
+    var out: PollResult = PollResult { tag: 1, _pad: 0, value: 0 }
+    ffi_yield_poll_ptr(state, null, mut ref out)
+    out
+}

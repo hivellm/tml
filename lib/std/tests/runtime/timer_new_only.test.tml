@@ -1,0 +1,16 @@
+// Test creating and polling a TimerState
+use test::*
+use std::runtime::sleep::{TimerState, PollResult}
+
+@test
+func test_create_timer() {
+    var timer: TimerState = TimerState::new(0)
+    assert(timer.duration_ms == 0)
+}
+
+@test
+func test_poll_zero_timer() {
+    var timer: TimerState = TimerState::new(0)
+    let result: PollResult = timer.poll()
+    assert(result.is_ready())
+}

@@ -1,0 +1,82 @@
+//! Async bounded channel for inter-task communication.
+//!
+//! Provides a bounded SPSC (single-producer, single-consumer) channel
+//! backed by a circular buffer. Used for communication between async tasks.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::runtime::channel::Channel
+//!
+//! var ch = Channel::new(16, 8)  // capacity 16, item size 8 bytes
+//! ch.close()
+//! ch.destroy()
+//! ```
+
+// FFI declarations for C runtime channel operations
+@extern("tml_channel_new")
+func ffi_channel_new(capacity: I64, item_size: I64) -> *Unit
+
+@extern("tml_channel_destroy")
+func ffi_channel_destroy(ch: *Unit)
+
+@extern("tml_channel_try_send")
+func ffi_channel_try_send(ch: *Unit, value: *Unit) -> I32
+
+@extern("tml_channel_try_recv")
+func ffi_channel_try_recv(ch: *Unit, value_out: *Unit) -> I32
+
+@extern("tml_channel_close")
+func ffi_channel_close(ch: *Unit)
+
+@extern("tml_channel_is_empty")
+func ffi_channel_is_empty(ch: *Unit) -> I32
+
+@extern("tml_channel_is_full")
+func ffi_channel_is_full(ch: *Unit) -> I32
+
+/// A bounded channel for async inter-task communication.
+///
+/// Uses a circular buffer with fixed capacity. Sending to a full
+/// channel or receiving from an empty channel returns 0 (would block).
+pub type Channel {
+    handle: *Unit,
+}
+
+impl Channel {
+    /// Creates a new channel with the given capacity and item size.
+    pub func new(capacity: I64, item_size: I64) -> Channel {
+        let h: *Unit = ffi_channel_new(capacity, item_size)
+        Channel { handle: h }
+    }
+
+    /// Tries to send a value. Returns 1 if sent, 0 if would block, -1 if closed.
+    pub func try_send(this, value: *Unit) -> I32 {
+        ffi_channel_try_send(this.handle, value)
+    }
+
+    /// Tries to receive a value. Returns 1 if received, 0 if would block, -1 if closed+empty.
+    pub func try_recv(this, value_out: *Unit) -> I32 {
+        ffi_channel_try_recv(this.handle, value_out)
+    }
+
+    /// Closes the channel, waking all waiters.
+    pub func close(this) {
+        ffi_channel_close(this.handle)
+    }
+
+    /// Returns true if the channel is empty.
+    pub func is_empty(this) -> Bool {
+        ffi_channel_is_empty(this.handle) == 1
+    }
+
+    /// Returns true if the channel is full.
+    pub func is_full(this) -> Bool {
+        ffi_channel_is_full(this.handle) == 1
+    }
+
+    /// Destroys the channel and frees resources.
+    pub func destroy(this) {
+        ffi_channel_destroy(this.handle)
+    }
+}

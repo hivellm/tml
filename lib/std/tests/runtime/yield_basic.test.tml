@@ -1,0 +1,22 @@
+// Test async yield operations
+use test::*
+use std::runtime::sleep::PollResult
+use std::runtime::yield_now::YieldState
+
+@test
+func test_yield_first_poll_pending() {
+    // First poll should return Pending
+    var state: YieldState = YieldState::new()
+    let r: PollResult = state.poll()
+    assert(r.is_pending())
+}
+
+@test
+func test_yield_second_poll_ready() {
+    // Second poll should return Ready
+    var state: YieldState = YieldState::new()
+    let r1: PollResult = state.poll()  // Pending
+    assert(r1.is_pending())
+    let r2: PollResult = state.poll()  // Ready
+    assert(r2.is_ready())
+}

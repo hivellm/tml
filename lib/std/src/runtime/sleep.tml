@@ -1,0 +1,92 @@
+//! Async sleep / timer operations.
+//!
+//! Provides poll-based timer functionality for the async runtime.
+//! Timer futures check elapsed time on each poll and return Ready
+//! when the duration has passed.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::runtime::sleep::{TimerState, sleep_poll}
+//!
+//! var timer = TimerState::new(100)  // 100ms timer
+//! // Poll in a loop until Ready
+//! ```
+
+// FFI declarations for C runtime timer operations (pointer-based to avoid ABI issues)
+@extern("tml_timer_new_ptr")
+func ffi_timer_new_ptr(duration_ms: I64, out: mut ref TimerState)
+
+@extern("tml_sleep_poll_ptr")
+func ffi_sleep_poll_ptr(state: mut ref TimerState, cx: *Unit, out: mut ref PollResult)
+
+@extern("tml_delay_poll_ptr")
+func ffi_delay_poll_ptr(state: mut ref TimerState, cx: *Unit, out: mut ref PollResult)
+
+/// Raw poll result from C runtime (matches TmlPoll layout).
+///
+/// Layout: { i32 tag, i32 pad, i64 value }
+/// - tag 0 = Ready, tag 1 = Pending
+pub type PollResult {
+    tag: I32,
+    _pad: I32,
+    value: I64,
+}
+
+impl PollResult {
+    /// Returns true if this poll result is Ready.
+    pub func is_ready(this) -> Bool {
+        this.tag == 0
+    }
+
+    /// Returns true if this poll result is Pending.
+    pub func is_pending(this) -> Bool {
+        this.tag == 1
+    }
+
+    /// Returns the value if Ready.
+    pub func get_value(this) -> I64 {
+        this.value
+    }
+}
+
+/// State for an async timer / sleep operation.
+///
+/// Created via `TimerState::new(duration_ms)`.
+/// Poll via `sleep_poll()` until Ready.
+pub type TimerState {
+    start_time_ms: I64,
+    duration_ms: I64,
+    started: I32,
+}
+
+impl TimerState {
+    /// Creates a new timer that will be Ready after `duration_ms` milliseconds.
+    pub func new(duration_ms: I64) -> TimerState {
+        var out: TimerState = TimerState { start_time_ms: 0, duration_ms: 0, started: 0 }
+        ffi_timer_new_ptr(duration_ms, mut ref out)
+        out
+    }
+
+    /// Polls the timer. Returns Ready when the duration has elapsed.
+    pub func poll(mut this) -> PollResult {
+        var out: PollResult = PollResult { tag: 1, _pad: 0, value: 0 }
+        ffi_sleep_poll_ptr(mut ref this, null, mut ref out)
+        out
+    }
+}
+
+/// Polls a sleep timer. First poll starts the timer, subsequent polls
+/// check if the duration has elapsed.
+pub func sleep_poll(state: mut ref TimerState) -> PollResult {
+    var out: PollResult = PollResult { tag: 1, _pad: 0, value: 0 }
+    ffi_sleep_poll_ptr(state, null, mut ref out)
+    out
+}
+
+/// Alias for sleep_poll.
+pub func delay_poll(state: mut ref TimerState) -> PollResult {
+    var out: PollResult = PollResult { tag: 1, _pad: 0, value: 0 }
+    ffi_delay_poll_ptr(state, null, mut ref out)
+    out
+}

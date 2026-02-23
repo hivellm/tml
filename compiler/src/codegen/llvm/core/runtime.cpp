@@ -160,6 +160,41 @@ void LLVMIRGen::init_runtime_catalog() {
     add("atomic_fence_acquire", "declare void @atomic_fence_acquire()");
     add("atomic_fence_release", "declare void @atomic_fence_release()");
 
+    // --- Async runtime ---
+    add("tml_executor_new", "declare ptr @tml_executor_new()");
+    add("tml_executor_destroy", "declare void @tml_executor_destroy(ptr)");
+    add("tml_executor_spawn", "declare i64 @tml_executor_spawn(ptr, ptr, ptr, i64)");
+    add("tml_executor_run", "declare i32 @tml_executor_run(ptr)");
+    add("tml_executor_wake", "declare void @tml_executor_wake(ptr, i64)");
+    add("tml_block_on_rt", "declare { i32, i32, i64 } @tml_block_on(ptr, ptr, i64)");
+    add("tml_executor_poll_task", "declare i32 @tml_executor_poll_task(ptr, ptr)");
+    add("tml_waker_create", "declare { ptr, ptr, i64 } @tml_waker_create(ptr, i64)");
+    add("tml_waker_wake", "declare void @tml_waker_wake(ptr)");
+    add("tml_waker_clone", "declare { ptr, ptr, i64 } @tml_waker_clone(ptr)");
+    add("tml_waker_destroy", "declare void @tml_waker_destroy(ptr)");
+    add("tml_poll_ready_i64", "declare { i32, i32, i64 } @tml_poll_ready_i64(i64)");
+    add("tml_poll_ready_ptr", "declare { i32, i32, i64 } @tml_poll_ready_ptr(ptr)");
+    add("tml_poll_pending", "declare { i32, i32, i64 } @tml_poll_pending()");
+    add("tml_poll_is_ready", "declare i32 @tml_poll_is_ready(ptr)");
+    add("tml_poll_is_pending", "declare i32 @tml_poll_is_pending(ptr)");
+    add("tml_timer_new", "declare { i64, i64, i32 } @tml_timer_new(i64)");
+    add("tml_timer_new_ptr", "declare void @tml_timer_new_ptr(i64, ptr)");
+    add("tml_sleep_poll", "declare { i32, i32, i64 } @tml_sleep_poll(ptr, ptr)");
+    add("tml_sleep_poll_ptr", "declare void @tml_sleep_poll_ptr(ptr, ptr, ptr)");
+    add("tml_delay_poll", "declare { i32, i32, i64 } @tml_delay_poll(ptr, ptr)");
+    add("tml_delay_poll_ptr", "declare void @tml_delay_poll_ptr(ptr, ptr, ptr)");
+    add("tml_yield_poll", "declare { i32, i32, i64 } @tml_yield_poll(ptr, ptr)");
+    add("tml_yield_poll_ptr", "declare void @tml_yield_poll_ptr(ptr, ptr, ptr)");
+    add("tml_channel_new", "declare ptr @tml_channel_new(i64, i64)");
+    add("tml_channel_destroy", "declare void @tml_channel_destroy(ptr)");
+    add("tml_channel_try_send", "declare i32 @tml_channel_try_send(ptr, ptr)");
+    add("tml_channel_try_recv", "declare i32 @tml_channel_try_recv(ptr, ptr)");
+    add("tml_channel_close", "declare void @tml_channel_close(ptr)");
+    add("tml_channel_is_empty", "declare i32 @tml_channel_is_empty(ptr)");
+    add("tml_channel_is_full", "declare i32 @tml_channel_is_full(ptr)");
+    add("tml_spawn", "declare { i64, ptr, i32, { i32, i32, i64 } } @tml_spawn(ptr, ptr, ptr, i64)");
+    add("tml_join_poll", "declare { i32, i32, i64 } @tml_join_poll(ptr, ptr)");
+
     // --- Log runtime ---
     add("rt_log_msg", "declare void @rt_log_msg(i32, ptr, ptr)");
     add("rt_log_set_level", "declare void @rt_log_set_level(i32)");

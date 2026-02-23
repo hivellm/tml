@@ -1,0 +1,60 @@
+//! Async task executor.
+//!
+//! Provides a single-threaded cooperative executor that polls futures
+//! to completion. This is the core scheduling component of the async runtime.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::runtime::executor::Executor
+//!
+//! let exec = Executor::new()
+//! exec.run()
+//! exec.destroy()
+//! ```
+
+// FFI declarations for C runtime async executor
+@extern("tml_executor_new")
+func ffi_executor_new() -> *Unit
+
+@extern("tml_executor_destroy")
+func ffi_executor_destroy(exec: *Unit)
+
+@extern("tml_executor_run")
+func ffi_executor_run(exec: *Unit) -> I32
+
+@extern("tml_executor_wake")
+func ffi_executor_wake(exec: *Unit, task_id: I64)
+
+/// A single-threaded async task executor.
+///
+/// The executor maintains queues of ready and pending tasks, polling
+/// them cooperatively until all tasks complete.
+pub type Executor {
+    handle: *Unit
+}
+
+impl Executor {
+    /// Creates a new executor.
+    pub func new() -> Executor {
+        let h: *Unit = ffi_executor_new()
+        Executor { handle: h }
+    }
+
+    /// Runs the executor until all spawned tasks complete.
+    ///
+    /// Returns 0 on success, non-zero on error.
+    pub func run(this) -> I32 {
+        ffi_executor_run(this.handle)
+    }
+
+    /// Destroys the executor and frees all associated resources.
+    pub func destroy(this) {
+        ffi_executor_destroy(this.handle)
+    }
+
+    /// Returns the raw handle pointer (for FFI use).
+    pub func raw(this) -> *Unit {
+        this.handle
+    }
+}

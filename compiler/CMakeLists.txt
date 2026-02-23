@@ -206,7 +206,7 @@ set(TML_RUNTIME_SOURCES
     # concurrency/
     # thread.c deleted (Phase 30) — replaced by sync.c (Phase 24)
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/sync.c
-    # async.c deleted (Phase 30) — async executor never connected
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/async.c
     # net/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c

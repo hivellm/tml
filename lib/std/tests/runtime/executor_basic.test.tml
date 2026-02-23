@@ -1,0 +1,19 @@
+// Test basic executor operations
+use test::*
+use std::runtime::executor::Executor
+
+@test
+func test_executor_create_destroy() {
+    // Create an executor and destroy it
+    let exec: Executor = Executor::new()
+    exec.destroy()
+}
+
+@test
+func test_executor_run_empty() {
+    // Running an executor with no tasks should return immediately
+    let exec: Executor = Executor::new()
+    let result: I32 = exec.run()
+    assert(result == 0)
+    exec.destroy()
+}

@@ -1,0 +1,40 @@
+//! Async runtime for cooperative multitasking.
+//!
+//! This module provides the async runtime infrastructure for TML's
+//! async/await system, including an executor, timer, yield, and channels.
+//!
+//! # Modules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`executor`] | Single-threaded task executor |
+//! | [`sleep`] | Timer and sleep operations |
+//! | [`yield_now`] | Yield to other tasks |
+//! | [`channel`] | Bounded async channel |
+//!
+//! # Architecture
+//!
+//! The async system uses a cooperative polling model:
+//! 1. Tasks are polled by the executor
+//! 2. If a task returns `Pending`, it's moved to the pending queue
+//! 3. When an event occurs (timer expires, data arrives), the task is woken
+//! 4. The executor polls the task again
+//!
+//! # Examples
+//!
+//! ## Timer-based sleep
+//!
+//! ```tml
+//! use std::runtime::sleep::TimerState
+//!
+//! var timer = TimerState::new(100)  // 100ms
+//! loop (true) {
+//!     let result = timer.poll()
+//!     if result.is_ready() { break }
+//! }
+//! ```
+
+pub mod executor
+pub mod sleep
+pub mod yield_now
+pub mod channel

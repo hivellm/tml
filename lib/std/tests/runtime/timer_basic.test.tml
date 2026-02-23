@@ -1,0 +1,37 @@
+// Test basic async timer/sleep operations
+use test::*
+use std::runtime::sleep::{TimerState, PollResult}
+
+@test
+func test_timer_zero_duration() {
+    // A zero-duration timer should be Ready immediately
+    var timer: TimerState = TimerState::new(0)
+    let result: PollResult = timer.poll()
+    assert(result.is_ready())
+}
+
+@test
+func test_timer_nonzero_first_poll_pending() {
+    // First poll of a non-zero timer should start it and return Pending
+    var timer: TimerState = TimerState::new(1000)
+    let result: PollResult = timer.poll()
+    assert(result.is_pending())
+}
+
+@test
+func test_timer_short_duration_completes() {
+    // A 1ms timer should complete quickly after polling
+    var timer: TimerState = TimerState::new(1)
+    var result: PollResult = timer.poll()  // starts timer
+
+    // Busy-poll until ready (should take ~1ms)
+    var iterations: I64 = 0
+    loop (not result.is_ready()) {
+        result = timer.poll()
+        iterations = iterations + 1
+        if iterations > 10000000 {
+            break
+        }
+    }
+    assert(result.is_ready())
+}
