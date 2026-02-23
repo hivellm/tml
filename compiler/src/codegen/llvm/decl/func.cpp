@@ -727,6 +727,27 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Mark the returned variable as consumed (moved) so it won't be dropped.
+                // This prevents double-free for types with Drop (like Buffer, List, etc.).
+                // Same logic as gen_return() in return.cpp — tail expressions transfer ownership.
+                if (func.body->expr.value()->is<parser::IdentExpr>()) {
+                    const auto& ident = func.body->expr.value()->as<parser::IdentExpr>();
+                    mark_var_consumed(ident.name);
+                }
+
+                // If the tail expression is a Str temp, remove from temp drops (ownership
+                // transfers)
+                if (last_expr_type_ == "ptr" && !temp_drops_.empty() &&
+                    temp_drops_.back().is_heap_str) {
+                    temp_drops_.pop_back();
+                }
+                if (last_expr_type_ == "ptr" && !pending_str_temps_.empty()) {
+                    consume_last_str_temp();
+                }
+
+                // Flush remaining Str intermediates before returning
+                flush_str_temps();
+
                 // Emit drops before returning
                 emit_all_drops();
                 // For async functions, wrap result in Poll.Ready
@@ -1074,6 +1095,27 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Mark the returned variable as consumed (moved) so it won't be dropped.
+                // This prevents double-free for types with Drop (like Buffer, List, etc.).
+                // Same logic as gen_return() in return.cpp — tail expressions transfer ownership.
+                if (func.body->expr.value()->is<parser::IdentExpr>()) {
+                    const auto& ident = func.body->expr.value()->as<parser::IdentExpr>();
+                    mark_var_consumed(ident.name);
+                }
+
+                // If the tail expression is a Str temp, remove from temp drops (ownership
+                // transfers)
+                if (last_expr_type_ == "ptr" && !temp_drops_.empty() &&
+                    temp_drops_.back().is_heap_str) {
+                    temp_drops_.pop_back();
+                }
+                if (last_expr_type_ == "ptr" && !pending_str_temps_.empty()) {
+                    consume_last_str_temp();
+                }
+
+                // Flush remaining Str intermediates before returning
+                flush_str_temps();
+
                 // Emit drops before returning
                 emit_all_drops();
                 // Fix: Unit type always uses zeroinitializer (can't use bool/int values)

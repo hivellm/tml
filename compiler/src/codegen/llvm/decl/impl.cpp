@@ -516,6 +516,9 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Generate method body
     if (method.body) {
+        // Push drop scope for method body (enables RAII for local variables)
+        push_drop_scope();
+
         for (const auto& stmt : method.body->stmts) {
             if (block_terminated_)
                 break;
@@ -526,6 +529,30 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (method.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Mark the returned variable as consumed (moved) so it won't be dropped.
+                // This prevents double-free for types with Drop (like Buffer, List, etc.).
+                // Same logic as gen_return() in return.cpp — tail expressions transfer ownership.
+                if (method.body->expr.value()->is<parser::IdentExpr>()) {
+                    const auto& ident = method.body->expr.value()->as<parser::IdentExpr>();
+                    mark_var_consumed(ident.name);
+                }
+
+                // If the tail expression is a Str temp, remove from temp drops (ownership
+                // transfers)
+                if (last_expr_type_ == "ptr" && !temp_drops_.empty() &&
+                    temp_drops_.back().is_heap_str) {
+                    temp_drops_.pop_back();
+                }
+                if (last_expr_type_ == "ptr" && !pending_str_temps_.empty()) {
+                    consume_last_str_temp();
+                }
+
+                // Flush remaining Str intermediates before returning
+                flush_str_temps();
+
+                // Emit drops before returning
+                emit_all_drops();
+
                 // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
                 if (ret_type == "{}") {
                     emit_line("  ret {} zeroinitializer");
@@ -566,6 +593,12 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                 block_terminated_ = true;
             }
         }
+
+        // Emit drops for variables that weren't returned via tail expression
+        if (!block_terminated_) {
+            emit_all_drops();
+        }
+        pop_drop_scope();
     }
 
     // Add implicit return if needed
@@ -946,6 +979,25 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (method.body->expr.has_value()) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Mark the returned variable as consumed (moved) so it won't be dropped.
+                // This prevents double-free for types with Drop (like Buffer, List, etc.).
+                if (method.body->expr.value()->is<parser::IdentExpr>()) {
+                    const auto& ident = method.body->expr.value()->as<parser::IdentExpr>();
+                    mark_var_consumed(ident.name);
+                }
+
+                // If the tail expression is a Str temp, remove from temp drops
+                if (last_expr_type_ == "ptr" && !temp_drops_.empty() &&
+                    temp_drops_.back().is_heap_str) {
+                    temp_drops_.pop_back();
+                }
+                if (last_expr_type_ == "ptr" && !pending_str_temps_.empty()) {
+                    consume_last_str_temp();
+                }
+
+                // Flush remaining Str intermediates before returning
+                flush_str_temps();
+
                 // Emit drops before returning
                 emit_all_drops();
                 // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
@@ -989,6 +1041,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
             }
         }
 
+        // Emit drops for variables that weren't returned via tail expression
+        if (!block_terminated_) {
+            emit_all_drops();
+        }
         pop_drop_scope();
     }
 
