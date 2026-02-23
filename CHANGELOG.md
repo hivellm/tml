@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Windows Certificate Store Integration for TLS** (2026-02-23) - Load CA certificates from Windows system store (wincrypt) into OpenSSL
+  - `load_windows_cert_store()` in `compiler/runtime/net/tls.c` uses `CertOpenSystemStoreA("ROOT")` + `CertEnumCertificatesInStore` + `d2i_X509`
+  - Fixes `SSL_VERIFY_PEER` mode on Windows where `SSL_CTX_set_default_verify_paths()` fails (no cert bundle at OPENSSLDIR)
+  - `TlsVerifyMode::Peer()` now validates certificates against trusted CAs: `verify_result() == 0` (X509_V_OK), `peer_verified() == true`
+  - Falls back to OpenSSL default paths on Linux/macOS where system bundles are available
+
+- **Real-World TLS Integration Tests** (2026-02-23) - TLS 1.2/1.3 version constraint and certificate verification tests
+  - `tls_google.test.tml` — TLS handshake to google.com:443 (version, cipher, CN, ALPN, PEM export)
+  - `tls_verify.test.tml` — Force TLS 1.2 to google.com via `set_min_version`/`set_max_version` (cipher: ECDHE-ECDSA-CHACHA20-POLY1305)
+  - `tls_cloudflare.test.tml` — Force TLS 1.3 to cloudflare.com (cipher: TLS_AES_256_GCM_SHA384)
+  - `tls_cert_verify.test.tml` — Real certificate validation with `TlsVerifyMode::Peer()` against google.com (X509_V_OK)
+  - `dns_realworld.test.tml` — 11 DNS tests (google.com, cloudflare, github.com; IPv4/IPv6/reverse)
+
+- **Networking Module Expansion** (2026-02-22) - TCP/UDP/DNS/TLS test coverage from 30% to 91%+
+  - TCP echo tests with threads (bind → listen → accept → connect → write → read)
+  - UDP datagram exchange tests (connected and unconnected modes)
+  - Socket options tests (TTL, broadcast, multicast, non-blocking, keepalive)
+  - E2E test framework for TCP/UDP client-server testing
+  - 42+ new net module tests across 15 test files
+
 - **Suite-Level Test Filtering** (2026-02-19) - `--suite=` CLI flag and MCP `suite` parameter for targeted test execution
   - `tml test --suite=core/str` runs only `core::str` test suites (maps to `lib/core/tests/str/`)
   - `tml test --list-suites` shows all available suite groups with file/test counts

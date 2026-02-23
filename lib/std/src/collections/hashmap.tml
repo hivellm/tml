@@ -569,3 +569,21 @@ impl[K, V] HashMapIter[K, V] {
         lowlevel { mem_free(this.handle) }
     }
 }
+
+impl[K, V] Drop for HashMap[K, V] {
+    func drop(mut this) {
+        if this.handle != (0 as *Unit) {
+            this.destroy()
+            this.handle = 0 as *Unit
+        }
+    }
+}
+
+impl[K, V] Drop for HashMapIter[K, V] {
+    func drop(mut this) {
+        if this.handle != (0 as *Unit) {
+            this.destroy()
+            this.handle = 0 as *Unit
+        }
+    }
+}

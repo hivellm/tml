@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-20
-**Current state**: Compiler functional, 76.2% library coverage, 9,045+ tests passing
+**Last updated**: 2026-02-23
+**Current state**: Compiler functional, 76.2% library coverage, 9,045+ tests passing, full networking stack operational
 
 ---
 
@@ -12,7 +12,7 @@ Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
 Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓, glob→@extern FFI✓, dead crypto list builders removed✓, dead codegen paths removed✓, primitive to_string→TML behavior dispatch✓, string interp→TML Display✓, MIR Char/Str/print fixes✓, dead time/header cleanup✓, ghost string/assert declarations removed✓, Str to_string/debug_string→TML dispatch✓; runtime: 15 compiled .c files, 0 migration candidates; inline IR: 5 functions remaining)
-Phase 5  [LATER]      Async runtime, networking, HTTP
+Phase 5  [PARTIAL]    Sync networking DONE ✓, async runtime + HTTP pending
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
 
@@ -433,7 +433,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 - [x] 3.8.7 Tests for regex (30 tests: basic + advanced + captures)
 
 **Progress**: 47/48 items complete (~98%). Only 3.6.3 (Read/Write/Seek behaviors) remains, blocked by compiler bug (default behavior method dispatch returns `()`).\
-**Recent improvements** (2026-02-18): Added `destroy()` methods to all collection types (List, HashMap, Buffer, Deque, BTreeMap, BTreeSet, HashSet, LinkedList) fixing memory leaks; TML-style Hash behavior impls for net types (IpAddr, SocketAddr, etc.); DNS runtime fix for dynamic TLS and family_hint values.
+**Recent improvements** (2026-02-23): Full sync networking stack operational — TCP (echo server with threads), UDP (datagram exchange), DNS (real-world resolution), TLS 1.2/1.3 (Google, Cloudflare), SSL certificate verification (Windows cert store integration via wincrypt.h), 30 net test files with 350+ tests. (2026-02-18): Added `destroy()` methods to all collection types (List, HashMap, Buffer, Deque, BTreeMap, BTreeSet, HashSet, LinkedList) fixing memory leaks; TML-style Hash behavior impls for net types (IpAddr, SocketAddr, etc.); DNS runtime fix for dynamic TLS and family_hint values.
 **Gate**: `HashSet`, `BTreeMap`, `Math`, `DateTime`, `Random`, `ThreadRng`, `BufReader/BufWriter`, `Regex` (with captures), `Process` all working with tests.
 
 ---
@@ -849,48 +849,69 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 **Dependencies**: Phase 1 (closures must work), Phase 3 (buffered I/O)
 **Tracking**: [language-completeness-roadmap/tasks.md](../rulebook/tasks/language-completeness-roadmap/tasks.md) M3-M4
 
-### 5.1 Async runtime
+### 5.1 Sync Networking (COMPLETE ✓)
 
-- [ ] 5.1.1 Event loop (epoll/IOCP/kqueue)
-- [ ] 5.1.2 `async func` — state machine codegen
-- [ ] 5.1.3 `await` expression — suspension and resumption
-- [ ] 5.1.4 `Executor` with work-stealing scheduler
-- [ ] 5.1.5 `spawn()`, `block_on()`, `sleep()`, `timeout()`
-- [ ] 5.1.6 `AsyncMutex[T]`, `AsyncChannel[T]`, `AsyncSemaphore`
-- [ ] 5.1.7 `select!`, `join!`
-- [ ] 5.1.8 Tests and benchmarks
+The synchronous networking stack is fully implemented and tested:
 
-### 5.2 Networking (async layer on existing sync)
+- [x] 5.1.1 IP address types: Ipv4Addr, Ipv6Addr, IpAddr (classification, formatting, parsing)
+- [x] 5.1.2 Socket addresses: SocketAddr, SocketAddrV4, SocketAddrV6
+- [x] 5.1.3 Address parsing: IPv4, IPv6 (full + `::` compression), socket addresses
+- [x] 5.1.4 TCP: TcpListener (bind, accept), TcpStream (connect, read, write, options), TcpBuilder
+- [x] 5.1.5 UDP: UdpSocket (bind, send_to, recv_from, connected mode), UdpBuilder
+- [x] 5.1.6 DNS: lookup (IPv4), lookup6 (IPv6), lookup_all, reverse DNS, error handling
+- [x] 5.1.7 TLS/SSL: TlsContext, TlsStream, version negotiation (TLS 1.2/1.3), certificate verification
+- [x] 5.1.8 Windows cert store integration (wincrypt.h → OpenSSL X509_STORE)
+- [x] 5.1.9 Raw socket layer: RawSocket with full option support (TTL, keepalive, nodelay, buffers)
+- [x] 5.1.10 Error types: NetError (sockets), DnsError (resolution), AddrParseError (parsing)
+- [x] 5.1.11 Tests: 30 test files, 350+ tests (IP, TCP, UDP, DNS, TLS, parser, error handling)
+- [x] 5.1.12 Real-world integration: TCP echo (threaded), UDP echo, DNS google.com, TLS to Google/Cloudflare
 
-> Sync TCP/UDP/DNS/TLS already implemented
+**Implementation**: 12 TML modules (~3,500 lines) + 3 C FFI files (~1,800 lines wrapping OS system calls).
 
-- [ ] 5.2.1 `AsyncTcpListener` / `AsyncTcpStream`
-- [ ] 5.2.2 `AsyncUdpSocket`
-- [ ] 5.2.3 Zero-copy buffer management
-- [ ] 5.2.4 Connection pooling
-- [ ] 5.2.5 Tests: async echo server, concurrent clients
+### 5.2 Async Runtime (NOT STARTED)
 
-### 5.3 HTTP
+- [ ] 5.2.1 Event loop (epoll/IOCP/kqueue)
+- [ ] 5.2.2 `async func` — state machine codegen
+- [ ] 5.2.3 `await` expression — suspension and resumption
+- [ ] 5.2.4 `Executor` with work-stealing scheduler
+- [ ] 5.2.5 `spawn()`, `block_on()`, `sleep()`, `timeout()`
+- [ ] 5.2.6 `AsyncMutex[T]`, `AsyncChannel[T]`, `AsyncSemaphore`
+- [ ] 5.2.7 `select!`, `join!`
+- [ ] 5.2.8 Tests and benchmarks
 
-- [ ] 5.3.1 HTTP/1.1 parser and server
-- [ ] 5.3.2 HTTP/1.1 client with connection pooling
-- [ ] 5.3.3 HTTP/2 multiplexing
-- [ ] 5.3.4 Router with path matching and method routing
-- [ ] 5.3.5 Middleware pipeline (logging, auth, CORS, compression)
-- [ ] 5.3.6 Decorator-based routing: `@Controller`, `@Get`, `@Post`
-- [ ] 5.3.7 WebSocket support
-- [ ] 5.3.8 HTTPS (TLS integration already done)
-- [ ] 5.3.9 Tests and benchmarks
+### 5.3 Async Networking (layer on sync)
 
-### 5.4 Promises and reactivity
+- [ ] 5.3.1 `AsyncTcpListener` / `AsyncTcpStream`
+- [ ] 5.3.2 `AsyncUdpSocket`
+- [ ] 5.3.3 Zero-copy buffer management
+- [ ] 5.3.4 Connection pooling
+- [ ] 5.3.5 Tests: async echo server, concurrent clients
 
-- [ ] 5.4.1 `Promise[T]` — then, catch, finally, map, flat_map
-- [ ] 5.4.2 `Observable[T]` — subscribe, map, filter, merge, zip
-- [ ] 5.4.3 Operators: debounce, throttle, distinct, buffer
-- [ ] 5.4.4 Pipe operator `|>` for fluent composition
-- [ ] 5.4.5 Tests
+### 5.4 HTTP
 
-**Gate**: TCP echo server runs, async/await compiles and executes, HTTP server serves routes.
+> **Prerequisites ready**: TCP ✓, TLS ✓, DNS ✓, URL ✓, zlib ✓, base64 ✓
+
+- [ ] 5.4.1 HTTP/1.1 request builder and response parser
+- [ ] 5.4.2 HTTP/1.1 client with connection pooling
+- [ ] 5.4.3 Chunked transfer encoding
+- [ ] 5.4.4 HTTP/1.1 server
+- [ ] 5.4.5 Router with path matching and method routing
+- [ ] 5.4.6 Middleware pipeline (logging, auth, CORS, compression)
+- [ ] 5.4.7 Decorator-based routing: `@Controller`, `@Get`, `@Post`
+- [ ] 5.4.8 HTTP/2 multiplexing
+- [ ] 5.4.9 WebSocket support
+- [ ] 5.4.10 HTTPS (TLS integration already done ✓)
+- [ ] 5.4.11 Tests and benchmarks
+
+### 5.5 Promises and reactivity
+
+- [ ] 5.5.1 `Promise[T]` — then, catch, finally, map, flat_map
+- [ ] 5.5.2 `Observable[T]` — subscribe, map, filter, merge, zip
+- [ ] 5.5.3 Operators: debounce, throttle, distinct, buffer
+- [ ] 5.5.4 Pipe operator `|>` for fluent composition
+- [ ] 5.5.5 Tests
+
+**Gate**: TCP echo server runs ✓, async/await compiles and executes, HTTP server serves routes.
 
 ---
 

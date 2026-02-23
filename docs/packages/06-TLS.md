@@ -462,132 +462,184 @@ pub type AlertDescription =
     | NoApplicationProtocol
 ```
 
-## 9. Examples
+## 9. Implementation Status
 
-### 9.1 HTTPS Client
+> **Note**: The spec above (sections 1-8) describes the full planned API. The current
+> implementation uses a lower-level OpenSSL wrapper API. The examples below show the
+> **actual working API** as of v0.1.6 (2026-02-23).
+
+### Current API (implemented)
 
 ```tml
-mod https_client
-caps: [io::network.tcp, io::network.tls]
+use std::net::tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
 
-use std::net.TcpStream
-use std::tls.{TlsConnector, TlsStream}
-use std::io.{BufReader, BufWriter, Write}
+// TlsContext — wraps SSL_CTX
+TlsContext::client() -> Outcome[TlsContext, NetError]     // Client context (TLS 1.2+ default)
+TlsContext::server(cert, key) -> Outcome[TlsContext, NetError]  // Server context
+ctx.set_verify_mode(TlsVerifyMode)                        // None, Peer, RequireClientCert
+ctx.set_ca_file(path) -> Outcome[(), NetError]             // Load custom CA bundle
+ctx.set_min_version(TlsVersion) -> Outcome[(), NetError]   // Force minimum version
+ctx.set_max_version(TlsVersion) -> Outcome[(), NetError]   // Force maximum version
+ctx.set_ciphers(cipher_list) -> Outcome[(), NetError]       // TLS 1.2 cipher list
+ctx.set_ciphersuites(suites) -> Outcome[(), NetError]       // TLS 1.3 cipher suites
 
-pub func https_get(host: ref str, path: ref str) -> Outcome[String, Error] {
-    // TCP connection
-    let tcp = TcpStream.connect((host, 443))!
+// TlsStream — wraps SSL
+TlsStream::connect(ctx, socket_fd, hostname) -> Outcome[TlsStream, NetError]  // Client handshake + SNI
+TlsStream::accept(ctx, socket_fd) -> Outcome[TlsStream, NetError]             // Server accept
+stream.read(buf) -> Outcome[I64, NetError]                 // Encrypted read
+stream.write(buf) -> Outcome[I64, NetError]                // Encrypted write
+stream.write_str(s) -> Outcome[I64, NetError]              // String write
+stream.version() -> Str                                    // e.g. "TLSv1.3"
+stream.cipher() -> Str                                     // e.g. "TLS_AES_256_GCM_SHA384"
+stream.alpn() -> Str                                       // Negotiated ALPN protocol
+stream.peer_cn() -> Str                                    // Peer certificate CN
+stream.peer_cert_pem() -> Str                              // PEM-encoded peer certificate
+stream.verify_result() -> I32                              // 0 = X509_V_OK
+stream.peer_verified() -> Bool                             // Certificate validation result
+stream.shutdown()                                          // Graceful TLS close
 
-    // TLS handshake
-    let connector = TlsConnector.new()!
-    let tls = connector.connect(host, tcp)!
+// TlsVersion constants
+TlsVersion::TLS_1_0()  // 0x0301
+TlsVersion::TLS_1_1()  // 0x0302
+TlsVersion::TLS_1_2()  // 0x0303 (minimum recommended)
+TlsVersion::TLS_1_3()  // 0x0304
 
-    // Send HTTP request
-    var writer = BufWriter.new(ref tls)
-    writer.write_all(b"GET ")!
-    writer.write_all(path.as_bytes())!
-    writer.write_all(b" HTTP/1.1\r\nHost: ")!
-    writer.write_all(host.as_bytes())!
-    writer.write_all(b"\r\nConnection: close\r\n\r\n")!
-    writer.flush()!
+// TlsVerifyMode
+TlsVerifyMode::None()              // No verification (testing only)
+TlsVerifyMode::Peer()              // Verify server cert (standard for clients)
+TlsVerifyMode::RequireClientCert() // Require client cert (mutual TLS servers)
+```
 
-    // Read response
-    var response = String.new()
-    tls.read_to_string(&mut response)!
+### Platform notes
 
-    return Ok(response)
+- **Windows**: CA certificates loaded from the Windows system certificate store via `wincrypt.h` (`CertOpenSystemStoreA("ROOT")`). No cert bundle file needed.
+- **Linux/macOS**: Uses OpenSSL's `SSL_CTX_set_default_verify_paths()` to find system CA bundles.
+- **Backend**: OpenSSL 3.x via vcpkg (Windows) or system packages (Linux/macOS).
+
+## 10. Working Examples
+
+### 10.1 HTTPS Client (TLS 1.3)
+
+```tml
+use std::net::dns
+use std::net::ip::Ipv4Addr
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::tcp::TcpStream
+use std::net::tls::{TlsContext, TlsStream, TlsVerifyMode}
+use std::net::tls
+use std::net::sys::RawSocket
+
+func https_get(host: Str, path: Str) -> Outcome[Str, Str] {
+    // 1. DNS resolution
+    let ip: Ipv4Addr = dns::lookup(host).unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+
+    // 2. TCP connection
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
+
+    // 3. TLS handshake with certificate verification
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::Peer())
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, host).unwrap()
+
+    // 4. Send HTTP request over TLS
+    let req: Str = "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+    let _w = stream.write_str(req)
+
+    // 5. Read response
+    // ... (read loop using stream.read())
+
+    stream.shutdown()
+    Ok("done")
 }
 ```
 
-### 9.2 TLS Server
+### 10.2 Force TLS 1.2 with Version Constraints
 
 ```tml
-mod tls_server
-caps: [io::network.tcp, io::network.tls, io::file.read]
+use std::net::dns
+use std::net::ip::Ipv4Addr
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::tcp::TcpStream
+use std::net::tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
+use std::net::tls
+use std::net::sys::RawSocket
 
-use std::net.TcpListener
-use std::tls.{TlsAcceptor, Certificate, PrivateKey}
-use std::thread
+func connect_tls12(host: Str) -> I32 {
+    let ip: Ipv4Addr = dns::lookup(host).unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
 
-pub func main() -> Outcome[Unit, Error] {
-    // Load certificate and key
-    let cert = Certificate.load_pem("server.crt")!
-    let key = PrivateKey.load_pem("server.key")!
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::None())
 
-    // Create TLS acceptor
-    let acceptor = TlsAcceptor.new(cert, key)!
+    // Force TLS 1.2 only
+    let _r1 = ctx.set_min_version(TlsVersion::TLS_1_2())
+    let _r2 = ctx.set_max_version(TlsVersion::TLS_1_2())
 
-    // Listen for connections
-    let listener = TcpListener.bind("0.0.0.0:8443")!
-    println("Listening on port 8443")
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, host).unwrap()
 
-    loop (tcp, addr) in listener.incoming() {
-        let tcp = tcp?
-        let acceptor = acceptor.duplicate()
+    let ver: Str = stream.version()    // "TLSv1.2"
+    let cipher: Str = stream.cipher()  // e.g. "ECDHE-ECDSA-CHACHA20-POLY1305"
 
-        thread.spawn(do() {
-            when acceptor.accept(tcp) {
-                Ok(tls) -> {
-                    println("TLS connection from: " + addr.to_string())
-                    println("  Version: " + tls.tls_version().to_string())
-                    println("  Cipher: " + tls.cipher_suite().name)
-                    handle_connection(tls).ok()
-                },
-                Err(e) -> {
-                    eprintln("TLS error: " + e.to_string())
-                },
-            }
-        })
-    }
-
-    return Ok(unit)
-}
-
-func handle_connection[S: Read + Write](stream: TlsStream[S]) -> Outcome[Unit, Error] {
-    var buf: [U8; 1024] = [0; 1024]
-    let n = stream.read(&mut buf)!
-
-    let response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello"
-    stream.write_all(response)!
-
-    return Ok(unit)
+    stream.shutdown()
+    0
 }
 ```
 
-### 9.3 Mutual TLS
+### 10.3 Certificate Verification
 
 ```tml
-mod mtls
-caps: [io::network.tls, io::file.read]
+use std::net::dns
+use std::net::ip::Ipv4Addr
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::tcp::TcpStream
+use std::net::tls::{TlsContext, TlsStream, TlsVerifyMode}
+use std::net::tls
+use std::net::sys::RawSocket
 
-use std::tls.{TlsConnectorBuilder, TlsAcceptorBuilder, Certificate, PrivateKey, ClientAuth}
+func verify_certificate(host: Str) -> Bool {
+    let ip: Ipv4Addr = dns::lookup(host).unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
 
-// Client with certificate
-func create_mtls_client() -> Outcome[TlsConnector, Error] {
-    let client_cert = Certificate.load_pem("client.crt")!
-    let client_key = PrivateKey.load_pem("client.key")!
-    let ca_cert = Certificate.load_pem("ca.crt")!
+    // Enable certificate verification (validates against system CA store)
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::Peer())
 
-    return TlsConnectorBuilder.new()
-        .add_root_cert(ca_cert)
-        .client_cert(client_cert, client_key)
-        .min_version(TlsVersion.Tls12)
-        .build()
-}
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, host).unwrap()
 
-// Server requiring client certificate
-func create_mtls_server() -> Outcome[TlsAcceptor, Error] {
-    let server_cert = Certificate.load_pem("server.crt")!
-    let server_key = PrivateKey.load_pem("server.key")!
-    let ca_cert = Certificate.load_pem("ca.crt")!
+    // Check verification result
+    let verify_code: I32 = stream.verify_result()  // 0 = X509_V_OK
+    let verified: Bool = stream.peer_verified()     // true if valid CA chain
 
-    return TlsAcceptorBuilder.new()
-        .identity(server_cert, server_key)
-        .client_auth(ClientAuth.RequireAndVerifyClientCert([ca_cert]))
-        .min_version(TlsVersion.Tls12)
-        .build()
+    // Inspect certificate
+    let cn: Str = stream.peer_cn()                  // e.g. "*.google.com"
+    let pem: Str = stream.peer_cert_pem()           // Full PEM certificate
+
+    stream.shutdown()
+    verified
 }
 ```
+
+## 11. Test Coverage
+
+| Test File | Tests | What it validates |
+|-----------|-------|-------------------|
+| `tls_google.test.tml` | 2 | Handshake, version, cipher, CN, ALPN, PEM export |
+| `tls_verify.test.tml` | 1 | Force TLS 1.2 via set_min/max_version |
+| `tls_cloudflare.test.tml` | 1 | Force TLS 1.3 via set_min/max_version |
+| `tls_cert_verify.test.tml` | 1 | Real certificate verification (Peer mode, X509_V_OK) |
+| `tls_context.test.tml` | 5 | Context creation, version/cipher config, error paths |
+| `tls_errors.test.tml` | 4 | Error handling, invalid host, connection failures |
+
+**Coverage**: `std::net::tls` at 91.2% (31/34 functions covered).
 
 ---
 

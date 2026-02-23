@@ -233,3 +233,12 @@ impl[T] List[T] {
         lowlevel { mem_free(this.handle) }
     }
 }
+
+impl[T] Drop for List[T] {
+    func drop(mut this) {
+        if this.handle != (0 as *Unit) {
+            this.destroy()
+            this.handle = 0 as *Unit
+        }
+    }
+}

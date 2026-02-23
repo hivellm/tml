@@ -990,3 +990,12 @@ impl Buffer {
         result
     }
 }
+
+impl Drop for Buffer {
+    func drop(mut this) {
+        if this.handle != (0 as *Unit) {
+            this.destroy()
+            this.handle = 0 as *Unit
+        }
+    }
+}
