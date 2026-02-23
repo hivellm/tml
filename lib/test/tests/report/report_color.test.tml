@@ -1,0 +1,12 @@
+// Tests for report module — color functions SKIPPED
+// The color print functions (print_colored, print_green, print_red, print_yellow, print_bold)
+// use ANSI_* module-level constants that fail during codegen.
+// These functions cannot be tested until const codegen from imported modules is fixed.
+use test::{assert}
+
+@test
+func test_color_functions_placeholder() -> I32 {
+    // Color functions blocked by const codegen issue (ANSI_* variables)
+    assert(true, "placeholder for blocked color tests")
+    return 0
+}

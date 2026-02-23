@@ -1,0 +1,11 @@
+// Tests for tuple — Ord/PartialOrd blocked by generic behavior dispatch
+// Keeping as placeholder until codegen is fixed
+use test::{assert}
+
+@test
+func test_tuple_ord_placeholder() -> I32 {
+    // tuple Ord::cmp and PartialOrd::partial_cmp return () instead of Ordering
+    // Generic behavior dispatch for compound types not monomorphized correctly
+    assert(true, "tuple ord blocked by generic behavior dispatch")
+    return 0
+}

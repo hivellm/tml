@@ -1,0 +1,98 @@
+// Tests for bitwise Not/negate on all integer types
+use test
+
+@test
+func test_negate_i8() -> I32 {
+    let a: I8 = 0 as I8
+    let r = a.negate()
+    assert_eq(r as I32, -1, "negate(0) for I8 should be -1")
+    0
+}
+
+@test
+func test_negate_i8_value() -> I32 {
+    let a: I8 = 5 as I8
+    let r = a.negate()
+    assert_eq(r as I32, -6, "negate(5) for I8 should be -6")
+    0
+}
+
+@test
+func test_negate_i16() -> I32 {
+    let a: I16 = 0 as I16
+    let r = a.negate()
+    assert_eq(r as I32, -1, "negate(0) for I16 should be -1")
+    0
+}
+
+@test
+func test_negate_i16_value() -> I32 {
+    let a: I16 = 255 as I16
+    let r = a.negate()
+    assert_eq(r as I32, -256, "negate(255) for I16 should be -256")
+    0
+}
+
+@test
+func test_negate_i32_value() -> I32 {
+    let a: I32 = 42
+    let r = a.negate()
+    assert_eq(r, -43, "negate(42) for I32 should be -43")
+    0
+}
+
+@test
+func test_negate_i64() -> I32 {
+    let a: I64 = 0 as I64
+    let r = a.negate()
+    assert_eq(r, -1 as I64, "negate(0) for I64 should be -1")
+    0
+}
+
+@test
+func test_negate_i64_value() -> I32 {
+    let a: I64 = 100 as I64
+    let r = a.negate()
+    assert_eq(r, -101 as I64, "negate(100) for I64 should be -101")
+    0
+}
+
+@test
+func test_negate_u8() -> I32 {
+    let a: U8 = 0 as U8
+    let r = a.negate()
+    assert(r == (255 as U8), "negate(0) for U8 should be 0xFF")
+    0
+}
+
+@test
+func test_negate_u8_value() -> I32 {
+    let a: U8 = 0x0F as U8
+    let r = a.negate()
+    assert(r == (0xF0 as U8), "negate(0x0F) for U8 should be 0xF0")
+    0
+}
+
+@test
+func test_negate_u16() -> I32 {
+    let a: U16 = 0 as U16
+    let r = a.negate()
+    assert(r == (65535 as U16), "negate(0) for U16 should be 0xFFFF")
+    0
+}
+
+@test
+func test_negate_u32() -> I32 {
+    let a: U32 = 0 as U32
+    let r = a.negate()
+    assert(r == (4294967295 as U32), "negate(0) for U32 should be 0xFFFFFFFF")
+    0
+}
+
+@test
+func test_negate_u64() -> I32 {
+    let a: U64 = 0 as U64
+    let r = a.negate()
+    assert(r == (18446744073709551615 as U64), "negate(0) for U64 should be max")
+    0
+}

@@ -1,0 +1,11 @@
+// Tests for Maybe[T] Default impl
+// NOTE: Default::default() can't resolve type — blocked by generic trait dispatch
+use test::{assert}
+
+@test
+func test_maybe_default_placeholder() -> I32 {
+    // Default::default() returns () instead of Maybe[I32]
+    // Generic trait static method dispatch doesn't infer the return type
+    assert(true, "Maybe::default blocked by Default trait dispatch")
+    return 0
+}

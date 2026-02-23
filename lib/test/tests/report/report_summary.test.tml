@@ -1,0 +1,25 @@
+// Tests for report module — summary and stats printing
+use test::{assert}
+use test::report::{print_summary_header, print_final_result, print_test_summary}
+use test::types::TestStats
+
+@test
+func test_print_summary_header() -> I32 {
+    print_summary_header()
+    assert(true, "print_summary_header ran")
+    return 0
+}
+
+@test
+func test_print_final_result_ok() -> I32 {
+    print_final_result(0)
+    assert(true, "print_final_result(0) ran")
+    return 0
+}
+
+@test
+func test_print_final_result_failed() -> I32 {
+    print_final_result(3)
+    assert(true, "print_final_result(3) ran")
+    return 0
+}

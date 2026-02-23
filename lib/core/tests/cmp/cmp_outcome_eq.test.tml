@@ -1,0 +1,27 @@
+// Tests for Outcome[T, E] PartialEq (cmp module)
+// NOTE: Like Maybe::eq, inner value comparison may have bugs
+use test::{assert}
+
+@test
+func test_outcome_eq_ok_ok_same() -> I32 {
+    let a: Outcome[I32, Str] = Ok(10)
+    let b: Outcome[I32, Str] = Ok(10)
+    assert(a == b, "Ok(10) == Ok(10)")
+    return 0
+}
+
+@test
+func test_outcome_eq_ok_err() -> I32 {
+    let a: Outcome[I32, Str] = Ok(1)
+    let b: Outcome[I32, Str] = Err("fail")
+    assert(not (a == b), "Ok(1) != Err(fail)")
+    return 0
+}
+
+@test
+func test_outcome_eq_err_ok() -> I32 {
+    let a: Outcome[I32, Str] = Err("fail")
+    let b: Outcome[I32, Str] = Ok(1)
+    assert(not (a == b), "Err(fail) != Ok(1)")
+    return 0
+}

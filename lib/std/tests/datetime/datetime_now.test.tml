@@ -1,0 +1,20 @@
+// Tests for std::datetime — DateTime::now
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_datetime_now_returns_reasonable_year() -> I32 {
+    let now: DateTime = DateTime::now()
+    let year: I64 = now.year()
+    assert(year >= 2024 as I64, "year should be >= 2024")
+    assert(year <= 2100 as I64, "year should be <= 2100")
+    0
+}
+
+@test
+func test_datetime_now_timestamp_positive() -> I32 {
+    let now: DateTime = DateTime::now()
+    let ts: I64 = now.timestamp()
+    assert(ts > 0 as I64, "timestamp should be positive")
+    0
+}

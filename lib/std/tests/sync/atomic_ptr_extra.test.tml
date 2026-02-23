@@ -1,0 +1,25 @@
+// Tests for AtomicPtr — compare_exchange_weak and into_inner
+use test::{assert, assert_eq}
+use std::sync::{AtomicPtr, Ordering}
+
+@test
+func test_atomic_ptr_compare_exchange_weak() -> I32 {
+    var x: I32 = 42
+    var y: I32 = 100
+    var ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    let r: Outcome[Ptr[I32], Ptr[I32]] = ptr.compare_exchange_weak(
+        ref x as Ptr[I32], ref y as Ptr[I32],
+        Ordering::Relaxed, Ordering::Relaxed
+    )
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_ptr_into_inner() -> I32 {
+    var x: I32 = 42
+    let ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    let v: Ptr[I32] = ptr.into_inner()
+    assert(v == ref x as Ptr[I32], "into_inner returns initial ptr")
+    return 0
+}

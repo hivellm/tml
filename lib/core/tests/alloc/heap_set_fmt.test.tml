@@ -1,0 +1,23 @@
+// Tests for Heap::set
+// NOTE: Display/Debug blocked by trait-bounded generic method codegen
+use test::{assert, assert_eq}
+use core::alloc::heap::Heap
+
+@test
+func test_heap_set() -> I32 {
+    var h: Heap[I32] = Heap::new(42)
+    assert_eq(h.get(), 42, "initial value is 42")
+    h.set(100)
+    assert_eq(h.get(), 100, "after set, value is 100")
+    return 0
+}
+
+@test
+func test_heap_set_multiple() -> I32 {
+    var h: Heap[I32] = Heap::new(0)
+    h.set(10)
+    h.set(20)
+    h.set(30)
+    assert_eq(h.get(), 30, "after multiple sets, last value wins")
+    return 0
+}

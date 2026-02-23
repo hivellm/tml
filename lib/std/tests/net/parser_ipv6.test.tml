@@ -1,0 +1,191 @@
+use test
+use std::net::parser::{parse_ipv6, AddrParseError}
+use std::net::ip::Ipv6Addr
+
+// ============================================================================
+// parse_ipv6 - Full form (no compression)
+// ============================================================================
+
+@test
+func test_parse_ipv6_full() -> I32 {
+    let result = parse_ipv6("2001:0db8:0000:0000:0000:0000:0000:0001")
+    when result {
+        Ok(addr) => {
+            // Check first segment
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0x2001)
+            // Check second segment
+            let s1: U16 = addr.segments()[1]
+            assert_eq(s1 as I32, 0x0db8)
+            // Check last segment
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 1)
+        }
+        Err(_) => assert(false, "should parse full ipv6")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_full_short() -> I32 {
+    let result = parse_ipv6("2001:db8:0:0:0:0:0:1")
+    when result {
+        Ok(addr) => {
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0x2001)
+            let s1: U16 = addr.segments()[1]
+            assert_eq(s1 as I32, 0x0db8)
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 1)
+        }
+        Err(_) => assert(false, "should parse short form")
+    }
+    0
+}
+
+// ============================================================================
+// parse_ipv6 - :: compression
+// ============================================================================
+
+@test
+func test_parse_ipv6_loopback() -> I32 {
+    let result = parse_ipv6("::1")
+    when result {
+        Ok(addr) => {
+            assert(addr.is_loopback(), "::1 should be loopback")
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 1)
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0)
+        }
+        Err(_) => assert(false, "should parse ::1")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_unspecified() -> I32 {
+    let result = parse_ipv6("::")
+    when result {
+        Ok(addr) => {
+            assert(addr.is_unspecified(), ":: should be unspecified")
+        }
+        Err(_) => assert(false, "should parse ::")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_prefix_compress() -> I32 {
+    // fe80::1 = fe80:0:0:0:0:0:0:1
+    let result = parse_ipv6("fe80::1")
+    when result {
+        Ok(addr) => {
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0xfe80)
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 1)
+        }
+        Err(_) => assert(false, "should parse fe80::1")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_middle_compress() -> I32 {
+    // 2001:db8::ff00:42:8329
+    let result = parse_ipv6("2001:db8::ff00:42:8329")
+    when result {
+        Ok(addr) => {
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0x2001)
+            let s5: U16 = addr.segments()[5]
+            assert_eq(s5 as I32, 0xff00)
+            let s6: U16 = addr.segments()[6]
+            assert_eq(s6 as I32, 0x42)
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 0x8329)
+        }
+        Err(_) => assert(false, "should parse middle compression")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_uppercase() -> I32 {
+    let result = parse_ipv6("FE80::1")
+    when result {
+        Ok(addr) => {
+            let s0: U16 = addr.segments()[0]
+            assert_eq(s0 as I32, 0xfe80)
+            let s7: U16 = addr.segments()[7]
+            assert_eq(s7 as I32, 1)
+        }
+        Err(_) => assert(false, "should parse uppercase hex")
+    }
+    0
+}
+
+// ============================================================================
+// parse_ipv6 - Invalid addresses
+// ============================================================================
+
+@test
+func test_parse_ipv6_empty() -> I32 {
+    let result = parse_ipv6("")
+    when result {
+        Ok(_) => assert(false, "empty string should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_too_few_groups() -> I32 {
+    let result = parse_ipv6("2001:db8:1:2:3")
+    when result {
+        Ok(_) => assert(false, "5 groups without :: should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_too_many_groups() -> I32 {
+    let result = parse_ipv6("1:2:3:4:5:6:7:8:9")
+    when result {
+        Ok(_) => assert(false, "9 groups should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_double_double_colon() -> I32 {
+    let result = parse_ipv6("2001::db8::1")
+    when result {
+        Ok(_) => assert(false, "multiple :: should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_invalid_hex() -> I32 {
+    let result = parse_ipv6("2001:db8::gggg")
+    when result {
+        Ok(_) => assert(false, "invalid hex should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ipv6_segment_too_long() -> I32 {
+    let result = parse_ipv6("2001:db800::1")
+    when result {
+        Ok(_) => assert(false, "5-digit segment should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}

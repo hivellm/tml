@@ -1,0 +1,36 @@
+// Tests for Rng::next_bool
+use test::{assert, assert_eq}
+use std::random::Rng
+
+@test
+func test_rng_next_bool() -> I32 {
+    var rng = Rng::with_seed(42)
+    var trues: I64 = 0
+    var falses: I64 = 0
+    var i: I64 = 0
+    loop (i < 100) {
+        if rng.next_bool() {
+            trues = trues + 1
+        } else {
+            falses = falses + 1
+        }
+        i = i + 1
+    }
+    assert(trues > 0 as I64, "should get some true values")
+    assert(falses > 0 as I64, "should get some false values")
+    0
+}
+
+@test
+func test_rng_next_bool_deterministic() -> I32 {
+    var rng1 = Rng::with_seed(777)
+    var rng2 = Rng::with_seed(777)
+    var i: I64 = 0
+    loop (i < 10) {
+        let b1 = rng1.next_bool()
+        let b2 = rng2.next_bool()
+        assert(b1 == b2, "same seed should produce same bool sequence")
+        i = i + 1
+    }
+    0
+}

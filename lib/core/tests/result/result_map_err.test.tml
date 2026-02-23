@@ -1,0 +1,8 @@
+// Tests for Outcome::map_err — blocked by generic [F] codegen
+use test::{assert}
+
+@test
+func test_outcome_map_err_placeholder() -> I32 {
+    assert(true, "Outcome::map_err blocked by generic codegen")
+    return 0
+}

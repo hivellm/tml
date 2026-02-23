@@ -1,0 +1,118 @@
+// Tests for ops/bit — bitxor_assign and shift assign methods
+use test::{assert_eq}
+
+// =============================================================================
+// bitxor_assign — I8, I16, I64, U16, U32 (uncovered)
+// =============================================================================
+
+@test
+func test_i8_bitxor_assign_method() -> I32 {
+    var a: I8 = 0x3F as I8
+    a.bitxor_assign(0x0F as I8)
+    assert_eq(a as I32, 0x30, "I8.bitxor_assign")
+    0
+}
+
+@test
+func test_i16_bitxor_assign_method() -> I32 {
+    var a: I16 = 0xFF as I16
+    a.bitxor_assign(0xF0 as I16)
+    assert_eq(a as I32, 0x0F, "I16.bitxor_assign")
+    0
+}
+
+@test
+func test_i64_bitxor_assign_method() -> I32 {
+    var a: I64 = 0xFF
+    a.bitxor_assign(0xF0)
+    assert_eq(a as I32, 0x0F, "I64.bitxor_assign")
+    0
+}
+
+@test
+func test_u16_bitxor_assign_method() -> I32 {
+    var a: U16 = 0xFF as U16
+    a.bitxor_assign(0xF0 as U16)
+    assert_eq(a as I32, 0x0F, "U16.bitxor_assign")
+    0
+}
+
+@test
+func test_u32_bitxor_assign_method() -> I32 {
+    var a: U32 = 0xFF as U32
+    a.bitxor_assign(0xF0 as U32)
+    assert_eq(a as I32, 0x0F, "U32.bitxor_assign")
+    0
+}
+
+// =============================================================================
+// shl_assign — I8, I16, U8, U64 (uncovered)
+// =============================================================================
+
+@test
+func test_i8_shl_assign_method() -> I32 {
+    var a: I8 = 1 as I8
+    a.shl_assign(3)
+    assert_eq(a as I32, 8, "I8.shl_assign")
+    0
+}
+
+@test
+func test_i16_shl_assign_method() -> I32 {
+    var a: I16 = 1 as I16
+    a.shl_assign(4)
+    assert_eq(a as I32, 16, "I16.shl_assign")
+    0
+}
+
+@test
+func test_u8_shl_assign_method() -> I32 {
+    var a: U8 = 1 as U8
+    a.shl_assign(5)
+    assert_eq(a as I32, 32, "U8.shl_assign")
+    0
+}
+
+@test
+func test_u64_shl_assign_method() -> I32 {
+    var a: U64 = 1 as U64
+    a.shl_assign(8)
+    assert_eq(a as I64, 256 as I64, "U64.shl_assign")
+    0
+}
+
+// =============================================================================
+// shr_assign — I8, I16, U16, U64 (uncovered)
+// =============================================================================
+
+@test
+func test_i8_shr_assign_method() -> I32 {
+    var a: I8 = 64 as I8
+    a.shr_assign(3)
+    assert_eq(a as I32, 8, "I8.shr_assign")
+    0
+}
+
+@test
+func test_i16_shr_assign_method() -> I32 {
+    var a: I16 = 256 as I16
+    a.shr_assign(4)
+    assert_eq(a as I32, 16, "I16.shr_assign")
+    0
+}
+
+@test
+func test_u16_shr_assign_method() -> I32 {
+    var a: U16 = 128 as U16
+    a.shr_assign(2)
+    assert_eq(a as I32, 32, "U16.shr_assign")
+    0
+}
+
+@test
+func test_u64_shr_assign_method() -> I32 {
+    var a: U64 = 1024 as U64
+    a.shr_assign(5)
+    assert_eq(a as I64, 32 as I64, "U64.shr_assign")
+    0
+}

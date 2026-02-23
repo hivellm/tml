@@ -1,0 +1,43 @@
+// Tests for std::log convenience functions and structured logging
+use test::{assert}
+use std::log
+
+@test
+func test_info_function() -> I32 {
+    log::set_level(0)
+    log::info("test", "info message")
+    assert(true, "info should not crash")
+    0
+}
+
+@test
+func test_warn_function() -> I32 {
+    log::set_level(0)
+    log::warn("test", "warn message")
+    assert(true, "warn should not crash")
+    0
+}
+
+@test
+func test_error_function() -> I32 {
+    log::set_level(0)
+    log::error("test", "error message")
+    assert(true, "error should not crash")
+    0
+}
+
+@test
+func test_fatal_function() -> I32 {
+    log::set_level(0)
+    log::fatal("test", "fatal message")
+    assert(true, "fatal should not crash")
+    0
+}
+
+@test
+func test_structured_function() -> I32 {
+    log::set_level(0)
+    log::structured(2, "test", "structured msg", "key=value;num=42")
+    assert(true, "structured should not crash")
+    0
+}

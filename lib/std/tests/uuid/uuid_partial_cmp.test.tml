@@ -1,0 +1,33 @@
+// Tests for Uuid::partial_cmp — PartialOrd implementation
+use test::{assert, assert_eq}
+use std::uuid::Uuid
+
+@test
+func test_uuid_partial_cmp_equal() -> I32 {
+    let a: Uuid = Uuid::nil()
+    let b: Uuid = Uuid::nil()
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap() == Ordering::Equal, "nil == nil should be Equal")
+    return 0
+}
+
+@test
+func test_uuid_partial_cmp_less() -> I32 {
+    let a: Uuid = Uuid { hi: 1, lo: 0 }
+    let b: Uuid = Uuid { hi: 2, lo: 0 }
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap() == Ordering::Less, "hi=1 < hi=2")
+    return 0
+}
+
+@test
+func test_uuid_partial_cmp_greater() -> I32 {
+    let a: Uuid = Uuid { hi: 5, lo: 0 }
+    let b: Uuid = Uuid { hi: 3, lo: 0 }
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap() == Ordering::Greater, "hi=5 > hi=3")
+    return 0
+}

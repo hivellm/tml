@@ -1,0 +1,142 @@
+use test
+use std::net::parser::{parse_ip, parse_socket_addr_v4, AddrParseError}
+use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+use std::net::socket::{SocketAddr, SocketAddrV4}
+
+// ============================================================================
+// parse_ip - dispatches to IPv4 or IPv6
+// ============================================================================
+
+@test
+func test_parse_ip_v4() -> I32 {
+    let result = parse_ip("192.168.1.1")
+    when result {
+        Ok(_) => assert(true, "parsed successfully")
+        Err(_) => assert(false, "should parse 192.168.1.1 as IpAddr")
+    }
+    0
+}
+
+@test
+func test_parse_ip_v6() -> I32 {
+    let result = parse_ip("::1")
+    when result {
+        Ok(_) => assert(true, "parsed successfully")
+        Err(_) => assert(false, "should parse ::1 as IpAddr")
+    }
+    0
+}
+
+@test
+func test_parse_ip_v4_full() -> I32 {
+    let result = parse_ip("10.0.0.1")
+    when result {
+        Ok(_) => assert(true, "parsed successfully")
+        Err(_) => assert(false, "should parse 10.0.0.1")
+    }
+    0
+}
+
+@test
+func test_parse_ip_invalid() -> I32 {
+    let result = parse_ip("not an ip")
+    when result {
+        Ok(_) => assert(false, "should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_ip_empty() -> I32 {
+    let result = parse_ip("")
+    when result {
+        Ok(_) => assert(false, "empty should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+// ============================================================================
+// parse_socket_addr_v4
+// ============================================================================
+
+@test
+func test_parse_socket_addr_v4_basic() -> I32 {
+    let result = parse_socket_addr_v4("127.0.0.1:8080")
+    when result {
+        Ok(addr) => {
+            assert_eq(addr.port() as I32, 8080)
+            let ip = addr.ip()
+            assert_eq(ip.octet0() as I32, 127)
+            assert_eq(ip.octet3() as I32, 1)
+        }
+        Err(_) => assert(false, "should parse 127.0.0.1:8080")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_port_zero() -> I32 {
+    let result = parse_socket_addr_v4("0.0.0.0:0")
+    when result {
+        Ok(addr) => {
+            assert_eq(addr.port() as I32, 0)
+        }
+        Err(_) => assert(false, "should parse 0.0.0.0:0")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_max_port() -> I32 {
+    let result = parse_socket_addr_v4("10.0.0.1:65535")
+    when result {
+        Ok(addr) => {
+            assert_eq(addr.port() as I32, 65535)
+        }
+        Err(_) => assert(false, "should parse max port 65535")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_no_port() -> I32 {
+    let result = parse_socket_addr_v4("127.0.0.1")
+    when result {
+        Ok(_) => assert(false, "no port should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_invalid_port() -> I32 {
+    let result = parse_socket_addr_v4("127.0.0.1:99999")
+    when result {
+        Ok(_) => assert(false, "port > 65535 should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_empty_port() -> I32 {
+    let result = parse_socket_addr_v4("127.0.0.1:")
+    when result {
+        Ok(_) => assert(false, "empty port should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+
+@test
+func test_parse_socket_addr_v4_alpha_port() -> I32 {
+    let result = parse_socket_addr_v4("127.0.0.1:abc")
+    when result {
+        Ok(_) => assert(false, "alpha port should fail")
+        Err(_) => assert(true, "correctly rejected")
+    }
+    0
+}
+

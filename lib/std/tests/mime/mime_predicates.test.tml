@@ -1,0 +1,29 @@
+// Tests for Mime predicates: is_audio, is_video
+use test::{assert}
+use std::mime::Mime
+
+@test
+func test_is_audio() -> I32 {
+    let m: Mime = Mime::new("audio", "mpeg")
+    assert(m.is_audio(), "audio/mpeg should be audio")
+    assert(not m.is_text(), "audio should not be text")
+    assert(not m.is_video(), "audio should not be video")
+    return 0
+}
+
+@test
+func test_is_video() -> I32 {
+    let m: Mime = Mime::new("video", "mp4")
+    assert(m.is_video(), "video/mp4 should be video")
+    assert(not m.is_audio(), "video should not be audio")
+    assert(not m.is_image(), "video should not be image")
+    return 0
+}
+
+@test
+func test_is_image_direct() -> I32 {
+    let m: Mime = Mime::new("image", "png")
+    assert(m.is_image(), "image/png should be image")
+    assert(not m.is_text(), "image should not be text")
+    return 0
+}

@@ -1,0 +1,36 @@
+// Tests for error module — ParseError::with_position, Error::description/source
+use test
+use core::error::{SimpleError, ParseError}
+
+@test
+func test_parse_error_with_position() -> I32 {
+    let err = ParseError::with_position("unexpected token", 42)
+    let msg = err.to_string()
+    assert(msg.contains("42"), "with_position error should include position")
+    assert(msg.contains("unexpected token"), "with_position error should include message")
+    0
+}
+
+@test
+func test_parse_error_with_position_debug() -> I32 {
+    let err = ParseError::with_position("bad input", 10)
+    let dbg = err.debug_string()
+    assert(dbg.len() > 0, "ParseError debug_string should produce output")
+    0
+}
+
+@test
+func test_simple_error_description() -> I32 {
+    let err = SimpleError::new("something failed")
+    let desc = err.description()
+    assert_eq(desc, "something failed", "description should match to_string")
+    0
+}
+
+@test
+func test_simple_error_source_is_nothing() -> I32 {
+    let err = SimpleError::new("no cause")
+    let src = err.source()
+    assert(src.is_nothing(), "SimpleError source should be Nothing")
+    0
+}

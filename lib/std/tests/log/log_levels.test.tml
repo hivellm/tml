@@ -1,0 +1,38 @@
+// Tests for std::log level management
+use test::{assert, assert_eq}
+use std::log::{set_level, get_level, enabled, set_format, get_format,
+               TRACE, DEBUG, INFO, WARN, ERROR, FATAL,
+               FORMAT_TEXT, FORMAT_JSON, FORMAT_COMPACT}
+
+@test
+func test_log_constants() -> I32 {
+    assert_eq(TRACE, 0, "TRACE should be 0")
+    assert_eq(DEBUG, 1, "DEBUG should be 1")
+    assert_eq(INFO, 2, "INFO should be 2")
+    assert_eq(WARN, 3, "WARN should be 3")
+    assert_eq(ERROR, 4, "ERROR should be 4")
+    assert_eq(FATAL, 5, "FATAL should be 5")
+    0
+}
+
+@test
+func test_set_get_level() -> I32 {
+    set_level(DEBUG)
+    let lvl = get_level()
+    assert_eq(lvl, DEBUG, "level should be DEBUG after set")
+    set_level(WARN)
+    let lvl2 = get_level()
+    assert_eq(lvl2, WARN, "level should be WARN after set")
+    0
+}
+
+@test
+func test_enabled() -> I32 {
+    set_level(WARN)
+    assert(enabled(WARN), "WARN should be enabled when level=WARN")
+    assert(enabled(ERROR), "ERROR should be enabled when level=WARN")
+    assert(enabled(FATAL), "FATAL should be enabled when level=WARN")
+    assert(not enabled(DEBUG), "DEBUG should not be enabled when level=WARN")
+    assert(not enabled(TRACE), "TRACE should not be enabled when level=WARN")
+    0
+}

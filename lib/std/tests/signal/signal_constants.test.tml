@@ -1,0 +1,30 @@
+// Tests for signal constant functions (SIGHUP, SIGUSR1, SIGUSR2, SIGALRM)
+use test::{assert, assert_eq}
+use std::os::signal
+
+@test
+func test_signal_constants() -> I32 {
+    assert_eq(signal::SIGINT(), 2, "SIGINT should be 2")
+    assert_eq(signal::SIGTERM(), 15, "SIGTERM should be 15")
+    assert_eq(signal::SIGHUP(), 1, "SIGHUP should be 1")
+    assert_eq(signal::SIGUSR1(), 10, "SIGUSR1 should be 10")
+    assert_eq(signal::SIGUSR2(), 12, "SIGUSR2 should be 12")
+    assert_eq(signal::SIGALRM(), 14, "SIGALRM should be 14")
+    0
+}
+
+@test
+func test_register_and_check_sigusr1() -> I32 {
+    let ok = signal::register(signal::SIGUSR1())
+    assert(ok, "should register SIGUSR1")
+    assert(not signal::check(signal::SIGUSR1()), "no signal pending")
+    signal::reset(signal::SIGUSR1())
+    0
+}
+
+@test
+func test_ignore_sighup() -> I32 {
+    let ok = signal::ignore(signal::SIGHUP())
+    assert(ok, "should ignore SIGHUP")
+    0
+}

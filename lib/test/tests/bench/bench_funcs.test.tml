@@ -1,0 +1,59 @@
+// Tests for bench module functions
+use test::{assert, assert_eq}
+use test::bench::{empty_bench_result, bench_iterations, measure_once, calculate_iterations, format_time_ns}
+
+@test
+func test_empty_bench_result() -> I32 {
+    let r = empty_bench_result("test_bench")
+    assert_eq(r.iterations, 0, "empty result has 0 iterations")
+    assert_eq(r.total_ns, 0 as I64, "empty result has 0 total_ns")
+    assert_eq(r.avg_ns, 0 as I64, "empty result has 0 avg_ns")
+    return 0
+}
+
+@test
+func test_bench_iterations() -> I32 {
+    let ns: I64 = bench_iterations(10)
+    // Just verify it returns without crashing, timing is non-deterministic
+    assert(ns >= 0 as I64, "bench_iterations returns non-negative")
+    return 0
+}
+
+@test
+func test_measure_once() -> I32 {
+    let ns: I64 = measure_once()
+    assert(ns >= 0 as I64, "measure_once returns non-negative")
+    return 0
+}
+
+@test
+func test_calculate_iterations_zero() -> I32 {
+    let iters: I32 = calculate_iterations(0 as I64)
+    assert_eq(iters, 1000000, "0ns sample -> 1M iterations")
+    return 0
+}
+
+@test
+func test_calculate_iterations_fast() -> I32 {
+    // 1ns per iteration -> need 1B iterations, capped to 10M
+    let iters: I32 = calculate_iterations(1 as I64)
+    assert_eq(iters, 10000000, "very fast -> capped at 10M")
+    return 0
+}
+
+@test
+func test_calculate_iterations_slow() -> I32 {
+    // 1s per iteration -> need 1, min 10
+    let iters: I32 = calculate_iterations(1000000000 as I64)
+    assert_eq(iters, 10, "very slow -> min 10 iterations")
+    return 0
+}
+
+@test
+func test_format_time_ns() -> I32 {
+    assert_eq(format_time_ns(500 as I64), "ns", "< 1us shows ns")
+    assert_eq(format_time_ns(5000 as I64), "us", "< 1ms shows us")
+    assert_eq(format_time_ns(5000000 as I64), "ms", "< 1s shows ms")
+    assert_eq(format_time_ns(5000000000 as I64), "s", ">= 1s shows s")
+    return 0
+}

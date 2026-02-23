@@ -1,0 +1,66 @@
+// Tests for hyperbolic functions: sinh, cosh, tanh + F32 variants
+use test
+use std::math
+
+@test
+func test_sinh_zero() -> I32 {
+    let r = math::sinh(0.0)
+    assert(r > -0.001 and r < 0.001, "sinh(0) should be ~0")
+    0
+}
+
+@test
+func test_sinh_one() -> I32 {
+    let r = math::sinh(1.0)
+    assert(r > 1.175 and r < 1.176, "sinh(1) should be ~1.1752")
+    0
+}
+
+@test
+func test_cosh_zero() -> I32 {
+    let r = math::cosh(0.0)
+    assert(r > 0.999 and r < 1.001, "cosh(0) should be ~1")
+    0
+}
+
+@test
+func test_cosh_one() -> I32 {
+    let r = math::cosh(1.0)
+    assert(r > 1.543 and r < 1.544, "cosh(1) should be ~1.5431")
+    0
+}
+
+@test
+func test_tanh_zero() -> I32 {
+    let r = math::tanh(0.0)
+    assert(r > -0.001 and r < 0.001, "tanh(0) should be ~0")
+    0
+}
+
+@test
+func test_tanh_large() -> I32 {
+    let r = math::tanh(10.0)
+    assert(r > 0.999 and r < 1.001, "tanh(10) should be ~1")
+    0
+}
+
+@test
+func test_sinh_f32() -> I32 {
+    let r = math::sinh_f32(0.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "sinh_f32(0) should be ~0")
+    0
+}
+
+@test
+func test_cosh_f32() -> I32 {
+    let r = math::cosh_f32(0.0 as F32)
+    assert((r as F64) > 0.99 and (r as F64) < 1.01, "cosh_f32(0) should be ~1")
+    0
+}
+
+@test
+func test_tanh_f32() -> I32 {
+    let r = math::tanh_f32(0.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "tanh_f32(0) should be ~0")
+    0
+}

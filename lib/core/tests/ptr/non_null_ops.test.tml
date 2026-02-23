@@ -1,0 +1,43 @@
+// Tests for NonNull[T] — read, write, replace, swap, eq, cmp
+use test::{assert, assert_eq}
+use core::ptr::non_null::NonNull
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_non_null_read_write() -> I32 {
+    let p: *Unit = alloc(8)
+    let nn: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(p as I64))
+    nn.write(42 as I64)
+    let val: I64 = nn.read()
+    assert_eq(val, 42 as I64, "read after write should return 42")
+    dealloc(p)
+    0
+}
+
+@test
+func test_non_null_replace() -> I32 {
+    let p: *Unit = alloc(8)
+    let nn: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(p as I64))
+    nn.write(10 as I64)
+    let old: I64 = nn.replace(20 as I64)
+    assert_eq(old, 10 as I64, "replace should return old value")
+    assert_eq(nn.read(), 20 as I64, "replace should write new value")
+    dealloc(p)
+    0
+}
+
+@test
+func test_non_null_swap() -> I32 {
+    let pa: *Unit = alloc(8)
+    let pb: *Unit = alloc(8)
+    let a: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(pa as I64))
+    let b: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(pb as I64))
+    a.write(100 as I64)
+    b.write(200 as I64)
+    a.swap(b)
+    assert_eq(a.read(), 200 as I64, "after swap a should be 200")
+    assert_eq(b.read(), 100 as I64, "after swap b should be 100")
+    dealloc(pa)
+    dealloc(pb)
+    0
+}

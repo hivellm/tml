@@ -1,0 +1,55 @@
+// Tests for Url::authority() and Url::host_port()
+use test
+use std::url::Url
+
+@test
+func test_url_authority_simple() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            let auth = url.authority()
+            assert_eq(auth, "example.com", "authority should be host for simple URL")
+        },
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_authority_with_port() -> I32 {
+    let result = Url::parse("https://example.com:8080/path")
+    when result {
+        Ok(url) => {
+            let auth = url.authority()
+            assert(auth == "example.com:8080", "authority should include host:port")
+        },
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_host_port_no_port() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => {
+            let hp = url.host_port()
+            assert_eq(hp, "example.com", "host_port without port should be just host")
+        },
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_host_port_with_port() -> I32 {
+    let result = Url::parse("https://example.com:443/path")
+    when result {
+        Ok(url) => {
+            let hp = url.host_port()
+            assert(hp == "example.com:443", "host_port should be host:port")
+        },
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}

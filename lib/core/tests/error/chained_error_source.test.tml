@@ -1,0 +1,22 @@
+// Tests for ChainedError::source and ChainedError::cause
+use test::{assert, assert_eq}
+use core::error::{ChainedError, SimpleError}
+
+@test
+func test_chained_error_cause() -> I32 {
+    let inner = SimpleError::new("root cause")
+    let chained = ChainedError::new("outer context", inner)
+    let c: ref SimpleError = chained.cause()
+    let msg: Str = c.to_string()
+    assert_eq(msg, "root cause", "cause() should return inner error")
+    return 0
+}
+
+@test
+func test_chained_error_to_string() -> I32 {
+    let inner = SimpleError::new("root")
+    let chained = ChainedError::new("wrapper", inner)
+    let s: Str = chained.to_string()
+    assert(s.len() > 0, "ChainedError to_string should produce output")
+    return 0
+}

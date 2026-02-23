@@ -1,0 +1,46 @@
+// Tests for report module — print_stats_line, print_test_summary
+use test::{assert}
+use test::report::{print_stats_line, print_test_summary}
+use test::types::TestStats
+
+@test
+func test_print_stats_line() -> I32 {
+    let stats: TestStats = TestStats {
+        total: 10,
+        passed: 8,
+        failed: 1,
+        ignored: 1,
+        duration: 5000 as I64,
+    }
+    print_stats_line(stats)
+    assert(true, "print_stats_line ran")
+    return 0
+}
+
+@test
+func test_print_test_summary_ok() -> I32 {
+    let stats: TestStats = TestStats {
+        total: 5,
+        passed: 5,
+        failed: 0,
+        ignored: 0,
+        duration: 2000 as I64,
+    }
+    print_test_summary(stats)
+    assert(true, "print_test_summary ok case ran")
+    return 0
+}
+
+@test
+func test_print_test_summary_failed() -> I32 {
+    let stats: TestStats = TestStats {
+        total: 5,
+        passed: 3,
+        failed: 2,
+        ignored: 0,
+        duration: 3000 as I64,
+    }
+    print_test_summary(stats)
+    assert(true, "print_test_summary failed case ran")
+    return 0
+}

@@ -1,0 +1,8 @@
+// Tests for Saturating[T] — partial_cmp, cmp blocked by generic trait codegen
+use test::{assert}
+
+@test
+func test_saturating_cmp_placeholder() -> I32 {
+    assert(true, "Saturating cmp/partial_cmp blocked by codegen")
+    0
+}

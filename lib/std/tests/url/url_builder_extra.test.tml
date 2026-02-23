@@ -1,0 +1,56 @@
+// Tests for UrlBuilder::set_query and UrlBuilder::set_fragment
+use test::{assert, assert_eq}
+use std::url::UrlBuilder
+
+@test
+func test_builder_set_query() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("https")
+        .set_host("example.com")
+        .set_path("/search")
+        .set_query("q=hello&lang=en")
+        .build()
+    when result {
+        Ok(url) => {
+            assert_eq(url.raw_query, "q=hello&lang=en", "set_query should set raw query")
+        }
+        Err(e) => assert(false, "build should succeed")
+    }
+    0
+}
+
+@test
+func test_builder_set_fragment() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("https")
+        .set_host("example.com")
+        .set_path("/docs")
+        .set_fragment("section1")
+        .build()
+    when result {
+        Ok(url) => {
+            assert_eq(url.fragment, "section1", "set_fragment should set fragment")
+        }
+        Err(e) => assert(false, "build should succeed")
+    }
+    0
+}
+
+@test
+func test_builder_set_query_and_fragment() -> I32 {
+    let result = UrlBuilder::new()
+        .set_scheme("https")
+        .set_host("example.com")
+        .set_path("/page")
+        .set_query("key=val")
+        .set_fragment("top")
+        .build()
+    when result {
+        Ok(url) => {
+            assert_eq(url.raw_query, "key=val", "query should be set")
+            assert_eq(url.fragment, "top", "fragment should be set")
+        }
+        Err(e) => assert(false, "build should succeed")
+    }
+    0
+}

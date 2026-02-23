@@ -1,0 +1,104 @@
+// UDP echo tests — self-contained send/recv cycle using two sockets
+use test::{assert, assert_eq}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::udp::UdpSocket
+
+// --- Test 1: send_to succeeds ---
+
+@test
+func test_udp_sendto() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr_a: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let addr_b: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let sock_a: UdpSocket = UdpSocket::bind(addr_a).unwrap()
+    let sock_b: UdpSocket = UdpSocket::bind(addr_b).unwrap()
+
+    let b_addr: SocketAddr = sock_b.local_addr().unwrap()
+
+    let payload: [U8; 5] = [104, 101, 108, 108, 111]
+    let sent_result = sock_a.send_to(ref payload, b_addr)
+    assert(sent_result.is_ok(), "send_to should succeed")
+    assert_eq(sent_result.unwrap(), 5 as I64)
+    return 0
+}
+
+// --- Test 2: recv_from succeeds and receives correct data ---
+
+@test
+func test_udp_recv_content() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr_a: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let addr_b: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let sock_a: UdpSocket = UdpSocket::bind(addr_a).unwrap()
+    let sock_b: UdpSocket = UdpSocket::bind(addr_b).unwrap()
+
+    let b_addr: SocketAddr = sock_b.local_addr().unwrap()
+
+    // A sends "ABC" to B
+    let payload: [U8; 3] = [65 as U8, 66 as U8, 67 as U8]
+    let sent: I64 = sock_a.send_to(ref payload, b_addr).unwrap()
+    assert_eq(sent, 3 as I64)
+
+    // B receives and verifies content
+    let mut buf: [U8; 32] = [0; 32]
+    let result = sock_b.recv_from(mut ref buf)
+    assert(result.is_ok(), "recv_from should succeed")
+
+    assert_eq(buf[0], 65 as U8)  // 'A'
+    assert_eq(buf[1], 66 as U8)  // 'B'
+    assert_eq(buf[2], 67 as U8)  // 'C'
+    return 0
+}
+
+// --- Test 3: full echo round-trip (A->B->A) ---
+
+@test
+func test_udp_echo_roundtrip() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr_a: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let addr_b: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let sock_a: UdpSocket = UdpSocket::bind(addr_a).unwrap()
+    let sock_b: UdpSocket = UdpSocket::bind(addr_b).unwrap()
+
+    let a_addr: SocketAddr = sock_a.local_addr().unwrap()
+    let b_addr: SocketAddr = sock_b.local_addr().unwrap()
+
+    // A sends "hello" to B
+    let payload: [U8; 5] = [104, 101, 108, 108, 111]
+    let sent: I64 = sock_a.send_to(ref payload, b_addr).unwrap()
+    assert_eq(sent, 5 as I64)
+
+    // B receives
+    let mut recv_buf: [U8; 32] = [0; 32]
+    let recv_result = sock_b.recv_from(mut ref recv_buf)
+    assert(recv_result.is_ok(), "B recv_from should succeed")
+
+    // Verify received content
+    assert_eq(recv_buf[0], 104 as U8)  // 'h'
+    assert_eq(recv_buf[1], 101 as U8)  // 'e'
+    assert_eq(recv_buf[2], 108 as U8)  // 'l'
+    assert_eq(recv_buf[3], 108 as U8)  // 'l'
+    assert_eq(recv_buf[4], 111 as U8)  // 'o'
+
+    // B echoes back to A
+    let reply: [U8; 5] = [recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3], recv_buf[4]]
+    let sent_back: I64 = sock_b.send_to(ref reply, a_addr).unwrap()
+    assert_eq(sent_back, 5 as I64)
+
+    // A receives echo
+    let mut echo_buf: [U8; 32] = [0; 32]
+    let echo_result = sock_a.recv_from(mut ref echo_buf)
+    assert(echo_result.is_ok(), "A recv_from should succeed")
+
+    // Verify echo matches original
+    assert_eq(echo_buf[0], 104 as U8)
+    assert_eq(echo_buf[1], 101 as U8)
+    assert_eq(echo_buf[2], 108 as U8)
+    assert_eq(echo_buf[3], 108 as U8)
+    assert_eq(echo_buf[4], 111 as U8)
+
+    return 0
+}

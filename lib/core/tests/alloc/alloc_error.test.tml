@@ -1,0 +1,24 @@
+// Tests for AllocError type
+use test::{assert, assert_eq}
+use core::alloc::AllocError
+
+@test
+func test_alloc_error_new() -> I32 {
+    let err: AllocError = AllocError::new()
+    assert(true, "AllocError::new() should succeed")
+    return 0
+}
+
+@test
+func test_alloc_error_to_string() -> I32 {
+    let err: AllocError = AllocError::new()
+    assert_eq(err.to_string(), "memory allocation failed", "to_string message")
+    return 0
+}
+
+@test
+func test_alloc_error_debug_string() -> I32 {
+    let err: AllocError = AllocError::new()
+    assert_eq(err.debug_string(), "AllocError", "debug_string message")
+    return 0
+}

@@ -1,0 +1,40 @@
+// Tests for Version::bump_minor and Version::bump_patch
+use test
+use std::semver::Version
+
+@test
+func test_bump_minor() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let bumped = v.bump_minor()
+    assert_eq(bumped.major, 1 as I64)
+    assert_eq(bumped.minor, 3 as I64)
+    assert_eq(bumped.patch, 0 as I64)
+    0
+}
+
+@test
+func test_bump_minor_resets_patch() -> I32 {
+    let v = Version::new(2, 5, 99)
+    let bumped = v.bump_minor()
+    assert_eq(bumped.patch, 0 as I64, "bump_minor should reset patch to 0")
+    assert_eq(bumped.minor, 6 as I64)
+    0
+}
+
+@test
+func test_bump_patch() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let bumped = v.bump_patch()
+    assert_eq(bumped.major, 1 as I64)
+    assert_eq(bumped.minor, 2 as I64)
+    assert_eq(bumped.patch, 4 as I64)
+    0
+}
+
+@test
+func test_bump_patch_from_zero() -> I32 {
+    let v = Version::new(0, 0, 0)
+    let bumped = v.bump_patch()
+    assert_eq(bumped.patch, 1 as I64)
+    0
+}

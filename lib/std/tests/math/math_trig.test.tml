@@ -1,0 +1,78 @@
+// Tests for trigonometric functions: tan, asin, acos, atan, atan2
+use test
+use std::math::{tan, asin, acos, atan, atan2, PI}
+
+@test
+func test_tan_zero() -> I32 {
+    let r = tan(0.0)
+    assert(r > -0.001 and r < 0.001, "tan(0) should be ~0")
+    0
+}
+
+@test
+func test_tan_pi_over_4() -> I32 {
+    let r = tan(PI / 4.0)
+    assert(r > 0.999 and r < 1.001, "tan(pi/4) should be ~1")
+    0
+}
+
+@test
+func test_asin_zero() -> I32 {
+    let r = asin(0.0)
+    assert(r > -0.001 and r < 0.001, "asin(0) should be ~0")
+    0
+}
+
+@test
+func test_asin_one() -> I32 {
+    let r = asin(1.0)
+    let half_pi = PI / 2.0
+    assert(r > half_pi - 0.001 and r < half_pi + 0.001, "asin(1) should be ~pi/2")
+    0
+}
+
+@test
+func test_acos_one() -> I32 {
+    let r = acos(1.0)
+    assert(r > -0.001 and r < 0.001, "acos(1) should be ~0")
+    0
+}
+
+@test
+func test_acos_zero() -> I32 {
+    let r = acos(0.0)
+    let half_pi = PI / 2.0
+    assert(r > half_pi - 0.001 and r < half_pi + 0.001, "acos(0) should be ~pi/2")
+    0
+}
+
+@test
+func test_atan_zero() -> I32 {
+    let r = atan(0.0)
+    assert(r > -0.001 and r < 0.001, "atan(0) should be ~0")
+    0
+}
+
+@test
+func test_atan_one() -> I32 {
+    let r = atan(1.0)
+    let pi_4 = PI / 4.0
+    assert(r > pi_4 - 0.001 and r < pi_4 + 0.001, "atan(1) should be ~pi/4")
+    0
+}
+
+@test
+func test_atan2_basic() -> I32 {
+    let r = atan2(1.0, 1.0)
+    let pi_4 = PI / 4.0
+    assert(r > pi_4 - 0.001 and r < pi_4 + 0.001, "atan2(1,1) should be ~pi/4")
+    0
+}
+
+@test
+func test_atan2_negative() -> I32 {
+    let r = atan2(-1.0, 0.0)
+    let neg_half_pi = 0.0 - PI / 2.0
+    assert(r > neg_half_pi - 0.001 and r < neg_half_pi + 0.001, "atan2(-1,0) should be ~-pi/2")
+    0
+}

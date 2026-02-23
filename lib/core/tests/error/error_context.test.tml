@@ -1,0 +1,47 @@
+// Tests for Outcome::context() and Outcome::with_context()
+use test
+use core::error::{SimpleError, ChainedError}
+
+@test
+func test_context_on_err() -> I32 {
+    let result: Outcome[I32, SimpleError] = Err(SimpleError::new("root cause"))
+    let wrapped = result.context("operation failed")
+    when wrapped {
+        Ok(_) => assert(false, "should still be Err"),
+        Err(_) => {}
+    }
+    0
+}
+
+@test
+func test_context_on_ok() -> I32 {
+    let result: Outcome[I32, SimpleError] = Ok(42)
+    let wrapped = result.context("should not appear")
+    when wrapped {
+        Ok(val) => assert_eq(val, 42, "Ok value should be preserved"),
+        Err(_) => assert(false, "should still be Ok")
+    }
+    0
+}
+
+@test
+func test_with_context_on_err() -> I32 {
+    let result: Outcome[I32, SimpleError] = Err(SimpleError::new("base error"))
+    let wrapped = result.with_context(do() "computed context")
+    when wrapped {
+        Ok(_) => assert(false, "should still be Err"),
+        Err(_) => {}
+    }
+    0
+}
+
+@test
+func test_with_context_on_ok() -> I32 {
+    let result: Outcome[I32, SimpleError] = Ok(99)
+    let wrapped = result.with_context(do() "not evaluated")
+    when wrapped {
+        Ok(val) => assert_eq(val, 99, "Ok value should be preserved"),
+        Err(_) => assert(false, "should still be Ok")
+    }
+    0
+}

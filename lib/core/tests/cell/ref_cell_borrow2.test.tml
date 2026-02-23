@@ -1,0 +1,8 @@
+// Tests for RefCell::borrow, try_borrow — blocked by BorrowState enum codegen
+use test::{assert}
+
+@test
+func test_ref_cell_borrow_placeholder() -> I32 {
+    assert(true, "RefCell::borrow blocked by enum codegen")
+    return 0
+}

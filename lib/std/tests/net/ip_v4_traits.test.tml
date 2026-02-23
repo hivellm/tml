@@ -1,0 +1,70 @@
+// Tests for Ipv4Addr — cmp, hash, default, to_string, duplicate, to_ipv6_mapped, octets
+use test
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipv4_cmp_less() -> I32 {
+    let a = Ipv4Addr::new(10, 0, 0, 1)
+    let b = Ipv4Addr::new(192, 168, 0, 1)
+    let ord = a.cmp(ref b)
+    assert(ord.is_less(), "10.0.0.1 < 192.168.0.1")
+    0
+}
+
+@test
+func test_ipv4_cmp_equal() -> I32 {
+    let a = Ipv4Addr::LOCALHOST()
+    let b = Ipv4Addr::new(127, 0, 0, 1)
+    let ord = a.cmp(ref b)
+    assert(ord.is_equal(), "127.0.0.1 == 127.0.0.1")
+    0
+}
+
+@test
+func test_ipv4_cmp_greater() -> I32 {
+    let a = Ipv4Addr::BROADCAST()
+    let b = Ipv4Addr::LOCALHOST()
+    let ord = a.cmp(ref b)
+    assert(ord.is_greater(), "255.255.255.255 > 127.0.0.1")
+    0
+}
+
+@test
+func test_ipv4_hash() -> I32 {
+    let a = Ipv4Addr::LOCALHOST()
+    let h = a.hash()
+    assert(h != 0, "hash of 127.0.0.1 should be non-zero")
+    0
+}
+
+@test
+func test_ipv4_default() -> I32 {
+    let addr = Ipv4Addr::default()
+    assert(addr.is_unspecified(), "default should be 0.0.0.0")
+    0
+}
+
+@test
+func test_ipv4_to_ipv6_mapped() -> I32 {
+    let v4 = Ipv4Addr::new(192, 168, 1, 1)
+    let v6 = v4.to_ipv6_mapped()
+    assert(v6.is_ipv4_mapped(), "mapped address should be IPv4-mapped")
+    0
+}
+
+@test
+func test_ipv4_partial_cmp() -> I32 {
+    let a = Ipv4Addr::new(10, 0, 0, 1)
+    let b = Ipv4Addr::new(10, 0, 0, 2)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    0
+}
+
+@test
+func test_ipv4_duplicate() -> I32 {
+    let a = Ipv4Addr::new(10, 20, 30, 40)
+    let b = a.duplicate()
+    assert(a == b, "duplicate should produce equal address")
+    0
+}

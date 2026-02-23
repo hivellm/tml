@@ -1,0 +1,9 @@
+// Tests for Json::get_or — blocked by when pattern match on Maybe[Json]
+use test::{assert}
+
+@test
+func test_json_get_or_placeholder() -> I32 {
+    // get_or uses when-match on Maybe[Json] which doesn't extract value correctly
+    assert(true, "Json::get_or blocked by Maybe pattern match codegen")
+    return 0
+}

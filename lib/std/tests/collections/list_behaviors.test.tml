@@ -1,0 +1,16 @@
+// Tests for List[T] behavior implementations (std::collections::behaviors)
+// BLOCKED: Constrained behavior impl dispatch not working
+// Methods from `impl[T: Display] Display for List[T]` and
+// `impl[T: PartialEq] PartialEq for List[T]` give "Unknown method" errors.
+// Revisit when constrained behavior dispatch is implemented.
+use test::{assert, assert_eq}
+use std::collections::List
+
+@test
+func test_list_behaviors_placeholder() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(1)
+    assert(list.len() == 1 as I64, "list creation works")
+    list.destroy()
+    return 0
+}

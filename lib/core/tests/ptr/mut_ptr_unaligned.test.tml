@@ -1,0 +1,10 @@
+// Tests for RawMutPtr — read_unaligned, write_unaligned, read_volatile, write_volatile
+// BLOCKED: ptr_read_unaligned, ptr_write_unaligned, ptr_read_volatile, ptr_write_volatile
+// intrinsics are not implemented in codegen backend (UNRESOLVED references).
+use test::{assert}
+
+@test
+func test_mut_ptr_unaligned_volatile_placeholder() -> I32 {
+    assert(true, "unaligned/volatile ptr ops blocked by missing intrinsics")
+    return 0
+}

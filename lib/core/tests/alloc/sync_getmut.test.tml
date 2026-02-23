@@ -1,0 +1,22 @@
+// Tests for Sync::get_mut
+use test::{assert, assert_eq}
+use core::alloc::sync::Sync
+
+@test
+func test_sync_get_mut_unique() -> I32 {
+    var s: Sync[I32] = Sync::new(42)
+    assert(s.is_unique(), "new Sync should be unique")
+    let maybe_ptr = s.get_mut()
+    assert(maybe_ptr.is_just(), "get_mut on unique should return Just")
+    return 0
+}
+
+@test
+func test_sync_get_mut_not_unique() -> I32 {
+    var s: Sync[I32] = Sync::new(42)
+    let s2: Sync[I32] = s.duplicate()
+    assert(not s.is_unique(), "duplicated Sync should not be unique")
+    let maybe_ptr = s.get_mut()
+    assert(maybe_ptr.is_nothing(), "get_mut on non-unique should return Nothing")
+    return 0
+}

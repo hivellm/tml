@@ -1,0 +1,24 @@
+// Tests for log2_f32
+use test::{assert, assert_eq}
+use std::math::log2_f32
+
+@test
+func test_log2_f32_one() -> I32 {
+    let r: F32 = log2_f32(1.0 as F32)
+    assert_eq(r as I32, 0, "log2(1.0) should be 0")
+    return 0
+}
+
+@test
+func test_log2_f32_two() -> I32 {
+    let r: F32 = log2_f32(2.0 as F32)
+    assert_eq(r as I32, 1, "log2(2.0) should be 1")
+    return 0
+}
+
+@test
+func test_log2_f32_eight() -> I32 {
+    let r: F32 = log2_f32(8.0 as F32)
+    assert_eq(r as I32, 3, "log2(8.0) should be 3")
+    return 0
+}

@@ -1,0 +1,8 @@
+// Tests for Pin[ref T]::new, get_ref — blocked by ref type codegen
+use test::{assert}
+
+@test
+func test_pin_ref_new_placeholder() -> I32 {
+    assert(true, "Pin[ref T]::new blocked by ref codegen")
+    return 0
+}

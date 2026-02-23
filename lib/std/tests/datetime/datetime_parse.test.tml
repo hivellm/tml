@@ -1,0 +1,34 @@
+// Tests for DateTime parsing functions
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_parse_iso8601() -> I32 {
+    let dt = DateTime::parse_iso8601("2024-03-15T10:30:45Z")
+    assert_eq(dt.year() as I32, 2024, "parsed year")
+    assert_eq(dt.month() as I32, 3, "parsed month")
+    assert_eq(dt.day() as I32, 15, "parsed day")
+    assert_eq(dt.hour() as I32, 10, "parsed hour")
+    assert_eq(dt.minute() as I32, 30, "parsed minute")
+    assert_eq(dt.second() as I32, 45, "parsed second")
+    0
+}
+
+@test
+func test_parse_date() -> I32 {
+    let dt = DateTime::parse_date("2024-12-25")
+    assert_eq(dt.year() as I32, 2024, "parsed year")
+    assert_eq(dt.month() as I32, 12, "parsed month")
+    assert_eq(dt.day() as I32, 25, "parsed day")
+    assert_eq(dt.hour() as I32, 0, "hour should be 0")
+    0
+}
+
+@test
+func test_parse_display() -> I32 {
+    let dt = DateTime::parse("2024-03-15 10:30:45 UTC")
+    assert_eq(dt.year() as I32, 2024, "parsed year")
+    assert_eq(dt.month() as I32, 3, "parsed month")
+    assert_eq(dt.day() as I32, 15, "parsed day")
+    0
+}

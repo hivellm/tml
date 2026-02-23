@@ -1,0 +1,53 @@
+// Tests for json/serialize — to_json and from_json for primitive types
+use test
+use std::json::{Json, parse}
+
+@test
+func test_bool_to_json_true() -> I32 {
+    let j = true.to_json()
+    let s = j.to_string()
+    assert_eq(s, "true", "true.to_json() should produce true")
+    0
+}
+
+@test
+func test_bool_to_json_false() -> I32 {
+    let j = false.to_json()
+    let s = j.to_string()
+    assert_eq(s, "false", "false.to_json() should produce false")
+    0
+}
+
+@test
+func test_i32_to_json() -> I32 {
+    let j = 42.to_json()
+    let s = j.to_string()
+    assert_eq(s, "42", "42.to_json() should produce 42")
+    0
+}
+
+@test
+func test_i64_to_json() -> I32 {
+    let val: I64 = 100
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "100", "100i64.to_json() should produce 100")
+    0
+}
+
+@test
+func test_f64_to_json() -> I32 {
+    let val: F64 = 3.14
+    let j = val.to_json()
+    let s = j.to_string()
+    assert(s.len() > 0, "f64.to_json() should produce output")
+    0
+}
+
+@test
+func test_str_to_json() -> I32 {
+    let j = "hello".to_json()
+    let s = j.to_string()
+    assert(s.contains("hello"), "str.to_json() should contain the string")
+    0
+}

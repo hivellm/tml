@@ -1,0 +1,32 @@
+// Tests for Vec::with_capacity
+use test::{assert, assert_eq}
+use std::collections::class_collections::Vec
+
+@test
+func test_vec_with_capacity() -> I32 {
+    var v: Vec[I64] = Vec::with_capacity(32 as I64)
+    assert(v.is_empty(), "with_capacity creates empty vec")
+    assert_eq(v.len(), 0 as I64, "len should be 0")
+    v.push(10 as I64)
+    v.push(20 as I64)
+    assert_eq(v.len(), 2 as I64, "len after push")
+    assert_eq(v.get(0 as I64), 10 as I64, "first element")
+    v.destroy()
+    return 0
+}
+
+@test
+func test_vec_with_capacity_large() -> I32 {
+    var v: Vec[I32] = Vec::with_capacity(100 as I64)
+    assert(v.is_empty(), "large capacity creates empty vec")
+    var i: I32 = 0
+    loop (i < 50) {
+        v.push(i)
+        i = i + 1
+    }
+    assert_eq(v.len(), 50 as I64, "should have 50 elements")
+    assert_eq(v.get(0 as I64), 0, "first is 0")
+    assert_eq(v.get(49 as I64), 49, "last is 49")
+    v.destroy()
+    return 0
+}

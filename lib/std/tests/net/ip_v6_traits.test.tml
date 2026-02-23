@@ -1,0 +1,80 @@
+// Tests for Ipv6Addr — is_ipv4_mapped, to_ipv4, cmp, hash, default, duplicate, partial_cmp
+use test
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipv6_is_ipv4_mapped() -> I32 {
+    let mapped = Ipv6Addr::new(0 as U16, 0 as U16, 0 as U16, 0 as U16,
+                                0 as U16, 0xFFFF as U16, 0xC0A8 as U16, 0x0101 as U16)
+    assert(mapped.is_ipv4_mapped(), "::ffff:192.168.1.1 should be IPv4-mapped")
+    assert(not Ipv6Addr::LOCALHOST().is_ipv4_mapped(), "::1 should not be IPv4-mapped")
+    0
+}
+
+@test
+func test_ipv6_to_ipv4_some() -> I32 {
+    let mapped = Ipv6Addr::new(0 as U16, 0 as U16, 0 as U16, 0 as U16,
+                                0 as U16, 0xFFFF as U16, 0x7F00 as U16, 0x0001 as U16)
+    let result = mapped.to_ipv4()
+    assert(result.is_just(), "IPv4-mapped address should convert to IPv4")
+    0
+}
+
+@test
+func test_ipv6_to_ipv4_none() -> I32 {
+    let result = Ipv6Addr::LOCALHOST().to_ipv4()
+    assert(result.is_nothing(), "::1 should not convert to IPv4")
+    0
+}
+
+@test
+func test_ipv6_cmp_equal() -> I32 {
+    let a = Ipv6Addr::LOCALHOST()
+    let b = Ipv6Addr::new(0 as U16, 0 as U16, 0 as U16, 0 as U16,
+                           0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    let ord = a.cmp(ref b)
+    assert(ord.is_equal(), "::1 == ::1")
+    0
+}
+
+@test
+func test_ipv6_cmp_less() -> I32 {
+    let a = Ipv6Addr::UNSPECIFIED()
+    let b = Ipv6Addr::LOCALHOST()
+    let ord = a.cmp(ref b)
+    assert(ord.is_less(), ":: < ::1")
+    0
+}
+
+@test
+func test_ipv6_hash() -> I32 {
+    let a = Ipv6Addr::LOCALHOST()
+    let h = a.hash()
+    assert(h != 0, "hash of ::1 should be non-zero")
+    0
+}
+
+@test
+func test_ipv6_default() -> I32 {
+    let addr = Ipv6Addr::default()
+    assert(addr.is_unspecified(), "default should be ::")
+    0
+}
+
+@test
+func test_ipv6_duplicate() -> I32 {
+    let a = Ipv6Addr::new(0x2001 as U16, 0x0db8 as U16, 0 as U16, 0 as U16,
+                           0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    let b = a.duplicate()
+    assert(a == b, "duplicate should produce equal address")
+    0
+}
+
+@test
+func test_ipv6_partial_cmp() -> I32 {
+    let a = Ipv6Addr::UNSPECIFIED()
+    let b = Ipv6Addr::LOCALHOST()
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    0
+}

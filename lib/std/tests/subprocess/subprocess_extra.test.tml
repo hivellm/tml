@@ -1,0 +1,53 @@
+// Tests for subprocess uncovered functions: current_dir, stderr, kill, read_stdout, read_stderr, Stdio::devnull
+use test::{assert, assert_eq}
+use core::str
+use std::os::subprocess::{Command, Stdio}
+
+@test
+func test_stdio_devnull() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo discarded")
+        .stdout(Stdio::devnull())
+        .stderr(Stdio::devnull())
+        .status()
+    when result {
+        Ok(code) => assert_eq(code, 0)
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_command_current_dir() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo ok")
+        .current_dir(".")
+        .stdout(Stdio::devnull())
+        .status()
+    when result {
+        Ok(code) => assert_eq(code, 0)
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_child_read_stdout_stderr() -> I32 {
+    let result = Command::new("cmd")
+        .arg("/c echo hello_stdout")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    when result {
+        Ok(child) => {
+            let out = child.read_stdout()
+            let err = child.read_stderr()
+            let code = child.wait()
+            assert_eq(code, 0)
+            assert(str::contains(out, "hello_stdout"), "stdout should contain output")
+            child.destroy()
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

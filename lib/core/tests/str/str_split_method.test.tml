@@ -1,0 +1,44 @@
+// Tests for Str::split method
+use test::{assert, assert_eq}
+
+@test
+func test_str_split_basic() -> I32 {
+    let s: Str = "hello world foo"
+    let parts = s.split(" ")
+    assert_eq(parts.len(), 3, "split by space should give 3 parts")
+    0
+}
+
+@test
+func test_str_split_comma() -> I32 {
+    let s: Str = "a,b,c"
+    let parts = s.split(",")
+    assert_eq(parts.len(), 3, "split by comma should give 3 parts")
+    0
+}
+
+@test
+func test_str_split_no_match() -> I32 {
+    let s: Str = "hello"
+    let parts = s.split(",")
+    assert_eq(parts.len(), 1, "split with no match should give 1 part")
+    0
+}
+
+@test
+func test_str_parse_u16() -> I32 {
+    let s: Str = "1234"
+    let result = s.parse_u16()
+    assert(result.is_just(), "parse_u16 should succeed")
+    let val: U16 = result.unwrap()
+    assert_eq(val as I32, 1234, "parse_u16 should return 1234")
+    0
+}
+
+@test
+func test_str_parse_f64() -> I32 {
+    let s: Str = "3.14"
+    let result = s.parse_f64()
+    assert(result.is_just(), "parse_f64 should succeed")
+    0
+}

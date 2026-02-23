@@ -1,0 +1,14 @@
+// Tests for RefCell borrow and try_borrow methods
+// BLOCKED: BorrowState enum codegen type mismatch
+// LLVM IR error: i32 vs %struct.BorrowState in store instruction
+// Revisit when enum variant codegen for pattern matching is fixed.
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_refcell_borrow_placeholder() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(42)
+    let old: I32 = cell.replace(100)
+    assert_eq(old, 42, "replace works as borrow alternative")
+    return 0
+}

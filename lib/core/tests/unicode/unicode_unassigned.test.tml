@@ -1,0 +1,20 @@
+// Tests for unicode::char::is_unassigned
+use test
+use core::unicode::char
+
+@test
+func test_is_unassigned_ascii_not() -> I32 {
+    // ASCII letters are assigned
+    assert(not char::is_unassigned('A'), "A should not be unassigned")
+    assert(not char::is_unassigned('z'), "z should not be unassigned")
+    assert(not char::is_unassigned('0'), "0 should not be unassigned")
+    0
+}
+
+@test
+func test_is_unassigned_common_chars() -> I32 {
+    // Space and punctuation are assigned
+    assert(not char::is_unassigned(' '), "space should not be unassigned")
+    assert(not char::is_unassigned('!'), "! should not be unassigned")
+    0
+}

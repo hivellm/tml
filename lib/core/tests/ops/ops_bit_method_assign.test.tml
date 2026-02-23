@@ -1,0 +1,84 @@
+// Tests for ops/bit — direct method calls for _assign functions
+// These call .bitand_assign(), .bitor_assign(), etc. directly
+// (as opposed to &= operator syntax which uses a different code path)
+use test::{assert_eq}
+
+// =============================================================================
+// bitand_assign — I16, U8, U16, U64 (uncovered)
+// =============================================================================
+
+@test
+func test_i16_bitand_assign_method() -> I32 {
+    var a: I16 = 0xFF as I16
+    a.bitand_assign(0x0F as I16)
+    assert_eq(a as I32, 0x0F, "I16.bitand_assign")
+    0
+}
+
+@test
+func test_u8_bitand_assign_method() -> I32 {
+    var a: U8 = 0xFF as U8
+    a.bitand_assign(0x0F as U8)
+    assert_eq(a as I32, 0x0F, "U8.bitand_assign")
+    0
+}
+
+@test
+func test_u16_bitand_assign_method() -> I32 {
+    var a: U16 = 0xFF as U16
+    a.bitand_assign(0x0F as U16)
+    assert_eq(a as I32, 0x0F, "U16.bitand_assign")
+    0
+}
+
+@test
+func test_u64_bitand_assign_method() -> I32 {
+    var a: U64 = 0xFF as U64
+    a.bitand_assign(0x0F as U64)
+    assert_eq(a as I64, 0x0F as I64, "U64.bitand_assign")
+    0
+}
+
+// =============================================================================
+// bitor_assign — I8, I64, U8, U16, U64 (uncovered)
+// =============================================================================
+
+@test
+func test_i8_bitor_assign_method() -> I32 {
+    var a: I8 = 0x10 as I8
+    a.bitor_assign(0x05 as I8)
+    assert_eq(a as I32, 0x15, "I8.bitor_assign")
+    0
+}
+
+@test
+func test_i64_bitor_assign_method() -> I32 {
+    var a: I64 = 0x10
+    a.bitor_assign(0x05)
+    assert_eq(a as I32, 0x15, "I64.bitor_assign")
+    0
+}
+
+@test
+func test_u8_bitor_assign_method() -> I32 {
+    var a: U8 = 0x10 as U8
+    a.bitor_assign(0x05 as U8)
+    assert_eq(a as I32, 0x15, "U8.bitor_assign")
+    0
+}
+
+@test
+func test_u16_bitor_assign_method() -> I32 {
+    var a: U16 = 0x10 as U16
+    a.bitor_assign(0x05 as U16)
+    assert_eq(a as I32, 0x15, "U16.bitor_assign")
+    0
+}
+
+@test
+func test_u64_bitor_assign_method() -> I32 {
+    var a: U64 = 0x10 as U64
+    a.bitor_assign(0x05 as U64)
+    assert_eq(a as I64, 0x15 as I64, "U64.bitor_assign")
+    0
+}

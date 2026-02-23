@@ -1,0 +1,96 @@
+// Tests for file/bufio uncovered functions: from_file, read_all, open_append, with_capacity, total_written, capacity
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::bufio::{BufReader, BufWriter, LineWriter}
+use std::file::path::Path
+
+@test
+func test_bufreader_from_file() -> I32 {
+    let tmp = "build/debug/_test_br_from_file.tmp"
+    File::write_all(tmp, "line1\nline2\n")
+    let f = File::open_read(tmp)
+    var br = BufReader::from_file(f)
+    assert(br.is_open(), "should be open")
+    let line = br.read_line()
+    assert_eq(line, "line1", "first line")
+    br.close()
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_bufreader_read_all() -> I32 {
+    let tmp = "build/debug/_test_br_read_all.tmp"
+    File::write_all(tmp, "hello\nworld")
+    var br = BufReader::open(tmp)
+    let all = br.read_all()
+    assert_eq(all, "hello\nworld", "read_all should return full content")
+    br.close()
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_bufwriter_with_capacity() -> I32 {
+    let tmp = "build/debug/_test_bw_capacity.tmp"
+    var bw = BufWriter::with_capacity(tmp, 4096)
+    assert_eq(bw.capacity(), 4096 as I64, "capacity should be 4096")
+    bw.write("test data")
+    assert(bw.total_written() > 0 as I64, "total_written should be positive")
+    bw.close()
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_bufwriter_open_append() -> I32 {
+    let tmp = "build/debug/_test_bw_append.tmp"
+    File::write_all(tmp, "first")
+    var bw = BufWriter::open_append(tmp)
+    bw.write(" second")
+    bw.close()
+    let content = File::read_all(tmp)
+    assert_eq(content, "first second", "append should add to existing content")
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_bufwriter_from_file() -> I32 {
+    let tmp = "build/debug/_test_bw_from_file.tmp"
+    let f = File::open_write(tmp)
+    var bw = BufWriter::from_file(f)
+    bw.write("from file test")
+    assert_eq(bw.total_written(), 14 as I64, "total_written should be 14")
+    bw.close()
+    let content = File::read_all(tmp)
+    assert_eq(content, "from file test", "should have written content")
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_linewriter_open_append() -> I32 {
+    let tmp = "build/debug/_test_lw_append.tmp"
+    File::write_all(tmp, "line1\n")
+    var lw = LineWriter::open_append(tmp)
+    lw.write_line("line2")
+    lw.close()
+    let content = File::read_all(tmp)
+    assert_eq(content, "line1\nline2\n", "append should add line")
+    Path::remove(tmp)
+    0
+}
+
+@test
+func test_linewriter_from_file() -> I32 {
+    let tmp = "build/debug/_test_lw_from_file.tmp"
+    let f = File::open_write(tmp)
+    var lw = LineWriter::from_file(f)
+    lw.write_line("hello from file")
+    lw.close()
+    let content = File::read_all(tmp)
+    assert_eq(content, "hello from file\n", "should have written line")
+    Path::remove(tmp)
+    0
+}

@@ -1,0 +1,37 @@
+// Tests for std::log module filtering and file sink
+use test::{assert}
+use std::log
+
+@test
+func test_set_filter() -> I32 {
+    log::set_filter("server=debug,db=trace,*=warn")
+    assert(true, "set_filter should not crash")
+    0
+}
+
+@test
+func test_module_enabled() -> I32 {
+    log::set_filter("mymod=trace,*=warn")
+    assert(log::module_enabled(0, "mymod"), "mymod TRACE should be enabled")
+    assert(not log::module_enabled(0, "other"), "other TRACE should not be enabled")
+    assert(log::module_enabled(3, "other"), "other WARN should be enabled")
+    0
+}
+
+@test
+func test_open_close_file() -> I32 {
+    let ok = log::open_file("build/debug/_test_log_output.log")
+    assert(ok, "open_file should succeed")
+    log::set_level(0)
+    log::info("test", "message to file")
+    log::close_file()
+    assert(true, "close_file should not crash")
+    0
+}
+
+@test
+func test_init_from_env() -> I32 {
+    let result = log::init_from_env()
+    assert(true, "init_from_env should not crash")
+    0
+}

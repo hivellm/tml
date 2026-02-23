@@ -1,0 +1,70 @@
+// Tests for Json::parse_result error handling
+use test
+use std::json::{parse_result}
+
+@test
+func test_parse_result_valid_object() -> I32 {
+    let input = "{\"key\": 42}"
+    let result = parse_result(input)
+    when result {
+        Ok(json) => {
+            let s = json.to_string()
+            assert(s.len() > 0, "valid JSON should produce output")
+        },
+        Err(msg) => assert(false, "valid JSON should not error")
+    }
+    0
+}
+
+@test
+func test_parse_result_empty_string() -> I32 {
+    let result = parse_result("")
+    when result {
+        Ok(_) => assert(false, "empty string should error"),
+        Err(_) => {}
+    }
+    0
+}
+
+@test
+func test_parse_result_valid_array() -> I32 {
+    let result = parse_result("[1, 2, 3]")
+    when result {
+        Ok(json) => {
+            let s = json.to_string()
+            assert(s.len() > 0, "valid array should produce output")
+        },
+        Err(msg) => assert(false, "valid array should not error")
+    }
+    0
+}
+
+@test
+func test_parse_result_valid_string() -> I32 {
+    let result = parse_result("\"hello\"")
+    when result {
+        Ok(_) => {},
+        Err(msg) => assert(false, "valid string should not error")
+    }
+    0
+}
+
+@test
+func test_parse_result_valid_number() -> I32 {
+    let result = parse_result("42")
+    when result {
+        Ok(_) => {},
+        Err(_) => assert(false, "valid number should not error")
+    }
+    0
+}
+
+@test
+func test_parse_result_valid_bool() -> I32 {
+    let result = parse_result("true")
+    when result {
+        Ok(_) => {},
+        Err(_) => assert(false, "true should parse ok")
+    }
+    0
+}

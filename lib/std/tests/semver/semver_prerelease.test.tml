@@ -1,0 +1,65 @@
+// Tests for Version::new_pre, is_prerelease, bump_*
+use test::{assert, assert_eq}
+use std::semver::Version
+
+@test
+func test_new_pre() -> I32 {
+    let v = Version::new_pre(1, 0, 0, "alpha")
+    assert_eq(v.major as I32, 1, "major")
+    assert_eq(v.minor as I32, 0, "minor")
+    assert_eq(v.patch as I32, 0, "patch")
+    assert_eq(v.pre, "alpha", "pre-release tag")
+    0
+}
+
+@test
+func test_is_prerelease_true() -> I32 {
+    let v = Version::new_pre(1, 0, 0, "beta.1")
+    assert(v.is_prerelease(), "version with pre tag should be prerelease")
+    0
+}
+
+@test
+func test_is_prerelease_false() -> I32 {
+    let v = Version::new(1, 0, 0)
+    assert(not v.is_prerelease(), "version without pre tag should not be prerelease")
+    0
+}
+
+@test
+func test_bump_major() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let bumped = v.bump_major()
+    assert_eq(bumped.major as I32, 2, "major bumped")
+    assert_eq(bumped.minor as I32, 0, "minor reset")
+    assert_eq(bumped.patch as I32, 0, "patch reset")
+    0
+}
+
+@test
+func test_bump_minor() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let bumped = v.bump_minor()
+    assert_eq(bumped.major as I32, 1, "major unchanged")
+    assert_eq(bumped.minor as I32, 3, "minor bumped")
+    assert_eq(bumped.patch as I32, 0, "patch reset")
+    0
+}
+
+@test
+func test_bump_patch() -> I32 {
+    let v = Version::new(1, 2, 3)
+    let bumped = v.bump_patch()
+    assert_eq(bumped.major as I32, 1, "major unchanged")
+    assert_eq(bumped.minor as I32, 2, "minor unchanged")
+    assert_eq(bumped.patch as I32, 4, "patch bumped")
+    0
+}
+
+@test
+func test_prerelease_to_string() -> I32 {
+    let v = Version::new_pre(2, 0, 0, "rc.1")
+    let s = v.to_string()
+    assert_eq(s, "2.0.0-rc.1", "prerelease format")
+    0
+}

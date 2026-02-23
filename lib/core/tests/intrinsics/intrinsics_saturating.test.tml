@@ -1,0 +1,45 @@
+// Tests for saturating arithmetic intrinsics
+use test
+use core::intrinsics::{saturating_add, saturating_sub, saturating_mul}
+
+@test
+func test_saturating_add_normal() -> I32 {
+    let r = saturating_add[I32](10, 20)
+    assert_eq(r, 30, "10 + 20 should be 30")
+    0
+}
+
+@test
+func test_saturating_add_overflow() -> I32 {
+    let r = saturating_add[I32](2147483647, 100)
+    assert_eq(r, 2147483647, "should saturate at max")
+    0
+}
+
+@test
+func test_saturating_sub_normal() -> I32 {
+    let r = saturating_sub[I32](30, 10)
+    assert_eq(r, 20, "30 - 10 should be 20")
+    0
+}
+
+@test
+func test_saturating_sub_underflow() -> I32 {
+    let r = saturating_sub[I32](-2147483648, 100)
+    assert_eq(r, -2147483648, "should saturate at min")
+    0
+}
+
+@test
+func test_saturating_mul_normal() -> I32 {
+    let r = saturating_mul[I32](100, 200)
+    assert_eq(r, 20000, "100 * 200 should be 20000")
+    0
+}
+
+@test
+func test_saturating_mul_overflow() -> I32 {
+    let r = saturating_mul[I32](2147483647, 2)
+    assert_eq(r, 2147483647, "should saturate at max")
+    0
+}

@@ -1,0 +1,29 @@
+// Tests for std::random — ThreadRng::reseed, thread_random_i64, thread_random_range
+use test::{assert, assert_eq}
+use std::random::{ThreadRng, thread_random_i64, thread_random_range}
+
+@test
+func test_thread_rng_reseed() -> I32 {
+    var rng: ThreadRng = ThreadRng::new()
+    rng.reseed()
+    let v: I64 = rng.next_i64()
+    // Just verify it produces a value without crashing
+    assert(true, "reseed should not crash")
+    0
+}
+
+@test
+func test_thread_random_i64() -> I32 {
+    let v: I64 = thread_random_i64()
+    // Just verify it returns a value
+    assert(true, "thread_random_i64 should not crash")
+    0
+}
+
+@test
+func test_thread_random_range() -> I32 {
+    let v: I64 = thread_random_range(1, 100)
+    assert(v >= 1, "thread_random_range should be >= 1")
+    assert(v < 100, "thread_random_range should be < 100")
+    0
+}

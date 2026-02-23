@@ -1,0 +1,8 @@
+// Tests for BoxedError::new — blocked by generic [E: Error] codegen
+use test::{assert}
+
+@test
+func test_boxed_error_new_placeholder() -> I32 {
+    assert(true, "BoxedError::new blocked by generic trait codegen")
+    return 0
+}

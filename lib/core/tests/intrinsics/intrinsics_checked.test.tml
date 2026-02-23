@@ -1,0 +1,63 @@
+// Tests for checked arithmetic intrinsics
+use test
+use core::intrinsics::{checked_add, checked_sub, checked_mul}
+
+@test
+func test_checked_add_no_overflow() -> I32 {
+    let r = checked_add[I32](10, 20)
+    when r {
+        Just(val) => assert_eq(val, 30, "10 + 20 should be 30"),
+        Nothing => assert(false, "should not overflow")
+    }
+    0
+}
+
+@test
+func test_checked_add_overflow() -> I32 {
+    let r = checked_add[I32](2147483647, 1)
+    when r {
+        Just(_) => assert(false, "should overflow"),
+        Nothing => {}
+    }
+    0
+}
+
+@test
+func test_checked_sub_no_overflow() -> I32 {
+    let r = checked_sub[I32](30, 10)
+    when r {
+        Just(val) => assert_eq(val, 20, "30 - 10 should be 20"),
+        Nothing => assert(false, "should not overflow")
+    }
+    0
+}
+
+@test
+func test_checked_sub_overflow() -> I32 {
+    let r = checked_sub[I32](-2147483648, 1)
+    when r {
+        Just(_) => assert(false, "should overflow"),
+        Nothing => {}
+    }
+    0
+}
+
+@test
+func test_checked_mul_no_overflow() -> I32 {
+    let r = checked_mul[I32](100, 200)
+    when r {
+        Just(val) => assert_eq(val, 20000, "100 * 200 should be 20000"),
+        Nothing => assert(false, "should not overflow")
+    }
+    0
+}
+
+@test
+func test_checked_mul_overflow() -> I32 {
+    let r = checked_mul[I32](2147483647, 2)
+    when r {
+        Just(_) => assert(false, "should overflow"),
+        Nothing => {}
+    }
+    0
+}

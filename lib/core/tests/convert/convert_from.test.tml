@@ -1,0 +1,55 @@
+// Tests for core::convert — From and TryFrom implementations
+use test::{assert, assert_eq}
+use core::convert::{From, TryFrom}
+
+@test
+func test_from_bool_to_i32_true() -> I32 {
+    let val: I32 = I32::from(true)
+    assert_eq(val, 1, "true should convert to 1")
+    return 0
+}
+
+@test
+func test_from_bool_to_i32_false() -> I32 {
+    let val: I32 = I32::from(false)
+    assert_eq(val, 0, "false should convert to 0")
+    return 0
+}
+
+@test
+func test_from_bool_to_i64() -> I32 {
+    let t: I64 = I64::from(true)
+    let f: I64 = I64::from(false)
+    assert(t == 1 as I64, "true -> I64 should be 1")
+    assert(f == 0 as I64, "false -> I64 should be 0")
+    return 0
+}
+
+@test
+func test_from_i8_to_i32() -> I32 {
+    let val: I32 = I32::from(42 as I8)
+    assert_eq(val, 42, "I8 42 -> I32 42")
+    return 0
+}
+
+@test
+func test_from_i32_to_i64() -> I32 {
+    let val: I64 = I64::from(1000)
+    assert(val == 1000 as I64, "I32 1000 -> I64 1000")
+    return 0
+}
+
+@test
+func test_from_u8_to_u32() -> I32 {
+    let val: U32 = U32::from(255 as U8)
+    assert(val == 255 as U32, "U8 255 -> U32 255")
+    return 0
+}
+
+@test
+func test_from_f32_to_f64() -> I32 {
+    let val: F64 = F64::from(3.14 as F32)
+    assert(val > 3.13, "F32 3.14 -> F64 should be > 3.13")
+    assert(val < 3.15, "F32 3.14 -> F64 should be < 3.15")
+    return 0
+}

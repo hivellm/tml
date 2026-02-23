@@ -1,0 +1,24 @@
+// Tests for std::log format management
+use test::{assert, assert_eq}
+use std::log::{set_format, get_format, FORMAT_TEXT, FORMAT_JSON, FORMAT_COMPACT}
+
+@test
+func test_format_constants() -> I32 {
+    assert_eq(FORMAT_TEXT, 0, "FORMAT_TEXT should be 0")
+    assert_eq(FORMAT_JSON, 1, "FORMAT_JSON should be 1")
+    assert_eq(FORMAT_COMPACT, 2, "FORMAT_COMPACT should be 2")
+    0
+}
+
+@test
+func test_set_get_format() -> I32 {
+    set_format(FORMAT_TEXT)
+    assert_eq(get_format(), FORMAT_TEXT, "format should be TEXT")
+    set_format(FORMAT_JSON)
+    assert_eq(get_format(), FORMAT_JSON, "format should be JSON")
+    set_format(FORMAT_COMPACT)
+    assert_eq(get_format(), FORMAT_COMPACT, "format should be COMPACT")
+    // Reset to default
+    set_format(FORMAT_TEXT)
+    0
+}

@@ -1,0 +1,26 @@
+// Tests for Maybe::unwrap_or_default
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_unwrap_or_default_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let result: I32 = x.unwrap_or_default()
+    assert_eq(result, 42, "unwrap_or_default on Just returns inner value")
+    return 0
+}
+
+@test
+func test_maybe_unwrap_or_default_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let result: I32 = x.unwrap_or_default()
+    assert_eq(result, 0, "unwrap_or_default on Nothing returns I32 default (0)")
+    return 0
+}
+
+@test
+func test_maybe_unwrap_or_default_nothing_i64() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: I64 = x.unwrap_or_default()
+    assert_eq(result, 0 as I64, "unwrap_or_default on Nothing returns I64 default (0)")
+    return 0
+}

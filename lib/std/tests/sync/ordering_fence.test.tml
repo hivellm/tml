@@ -1,0 +1,24 @@
+// Tests for sync/ordering compiler_fence function
+use test::{assert}
+use std::sync::ordering::{compiler_fence, Ordering}
+
+@test
+func test_compiler_fence_seqcst() -> I32 {
+    compiler_fence(Ordering::SeqCst)
+    assert(true, "compiler_fence SeqCst should not crash")
+    0
+}
+
+@test
+func test_compiler_fence_acquire() -> I32 {
+    compiler_fence(Ordering::Acquire)
+    assert(true, "compiler_fence Acquire should not crash")
+    0
+}
+
+@test
+func test_compiler_fence_release() -> I32 {
+    compiler_fence(Ordering::Release)
+    assert(true, "compiler_fence Release should not crash")
+    0
+}

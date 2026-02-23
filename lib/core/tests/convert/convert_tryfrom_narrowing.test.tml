@@ -1,0 +1,25 @@
+// Tests for core::convert — TryFrom narrowing conversions
+use test::{assert, assert_eq}
+use core::convert::{TryFrom, TryFromIntError}
+
+@test
+func test_tryfrom_i64_to_i32_ok() -> I32 {
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(1000 as I64)
+    assert(result.is_ok(), "1000 fits in I32")
+    assert_eq(result.unwrap(), 1000, "value preserved")
+    return 0
+}
+
+@test
+func test_tryfrom_i64_to_i32_overflow() -> I32 {
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(3000000000 as I64)
+    assert(result.is_err(), "3 billion overflows I32")
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_i8_ok() -> I32 {
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(100)
+    assert(result.is_ok(), "100 fits in I8")
+    return 0
+}

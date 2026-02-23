@@ -1,0 +1,32 @@
+// Tests for PoolStats
+use test::{assert, assert_eq}
+use core::pool::PoolStats
+
+@test
+func test_pool_stats_new() -> I32 {
+    let s: PoolStats = PoolStats::new()
+    assert_eq(s.available, 0, "new stats available = 0")
+    assert_eq(s.in_use, 0, "new stats in_use = 0")
+    assert_eq(s.capacity, 0, "new stats capacity = 0")
+    assert_eq(s.grows, 0, "new stats grows = 0")
+    return 0
+}
+
+@test
+func test_pool_stats_hit_rate_empty() -> I32 {
+    let s: PoolStats = PoolStats::new()
+    let rate: F64 = s.hit_rate()
+    assert(rate == 100.0, "empty stats hit_rate = 100.0")
+    return 0
+}
+
+@test
+func test_pool_stats_hit_rate_with_hits() -> I32 {
+    let s: PoolStats = PoolStats {
+        available: 0, in_use: 0, capacity: 0,
+        hits: 8 as I64, misses: 2 as I64, grows: 0
+    }
+    let rate: F64 = s.hit_rate()
+    assert(rate == 80.0, "8 hits 2 misses = 80%")
+    return 0
+}

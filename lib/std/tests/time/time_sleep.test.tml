@@ -1,0 +1,11 @@
+// Tests for Instant::duration_since
+use test
+use std::time::Instant
+
+@test
+func test_instant_duration_since_self() -> I32 {
+    let t = Instant::now()
+    let d = t.duration_since(t)
+    assert(d.as_secs() == 0, "duration_since self should be 0 seconds")
+    0
+}

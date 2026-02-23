@@ -1,0 +1,43 @@
+// Tests for unicode is_valid_scalar and is_printable functions
+use test::{assert}
+use core::unicode::{is_valid_scalar, is_printable}
+
+@test
+func test_is_valid_scalar_ascii() -> I32 {
+    assert(is_valid_scalar(65 as U32), "A (U+0041) is valid scalar")
+    assert(is_valid_scalar(0 as U32), "NULL (U+0000) is valid scalar")
+    assert(is_valid_scalar(127 as U32), "DEL (U+007F) is valid scalar")
+    return 0
+}
+
+@test
+func test_is_valid_scalar_surrogate() -> I32 {
+    assert(not is_valid_scalar(0xD800 as U32), "U+D800 is surrogate (invalid)")
+    assert(not is_valid_scalar(0xDFFF as U32), "U+DFFF is surrogate (invalid)")
+    assert(not is_valid_scalar(0xDB00 as U32), "U+DB00 is surrogate (invalid)")
+    return 0
+}
+
+@test
+func test_is_valid_scalar_beyond_range() -> I32 {
+    assert(is_valid_scalar(0x10FFFF as U32), "U+10FFFF is valid (max)")
+    assert(not is_valid_scalar(0x110000 as U32), "U+110000 is invalid (beyond max)")
+    return 0
+}
+
+@test
+func test_is_printable_ascii() -> I32 {
+    assert(is_printable(32 as U32), "space is printable")
+    assert(is_printable(65 as U32), "A is printable")
+    assert(is_printable(126 as U32), "~ is printable")
+    return 0
+}
+
+@test
+func test_is_printable_control() -> I32 {
+    assert(not is_printable(0 as U32), "NULL is not printable")
+    assert(not is_printable(10 as U32), "LF is not printable")
+    assert(not is_printable(31 as U32), "US is not printable")
+    assert(not is_printable(127 as U32), "DEL is not printable")
+    return 0
+}

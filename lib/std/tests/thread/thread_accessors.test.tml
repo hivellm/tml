@@ -1,0 +1,30 @@
+// Tests for thread module — Thread, ThreadId, Builder accessors
+use test::{assert, assert_eq}
+use std::thread
+
+@test
+func test_thread_current_id_nonzero() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    assert(raw > 0, "current thread id should be nonzero")
+    return 0
+}
+
+@test
+func test_thread_current_name_nothing() -> I32 {
+    let t: thread::Thread = thread::current()
+    let name: Maybe[Str] = t.name()
+    assert(name.is_nothing(), "current thread name should be Nothing")
+    return 0
+}
+
+@test
+func test_thread_current_duplicate() -> I32 {
+    let t1: thread::Thread = thread::current()
+    let t2: thread::Thread = t1.duplicate()
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert(id1 == id2, "duplicated thread should have same id")
+    return 0
+}

@@ -1,0 +1,80 @@
+// Tests for hex nibble conversion functions
+use test
+use core::encoding::hex::{nibble_to_lower, nibble_to_upper, char_to_nibble}
+
+@test
+func test_nibble_to_lower_zero() -> I32 {
+    let r = nibble_to_lower(0)
+    assert_eq(r as I32, 48, "nibble 0 should be '0' (48)")
+    0
+}
+
+@test
+func test_nibble_to_lower_nine() -> I32 {
+    let r = nibble_to_lower(9)
+    assert_eq(r as I32, 57, "nibble 9 should be '9' (57)")
+    0
+}
+
+@test
+func test_nibble_to_lower_ten() -> I32 {
+    let r = nibble_to_lower(10)
+    assert_eq(r as I32, 97, "nibble 10 should be 'a' (97)")
+    0
+}
+
+@test
+func test_nibble_to_lower_fifteen() -> I32 {
+    let r = nibble_to_lower(15)
+    assert_eq(r as I32, 102, "nibble 15 should be 'f' (102)")
+    0
+}
+
+@test
+func test_nibble_to_upper_ten() -> I32 {
+    let r = nibble_to_upper(10)
+    assert_eq(r as I32, 65, "nibble 10 should be 'A' (65)")
+    0
+}
+
+@test
+func test_nibble_to_upper_fifteen() -> I32 {
+    let r = nibble_to_upper(15)
+    assert_eq(r as I32, 70, "nibble 15 should be 'F' (70)")
+    0
+}
+
+@test
+func test_char_to_nibble_zero() -> I32 {
+    let r = char_to_nibble(48)
+    assert_eq(r, 0, "char '0' should be nibble 0")
+    0
+}
+
+@test
+func test_char_to_nibble_nine() -> I32 {
+    let r = char_to_nibble(57)
+    assert_eq(r, 9, "char '9' should be nibble 9")
+    0
+}
+
+@test
+func test_char_to_nibble_lower_a() -> I32 {
+    let r = char_to_nibble(97)
+    assert_eq(r, 10, "char 'a' should be nibble 10")
+    0
+}
+
+@test
+func test_char_to_nibble_upper_a() -> I32 {
+    let r = char_to_nibble(65)
+    assert_eq(r, 10, "char 'A' should be nibble 10")
+    0
+}
+
+@test
+func test_char_to_nibble_invalid() -> I32 {
+    let r = char_to_nibble(120)
+    assert_eq(r, -1, "char 'x' should return -1")
+    0
+}

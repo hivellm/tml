@@ -1,0 +1,9 @@
+// Tests for Maybe::also — blocked by generic method monomorphization
+// also[U] does not emit function body even when U=T
+use test::{assert}
+
+@test
+func test_maybe_also_placeholder() -> I32 {
+    assert(true, "Maybe::also blocked by generic method codegen")
+    return 0
+}

@@ -1,0 +1,10 @@
+// Tests for primitive type Hash behavior implementations
+// BLOCKED: calling .hash() on primitive types crashes (access violation)
+// The behavior dispatch for Hash on I8/I16/I32/etc. is not working correctly.
+use test::{assert}
+
+@test
+func test_hash_primitives_placeholder() -> I32 {
+    assert(true, "primitive hash blocked by behavior dispatch crash")
+    return 0
+}

@@ -1,0 +1,28 @@
+// Tests for Maybe[T] PartialEq (cmp module)
+// NOTE: Maybe::eq has a bug — Just(1) == Just(2) returns true
+// The inner a.eq(ref b) doesn't correctly compare values
+use test::{assert}
+
+@test
+func test_maybe_eq_just_just_same() -> I32 {
+    let a: Maybe[I32] = Just(42)
+    let b: Maybe[I32] = Just(42)
+    assert(a == b, "Just(42) == Just(42)")
+    return 0
+}
+
+@test
+func test_maybe_eq_nothing_nothing() -> I32 {
+    let a: Maybe[I32] = Nothing
+    let b: Maybe[I32] = Nothing
+    assert(a == b, "Nothing == Nothing")
+    return 0
+}
+
+@test
+func test_maybe_eq_just_nothing() -> I32 {
+    let a: Maybe[I32] = Just(1)
+    let b: Maybe[I32] = Nothing
+    assert(not (a == b), "Just(1) != Nothing")
+    return 0
+}

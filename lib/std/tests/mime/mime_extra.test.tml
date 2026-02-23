@@ -1,0 +1,66 @@
+// Tests for Mime::with_params, essence, get_suffix, is_audio, is_video, is_application
+use test::{assert, assert_eq}
+use std::mime::{Mime, IMAGE_SVG, AUDIO_MPEG, VIDEO_MP4, APPLICATION_JSON}
+
+@test
+func test_with_params() -> I32 {
+    let m = Mime::with_params("text", "html", "charset=utf-8")
+    assert_eq(m.get_type(), "text", "type")
+    assert_eq(m.get_subtype(), "html", "subtype")
+    assert_eq(m.get_params(), "charset=utf-8", "params")
+    0
+}
+
+@test
+func test_essence_simple() -> I32 {
+    let m = Mime::new("text", "plain")
+    assert_eq(m.essence(), "text/plain", "simple essence")
+    0
+}
+
+@test
+func test_essence_with_suffix() -> I32 {
+    let m = IMAGE_SVG()
+    let e = m.essence()
+    assert_eq(e, "image/svg+xml", "SVG essence includes suffix")
+    0
+}
+
+@test
+func test_get_suffix() -> I32 {
+    let m = IMAGE_SVG()
+    assert_eq(m.get_suffix(), "xml", "SVG has xml suffix")
+    let plain = Mime::new("text", "plain")
+    assert_eq(plain.get_suffix(), "", "plain text has no suffix")
+    0
+}
+
+@test
+func test_is_audio() -> I32 {
+    let m = AUDIO_MPEG()
+    assert(m.is_audio(), "audio/mpeg should be audio")
+    assert(not m.is_text(), "audio should not be text")
+    0
+}
+
+@test
+func test_is_video() -> I32 {
+    let m = VIDEO_MP4()
+    assert(m.is_video(), "video/mp4 should be video")
+    0
+}
+
+@test
+func test_is_application() -> I32 {
+    let m = APPLICATION_JSON()
+    assert(m.is_application(), "application/json should be application")
+    0
+}
+
+@test
+func test_to_string_with_params() -> I32 {
+    let m = Mime::with_params("text", "html", "charset=utf-8")
+    let s = m.to_string()
+    assert_eq(s, "text/html; charset=utf-8", "formatted with params")
+    0
+}

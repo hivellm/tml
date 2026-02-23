@@ -1,0 +1,28 @@
+// Tests for std::thread — Thread::id, Thread::name, current, ThreadId::as_u64, sleep_ms
+use test::{assert, assert_eq}
+use std::thread::{current, sleep_ms, Thread, ThreadId}
+
+@test
+func test_current_thread_id() -> I32 {
+    let t: Thread = current()
+    let id: ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    assert(raw > 0 as U64, "current thread id should be positive")
+    0
+}
+
+@test
+func test_current_thread_name() -> I32 {
+    let t: Thread = current()
+    let name: Maybe[Str] = t.name()
+    // main thread may or may not have a name, just check it doesn't crash
+    assert(true, "Thread::name should not crash")
+    0
+}
+
+@test
+func test_sleep_ms_does_not_crash() -> I32 {
+    sleep_ms(1 as U64)
+    assert(true, "sleep_ms(1) should not crash")
+    0
+}

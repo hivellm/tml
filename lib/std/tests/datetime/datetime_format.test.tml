@@ -1,0 +1,27 @@
+// Tests for DateTime formatting and parsing
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_to_iso8601() -> I32 {
+    let dt = DateTime::from_parts(2024, 3, 15, 10, 30, 45)
+    let s = dt.to_iso8601()
+    assert_eq(s, "2024-03-15T10:30:45Z", "ISO 8601 format")
+    0
+}
+
+@test
+func test_to_date_string() -> I32 {
+    let dt = DateTime::from_parts(2024, 3, 15, 10, 30, 45)
+    let s = dt.to_date_string()
+    assert_eq(s, "2024-03-15", "date string format")
+    0
+}
+
+@test
+func test_to_time_string() -> I32 {
+    let dt = DateTime::from_parts(2024, 3, 15, 10, 30, 45)
+    let s = dt.to_time_string()
+    assert_eq(s, "10:30:45", "time string format")
+    0
+}

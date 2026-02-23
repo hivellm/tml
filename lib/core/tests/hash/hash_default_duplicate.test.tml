@@ -1,0 +1,30 @@
+// Tests for DefaultHasher::default, DefaultHasher::duplicate, DefaultHasher::with_seed
+use test::{assert, assert_eq}
+use core::hash::DefaultHasher
+
+@test
+func test_default_hasher_default() -> I32 {
+    let h: DefaultHasher = DefaultHasher::default()
+    let result: I64 = h.finish()
+    // default() should produce same initial state as new()
+    let h2: DefaultHasher = DefaultHasher::new()
+    assert_eq(result, h2.finish(), "default() should match new()")
+    return 0
+}
+
+@test
+func test_default_hasher_duplicate() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(42 as I64)
+    let h2: DefaultHasher = h1.duplicate()
+    assert_eq(h1.finish(), h2.finish(), "duplicate should preserve state")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed_different() -> I32 {
+    let h1: DefaultHasher = DefaultHasher::with_seed(1 as U64)
+    let h2: DefaultHasher = DefaultHasher::with_seed(2 as U64)
+    assert(h1.finish() != h2.finish(), "different seeds should produce different hashes")
+    return 0
+}

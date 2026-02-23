@@ -1,0 +1,30 @@
+// Tests for Outcome::also — returns second result if first is Ok
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_also_ok_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(2)
+    let y: Outcome[I64, Str] = Ok(100 as I64)
+    let result: Outcome[I64, Str] = x.also(y)
+    assert(result.is_ok(), "also(Ok, Ok) should be Ok")
+    assert_eq(result.unwrap(), 100 as I64, "also(Ok, Ok) returns second value")
+    return 0
+}
+
+@test
+func test_outcome_also_ok_err() -> I32 {
+    let x: Outcome[I32, Str] = Ok(2)
+    let y: Outcome[I64, Str] = Err("second failed")
+    let result: Outcome[I64, Str] = x.also(y)
+    assert(result.is_err(), "also(Ok, Err) should be Err")
+    return 0
+}
+
+@test
+func test_outcome_also_err_ok() -> I32 {
+    let x: Outcome[I32, Str] = Err("first failed")
+    let y: Outcome[I64, Str] = Ok(100 as I64)
+    let result: Outcome[I64, Str] = x.also(y)
+    assert(result.is_err(), "also(Err, Ok) should be Err (from first)")
+    return 0
+}

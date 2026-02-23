@@ -1,0 +1,39 @@
+// Tests for tuple Default, PartialEq, Clone implementations
+use test::{assert, assert_eq}
+
+@test
+func test_tuple2_default() -> I32 {
+    let t: (I32, I32) = (I32::default(), I32::default())
+    assert_eq(t.0, 0, "tuple2 default .0 should be 0")
+    assert_eq(t.1, 0, "tuple2 default .1 should be 0")
+    0
+}
+
+@test
+func test_tuple3_default() -> I32 {
+    let t: (I32, I32, I32) = (I32::default(), I32::default(), I32::default())
+    assert_eq(t.0, 0, "tuple3 default .0")
+    assert_eq(t.1, 0, "tuple3 default .1")
+    assert_eq(t.2, 0, "tuple3 default .2")
+    0
+}
+
+@test
+func test_tuple2_eq() -> I32 {
+    let a: (I32, I32) = (1, 2)
+    let b: (I32, I32) = (1, 2)
+    let c: (I32, I32) = (1, 3)
+    assert(a == b, "same tuples should be equal")
+    assert(a != c, "different tuples should not be equal")
+    0
+}
+
+@test
+func test_tuple3_eq() -> I32 {
+    let a: (I32, I32, I32) = (1, 2, 3)
+    let b: (I32, I32, I32) = (1, 2, 3)
+    let c: (I32, I32, I32) = (1, 2, 4)
+    assert(a == b, "same 3-tuples should be equal")
+    assert(a != c, "different 3-tuples should not be equal")
+    0
+}

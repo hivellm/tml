@@ -1,0 +1,28 @@
+// Tests for ScopeGuard — new, defuse, arm
+use test::{assert, assert_eq}
+use core::ops::drop::ScopeGuard
+
+@test
+func test_scope_guard_new() -> I32 {
+    let guard: ScopeGuard[I32] = ScopeGuard::new(42)
+    assert(guard.enabled, "new ScopeGuard should be enabled")
+    0
+}
+
+@test
+func test_scope_guard_defuse() -> I32 {
+    var guard: ScopeGuard[I32] = ScopeGuard::new(1)
+    guard.defuse()
+    assert(not guard.enabled, "defuse should disable the guard")
+    0
+}
+
+@test
+func test_scope_guard_arm() -> I32 {
+    var guard: ScopeGuard[I32] = ScopeGuard::new(1)
+    guard.defuse()
+    assert(not guard.enabled, "defuse should disable")
+    guard.arm()
+    assert(guard.enabled, "arm should re-enable the guard")
+    0
+}

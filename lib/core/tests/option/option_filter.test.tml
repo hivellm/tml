@@ -1,0 +1,8 @@
+// Tests for Maybe::filter — blocked by closure ref parameter codegen
+use test::{assert}
+
+@test
+func test_maybe_filter_placeholder() -> I32 {
+    assert(true, "Maybe::filter blocked by ref closure codegen")
+    return 0
+}

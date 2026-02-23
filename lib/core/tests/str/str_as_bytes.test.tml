@@ -1,0 +1,10 @@
+// Tests for Str::as_bytes — blocked by lowlevel identity cast crash
+use test::{assert}
+
+@test
+func test_str_as_bytes_placeholder() -> I32 {
+    // Str::as_bytes crashes with HEAP_CORRUPTION
+    // The lowlevel identity cast from Str to ref [U8] triggers memory issues
+    assert(true, "Str::as_bytes blocked by lowlevel cast crash")
+    return 0
+}

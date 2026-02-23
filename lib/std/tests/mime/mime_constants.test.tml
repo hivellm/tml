@@ -1,0 +1,75 @@
+// Tests for MIME type constant constructors
+use test::{assert, assert_eq}
+use std::mime
+
+@test
+func test_text_constants() -> I32 {
+    let css: mime::Mime = mime::TEXT_CSS()
+    assert_eq(css.get_type(), "text")
+    assert_eq(css.get_subtype(), "css")
+
+    let js: mime::Mime = mime::TEXT_JAVASCRIPT()
+    assert_eq(js.get_type(), "text")
+    assert_eq(js.get_subtype(), "javascript")
+
+    let xml: mime::Mime = mime::TEXT_XML()
+    assert_eq(xml.get_type(), "text")
+    assert_eq(xml.get_subtype(), "xml")
+
+    let csv: mime::Mime = mime::TEXT_CSV()
+    assert_eq(csv.get_type(), "text")
+    assert_eq(csv.get_subtype(), "csv")
+    return 0
+}
+
+@test
+func test_application_constants() -> I32 {
+    let xml: mime::Mime = mime::APPLICATION_XML()
+    assert_eq(xml.get_type(), "application")
+    assert_eq(xml.get_subtype(), "xml")
+
+    let octet: mime::Mime = mime::APPLICATION_OCTET_STREAM()
+    assert_eq(octet.get_type(), "application")
+    assert_eq(octet.get_subtype(), "octet-stream")
+
+    let pdf: mime::Mime = mime::APPLICATION_PDF()
+    assert_eq(pdf.get_type(), "application")
+    assert_eq(pdf.get_subtype(), "pdf")
+
+    let form: mime::Mime = mime::APPLICATION_FORM_URLENCODED()
+    assert_eq(form.get_type(), "application")
+    assert_eq(form.get_subtype(), "x-www-form-urlencoded")
+
+    let wasm: mime::Mime = mime::APPLICATION_WASM()
+    assert_eq(wasm.get_type(), "application")
+    assert_eq(wasm.get_subtype(), "wasm")
+    return 0
+}
+
+@test
+func test_image_audio_video_constants() -> I32 {
+    let jpeg: mime::Mime = mime::IMAGE_JPEG()
+    assert_eq(jpeg.get_type(), "image")
+    assert_eq(jpeg.get_subtype(), "jpeg")
+
+    let gif: mime::Mime = mime::IMAGE_GIF()
+    assert_eq(gif.get_type(), "image")
+    assert_eq(gif.get_subtype(), "gif")
+
+    let svg: mime::Mime = mime::IMAGE_SVG()
+    assert_eq(svg.get_type(), "image")
+    assert_eq(svg.get_subtype(), "svg")
+
+    let webp: mime::Mime = mime::IMAGE_WEBP()
+    assert_eq(webp.get_type(), "image")
+    assert_eq(webp.get_subtype(), "webp")
+
+    let mp3: mime::Mime = mime::AUDIO_MPEG()
+    assert_eq(mp3.get_type(), "audio")
+    assert_eq(mp3.get_subtype(), "mpeg")
+
+    let multi: mime::Mime = mime::MULTIPART_FORM_DATA()
+    assert_eq(multi.get_type(), "multipart")
+    assert_eq(multi.get_subtype(), "form-data")
+    return 0
+}

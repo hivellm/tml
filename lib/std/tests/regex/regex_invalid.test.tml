@@ -1,0 +1,9 @@
+// Tests for make_invalid — private function, only called from compile()
+// No public is_valid() method to verify. Indirectly tested via failed matches.
+use test::{assert}
+
+@test
+func test_regex_invalid_placeholder() -> I32 {
+    assert(true, "make_invalid is private, no is_valid accessor")
+    return 0
+}

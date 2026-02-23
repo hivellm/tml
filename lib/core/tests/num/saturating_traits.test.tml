@@ -1,0 +1,9 @@
+// Tests for Saturating[T] — blocked by generic trait dispatch codegen bug
+// Saturating::eq crashes (HEAP_CORRUPTION) when delegating to inner.eq()
+use test::{assert}
+
+@test
+func test_saturating_traits_placeholder() -> I32 {
+    assert(true, "Saturating trait impls blocked by generic codegen")
+    0
+}

@@ -1,0 +1,39 @@
+// Tests for DateTime::from_parts, from_timestamp with known values
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_from_parts_epoch() -> I32 {
+    let dt = DateTime::from_parts(1970, 1, 1, 0, 0, 0)
+    assert_eq(dt.year() as I32, 1970, "epoch year")
+    assert_eq(dt.month() as I32, 1, "epoch month")
+    assert_eq(dt.day() as I32, 1, "epoch day")
+    assert_eq(dt.hour() as I32, 0, "epoch hour")
+    assert_eq(dt.minute() as I32, 0, "epoch minute")
+    assert_eq(dt.second() as I32, 0, "epoch second")
+    assert_eq(dt.timestamp(), 0 as I64, "epoch timestamp should be 0")
+    0
+}
+
+@test
+func test_from_parts_known_date() -> I32 {
+    // 2000-06-15 12:30:45
+    let dt = DateTime::from_parts(2000, 6, 15, 12, 30, 45)
+    assert_eq(dt.year() as I32, 2000, "year")
+    assert_eq(dt.month() as I32, 6, "month")
+    assert_eq(dt.day() as I32, 15, "day")
+    assert_eq(dt.hour() as I32, 12, "hour")
+    assert_eq(dt.minute() as I32, 30, "minute")
+    assert_eq(dt.second() as I32, 45, "second")
+    0
+}
+
+@test
+func test_from_timestamp_known() -> I32 {
+    // 1000000000 seconds = 2001-09-09 01:46:40
+    let dt = DateTime::from_timestamp(1000000000 as I64)
+    assert_eq(dt.year() as I32, 2001, "year should be 2001")
+    assert_eq(dt.month() as I32, 9, "month should be 9")
+    assert_eq(dt.day() as I32, 9, "day should be 9")
+    0
+}

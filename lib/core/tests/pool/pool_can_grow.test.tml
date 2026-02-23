@@ -1,0 +1,24 @@
+// Tests for GrowthPolicy::can_grow
+use test::{assert, assert_eq}
+use core::pool::GrowthPolicy
+
+@test
+func test_fixed_cannot_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Fixed
+    assert(not p.can_grow(), "Fixed cannot grow")
+    return 0
+}
+
+@test
+func test_doubling_can_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Doubling
+    assert(p.can_grow(), "Doubling can grow")
+    return 0
+}
+
+@test
+func test_linear_can_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(5)
+    assert(p.can_grow(), "Linear can grow")
+    return 0
+}

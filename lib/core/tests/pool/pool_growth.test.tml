@@ -1,0 +1,27 @@
+// Tests for GrowthPolicy and PoolStats
+use test::{assert, assert_eq}
+use core::pool::{GrowthPolicy, PoolStats}
+
+@test
+func test_growth_fixed_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Fixed
+    assert_eq(p.next_capacity(16), 16, "Fixed stays at 16")
+    assert_eq(p.next_capacity(100), 100, "Fixed stays at 100")
+    return 0
+}
+
+@test
+func test_growth_doubling_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Doubling
+    assert_eq(p.next_capacity(16), 32, "Doubling: 16 -> 32")
+    assert_eq(p.next_capacity(1), 2, "Doubling: 1 -> 2")
+    return 0
+}
+
+@test
+func test_growth_linear_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(10)
+    assert_eq(p.next_capacity(16), 26, "Linear(10): 16 -> 26")
+    assert_eq(p.next_capacity(0), 10, "Linear(10): 0 -> 10")
+    return 0
+}

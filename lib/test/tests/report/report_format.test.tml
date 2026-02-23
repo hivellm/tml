@@ -1,0 +1,47 @@
+// Tests for report module — format_duration_us, convert_duration_us
+use test::{assert, assert_eq}
+use test::report::{format_duration_us, convert_duration_us}
+
+@test
+func test_format_duration_us_micro() -> I32 {
+    assert_eq(format_duration_us(500 as I64), "us", "< 1000 -> us")
+    assert_eq(format_duration_us(0 as I64), "us", "0 -> us")
+    assert_eq(format_duration_us(999 as I64), "us", "999 -> us")
+    return 0
+}
+
+@test
+func test_format_duration_us_milli() -> I32 {
+    assert_eq(format_duration_us(1000 as I64), "ms", "1000 -> ms")
+    assert_eq(format_duration_us(500000 as I64), "ms", "500000 -> ms")
+    assert_eq(format_duration_us(999999 as I64), "ms", "999999 -> ms")
+    return 0
+}
+
+@test
+func test_format_duration_us_seconds() -> I32 {
+    assert_eq(format_duration_us(1000000 as I64), "s", "1000000 -> s")
+    assert_eq(format_duration_us(5000000 as I64), "s", "5M -> s")
+    return 0
+}
+
+@test
+func test_convert_duration_us_micro() -> I32 {
+    let result: I64 = convert_duration_us(500 as I64)
+    assert(result == 500 as I64, "500us -> 500")
+    return 0
+}
+
+@test
+func test_convert_duration_us_milli() -> I32 {
+    let result: I64 = convert_duration_us(5000 as I64)
+    assert(result == 5 as I64, "5000us -> 5ms")
+    return 0
+}
+
+@test
+func test_convert_duration_us_seconds() -> I32 {
+    let result: I64 = convert_duration_us(3000000 as I64)
+    assert(result == 3 as I64, "3000000us -> 3s")
+    return 0
+}

@@ -1,0 +1,60 @@
+// Extra tests for IPv6: from_parts, to_bits roundtrip, classification
+use test
+use std::net::ip::{Ipv6Addr}
+
+@test
+func test_ipv6_from_parts_loopback() -> I32 {
+    let addr = Ipv6Addr::from_parts(0 as U64, 1 as U64)
+    assert(addr.is_loopback(), "from_parts(0, 1) should be ::1 (loopback)")
+    0
+}
+
+@test
+func test_ipv6_to_bits_roundtrip() -> I32 {
+    let addr = Ipv6Addr::new(0x2001 as U16, 0x0db8 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    let high = addr.to_bits_high()
+    let low = addr.to_bits_low()
+    let addr2 = Ipv6Addr::from_parts(high, low)
+    assert(addr == addr2, "roundtrip through bits should preserve address")
+    0
+}
+
+@test
+func test_ipv6_multicast() -> I32 {
+    let addr = Ipv6Addr::new(0xff02 as U16, 0 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    assert(addr.is_multicast(), "ff02::1 should be multicast")
+    0
+}
+
+@test
+func test_ipv6_unique_local() -> I32 {
+    let addr = Ipv6Addr::new(0xfd00 as U16, 0 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    assert(addr.is_unique_local(), "fd00::1 should be unique local")
+    0
+}
+
+@test
+func test_ipv6_link_local() -> I32 {
+    let addr = Ipv6Addr::new(0xfe80 as U16, 0 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    assert(addr.is_unicast_link_local(), "fe80::1 should be unicast link local")
+    0
+}
+
+@test
+func test_ipv6_not_multicast() -> I32 {
+    let addr = Ipv6Addr::LOCALHOST()
+    assert(not addr.is_multicast(), "::1 should not be multicast")
+    0
+}
+
+@test
+func test_ipv6_unspecified_not_loopback() -> I32 {
+    let addr = Ipv6Addr::UNSPECIFIED()
+    assert(not addr.is_loopback(), ":: should not be loopback")
+    assert(addr.is_unspecified(), ":: should be unspecified")
+    0
+}

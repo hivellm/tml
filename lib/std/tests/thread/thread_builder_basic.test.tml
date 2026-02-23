@@ -1,0 +1,25 @@
+// Tests for thread::Builder — construction and configuration
+use test::{assert, assert_eq}
+use std::thread::Builder
+
+@test
+func test_builder_new() -> I32 {
+    let b: Builder = Builder::new()
+    // Builder::new should not crash
+    assert(true, "Builder::new works")
+    return 0
+}
+
+@test
+func test_builder_name() -> I32 {
+    let b: Builder = Builder::new().name("worker-1")
+    assert(true, "Builder::name works")
+    return 0
+}
+
+@test
+func test_builder_stack_size() -> I32 {
+    let b: Builder = Builder::new().stack_size(4194304 as U64)
+    assert(true, "Builder::stack_size works")
+    return 0
+}

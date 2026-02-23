@@ -1,0 +1,41 @@
+// Tests for F32 trig variants: tan_f32, asin_f32, acos_f32, atan_f32, atan2_f32
+use test
+use std::math::{tan_f32, asin_f32, acos_f32, atan_f32, atan2_f32, PI}
+
+@test
+func test_tan_f32_zero() -> I32 {
+    let r = tan_f32(0.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "tan_f32(0) should be ~0")
+    0
+}
+
+@test
+func test_asin_f32_zero() -> I32 {
+    let r = asin_f32(0.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "asin_f32(0) should be ~0")
+    0
+}
+
+@test
+func test_acos_f32_one() -> I32 {
+    let r = acos_f32(1.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "acos_f32(1) should be ~0")
+    0
+}
+
+@test
+func test_atan_f32_zero() -> I32 {
+    let r = atan_f32(0.0 as F32)
+    assert((r as F64) > -0.01 and (r as F64) < 0.01, "atan_f32(0) should be ~0")
+    0
+}
+
+@test
+func test_atan2_f32_basic() -> I32 {
+    let r = atan2_f32(1.0 as F32, 1.0 as F32)
+    let pi_4 = (PI / 4.0) as F32
+    let diff = r - pi_4
+    let abs_diff = if diff < (0.0 as F32) { (0.0 as F32) - diff } else { diff }
+    assert((abs_diff as F64) < 0.01, "atan2_f32(1,1) should be ~pi/4")
+    0
+}

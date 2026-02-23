@@ -1,0 +1,108 @@
+// Tests for core::unicode top-level classification and case conversion
+use test::{assert, assert_eq}
+use core::unicode
+
+@test
+func test_is_alphabetic_ascii() -> I32 {
+    assert(unicode::is_alphabetic(65 as U32), "A is alphabetic")
+    assert(unicode::is_alphabetic(90 as U32), "Z is alphabetic")
+    assert(unicode::is_alphabetic(97 as U32), "a is alphabetic")
+    assert(unicode::is_alphabetic(122 as U32), "z is alphabetic")
+    assert(not unicode::is_alphabetic(48 as U32), "0 is not alphabetic")
+    assert(not unicode::is_alphabetic(32 as U32), "space is not alphabetic")
+    0
+}
+
+@test
+func test_is_lowercase_ascii() -> I32 {
+    assert(unicode::is_lowercase(97 as U32), "a is lowercase")
+    assert(unicode::is_lowercase(122 as U32), "z is lowercase")
+    assert(not unicode::is_lowercase(65 as U32), "A is not lowercase")
+    assert(not unicode::is_lowercase(48 as U32), "0 is not lowercase")
+    0
+}
+
+@test
+func test_is_uppercase_ascii() -> I32 {
+    assert(unicode::is_uppercase(65 as U32), "A is uppercase")
+    assert(unicode::is_uppercase(90 as U32), "Z is uppercase")
+    assert(not unicode::is_uppercase(97 as U32), "a is not uppercase")
+    assert(not unicode::is_uppercase(48 as U32), "0 is not uppercase")
+    0
+}
+
+@test
+func test_is_numeric_ascii() -> I32 {
+    assert(unicode::is_numeric(48 as U32), "0 is numeric")
+    assert(unicode::is_numeric(57 as U32), "9 is numeric")
+    assert(not unicode::is_numeric(65 as U32), "A is not numeric")
+    assert(not unicode::is_numeric(32 as U32), "space is not numeric")
+    0
+}
+
+@test
+func test_is_alphanumeric() -> I32 {
+    assert(unicode::is_alphanumeric(65 as U32), "A is alphanumeric")
+    assert(unicode::is_alphanumeric(97 as U32), "a is alphanumeric")
+    assert(unicode::is_alphanumeric(48 as U32), "0 is alphanumeric")
+    assert(not unicode::is_alphanumeric(32 as U32), "space is not alphanumeric")
+    assert(not unicode::is_alphanumeric(33 as U32), "! is not alphanumeric")
+    0
+}
+
+@test
+func test_is_whitespace_ascii() -> I32 {
+    assert(unicode::is_whitespace(32 as U32), "space is whitespace")
+    assert(unicode::is_whitespace(9 as U32), "tab is whitespace")
+    assert(unicode::is_whitespace(10 as U32), "newline is whitespace")
+    assert(unicode::is_whitespace(13 as U32), "CR is whitespace")
+    assert(not unicode::is_whitespace(65 as U32), "A is not whitespace")
+    0
+}
+
+@test
+func test_is_control_ascii() -> I32 {
+    assert(unicode::is_control(0 as U32), "NUL is control")
+    assert(unicode::is_control(10 as U32), "LF is control")
+    assert(unicode::is_control(31 as U32), "US is control")
+    assert(unicode::is_control(127 as U32), "DEL is control")
+    assert(not unicode::is_control(32 as U32), "space is not control")
+    assert(not unicode::is_control(65 as U32), "A is not control")
+    0
+}
+
+@test
+func test_is_grapheme_extend_ascii() -> I32 {
+    // No ASCII characters are grapheme extending
+    assert(not unicode::is_grapheme_extend(65 as U32), "A is not grapheme extend")
+    assert(not unicode::is_grapheme_extend(32 as U32), "space is not grapheme extend")
+    assert(not unicode::is_grapheme_extend(0 as U32), "NUL is not grapheme extend")
+    0
+}
+
+@test
+func test_to_uppercase_ascii() -> I32 {
+    assert_eq(unicode::to_uppercase(97 as U32), 65 as U32, "a -> A")
+    assert_eq(unicode::to_uppercase(122 as U32), 90 as U32, "z -> Z")
+    assert_eq(unicode::to_uppercase(65 as U32), 65 as U32, "A stays A")
+    assert_eq(unicode::to_uppercase(48 as U32), 48 as U32, "0 stays 0")
+    0
+}
+
+@test
+func test_to_lowercase_ascii() -> I32 {
+    assert_eq(unicode::to_lowercase(65 as U32), 97 as U32, "A -> a")
+    assert_eq(unicode::to_lowercase(90 as U32), 122 as U32, "Z -> z")
+    assert_eq(unicode::to_lowercase(97 as U32), 97 as U32, "a stays a")
+    assert_eq(unicode::to_lowercase(48 as U32), 48 as U32, "0 stays 0")
+    0
+}
+
+@test
+func test_to_titlecase_ascii() -> I32 {
+    assert_eq(unicode::to_titlecase(97 as U32), 65 as U32, "a -> A titlecase")
+    assert_eq(unicode::to_titlecase(122 as U32), 90 as U32, "z -> Z titlecase")
+    assert_eq(unicode::to_titlecase(65 as U32), 65 as U32, "A stays A")
+    assert_eq(unicode::to_titlecase(48 as U32), 48 as U32, "0 stays 0")
+    0
+}

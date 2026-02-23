@@ -1,0 +1,27 @@
+// Tests for BoxedError::source, SimpleError::description
+use test::{assert, assert_eq}
+use core::error::{BoxedError, SimpleError, IoError, IoErrorKind}
+
+@test
+func test_boxed_error_source_is_nothing() -> I32 {
+    let boxed = BoxedError::from_message("test")
+    let src = boxed.source()
+    assert(src.is_nothing(), "BoxedError source should be Nothing")
+    0
+}
+
+@test
+func test_io_error_source_is_nothing() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    let src = err.source()
+    assert(src.is_nothing(), "IoError source should be Nothing by default")
+    0
+}
+
+@test
+func test_simple_error_source_nothing() -> I32 {
+    let err = SimpleError::new("no cause")
+    let src = err.source()
+    assert(src.is_nothing(), "SimpleError source should be Nothing")
+    0
+}

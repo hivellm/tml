@@ -1,0 +1,53 @@
+// Tests for DateTime methods: weekday, day_of_year, is_leap_year, to_rfc2822, to_string, debug_string
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_weekday_epoch() -> I32 {
+    // 1970-01-01 was Thursday (3)
+    let dt = DateTime::from_timestamp(0 as I64)
+    assert_eq(dt.weekday() as I32, 3, "1970-01-01 was Thursday (3)")
+    0
+}
+
+@test
+func test_day_of_year() -> I32 {
+    // 2024-03-01 should be day 61 (leap year: 31 Jan + 29 Feb + 1)
+    let dt = DateTime::from_parts(2024, 3, 1, 0, 0, 0)
+    assert_eq(dt.day_of_year() as I32, 61, "March 1 in leap year = day 61")
+    0
+}
+
+@test
+func test_is_leap_year() -> I32 {
+    let dt2024 = DateTime::from_parts(2024, 1, 1, 0, 0, 0)
+    assert(dt2024.is_leap_year(), "2024 is a leap year")
+    let dt2023 = DateTime::from_parts(2023, 1, 1, 0, 0, 0)
+    assert(not dt2023.is_leap_year(), "2023 is not a leap year")
+    0
+}
+
+@test
+func test_to_rfc2822() -> I32 {
+    // 1970-01-01 00:00:00 -> "Thu, 01 Jan 1970 00:00:00 +0000"
+    let dt = DateTime::from_timestamp(0 as I64)
+    let s = dt.to_rfc2822()
+    assert_eq(s, "Thu, 01 Jan 1970 00:00:00 +0000", "RFC 2822 for epoch")
+    0
+}
+
+@test
+func test_to_string() -> I32 {
+    let dt = DateTime::from_parts(2024, 3, 15, 10, 30, 45)
+    let s = dt.to_string()
+    assert_eq(s, "2024-03-15 10:30:45 UTC", "display string")
+    0
+}
+
+@test
+func test_debug_string() -> I32 {
+    let dt = DateTime::from_parts(2024, 3, 15, 10, 30, 45)
+    let s = dt.debug_string()
+    assert_eq(s, "DateTime(2024-03-15T10:30:45Z)", "debug string")
+    0
+}

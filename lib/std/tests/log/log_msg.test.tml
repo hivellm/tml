@@ -1,0 +1,27 @@
+// Tests for std::log message functions — exercise without crashing
+use test::{assert}
+use std::log
+
+@test
+func test_msg_function() -> I32 {
+    log::set_level(0)
+    log::msg(2, "test", "msg function works")
+    assert(true, "msg should not crash")
+    0
+}
+
+@test
+func test_trace_function() -> I32 {
+    log::set_level(0)
+    log::trace("test", "trace message")
+    assert(true, "trace should not crash")
+    0
+}
+
+@test
+func test_debug_function() -> I32 {
+    log::set_level(0)
+    log::debug("test", "debug message")
+    assert(true, "debug should not crash")
+    0
+}

@@ -1,0 +1,35 @@
+// Tests for bench module — print_bench_result, simple_bench
+use test::{assert, assert_eq}
+use test::bench::{BenchResult, print_bench_result, simple_bench}
+
+@test
+func test_print_bench_result() -> I32 {
+    let r = BenchResult {
+        name: "my_bench",
+        iterations: 100,
+        total_ns: 50000 as I64,
+        avg_ns: 500 as I64,
+        min_ns: 400 as I64,
+        max_ns: 600 as I64,
+    }
+    print_bench_result(r)
+    assert(true, "print_bench_result ran without crashing")
+    return 0
+}
+
+@test
+func test_simple_bench() -> I32 {
+    let r = simple_bench("overhead", 10)
+    assert_eq(r.iterations, 10, "simple_bench preserves iteration count")
+    assert(r.total_ns >= 0 as I64, "total_ns non-negative")
+    assert(r.avg_ns >= 0 as I64, "avg_ns non-negative")
+    return 0
+}
+
+@test
+func test_simple_bench_zero_iterations() -> I32 {
+    let r = simple_bench("zero", 0)
+    assert_eq(r.iterations, 0, "0 iterations preserved")
+    assert_eq(r.avg_ns, 0 as I64, "0 iterations -> 0 avg")
+    return 0
+}

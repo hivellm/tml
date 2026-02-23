@@ -1,0 +1,13 @@
+// Tests for Array[U8, N] ASCII methods (core::array::ascii)
+// BLOCKED: type-specialized const-generic impl dispatch
+// Methods like is_ascii() from `impl[const N: I64] Array[U8, N]` are not
+// resolvable from [U8; N] array literal syntax — "Unknown method: is_ascii"
+// Revisit when type-specialized impl dispatch is implemented.
+use test::{assert, assert_eq}
+
+@test
+func test_u8_array_basic() -> I32 {
+    let bytes: [U8; 5] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8]
+    assert(true, "U8 array creation works")
+    return 0
+}

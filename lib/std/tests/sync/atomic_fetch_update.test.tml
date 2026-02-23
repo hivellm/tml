@@ -1,0 +1,31 @@
+// Tests for AtomicI32::fetch_update
+use test::{assert, assert_eq}
+use std::sync::{AtomicI32, Ordering}
+
+@test
+func test_fetch_update_ok() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let result = counter.fetch_update(Ordering::SeqCst, Ordering::SeqCst, do(val: I32) -> Maybe[I32] {
+        Just(val + 5)
+    })
+    when result {
+        Ok(old) => assert_eq(old, 10, "fetch_update should return old value"),
+        Err(e) => assert(false, "fetch_update should succeed")
+    }
+    assert_eq(counter.load(Ordering::SeqCst), 15, "value should be updated to 15")
+    0
+}
+
+@test
+func test_fetch_update_rejected() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(5)
+    let result = counter.fetch_update(Ordering::SeqCst, Ordering::SeqCst, do(val: I32) -> Maybe[I32] {
+        Nothing
+    })
+    when result {
+        Ok(old) => assert(false, "fetch_update should fail when Nothing returned"),
+        Err(v) => assert_eq(v, 5, "should return current value on failure")
+    }
+    assert_eq(counter.load(Ordering::SeqCst), 5, "value should be unchanged")
+    0
+}

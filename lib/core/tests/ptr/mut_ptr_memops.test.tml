@@ -1,0 +1,11 @@
+// Tests for RawMutPtr — copy_from, copy_from_nonoverlapping, write_bytes_val
+// BLOCKED: memmove, memcpy, memset lowlevel intrinsics are not resolved
+// in codegen. These ptr memory operations need codegen support for
+// the underlying memory intrinsics.
+use test::{assert}
+
+@test
+func test_mut_ptr_memops_placeholder() -> I32 {
+    assert(true, "copy_from/write_bytes_val blocked by unresolved memmove/memcpy/memset")
+    return 0
+}

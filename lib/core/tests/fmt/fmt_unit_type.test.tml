@@ -1,0 +1,9 @@
+// Tests for Unit Display/Debug — blocked by compiler Unit type assignment bug
+// "let u: Unit = ()" gives "Type mismatch: expected (), found ()"
+use test::{assert}
+
+@test
+func test_unit_display_placeholder() -> I32 {
+    assert(true, "Unit Display/Debug blocked by Unit type assignment bug")
+    return 0
+}

@@ -1,0 +1,10 @@
+// Tests for core::fmt::rt::format_join
+// BLOCKED: format_join takes ref [Str] which crashes on array ref codegen
+// See also: fmt_rt_funcs.test.tml note about array ref crash
+use test::{assert}
+
+@test
+func test_format_join_placeholder() -> I32 {
+    assert(true, "format_join blocked by array ref codegen")
+    0
+}

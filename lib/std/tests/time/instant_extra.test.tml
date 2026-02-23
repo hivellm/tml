@@ -1,0 +1,39 @@
+// Tests for Instant — elapsed, as_nanos, sleep
+use test::{assert}
+use std::time::{Instant, sleep}
+use core::time::Duration
+
+@test
+func test_instant_elapsed() -> I32 {
+    let start = Instant::now()
+    // Do some trivial work to ensure elapsed is non-zero
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < 10000) {
+        sum = sum + i
+        i = i + 1
+    }
+    let dur = start.elapsed()
+    assert(dur.as_nanos() >= 0, "elapsed should be non-negative")
+    return 0
+}
+
+@test
+func test_instant_as_nanos() -> I32 {
+    let t = Instant::now()
+    let ns: I64 = t.as_nanos()
+    // Just verify the function runs and returns a value
+    // (time_ns() may return large values that appear negative as I64)
+    let _ = ns
+    return 0
+}
+
+@test
+func test_sleep_short() -> I32 {
+    let start = Instant::now()
+    sleep(Duration::from_millis(10))
+    let dur = start.elapsed()
+    // Should have slept at least a few milliseconds
+    assert(dur.as_nanos() > 1000000, "should have slept at least 1ms")
+    return 0
+}

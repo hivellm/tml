@@ -1,0 +1,33 @@
+// Tests for RawPtr[T] — partial_cmp
+use test::{assert, assert_eq}
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_const_ptr_partial_cmp_less() -> I32 {
+    let a: RawPtr[I64] = RawPtr::from_addr(0x1000 as I64)
+    let b: RawPtr[I64] = RawPtr::from_addr(0x2000 as I64)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap().is_less(), "lower addr less")
+    0
+}
+
+@test
+func test_const_ptr_partial_cmp_equal() -> I32 {
+    let a: RawPtr[I64] = RawPtr::from_addr(0x5000 as I64)
+    let b: RawPtr[I64] = RawPtr::from_addr(0x5000 as I64)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap().is_equal(), "same addr equal")
+    0
+}
+
+@test
+func test_const_ptr_partial_cmp_greater() -> I32 {
+    let a: RawPtr[I64] = RawPtr::from_addr(0x3000 as I64)
+    let b: RawPtr[I64] = RawPtr::from_addr(0x1000 as I64)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    assert(result.unwrap().is_greater(), "higher addr greater")
+    0
+}

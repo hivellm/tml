@@ -1,0 +1,62 @@
+// Tests for Rng::next_f64, Rng::range_f64, ThreadRng::range_f64, ThreadRng::reseed
+use test
+use std::random::{Rng, ThreadRng, thread_random_i64, thread_random_range}
+
+@test
+func test_rng_next_f64_range() -> I32 {
+    var rng = Rng::with_seed(12345)
+    let val = rng.next_f64()
+    assert(val >= 0.0 and val < 1.0, "next_f64 should be in [0.0, 1.0)")
+    0
+}
+
+@test
+func test_rng_next_f64_varies() -> I32 {
+    var rng = Rng::with_seed(99999)
+    let v1 = rng.next_f64()
+    let v2 = rng.next_f64()
+    assert(v1 >= 0.0 and v1 < 1.0, "v1 should be in range")
+    assert(v2 >= 0.0 and v2 < 1.0, "v2 should be in range")
+    0
+}
+
+@test
+func test_rng_range_f64() -> I32 {
+    var rng = Rng::with_seed(42)
+    let val = rng.range_f64(10.0, 20.0)
+    assert(val >= 10.0 and val < 20.0, "range_f64(10, 20) should be in [10, 20)")
+    0
+}
+
+@test
+func test_thread_rng_range_f64() -> I32 {
+    var trng = ThreadRng::new()
+    let val = trng.range_f64(0.0, 100.0)
+    assert(val >= 0.0 and val < 100.0, "range_f64(0, 100) should be in [0, 100)")
+    0
+}
+
+@test
+func test_thread_rng_reseed() -> I32 {
+    var trng = ThreadRng::new()
+    trng.reseed()
+    let val = trng.next_i64()
+    // Just verify it doesn't crash and produces a value
+    assert(true, "reseed should not crash")
+    0
+}
+
+@test
+func test_thread_random_i64() -> I32 {
+    let val = thread_random_i64()
+    // Just verify it returns without crashing
+    assert(true, "thread_random_i64 should work")
+    0
+}
+
+@test
+func test_thread_random_range() -> I32 {
+    let val = thread_random_range(0, 100)
+    assert(val >= 0 and val < 100, "thread_random_range(0, 100) should be in [0, 100)")
+    0
+}

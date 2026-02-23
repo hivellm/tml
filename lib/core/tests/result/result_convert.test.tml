@@ -1,0 +1,28 @@
+// Tests for Outcome::ok, Outcome::err — converting to Maybe
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_ok_to_maybe_just() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let m: Maybe[I32] = x.ok()
+    assert(m.is_just(), "Ok.ok() should be Just")
+    assert_eq(m.unwrap(), 42, "Ok.ok() should contain value")
+    return 0
+}
+
+@test
+func test_outcome_err_to_maybe_nothing() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let m: Maybe[I32] = x.ok()
+    assert(m.is_nothing(), "Err.ok() should be Nothing")
+    return 0
+}
+
+@test
+func test_outcome_err_to_maybe_just() -> I32 {
+    let x: Outcome[I32, Str] = Err("oops")
+    let m: Maybe[Str] = x.err()
+    assert(m.is_just(), "Err.err() should be Just")
+    assert_eq(m.unwrap(), "oops", "Err.err() should contain error")
+    return 0
+}

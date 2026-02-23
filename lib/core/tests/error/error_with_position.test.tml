@@ -1,0 +1,19 @@
+// Tests for ParseError::with_position
+use test::{assert, assert_eq}
+use core::error::ParseError
+
+@test
+func test_parse_error_with_position() -> I32 {
+    let err = ParseError::with_position("unexpected char", 5)
+    let s: Str = err.to_string()
+    assert(s.len() > 0, "with_position to_string should produce output")
+    return 0
+}
+
+@test
+func test_parse_error_with_position_debug() -> I32 {
+    let err = ParseError::with_position("bad token", 10)
+    let s: Str = err.debug_string()
+    assert(s.len() > 0, "with_position debug_string should produce output")
+    return 0
+}

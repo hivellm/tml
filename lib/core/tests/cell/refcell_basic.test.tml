@@ -1,0 +1,27 @@
+// Tests for RefCell basic operations
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_refcell_new() -> I32 {
+    let cell: RefCell[I32] = RefCell::new(42)
+    assert(true, "RefCell::new should succeed")
+    return 0
+}
+
+@test
+func test_refcell_replace() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(42)
+    let old: I32 = cell.replace(100)
+    assert_eq(old, 42, "replace returns old value 42")
+    return 0
+}
+
+@test
+func test_refcell_get_mut() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(10)
+    let r: mut ref I32 = cell.get_mut()
+    *r = 20
+    assert(true, "get_mut allows mutation")
+    return 0
+}

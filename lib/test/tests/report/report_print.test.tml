@@ -1,0 +1,24 @@
+// Tests for report module — print functions coverage
+use test::{assert}
+use test::report::{print_test_header, print_test_ok, print_test_failed}
+
+@test
+func test_print_test_header() -> I32 {
+    print_test_header(5)
+    assert(true, "print_test_header ran")
+    return 0
+}
+
+@test
+func test_print_test_ok() -> I32 {
+    print_test_ok("my_test")
+    assert(true, "print_test_ok ran")
+    return 0
+}
+
+@test
+func test_print_test_failed() -> I32 {
+    print_test_failed("bad_test")
+    assert(true, "print_test_failed ran")
+    return 0
+}

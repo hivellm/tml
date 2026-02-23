@@ -1,0 +1,27 @@
+// Tests for CacheAlignedBox — heap-allocated cache-aligned data
+use test::{assert, assert_eq}
+use core::cache::CacheAlignedBox
+
+@test
+func test_cache_aligned_box_new_is_valid() -> I32 {
+    let box_val: CacheAlignedBox[I32] = CacheAlignedBox::new(42)
+    assert(box_val.is_valid(), "CacheAlignedBox::new should produce valid allocation")
+    return 0
+}
+
+@test
+func test_cache_aligned_box_get() -> I32 {
+    let box_val: CacheAlignedBox[I32] = CacheAlignedBox::new(42)
+    let r: ref I32 = box_val.get()
+    assert_eq(*r, 42, "CacheAlignedBox::get should return 42")
+    return 0
+}
+
+@test
+func test_cache_aligned_box_get_mut() -> I32 {
+    var box_val: CacheAlignedBox[I32] = CacheAlignedBox::new(10)
+    let r: mut ref I32 = box_val.get_mut()
+    *r = 99
+    assert_eq(*box_val.get(), 99, "CacheAlignedBox::get_mut allows mutation")
+    return 0
+}

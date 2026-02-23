@@ -1,0 +1,72 @@
+// Tests for IpAddr — is_multicast, port, eq, hash, duplicate
+use test
+use std::net::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipaddr_multicast_v4() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))
+    assert(addr.is_multicast(), "224.0.0.1 should be multicast")
+    0
+}
+
+@test
+func test_ipaddr_multicast_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::new(0xFF02 as U16, 0 as U16, 0 as U16, 0 as U16,
+                                          0 as U16, 0 as U16, 0 as U16, 1 as U16))
+    assert(addr.is_multicast(), "ff02::1 should be multicast")
+    0
+}
+
+@test
+func test_ipaddr_not_multicast() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert(not addr.is_multicast(), "127.0.0.1 should not be multicast")
+    0
+}
+
+@test
+func test_ipaddr_port() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert_eq(addr.port() as I32, 0, "IpAddr.port should return 0")
+    0
+}
+
+@test
+func test_ipaddr_eq_v4() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    let b = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    assert(a == b, "same V4 addresses should be equal")
+    0
+}
+
+@test
+func test_ipaddr_neq_variant() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    let b = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    assert(a != b, "V4 and V6 should not be equal")
+    0
+}
+
+@test
+func test_ipaddr_hash_v4() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))
+    let h = addr.hash()
+    assert(h != 0, "hash of V4 8.8.8.8 should be non-zero")
+    0
+}
+
+@test
+func test_ipaddr_hash_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let h = addr.hash()
+    assert(h != 0, "hash of V6 ::1 should be non-zero")
+    0
+}
+
+@test
+func test_ipaddr_duplicate() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))
+    let b = a.duplicate()
+    assert(a == b, "duplicate should produce equal IpAddr")
+    0
+}

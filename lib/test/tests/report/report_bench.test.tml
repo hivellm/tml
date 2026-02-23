@@ -1,0 +1,31 @@
+// Tests for report module — bench and separator functions
+use test::{assert}
+use test::report::{print_bench_header, print_bench_summary, print_separator, print_section_header}
+
+@test
+func test_print_bench_header() -> I32 {
+    print_bench_header(3)
+    assert(true, "print_bench_header ran")
+    return 0
+}
+
+@test
+func test_print_bench_summary() -> I32 {
+    print_bench_summary(3, 1500 as I64)
+    assert(true, "print_bench_summary ran")
+    return 0
+}
+
+@test
+func test_print_separator() -> I32 {
+    print_separator()
+    assert(true, "print_separator ran")
+    return 0
+}
+
+@test
+func test_print_section_header() -> I32 {
+    print_section_header("Test Results")
+    assert(true, "print_section_header ran")
+    return 0
+}

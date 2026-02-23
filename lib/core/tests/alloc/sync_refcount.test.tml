@@ -1,0 +1,31 @@
+// Tests for Sync[T] — duplicate, try_unwrap, get_mut, get
+use test::{assert, assert_eq}
+use core::alloc::sync::Sync
+
+@test
+func test_sync_get() -> I32 {
+    let s: Sync[I32] = Sync::new(42)
+    let v: I32 = s.get()
+    assert_eq(v, 42, "Sync::get should return 42")
+    0
+}
+
+@test
+func test_sync_duplicate_increments_count() -> I32 {
+    let s: Sync[I32] = Sync::new(10)
+    assert_eq(s.strong_count(), 1, "initial count = 1")
+    let s2: Sync[I32] = s.duplicate()
+    assert_eq(s.strong_count(), 2, "after duplicate count = 2")
+    assert_eq(s2.get(), 10, "duplicate has same value")
+    0
+}
+
+@test
+func test_sync_try_unwrap_unique() -> I32 {
+    var s: Sync[I32] = Sync::new(99)
+    assert(s.is_unique(), "should be unique before unwrap")
+    let result: Maybe[I32] = s.try_unwrap()
+    assert(result.is_just(), "try_unwrap on unique should return Just")
+    assert_eq(result.unwrap(), 99, "unwrapped value should be 99")
+    0
+}

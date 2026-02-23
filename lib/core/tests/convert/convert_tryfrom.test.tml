@@ -1,0 +1,12 @@
+// Tests for core::convert — TryFrom narrowing conversions
+// BLOCKED: Outcome codegen type mismatch
+// LLVM IR error: Outcome[I32, TryFromIntError] vs Outcome[I32, Unit] type clash
+// Revisit when generic Outcome instantiation codegen is fixed.
+use test::{assert, assert_eq}
+
+@test
+func test_tryfrom_placeholder() -> I32 {
+    // TryFrom tests blocked by Outcome codegen bug
+    assert(true, "placeholder — TryFrom blocked by Outcome codegen")
+    return 0
+}

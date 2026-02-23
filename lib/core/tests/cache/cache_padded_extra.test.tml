@@ -1,0 +1,27 @@
+// Tests for Padded[T] — into_inner, set
+use test::{assert, assert_eq}
+use core::cache::{Padded, CacheAligned}
+
+@test
+func test_padded_into_inner() -> I32 {
+    let p: Padded[I32] = Padded::new(77)
+    let val: I32 = p.into_inner()
+    assert_eq(val, 77, "into_inner should return 77")
+    0
+}
+
+@test
+func test_padded_set() -> I32 {
+    var p: Padded[I32] = Padded::new(1)
+    p.set(99)
+    assert_eq(*p.get(), 99, "set should update value to 99")
+    0
+}
+
+@test
+func test_cache_aligned_into_inner() -> I32 {
+    let a: CacheAligned[I32] = CacheAligned::new(55)
+    let val: I32 = a.into_inner()
+    assert_eq(val, 55, "into_inner should return 55")
+    0
+}

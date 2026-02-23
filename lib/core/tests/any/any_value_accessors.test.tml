@@ -1,0 +1,24 @@
+// Tests for core::any — TypeId::of for additional types
+use test::{assert, assert_eq}
+use core::any::TypeId
+
+@test
+func test_typeid_of_i16() -> I32 {
+    let id: TypeId = TypeId::of[I16]()
+    assert(id.id >= 0, "TypeId::of[I16] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_u16() -> I32 {
+    let id: TypeId = TypeId::of[U16]()
+    assert(id.id >= 0, "TypeId::of[U16] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_u32() -> I32 {
+    let id: TypeId = TypeId::of[U32]()
+    assert(id.id >= 0, "TypeId::of[U32] should produce a valid id")
+    return 0
+}

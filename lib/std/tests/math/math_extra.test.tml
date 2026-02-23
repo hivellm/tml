@@ -1,0 +1,136 @@
+// Tests for math utility functions: log10, cbrt_f32, hypot_f32,
+// to_radians_f32, to_degrees_f32, mul_add, mul_add_f32,
+// fract, fract_f32, copysign, copysign_f32, signum, signum_f32
+use test
+use std::math::{log10, log10_f32, cbrt_f32, hypot_f32,
+    to_radians_f32, to_degrees_f32, mul_add, mul_add_f32,
+    fract, fract_f32, copysign, copysign_f32, signum, signum_f32, PI}
+
+@test
+func test_log10() -> I32 {
+    let r = log10(100.0)
+    assert(r > 1.999 and r < 2.001, "log10(100) should be ~2")
+    0
+}
+
+@test
+func test_log10_one() -> I32 {
+    let r = log10(1.0)
+    assert(r > -0.001 and r < 0.001, "log10(1) should be ~0")
+    0
+}
+
+@test
+func test_log10_f32() -> I32 {
+    let r = log10_f32(10.0 as F32)
+    assert((r as F64) > 0.99 and (r as F64) < 1.01, "log10_f32(10) should be ~1")
+    0
+}
+
+@test
+func test_cbrt_f32() -> I32 {
+    let r = cbrt_f32(27.0 as F32)
+    assert((r as F64) > 2.99 and (r as F64) < 3.01, "cbrt_f32(27) should be ~3")
+    0
+}
+
+@test
+func test_hypot_f32() -> I32 {
+    let r = hypot_f32(3.0 as F32, 4.0 as F32)
+    assert((r as F64) > 4.99 and (r as F64) < 5.01, "hypot_f32(3,4) should be ~5")
+    0
+}
+
+@test
+func test_to_radians_f32() -> I32 {
+    let r = to_radians_f32(180.0 as F32)
+    let pi_f32 = PI as F32
+    let diff = r - pi_f32
+    let abs_diff = if diff < (0.0 as F32) { (0.0 as F32) - diff } else { diff }
+    assert((abs_diff as F64) < 0.01, "to_radians_f32(180) should be ~pi")
+    0
+}
+
+@test
+func test_to_degrees_f32() -> I32 {
+    let r = to_degrees_f32(PI as F32)
+    assert((r as F64) > 179.0 and (r as F64) < 181.0, "to_degrees_f32(pi) should be ~180")
+    0
+}
+
+@test
+func test_mul_add() -> I32 {
+    let r = mul_add(2.0, 3.0, 4.0)
+    assert(r > 9.999 and r < 10.001, "mul_add(2,3,4) should be ~10")
+    0
+}
+
+@test
+func test_mul_add_f32() -> I32 {
+    let r = mul_add_f32(2.0 as F32, 3.0 as F32, 4.0 as F32)
+    assert((r as F64) > 9.99 and (r as F64) < 10.01, "mul_add_f32(2,3,4) should be ~10")
+    0
+}
+
+@test
+func test_fract() -> I32 {
+    let r = fract(3.75)
+    assert(r > 0.749 and r < 0.751, "fract(3.75) should be ~0.75")
+    0
+}
+
+@test
+func test_fract_f32() -> I32 {
+    let r = fract_f32(3.75 as F32)
+    assert((r as F64) > 0.74 and (r as F64) < 0.76, "fract_f32(3.75) should be ~0.75")
+    0
+}
+
+@test
+func test_copysign_positive() -> I32 {
+    let r = copysign(5.0, -1.0)
+    assert(r > -5.001 and r < -4.999, "copysign(5, -1) should be -5")
+    0
+}
+
+@test
+func test_copysign_negative() -> I32 {
+    let r = copysign(-5.0, 1.0)
+    assert(r > 4.999 and r < 5.001, "copysign(-5, 1) should be 5")
+    0
+}
+
+@test
+func test_copysign_f32() -> I32 {
+    let r = copysign_f32(5.0 as F32, -1.0 as F32)
+    assert((r as F64) > -5.01 and (r as F64) < -4.99, "copysign_f32(5, -1) should be -5")
+    0
+}
+
+@test
+func test_signum_positive() -> I32 {
+    let r = signum(42.0)
+    assert(r > 0.999 and r < 1.001, "signum(42) should be 1")
+    0
+}
+
+@test
+func test_signum_negative() -> I32 {
+    let r = signum(-42.0)
+    assert(r > -1.001 and r < -0.999, "signum(-42) should be -1")
+    0
+}
+
+@test
+func test_signum_zero() -> I32 {
+    let r = signum(0.0)
+    assert(r > -0.001 and r < 0.001, "signum(0) should be 0")
+    0
+}
+
+@test
+func test_signum_f32() -> I32 {
+    let r = signum_f32(42.0 as F32)
+    assert((r as F64) > 0.99 and (r as F64) < 1.01, "signum_f32(42) should be 1")
+    0
+}

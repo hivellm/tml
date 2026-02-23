@@ -1,0 +1,20 @@
+// Tests for net/dns lookup6 and lookup_all6
+use test::{assert}
+use std::net::dns
+
+@test
+func test_lookup6_localhost() -> I32 {
+    let result = dns::lookup6("localhost")
+    // IPv6 may or may not resolve for localhost depending on system config
+    // Just exercise the function without asserting success
+    assert(true, "lookup6 should not crash")
+    0
+}
+
+@test
+func test_lookup_all6_localhost() -> I32 {
+    let result = dns::lookup_all6("localhost", 4)
+    // Just exercise the function
+    assert(true, "lookup_all6 should not crash")
+    0
+}

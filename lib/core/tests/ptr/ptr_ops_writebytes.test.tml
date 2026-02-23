@@ -1,0 +1,12 @@
+// Tests for ptr::ops — write_bytes/zero_memory/swap_nonoverlapping blocked
+// write_bytes triggers LLVM memset intrinsic type mismatch (RawMutPtr vs ptr)
+// zero_memory delegates to write_bytes (same bug)
+// swap_nonoverlapping works but only with I64 (tested in ptr_ops_advanced)
+use test::{assert}
+
+@test
+func test_ptr_ops_writebytes_placeholder() -> I32 {
+    // Blocked by memset codegen bug
+    assert(true, "placeholder")
+    0
+}

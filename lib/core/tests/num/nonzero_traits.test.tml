@@ -1,0 +1,13 @@
+// Tests for NonZero[I32] — trait impls
+// NOTE: ALL NonZero tests blocked by generic monomorphization bug
+//       (Maybe__NonZero__T vs Maybe__NonZero__I32 type mismatch in LLVM IR)
+// TODO: Re-enable when codegen fix lands
+use test::{assert, assert_eq}
+
+@test
+func test_nonzero_placeholder() -> I32 {
+    // NonZero::new(42).unwrap() triggers codegen bug
+    // NonZero::new(42).eq() triggers codegen bug
+    // All NonZero trait methods blocked
+    0
+}

@@ -1,0 +1,55 @@
+// Tests for Ipv4Addr — is_private, is_documentation, is_global, eq, cmp, hash, default, octets, to_ipv6_mapped, to_string
+use test
+use std::net::ip::{Ipv4Addr}
+
+@test
+func test_ipv4_is_private_10() -> I32 {
+    assert(Ipv4Addr::new(10, 0, 0, 1).is_private(), "10.0.0.1 should be private")
+    assert(Ipv4Addr::new(10, 255, 255, 255).is_private(), "10.255.255.255 should be private")
+    0
+}
+
+@test
+func test_ipv4_is_private_172() -> I32 {
+    assert(Ipv4Addr::new(172, 16, 0, 1).is_private(), "172.16.0.1 should be private")
+    assert(Ipv4Addr::new(172, 31, 255, 255).is_private(), "172.31.255.255 should be private")
+    assert(not Ipv4Addr::new(172, 15, 0, 1).is_private(), "172.15.0.1 should not be private")
+    assert(not Ipv4Addr::new(172, 32, 0, 1).is_private(), "172.32.0.1 should not be private")
+    0
+}
+
+@test
+func test_ipv4_is_private_192() -> I32 {
+    assert(Ipv4Addr::new(192, 168, 0, 1).is_private(), "192.168.0.1 should be private")
+    assert(Ipv4Addr::new(192, 168, 255, 255).is_private(), "192.168.255.255 should be private")
+    assert(not Ipv4Addr::new(192, 169, 0, 1).is_private(), "192.169.0.1 should not be private")
+    0
+}
+
+@test
+func test_ipv4_is_documentation() -> I32 {
+    assert(Ipv4Addr::new(192, 0, 2, 1).is_documentation(), "192.0.2.1 should be documentation")
+    assert(Ipv4Addr::new(198, 51, 100, 1).is_documentation(), "198.51.100.1 should be documentation")
+    assert(Ipv4Addr::new(203, 0, 113, 1).is_documentation(), "203.0.113.1 should be documentation")
+    assert(not Ipv4Addr::new(8, 8, 8, 8).is_documentation(), "8.8.8.8 should not be documentation")
+    0
+}
+
+@test
+func test_ipv4_is_global() -> I32 {
+    assert(Ipv4Addr::new(8, 8, 8, 8).is_global(), "8.8.8.8 should be global")
+    assert(not Ipv4Addr::new(10, 0, 0, 1).is_global(), "10.0.0.1 should not be global (private)")
+    assert(not Ipv4Addr::LOCALHOST().is_global(), "127.0.0.1 should not be global (loopback)")
+    assert(not Ipv4Addr::BROADCAST().is_global(), "255.255.255.255 should not be global (broadcast)")
+    0
+}
+
+@test
+func test_ipv4_eq() -> I32 {
+    let a = Ipv4Addr::new(192, 168, 1, 1)
+    let b = Ipv4Addr::new(192, 168, 1, 1)
+    let c = Ipv4Addr::new(192, 168, 1, 2)
+    assert(a == b, "same addresses should be equal")
+    assert(a != c, "different addresses should not be equal")
+    0
+}

@@ -1,0 +1,56 @@
+// Tests for Str parse methods — parse_i64, parse_i32, parse_u16, parse_f64, parse_bool
+use test::{assert, assert_eq}
+
+@test
+func test_str_parse_i64_valid() -> I32 {
+    let s: Str = "12345"
+    let result = s.parse_i64()
+    assert(result.is_just(), "parse_i64 should succeed for valid number")
+    assert_eq(result.unwrap(), 12345, "parse_i64 should return 12345")
+    0
+}
+
+@test
+func test_str_parse_i64_negative() -> I32 {
+    let s: Str = "-42"
+    let result = s.parse_i64()
+    assert(result.is_just(), "parse_i64 should succeed for negative")
+    assert_eq(result.unwrap(), -42, "parse_i64 should return -42")
+    0
+}
+
+@test
+func test_str_parse_i32_valid() -> I32 {
+    let s: Str = "999"
+    let result = s.parse_i32()
+    assert(result.is_just(), "parse_i32 should succeed")
+    assert_eq(result.unwrap(), 999, "parse_i32 should return 999")
+    0
+}
+
+@test
+func test_str_parse_i32_zero() -> I32 {
+    let s: Str = "0"
+    let result = s.parse_i32()
+    assert(result.is_just(), "parse_i32 should succeed for 0")
+    assert_eq(result.unwrap(), 0, "parse_i32 should return 0")
+    0
+}
+
+@test
+func test_str_parse_bool_true() -> I32 {
+    let s: Str = "true"
+    let result = s.parse_bool()
+    assert(result.is_just(), "parse_bool should succeed for true")
+    assert(result.unwrap() == true, "parse_bool should return true")
+    0
+}
+
+@test
+func test_str_parse_bool_false() -> I32 {
+    let s: Str = "false"
+    let result = s.parse_bool()
+    assert(result.is_just(), "parse_bool should succeed for false")
+    assert(result.unwrap() == false, "parse_bool should return false")
+    0
+}

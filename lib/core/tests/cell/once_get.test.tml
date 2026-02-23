@@ -1,0 +1,37 @@
+// Tests for OnceCell::get — returns Maybe[ref T]
+use test::{assert, assert_eq}
+use core::cell::once::OnceCell
+
+@test
+func test_oncecell_get_after_set() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new()
+    cell.set(42)
+    let result: Maybe[ref I32] = cell.get()
+    when result {
+        Just(v) => assert_eq(*v, 42, "get returns ref to set value"),
+        Nothing => assert(false, "get should return Just after set")
+    }
+    return 0
+}
+
+@test
+func test_oncecell_get_empty() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::new()
+    let result: Maybe[ref I32] = cell.get()
+    when result {
+        Just(_) => assert(false, "get on empty cell should return Nothing"),
+        Nothing => assert(true, "get on empty returns Nothing")
+    }
+    return 0
+}
+
+@test
+func test_oncecell_get_with_value() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::with_value(99)
+    let result: Maybe[ref I32] = cell.get()
+    when result {
+        Just(v) => assert_eq(*v, 99, "get returns ref to initial value"),
+        Nothing => assert(false, "get should return Just for with_value cell")
+    }
+    return 0
+}

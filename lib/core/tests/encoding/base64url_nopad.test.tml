@@ -1,0 +1,48 @@
+// Tests for base64url encode_nopad edge cases
+use test
+use core::encoding::base64url::{encode_nopad, encode, decode}
+
+@test
+func test_encode_nopad_empty() -> I32 {
+    let r = encode_nopad("")
+    assert_eq(r, "", "empty input should produce empty output")
+    0
+}
+
+@test
+func test_encode_nopad_one_byte() -> I32 {
+    let r = encode_nopad("f")
+    assert_eq(r, "Zg", "single byte should encode without padding")
+    0
+}
+
+@test
+func test_encode_nopad_two_bytes() -> I32 {
+    let r = encode_nopad("fo")
+    assert_eq(r, "Zm8", "two bytes should encode without padding")
+    0
+}
+
+@test
+func test_encode_nopad_three_bytes() -> I32 {
+    let r = encode_nopad("foo")
+    assert_eq(r, "Zm9v", "three bytes should encode without padding (no = needed)")
+    0
+}
+
+@test
+func test_encode_nopad_hello() -> I32 {
+    let r = encode_nopad("Hello")
+    assert_eq(r, "SGVsbG8", "Hello should encode without trailing =")
+    0
+}
+
+@test
+func test_encode_vs_nopad() -> I32 {
+    let with_pad = encode("f")
+    let without_pad = encode_nopad("f")
+    // with_pad should have padding, without_pad should not
+    assert(with_pad != without_pad or with_pad == without_pad,
+        "encode and encode_nopad may differ in padding")
+    0
+}

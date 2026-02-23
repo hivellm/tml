@@ -1,0 +1,63 @@
+// Tests for Url getter methods — get_scheme, get_host, get_port, get_path, get_query, get_fragment
+use test
+use std::url::Url
+
+@test
+func test_url_get_scheme() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => assert_eq(url.get_scheme(), "https", "get_scheme should return https"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_get_host() -> I32 {
+    let result = Url::parse("https://example.com/path")
+    when result {
+        Ok(url) => assert_eq(url.get_host(), "example.com", "get_host should return example.com"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_get_port() -> I32 {
+    let result = Url::parse("https://example.com:8080/path")
+    when result {
+        Ok(url) => assert_eq(url.get_port(), 8080, "get_port should return 8080"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_get_path() -> I32 {
+    let result = Url::parse("https://example.com/api/v1")
+    when result {
+        Ok(url) => assert_eq(url.get_path(), "/api/v1", "get_path should return /api/v1"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_get_query() -> I32 {
+    let result = Url::parse("https://example.com/search?q=hello")
+    when result {
+        Ok(url) => assert_eq(url.get_query(), "q=hello", "get_query should return q=hello"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}
+
+@test
+func test_url_get_fragment() -> I32 {
+    let result = Url::parse("https://example.com/page#section1")
+    when result {
+        Ok(url) => assert_eq(url.get_fragment(), "section1", "get_fragment should return section1"),
+        Err(_) => assert(false, "parse should succeed")
+    }
+    0
+}

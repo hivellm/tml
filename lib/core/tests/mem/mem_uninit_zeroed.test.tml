@@ -1,0 +1,10 @@
+// Tests for MaybeUninit::uninit and zeroed — blocked by codegen
+// MaybeUninit::uninit() -> maybe_uninit_create intrinsic returns i32 but expects struct type
+// zeroed[T]() -> mem_zeroed intrinsic has same issue
+use test::{assert}
+
+@test
+func test_maybe_uninit_placeholder() -> I32 {
+    assert(true, "MaybeUninit::uninit blocked by intrinsic return type mismatch")
+    return 0
+}

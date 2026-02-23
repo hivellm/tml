@@ -1,0 +1,24 @@
+// Tests for thread module — available_parallelism, yield_now, sleep_ms
+use test::{assert}
+use std::thread
+
+@test
+func test_available_parallelism() -> I32 {
+    let cpus: U32 = thread::available_parallelism()
+    assert(cpus >= 1, "available_parallelism should be at least 1")
+    return 0
+}
+
+@test
+func test_yield_now() -> I32 {
+    thread::yield_now()
+    assert(true, "yield_now should not crash")
+    return 0
+}
+
+@test
+func test_sleep_ms_short() -> I32 {
+    thread::sleep_ms(1 as U64)
+    assert(true, "sleep_ms(1) should complete")
+    return 0
+}

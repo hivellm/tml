@@ -1,0 +1,66 @@
+// Tests for json/serialize — more to_json types (I8, I16, U8, U16, U32, U64, F32)
+use test
+use std::json::Json
+
+@test
+func test_i8_to_json() -> I32 {
+    let val: I8 = 42 as I8
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "42", "I8 42.to_json()")
+    0
+}
+
+@test
+func test_i16_to_json() -> I32 {
+    let val: I16 = 1000 as I16
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "1000", "I16 1000.to_json()")
+    0
+}
+
+@test
+func test_u8_to_json() -> I32 {
+    let val: U8 = 255 as U8
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "255", "U8 255.to_json()")
+    0
+}
+
+@test
+func test_u16_to_json() -> I32 {
+    let val: U16 = 60000 as U16
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "60000", "U16 60000.to_json()")
+    0
+}
+
+@test
+func test_u32_to_json() -> I32 {
+    let val: U32 = 100000 as U32
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "100000", "U32 100000.to_json()")
+    0
+}
+
+@test
+func test_u64_to_json() -> I32 {
+    let val: U64 = 999 as U64
+    let j = val.to_json()
+    let s = j.to_string()
+    assert_eq(s, "999", "U64 999.to_json()")
+    0
+}
+
+@test
+func test_f32_to_json() -> I32 {
+    let val: F32 = 1.5 as F32
+    let j = val.to_json()
+    let s = j.to_string()
+    assert(s.len() > 0, "F32 to_json should produce output")
+    0
+}

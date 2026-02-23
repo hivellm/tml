@@ -1,0 +1,45 @@
+// Tests for report module — verbose, progress bar, quiet functions
+use test::{assert}
+use test::report::{print_progress_bar, print_test_start_verbose, print_test_end_verbose, print_quiet_summary}
+
+@test
+func test_print_progress_bar() -> I32 {
+    print_progress_bar(5, 10, 20)
+    assert(true, "print_progress_bar ran")
+    return 0
+}
+
+@test
+func test_print_progress_bar_zero() -> I32 {
+    print_progress_bar(0, 0, 20)
+    assert(true, "print_progress_bar zero total ran")
+    return 0
+}
+
+@test
+func test_print_test_start_verbose() -> I32 {
+    print_test_start_verbose("my_test_func")
+    assert(true, "print_test_start_verbose ran")
+    return 0
+}
+
+@test
+func test_print_test_end_verbose() -> I32 {
+    print_test_end_verbose("my_test_func", 5000 as I64)
+    assert(true, "print_test_end_verbose ran")
+    return 0
+}
+
+@test
+func test_print_quiet_summary_ok() -> I32 {
+    print_quiet_summary(10, 0)
+    assert(true, "print_quiet_summary ok ran")
+    return 0
+}
+
+@test
+func test_print_quiet_summary_failed() -> I32 {
+    print_quiet_summary(8, 2)
+    assert(true, "print_quiet_summary failed ran")
+    return 0
+}

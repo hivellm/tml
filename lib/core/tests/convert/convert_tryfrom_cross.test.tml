@@ -1,0 +1,24 @@
+// Tests for core::convert — TryFrom signed/unsigned cross conversions
+use test::{assert, assert_eq}
+use core::convert::{TryFrom, TryFromIntError}
+
+@test
+func test_tryfrom_i32_to_u32_positive() -> I32 {
+    let result: Outcome[U32, TryFromIntError] = U32::try_from(42)
+    assert(result.is_ok(), "positive I32 fits in U32")
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_u32_negative() -> I32 {
+    let result: Outcome[U32, TryFromIntError] = U32::try_from(-1)
+    assert(result.is_err(), "negative I32 fails for U32")
+    return 0
+}
+
+@test
+func test_tryfrom_i64_to_u64_positive() -> I32 {
+    let result: Outcome[U64, TryFromIntError] = U64::try_from(100 as I64)
+    assert(result.is_ok(), "positive I64 fits in U64")
+    return 0
+}

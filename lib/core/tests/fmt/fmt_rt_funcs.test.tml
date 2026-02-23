@@ -1,0 +1,33 @@
+// Tests for core::fmt::rt — Argument::new_with, FormatSpec constructors
+// NOTE: format_join/format_args crash on array ref — blocked by codegen
+// NOTE: Argument::new_display/new_debug blocked by generic method dispatch
+use test::{assert, assert_eq}
+use core::fmt::rt::{Argument, FormatSpec, Placeholder}
+
+@test
+func test_argument_new_with_empty() -> I32 {
+    let arg = Argument::new_with("")
+    assert_eq(arg.as_str(), "", "empty argument")
+    0
+}
+
+@test
+func test_format_spec_new_defaults() -> I32 {
+    let spec = FormatSpec::new()
+    assert_eq(spec.fill, 32, "default fill should be space (32)")
+    0
+}
+
+@test
+func test_format_spec_with_width_field() -> I32 {
+    let spec = FormatSpec::with_width(15)
+    assert_eq(spec.fill, 32, "with_width fill should be space")
+    0
+}
+
+@test
+func test_placeholder_new_position() -> I32 {
+    let ph = Placeholder::new(7)
+    assert_eq(ph.position, 7 as I64, "position should be 7")
+    0
+}
