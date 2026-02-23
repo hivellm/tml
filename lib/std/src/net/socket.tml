@@ -31,7 +31,7 @@ use core::hash::Hash
 // Note: Formatter and FormatResult would need real imports if used
 use core::option::Maybe::{Just, Nothing}
 
-use super::ip::{IpAddr, Ipv4Addr}
+use super::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
 
 // =============================================================================
 // SocketAddrV4 - IPv4 Socket Address
@@ -136,6 +136,94 @@ impl Debug for SocketAddrV4 {
 }
 
 // =============================================================================
+// SocketAddrV6 - IPv6 Socket Address
+// =============================================================================
+
+/// An IPv6 socket address.
+///
+/// Consists of an IPv6 address, a 16-bit port number, a flow info field,
+/// and a scope ID.
+pub type SocketAddrV6 {
+    ip: Ipv6Addr,
+    port: U16,
+    flow_info: U32,
+    scope_id: U32,
+}
+
+impl SocketAddrV6 {
+    /// Creates a new IPv6 socket address.
+    pub func new(ip: Ipv6Addr, port: U16, flow_info: U32, scope_id: U32) -> SocketAddrV6 {
+        SocketAddrV6 { ip, port, flow_info, scope_id }
+    }
+
+    /// Returns the IP address.
+    pub func ip(this) -> Ipv6Addr {
+        this.ip
+    }
+
+    /// Sets the IP address.
+    pub func set_ip(mut this, ip: Ipv6Addr) {
+        this.ip = ip
+    }
+
+    /// Returns the port number.
+    pub func port(this) -> U16 {
+        this.port
+    }
+
+    /// Sets the port number.
+    pub func set_port(mut this, port: U16) {
+        this.port = port
+    }
+
+    /// Returns the flow info field.
+    pub func flow_info(this) -> U32 {
+        this.flow_info
+    }
+
+    /// Returns the scope ID.
+    pub func scope_id(this) -> U32 {
+        this.scope_id
+    }
+}
+
+impl Copy for SocketAddrV6 {}
+impl Duplicate for SocketAddrV6 {
+    func duplicate(this) -> SocketAddrV6 {
+        SocketAddrV6 { ip: this.ip.duplicate(), port: this.port, flow_info: this.flow_info, scope_id: this.scope_id }
+    }
+}
+
+impl PartialEq for SocketAddrV6 {
+    func eq(this, other: ref SocketAddrV6) -> Bool {
+        this.ip == other.ip and this.port == other.port and this.flow_info == other.flow_info and this.scope_id == other.scope_id
+    }
+}
+
+impl Eq for SocketAddrV6 {}
+
+impl Hash for SocketAddrV6 {
+    pub func hash(this) -> I64 {
+        return this.ip.hash() * 31 + (this.port as I64)
+    }
+}
+
+impl Display for SocketAddrV6 {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        f.write_str("[")
+        this.ip.fmt(f)
+        f.write_str("]:")
+        f.write_str(this.port.to_string())
+    }
+}
+
+impl Debug for SocketAddrV6 {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}
+
+// =============================================================================
 // SocketAddr - Socket Address wrapper (IPv4 only for now)
 // =============================================================================
 
@@ -155,6 +243,13 @@ impl SocketAddr {
     /// Creates a SocketAddr from a SocketAddrV4.
     pub func V4(addr: SocketAddrV4) -> SocketAddr {
         SocketAddr { inner: addr }
+    }
+
+    /// Creates a SocketAddr from a SocketAddrV6.
+    ///
+    /// NOTE: Currently stores only the port. Full IPv6 support pending.
+    pub func V6(addr: SocketAddrV6) -> SocketAddr {
+        SocketAddr { inner: SocketAddrV4::new(Ipv4Addr::UNSPECIFIED(), addr.port) }
     }
 
     /// Returns `true` if this is an IPv4 socket address.

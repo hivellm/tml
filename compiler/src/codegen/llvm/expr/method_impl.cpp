@@ -590,14 +590,15 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // The fat pointer preserves the env_ptr for capturing closures
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
+        types::TypePtr param_type_resolved;
         if (func_sig && i + 1 < func_sig->params.size()) {
-            auto param_type = func_sig->params[i + 1];
+            param_type_resolved = func_sig->params[i + 1];
             if (!type_subs.empty()) {
-                param_type = types::substitute_type(param_type, type_subs);
+                param_type_resolved = types::substitute_type(param_type_resolved, type_subs);
             }
-            expected_type = llvm_type_from_semantic(param_type);
+            expected_type = llvm_type_from_semantic(param_type_resolved);
             // Function-typed parameters use fat pointer { ptr, ptr }
-            if (param_type->is<types::FuncType>()) {
+            if (param_type_resolved->is<types::FuncType>()) {
                 expected_type = "{ ptr, ptr }";
             }
         }
@@ -624,6 +625,38 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
                 emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
                 val = fat2;
+            }
+        }
+        // Array-to-slice coercion: when parameter expects ref [T] (slice) but argument
+        // is a ref to a fixed-size array [T; N], create a fat pointer { ptr, i64 }
+        // containing the array data pointer and the array length.
+        if (actual_type == "ptr" && expected_type == "ptr" && param_type_resolved &&
+            param_type_resolved->is<types::RefType>()) {
+            const auto& ref_type = param_type_resolved->as<types::RefType>();
+            if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+                auto arg_semantic = infer_expr_type(*call.args[i]);
+                size_t array_size = 0;
+                if (arg_semantic && arg_semantic->is<types::ArrayType>()) {
+                    array_size = arg_semantic->as<types::ArrayType>().size;
+                } else if (arg_semantic && arg_semantic->is<types::RefType>()) {
+                    const auto& arg_ref = arg_semantic->as<types::RefType>();
+                    if (arg_ref.inner && arg_ref.inner->is<types::ArrayType>()) {
+                        array_size = arg_ref.inner->as<types::ArrayType>().size;
+                    }
+                }
+                if (array_size > 0) {
+                    std::string fat_alloca = fresh_reg();
+                    emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 0");
+                    emit_line("  store ptr " + val + ", ptr " + data_field);
+                    std::string len_field = fresh_reg();
+                    emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 1");
+                    emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
+                    val = fat_alloca;
+                }
             }
         }
         typed_args.push_back({expected_type, val});
@@ -787,11 +820,12 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         std::string val = gen_expr(*call.args[i]);
         std::string actual_type = last_expr_type_;
         std::string arg_type = "i32";
+        types::TypePtr param_type_ptr;
         if (func_sig && i + 1 < func_sig->params.size()) {
-            auto param_type = func_sig->params[i + 1];
-            arg_type = llvm_type_from_semantic(param_type);
+            param_type_ptr = func_sig->params[i + 1];
+            arg_type = llvm_type_from_semantic(param_type_ptr);
             // Function-typed parameters use fat pointer to support closures
-            if (param_type->is<types::FuncType>()) {
+            if (param_type_ptr->is<types::FuncType>()) {
                 arg_type = "{ ptr, ptr }";
             }
         }
@@ -802,6 +836,40 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
             emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
             emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
             val = fat2;
+        }
+        // Array-to-slice coercion: when parameter expects ref [T] (slice) but argument
+        // is a ref to a fixed-size array [T; N], create a fat pointer { ptr, i64 }
+        // containing the array data pointer and the array length.
+        if (actual_type == "ptr" && arg_type == "ptr" && param_type_ptr &&
+            param_type_ptr->is<types::RefType>()) {
+            const auto& ref_type = param_type_ptr->as<types::RefType>();
+            if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+                // Parameter expects ref [T] — check if argument is an array
+                auto arg_semantic = infer_expr_type(*call.args[i]);
+                size_t array_size = 0;
+                if (arg_semantic && arg_semantic->is<types::ArrayType>()) {
+                    array_size = arg_semantic->as<types::ArrayType>().size;
+                } else if (arg_semantic && arg_semantic->is<types::RefType>()) {
+                    const auto& arg_ref = arg_semantic->as<types::RefType>();
+                    if (arg_ref.inner && arg_ref.inner->is<types::ArrayType>()) {
+                        array_size = arg_ref.inner->as<types::ArrayType>().size;
+                    }
+                }
+                if (array_size > 0) {
+                    // Create fat pointer { ptr, i64 } on stack
+                    std::string fat_alloca = fresh_reg();
+                    emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 0");
+                    emit_line("  store ptr " + val + ", ptr " + data_field);
+                    std::string len_field = fresh_reg();
+                    emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 1");
+                    emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
+                    val = fat_alloca;
+                }
+            }
         }
         typed_args.push_back({arg_type, val});
     }

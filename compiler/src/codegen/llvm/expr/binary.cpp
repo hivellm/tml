@@ -789,6 +789,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Store value to element
                 emit_line("  store " + elem_type + " " + right + ", ptr " + elem_ptr);
+                last_expr_type_ = elem_type;
             }
         }
         return right;

@@ -1,0 +1,22 @@
+// Tests for test::e2e::response::TestResult
+use test::{assert, assert_eq}
+use test::e2e::response::TestResult
+
+@test
+func test_result_pass() -> I32 {
+    let r: TestResult = TestResult::pass(5, 42)
+    assert(r.ok(), "pass should be ok")
+    assert_eq(r.received_len(), 5 as I64)
+    assert_eq(r.elapsed(), 42 as I64)
+    assert_eq(r.error_msg(), "")
+    0
+}
+
+@test
+func test_result_fail() -> I32 {
+    let r: TestResult = TestResult::fail("connection refused")
+    assert(not r.ok(), "fail should not be ok")
+    assert_eq(r.error_msg(), "connection refused")
+    assert_eq(r.received_len(), 0 as I64)
+    0
+}

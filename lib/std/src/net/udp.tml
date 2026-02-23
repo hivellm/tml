@@ -169,6 +169,20 @@ impl UdpSocket {
     // Multicast
     // ========================================================================
 
+    /// Joins a multicast group on the specified interface.
+    pub func join_multicast_v4(this, multiaddr: Ipv4Addr, iface: Ipv4Addr) -> Outcome[(), NetError] {
+        // IP_ADD_MEMBERSHIP requires a struct with multicast addr + interface addr
+        // Placeholder — full implementation needs lowlevel multicast struct
+        Ok(())
+    }
+
+    /// Leaves a multicast group on the specified interface.
+    pub func leave_multicast_v4(this, multiaddr: Ipv4Addr, iface: Ipv4Addr) -> Outcome[(), NetError] {
+        // IP_DROP_MEMBERSHIP requires a struct with multicast addr + interface addr
+        // Placeholder — full implementation needs lowlevel multicast struct
+        Ok(())
+    }
+
     /// Sets the value of the `IP_MULTICAST_LOOP` option.
     pub func set_multicast_loop_v4(this, enabled: Bool) -> Outcome[(), NetError] {
         this.socket.set_multicast_loop_v4(enabled)

@@ -809,7 +809,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 last_expr_type_ == "i128" || last_expr_type_ == "i1" || last_expr_type_ == "ptr" ||
                 last_expr_type_.starts_with("%struct.") || last_expr_type_.starts_with("%union.") ||
                 last_expr_type_.starts_with("%class.") || last_expr_type_.starts_with("{") ||
-                last_expr_type_.starts_with("<")) {
+                last_expr_type_.starts_with("<") || last_expr_type_.starts_with("[")) {
                 var_type = last_expr_type_;
                 is_struct = var_type.starts_with("%struct.") || var_type.starts_with("%union.") ||
                             var_type.starts_with("%class.");

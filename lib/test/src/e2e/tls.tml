@@ -1,0 +1,306 @@
+//! E2E TLS test helpers with auto-generated self-signed certificates.
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::e2e::tls::{TlsTestServer, TlsTestClient}
+//!
+//! let server = TlsTestServer::new().unwrap()
+//! let result = TlsTestClient::new(server.addr())
+//!     .send_byte(72).send_byte(73)
+//!     .expect_n(2)
+//!     .run(ref server)
+//! assert(result.ok(), result.error_msg())
+//! ```
+
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::{TcpListener, TcpStream}
+use std::net::tls::{TlsContext, TlsStream, TlsVerifyMode}
+use std::os::subprocess::{Command, Stdio}
+use core::time::Duration
+use std::time::Instant
+use test::e2e::response::TestResult
+
+// ============================================================================
+// TestCerts — self-signed certificate pair
+// ============================================================================
+
+/// A pair of PEM files for TLS testing.
+pub type TestCerts {
+    cert_path: Str,
+    key_path: Str,
+}
+
+/// Generate a self-signed cert + key pair using openssl CLI.
+/// Files are written to the build/debug/ directory (gitignored).
+pub func generate_test_certs() -> Outcome[TestCerts, Str] {
+    let cert_path: Str = "build/debug/e2e_test_cert.pem"
+    let key_path: Str = "build/debug/e2e_test_key.pem"
+
+    // Use openssl to generate self-signed cert valid for 1 day
+    let result = Command::new("openssl")
+        .arg("req -x509 -newkey rsa:2048 -keyout " + key_path + " -out " + cert_path + " -days 1 -nodes -subj /CN=localhost")
+        .stdout(Stdio::devnull())
+        .stderr(Stdio::devnull())
+        .status()
+
+    when result {
+        Ok(code) => {
+            if code != 0 {
+                return Err("openssl cert generation failed with code " + code.to_string())
+            }
+            return Ok(TestCerts { cert_path: cert_path, key_path: key_path })
+        }
+        Err(e) => return Err("failed to run openssl: " + e)
+    }
+}
+
+// ============================================================================
+// TlsTestServer
+// ============================================================================
+
+/// A TLS test server with auto-generated self-signed certificates.
+pub type TlsTestServer {
+    listener: TcpListener,
+    tls_ctx: TlsContext,
+    certs: TestCerts,
+    bound_port: U16,
+}
+
+impl TlsTestServer {
+    /// Create a TLS test server: generates certs, binds to localhost:0.
+    pub func new() -> Outcome[TlsTestServer, Str] {
+        // Generate certs
+        let certs: TestCerts = generate_test_certs()!
+
+        // Create TLS server context
+        let ctx_result = TlsContext::server(certs.cert_path, certs.key_path)
+        when ctx_result {
+            Err(_) => return Err("failed to create TLS server context")
+            Ok(ctx) => {
+                // Bind TCP listener
+                let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+                let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+                when TcpListener::bind(addr) {
+                    Err(_) => return Err("failed to bind TCP listener")
+                    Ok(listener) => {
+                        when listener.local_addr() {
+                            Err(_) => return Err("failed to get local address")
+                            Ok(bound) => {
+                                let port: U16 = bound.port()
+                                return Ok(TlsTestServer {
+                                    listener: listener,
+                                    tls_ctx: ctx,
+                                    certs: certs,
+                                    bound_port: port,
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns the port number the server is listening on.
+    pub func port(this) -> U16 {
+        this.bound_port
+    }
+
+    /// Returns the full socket address the server is bound to.
+    pub func addr(this) -> SocketAddr {
+        let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+        SocketAddr::V4(SocketAddrV4::new(lo, this.bound_port))
+    }
+
+    /// Accept a TCP connection and perform TLS handshake.
+    pub func accept_tls(this) -> Outcome[TlsStream, Str] {
+        when this.listener.accept() {
+            Err(_) => return Err("TCP accept failed")
+            Ok(result) => {
+                let tcp_stream: TcpStream = result.0
+                let raw = tcp_stream.as_raw_socket()
+                when TlsStream::accept(this.tls_ctx, raw.handle) {
+                    Err(_) => return Err("TLS accept failed")
+                    Ok(tls) => return Ok(tls)
+                }
+            }
+        }
+    }
+
+    /// Accept a TLS connection, read data, echo it back.
+    pub func echo_one(this) -> Outcome[I64, Str] {
+        let tls_stream: TlsStream = this.accept_tls()!
+        var buf: [U8; 256] = [0 as U8; 256]
+        when tls_stream.read(mut ref buf) {
+            Err(_) => return Err("TLS read failed")
+            Ok(n) => {
+                if n > 0 {
+                    when tls_stream.write(ref buf) {
+                        Err(_) => return Err("TLS write failed")
+                        Ok(_) => {}
+                    }
+                }
+                tls_stream.shutdown()
+                return Ok(n)
+            }
+        }
+    }
+
+    /// Returns the certificate paths for client configuration.
+    pub func cert_path(this) -> Str {
+        this.certs.cert_path
+    }
+}
+
+// ============================================================================
+// TlsTestClient
+// ============================================================================
+
+/// A fluent TLS test client that connects, sends data, and verifies.
+pub type TlsTestClient {
+    target: SocketAddr,
+    timeout_ms: I64,
+    send_buf: [U8; 256],
+    send_len: I64,
+    expect_len: I64,
+    ca_path: Str,
+}
+
+impl TlsTestClient {
+    /// Create a new TLS test client targeting the given address.
+    pub func new(addr: SocketAddr) -> TlsTestClient {
+        TlsTestClient {
+            target: addr,
+            timeout_ms: 5000,
+            send_buf: [0 as U8; 256],
+            send_len: 0,
+            expect_len: 0,
+            ca_path: "",
+        }
+    }
+
+    /// Set the timeout in milliseconds (default: 5000).
+    pub func timeout(this, ms: I64) -> TlsTestClient {
+        TlsTestClient {
+            target: this.target,
+            timeout_ms: ms,
+            send_buf: this.send_buf,
+            send_len: this.send_len,
+            expect_len: this.expect_len,
+            ca_path: this.ca_path,
+        }
+    }
+
+    /// Set the CA certificate path for verification.
+    pub func ca(this, path: Str) -> TlsTestClient {
+        TlsTestClient {
+            target: this.target,
+            timeout_ms: this.timeout_ms,
+            send_buf: this.send_buf,
+            send_len: this.send_len,
+            expect_len: this.expect_len,
+            ca_path: path,
+        }
+    }
+
+    /// Append a single byte to the send buffer.
+    pub func send_byte(this, b: I32) -> TlsTestClient {
+        var buf: [U8; 256] = this.send_buf
+        let idx: I64 = this.send_len
+        if idx < 256 {
+            buf[idx] = b as U8
+        }
+        TlsTestClient {
+            target: this.target,
+            timeout_ms: this.timeout_ms,
+            send_buf: buf,
+            send_len: idx + 1,
+            expect_len: this.expect_len,
+            ca_path: this.ca_path,
+        }
+    }
+
+    /// Set the expected number of bytes to receive back.
+    pub func expect_n(this, n: I64) -> TlsTestClient {
+        TlsTestClient {
+            target: this.target,
+            timeout_ms: this.timeout_ms,
+            send_buf: this.send_buf,
+            send_len: this.send_len,
+            expect_len: n,
+            ca_path: this.ca_path,
+        }
+    }
+
+    /// Execute the TLS test: connect, handshake, send, echo, verify.
+    pub func run(this, server: ref TlsTestServer) -> TestResult {
+        let start: Instant = Instant::now()
+
+        // 1. Create TLS client context (no peer verification for testing)
+        let ctx_result = TlsContext::client()
+        when ctx_result {
+            Err(_) => return TestResult::fail("TLS client context creation failed")
+            Ok(ctx) => {
+                ctx.set_verify_mode(TlsVerifyMode::None())
+
+                // 2. TCP connect
+                let tcp_result = TcpStream::connect(this.target)
+                when tcp_result {
+                    Err(_) => return TestResult::fail("TCP connect failed")
+                    Ok(tcp) => {
+                        // Set timeout
+                        let dur: Duration = Duration::from_millis(this.timeout_ms)
+                        tcp.set_read_timeout(Just(dur))
+                        tcp.set_write_timeout(Just(dur))
+
+                        // 3. TLS handshake (client side)
+                        let raw = tcp.as_raw_socket()
+                        let tls_result = TlsStream::connect(ctx, raw.handle, "localhost")
+                        when tls_result {
+                            Err(_) => {
+                                // Server needs to accept first for handshake
+                                return TestResult::fail("TLS handshake failed")
+                            }
+                            Ok(tls_client) => {
+                                // 4. Send data
+                                if this.send_len > 0 {
+                                    when tls_client.write(ref this.send_buf) {
+                                        Err(_) => return TestResult::fail("TLS write failed")
+                                        Ok(_) => {}
+                                    }
+                                }
+
+                                // 5. Server accepts TLS + echoes
+                                when server.echo_one() {
+                                    Err(e) => return TestResult::fail(e)
+                                    Ok(_) => {}
+                                }
+
+                                // 6. Client reads response
+                                if this.expect_len > 0 {
+                                    var recv_buf: [U8; 256] = [0 as U8; 256]
+                                    when tls_client.read(mut ref recv_buf) {
+                                        Err(_) => return TestResult::fail("TLS read failed")
+                                        Ok(n) => {
+                                            let ms: I64 = start.elapsed().as_millis()
+                                            tls_client.shutdown()
+                                            if n != this.expect_len {
+                                                return TestResult::fail("expected " + this.expect_len.to_string() + " bytes, got " + n.to_string())
+                                            }
+                                            return TestResult::pass(n, ms)
+                                        }
+                                    }
+                                }
+
+                                let ms: I64 = start.elapsed().as_millis()
+                                tls_client.shutdown()
+                                return TestResult::pass(0, ms)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

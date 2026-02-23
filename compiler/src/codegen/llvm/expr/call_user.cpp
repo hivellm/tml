@@ -443,9 +443,72 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                     std::string loaded_ptr = fresh_reg();
                     emit_line("  " + loaded_ptr + " = load ptr, ptr " + it->second.reg);
                     val = loaded_ptr;
+
+                    // For lowlevel/extern C calls: when a ref [T] (slice reference)
+                    // is passed to a C function, extract the raw data pointer from the
+                    // fat pointer { ptr, i64 }. C functions expect uint8_t*, not a
+                    // pointer to the fat pointer struct.
+                    bool callee_is_extern =
+                        (func_it != functions_.end() && func_it->second.is_extern) ||
+                        (func_sig.has_value() && (func_sig->is_extern() || func_sig->is_lowlevel));
+                    if (callee_is_extern && it->second.semantic_type &&
+                        it->second.semantic_type->is<types::RefType>()) {
+                        const auto& inner_ref = it->second.semantic_type->as<types::RefType>();
+                        if (inner_ref.inner && inner_ref.inner->is<types::SliceType>()) {
+                            // loaded_ptr points to { ptr, i64 } — extract field 0 (data ptr)
+                            std::string data_ptr = fresh_reg();
+                            emit_line("  " + data_ptr + " = load ptr, ptr " + val);
+                            val = data_ptr;
+                        }
+                    }
                 } else {
-                    // Local is a value - pass the alloca address directly (pointer to the value)
-                    val = it->second.reg;
+                    // Check for array-to-slice coercion: when a fixed-size array [T; N]
+                    // is passed to a parameter expecting ref [T] (slice), we need to
+                    // create a fat pointer { ptr, i64 } containing the array pointer and length.
+                    bool needs_slice_coercion = false;
+                    size_t array_size = 0;
+                    if (func_sig.has_value() && i < func_sig->params.size()) {
+                        auto resolved_param = func_sig->params[i];
+                        if (!free_func_type_subs.empty()) {
+                            resolved_param =
+                                types::substitute_type(resolved_param, free_func_type_subs);
+                        }
+                        if (resolved_param->is<types::RefType>()) {
+                            const auto& ref_type = resolved_param->as<types::RefType>();
+                            if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+                                // Parameter expects ref [T] (a slice)
+                                // Check if the local is an array type
+                                if (it->second.semantic_type &&
+                                    it->second.semantic_type->is<types::ArrayType>()) {
+                                    needs_slice_coercion = true;
+                                    array_size =
+                                        it->second.semantic_type->as<types::ArrayType>().size;
+                                }
+                            }
+                        }
+                    }
+
+                    if (needs_slice_coercion) {
+                        // Create a fat pointer { ptr, i64 } on the stack
+                        // Field 0: pointer to the array data
+                        // Field 1: array length (i64)
+                        std::string fat_ptr_alloca = fresh_reg();
+                        emit_line("  " + fat_ptr_alloca + " = alloca { ptr, i64 }");
+                        std::string data_field = fresh_reg();
+                        emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
+                                  fat_ptr_alloca + ", i32 0, i32 0");
+                        emit_line("  store ptr " + it->second.reg + ", ptr " + data_field);
+                        std::string len_field = fresh_reg();
+                        emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
+                                  fat_ptr_alloca + ", i32 0, i32 1");
+                        emit_line("  store i64 " + std::to_string(array_size) + ", ptr " +
+                                  len_field);
+                        val = fat_ptr_alloca;
+                    } else {
+                        // Local is a value - pass the alloca address directly (pointer to the
+                        // value)
+                        val = it->second.reg;
+                    }
                 }
                 actual_type = "ptr";
             } else {

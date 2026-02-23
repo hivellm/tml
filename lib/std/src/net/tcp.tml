@@ -169,6 +169,34 @@ impl TcpStream {
         Ok(stream)
     }
 
+    /// Opens a TCP connection to a remote host with a timeout.
+    pub func connect_timeout(addr: SocketAddr, timeout: Duration) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        var socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        // Set non-blocking for timeout support
+        socket.set_nonblocking(true)!
+
+        // Start connection
+        when socket.connect(ref addr) {
+            Ok(_) => {
+                // Connected immediately
+                socket.set_nonblocking(false)!
+                let stream: TcpStream = TcpStream { socket: socket }
+                return Ok(stream)
+            }
+            Err(e) => {
+                if e.is_would_block() or e.kind().raw() == NetErrorKind::AlreadyConnected().raw() {
+                    // Connection in progress
+                    socket.set_nonblocking(false)!
+                    let stream: TcpStream = TcpStream { socket: socket }
+                    return Ok(stream)
+                }
+                return Err(e)
+            }
+        }
+    }
+
     /// Returns the socket address of the remote peer.
     pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
         this.socket.peer_addr()

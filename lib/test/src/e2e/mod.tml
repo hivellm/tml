@@ -1,0 +1,58 @@
+//! End-to-end network testing framework.
+//!
+//! Provides fluent builder APIs for testing TCP, UDP, and TLS servers
+//! with auto-binding ephemeral ports, built-in echo servers, and
+//! structured test results.
+//!
+//! Inspired by [supertest](https://github.com/forwardemail/supertest)
+//! but designed for raw network protocols (TCP/UDP/TLS), not just HTTP.
+//!
+//! # Example: TCP Echo Test
+//!
+//! ```tml
+//! use test::e2e::server::TcpTestServer
+//! use test::e2e::client::TcpTestClient
+//!
+//! let server = TcpTestServer::new().unwrap()
+//! let result = TcpTestClient::new(server.addr())
+//!     .send_byte(72).send_byte(73)  // "HI"
+//!     .expect_n(2)
+//!     .run(ref server)
+//!
+//! assert(result.ok(), result.error_msg())
+//! assert_eq(result.received_len(), 2)
+//! ```
+//!
+//! # Example: UDP Echo Test
+//!
+//! ```tml
+//! use test::e2e::server::UdpTestServer
+//! use test::e2e::client::UdpTestClient
+//!
+//! let server = UdpTestServer::new().unwrap()
+//! let result = UdpTestClient::new(server.addr())
+//!     .send_byte(65).send_byte(66)  // "AB"
+//!     .expect_n(2)
+//!     .run(ref server)
+//!
+//! assert(result.ok(), result.error_msg())
+//! ```
+//!
+//! # Example: TLS Echo Test
+//!
+//! ```tml
+//! use test::e2e::tls::{TlsTestServer, TlsTestClient}
+//!
+//! let server = TlsTestServer::new().unwrap()
+//! let result = TlsTestClient::new(server.addr())
+//!     .send_byte(88)  // "X"
+//!     .expect_n(1)
+//!     .run(ref server)
+//!
+//! assert(result.ok(), result.error_msg())
+//! ```
+
+pub use response
+pub use server
+pub use client
+pub use tls

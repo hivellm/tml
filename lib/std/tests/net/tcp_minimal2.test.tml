@@ -1,6 +1,0 @@
-use test::{assert}
-
-@test
-func test_minimal() {
-    assert(true)
-}

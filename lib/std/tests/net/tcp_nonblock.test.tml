@@ -1,0 +1,116 @@
+// Non-blocking TCP tests — verify WouldBlock behavior
+use test::{assert, assert_eq}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::{TcpListener, TcpStream}
+use std::net::error::NetError
+
+// --- Test 1: non-blocking accept returns error when no connections pending ---
+
+@test
+func test_tcp_nonblocking_accept_is_err() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let bind_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    var listener: TcpListener = TcpListener::bind(bind_addr).unwrap()
+    listener.set_nonblocking(true).unwrap()
+
+    // No connections pending, accept should fail
+    let result = listener.accept()
+    let is_err: Bool = result.is_err()
+    assert(is_err, "accept should fail with no connections")
+    return 0
+}
+
+// --- Test 2: non-blocking read returns error when no data ---
+
+@test
+func test_tcp_nonblocking_read_is_err() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let bind_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let listener: TcpListener = TcpListener::bind(bind_addr).unwrap()
+    let bound_addr: SocketAddr = listener.local_addr().unwrap()
+
+    let client: TcpStream = TcpStream::connect(bound_addr).unwrap()
+
+    when listener.accept() {
+        Ok(result) => {
+            var server: TcpStream = result.0
+
+            // Set server to non-blocking
+            server.set_nonblocking(true).unwrap()
+
+            // No data sent yet, read should return error (WouldBlock)
+            var buf: [U8; 32] = [0 as U8; 32]
+            let read_result = server.read(mut ref buf)
+            assert(read_result.is_err(), "read should fail with no data")
+        }
+        Err(_) => assert(false, "accept should succeed")
+    }
+    return 0
+}
+
+// --- Test 3: non-blocking mode still transfers data when ready ---
+
+@test
+func test_tcp_nonblocking_read_with_data() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let bind_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let listener: TcpListener = TcpListener::bind(bind_addr).unwrap()
+    let bound_addr: SocketAddr = listener.local_addr().unwrap()
+
+    let client: TcpStream = TcpStream::connect(bound_addr).unwrap()
+
+    when listener.accept() {
+        Ok(result) => {
+            var server: TcpStream = result.0
+
+            // Client sends data first
+            let data: [U8; 3] = [10 as U8, 20 as U8, 30 as U8]
+            client.write(ref data).unwrap()
+
+            // Set server to non-blocking and read — data is already available
+            server.set_nonblocking(true).unwrap()
+
+            var buf: [U8; 32] = [0 as U8; 32]
+            let read_result = server.read(mut ref buf)
+            assert(read_result.is_ok(), "should read data that was already sent")
+            let n: I64 = read_result.unwrap()
+            assert_eq(n as I32, 3)
+            assert_eq(buf[0] as I32, 10)
+            assert_eq(buf[1] as I32, 20)
+            assert_eq(buf[2] as I32, 30)
+        }
+        Err(_) => assert(false, "accept should succeed")
+    }
+    return 0
+}
+
+// --- Test 4: WouldBlock on non-blocking read, returns I64 error ---
+
+@test
+func test_tcp_nonblocking_read_err_check() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let bind_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+
+    let listener: TcpListener = TcpListener::bind(bind_addr).unwrap()
+    let bound_addr: SocketAddr = listener.local_addr().unwrap()
+
+    let client: TcpStream = TcpStream::connect(bound_addr).unwrap()
+
+    when listener.accept() {
+        Ok(result) => {
+            var server: TcpStream = result.0
+            server.set_nonblocking(true).unwrap()
+
+            // Read with no data — check the error via Outcome methods
+            var buf: [U8; 32] = [0 as U8; 32]
+            let read_result = server.read(mut ref buf)
+            assert(read_result.is_err(), "should be error")
+            assert(not read_result.is_ok(), "should not be ok")
+        }
+        Err(_) => assert(false, "accept should succeed")
+    }
+    return 0
+}

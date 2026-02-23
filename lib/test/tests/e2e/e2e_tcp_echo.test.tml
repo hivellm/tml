@@ -1,0 +1,42 @@
+// Tests for TCP echo using the e2e framework
+use test::{assert, assert_eq}
+use test::e2e::server::TcpTestServer
+use test::e2e::client::TcpTestClient
+use test::e2e::response::TestResult
+
+@test
+func test_tcp_echo_basic() -> I32 {
+    // Create a TCP test server on an ephemeral port
+    let server: TcpTestServer = TcpTestServer::new().unwrap()
+
+    // Use the fluent client API to send bytes and expect them back
+    let result: TestResult = TcpTestClient::new(server.addr())
+        .timeout(5000)
+        .send_byte(72)    // 'H'
+        .send_byte(73)    // 'I'
+        .expect_n(2)
+        .run(ref server)
+
+    assert(result.ok(), result.error_msg())
+    assert_eq(result.received_len(), 2 as I64)
+    0
+}
+
+@test
+func test_tcp_echo_five_bytes() -> I32 {
+    let server: TcpTestServer = TcpTestServer::new().unwrap()
+
+    let result: TestResult = TcpTestClient::new(server.addr())
+        .send_byte(65)    // 'A'
+        .send_byte(66)    // 'B'
+        .send_byte(67)    // 'C'
+        .send_byte(68)    // 'D'
+        .send_byte(69)    // 'E'
+        .expect_n(5)
+        .run(ref server)
+
+    assert(result.ok(), result.error_msg())
+    assert_eq(result.received_len(), 5 as I64)
+    assert(result.elapsed() >= 0, "elapsed should be non-negative")
+    0
+}

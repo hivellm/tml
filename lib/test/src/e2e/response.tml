@@ -1,0 +1,57 @@
+//! E2E test result type for network testing.
+//!
+//! Provides a structured result from e2e test operations,
+//! holding pass/fail status, error message, byte count, and timing.
+
+/// The result of an e2e test operation.
+///
+/// Contains timing information, byte count, and success/failure status.
+/// Received data is checked inline during the test run, not stored here.
+pub type TestResult {
+    success: Bool,
+    error: Str,
+    bytes_received: I64,
+    elapsed_ms: I64,
+}
+
+impl TestResult {
+    /// Create a passing result with byte count and timing.
+    pub func pass(n: I64, ms: I64) -> TestResult {
+        TestResult {
+            success: true,
+            error: "",
+            bytes_received: n,
+            elapsed_ms: ms,
+        }
+    }
+
+    /// Create a failing result with an error message.
+    pub func fail(msg: Str) -> TestResult {
+        TestResult {
+            success: false,
+            error: msg,
+            bytes_received: 0,
+            elapsed_ms: 0,
+        }
+    }
+
+    /// Returns true if the test passed.
+    pub func ok(this) -> Bool {
+        this.success
+    }
+
+    /// Returns the error message (empty string if passed).
+    pub func error_msg(this) -> Str {
+        this.error
+    }
+
+    /// Returns the number of bytes received.
+    pub func received_len(this) -> I64 {
+        this.bytes_received
+    }
+
+    /// Returns the elapsed time in milliseconds.
+    pub func elapsed(this) -> I64 {
+        this.elapsed_ms
+    }
+}

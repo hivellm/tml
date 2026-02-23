@@ -1,0 +1,210 @@
+//! Non-blocking UDP networking primitives.
+//!
+//! This module provides non-blocking versions of UDP socket types for
+//! event-driven I/O operations.
+//!
+//! # Types
+//!
+//! - [`AsyncUdpSocket`] - Non-blocking UDP socket for datagrams
+
+use std::net::{SocketAddr, Ipv4Addr, Ipv6Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily}
+use std::net::udp::UdpSocket
+
+// ============================================================================
+// AsyncUdpSocket
+// ============================================================================
+
+/// A non-blocking UDP socket for sending and receiving datagrams.
+///
+/// This is the non-blocking equivalent of `UdpSocket`. It uses non-blocking I/O
+/// and returns immediately if an operation would block.
+pub type AsyncUdpSocket {
+    /// The underlying non-blocking socket
+    socket: RawSocket,
+    /// Whether connected to a specific address
+    connected: Bool,
+}
+
+impl AsyncUdpSocket {
+    /// Creates a non-blocking UDP socket bound to the given address.
+    pub func bind(addr: SocketAddr) -> Outcome[AsyncUdpSocket, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        var socket: RawSocket = RawSocket::new_with_family(family, SocketType::Datagram, SocketProtocol::Udp)!
+        socket.bind(ref addr)!
+        socket.set_nonblocking(true)!
+
+        let async_socket: AsyncUdpSocket = AsyncUdpSocket { socket: socket, connected: false }
+        Ok(async_socket)
+    }
+
+    /// Creates a non-blocking socket from a synchronous one.
+    pub func from_std(udp: UdpSocket) -> Outcome[AsyncUdpSocket, NetError] {
+        let connected: Bool = udp.is_connected()
+        let socket: RawSocket = udp.into_raw_socket()
+        var async_socket: AsyncUdpSocket = AsyncUdpSocket {
+            socket: socket,
+            connected: connected,
+        }
+        async_socket.socket.set_nonblocking(true)!
+        Ok(async_socket)
+    }
+
+    /// Connects to a remote address.
+    pub func connect(mut this, addr: SocketAddr) -> Outcome[(), NetError] {
+        this.socket.connect(ref addr)!
+        this.connected = true
+        Ok(())
+    }
+
+    /// Tries to send data to the given address without blocking.
+    ///
+    /// Returns `Ok(Just(n))` if data was sent, `Ok(Nothing)` if it would block.
+    pub func try_send_to(this, buf: ref [U8], addr: SocketAddr) -> Outcome[Maybe[I64], NetError] {
+        when this.socket.send_to(buf, ref addr) {
+            Ok(n) => Ok(Just(n))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Tries to receive data without blocking.
+    ///
+    /// Returns `Ok(Just((n, addr)))` if data was received, `Ok(Nothing)` if it would block.
+    pub func try_recv_from(this, buf: mut ref [U8]) -> Outcome[Maybe[(I64, SocketAddr)], NetError] {
+        when this.socket.recv_from(buf) {
+            Ok(result) => Ok(Just(result))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Sends data to the given address, spinning until complete.
+    pub func send_to(this, buf: ref [U8], addr: SocketAddr) -> Outcome[I64, NetError] {
+        loop (true) {
+            when this.try_send_to(buf, addr)! {
+                Just(n) => return Ok(n)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Receives data and sender address, spinning until available.
+    pub func recv_from(this, buf: mut ref [U8]) -> Outcome[(I64, SocketAddr), NetError] {
+        loop (true) {
+            when this.try_recv_from(buf)! {
+                Just(result) => return Ok(result)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Tries to send data on a connected socket without blocking.
+    pub func try_send(this, buf: ref [U8]) -> Outcome[Maybe[I64], NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        when this.socket.send(buf) {
+            Ok(n) => Ok(Just(n))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Tries to receive data on a connected socket without blocking.
+    pub func try_recv(this, buf: mut ref [U8]) -> Outcome[Maybe[I64], NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        when this.socket.recv(buf) {
+            Ok(n) => Ok(Just(n))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Sends data on a connected socket, spinning until complete.
+    pub func send(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        loop (true) {
+            when this.try_send(buf)! {
+                Just(n) => return Ok(n)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Receives data on a connected socket, spinning until available.
+    pub func recv(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        loop (true) {
+            when this.try_recv(buf)! {
+                Just(n) => return Ok(n)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Returns the local address.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Returns the peer address (if connected).
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        this.socket.peer_addr()
+    }
+
+    /// Sets broadcast mode.
+    pub func set_broadcast(this, broadcast: Bool) -> Outcome[(), NetError] {
+        this.socket.set_broadcast(broadcast)
+    }
+
+    /// Returns whether connected.
+    pub func is_connected(this) -> Bool {
+        this.connected
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the socket and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+}
+
+// Extension for UdpSocket
+impl UdpSocket {
+    /// Creates a UdpSocket from a raw socket.
+    pub func from_raw_socket(socket: RawSocket) -> UdpSocket {
+        UdpSocket {
+            socket: socket,
+            connected: false,
+        }
+    }
+}

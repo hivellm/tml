@@ -168,6 +168,12 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
     const auto& registry = env_.module_registry();
     const auto& all_modules = registry->get_all_modules();
 
+    // Track emitted symbols to prevent duplicate declarations.
+    // The same lowlevel function can appear in multiple module entries
+    // (e.g., a parent module and its submodule) when module resolution
+    // loads the same source via different paths.
+    std::unordered_set<std::string> emitted;
+
     for (const auto& [module_name, module] : all_modules) {
         for (const auto& [func_name, func_sig] : module.functions) {
             if (func_sig.is_lowlevel) {
@@ -189,9 +195,18 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                     pos += 1;
                 }
 
+                // Skip if already emitted (prevents duplicate LLVM declarations)
+                std::string symbol = "tml_" + sanitized_name;
+                if (!emitted.insert(symbol).second) {
+                    continue;
+                }
+
+                // Also register in declared_externals_ so gen_func_decl
+                // won't re-emit the same symbol later
+                declared_externals_.insert(symbol);
+
                 // Emit declaration with tml_ prefix
-                emit_line("declare " + llvm_ret_type + " @tml_" + sanitized_name + "(" +
-                          params_str + ")");
+                emit_line("declare " + llvm_ret_type + " @" + symbol + "(" + params_str + ")");
             }
         }
     }

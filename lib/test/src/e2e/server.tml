@@ -1,0 +1,151 @@
+//! E2E test servers for TCP and UDP.
+//!
+//! Provides lightweight test servers that bind to ephemeral ports
+//! on localhost, ready to accept connections or datagrams.
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::e2e::server::TcpTestServer
+//!
+//! let server = TcpTestServer::new().unwrap()
+//! let port = server.port()  // OS-assigned ephemeral port
+//! // ... connect a client, server echoes data back ...
+//! ```
+
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::{TcpListener, TcpStream}
+use std::net::udp::UdpSocket
+
+// ============================================================================
+// TcpTestServer
+// ============================================================================
+
+/// A TCP test server that listens on localhost with an ephemeral port.
+pub type TcpTestServer {
+    listener: TcpListener,
+    bound_port: U16,
+}
+
+impl TcpTestServer {
+    /// Create a new TCP test server bound to 127.0.0.1 on a random port.
+    pub func new() -> Outcome[TcpTestServer, Str] {
+        let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+        let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+        when TcpListener::bind(addr) {
+            Ok(listener) => {
+                when listener.local_addr() {
+                    Ok(bound) => {
+                        let port: U16 = bound.port()
+                        return Ok(TcpTestServer { listener: listener, bound_port: port })
+                    }
+                    Err(_) => return Err("failed to get local address")
+                }
+            }
+            Err(_) => return Err("failed to bind TCP listener")
+        }
+    }
+
+    /// Returns the port number the server is listening on.
+    pub func port(this) -> U16 {
+        this.bound_port
+    }
+
+    /// Returns the full socket address the server is bound to.
+    pub func addr(this) -> SocketAddr {
+        let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+        SocketAddr::V4(SocketAddrV4::new(lo, this.bound_port))
+    }
+
+    /// Accept a single incoming connection and return the stream.
+    pub func accept_one(this) -> Outcome[TcpStream, Str] {
+        when this.listener.accept() {
+            Ok(result) => Ok(result.0)
+            Err(_) => Err("accept failed")
+        }
+    }
+
+    /// Accept a connection, read up to max_bytes, echo them back.
+    pub func echo_one(this, max_bytes: I64) -> Outcome[I64, Str] {
+        when this.listener.accept() {
+            Ok(result) => {
+                let stream: TcpStream = result.0
+                var buf: [U8; 256] = [0 as U8; 256]
+                when stream.read(mut ref buf) {
+                    Ok(n) => {
+                        if n > 0 {
+                            // Build echo slice by writing back what we read
+                            when stream.write(ref buf) {
+                                Ok(sent) => return Ok(n)
+                                Err(_) => return Err("echo write failed")
+                            }
+                        }
+                        return Ok(0)
+                    }
+                    Err(_) => return Err("echo read failed")
+                }
+            }
+            Err(_) => return Err("echo accept failed")
+        }
+    }
+}
+
+// ============================================================================
+// UdpTestServer
+// ============================================================================
+
+/// A UDP test server bound to localhost with an ephemeral port.
+pub type UdpTestServer {
+    socket: UdpSocket,
+    bound_port: U16,
+}
+
+impl UdpTestServer {
+    /// Create a new UDP test server bound to 127.0.0.1 on a random port.
+    pub func new() -> Outcome[UdpTestServer, Str] {
+        let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+        let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+        when UdpSocket::bind(addr) {
+            Ok(socket) => {
+                when socket.local_addr() {
+                    Ok(bound) => {
+                        let port: U16 = bound.port()
+                        return Ok(UdpTestServer { socket: socket, bound_port: port })
+                    }
+                    Err(_) => return Err("failed to get local address")
+                }
+            }
+            Err(_) => return Err("failed to bind UDP socket")
+        }
+    }
+
+    /// Returns the port number the server is listening on.
+    pub func port(this) -> U16 {
+        this.bound_port
+    }
+
+    /// Returns the full socket address the server is bound to.
+    pub func addr(this) -> SocketAddr {
+        let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+        SocketAddr::V4(SocketAddrV4::new(lo, this.bound_port))
+    }
+
+    /// Receive a datagram and echo it back to the sender.
+    pub func echo_one(this) -> Outcome[I64, Str] {
+        var buf: [U8; 256] = [0 as U8; 256]
+        when this.socket.recv_from(mut ref buf) {
+            Ok(result) => {
+                let n: I64 = result.0
+                let sender: SocketAddr = result.1
+                if n > 0 {
+                    when this.socket.send_to(ref buf, sender) {
+                        Ok(sent) => return Ok(n)
+                        Err(_) => return Err("echo send_to failed")
+                    }
+                }
+                return Ok(0)
+            }
+            Err(_) => return Err("echo recv_from failed")
+        }
+    }
+}

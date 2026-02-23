@@ -13,6 +13,7 @@
 //! - [`coverage`] - Code coverage tracking
 //! - [`types`] - Shared types (`TestResult`, `TestConfig`, etc.)
 //! - [`mock`] - Mock framework for test doubles
+//! - [`e2e`] - End-to-end network testing (TCP, UDP, TLS)
 //!
 //! # Example
 //!
@@ -34,3 +35,4 @@ pub use bench
 pub use report
 pub use coverage
 pub use mock
+pub use e2e

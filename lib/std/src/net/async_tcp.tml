@@ -1,0 +1,272 @@
+//! Non-blocking TCP networking primitives.
+//!
+//! This module provides non-blocking versions of TCP socket types for
+//! event-driven I/O operations.
+//!
+//! # Types
+//!
+//! - [`AsyncTcpListener`] - Non-blocking listener for incoming TCP connections
+//! - [`AsyncTcpStream`] - Non-blocking connected TCP socket
+
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily, ShutdownMode}
+use std::net::tcp::{TcpStream, TcpListener}
+use core::time::Duration
+
+// ============================================================================
+// AsyncTcpListener
+// ============================================================================
+
+/// A non-blocking TCP socket server, listening for connections.
+///
+/// This is the non-blocking equivalent of `TcpListener`. It uses non-blocking I/O
+/// and returns immediately if no connection is ready.
+pub type AsyncTcpListener {
+    /// The underlying non-blocking socket
+    socket: RawSocket,
+}
+
+impl AsyncTcpListener {
+    /// Creates a new non-blocking `TcpListener` bound to the specified address.
+    pub func bind(addr: SocketAddr) -> Outcome[AsyncTcpListener, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        var socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        socket.set_reuse_addr(true)!
+        socket.bind(ref addr)!
+        socket.listen(128)!
+        socket.set_nonblocking(true)!
+
+        let listener: AsyncTcpListener = AsyncTcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Creates a non-blocking listener from a synchronous one.
+    pub func from_std(listener: TcpListener) -> Outcome[AsyncTcpListener, NetError] {
+        let socket: RawSocket = listener.into_raw_socket()
+        var async_listener: AsyncTcpListener = AsyncTcpListener {
+            socket: socket,
+        }
+        async_listener.socket.set_nonblocking(true)!
+        Ok(async_listener)
+    }
+
+    /// Tries to accept a connection without blocking.
+    ///
+    /// Returns `Ok(Just((stream, addr)))` if a connection is ready,
+    /// `Ok(Nothing)` if no connection is available (would block),
+    /// or `Err` on actual error.
+    pub func try_accept(this) -> Outcome[Maybe[(AsyncTcpStream, SocketAddr)], NetError] {
+        when this.socket.accept() {
+            Ok(result) => {
+                var stream_socket: RawSocket = result.0
+                let peer_addr: SocketAddr = result.1
+                stream_socket.set_nonblocking(true)!
+                let stream: AsyncTcpStream = AsyncTcpStream { socket: stream_socket }
+                Ok(Just((stream, peer_addr)))
+            }
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Accepts a connection, spinning until one is available.
+    ///
+    /// Note: This busy-waits. For production use, integrate with an event loop.
+    pub func accept(this) -> Outcome[(AsyncTcpStream, SocketAddr), NetError] {
+        loop (true) {
+            when this.try_accept()! {
+                Just(result) => return Ok(result)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Returns the local socket address.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Sets the value of `SO_REUSEADDR`.
+    pub func set_reuse_addr(this, reuse: Bool) -> Outcome[(), NetError] {
+        this.socket.set_reuse_addr(reuse)
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the listener and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+}
+
+// ============================================================================
+// AsyncTcpStream
+// ============================================================================
+
+/// A non-blocking TCP stream between a local and a remote socket.
+///
+/// This is the non-blocking equivalent of `TcpStream`. Reads and writes
+/// return immediately, either completing the operation or indicating it
+/// would block.
+pub type AsyncTcpStream {
+    /// The underlying non-blocking socket
+    socket: RawSocket,
+}
+
+impl AsyncTcpStream {
+    /// Opens a non-blocking TCP connection to a remote host.
+    pub func connect(addr: SocketAddr) -> Outcome[AsyncTcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        var socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        socket.set_nonblocking(true)!
+
+        // Non-blocking connect
+        when socket.connect(ref addr) {
+            Ok(_) => {
+                let stream: AsyncTcpStream = AsyncTcpStream { socket: socket }
+                Ok(stream)
+            }
+            Err(e) => {
+                if e.is_would_block() {
+                    // Connection in progress
+                    let stream: AsyncTcpStream = AsyncTcpStream { socket: socket }
+                    Ok(stream)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Creates a non-blocking stream from a synchronous one.
+    pub func from_std(stream: TcpStream) -> Outcome[AsyncTcpStream, NetError] {
+        let socket: RawSocket = stream.into_raw_socket()
+        var async_stream: AsyncTcpStream = AsyncTcpStream {
+            socket: socket,
+        }
+        async_stream.socket.set_nonblocking(true)!
+        Ok(async_stream)
+    }
+
+    /// Tries to read data without blocking.
+    ///
+    /// Returns `Ok(Just(n))` if data was read, `Ok(Nothing)` if it would block,
+    /// or `Err` on actual error. Returns `Ok(Just(0))` on EOF.
+    pub func try_read(this, buf: mut ref [U8]) -> Outcome[Maybe[I64], NetError] {
+        when this.socket.recv(buf) {
+            Ok(n) => Ok(Just(n))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Tries to write data without blocking.
+    ///
+    /// Returns `Ok(Just(n))` if data was written, `Ok(Nothing)` if it would block,
+    /// or `Err` on actual error.
+    pub func try_write(this, buf: ref [U8]) -> Outcome[Maybe[I64], NetError] {
+        when this.socket.send(buf) {
+            Ok(n) => Ok(Just(n))
+            Err(e) => {
+                if e.is_would_block() {
+                    Ok(Nothing)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Reads data, spinning until data is available.
+    pub func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        loop (true) {
+            when this.try_read(buf)! {
+                Just(n) => return Ok(n)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Writes data, spinning until complete.
+    pub func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        loop (true) {
+            when this.try_write(buf)! {
+                Just(n) => return Ok(n)
+                Nothing => {}
+            }
+        }
+    }
+
+    /// Shuts down the stream.
+    pub func shutdown(this, how: ShutdownMode) -> Outcome[(), NetError] {
+        this.socket.shutdown(how)
+    }
+
+    /// Returns the peer address.
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.peer_addr()
+    }
+
+    /// Returns the local address.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Sets TCP_NODELAY option.
+    pub func set_nodelay(this, nodelay: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nodelay(nodelay)
+    }
+
+    /// Sets SO_KEEPALIVE option.
+    pub func set_keepalive(this, keepalive: Bool) -> Outcome[(), NetError] {
+        this.socket.set_keepalive(keepalive)
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the stream and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+}
+
+// ============================================================================
+// from_raw_socket extensions for sync types
+// ============================================================================
+
+impl TcpListener {
+    /// Creates a TcpListener from a raw socket.
+    pub func from_raw_socket(socket: RawSocket) -> TcpListener {
+        TcpListener {
+            socket: socket,
+        }
+    }
+}
+
+impl TcpStream {
+    /// Creates a TcpStream from a raw socket.
+    pub func from_raw_socket(socket: RawSocket) -> TcpStream {
+        TcpStream {
+            socket: socket,
+        }
+    }
+}
