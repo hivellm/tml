@@ -31,8 +31,10 @@ extern void* mem_alloc(int64_t);
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
+#include <wincrypt.h>
 #include <windows.h>
 #include <winsock2.h>
+#pragma comment(lib, "crypt32.lib")
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
 #include <unistd.h>
@@ -70,6 +72,47 @@ static const char* get_last_openssl_error(void) {
  * TLS Context (wraps SSL_CTX)
  * ============================================================================ */
 
+#ifdef _WIN32
+/**
+ * Load certificates from the Windows system certificate store into OpenSSL's
+ * X509_STORE. This is necessary because SSL_CTX_set_default_verify_paths()
+ * looks for OpenSSL's cert bundle file which is typically absent on Windows.
+ *
+ * Opens the "ROOT" system store (Trusted Root CAs) and adds each certificate
+ * to OpenSSL's trust store.
+ *
+ * Returns number of certificates loaded, or -1 on error.
+ */
+static int load_windows_cert_store(SSL_CTX* ctx) {
+    HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
+    if (!hStore)
+        return -1;
+
+    X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+    if (!store) {
+        CertCloseStore(hStore, 0);
+        return -1;
+    }
+
+    int count = 0;
+    PCCERT_CONTEXT pContext = NULL;
+    while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != NULL) {
+        /* Convert from Windows DER format to OpenSSL X509 */
+        const unsigned char* data = pContext->pbCertEncoded;
+        X509* x509 = d2i_X509(NULL, &data, (long)pContext->cbCertEncoded);
+        if (x509) {
+            if (X509_STORE_add_cert(store, x509) == 1) {
+                count++;
+            }
+            X509_free(x509);
+        }
+    }
+
+    CertCloseStore(hStore, 0);
+    return count;
+}
+#endif
+
 /**
  * Create a TLS client context.
  * Returns an opaque SSL_CTX* handle, or NULL on error.
@@ -83,8 +126,19 @@ TML_EXPORT void* tls_context_client_new(void) {
     /* Require TLS 1.2 minimum */
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 
-    /* Enable default certificate verification paths */
+    /* Load CA certificates for verification */
+#ifdef _WIN32
+    /* On Windows, load from the system certificate store (wincrypt) since
+       SSL_CTX_set_default_verify_paths() relies on an OpenSSL cert bundle
+       that is typically absent on Windows installations. */
+    if (load_windows_cert_store(ctx) < 0) {
+        /* Fallback to OpenSSL default paths (may work if cert bundle exists) */
+        SSL_CTX_set_default_verify_paths(ctx);
+    }
+#else
+    /* On Linux/macOS, OpenSSL's default paths find the system CA bundle */
     SSL_CTX_set_default_verify_paths(ctx);
+#endif
 
     /* Enable certificate verification */
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
