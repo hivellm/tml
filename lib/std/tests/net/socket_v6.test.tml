@@ -1,0 +1,30 @@
+// Tests for SocketAddrV6 basic operations
+use test
+use std::net::{SocketAddrV6, Ipv6Addr}
+
+@test
+func test_socket_addr_v6_new() -> I32 {
+    let ip: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: SocketAddrV6 = SocketAddrV6::new(ip, 8080 as U16, 0 as U32, 0 as U32)
+    assert_eq(addr.port() as I32, 8080)
+    assert_eq(addr.flow_info() as I32, 0)
+    assert_eq(addr.scope_id() as I32, 0)
+    0
+}
+
+@test
+func test_socket_addr_v6_set_port() -> I32 {
+    let ip: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    var addr: SocketAddrV6 = SocketAddrV6::new(ip, 80 as U16, 0 as U32, 0 as U32)
+    addr.set_port(443 as U16)
+    assert_eq(addr.port() as I32, 443)
+    0
+}
+
+@test
+func test_socket_addr_v6_flow_info() -> I32 {
+    let addr: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 80 as U16, 42 as U32, 7 as U32)
+    assert_eq(addr.flow_info() as I32, 42)
+    assert_eq(addr.scope_id() as I32, 7)
+    0
+}

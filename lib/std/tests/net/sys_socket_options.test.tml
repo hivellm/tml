@@ -1,6 +1,6 @@
 // Tests for std::net::sys — RawSocket property accessors and socket options
 use test::{assert, assert_eq}
-use std::net::sys::{RawSocket, SocketType, AddressFamily}
+use std::net::sys::{RawSocket, SocketType, AddressFamily, ShutdownMode}
 
 // === RawSocket property accessors ===
 
@@ -179,6 +179,65 @@ func test_set_nonblocking() -> I32 {
     let set_result = sock.set_nonblocking(true)
     assert(set_result.is_ok(), "set_nonblocking should succeed")
     assert_eq(sock.is_nonblocking(), true, "should be nonblocking after set")
+    sock.close()
+    return 0
+}
+
+// === Multicast getters ===
+
+@test
+func test_get_multicast_loop_v4() -> I32 {
+    let result = RawSocket::udp()
+    assert(result.is_ok(), "udp should succeed")
+    let sock: RawSocket = result.unwrap()
+    // Set multicast loop then get it
+    let set_r = sock.set_multicast_loop_v4(true)
+    assert(set_r.is_ok(), "set_multicast_loop_v4 should succeed")
+    let get_r = sock.get_multicast_loop_v4()
+    assert(get_r.is_ok(), "get_multicast_loop_v4 should succeed")
+    assert_eq(get_r.unwrap(), true, "multicast loop should be true")
+    sock.close()
+    return 0
+}
+
+@test
+func test_get_multicast_ttl_v4() -> I32 {
+    let result = RawSocket::udp()
+    assert(result.is_ok(), "udp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_r = sock.set_multicast_ttl_v4(8 as I32)
+    assert(set_r.is_ok(), "set_multicast_ttl_v4 should succeed")
+    let get_r = sock.get_multicast_ttl_v4()
+    assert(get_r.is_ok(), "get_multicast_ttl_v4 should succeed")
+    assert_eq(get_r.unwrap(), 8 as I32, "multicast ttl should be 8")
+    sock.close()
+    return 0
+}
+
+// === Shutdown (on an unconnected socket — should fail gracefully) ===
+
+@test
+func test_shutdown_unconnected() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    // shutdown on unconnected socket should return error
+    let r = sock.shutdown(ShutdownMode::Both)
+    assert(r.is_err(), "shutdown on unconnected socket should fail")
+    sock.close()
+    return 0
+}
+
+// === Peek (on an unconnected socket — should fail gracefully) ===
+
+@test
+func test_peek_unconnected() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    var buf: [U8; 16] = [0 as U8; 16]
+    let r = sock.peek(mut ref buf)
+    assert(r.is_err(), "peek on unconnected socket should fail")
     sock.close()
     return 0
 }

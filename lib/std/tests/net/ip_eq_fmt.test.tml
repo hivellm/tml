@@ -1,0 +1,7 @@
+use test
+
+@test
+func test_trivial() -> I32 {
+    assert(true, "trivial")
+    0
+}

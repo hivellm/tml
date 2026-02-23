@@ -1,0 +1,179 @@
+// Tests for uncovered UDP socket functions
+use test::{assert, assert_eq}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::udp::{UdpSocket, UdpBuilder}
+
+// ============================================================================
+// UdpSocket: getter functions (broadcast, ttl, multicast)
+// ============================================================================
+
+@test
+func test_udp_broadcast_getter() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    sock.set_broadcast(true).unwrap()
+    let r = sock.broadcast()
+    assert(r.is_ok(), "broadcast() getter should succeed")
+    assert_eq(r.unwrap(), true, "broadcast should be true after set")
+    0
+}
+
+@test
+func test_udp_ttl_getter() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    sock.set_ttl(128).unwrap()
+    let r = sock.ttl()
+    assert(r.is_ok(), "ttl() getter should succeed")
+    assert_eq(r.unwrap(), 128, "ttl should be 128 after set")
+    0
+}
+
+@test
+func test_udp_multicast_loop_v4_getter() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    sock.set_multicast_loop_v4(true).unwrap()
+    let r = sock.multicast_loop_v4()
+    assert(r.is_ok(), "multicast_loop_v4() getter should succeed")
+    assert_eq(r.unwrap(), true, "multicast loop should be true")
+    0
+}
+
+@test
+func test_udp_multicast_ttl_v4_getter() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    sock.set_multicast_ttl_v4(10).unwrap()
+    let r = sock.multicast_ttl_v4()
+    assert(r.is_ok(), "multicast_ttl_v4() getter should succeed")
+    assert_eq(r.unwrap(), 10, "multicast ttl should be 10")
+    0
+}
+
+// ============================================================================
+// UdpSocket: join/leave multicast (placeholder implementations)
+// ============================================================================
+
+@test
+func test_udp_join_multicast_v4() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    let multi: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 1)
+    let iface: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    let r = sock.join_multicast_v4(multi, iface)
+    assert(r.is_ok(), "join_multicast_v4 should succeed (placeholder)")
+    0
+}
+
+@test
+func test_udp_leave_multicast_v4() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    let multi: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 1)
+    let iface: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    let r = sock.leave_multicast_v4(multi, iface)
+    assert(r.is_ok(), "leave_multicast_v4 should succeed (placeholder)")
+    0
+}
+
+// ============================================================================
+// UdpSocket: into_raw_socket
+// ============================================================================
+
+@test
+func test_udp_into_raw_socket() -> I32 {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let sock: UdpSocket = UdpSocket::bind(addr).unwrap()
+    let raw = sock.into_raw_socket()
+    let close_r = raw.close()
+    assert(close_r.is_ok(), "close raw socket should succeed")
+    0
+}
+
+// ============================================================================
+// UdpBuilder: builder methods
+// ============================================================================
+
+@test
+func test_udp_builder_broadcast() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.broadcast(true)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "builder with broadcast should bind")
+    0
+}
+
+@test
+func test_udp_builder_ttl() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.ttl(64)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "builder with ttl should bind")
+    0
+}
+
+@test
+func test_udp_builder_multicast_loop() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.multicast_loop(false)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "builder with multicast_loop should bind")
+    0
+}
+
+@test
+func test_udp_builder_multicast_ttl() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.multicast_ttl(4)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "builder with multicast_ttl should bind")
+    0
+}
+
+@test
+func test_udp_builder_buffer_sizes() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.recv_buffer_size(65536)
+    builder = builder.send_buffer_size(65536)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "builder with buffer sizes should bind")
+    0
+}
+
+@test
+func test_udp_builder_full_chain() -> I32 {
+    var builder: UdpBuilder = UdpBuilder::new()
+    builder = builder.broadcast(true)
+    builder = builder.ttl(32)
+    builder = builder.multicast_loop(false)
+    builder = builder.multicast_ttl(8)
+    builder = builder.recv_buffer_size(32768)
+    builder = builder.send_buffer_size(32768)
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+    let result = builder.bind(addr)
+    assert(result.is_ok(), "fully configured builder should bind")
+    0
+}
+
+// NOTE: UdpSocket timeout tests (set_read_timeout, set_write_timeout,
+// read_timeout, write_timeout) are BLOCKED by a codegen bug with
+// Maybe[Duration] — compiler generates Maybe__I32 instead of Maybe__Duration.

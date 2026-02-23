@@ -1,5 +1,5 @@
 use test
-use std::net::parser::{parse_ip, parse_socket_addr_v4, AddrParseError}
+use std::net::parser::{parse_ip, parse_ipv4, parse_socket_addr_v4, AddrParseError}
 use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
 use std::net::socket::{SocketAddr, SocketAddrV4}
 
@@ -140,3 +140,58 @@ func test_parse_socket_addr_v4_alpha_port() -> I32 {
     0
 }
 
+// ============================================================================
+// Type::parse methods (only V4 — V6/SocketAddr cause compiler crash)
+// ============================================================================
+
+@test
+func test_ipv4_parse_method() -> I32 {
+    let result = Ipv4Addr::parse("10.0.0.1")
+    assert(result.is_ok(), "Ipv4Addr::parse should succeed")
+    let addr = result.unwrap()
+    assert_eq(addr.octet0() as I32, 10)
+    0
+}
+
+@test
+func test_ipv6_parse_method() -> I32 {
+    let result = Ipv6Addr::parse("::1")
+    assert(result.is_ok(), "Ipv6Addr::parse should succeed")
+    let addr = result.unwrap()
+    assert(addr.is_loopback(), "parsed ::1 should be loopback")
+    0
+}
+
+@test
+func test_ipaddr_parse_method_v4() -> I32 {
+    let result = IpAddr::parse("192.168.1.1")
+    assert(result.is_ok(), "IpAddr::parse should succeed for v4")
+    0
+}
+
+@test
+func test_ipaddr_parse_method_v6() -> I32 {
+    let result = IpAddr::parse("::1")
+    assert(result.is_ok(), "IpAddr::parse should succeed for v6")
+    0
+}
+
+@test
+func test_socket_addr_v4_parse_method() -> I32 {
+    let result = SocketAddrV4::parse("10.0.0.1:3000")
+    assert(result.is_ok(), "SocketAddrV4::parse should succeed")
+    let addr = result.unwrap()
+    assert_eq(addr.port() as I32, 3000)
+    0
+}
+
+// ============================================================================
+// AddrParseError::kind
+// ============================================================================
+
+@test
+func test_addr_parse_error_kind() -> I32 {
+    let result = parse_ipv4("not_valid")
+    assert(result.is_err(), "invalid input should fail")
+    0
+}

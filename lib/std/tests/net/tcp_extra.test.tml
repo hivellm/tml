@@ -1,0 +1,146 @@
+// Tests for uncovered TcpListener and TcpStream functions
+use test::{assert, assert_eq}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::{TcpListener, TcpStream, TcpBuilder}
+use std::net::error::NetError
+use std::net::sys::ShutdownMode
+
+// ============================================================================
+// TcpListener: bind_with_backlog
+// ============================================================================
+
+@test
+func test_tcp_listener_bind_with_backlog() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let result = TcpListener::bind_with_backlog(addr, 64)
+    assert(result.is_ok(), "bind_with_backlog should succeed")
+    let listener: TcpListener = result.unwrap()
+    let local = listener.local_addr()
+    assert(local.is_ok(), "should have local addr")
+    let port: U16 = local.unwrap().port()
+    assert(port > 0 as U16, "should have assigned port")
+    0
+}
+
+// ============================================================================
+// TcpListener: set_reuse_addr
+// ============================================================================
+
+@test
+func test_tcp_listener_set_reuse_addr() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let r = listener.set_reuse_addr(true)
+    assert(r.is_ok(), "set_reuse_addr(true) should succeed")
+    let r2 = listener.set_reuse_addr(false)
+    assert(r2.is_ok(), "set_reuse_addr(false) should succeed")
+    0
+}
+
+// ============================================================================
+// TcpListener: into_raw_socket
+// ============================================================================
+
+@test
+func test_tcp_listener_into_raw_socket() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let raw = listener.into_raw_socket()
+    let close_r = raw.close()
+    assert(close_r.is_ok(), "close should succeed on valid socket")
+    0
+}
+
+// ============================================================================
+// TcpStream: flush (no-op for TCP)
+// ============================================================================
+
+@test
+func test_tcp_stream_flush() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept()
+    assert(accept_result.is_ok(), "accept should succeed")
+
+    let r = client.flush()
+    assert(r.is_ok(), "flush should succeed (no-op for TCP)")
+    0
+}
+
+// ============================================================================
+// TcpStream: shutdown
+// ============================================================================
+
+@test
+func test_tcp_stream_shutdown() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept()
+    assert(accept_result.is_ok(), "accept should succeed")
+
+    let r = client.shutdown(ShutdownMode::Write)
+    assert(r.is_ok(), "shutdown Write should succeed")
+    0
+}
+
+// ============================================================================
+// TcpStream: peek
+// ============================================================================
+
+@test
+func test_tcp_stream_peek() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept().unwrap()
+    let peer: TcpStream = accept_result.0
+
+    // Server writes data
+    let send_buf: [U8; 3] = [65, 66, 67]
+    let w = peer.write(ref send_buf)
+    assert(w.is_ok(), "server write should succeed")
+
+    // Client peeks — data stays in buffer
+    var peek_buf: [U8; 8] = [0 as U8; 8]
+    let p = client.peek(mut ref peek_buf)
+    assert(p.is_ok(), "peek should succeed")
+    let peeked: I64 = p.unwrap()
+    assert(peeked > 0 as I64, "should have peeked some data")
+
+    // Client reads — should still get the same data
+    var read_buf: [U8; 8] = [0 as U8; 8]
+    let r = client.read(mut ref read_buf)
+    assert(r.is_ok(), "read after peek should succeed")
+    let read_n: I64 = r.unwrap()
+    assert(read_n > 0 as I64, "should have read data after peek")
+    0
+}
+
+// ============================================================================
+// TcpStream: into_raw_socket
+// ============================================================================
+
+@test
+func test_tcp_stream_into_raw_socket() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept()
+    assert(accept_result.is_ok(), "accept should succeed")
+
+    let raw = client.into_raw_socket()
+    let close_r = raw.close()
+    assert(close_r.is_ok(), "close raw socket should succeed")
+    0
+}
+
+// NOTE: TcpStream timeout tests (set_read_timeout, set_write_timeout,
+// read_timeout, write_timeout) and connect_timeout are BLOCKED by a
+// codegen bug with Maybe[Duration] — the compiler generates Maybe__I32
+// instead of Maybe__Duration. Tracked as known issue.
