@@ -1,0 +1,42 @@
+// Test basic channel operations (create, empty/full checks, close)
+use test::*
+use std::runtime::channel::Channel
+
+@test
+func test_channel_create_destroy() {
+    // Create a channel and destroy it
+    var ch: Channel = Channel::new(16, 8)
+    assert(ch.is_empty())
+    assert(not ch.is_full())
+    ch.destroy()
+}
+
+@test
+func test_channel_close_empty() {
+    // Closing an empty channel should work
+    var ch: Channel = Channel::new(4, 8)
+    assert(ch.is_empty())
+    ch.close()
+    // After close, recv from empty channel should return -1
+    var recv_buf: I64 = 0
+    let rc: I32 = ch.try_recv(&recv_buf as *Unit)
+    assert(rc == -1)
+    ch.destroy()
+}
+
+@test
+func test_channel_send_recv() {
+    // Send a value and receive it back
+    var ch: Channel = Channel::new(4, 8)
+    var value: I64 = 42
+    let send_rc: I32 = ch.try_send(&value as *Unit)
+    assert(send_rc == 1)
+    assert(not ch.is_empty())
+
+    var recv_buf: I64 = 0
+    let recv_rc: I32 = ch.try_recv(&recv_buf as *Unit)
+    assert(recv_rc == 1)
+    assert(recv_buf == 42)
+    assert(ch.is_empty())
+    ch.destroy()
+}

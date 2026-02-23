@@ -127,9 +127,9 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "Text")
         return "%struct.Text";
     if (name == "Channel")
-        return "ptr";
+        return "%struct.Channel";
     if (name == "WaitGroup")
-        return "ptr";
+        return "%struct.WaitGroup";
     // Note: Mutex[T] is a generic struct now, not a runtime handle.
     // It will be handled via generic struct instantiation.
 
@@ -462,10 +462,13 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         }
         // Note: Buffer is now pure TML — goes through normal struct instantiation
         // List/HashMap are generic types that get instantiated - skip here
-        // Channel/WaitGroup are pure runtime handles (opaque pointers)
+        // Channel/WaitGroup are runtime handle wrappers (struct { ptr })
         // Note: Mutex[T] is now a generic struct, handled via require_struct_instantiation
-        if (named.name == "Channel" || named.name == "WaitGroup") {
-            return "ptr";
+        if (named.name == "Channel") {
+            return "%struct.Channel";
+        }
+        if (named.name == "WaitGroup") {
+            return "%struct.WaitGroup";
         }
 
         // If it has type arguments, need to use mangled name and ensure instantiation
