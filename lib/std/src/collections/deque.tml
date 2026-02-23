@@ -73,7 +73,7 @@ impl[T] Deque[T] {
     }
 
     /// Destroys the deque and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 

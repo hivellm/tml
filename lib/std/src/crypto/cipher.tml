@@ -880,18 +880,18 @@ pub func xchacha20_poly1305_decrypt(
 pub func encrypt_string(key: ref Buffer, plaintext: Str) -> Outcome[Str, CryptoError] {
     // Generate random IV
     let iv_handle: *Unit = ffi_crypto_random_bytes(12)
-    let iv: Buffer = Buffer { handle: iv_handle }
+    var iv: Buffer = Buffer { handle: iv_handle }
 
     // Encrypt with AES-GCM
     let plaintext_buf_handle: *Unit = ffi_crypto_str_to_bytes(plaintext)
-    let plaintext_buf: Buffer = Buffer { handle: plaintext_buf_handle }
+    var plaintext_buf: Buffer = Buffer { handle: plaintext_buf_handle }
 
-    let aad: Buffer = Buffer::new(0)
-    let (ct, tag): (Buffer, AuthTag) = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)!
+    var aad: Buffer = Buffer::new(0)
+    var (ct, tag): (Buffer, AuthTag) = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)!
 
     // Combine IV + ciphertext + tag
     let result_handle: *Unit = ffi_crypto_concat_buffers3(iv.handle, ct.handle, tag.data.handle)
-    let result: Buffer = Buffer { handle: result_handle }
+    var result: Buffer = Buffer { handle: result_handle }
 
     // Return base64
     let b64: Str = ffi_crypto_bytes_to_base64(result.handle)
@@ -911,7 +911,7 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     if data_handle == null {
         return Err(CryptoError::invalid_parameter("invalid base64"))
     }
-    let data: Buffer = Buffer { handle: data_handle }
+    var data: Buffer = Buffer { handle: data_handle }
 
     // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
     let data_len: I64 = ffi_buffer_len(data.handle)
@@ -920,17 +920,17 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     }
 
     let iv_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 0, 12)
-    let iv: Buffer = Buffer { handle: iv_handle }
+    var iv: Buffer = Buffer { handle: iv_handle }
 
     let ciphertext_len: I64 = data_len - 28
     let ciphertext_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 12, ciphertext_len)
-    let ciphertext: Buffer = Buffer { handle: ciphertext_handle }
+    var ciphertext: Buffer = Buffer { handle: ciphertext_handle }
 
     let tag_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 12 + ciphertext_len, 16)
     let tag: AuthTag = AuthTag { data: Buffer { handle: tag_handle } }
 
-    let aad: Buffer = Buffer::new(0)
-    let plaintext: Buffer = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)!
+    var aad: Buffer = Buffer::new(0)
+    var plaintext: Buffer = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)!
 
     let result: Str = ffi_crypto_bytes_to_str(plaintext.handle)
 

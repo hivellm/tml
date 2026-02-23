@@ -306,7 +306,7 @@ use std::collections::{HashMap, HashMapIter}
 impl[V: ToJson] ToJson for HashMap[I64, V] {
     func to_json(this) -> Json {
         let b: Builder = object()
-        let iter: HashMapIter = this.iter()
+        var iter: HashMapIter = this.iter()
         loop (iter.has_next()) {
             let key: I64 = iter.key()
             let value: V = iter.value()

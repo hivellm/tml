@@ -101,7 +101,7 @@ func random_node() -> I64 {
 /// Used by both v3 (MD5) and v5 (SHA-1).
 func name_based_uuid(ns: Uuid, name: Str, algorithm: HashAlgorithm, version: I32) -> Uuid {
     // Step 1: Convert namespace UUID to 16 bytes (big-endian)
-    let ns_buf: Buffer = uuid_to_buffer(ns)
+    var ns_buf: Buffer = uuid_to_buffer(ns)
 
     // Step 2: Hash namespace bytes + name string
     var hasher: Hash = Hash::create(algorithm)

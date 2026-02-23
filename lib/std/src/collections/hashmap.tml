@@ -380,7 +380,11 @@ impl[K, V] HashMap[K, V] {
     }
 
     /// Destroys the hashmap and frees all associated memory.
-    pub func destroy(this) {
+    /// Safe to call multiple times — subsequent calls are no-ops.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
         let hdr: I64 = this.handle as I64
 
         // Free entries array
@@ -391,6 +395,7 @@ impl[K, V] HashMap[K, V] {
 
         // Free header
         lowlevel { mem_free(this.handle) }
+        this.handle = 0 as *Unit
     }
 
     /// Creates an iterator over the hashmap entries.
@@ -565,25 +570,24 @@ impl[K, V] HashMapIter[K, V] {
     }
 
     /// Destroys the iterator and frees all associated memory.
-    pub func destroy(this) {
+    /// Safe to call multiple times — subsequent calls are no-ops.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
         lowlevel { mem_free(this.handle) }
+        this.handle = 0 as *Unit
     }
 }
 
 impl[K, V] Drop for HashMap[K, V] {
     func drop(mut this) {
-        if this.handle != (0 as *Unit) {
-            this.destroy()
-            this.handle = 0 as *Unit
-        }
+        this.destroy()
     }
 }
 
 impl[K, V] Drop for HashMapIter[K, V] {
     func drop(mut this) {
-        if this.handle != (0 as *Unit) {
-            this.destroy()
-            this.handle = 0 as *Unit
-        }
+        this.destroy()
     }
 }

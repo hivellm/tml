@@ -220,7 +220,11 @@ impl[T] List[T] {
     }
 
     /// Destroys the list and frees all associated memory.
-    pub func destroy(this) {
+    /// Safe to call multiple times — subsequent calls are no-ops.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
         let hdr: I64 = this.handle as I64
 
         // Free data buffer
@@ -231,14 +235,12 @@ impl[T] List[T] {
 
         // Free header
         lowlevel { mem_free(this.handle) }
+        this.handle = 0 as *Unit
     }
 }
 
 impl[T] Drop for List[T] {
     func drop(mut this) {
-        if this.handle != (0 as *Unit) {
-            this.destroy()
-            this.handle = 0 as *Unit
-        }
+        this.destroy()
     }
 }

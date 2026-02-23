@@ -107,7 +107,7 @@ impl Captures {
     }
 
     /// Free all internal allocations.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this._starts.destroy()
         this._ends.destroy()
     }
@@ -166,7 +166,7 @@ impl Regex {
         let slen: I64 = s.len()
         var sp: I64 = 0
         loop (sp <= slen) {
-            let cap: Captures = nfa_exec_captures(ref this, s, slen, sp, ng)
+            var cap: Captures = nfa_exec_captures(ref this, s, slen, sp, ng)
             if cap._matched { return cap }
             cap.destroy()
             sp = sp + 1
@@ -232,7 +232,7 @@ impl Regex {
     }
 
     /// Free all internal allocations.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this._kinds.destroy()
         this._chars.destroy()
         this._next1.destroy()

@@ -380,7 +380,7 @@ impl[K, V] Default for HashMap[K, V] {
 impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
     pub func duplicate(this) -> HashMap[K, V] {
         let result: HashMap[K, V] = HashMap::new(this.len() * 2)
-        let iter = this.iter()
+        var iter = this.iter()
         loop (iter.has_next()) {
             result.set(iter.key().duplicate(), iter.value().duplicate())
             iter.next()
@@ -398,7 +398,7 @@ impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
 impl[K: Display, V: Display] Display for HashMap[K, V] {
     pub func to_string(this) -> Str {
         let mut result: Str = "{"
-        let iter = this.iter()
+        var iter = this.iter()
         let mut first: Bool = true
         loop (iter.has_next()) {
             if not first {
@@ -417,7 +417,7 @@ impl[K: Display, V: Display] Display for HashMap[K, V] {
 impl[K: Debug, V: Debug] Debug for HashMap[K, V] {
     pub func debug_string(this) -> Str {
         let mut result: Str = "HashMap{"
-        let iter = this.iter()
+        var iter = this.iter()
         let mut first: Bool = true
         loop (iter.has_next()) {
             if not first {

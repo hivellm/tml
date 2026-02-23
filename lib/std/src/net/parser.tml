@@ -42,7 +42,7 @@ pub func parse_ipv4(s: Str) -> Outcome[Ipv4Addr, AddrParseError] {
         return Err(AddrParseError::new(Empty))
     }
 
-    let parts: List[Str] = str::split(s, ".")
+    var parts: List[Str] = str::split(s, ".")
     if parts.len() != 4 {
         parts.destroy()
         return Err(AddrParseError::new(InvalidIpv4))
@@ -109,7 +109,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
     let has_double_colon: Bool = str::contains(s, "::")
 
     if has_double_colon {
-        let parts: List[Str] = str::split(s, "::")
+        var parts: List[Str] = str::split(s, "::")
         if parts.len() > 2 {
             // Multiple :: not allowed
             parts.destroy()
@@ -117,10 +117,10 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         }
 
         let left_str: Str = parts.get(0)
-        let left: List[Str] = if str::is_empty(left_str) { List[Str]::new(0) } else { str::split(left_str, ":") }
+        var left: List[Str] = if str::is_empty(left_str) { List[Str]::new(0) } else { str::split(left_str, ":") }
 
         let right_str: Str = if parts.len() < 2 { "" } else { parts.get(1) }
-        let right: List[Str] = if str::is_empty(right_str) { List[Str]::new(0) } else { str::split(right_str, ":") }
+        var right: List[Str] = if str::is_empty(right_str) { List[Str]::new(0) } else { str::split(right_str, ":") }
 
         let total: I64 = left.len() + right.len()
         if total > 8 {
@@ -172,7 +172,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         ))
     } else {
         // No compression - must have exactly 8 parts
-        let parts: List[Str] = str::split(s, ":")
+        var parts: List[Str] = str::split(s, ":")
         if parts.len() != 8 {
             parts.destroy()
             return Err(AddrParseError::new(InvalidIpv6))

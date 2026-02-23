@@ -89,7 +89,7 @@ impl[T] ArrayList[T] {
     }
 
     /// Destroys the list and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 
@@ -256,7 +256,7 @@ impl[T] HashSet[T] {
     }
 
     /// Destroys the set and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 }
@@ -384,7 +384,7 @@ impl[T] Queue[T] {
     }
 
     /// Destroys the queue and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 
@@ -559,7 +559,7 @@ impl[T] Stack[T] {
     }
 
     /// Destroys the stack and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 
@@ -699,7 +699,7 @@ impl[T] LinkedList[T] {
     }
 
     /// Destroys the list and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.nodes.destroy()
     }
 
@@ -954,7 +954,7 @@ impl[T] Vec[T] {
     }
 
     /// Destroys the Vec and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.data.destroy()
     }
 }

@@ -328,11 +328,16 @@ impl Buffer {
     }
 
     /// Destroys the buffer and frees all associated memory.
-    pub func destroy(this) {
+    /// Safe to call multiple times — subsequent calls are no-ops.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
         let h: I64 = this.handle as I64
         let data: *Unit = buf_get_data(h)
         buf_mem_free(data)
         buf_mem_free(this.handle)
+        this.handle = 0 as *Unit
     }
 
     // ========================================================================
@@ -993,9 +998,6 @@ impl Buffer {
 
 impl Drop for Buffer {
     func drop(mut this) {
-        if this.handle != (0 as *Unit) {
-            this.destroy()
-            this.handle = 0 as *Unit
-        }
+        this.destroy()
     }
 }

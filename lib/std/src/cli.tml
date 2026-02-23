@@ -234,7 +234,7 @@ impl Matches {
     }
 
     /// Clean up resources.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.values.destroy()
         this.positionals.destroy()
     }

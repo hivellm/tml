@@ -103,7 +103,7 @@ impl BTreeMap {
     }
 
     /// Destroys the map and frees all associated memory.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.keys.destroy()
         this.values.destroy()
     }

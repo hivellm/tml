@@ -256,7 +256,7 @@ impl MockContext {
     }
 
     /// Clean up resources.
-    pub func destroy(this) {
+    pub func destroy(mut this) {
         this.expectations.destroy()
         this.calls.destroy()
     }
