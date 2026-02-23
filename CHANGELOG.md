@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Async Runtime** (2026-02-23) — Real executor, timer, yield, and channel for cooperative multitasking
+  - `compiler/runtime/concurrency/async.c` (710 lines) — C runtime with executor loop, waker mechanism, task queue, timer (GetTickCount64/clock_gettime), yield_now, bounded SPSC channel, poll utilities
+  - `lib/std/src/runtime/` — TML wrapper module: `Executor`, `TimerState`/`PollResult`, `YieldState`, `Channel`
+  - FFI-safe `_ptr` variants for struct-returning C functions (Windows x64 MSVC ABI: structs >8 bytes use hidden sret pointer)
+  - 12 tests across 5 files: executor lifecycle, timer polling (zero/nonzero/busy-loop), yield state machine, channel send/recv/close
+  - Runtime catalog entries in `runtime.cpp` for 20+ async FFI functions
+  - Preserves existing synchronous `block_on()` — new `Executor::run()` provides real poll-loop execution
+
+- **Drop/RAII Tests for Buffer** (2026-02-23) — 5 new test files covering destroy idempotency, RAII scope cleanup, and tail expression ownership transfer
+
 - **Windows Certificate Store Integration for TLS** (2026-02-23) - Load CA certificates from Windows system store (wincrypt) into OpenSSL
   - `load_windows_cert_store()` in `compiler/runtime/net/tls.c` uses `CertOpenSystemStoreA("ROOT")` + `CertEnumCertificatesInStore` + `d2i_X509`
   - Fixes `SSL_VERIFY_PEER` mode on Windows where `SSL_CTX_set_default_verify_paths()` fails (no cert bundle at OPENSSLDIR)
@@ -36,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New skills: `/test-suite`, `/list-suites`, `/verify`
 
 ### Fixed
+- **Channel/WaitGroup codegen: struct type mapped to opaque ptr** (2026-02-23) — `llvm_type_name()` and `llvm_type_from_semantic()` in `types.cpp` hardcoded `Channel`/`WaitGroup` to bare `"ptr"` instead of `"%struct.Channel"`, causing invalid `getelementptr ptr, ptr` IR when accessing struct fields. Now maps to proper struct types.
+
+- **Double-free in tail expressions and impl method drop scopes** (2026-02-23) — Tail expressions (implicit return at end of function body) now mark returned variables as consumed and flush Str temps before dropping, matching explicit `return` behavior. Impl method bodies now have proper `push/pop_drop_scope` for RAII cleanup of local variables.
+
+- **Idempotent `destroy()` across all collection types** (2026-02-23) — Buffer, HashMap, HashMapIter, List, BTreeMap, BTreeSet, Deque, ArrayList, and CLI Matches now guard `destroy()` with null-check and null handle after free, preventing double-free when Drop calls destroy on an already-destroyed instance. Changed `let`→`var` for owned resources needing Drop in cipher, parser, regex, uuid, and mock modules.
+
 - **`@tml_Str_len` undefined in suite mode** (2026-02-19) - Root cause: `method_primitive_ext.cpp` was adding method names to `generated_functions_` during call dispatch, causing `gen_impl_method()` to skip the actual definition in `library_ir_only` mode (shared library compilation). The fix removes the premature `generated_functions_.insert()` from the dispatch path — definitions are only registered by `gen_impl_method()` after the actual `define` is emitted.
 
 ### Changed
