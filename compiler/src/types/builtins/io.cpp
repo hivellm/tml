@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin I/O Functions
 //!
 //! This file registers basic I/O and assertion functions.

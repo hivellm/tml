@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Return/Throw Control Flow
 //!
 //! This file implements return and throw expression code generation.

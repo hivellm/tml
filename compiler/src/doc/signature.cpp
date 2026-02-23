@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Signature Generation Implementation
 //!
 //! This file implements the generation of human-readable signatures

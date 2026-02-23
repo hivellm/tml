@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builder Pattern Optimization Pass Implementation
 //!
 //! Detects and optimizes method chaining patterns for OOP performance.

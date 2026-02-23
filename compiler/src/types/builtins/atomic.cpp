@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Atomic Functions
 //!
 //! This file registers atomic operations for thread-safe programming.

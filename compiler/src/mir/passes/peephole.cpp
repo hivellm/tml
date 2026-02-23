@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Peephole Optimization Pass
 //!
 //! Local pattern-based instruction simplifications.

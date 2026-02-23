@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(Serialize) Implementation
 //!
 //! This file implements the `@derive(Serialize)` derive macro.

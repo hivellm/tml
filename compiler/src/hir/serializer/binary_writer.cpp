@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Binary Writer
 //!
 //! Serializes HIR modules to a compact binary format optimized for fast I/O

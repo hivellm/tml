@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # General Error Explanations
 //!
 //! Error codes E001-E006 for general compiler errors.

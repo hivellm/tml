@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Method Call Expressions
 //!
 //! This file implements type checking for method calls (receiver.method(args)).

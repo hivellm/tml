@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Binary Reader
 //!
 //! This file reads MIR modules from the binary format.

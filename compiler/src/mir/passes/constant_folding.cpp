@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Constant Folding Optimization Pass
 //!
 //! This pass evaluates constant expressions at compile time.

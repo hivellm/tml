@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Loop Invariant Code Motion (LICM) Pass
 //!
 //! Moves loop-invariant computations out of loops.

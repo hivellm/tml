@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # HTML Documentation Generator Implementation
 //!
 //! This file implements the HtmlGenerator class for producing HTML documentation

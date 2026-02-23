@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 #include "codegen/llvm/llvm_codegen_backend.hpp"
 
 #include "backend/llvm_backend.hpp"

@@ -1,0 +1,168 @@
+// Plugin Pack Tool
+//
+// Compresses plugin DLLs with zstd and generates a manifest.json
+// with SHA256 hashes for integrity verification.
+//
+// Usage: tml run tools/plugin_pack.tml -- <plugins_dir> [output_dir]
+//
+// If output_dir is omitted, compressed files are written next to originals.
+
+use std::file::{File, Path}
+use std::collections::{List, Buffer}
+use std::crypto::hash::sha256
+use std::zlib::zstd::zstd_compress_buffer
+use std::json::builder
+use std::os::{args_count, args_get}
+
+func format_size(bytes: I64) -> Str {
+    if bytes < 1024 {
+        return "{bytes} B"
+    }
+    let kb: I64 = bytes / 1024
+    if kb < 1024 {
+        return "{kb} KB"
+    }
+    let mb: I64 = kb / 1024
+    return "{mb} MB"
+}
+
+func main() -> I32 {
+    let argc: I32 = args_count()
+
+    if argc < 2 {
+        print("Usage: tml run tools/plugin_pack.tml -- <plugins_dir> [output_dir]\n")
+        print("\nCompresses plugin DLLs with zstd and generates manifest.json.\n")
+        return 1
+    }
+
+    let plugins_dir: Str = args_get(1)
+    let output_dir: Str = if argc >= 3 { args_get(2) } else { plugins_dir }
+
+    if not Path.exists(plugins_dir) {
+        print("error: plugins directory not found: {plugins_dir}\n")
+        return 1
+    }
+
+    if output_dir != plugins_dir {
+        Path.create_dir_all(output_dir)
+    }
+
+    print("Plugin Pack Tool\n")
+    print("  Source:  {plugins_dir}\n")
+    print("  Output:  {output_dir}\n\n")
+
+    #if WINDOWS
+    let dll_ext: Str = ".dll"
+    #else
+    let dll_ext: Str = ".so"
+    #endif
+
+    // Known plugin names
+    let mut names: List[Str] = List[Str]::new(5)
+    names.push("tml_compiler")
+    names.push("tml_codegen_x86")
+    names.push("tml_tools")
+    names.push("tml_test")
+    names.push("tml_mcp")
+
+    // Build manifest JSON
+    let b = builder::pretty_object()
+    b.kn("abi_version", 1i64)
+    b.ks("packed_by", "plugin_pack.tml")
+    b.k("plugins")
+    b.arr()
+
+    var total_original: I64 = 0
+    var total_compressed: I64 = 0
+    var packed_count: I32 = 0
+    var idx: I64 = 0
+
+    loop (idx < names.len()) {
+        let name: Str = names.get(idx)
+        idx = idx + 1
+
+        let dll_path: Str = Path.join(plugins_dir, "{name}{dll_ext}")
+        if not Path.exists(dll_path) {
+            continue
+        }
+
+        let zst_path: Str = Path.join(output_dir, "{name}{dll_ext}.zst")
+        print("  Packing {name}{dll_ext}...")
+
+        // Read the DLL content
+        let content: Str = File.read_all(dll_path)
+        if content.len() == 0 and not Path.exists(dll_path) {
+            print(" FAILED (read error)\n")
+            continue
+        }
+
+        // Compute SHA256 of original
+        var digest = sha256(content)
+        let hash_hex: Str = digest.to_hex()
+        digest.destroy()
+
+        // Convert to buffer and compress
+        var buf: Buffer = Buffer.from_string(content)
+        let original_size: I64 = buf.len()
+
+        let result = zstd_compress_buffer(ref buf)
+        buf.destroy()
+
+        if result.is_err() {
+            print(" FAILED (compression error)\n")
+            continue
+        }
+
+        var compressed: Buffer = result.unwrap()
+        let compressed_size: I64 = compressed.len()
+
+        // Write compressed file
+        let compressed_str: Str = compressed.to_string()
+        compressed.destroy()
+
+        let ok: Bool = File.write_all(zst_path, compressed_str)
+        if not ok {
+            print(" FAILED (write error)\n")
+            continue
+        }
+
+        let ratio: I64 = if original_size > 0 { (compressed_size * 100) / original_size } else { 0 }
+        print(" {format_size(original_size)} -> {format_size(compressed_size)} ({ratio}%)\n")
+
+        // Add to manifest
+        b.obj()
+        b.ks("name", name)
+        b.ks("file", "{name}{dll_ext}.zst")
+        b.kn("original_size", original_size)
+        b.kn("compressed_size", compressed_size)
+        b.ks("sha256", hash_hex)
+        b.end_obj()
+
+        total_original = total_original + original_size
+        total_compressed = total_compressed + compressed_size
+        packed_count = packed_count + 1
+    }
+
+    b.end_arr()
+    b.kn("total_original", total_original)
+    b.kn("total_compressed", total_compressed)
+    b.end_obj()
+
+    let manifest: Str = b.build()
+    b.drop()
+
+    // Write manifest
+    let manifest_path: Str = Path.join(output_dir, "manifest.json")
+    let ok: Bool = File.write_all(manifest_path, manifest)
+    if not ok {
+        print("\nerror: could not write manifest.json\n")
+        return 1
+    }
+
+    print("\nPacked {packed_count} plugins\n")
+    let total_ratio: I64 = if total_original > 0 { (total_compressed * 100) / total_original } else { 0 }
+    print("Total: {format_size(total_original)} -> {format_size(total_compressed)} ({total_ratio}%)\n")
+    print("Manifest: {manifest_path}\n")
+
+    return 0
+}

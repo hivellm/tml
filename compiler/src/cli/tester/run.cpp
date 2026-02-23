@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Runner Implementation
 //!
 //! This file contains the main `run_test()` function that orchestrates
@@ -681,6 +683,11 @@ int run_test(int argc, char* argv[], bool verbose) {
         // Print profiling stats if enabled
         if (opts.profile && collector.profile_stats.total_tests > 0) {
             print_profile_stats(collector.profile_stats, opts);
+        }
+
+        // Print leak summary table
+        if (opts.check_leaks) {
+            print_leak_stats(collector.leak_stats, opts);
         }
 
         // Print TML runtime coverage summary

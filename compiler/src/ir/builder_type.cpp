@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Type Conversion
 //!
 //! This file converts AST type annotations to IR form.

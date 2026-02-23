@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Style Linting
 //!
 //! This file implements text-based style linting for TML source files.

@@ -179,6 +179,43 @@ void tml_mem_set_output(void* fp);
  */
 TML_MEM_EXPORT void tml_mem_track_set_test_context(const char* test_name, const char* test_file);
 
+/**
+ * @brief Returns the current number of unfreed allocations (leak count).
+ *
+ * Non-destructive query — does not print or modify state.
+ * Exported so the test runner can query leak counts per suite via GetProcAddress.
+ *
+ * @return Number of currently unfreed allocations.
+ */
+TML_MEM_EXPORT int32_t tml_mem_get_leak_count(void);
+
+/**
+ * @brief Returns the total bytes of unfreed allocations.
+ *
+ * Non-destructive query — does not print or modify state.
+ * Exported so the test runner can query leak bytes per suite via GetProcAddress.
+ *
+ * @return Total bytes currently leaked.
+ */
+TML_MEM_EXPORT int64_t tml_mem_get_leak_bytes(void);
+
+/**
+ * @brief Fills per-file leak summary into caller-provided arrays.
+ *
+ * Scans all unfreed allocations and groups them by test_file.
+ * The caller provides arrays of size `max_entries`. Returns the number
+ * of distinct files with leaks (may exceed max_entries).
+ *
+ * @param files      Array of char pointers (filled with internal pointers, valid until next
+ * alloc/free).
+ * @param counts     Array of leak counts per file.
+ * @param bytes      Array of leak bytes per file.
+ * @param max_entries Maximum number of entries to write.
+ * @return Number of distinct files with leaks (total, even if > max_entries).
+ */
+TML_MEM_EXPORT int32_t tml_mem_get_leak_files(const char** files, int32_t* counts, int64_t* bytes,
+                                              int32_t max_entries);
+
 // ============================================================================
 // Tagged Allocation Macros
 // ============================================================================

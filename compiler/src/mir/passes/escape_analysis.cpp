@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Escape Analysis Pass
 //!
 //! This pass determines which allocations can be stack-promoted.

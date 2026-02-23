@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Formatted Print
 //!
 //! This file implements format string printing.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Behavior Implementations
 //!
 //! Defines which primitive and builtin types implement which behaviors

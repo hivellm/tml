@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MCP Command
 //!
 //! Implements the `tml mcp` command to start the MCP server.

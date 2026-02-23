@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Control Flow
 //!
 //! This file implements control flow to MIR conversion.

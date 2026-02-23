@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Semantic Linting
 //!
 //! This file implements AST-based semantic linting for TML source files.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Mem2Reg Pass (Memory to Register Promotion)
 //!
 //! Promotes stack allocations to SSA registers.

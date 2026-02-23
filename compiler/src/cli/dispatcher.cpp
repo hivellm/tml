@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # CLI Command Dispatcher
 //!
 //! This file implements the main entry point for the TML compiler CLI.

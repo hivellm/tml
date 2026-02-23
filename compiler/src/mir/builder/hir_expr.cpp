@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Expression Lowering to MIR — Core Expressions
 //!
 //! This file implements expression lowering from HIR to MIR SSA form.

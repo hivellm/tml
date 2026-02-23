@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Package Management Commands
 //!
 //! This file implements package management CLI commands.

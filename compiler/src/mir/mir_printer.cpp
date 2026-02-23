@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Pretty Printer
 //!
 //! This file implements human-readable MIR output for debugging.

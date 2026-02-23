@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser Error Explanations
 //!
 //! Error codes P001-P065 for syntax/parsing errors.

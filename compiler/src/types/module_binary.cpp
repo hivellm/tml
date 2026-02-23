@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Binary Module Metadata Serialization — Implementation
 //!
 //! Compact binary serialization of Module structs following the

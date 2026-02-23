@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # SIMD Vectorization Pass - Implementation
 //!
 //! Implements loop vectorization, SLP vectorization, and reduction handling.

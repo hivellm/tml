@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Binary Operator Evaluation
 //!
 //! This file implements operand evaluation, type coercion, and operator codegen

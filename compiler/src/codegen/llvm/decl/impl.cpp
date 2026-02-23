@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Impl Method Declarations
 //!
 //! This file implements impl method declaration and instantiation code generation.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Types
 //!
 //! This file registers primitive types, core enums, and behavior implementations.

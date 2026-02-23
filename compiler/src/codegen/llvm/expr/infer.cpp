@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Type Inference
 //!
 //! This file implements expression type inference for codegen.

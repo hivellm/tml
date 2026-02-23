@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Closures
 //!
 //! This file implements closure expression code generation.

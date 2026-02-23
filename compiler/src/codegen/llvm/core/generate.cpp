@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Main Entry Point
 //!
 //! This file implements the main `generate()` code generation entry point.

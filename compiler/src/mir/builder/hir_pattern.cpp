@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Pattern Lowering to MIR
 //!
 //! This file implements pattern matching and binding from HIR to MIR.

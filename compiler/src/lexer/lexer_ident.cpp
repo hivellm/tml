@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Identifiers
 //!
 //! This file implements identifier and keyword lexing.

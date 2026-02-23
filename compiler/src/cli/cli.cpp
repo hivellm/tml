@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # CLI Module Placeholder
 //!
 //! This file serves as a placeholder for the CLI module namespace. The actual

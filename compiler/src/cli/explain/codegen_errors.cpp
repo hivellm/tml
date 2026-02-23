@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Codegen Error Explanations
 //!
 //! Error codes C001-C035 for code generation errors.

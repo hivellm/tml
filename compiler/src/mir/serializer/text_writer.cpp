@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Text Writer
 //!
 //! This file writes MIR modules to human-readable text format.

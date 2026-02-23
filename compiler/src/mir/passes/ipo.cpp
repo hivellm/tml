@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Interprocedural Optimization (IPO) Pass - Implementation
 
 #include "mir/passes/ipo.hpp"

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Core Utilities
 //!
 //! This file implements fundamental codegen utilities.

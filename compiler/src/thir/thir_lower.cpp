@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR -> THIR Lowering Implementation
 //!
 //! Transforms HIR to THIR with explicit coercions, resolved dispatch, and

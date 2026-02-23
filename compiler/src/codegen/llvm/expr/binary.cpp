@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Binary Expressions
 //!
 //! This file implements binary operator code generation.

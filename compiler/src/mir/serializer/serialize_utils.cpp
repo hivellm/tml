@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Serialization Utilities
 //!
 //! Convenience functions for serializing/deserializing MIR modules.

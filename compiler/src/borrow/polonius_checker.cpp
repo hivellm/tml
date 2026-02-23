@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Polonius Borrow Checker Entry Point
 //!
 //! Provides `PoloniusChecker`, a drop-in alternative to `BorrowChecker` that

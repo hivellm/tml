@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Expression Formatting
 //!
 //! This file implements formatting for all expression types.

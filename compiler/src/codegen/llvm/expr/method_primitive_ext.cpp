@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Primitive Type Methods (Part 2)
 //!
 //! This file is the continuation of method_primitive.cpp, implementing:

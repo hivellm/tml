@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen - Method Call Instruction
 //!
 //! This file handles the emit_method_call_inst method for the MIR-based

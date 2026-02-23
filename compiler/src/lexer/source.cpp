@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Source File Implementation
 //!
 //! This file implements source file loading and location tracking.

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Benchmark Framework
 //!
 //! This file implements the benchmark runner for `tml test --bench`.

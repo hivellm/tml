@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 #include "query/query_context.hpp"
 
 #include "log/log.hpp"

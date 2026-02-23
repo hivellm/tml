@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Module Index
 //!
 //! This file documents the structure of the LLVM IR code generator.

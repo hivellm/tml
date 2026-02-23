@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Builder - Expression Lowering
 //!
 //! This file implements expression lowering from AST to HIR.

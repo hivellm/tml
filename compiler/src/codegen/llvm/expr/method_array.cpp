@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Array Methods
 //!
 //! This file implements methods for fixed-size array types `[T; N]`.

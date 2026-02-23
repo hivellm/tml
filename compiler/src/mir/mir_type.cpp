@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Type Implementation
 //!
 //! This file implements MIR type queries and constructors.

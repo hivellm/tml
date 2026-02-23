@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Async Builtins
 //!
 //! This file implements async runtime intrinsics.

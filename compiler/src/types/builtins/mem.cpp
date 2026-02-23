@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Memory Functions
 //!
 //! This file registers low-level memory management intrinsics.

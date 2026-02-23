@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Code Formatting Command
 //!
 //! This file implements the `tml fmt` command for formatting source files.

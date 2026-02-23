@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Types
 //!
 //! This file implements type expression parsing.

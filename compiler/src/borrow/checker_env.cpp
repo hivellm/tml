@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Checker Environment Implementation
 //!
 //! This file implements `BorrowEnv`, the environment that tracks the state of all

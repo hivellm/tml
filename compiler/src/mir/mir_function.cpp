@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Function Implementation
 //!
 //! This file implements MIR function-level operations.

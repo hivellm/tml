@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Statements
 //!
 //! This file converts AST statements and declarations to MIR.

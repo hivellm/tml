@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON Schema Validation Implementation
 //!
 //! This module implements basic JSON schema validation.

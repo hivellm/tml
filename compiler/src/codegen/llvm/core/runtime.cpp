@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Runtime Declarations
 //!
 //! This file emits the target header and runtime type/function declarations.

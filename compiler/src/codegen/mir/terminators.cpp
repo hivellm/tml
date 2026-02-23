@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen Terminator Emission
 //!
 //! This file contains terminator emission for the MIR-based code generator:

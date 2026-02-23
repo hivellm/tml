@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Control Flow Graph Simplification Pass
 //!
 //! Simplifies CFG by merging blocks, removing empty jumps, and

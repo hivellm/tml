@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Execution Engine
 //!
 //! This file implements test compilation and execution for `tml test`.

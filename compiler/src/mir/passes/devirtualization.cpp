@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Devirtualization Pass Implementation
 //!
 //! Converts virtual method calls to direct calls when possible.

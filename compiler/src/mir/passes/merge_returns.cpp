@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MergeReturns Pass
 //!
 //! Combines multiple return statements into a single exit block.

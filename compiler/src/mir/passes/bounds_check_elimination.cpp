@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Bounds Check Elimination Pass - Implementation
 //!
 //! This pass eliminates redundant bounds checks through value range analysis

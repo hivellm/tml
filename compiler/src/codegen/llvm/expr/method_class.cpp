@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Class Instance Method Calls
 //!
 //! This file handles method calls on class instances.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Constant Folding and Dead Code Elimination
 //!
 //! Implements constant folding and dead code elimination passes for HIR.

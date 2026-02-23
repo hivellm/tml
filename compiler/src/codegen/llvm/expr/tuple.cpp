@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Tuples
 //!
 //! This file implements tuple expression code generation.

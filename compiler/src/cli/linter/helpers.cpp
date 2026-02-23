@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Lint Helper Functions
 //!
 //! This file contains shared constants and utilities for the linter.

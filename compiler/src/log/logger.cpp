@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Logger Implementation
 //!
 //! Implements the Logger singleton, ConsoleSink, FileSink, and LogFilter.

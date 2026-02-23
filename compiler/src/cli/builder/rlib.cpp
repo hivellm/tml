@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # RLIB Library Format
 //!
 //! This file implements creation and reading of TML library files (.rlib).

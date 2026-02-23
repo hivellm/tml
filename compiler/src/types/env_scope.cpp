@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Scopes
 //!
 //! This file implements the Scope class for variable tracking.

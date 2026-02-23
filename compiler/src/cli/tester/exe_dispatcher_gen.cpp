@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # EXE Test Dispatcher IR Generator
 //!
 //! Generates LLVM IR for a dispatcher main() function that supports:

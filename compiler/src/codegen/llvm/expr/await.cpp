@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Await Expression
 //!
 //! This file implements the `await` expression for async functions.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # AST Factory Functions
 //!
 //! This file provides factory functions for creating AST nodes.

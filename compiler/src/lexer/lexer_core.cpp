@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer Core
 //!
 //! This file implements core lexer functionality including:

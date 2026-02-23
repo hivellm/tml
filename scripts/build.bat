@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: TML Compiler Build Script for Windows
-:: Usage: scripts\build.bat [debug|release] [--clean] [--tests] [--bump-minor] [--bump-major]
+:: Usage: scripts\build.bat [debug|release] [--clean] [--tests] [--pack] [--bump-minor] [--bump-major]
 
 :: Get the root directory (parent of scripts\)
 set "SCRIPT_DIR=%~dp0"
@@ -25,6 +25,8 @@ set "ENABLE_CRANELIFT_BACKEND=OFF"
 set "BUILD_TARGET="
 set "BUMP_MAJOR=0"
 set "BUMP_MINOR=0"
+set "ENABLE_MODULAR=OFF"
+set "ENABLE_PACK=0"
 
 :: Parse arguments
 :parse_args
@@ -39,6 +41,8 @@ if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
+if /i "%~1"=="--modular" set "ENABLE_MODULAR=ON" & shift & goto :parse_args
+if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
@@ -66,6 +70,8 @@ echo   --asan         Enable AddressSanitizer (memory error detection)
 echo   --ubsan        Enable UndefinedBehaviorSanitizer
 echo   --sanitize     Enable both ASan and UBSan
 echo   --cranelift    Enable Cranelift backend (fast debug builds)
+echo   --modular      Build modular plugins (DLLs) instead of monolithic exe
+echo   --pack         Pack plugins (compress DLLs + manifest); requires --modular
 echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
 echo   --help         Show this help message
 echo.
@@ -141,6 +147,8 @@ echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
 echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
+if "%ENABLE_MODULAR%"=="ON" echo Modular:     Enabled
+if "%ENABLE_PACK%"=="1" echo Pack:        Enabled
 if "%ENABLE_CRANELIFT_BACKEND%"=="ON" echo Cranelift:   Enabled
 if "%ENABLE_ASAN%"=="ON" echo ASan:        Enabled
 if "%ENABLE_UBSAN%"=="ON" echo UBSan:       Enabled
@@ -195,6 +203,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_ENABLE_UBSAN=%ENABLE_UBSAN% ^
     -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
     -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
+    -DTML_BUILD_MODULAR=%ENABLE_MODULAR% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^
     -DTML_VERSION_MAJOR=!VER_MAJOR! ^
@@ -225,6 +234,33 @@ if errorlevel 1 (
 :: Copy compile_commands.json to root for IDE support
 if exist "compile_commands.json" (
     copy /y "compile_commands.json" "%ROOT_DIR%\" >nul 2>&1
+)
+
+:: Pack plugins if requested
+if "%ENABLE_PACK%"=="1" (
+    if not "%ENABLE_MODULAR%"=="ON" (
+        echo WARNING: --pack requires --modular, skipping plugin packing.
+    ) else (
+        echo.
+        echo Packing plugins...
+        cd /d "%ROOT_DIR%"
+        set "PLUGINS_DIR=%OUTPUT_DIR%\plugins"
+        if exist "!PLUGINS_DIR!" (
+            "%OUTPUT_DIR%\tml.exe" run tools\plugin_pack.tml -- "!PLUGINS_DIR!"
+            if errorlevel 1 (
+                echo WARNING: Plugin packing failed ^(non-fatal^).
+            ) else (
+                echo.
+                echo Verifying plugins...
+                "%OUTPUT_DIR%\tml.exe" run tools\plugin_verify.tml -- "!PLUGINS_DIR!"
+                if errorlevel 1 (
+                    echo WARNING: Plugin verification failed!
+                )
+            )
+        ) else (
+            echo WARNING: No plugins directory found at !PLUGINS_DIR!, skipping pack.
+        )
+    )
 )
 
 :: Print result

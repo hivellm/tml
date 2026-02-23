@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Common Subexpression Elimination (CSE) Pass
 //!
 //! This pass eliminates redundant computations within basic blocks.

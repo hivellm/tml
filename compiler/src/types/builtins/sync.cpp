@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Synchronization Primitives
 //!
 //! This file registers concurrency and synchronization intrinsics.

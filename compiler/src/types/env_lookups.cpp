@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Lookups
 //!
 //! This file implements type and definition lookups.

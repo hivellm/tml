@@ -1,0 +1,94 @@
+use test::{assert, assert_eq}
+use std::collections::BTreeMap
+
+@test
+func test_btreemap_create_only() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    return 0
+}
+
+@test
+func test_btreemap_destroy_then_drop() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_insert_get() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(5, 50)
+    m.insert(3, 30)
+    m.insert(7, 70)
+    assert_eq(m.len(), 3, "len should be 3")
+    assert_eq(m.get(5), 50, "get(5) should be 50")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_contains_key() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(1, 10)
+    m.insert(2, 20)
+    assert(m.contains_key(1), "should contain 1")
+    assert(m.contains_key(2), "should contain 2")
+    assert(not m.contains_key(3), "should not contain 3")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_update_value() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(1, 10)
+    m.insert(1, 99)
+    assert_eq(m.len(), 1, "should still have 1 entry")
+    assert_eq(m.get(1), 99, "value should be updated to 99")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_sorted_order() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(50, 500)
+    m.insert(10, 100)
+    m.insert(30, 300)
+    m.insert(20, 200)
+    m.insert(40, 400)
+    assert_eq(m.min_key(), 10, "min_key should be 10")
+    assert_eq(m.max_key(), 50, "max_key should be 50")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_remove() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(1, 10)
+    m.insert(2, 20)
+    m.insert(3, 30)
+    let removed: Bool = m.remove(2)
+    assert(removed, "remove(2) should return true")
+    assert_eq(m.len(), 2, "len should be 2 after remove")
+    assert(not m.contains_key(2), "should not contain 2 after remove")
+    assert_eq(m.get(1), 10, "get(1) should still work")
+    assert_eq(m.get(3), 30, "get(3) should still work")
+    let not_removed: Bool = m.remove(99)
+    assert(not not_removed, "remove(99) should return false")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_clear() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(1, 10)
+    m.insert(2, 20)
+    m.clear()
+    assert(m.is_empty(), "should be empty after clear")
+    assert_eq(m.len(), 0, "len should be 0 after clear")
+    m.destroy()
+    return 0
+}

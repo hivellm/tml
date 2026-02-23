@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 /**
  * @file json_runtime.cpp
  * @brief TML Runtime - JSON Parser Bindings

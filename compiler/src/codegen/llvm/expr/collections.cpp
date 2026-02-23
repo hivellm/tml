@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Collections and Paths
 //!
 //! This file implements array literals, indexing, and path expressions.

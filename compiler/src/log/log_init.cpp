@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Log Initialization from CLI
 //!
 //! Parses logging-related command-line arguments and the TML_LOG

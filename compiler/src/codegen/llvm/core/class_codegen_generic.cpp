@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Generic Class & Method Generation
 //!
 //! This file handles generic class instantiation helpers, generic static method

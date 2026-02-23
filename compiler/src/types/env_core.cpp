@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Core
 //!
 //! This file implements core TypeEnv functionality.

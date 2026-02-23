@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Early Common Subexpression Elimination Pass
 //!
 //! Performs local CSE early in the pipeline.

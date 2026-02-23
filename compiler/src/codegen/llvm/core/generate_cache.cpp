@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Global Caches
 //!
 //! This file implements the GlobalASTCache and GlobalLibraryIRCache

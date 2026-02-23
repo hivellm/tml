@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Narrowing Pass
 //!
 //! Replaces operations on wider types with narrower types when safe.

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Command Helpers
 //!
 //! This file contains shared utilities for the test framework.

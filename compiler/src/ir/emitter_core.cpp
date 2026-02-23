@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Emitter - Core
 //!
 //! This file implements the core IR emitter that outputs S-expressions.

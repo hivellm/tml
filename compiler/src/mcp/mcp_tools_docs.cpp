@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Documentation Search Tools
 //!
 //! Documentation search infrastructure: DocSearchCache, BM25/HNSW indexing,

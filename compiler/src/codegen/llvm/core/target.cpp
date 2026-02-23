@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Target Specification
 //!
 //! This file implements cross-compilation target handling.

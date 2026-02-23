@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Struct Declarations
 //!
 //! This file implements struct declaration and instantiation code generation.

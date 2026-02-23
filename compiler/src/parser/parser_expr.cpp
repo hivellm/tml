@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Expressions
 //!
 //! This file implements expression parsing using a Pratt parser.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Declarations
 //!
 //! This file implements declaration parsing.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Infinite Loop Detection Pass
 //!
 //! Static analysis pass to detect potential infinite loops.

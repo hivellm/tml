@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Pretty Printer Implementation
 //!
 //! This file implements the HIR pretty printer for debugging output.

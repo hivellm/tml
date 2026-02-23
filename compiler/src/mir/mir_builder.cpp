@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Main Entry Point
 //!
 //! This is the main entry point for the MIR builder. The actual implementation

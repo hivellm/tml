@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Struct Construction
 //!
 //! This file implements struct construction (value and pointer modes).

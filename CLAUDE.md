@@ -207,10 +207,11 @@ When implementing new functionality, follow this decision hierarchy:
 
 ```bash
 # Windows - from project root (f:\Node\hivellm\tml)
-scripts\build.bat              # Debug build (default, no C++ tests)
+scripts\build.bat              # Debug build (default, monolithic ~100MB)
 scripts\build.bat release      # Release build
 scripts\build.bat --clean      # Clean build
 scripts\build.bat --tests      # Also build C++ unit tests (tml_tests.exe)
+scripts\build.bat --modular    # Modular build (thin launcher + plugin DLLs)
 
 # Run tests
 scripts\test.bat
@@ -218,6 +219,41 @@ scripts\test.bat
 # Clean
 scripts\clean.bat
 ```
+
+### Modular Build (Plugin Architecture)
+
+The `--modular` flag produces a thin launcher + plugin DLLs instead of a single monolithic executable:
+
+```bash
+scripts\build.bat --modular          # Debug modular build
+scripts\build.bat --modular release  # Release modular build
+```
+
+**Output structure (modular):**
+| File | Size | Description |
+|------|------|-------------|
+| `build/debug/tml.exe` | ~367KB | Thin launcher (no LLVM) |
+| `build/debug/tml_full.exe` | ~100MB | Monolithic fallback |
+| `build/debug/plugins/tml_compiler.dll` | ~100MB | Core compiler plugin |
+| `build/debug/plugins/tml_codegen_x86.dll` | ~75MB | LLVM codegen backend |
+| `build/debug/plugins/tml_tools.dll` | ~47KB | Formatter, linter, doc, search |
+| `build/debug/plugins/tml_test.dll` | ~47KB | Test runner, coverage |
+| `build/debug/plugins/tml_mcp.dll` | ~46KB | MCP server |
+
+**How it works:**
+1. `tml.exe` handles `--help`/`--version` locally (no plugins loaded)
+2. All other commands load `tml_compiler.dll` via `plugin_loader`
+3. Plugins discover each other via `plugins/` directory next to the exe
+4. Plugin ABI is pure C (`plugin/abi.h`) to avoid C++ ABI issues across DLL boundaries
+5. Compressed plugins (`.dll.zst`) are auto-decompressed and cached
+
+**Key files:**
+- `compiler/include/plugin/abi.h` — Plugin ABI (pure C interface)
+- `compiler/include/plugin/loader.hpp` — Plugin loader class
+- `compiler/src/plugin/loader.cpp` — Cross-platform LoadLibrary/dlopen + zstd cache
+- `compiler/src/launcher/main_launcher.cpp` — Thin launcher entry point
+- `compiler/src/plugin/*_plugin.cpp` — Plugin entry points for each module
+- `compiler/cmake/collect_modules.cmake` — CMake module scanner
 
 **Why scripts only?** The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss. Using cmake directly can result in tests that appear to pass but actually fail silently or hang indefinitely.
 
@@ -342,8 +378,13 @@ tml/
 │   │   ├── codegen/   # LLVM IR generation
 │   │   ├── query/     # Query system (demand-driven compilation)
 │   │   ├── backend/   # LLVM backend + LLD linker (in-process)
-│   │   └── format/    # Code formatter
+│   │   ├── format/    # Code formatter
+│   │   ├── plugin/    # Plugin entry points (*_plugin.cpp)
+│   │   └── launcher/  # Thin launcher (modular build)
 │   ├── include/       # Header files
+│   │   └── plugin/    # Plugin ABI (abi.h, loader.hpp, module.hpp)
+│   ├── cmake/         # CMake modules (collect_modules.cmake)
+│   ├── third_party/   # Vendored deps (zstd decoder)
 │   ├── runtime/       # Essential runtime (essential.c)
 │   └── tests/         # Compiler unit tests (C++)
 ├── lib/               # TML standard libraries

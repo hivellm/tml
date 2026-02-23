@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Statements
 //!
 //! This file implements statement parsing.

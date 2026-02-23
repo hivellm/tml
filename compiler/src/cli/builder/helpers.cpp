@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builder Helper Functions
 //!
 //! This file contains shared utility functions used across the build system.

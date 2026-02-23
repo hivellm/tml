@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen Helper Methods
 //!
 //! This file contains helper methods for the MIR-based code generator:

@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # HNSW Vector Index — Implementation
 //!
 //! Implements the HNSW algorithm from:

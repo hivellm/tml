@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Loop Unrolling Pass
 //!
 //! Unrolls small loops with known trip counts.

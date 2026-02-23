@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Diagnostic Test Execution
 //!
 //! This file implements the diagnostic test mode for verifying compiler error messages.

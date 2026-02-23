@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Module Loading
 //!
 //! This file implements native module loading and filesystem resolution.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Support Functions
 //!
 //! This file implements support functions for the LLVM IR generator:

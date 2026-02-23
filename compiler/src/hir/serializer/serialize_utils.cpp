@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Serialization Utilities
 //!
 //! This file provides convenience functions for HIR serialization and

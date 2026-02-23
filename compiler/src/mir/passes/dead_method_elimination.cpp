@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Dead Virtual Method Elimination Pass Implementation
 //!
 //! Removes virtual methods that are never called at runtime.

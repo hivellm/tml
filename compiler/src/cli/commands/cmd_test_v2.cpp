@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Test V2 Command Implementation (EXE-based)
 //!
 //! Entry point for `tml test-v2`. Uses the EXE-based subprocess execution

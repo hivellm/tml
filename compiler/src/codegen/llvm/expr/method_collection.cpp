@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Collection Methods
 //!
 //! This file previously implemented instance methods for collection types

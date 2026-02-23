@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen Instruction Emission
 //!
 //! This file contains instruction emission for the MIR-based code generator.

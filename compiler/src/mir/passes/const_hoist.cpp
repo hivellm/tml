@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Constant Hoisting Pass
 //!
 //! Moves expensive constant materialization out of loops.

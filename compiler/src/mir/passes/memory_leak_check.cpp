@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Memory Leak Detection Pass
 //!
 //! Static analysis pass to detect potential memory leaks.

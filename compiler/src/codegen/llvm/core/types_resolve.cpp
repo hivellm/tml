@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Type Resolution & Substitution
 //!
 //! This file implements type resolution, substitution, unification,

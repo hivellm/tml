@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # EXE-Based Suite Runner (Go-Style)
 //!
 //! Top-level orchestration for the EXE-based test execution system.

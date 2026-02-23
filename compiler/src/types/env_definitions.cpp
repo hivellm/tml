@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Definitions
 //!
 //! This file implements type definition registration.

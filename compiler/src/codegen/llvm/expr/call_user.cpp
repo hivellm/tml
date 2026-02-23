@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - User-Defined Function Calls
 //!
 //! Handles calls to user-defined functions, @extern functions, and

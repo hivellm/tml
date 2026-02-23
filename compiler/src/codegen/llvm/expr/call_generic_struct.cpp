@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Generic Struct Static Method Calls
 //!
 //! Handles calls like Range::new(0, 10) where Range is a generic struct.

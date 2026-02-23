@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Documentation Comment Parser Implementation
 //!
 //! This file implements the parsing of documentation comments to extract

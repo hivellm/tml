@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(PartialEq, Eq) Implementation
 //!
 //! This file implements the `@derive(PartialEq)` and `@derive(Eq)` derive macros.

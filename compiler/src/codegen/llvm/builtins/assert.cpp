@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Assert Builtins
 //!
 //! This file implements assertion intrinsics for testing and debugging.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Checker Core Implementation
 //!
 //! This file contains the core borrow checking logic including:

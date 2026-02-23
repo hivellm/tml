@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Struct Field Access
 //!
 //! This file implements struct field access, field index/type lookup,

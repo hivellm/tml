@@ -101,6 +101,7 @@ option(TML_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(TML_ENABLE_LSAN "Enable LeakSanitizer (Linux/macOS only)" OFF)
 option(TML_ENABLE_MSAN "Enable MemorySanitizer (Linux Clang only)" OFF)
+option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" OFF)
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -148,6 +149,15 @@ elseif(MSVC)
         add_compile_options(/fsanitize=address)
         message(STATUS "AddressSanitizer enabled (MSVC)")
     endif()
+endif()
+
+# Force-include plugin/module.hpp in every .cpp so TML_MODULE("xxx") is always defined.
+# This avoids requiring explicit #include in each source file.
+set(_module_header "${CMAKE_CURRENT_SOURCE_DIR}/include/plugin/module.hpp")
+if(MSVC)
+    add_compile_options(/FI"${_module_header}")
+else()
+    add_compile_options(-include "${_module_header}")
 endif()
 
 # Include directories
@@ -1470,16 +1480,153 @@ if(NOT WIN32)
     endif()
 endif()
 
-# Main executable
-add_executable(tml src/main.cpp)
-target_link_libraries(tml PRIVATE tml_cli)
+# ============================================================================
+# Modular Plugin Build
+# ============================================================================
+if(TML_BUILD_MODULAR)
+    include(cmake/collect_modules.cmake)
+    collect_module_sources("${CMAKE_CURRENT_SOURCE_DIR}/src" MOD)
+
+    # Plugin loader library (shared between launcher and any host that loads plugins)
+    add_library(tml_plugin_loader STATIC
+        src/plugin/loader.cpp
+        third_party/zstd/zstddeclib.c
+    )
+    target_include_directories(tml_plugin_loader PUBLIC include src)
+    target_include_directories(tml_plugin_loader PRIVATE third_party/zstd)
+    set_source_files_properties(third_party/zstd/zstddeclib.c PROPERTIES
+        LANGUAGE C
+        COMPILE_FLAGS "$<$<C_COMPILER_ID:MSVC>:/W0>$<$<NOT:$<C_COMPILER_ID:MSVC>>:-w>"
+    )
+
+    # ================================================================
+    # Phase 2: tml_codegen_x86 plugin DLL
+    # ================================================================
+    # This SHARED library contains LLVM codegen + LLD linker + plugin entry points.
+    # It links against the heavy LLVM/LLD static libraries so the main executable
+    # does NOT need them when the codegen is loaded as a plugin.
+    if(TML_USE_LLVM_BACKEND AND LLVM_FOUND)
+        add_library(tml_codegen_x86_plugin SHARED
+            src/plugin/llvm_plugin.cpp
+        )
+        target_include_directories(tml_codegen_x86_plugin PRIVATE include src)
+        target_compile_definitions(tml_codegen_x86_plugin PRIVATE PLUGIN_BUILDING)
+        target_link_libraries(tml_codegen_x86_plugin PRIVATE
+            tml_codegen tml_lld ${TML_BACKEND_LIB} tml_log tml_common
+        )
+        set_target_properties(tml_codegen_x86_plugin PROPERTIES
+            OUTPUT_NAME "tml_codegen_x86"
+            RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+        )
+        # Flatten multi-config output dirs
+        foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+            set_target_properties(tml_codegen_x86_plugin PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+            )
+        endforeach()
+        message(STATUS "Plugin: tml_codegen_x86 (SHARED)")
+    endif()
+
+    # ================================================================
+    # Phase 3: tml_compiler plugin DLL (future)
+    # ================================================================
+    # The compiler plugin wraps the full frontend (lex, parse, check, build, etc.)
+    # and exports compiler_main(argc, argv) for the thin launcher.
+    # Currently not used as the main exe — the monolithic build serves both modes.
+    add_library(tml_compiler_plugin SHARED
+        src/plugin/compiler_plugin.cpp
+    )
+    target_include_directories(tml_compiler_plugin PRIVATE include src)
+    target_compile_definitions(tml_compiler_plugin PRIVATE PLUGIN_BUILDING)
+    target_link_libraries(tml_compiler_plugin PRIVATE
+        tml_cli tml_plugin_loader
+    )
+    set_target_properties(tml_compiler_plugin PROPERTIES
+        OUTPUT_NAME "tml_compiler"
+        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+        LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+    )
+    foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_target_properties(tml_compiler_plugin PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+        )
+    endforeach()
+    message(STATUS "Plugin: tml_compiler (SHARED)")
+
+    # ================================================================
+    # Phase 4: Auxiliary plugin DLLs
+    # ================================================================
+    # Helper macro to create a plugin SHARED target with standard settings.
+    macro(add_tml_plugin PLUGIN_NAME PLUGIN_SOURCE PLUGIN_DEPS)
+        add_library(tml_${PLUGIN_NAME}_plugin SHARED ${PLUGIN_SOURCE})
+        target_include_directories(tml_${PLUGIN_NAME}_plugin PRIVATE include src)
+        target_compile_definitions(tml_${PLUGIN_NAME}_plugin PRIVATE PLUGIN_BUILDING)
+        target_link_libraries(tml_${PLUGIN_NAME}_plugin PRIVATE ${PLUGIN_DEPS})
+        set_target_properties(tml_${PLUGIN_NAME}_plugin PROPERTIES
+            OUTPUT_NAME "tml_${PLUGIN_NAME}"
+            RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+        )
+        foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+            set_target_properties(tml_${PLUGIN_NAME}_plugin PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+            )
+        endforeach()
+        message(STATUS "Plugin: tml_${PLUGIN_NAME} (SHARED)")
+    endmacro()
+
+    # Tools plugin: formatter, linter, doc generator, search
+    add_tml_plugin(tools
+        src/plugin/tools_plugin.cpp
+        "tml_format;tml_doc;tml_search;tml_log;tml_common"
+    )
+
+    # Test plugin: test runner, coverage, benchmark, fuzzer
+    add_tml_plugin(test
+        src/plugin/test_plugin.cpp
+        "tml_cli;tml_log;tml_common"
+    )
+
+    # MCP plugin: Model Context Protocol server
+    add_tml_plugin(mcp
+        src/plugin/mcp_plugin.cpp
+        "tml_mcp_lib;tml_json;tml_log;tml_common"
+    )
+
+    # ================================================================
+    # Thin launcher — THIS is tml.exe in modular mode
+    # ================================================================
+    # 367KB binary that loads plugins on demand.
+    # Links only the plugin loader — no compiler, no LLVM.
+    add_executable(tml src/launcher/main_launcher.cpp)
+    target_include_directories(tml PRIVATE include src)
+    target_link_libraries(tml PRIVATE tml_plugin_loader)
+    message(STATUS "Launcher: tml.exe (thin, ~400KB)")
+
+    # Monolithic fallback — tml_full.exe for debugging/compatibility
+    add_executable(tml_full src/main.cpp)
+    target_link_libraries(tml_full PRIVATE tml_cli tml_plugin_loader)
+    set_target_properties(tml_full PROPERTIES
+        OUTPUT_NAME "tml_full"
+    )
+else()
+    # Monolithic build — unchanged from before
+    add_executable(tml src/main.cpp)
+    target_link_libraries(tml PRIVATE tml_cli)
+endif()
 
 # Increase stack size on Windows to handle deep recursion during test execution
 # Default is 1MB, increase to 32MB for running large test suites with coverage.
-# Coverage mode disables shared library optimization, resulting in very large DLLs
-# with all library functions inlined. Processing 77+ suites requires more stack.
 if(MSVC)
-    target_link_options(tml PRIVATE /STACK:33554432)
+    if(TML_BUILD_MODULAR)
+        target_link_options(tml_full PRIVATE /STACK:33554432)
+    else()
+        target_link_options(tml PRIVATE /STACK:33554432)
+    endif()
 endif()
 
 # MCP server executable (separate from main tml to avoid file locking issues)

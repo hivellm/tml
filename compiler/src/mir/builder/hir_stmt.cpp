@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Statement Lowering to MIR
 //!
 //! This file implements statement lowering from HIR to MIR.

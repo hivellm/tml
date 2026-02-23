@@ -513,6 +513,80 @@ void tml_mem_set_output(void* fp) {
     g_track.output = (FILE*)fp;
 }
 
+TML_MEM_EXPORT int32_t tml_mem_get_leak_count(void) {
+    if (!g_track.initialized)
+        return 0;
+
+    TML_MUTEX_LOCK(g_track.mutex);
+    int32_t count = 0;
+    for (int i = 0; i < HASH_BUCKETS; i++) {
+        AllocBucket* bucket = g_track.buckets[i];
+        while (bucket) {
+            count++;
+            bucket = bucket->next;
+        }
+    }
+    TML_MUTEX_UNLOCK(g_track.mutex);
+    return count;
+}
+
+TML_MEM_EXPORT int64_t tml_mem_get_leak_bytes(void) {
+    if (!g_track.initialized)
+        return 0;
+
+    TML_MUTEX_LOCK(g_track.mutex);
+    int64_t bytes = 0;
+    for (int i = 0; i < HASH_BUCKETS; i++) {
+        AllocBucket* bucket = g_track.buckets[i];
+        while (bucket) {
+            bytes += (int64_t)bucket->record.size;
+            bucket = bucket->next;
+        }
+    }
+    TML_MUTEX_UNLOCK(g_track.mutex);
+    return bytes;
+}
+
+TML_MEM_EXPORT int32_t tml_mem_get_leak_files(const char** files, int32_t* counts, int64_t* bytes,
+                                              int32_t max_entries) {
+    if (!g_track.initialized)
+        return 0;
+
+    TML_MUTEX_LOCK(g_track.mutex);
+
+    int32_t num_files = 0;
+
+    for (int i = 0; i < HASH_BUCKETS; i++) {
+        AllocBucket* bucket = g_track.buckets[i];
+        while (bucket) {
+            const char* file = bucket->record.test_file[0] ? bucket->record.test_file : "(unknown)";
+
+            /* Find existing entry */
+            int found = 0;
+            for (int32_t f = 0; f < num_files && f < max_entries; f++) {
+                if (strcmp(files[f], file) == 0) {
+                    counts[f]++;
+                    bytes[f] += (int64_t)bucket->record.size;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                if (num_files < max_entries) {
+                    files[num_files] = file;
+                    counts[num_files] = 1;
+                    bytes[num_files] = (int64_t)bucket->record.size;
+                }
+                num_files++;
+            }
+            bucket = bucket->next;
+        }
+    }
+
+    TML_MUTEX_UNLOCK(g_track.mutex);
+    return num_files;
+}
+
 TML_MEM_EXPORT void tml_mem_track_set_test_context(const char* test_name, const char* test_file) {
     if (!g_track.initialized) {
         tml_mem_track_init();

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Complex Expressions
 //!
 //! This file implements parsing for control flow and complex expression forms.

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Runner — Single Test Compilation
 //!
 //! Single test and fuzz target compilation to shared libraries,

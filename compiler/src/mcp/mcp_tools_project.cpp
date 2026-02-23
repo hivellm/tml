@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Project Tools
 //!
 //! Handlers for cache invalidation, project/build, project/coverage,

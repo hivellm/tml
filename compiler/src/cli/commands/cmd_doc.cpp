@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Documentation Command Implementation
 //!
 //! This file implements the `tml doc` command for generating documentation.

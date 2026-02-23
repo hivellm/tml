@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Build Command Implementation
 //!
 //! This file implements the main `tml build` command that compiles TML source

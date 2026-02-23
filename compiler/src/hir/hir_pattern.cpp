@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Pattern Implementation
 //!
 //! This file implements the HirPattern accessor methods and factory functions.

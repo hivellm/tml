@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Utilities
 //!
 //! This file implements lexer utility functions.

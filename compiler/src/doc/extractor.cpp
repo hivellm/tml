@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Documentation Extractor Implementation
 //!
 //! This file implements the AST to DocModel conversion.

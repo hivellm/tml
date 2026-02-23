@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Atomic Builtins
 //!
 //! This file implements atomic operation intrinsics.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Optimization Pass Infrastructure
 //!
 //! This file implements the pass infrastructure and pass manager.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 #include "query/query_incr.hpp"
 
 #include "common/crc32c.hpp"

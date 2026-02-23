@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Helpers
 //!
 //! This file implements helper functions used throughout the builder.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Compiler Intrinsics (Extended)
 //!
 //! This file implements the second half of compiler intrinsics that map directly

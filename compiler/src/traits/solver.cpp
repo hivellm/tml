@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Trait Solver Implementation
 //!
 //! Goal-based trait solving with candidate assembly, selection, recursive

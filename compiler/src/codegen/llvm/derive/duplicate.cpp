@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(Duplicate, Copy) Implementation
 //!
 //! This file implements the `@derive(Duplicate)` and `@derive(Copy)` derive macros.

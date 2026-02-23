@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Lint Runner Implementation
 //!
 //! This file implements the main `run_lint()` function that orchestrates

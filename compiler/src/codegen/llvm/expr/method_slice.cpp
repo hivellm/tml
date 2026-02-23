@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Slice Methods
 //!
 //! This file implements methods for slice types `[T]`.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLD Linker Implementation
 //!
 //! Wraps LLD for cross-platform linking. When TML_HAS_LLD_EMBEDDED is defined,

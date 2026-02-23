@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Profiled Build and Run
 //!
 //! This file implements the profiled version of `tml run` with phase timing.

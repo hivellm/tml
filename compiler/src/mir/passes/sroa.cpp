@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Scalar Replacement of Aggregates (SROA) Pass
 //!
 //! Breaks up alloca of aggregates into multiple scalar allocas.

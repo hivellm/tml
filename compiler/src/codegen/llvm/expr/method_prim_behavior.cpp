@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Primitive Type Behavior Methods
 //!
 //! This file handles behavior implementations on primitive types

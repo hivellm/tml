@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Explain Command Entry Point
 //!
 //! This file implements the `tml explain` command, which shows detailed

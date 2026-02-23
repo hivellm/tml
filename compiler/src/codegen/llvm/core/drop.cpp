@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Drop/RAII Support
 //!
 //! This file implements automatic destructor calls at scope exit.

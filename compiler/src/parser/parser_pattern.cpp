@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Patterns
 //!
 //! This file implements pattern parsing for matching and destructuring.

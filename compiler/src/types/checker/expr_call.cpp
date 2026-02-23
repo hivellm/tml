@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Call Expressions
 //!
 //! This file implements type checking for function calls (check_call).

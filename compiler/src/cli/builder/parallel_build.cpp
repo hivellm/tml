@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parallel Build System
 //!
 //! This file implements multi-threaded compilation for the TML compiler.

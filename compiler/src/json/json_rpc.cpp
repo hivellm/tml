@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON-RPC 2.0 Implementation
 //!
 //! This module implements JSON-RPC 2.0 request/response handling for the TML compiler.

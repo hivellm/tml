@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - If/Ternary Control Flow
 //!
 //! This file implements if, ternary, and if-let expression code generation.

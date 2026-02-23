@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Lint Configuration
 //!
 //! This file implements lint configuration loading from `tml.toml`.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Advanced Loop Optimizations - Implementation
 
 #include "mir/passes/loop_opts.hpp"

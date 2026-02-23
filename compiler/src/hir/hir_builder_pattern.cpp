@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Builder - Pattern Lowering
 //!
 //! This file implements pattern lowering from AST to HIR.

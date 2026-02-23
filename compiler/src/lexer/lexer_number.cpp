@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Numbers
 //!
 //! This file implements numeric literal lexing.

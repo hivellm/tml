@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Polonius Fact Generation
 //!
 //! Generates Polonius input facts by traversing the AST. This parallels the

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Checker Expression Analysis
 //!
 //! This file implements borrow checking for all expression types in TML.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Compiler Setup and Toolchain Discovery
 //!
 //! This file handles discovery and configuration of external build tools.

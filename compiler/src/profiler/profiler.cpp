@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 /**
  * @file profiler.cpp
  * @brief TML Native Profiler Implementation

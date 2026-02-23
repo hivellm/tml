@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Text Reader
 //!
 //! This file parses MIR modules from text format.

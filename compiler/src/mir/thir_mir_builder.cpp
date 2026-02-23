@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # THIR to MIR Builder — Core Implementation
 //!
 //! This file contains the first half of the ThirMirBuilder implementation:

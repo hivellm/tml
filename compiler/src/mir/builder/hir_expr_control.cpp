@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Expression Lowering to MIR — Control Flow, Construction, and Assignments
 //!
 //! This file contains the second half of expression lowering:

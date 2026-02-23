@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON Parser Implementation
 //!
 //! This module implements the JSON lexer and recursive descent parser.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Module Registry
 //!
 //! This file implements the module registry for managing compiled modules.

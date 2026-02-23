@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Time Builtins (REMOVED)
 //!
 //! Phase 25: All time builtins migrated to @extern("c") FFI in std::time.

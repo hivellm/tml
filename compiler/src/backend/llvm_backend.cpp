@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM Backend Implementation
 //!
 //! Uses the LLVM C API for direct IR compilation to object files.

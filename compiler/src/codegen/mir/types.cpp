@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen Type Conversion
 //!
 //! This file contains type conversion methods for the MIR-based code generator:

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # TML Preprocessor Implementation
 //!
 //! Implements C-style preprocessor directives for conditional compilation.

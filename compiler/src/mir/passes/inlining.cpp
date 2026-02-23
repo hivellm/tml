@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Function Inlining Pass
 //!
 //! This pass replaces function calls with the callee's body.

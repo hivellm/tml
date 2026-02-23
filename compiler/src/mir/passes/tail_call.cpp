@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Tail Call Optimization Pass
 //!
 //! Identifies and marks tail calls for optimization.

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test File Discovery
 //!
 //! This file implements test and benchmark file discovery for `tml test`.

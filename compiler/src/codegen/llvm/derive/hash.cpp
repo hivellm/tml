@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(Hash) Implementation
 //!
 //! This file implements the `@derive(Hash)` derive macro.

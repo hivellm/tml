@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(Display) Implementation
 //!
 //! This file implements the `@derive(Display)` derive macro.

@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Declaration Formatting
 //!
 //! This file implements formatting for all declaration types.

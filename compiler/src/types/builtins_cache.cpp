@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtins Snapshot Cache - Implementation
 //!
 //! Caches a TypeEnv with builtins initialized to avoid redundant

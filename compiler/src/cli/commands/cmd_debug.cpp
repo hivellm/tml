@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Debug Commands
 //!
 //! This file implements the `tml lex`, `tml parse`, and `tml check` commands

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Runner Execution Infrastructure
 //!
 //! DynamicLibrary implementation, OutputCapture, crash handlers, logger bridge,

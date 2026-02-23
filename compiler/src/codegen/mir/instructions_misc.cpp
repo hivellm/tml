@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! MIR Codegen - Cast, PHI, Constant, Init, Atomic Instructions
 //!
 //! This file handles cast instructions, PHI nodes, constant materialization,

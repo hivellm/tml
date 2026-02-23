@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Serialization Entry Point
 //!
 //! This file provides serialization and deserialization of MIR modules.

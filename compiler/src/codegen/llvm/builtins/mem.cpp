@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Memory Builtins
 //!
 //! This file implements low-level memory intrinsics.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Text Reader
 //!
 //! Parses human-readable HIR text format back into HirModule.

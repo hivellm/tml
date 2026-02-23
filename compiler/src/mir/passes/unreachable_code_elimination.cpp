@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Unreachable Code Elimination (UCE) Pass
 //!
 //! This pass removes basic blocks not reachable from the entry block.

@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Server Implementation
 //!
 //! Implements the Model Context Protocol server over stdio transport.

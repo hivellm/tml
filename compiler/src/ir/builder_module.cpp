@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Module Construction
 //!
 //! This file builds an IR module from an AST module.

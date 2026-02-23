@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Build Cache System
 //!
 //! This file implements the incremental build cache for the TML compiler.

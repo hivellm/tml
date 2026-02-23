@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Enum Declarations
 //!
 //! This file implements enum declaration and instantiation code generation.

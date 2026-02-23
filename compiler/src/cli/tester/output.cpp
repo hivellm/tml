@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Output Formatting
 //!
 //! This file implements test result formatting in Go/Rust style.
@@ -257,6 +259,82 @@ void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
             }
         }
     }
+}
+
+// ============================================================================
+// Print Leak Statistics
+// ============================================================================
+
+void print_leak_stats(const LeakStats& stats, const TestOptions& opts) {
+    ColorOutput c(!opts.no_color);
+
+    if (stats.total_leaks == 0) {
+        TML_LOG_INFO("test", c.green() << c.bold() << "Memory Leaks" << c.reset() << " " << c.dim()
+                                       << "none detected" << c.reset());
+        return;
+    }
+
+    TML_LOG_INFO("test", c.red() << c.bold() << "Memory Leaks" << c.reset() << " " << c.dim() << "("
+                                 << stats.total_leaks << " leak"
+                                 << (stats.total_leaks != 1 ? "s" : "") << ", " << stats.total_bytes
+                                 << " bytes)" << c.reset());
+    TML_LOG_INFO("test", c.dim() << std::string(72, '-') << c.reset());
+
+    // Sort files by leak bytes (descending)
+    auto sorted = stats.files;
+    std::sort(sorted.begin(), sorted.end(), [](const LeakFileInfo& a, const LeakFileInfo& b) {
+        return a.leak_bytes > b.leak_bytes;
+    });
+
+    // Format helper for bytes
+    auto format_bytes = [](int64_t b) -> std::string {
+        if (b < 1024)
+            return std::to_string(b) + " B";
+        else if (b < 1024 * 1024)
+            return std::to_string(b / 1024) + "." + std::to_string((b % 1024) * 10 / 1024) + " KB";
+        else
+            return std::to_string(b / (1024 * 1024)) + "." +
+                   std::to_string((b % (1024 * 1024)) * 10 / (1024 * 1024)) + " MB";
+    };
+
+    for (const auto& file : sorted) {
+        // Shorten file path for display (show last 2-3 components)
+        std::string display_path = file.file_path;
+        size_t sep = display_path.rfind('/');
+        if (sep == std::string::npos)
+            sep = display_path.rfind('\\');
+        if (sep != std::string::npos) {
+            size_t sep2 = display_path.rfind('/', sep - 1);
+            if (sep2 == std::string::npos)
+                sep2 = display_path.rfind('\\', sep - 1);
+            if (sep2 != std::string::npos) {
+                size_t sep3 = display_path.rfind('/', sep2 - 1);
+                if (sep3 == std::string::npos)
+                    sep3 = display_path.rfind('\\', sep2 - 1);
+                if (sep3 != std::string::npos)
+                    display_path = display_path.substr(sep3 + 1);
+            }
+        }
+
+        // Pad file path
+        if (display_path.size() < 45)
+            display_path += std::string(45 - display_path.size(), ' ');
+
+        std::ostringstream line;
+        line << c.red() << display_path << c.reset() << "  " << c.bold() << std::setw(3)
+             << file.leak_count << c.reset() << " leak" << (file.leak_count != 1 ? "s" : " ")
+             << "  " << c.dim() << std::setw(8) << format_bytes(file.leak_bytes) << c.reset();
+        TML_LOG_INFO("test", line.str());
+    }
+
+    TML_LOG_INFO("test", c.dim() << std::string(72, '-') << c.reset());
+
+    std::ostringstream total_line;
+    total_line << c.bold() << c.red() << "Total" << c.reset() << std::string(40, ' ') << "  "
+               << c.bold() << std::setw(3) << stats.total_leaks << c.reset() << " leak"
+               << (stats.total_leaks != 1 ? "s" : " ") << "  " << c.dim() << std::setw(8)
+               << format_bytes(stats.total_bytes) << c.reset();
+    TML_LOG_INFO("test", total_line.str());
 }
 
 } // namespace tml::cli::tester

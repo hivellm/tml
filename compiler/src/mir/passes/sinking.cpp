@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Code Sinking Pass
 //!
 //! Moves computations closer to their uses.

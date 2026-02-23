@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Load-Store Optimization Pass
 //!
 //! Eliminates redundant loads and stores within basic blocks.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Batch Destruction Optimization Pass Implementation
 //!
 //! Optimizes arrays of destructor calls into efficient loops.

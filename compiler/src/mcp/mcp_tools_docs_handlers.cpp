@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Documentation Get/List/Resolve Handlers
 //!
 //! Handlers for docs/get, docs/list, and docs/resolve tools.

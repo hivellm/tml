@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - Declarations (Impl, Aliases, Generics, Parameters)
 //!
 //! This file implements the second half of declaration parsing:

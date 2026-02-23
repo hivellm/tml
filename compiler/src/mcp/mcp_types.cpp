@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Types Implementation
 //!
 //! Serialization implementations for MCP protocol types.

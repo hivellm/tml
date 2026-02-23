@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Dynamic Dispatch
 //!
 //! This file implements vtables for `dyn Behavior` types.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Generic & Closure Method Dispatch
 //!
 //! This file handles two sections from gen_method_call:

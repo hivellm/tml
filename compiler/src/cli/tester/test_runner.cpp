@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //\! # Test Runner — Suite Compilation
 //\!
 //\! Suite-based test compilation: groups tests into DLLs, parallel lex/parse/typecheck/codegen,

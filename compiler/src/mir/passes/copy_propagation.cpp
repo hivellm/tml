@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Copy Propagation Pass
 //!
 //! This pass replaces uses of copied values with the original value.

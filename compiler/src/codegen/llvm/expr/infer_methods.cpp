@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Type Inference (Method Calls & Remaining Expressions)
 //!
 //! This file is the continuation of infer.cpp, handling:

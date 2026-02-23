@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Primitive Type Methods
 //!
 //! This file implements method calls on primitive types (part 1).

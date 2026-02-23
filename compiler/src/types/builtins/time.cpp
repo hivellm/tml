@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Time Functions (REMOVED)
 //!
 //! Phase 25: time_ns/sleep_ms migrated to @extern("c") FFI in lib/std/src/time.tml.

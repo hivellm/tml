@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # EXE-Based Test Runner Compilation Pipeline
 //!
 //! Compiles a TestSuite to an executable instead of a DLL.

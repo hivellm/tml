@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(PartialOrd, Ord) Implementation
 //!
 //! This file implements the `@derive(PartialOrd)` and `@derive(Ord)` derive macros.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Types
 //!
 //! This file converts parser and semantic types to MIR types.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Instruction Simplification Pass (Peephole Optimizations)
 //!
 //! Performs algebraic simplifications and pattern matching to simplify

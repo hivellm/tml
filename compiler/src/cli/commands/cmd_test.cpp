@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Test Command Module
 //!
 //! This file serves as the entry point for the `tml test` command.

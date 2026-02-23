@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # SIMD-Optimized Distance Functions — Implementation
 //!
 //! All loops are written for auto-vectorization. The compiler will generate

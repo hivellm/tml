@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer Error Explanations
 //!
 //! Error codes L001-L020 for tokenization errors.

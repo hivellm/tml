@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Function Declarations
 //!
 //! This file implements function declaration and instantiation code generation.

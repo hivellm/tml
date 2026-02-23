@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Module Import Codegen
 //!
 //! This file emits LLVM IR for imported module functions and string constants.

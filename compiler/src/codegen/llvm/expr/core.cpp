@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Core Expressions
 //!
 //! This file implements fundamental expression code generation.

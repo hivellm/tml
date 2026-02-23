@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Fast JSON Parser Implementation
 //!
 //! High-performance JSON parser using V8-inspired optimizations.

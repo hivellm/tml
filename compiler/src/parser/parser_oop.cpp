@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser - OOP Declarations (C#-style)
 //!
 //! This file implements parsing for object-oriented programming constructs.

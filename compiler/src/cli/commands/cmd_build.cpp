@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Build Command Module
 //!
 //! This file serves as the entry point for all build-related commands.

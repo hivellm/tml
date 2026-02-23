@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Statements
 //!
 //! This file implements statement code generation.
@@ -66,7 +68,11 @@ bool LLVMIRGen::is_heap_str_producer(const parser::Expr& expr) const {
     // Function/method calls returning Str: only those marked @allocates produce
     // fresh heap-allocated Str. Non-@allocates functions may return borrowed
     // pointers (e.g., FFI functions returning const char* from C data structures).
-    // Auto-freeing borrowed pointers causes double-free / heap corruption.
+    // Auto-freeing borrowed pointers at scope exit causes double-free / heap corruption
+    // (e.g., glob.next() returns pointer into C-owned glob_result buffer).
+    // Note: expression-level temp tracking (llvm_ir_gen_expr.cpp) uses tml_str_free
+    // which validates heap pointers at runtime, so it's safe to track ALL calls there.
+    // But scope-exit cleanup here happens later when the pointer may have been freed.
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
         std::string func_name;

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Outcome[T, E] Methods
 //!
 //! This file implements methods for the `Outcome[T, E]` result type.

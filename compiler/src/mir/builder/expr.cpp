@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Expressions
 //!
 //! This file converts AST expressions to MIR SSA form.

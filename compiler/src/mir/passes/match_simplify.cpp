@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Match Branch Simplification Pass
 //!
 //! Simplifies switch/match statements.

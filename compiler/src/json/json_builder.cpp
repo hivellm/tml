@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON Builder Implementation
 //!
 //! This module implements the fluent JSON builder API.

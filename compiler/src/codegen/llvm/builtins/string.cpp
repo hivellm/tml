@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Float Intrinsic Builtins
 //!
 //! This file implements float intrinsics via try_gen_builtin_string().

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Builder - Statement Lowering
 //!
 //! This file implements statement lowering from AST to HIR.

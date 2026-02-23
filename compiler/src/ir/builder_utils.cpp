@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Utilities
 //!
 //! This file implements utility functions for IR building.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Statements and Patterns
 //!
 //! This file converts AST statements, blocks, and patterns to IR.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Advanced Optimization Passes
 //!
 //! This file implements Phase 10.3 (Arena), Phase 11 (SOO), Phase 13 (Cache Layout),

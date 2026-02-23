@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Library Coverage Analysis
 //!
 //! Scans library source files to find all function definitions,

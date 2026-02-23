@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Suite-Based Test Execution
 //!
 //! This file implements the optimized suite mode for running tests.
@@ -680,6 +682,32 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                             int32_t hits = get_func_hits(fi);
                             if (name && hits > 0) {
                                 all_covered_functions.insert(name);
+                            }
+                        }
+                    }
+                }
+
+                // Collect per-file leak data before unloading DLL
+                if (opts.check_leaks) {
+                    using TmlMemGetLeakFiles =
+                        int32_t (*)(const char**, int32_t*, int64_t*, int32_t);
+                    auto get_leak_files =
+                        lib.get_function<TmlMemGetLeakFiles>("tml_mem_get_leak_files");
+
+                    if (get_leak_files) {
+                        constexpr int32_t MAX_LEAK_FILES = 128;
+                        const char* files[MAX_LEAK_FILES];
+                        int32_t counts[MAX_LEAK_FILES];
+                        int64_t bytes[MAX_LEAK_FILES];
+
+                        int32_t num_files = get_leak_files(files, counts, bytes, MAX_LEAK_FILES);
+                        int32_t entries = num_files < MAX_LEAK_FILES ? num_files : MAX_LEAK_FILES;
+
+                        if (entries > 0) {
+                            std::lock_guard<std::mutex> lock(collector.mutex);
+                            for (int32_t fi = 0; fi < entries; fi++) {
+                                collector.leak_stats.add(files[fi] ? files[fi] : "(unknown)",
+                                                         counts[fi], bytes[fi]);
                             }
                         }
                     }

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Jump Threading Optimization Pass
 //!
 //! Threads jumps through blocks when conditions are known from incoming edges.

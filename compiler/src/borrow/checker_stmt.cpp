@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Checker Statement Analysis
 //!
 //! This file implements borrow checking for statements in TML. Statements

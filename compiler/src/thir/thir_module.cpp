@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # THIR Module Implementation
 //!
 //! Implements ThirExpr, ThirStmt, ThirPattern, and ThirModule accessor methods.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Binary Module Metadata Deserialization — Implementation
 //!
 //! ModuleBinaryReader and convenience functions for loading/preloading

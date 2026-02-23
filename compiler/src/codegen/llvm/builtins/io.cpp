@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - I/O Builtins
 //!
 //! This file implements builtin I/O function code generation.

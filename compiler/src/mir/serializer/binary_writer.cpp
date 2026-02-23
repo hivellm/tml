@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Binary Writer
 //!
 //! This file writes MIR modules to a compact binary format.

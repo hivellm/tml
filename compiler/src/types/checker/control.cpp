@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Control Flow
 //!
 //! This file implements type checking for control flow expressions.

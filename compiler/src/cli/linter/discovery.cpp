@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Lint File Discovery
 //!
 //! This file implements file discovery and orchestrates linting of individual files.

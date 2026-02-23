@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Object Compiler
 //!
 //! This file implements the final stage of compilation: converting LLVM IR

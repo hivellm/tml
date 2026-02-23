@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Diagnostic System
 //!
 //! This file implements the diagnostic emitter for compiler errors, warnings,

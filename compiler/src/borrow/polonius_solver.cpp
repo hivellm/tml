@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Polonius Constraint Solver
 //!
 //! Implements the fixed-point Datalog solver for Polonius borrow checking.

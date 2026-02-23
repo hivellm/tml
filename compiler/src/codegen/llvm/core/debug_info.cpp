@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Debug Information
 //!
 //! This file generates DWARF debug metadata for source-level debugging.

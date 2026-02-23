@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - OOP Core
 //!
 //! This file implements OOP type checking: interface and class registration,

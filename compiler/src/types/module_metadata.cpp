@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Module Metadata
 //!
 //! This file implements serialization of module metadata for incremental builds.

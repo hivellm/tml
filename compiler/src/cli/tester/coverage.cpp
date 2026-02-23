@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # LLVM Coverage Collector Implementation
 //!
 //! Implements coverage data collection and report generation using

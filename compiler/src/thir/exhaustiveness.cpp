@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Pattern Exhaustiveness Checker Implementation
 //!
 //! Implements the Maranget usefulness algorithm for pattern exhaustiveness.

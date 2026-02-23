@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - When/Pattern Matching
 //!
 //! This file implements when expression and pattern comparison code generation.

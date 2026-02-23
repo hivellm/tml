@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Strings
 //!
 //! This file implements string and character literal lexing.

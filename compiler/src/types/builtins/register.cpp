@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Registration
 //!
 //! This file is the entry point for registering all builtin functions.

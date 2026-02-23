@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Expressions
 //!
 //! This file converts AST expressions to IR form.

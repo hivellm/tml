@@ -96,6 +96,36 @@ struct PhaseTiming {
     int64_t duration_us = 0; // Microseconds for precision
 };
 
+// Per-file leak information for the leak summary table
+struct LeakFileInfo {
+    std::string file_path;
+    int32_t leak_count = 0;
+    int64_t leak_bytes = 0;
+};
+
+// Aggregated leak statistics across all suites
+struct LeakStats {
+    int32_t total_leaks = 0;
+    int64_t total_bytes = 0;
+    std::vector<LeakFileInfo> files; // Per-file breakdown
+
+    void add(const std::string& file, int32_t count, int64_t bytes) {
+        // Merge into existing entry if same file
+        for (auto& f : files) {
+            if (f.file_path == file) {
+                f.leak_count += count;
+                f.leak_bytes += bytes;
+                total_leaks += count;
+                total_bytes += bytes;
+                return;
+            }
+        }
+        files.push_back({file, count, bytes});
+        total_leaks += count;
+        total_bytes += bytes;
+    }
+};
+
 // Aggregated phase timings across all tests
 struct ProfileStats {
     std::map<std::string, int64_t> total_us; // Total time per phase

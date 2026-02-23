@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # CRC32C Implementation
 //!
 //! Implementation of file hashing utilities.

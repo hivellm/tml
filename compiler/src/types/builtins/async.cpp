@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Async Functions
 //!
 //! This file registers async runtime intrinsics.

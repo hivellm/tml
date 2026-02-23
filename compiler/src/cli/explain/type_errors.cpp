@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Error Explanations
 //!
 //! Error codes T001-T084 for type checking errors.

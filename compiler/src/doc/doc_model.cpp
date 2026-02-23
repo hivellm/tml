@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Documentation Model Implementation
 //!
 //! This file implements the utility functions for the documentation model.

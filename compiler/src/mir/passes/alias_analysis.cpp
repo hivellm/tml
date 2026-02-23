@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Alias Analysis Pass - Implementation
 //!
 //! Implements alias analysis to determine memory aliasing relationships.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! JSON Memory Allocator Implementation
 
 #include "json/json_allocator.hpp"

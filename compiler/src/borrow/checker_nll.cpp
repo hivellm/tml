@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Non-Lexical Lifetimes (NLL) and Advanced Borrow Checking
 //!
 //! This file implements Non-Lexical Lifetimes (NLL), partial move tracking,

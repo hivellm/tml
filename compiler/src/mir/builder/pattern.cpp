@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR Builder - Patterns
 //!
 //! This file implements pattern binding and destructuring.

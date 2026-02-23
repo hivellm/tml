@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Constant Propagation Pass
 //!
 //! This pass tracks constant values through the program and propagates

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Statement Implementation
 //!
 //! This file implements the HirStmt accessor methods and factory functions.

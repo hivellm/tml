@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Loop Control Flow
 //!
 //! This file implements block, loop, while, and for expression code generation.

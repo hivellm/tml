@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Token Dispatch
 //!
 //! This file implements the main `next_token()` entry point.

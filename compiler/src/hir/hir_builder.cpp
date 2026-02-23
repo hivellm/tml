@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Builder - Core Implementation
 //!
 //! This file implements the main `HirBuilder` class responsible for lowering

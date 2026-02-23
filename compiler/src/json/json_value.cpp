@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON Value Implementation
 //!
 //! This module implements the equality comparison operator for `JsonValue`.

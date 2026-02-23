@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Run Command Implementation
 //!
 //! This file implements the `tml run` command that compiles and immediately

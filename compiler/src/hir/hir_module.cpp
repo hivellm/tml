@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Module Implementation
 //!
 //! This file implements the HirModule lookup methods.

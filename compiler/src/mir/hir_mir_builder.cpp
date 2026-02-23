@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR to MIR Builder Implementation
 //!
 //! This file implements the main HirMirBuilder class that converts HIR to MIR.

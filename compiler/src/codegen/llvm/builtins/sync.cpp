@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Synchronization Builtins
 //!
 //! This file implements thread synchronization intrinsics.

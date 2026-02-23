@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Type Formatting
 //!
 //! This file implements formatting for type annotations.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 #include "query/query_provider.hpp"
 
 #include "query/query_core.hpp"

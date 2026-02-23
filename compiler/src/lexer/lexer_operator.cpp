@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Lexer - Operators
 //!
 //! This file implements operator and punctuation lexing.

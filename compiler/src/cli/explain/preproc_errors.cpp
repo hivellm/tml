@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Preprocessor Error Explanations
 //!
 //! Error codes PP001-PP002 for conditional compilation errors.

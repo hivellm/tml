@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Maybe[T] Methods
 //!
 //! This file implements methods for the `Maybe[T]` optional type.

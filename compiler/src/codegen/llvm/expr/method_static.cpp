@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Static Method Calls
 //!
 //! This file implements `Type::method()` static method calls.

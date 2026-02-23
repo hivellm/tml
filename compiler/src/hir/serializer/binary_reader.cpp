@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Binary Reader
 //!
 //! This file reads HIR modules from the compact binary format produced by

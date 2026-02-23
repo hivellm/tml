@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Strength Reduction Pass
 //!
 //! Replaces expensive operations with cheaper equivalents.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Implementation
 //!
 //! This file implements type creation and manipulation functions.

@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Fuzz Testing Framework
 //!
 //! This file implements the fuzz testing runner for `tml test --fuzz`.

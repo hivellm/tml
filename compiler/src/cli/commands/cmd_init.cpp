@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Project Initialization Command
 //!
 //! This file implements the `tml init` command for creating new TML projects.

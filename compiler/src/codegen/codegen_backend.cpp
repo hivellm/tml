@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 #include "codegen/codegen_backend.hpp"
 
 #include "codegen/llvm/llvm_codegen_backend.hpp"

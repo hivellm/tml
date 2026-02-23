@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Dead Argument Elimination Pass
 //!
 //! Removes unused function parameters from internal functions.

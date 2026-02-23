@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Checker Operations
 //!
 //! This file implements core borrow checking operations: creating/releasing borrows,

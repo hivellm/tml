@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(FromStr) Implementation
 //!
 //! This file implements the `@derive(FromStr)` derive macro.

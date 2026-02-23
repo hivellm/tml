@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Class OOP Support
 //!
 //! This file implements C#-style OOP class support with virtual dispatch.

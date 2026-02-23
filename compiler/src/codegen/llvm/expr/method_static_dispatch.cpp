@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Static Method Dispatch
 //!
 //! This file handles Section 1 of gen_method_call: dispatching Type::method()

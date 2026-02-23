@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Dead Code Elimination (DCE) Pass
 //!
 //! This pass removes instructions whose results are never used.

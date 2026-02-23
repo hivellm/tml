@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin Math Functions
 //!
 //! This file registers mathematical intrinsics.

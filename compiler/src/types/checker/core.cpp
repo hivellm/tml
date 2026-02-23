@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Core
 //!
 //! This file implements the core type checking logic for modules.

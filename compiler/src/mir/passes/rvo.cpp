@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Return Value Optimization (RVO) Pass - Implementation
 //!
 //! This pass implements NRVO by identifying local variables returned from

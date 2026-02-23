@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Builder - Declarations
 //!
 //! This file converts AST declarations to IR form.

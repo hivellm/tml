@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Virtual Dispatch, New/Base Expressions, Properties
 //!
 //! This file handles virtual method dispatch, interface vtable generation,

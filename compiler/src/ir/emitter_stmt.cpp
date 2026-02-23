@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # IR Emitter - Statements
 //!
 //! This file emits IR statements in S-expression format.

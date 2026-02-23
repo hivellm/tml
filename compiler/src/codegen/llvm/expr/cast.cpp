@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Type Casts
 //!
 //! This file implements type cast code generation.

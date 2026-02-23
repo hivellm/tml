@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # THIR to MIR Builder — Expression, Pattern & Helper Methods
 //!
 //! This file contains the second half of the ThirMirBuilder implementation:

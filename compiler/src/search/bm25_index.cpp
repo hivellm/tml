@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # BM25 Text Index — Implementation
 //!
 //! Implements tokenization, indexing, and BM25 scoring.

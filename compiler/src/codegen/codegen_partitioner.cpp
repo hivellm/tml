@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Codegen Unit Partitioner Implementation
 //!
 //! Splits a MIR module into N CGUs using deterministic hash-based assignment.

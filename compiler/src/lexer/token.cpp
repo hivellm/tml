@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Token Utilities
 //!
 //! This file implements token utility functions.

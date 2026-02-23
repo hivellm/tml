@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Cache Management Command
 //!
 //! This file implements the `tml cache` command for managing the build cache.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Types
 //!
 //! This file implements type conversion and name mangling.

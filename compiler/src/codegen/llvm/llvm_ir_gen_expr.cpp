@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Expression Dispatcher
 //!
 //! This file implements the main expression code generation dispatcher.
@@ -148,34 +150,16 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
                 sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
                 is_str_temp = true;
             }
-        } else if (expr.is<parser::CallExpr>()) {
-            // Track Str temporaries from @allocates free functions.
-            const auto& call = expr.as<parser::CallExpr>();
-            std::string func_name;
-            if (call.callee->is<parser::IdentExpr>()) {
-                func_name = call.callee->as<parser::IdentExpr>().name;
-            } else if (call.callee->is<parser::PathExpr>()) {
-                const auto& path = call.callee->as<parser::PathExpr>().path;
-                if (!path.segments.empty()) {
-                    func_name = path.segments.back();
-                }
-            }
-            if (!func_name.empty() && allocating_functions_.count(func_name)) {
-                auto sem = infer_expr_type(expr);
-                if (sem && sem->is<types::PrimitiveType>() &&
-                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                    is_str_temp = true;
-                }
-            }
-        } else if (expr.is<parser::MethodCallExpr>()) {
-            // Track Str temporaries from @allocates methods.
-            const auto& mcall = expr.as<parser::MethodCallExpr>();
-            if (allocating_functions_.count(mcall.method)) {
-                auto sem = infer_expr_type(expr);
-                if (sem && sem->is<types::PrimitiveType>() &&
-                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                    is_str_temp = true;
-                }
+        } else if (expr.is<parser::CallExpr>() || expr.is<parser::MethodCallExpr>()) {
+            // Track ALL Str-returning calls/methods as temporaries.
+            // tml_str_free validates heap pointers (HeapValidate on Windows,
+            // malloc_usable_size on Linux, malloc_size on macOS), so calling it
+            // on non-heap pointers (global constants, stack) is safe — they are skipped.
+            // This eliminates the need for @allocates annotations on every Str-returning function.
+            auto sem = infer_expr_type(expr);
+            if (sem && sem->is<types::PrimitiveType>() &&
+                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                is_str_temp = true;
             }
         }
         if (is_str_temp) {

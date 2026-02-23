@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Global Value Numbering (GVN) Pass
 //!
 //! Eliminates redundant computations across basic blocks.

@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Type Resolution
 //!
 //! This file implements type resolution from parser AST to semantic types.

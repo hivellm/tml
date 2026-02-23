@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Build Configuration and Manifest Parsing
 //!
 //! This file implements tml.toml manifest parsing and validation.

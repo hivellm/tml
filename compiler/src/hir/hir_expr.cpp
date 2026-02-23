@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Expression Implementation
 //!
 //! This file implements the HirExpr accessor methods and factory functions.

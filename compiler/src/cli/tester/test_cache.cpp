@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Test Cache Manager Implementation
 //!
 //! This file implements the test caching system that tracks file hashes

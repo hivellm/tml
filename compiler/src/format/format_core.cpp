@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Formatter Core Utilities
 //!
 //! This file implements core formatting infrastructure.

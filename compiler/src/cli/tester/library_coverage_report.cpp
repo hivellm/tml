@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # Library Coverage HTML/JSON Report Generation
 //!
 //! Generates HTML and JSON coverage reports from library scan data.

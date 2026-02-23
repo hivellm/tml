@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # RLIB Inspection Command
 //!
 //! This file implements the `tml rlib` command for inspecting TML library files.

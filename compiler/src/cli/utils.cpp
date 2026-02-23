@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # CLI Utility Functions
 //!
 //! This file contains shared utility functions used across the CLI.

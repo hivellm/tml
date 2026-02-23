@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Constructor Initialization Fusion Pass Implementation
 //!
 //! Fuses consecutive stores to object fields during construction.

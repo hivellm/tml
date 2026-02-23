@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Statements
 //!
 //! This file implements type checking for statements.

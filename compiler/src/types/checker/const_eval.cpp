@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Const Expression Evaluation
 //!
 //! This file implements compile-time evaluation of constant expressions.

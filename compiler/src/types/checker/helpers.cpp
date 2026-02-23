@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Helper Functions
 //!
 //! This file implements shared utilities used by other checker modules.

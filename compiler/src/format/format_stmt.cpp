@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Statement Formatting
 //!
 //! This file implements formatting for statement types.

@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - @derive(Reflect) Implementation
 //!
 //! This file implements the `@derive(Reflect)` derive macro which generates:

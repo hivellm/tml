@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Parser Core
 //!
 //! This file implements the core parser infrastructure.

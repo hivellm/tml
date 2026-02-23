@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Async Lowering Pass
 //!
 //! Transforms async functions into state machines for suspension/resume.

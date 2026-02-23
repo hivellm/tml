@@ -1,3 +1,5 @@
+TML_MODULE("mcp")
+
 //! # MCP Compiler Tools — Core
 //!
 //! Tool registration, definitions, shared helpers, and compiler tool handlers

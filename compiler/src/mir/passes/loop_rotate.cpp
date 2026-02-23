@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Loop Rotation Pass
 //!
 //! Transforms loops to expose more optimization opportunities.

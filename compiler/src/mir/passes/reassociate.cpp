@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Reassociation Pass
 //!
 //! Reorders associative operations to expose optimization opportunities.

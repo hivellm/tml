@@ -103,6 +103,7 @@ struct TestResultCollector {
     std::atomic<bool> compilation_error_occurred{false};
     TestResult first_compilation_error;
     ProfileStats profile_stats;
+    LeakStats leak_stats;
 
     void add(TestResult result);
     void add_timings(const PhaseTimings& timings);
@@ -199,6 +200,9 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
 
 // Print profile statistics
 void print_profile_stats(const ProfileStats& stats, const TestOptions& opts);
+
+// Print leak statistics (per-file leak table)
+void print_leak_stats(const LeakStats& stats, const TestOptions& opts);
 
 // ============================================================================
 // Benchmark Functions

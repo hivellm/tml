@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # SimplifySelect Pass
 //!
 //! Simplifies select (conditional) instructions.

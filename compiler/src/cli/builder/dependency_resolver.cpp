@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Dependency Resolution System
 //!
 //! This file implements dependency resolution for TML projects. It handles

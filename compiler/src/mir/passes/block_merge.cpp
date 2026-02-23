@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Basic Block Merging Pass
 //!
 //! Merges consecutive basic blocks when possible.

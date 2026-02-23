@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Aggressive Dead Code Elimination (ADCE) Pass
 //!
 //! Removes instructions that don't contribute to program output.

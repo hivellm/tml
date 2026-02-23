@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Builtin String Functions — REMOVED (Phase 29)
 //!
 //! All 29 FuncSig registrations (12 string + 14 char + 3 char_to_string)

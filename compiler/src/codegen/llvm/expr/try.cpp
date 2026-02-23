@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Try Operator
 //!
 //! This file implements the `!` (try) operator for error propagation.

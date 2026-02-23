@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Profile-Guided Optimization (PGO) - Implementation
 
 #include "mir/passes/pgo.hpp"

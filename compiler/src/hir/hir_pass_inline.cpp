@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Inlining, Closure Optimization, and Pass Manager
 //!
 //! Implements function inlining, closure optimization, and the pass manager

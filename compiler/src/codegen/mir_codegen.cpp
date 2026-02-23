@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # MIR-based LLVM IR Code Generator
 //!
 //! This file generates LLVM IR directly from MIR (Mid-level IR).

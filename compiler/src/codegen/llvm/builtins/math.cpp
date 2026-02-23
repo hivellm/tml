@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Math Builtins
 //!
 //! This file implements mathematical builtin functions via try_gen_builtin_math().

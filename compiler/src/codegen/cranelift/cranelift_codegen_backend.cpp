@@ -1,3 +1,5 @@
+TML_MODULE("codegen_cranelift")
+
 #include "codegen/cranelift/cranelift_codegen_backend.hpp"
 
 #include "backend/cranelift_bridge.h"

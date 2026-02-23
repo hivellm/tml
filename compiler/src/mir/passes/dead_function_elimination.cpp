@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Dead Function Elimination Pass
 //!
 //! This pass removes functions that are never called from the module.

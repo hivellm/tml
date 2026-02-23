@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # JSON Serializer
 //!
 //! This module implements JSON serialization for `JsonValue`.

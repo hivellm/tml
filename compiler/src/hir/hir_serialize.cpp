@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Serialization Entry Point
 //!
 //! This file provides serialization and deserialization of HIR modules.

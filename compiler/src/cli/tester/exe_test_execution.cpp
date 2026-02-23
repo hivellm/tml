@@ -1,3 +1,5 @@
+TML_MODULE("test")
+
 //! # EXE Test Subprocess Execution
 //!
 //! Runs test functions by invoking the compiled suite EXE as a subprocess.

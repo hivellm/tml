@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 #include "query/query_deps.hpp"
 
 namespace tml::query {

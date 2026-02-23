@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Borrow Error Explanations
 //!
 //! Error codes B001-B017 for ownership and lifetime errors.

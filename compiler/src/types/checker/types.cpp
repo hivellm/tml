@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Type Expressions
 //!
 //! This file implements type checking for composite type expressions.

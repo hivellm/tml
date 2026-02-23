@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Destructor Loop Hoisting Pass Implementation
 //!
 //! Hoists loop-local object allocations outside the loop to reduce

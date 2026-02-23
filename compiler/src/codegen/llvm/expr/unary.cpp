@@ -1,3 +1,5 @@
+TML_MODULE("codegen_x86")
+
 //! # LLVM IR Generator - Unary Expressions
 //!
 //! This file implements unary operator code generation.

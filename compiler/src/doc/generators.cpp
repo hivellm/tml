@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Documentation Output Generators Implementation
 //!
 //! This file implements JSON, Markdown, and HTML documentation generators.

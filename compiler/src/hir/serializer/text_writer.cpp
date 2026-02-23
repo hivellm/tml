@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # HIR Text Writer
 //!
 //! This file produces human-readable text output for HIR modules,

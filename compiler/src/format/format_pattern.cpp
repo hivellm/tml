@@ -1,3 +1,5 @@
+TML_MODULE("tools")
+
 //! # Pattern Formatting
 //!
 //! This file implements formatting for pattern matching.

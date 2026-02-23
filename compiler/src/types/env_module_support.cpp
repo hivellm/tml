@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Environment - Module Support
 //!
 //! This file implements module loading and import resolution.

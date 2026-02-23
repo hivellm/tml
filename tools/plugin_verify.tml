@@ -1,0 +1,168 @@
+// Plugin Verify Tool
+//
+// Verifies plugin DLL integrity by checking SHA256 hashes against manifest.json.
+//
+// Usage: tml run tools/plugin_verify.tml -- <plugins_dir>
+//
+// Reads manifest.json from the plugins directory and verifies each plugin's hash.
+
+use std::file::{File, Path}
+use std::crypto::hash::sha256
+use std::json::types::{Json, parse_result}
+use std::os::{args_count, args_get}
+
+func main() -> I32 {
+    let argc: I32 = args_count()
+
+    if argc < 2 {
+        print("Usage: tml run tools/plugin_verify.tml -- <plugins_dir>\n")
+        print("\nVerifies plugin integrity via SHA256 hashes in manifest.json.\n")
+        return 1
+    }
+
+    let plugins_dir: Str = args_get(1)
+
+    if not Path.exists(plugins_dir) {
+        print("error: plugins directory not found: {plugins_dir}\n")
+        return 1
+    }
+
+    let manifest_path: Str = Path.join(plugins_dir, "manifest.json")
+    if not Path.exists(manifest_path) {
+        print("error: manifest.json not found in {plugins_dir}\n")
+        print("  Run plugin_pack.tml first to generate the manifest.\n")
+        return 1
+    }
+
+    // Read and parse manifest
+    let manifest_str: Str = File.read_all(manifest_path)
+    let r: Outcome[Json, Str] = parse_result(manifest_str)
+
+    if r.is_err() {
+        print("error: invalid manifest.json\n")
+        return 1
+    }
+
+    var manifest: Json = r.unwrap()
+
+    // Extract ABI version via value_at (keys sorted: abi_version is at index 0)
+    let abi_val: Maybe[Json] = manifest.value_at(0)
+    if abi_val.is_nothing() {
+        print("error: manifest missing abi_version\n")
+        return 1
+    }
+    var abi_json: Json = abi_val.unwrap()
+    let abi_i: Maybe[I64] = abi_json.as_i64()
+    if abi_i.is_nothing() {
+        print("error: manifest missing abi_version\n")
+        return 1
+    }
+    let abi_version: I64 = abi_i.unwrap()
+
+    print("Plugin Verify Tool\n")
+    print("  Directory: {plugins_dir}\n")
+    print("  ABI:       {abi_version}\n\n")
+
+    // Get plugins array
+    let maybe_arr: Maybe[Json] = manifest.get("plugins")
+    if maybe_arr.is_nothing() {
+        print("error: manifest missing 'plugins' array\n")
+        return 1
+    }
+
+    var plugins_json: Json = maybe_arr.unwrap()
+    let num_plugins: I64 = plugins_json.len()
+
+    var verified: I32 = 0
+    var failed: I32 = 0
+    var missing: I32 = 0
+    var idx: I64 = 0
+
+    #if WINDOWS
+    let dll_ext: Str = ".dll"
+    #else
+    let dll_ext: Str = ".so"
+    #endif
+
+    loop (idx < num_plugins) {
+        let maybe_entry: Maybe[Json] = plugins_json.at(idx)
+        idx = idx + 1
+
+        if maybe_entry.is_nothing() {
+            continue
+        }
+
+        var entry: Json = maybe_entry.unwrap()
+
+        // Plugin entry keys are sorted alphabetically:
+        //   [0]=compressed_size, [1]=file, [2]=name, [3]=original_size, [4]=sha256
+        // WORKAROUND: Json.as_str() returns a shared buffer that gets overwritten.
+        // We must save each string via concatenation (name + "") before calling as_str again.
+
+        // Read name at index 2
+        let name_val: Maybe[Json] = entry.value_at(2)
+        if name_val.is_nothing() {
+            print("  [?] Skipping malformed entry\n")
+            continue
+        }
+        var name_json: Json = name_val.unwrap()
+        let name_str: Maybe[Str] = name_json.as_str()
+        if name_str.is_nothing() {
+            print("  [?] Skipping malformed entry\n")
+            continue
+        }
+        // Force a copy by concatenation — as_str shares a buffer
+        let name: Str = name_str.unwrap() + ""
+        let dll_filename: Str = name + dll_ext
+
+        // Read sha256 at index 4 (this overwrites the as_str buffer)
+        let hash_val: Maybe[Json] = entry.value_at(4)
+        if hash_val.is_nothing() {
+            print("  [?] Skipping entry without hash\n")
+            continue
+        }
+        var hash_json: Json = hash_val.unwrap()
+        let hash_str: Maybe[Str] = hash_json.as_str()
+        if hash_str.is_nothing() {
+            print("  [?] Skipping entry without hash\n")
+            continue
+        }
+        let expected_hash: Str = hash_str.unwrap() + ""
+
+        let dll_path: Str = Path.join(plugins_dir, dll_filename)
+
+        if not Path.exists(dll_path) {
+            print("  [MISSING] {dll_filename}\n")
+            missing = missing + 1
+            continue
+        }
+
+        // Compute SHA256 of the DLL
+        let content: Str = File.read_all(dll_path)
+        var digest = sha256(content)
+        let actual_hash: Str = digest.to_hex()
+        digest.destroy()
+
+        if actual_hash == expected_hash {
+            print("  [OK]   {dll_filename}\n")
+            verified = verified + 1
+        } else {
+            print("  [FAIL] {dll_filename}\n")
+            print("         expected: {expected_hash}\n")
+            print("         actual:   {actual_hash}\n")
+            failed = failed + 1
+        }
+    }
+
+    print("\nResults: {verified} verified, {failed} failed, {missing} missing\n")
+
+    if failed > 0 {
+        print("\nWARNING: Some plugins have been modified since packing!\n")
+        return 1
+    }
+    if missing > 0 {
+        print("\nNOTE: Some plugins are missing (may not have been built).\n")
+    }
+
+    return 0
+}

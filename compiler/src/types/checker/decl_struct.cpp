@@ -1,3 +1,5 @@
+TML_MODULE("compiler")
+
 //! # Type Checker - Struct and Enum Registration
 //!
 //! This file implements struct and enum type registration with @derive support.
