@@ -200,7 +200,7 @@ impl RawSocket {
     /// Creates a new socket with the specified parameters.
     pub func new_with_family(family: AddressFamily, sock_type: SocketType, protocol: SocketProtocol) -> Outcome[RawSocket, NetError] {
         let handle: I64 = lowlevel { sys_socket(family.to_raw(), sock_type.to_raw(), protocol.to_raw()) }
-        if handle == INVALID_SOCKET {
+        if handle == -1 {
             return Err(NetError::new(NetErrorKind::Other()))
         }
         Ok(RawSocket {
@@ -213,7 +213,7 @@ impl RawSocket {
 
     /// Checks if the socket handle is valid.
     pub func is_valid(this) -> Bool {
-        this.handle != INVALID_SOCKET
+        this.handle != -1
     }
 
     /// Returns the socket type.

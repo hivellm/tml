@@ -18,6 +18,7 @@
 
 - [x] 0.1.1 Test: recursive enum (AST-like tree with enum variants containing `Heap[Self]`)
 - [x] 0.1.2 Test: `HashMap[Str, T]` with 10K+ entries — insert, get, iterate, remove
+- [x] 0.1.2b Fix: `HashMap[Str, Str]` broken — pointer equality for string keys. Rewrote `Headers` to use linear arrays with string content comparison. Also fixed `hash_key` overflow with `wrapping_mul` (FNV hash intentionally overflows).
 - [ ] 0.1.3 Test: `List[T]` with polymorphic element types (List of enums)
 - [ ] 0.1.4 Test: nested generics — `HashMap[Str, List[AstNode]]`
 - [ ] 0.1.5 Test: pattern matching (`when`) on recursive enum with 20+ variants

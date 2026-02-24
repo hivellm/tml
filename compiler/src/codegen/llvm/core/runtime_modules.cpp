@@ -286,8 +286,31 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             if (it == all_modules.end())
                 continue;
             for (const auto& dep : it->second.private_imports) {
-                if (imported_module_paths.insert(dep).second) {
-                    worklist.push_back(dep);
+                // private_imports may contain symbol-level paths like
+                // "std::net::sys::RawSocket" where the actual module is
+                // "std::net::sys". Try exact match first, then strip last
+                // segment(s) to find the real module.
+                std::string resolved = dep;
+                if (all_modules.find(resolved) == all_modules.end()) {
+                    // Strip last segment (likely a symbol name, not a module)
+                    auto sep = resolved.rfind("::");
+                    if (sep != std::string::npos) {
+                        resolved = resolved.substr(0, sep);
+                    }
+                    // If still not found, try one more level
+                    if (all_modules.find(resolved) == all_modules.end()) {
+                        sep = resolved.rfind("::");
+                        if (sep != std::string::npos) {
+                            resolved = resolved.substr(0, sep);
+                        }
+                    }
+                }
+                if (imported_module_paths.insert(resolved).second) {
+                    worklist.push_back(resolved);
+                }
+                // Also insert the original dep path (it may match an exact module)
+                if (resolved != dep) {
+                    imported_module_paths.insert(dep);
                 }
             }
         }

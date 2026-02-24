@@ -1,13 +1,198 @@
-use test::{assert_eq}
+use test::{assert, assert_eq}
+use std::stream::byte_stream::ByteStream
+use std::stream::buffered::{BufferedReader, BufferedWriter}
 
-// BufferedReader and BufferedWriter are tested via standalone executables
-// (.sandbox/test_buffered7.tml) because the module generates too much IR
-// (~2500ms codegen) which exceeds the DLL test framework's stack limits,
-// causing STACK_OVERFLOW/ACCESS_VIOLATION crashes when calling methods
-// that access ByteStream internals.
+@test func test_read_line_basic() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("hello\nworld\n")
+    var reader: BufferedReader = BufferedReader::new()
 
-@test func test_buffered_module_exists() -> I32 {
-    // Placeholder test — full functionality verified via standalone
-    assert_eq(1, 1)
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "hello")
+        },
+    }
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "world")
+        },
+    }
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
+@test func test_read_line_crlf() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("line1\r\nline2\r\nline3\r\n")
+    var reader: BufferedReader = BufferedReader::new()
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "line1")
+        },
+    }
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "line2")
+        },
+    }
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "line3")
+        },
+    }
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
+@test func test_read_line_eof_no_newline() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("no-newline")
+    var reader: BufferedReader = BufferedReader::new()
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "no-newline")
+        },
+    }
+
+    // Second read should return empty (EOF)
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "")
+        },
+    }
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
+@test func test_buffered_reader_capacity() -> I32 {
+    var reader: BufferedReader = BufferedReader::new()
+    assert_eq(reader.get_buf_cap(), 8192)
+    assert_eq(reader.buffered(), 0)
+    reader.destroy()
+    return 0
+}
+
+@test func test_buffered_writer_basic() -> I32 {
+    var dest: ByteStream = ByteStream::new()
+    var writer: BufferedWriter = BufferedWriter::new()
+
+    // Write some bytes via writer
+    var data: [U8; 5] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8]
+    when writer.write(mut ref dest, ref data) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 5)
+        },
+    }
+
+    // Data should still be buffered (not flushed yet)
+    assert_eq(writer.buffered(), 5)
+    assert_eq(dest.len(), 0)
+
+    // Flush
+    when writer.flush(mut ref dest) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(u) => {},
+    }
+
+    // Now dest should have the bytes
+    assert_eq(dest.len(), 5)
+    assert_eq(writer.buffered(), 0)
+
+    writer.destroy()
+    dest.destroy()
+    return 0
+}
+
+@test func test_read_line_empty_lines() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("\n\nfoo\n")
+    var reader: BufferedReader = BufferedReader::new()
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "")
+        },
+    }
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "")
+        },
+    }
+
+    when reader.read_line(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(line) => {
+            assert_eq(line, "foo")
+        },
+    }
+
+    reader.destroy()
+    stream.destroy()
     return 0
 }

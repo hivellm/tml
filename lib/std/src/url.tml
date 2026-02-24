@@ -132,6 +132,11 @@ func find_last_colon(s: Str, slen: I64) -> I64 {
 }
 
 /// Internal: parse a URL string.
+///
+/// NOTE: `str::substring` and `str::to_lowercase` are `@allocates` — the compiler
+/// inserts `mem_free` for their results at scope exit. Strings stored in the Url
+/// struct must escape this tracking by casting to I64 immediately. Intermediate
+/// strings used only for parsing can stay as normal Str (auto-freed at scope exit).
 func parse_url_impl(input: Str) -> Outcome[Url, Str] {
     let slen: I64 = str::len(input)
     if slen == 0 {
@@ -142,65 +147,77 @@ func parse_url_impl(input: Str) -> Outcome[Url, Str] {
     if scheme_end < 0 {
         return Err("url: missing scheme (no :// found)")
     }
-    let scheme: Str = str::to_lowercase(str::substring(input, 0, scheme_end))
+
+    // scheme: escaped from @allocates (stored in Url)
+    let scheme_raw: Str = str::substring(input, 0, scheme_end)
+    let scheme_i64: I64 = str::to_lowercase(scheme_raw) as I64
     let after_scheme: I64 = scheme_end + 3
 
+    // fragment: escaped from @allocates (stored in Url)
     let frag_pos: I64 = find_char_or_neg(input, after_scheme, slen, 35)
     var effective_end: I64 = slen
-    var frag: Str = ""
+    var frag_i64: I64 = "" as I64
     if frag_pos >= 0 {
-        frag = str::substring(input, frag_pos + 1, slen)
+        frag_i64 = str::substring(input, frag_pos + 1, slen) as I64
         effective_end = frag_pos
     }
 
+    // query: escaped from @allocates (stored in Url)
     let query_pos: I64 = find_char_or_neg(input, after_scheme, effective_end, 63)
-    var raw_q: Str = ""
+    var raw_q_i64: I64 = "" as I64
     var path_end: I64 = effective_end
     if query_pos >= 0 {
-        raw_q = str::substring(input, query_pos + 1, effective_end)
+        raw_q_i64 = str::substring(input, query_pos + 1, effective_end) as I64
         path_end = query_pos
     }
 
+    // authority: intermediate (NOT stored in Url, will be auto-freed by @allocates)
     let auth_end: I64 = find_char(input, after_scheme, path_end, 47)
     let authority: Str = str::substring(input, after_scheme, auth_end)
 
-    var url_path: Str = ""
+    // path: escaped from @allocates (stored in Url)
+    var url_path_i64: I64 = "" as I64
     if auth_end < path_end {
-        url_path = str::substring(input, auth_end, path_end)
+        url_path_i64 = str::substring(input, auth_end, path_end) as I64
     }
 
     let auth_len: I64 = str::len(authority)
-    var uinfo: Str = ""
-    var hst: Str = ""
+    var uinfo_i64: I64 = "" as I64
+    var hst_i64: I64 = "" as I64
     var prt: I64 = -1
 
     let at_pos: I64 = find_char_or_neg(authority, 0, auth_len, 64)
     var host_start: I64 = 0
     if at_pos >= 0 {
-        uinfo = str::substring(authority, 0, at_pos)
+        // userinfo: escaped (stored in Url)
+        uinfo_i64 = str::substring(authority, 0, at_pos) as I64
         host_start = at_pos + 1
     }
 
+    // host_part: intermediate (used for parsing host:port, NOT stored directly)
     let host_part: Str = str::substring(authority, host_start, auth_len)
     let hp_len: I64 = str::len(host_part)
     let colon_pos: I64 = find_last_colon(host_part, hp_len)
 
     if colon_pos >= 0 {
-        hst = str::substring(host_part, 0, colon_pos)
+        // host: escaped (stored in Url)
+        hst_i64 = str::substring(host_part, 0, colon_pos) as I64
+        // port_str: intermediate (not stored, auto-freed)
         let port_str: Str = str::substring(host_part, colon_pos + 1, hp_len)
         prt = parse_port_str(port_str)
     } else {
-        hst = host_part
+        // No port — host is the entire host_part, need fresh copy since host_part is auto-freed
+        hst_i64 = str::substring(authority, host_start, auth_len) as I64
     }
 
     return Ok(Url {
-        scheme: scheme,
-        userinfo: uinfo,
-        host: hst,
+        scheme: scheme_i64 as Str,
+        userinfo: uinfo_i64 as Str,
+        host: hst_i64 as Str,
         port: prt,
-        path: url_path,
-        raw_query: raw_q,
-        fragment: frag
+        path: url_path_i64 as Str,
+        raw_query: raw_q_i64 as Str,
+        fragment: frag_i64 as Str
     })
 }
 

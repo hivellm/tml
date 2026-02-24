@@ -768,13 +768,16 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
         // --- Launch pipeline: execution thread + compilation threads ---
 
-        // Start execution thread with 8 MB stack.
+        // Start execution thread with 32 MB stack.
         // Default std::thread on Windows gets 1 MB, which is insufficient for
         // OpenSSL DH/RSA operations that use deep BIGNUM call chains.
         // The main process has 32 MB (/STACK:33554432), but worker threads
         // created via std::thread inherit the default 1 MB, causing
         // intermittent EXCEPTION_STACK_OVERFLOW in crypto tests.
-        constexpr size_t EXEC_THREAD_STACK_SIZE = 8 * 1024 * 1024; // 8 MB
+        // Modules like std::stream generate 10K+ lines of IR which compiles
+        // to machine code with deep call chains; 8 MB is insufficient for
+        // test files with 6+ test functions in these modules.
+        constexpr size_t EXEC_THREAD_STACK_SIZE = 32 * 1024 * 1024; // 32 MB
 #ifdef _WIN32
         NativeThread exec_thread(execute_worker, EXEC_THREAD_STACK_SIZE);
 #else

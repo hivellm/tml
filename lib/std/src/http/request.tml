@@ -253,10 +253,10 @@ impl Request {
     pub func host_header(this) -> Str {
         let h: Str = this.host()
         let p: I64 = this.port()
-        if p == 0 or (p == 80 and this.scheme() == "http") or (p == 443 and this.scheme() == "https") {
+        if p <= 0 or (p == 80 and this.scheme() == "http") or (p == 443 and this.scheme() == "https") {
             return h
         }
-        return "{h}:{p}"
+        return "{h}:{i64_to_str(p)}"
     }
 
     /// Returns the Content-Type header value, or "".

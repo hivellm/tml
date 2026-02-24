@@ -779,6 +779,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 // Single-arg variant
                                 std::string payload = gen_expr(*call.args[0]);
 
+                                // Mark variable as consumed (moved into enum variant)
+                                // to prevent double-free at scope exit
+                                if (call.args[0]->is<parser::IdentExpr>()) {
+                                    const auto& arg_ident = call.args[0]->as<parser::IdentExpr>();
+                                    if (locals_.find(arg_ident.name) != locals_.end()) {
+                                        mark_var_consumed(arg_ident.name);
+                                    }
+                                }
+
                                 // Skip store for Unit payload - "{}" is zero-sized
                                 if (last_expr_type_ != "{}") {
                                     std::string payload_ptr = fresh_reg();
@@ -798,6 +807,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 for (size_t ai = 0; ai < call.args.size(); ++ai) {
                                     arg_vals.push_back(gen_expr(*call.args[ai]));
                                     arg_types.push_back(last_expr_type_);
+
+                                    // Mark variable as consumed (moved into enum variant)
+                                    if (call.args[ai]->is<parser::IdentExpr>()) {
+                                        const auto& arg_ident =
+                                            call.args[ai]->as<parser::IdentExpr>();
+                                        if (locals_.find(arg_ident.name) != locals_.end()) {
+                                            mark_var_consumed(arg_ident.name);
+                                        }
+                                    }
                                 }
                                 // Build tuple type string: { type0, type1, ... }
                                 std::string tuple_type = "{ ";
@@ -856,6 +874,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 // Single-arg variant
                                 std::string payload = gen_expr(*call.args[0]);
 
+                                // Mark variable as consumed (moved into enum variant)
+                                // to prevent double-free at scope exit
+                                if (call.args[0]->is<parser::IdentExpr>()) {
+                                    const auto& arg_ident = call.args[0]->as<parser::IdentExpr>();
+                                    if (locals_.find(arg_ident.name) != locals_.end()) {
+                                        mark_var_consumed(arg_ident.name);
+                                    }
+                                }
+
                                 // Skip store for Unit payload - "{}" is zero-sized
                                 if (last_expr_type_ != "{}") {
                                     std::string payload_ptr = fresh_reg();
@@ -875,6 +902,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 for (size_t ai = 0; ai < call.args.size(); ++ai) {
                                     arg_vals.push_back(gen_expr(*call.args[ai]));
                                     arg_types.push_back(last_expr_type_);
+
+                                    // Mark variable as consumed (moved into enum variant)
+                                    if (call.args[ai]->is<parser::IdentExpr>()) {
+                                        const auto& arg_ident =
+                                            call.args[ai]->as<parser::IdentExpr>();
+                                        if (locals_.find(arg_ident.name) != locals_.end()) {
+                                            mark_var_consumed(arg_ident.name);
+                                        }
+                                    }
                                 }
                                 std::string tuple_type = "{ ";
                                 for (size_t ai = 0; ai < arg_types.size(); ++ai) {
@@ -1098,6 +1134,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             std::string payload = gen_expr(*call.args[0]);
                             expected_enum_type_ = saved_expected;
 
+                            // Mark variable as consumed (moved into enum variant)
+                            // to prevent double-free at scope exit
+                            if (call.args[0]->is<parser::IdentExpr>()) {
+                                const auto& arg_ident = call.args[0]->as<parser::IdentExpr>();
+                                if (locals_.find(arg_ident.name) != locals_.end()) {
+                                    mark_var_consumed(arg_ident.name);
+                                }
+                            }
+
                             // Skip store for Unit payload - "{}" is zero-sized
                             if (last_expr_type_ != "{}") {
                                 std::string payload_ptr = fresh_reg();
@@ -1117,6 +1162,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             for (size_t ai = 0; ai < call.args.size(); ++ai) {
                                 arg_vals.push_back(gen_expr(*call.args[ai]));
                                 arg_types.push_back(last_expr_type_);
+
+                                // Mark variable as consumed (moved into enum variant)
+                                if (call.args[ai]->is<parser::IdentExpr>()) {
+                                    const auto& arg_ident = call.args[ai]->as<parser::IdentExpr>();
+                                    if (locals_.find(arg_ident.name) != locals_.end()) {
+                                        mark_var_consumed(arg_ident.name);
+                                    }
+                                }
                             }
                             expected_enum_type_ = saved_expected;
 
@@ -1178,6 +1231,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             // Single-arg variant
                             std::string payload = gen_expr(*call.args[0]);
 
+                            // Mark variable as consumed (moved into enum variant)
+                            // to prevent double-free at scope exit
+                            if (call.args[0]->is<parser::IdentExpr>()) {
+                                const auto& arg_ident = call.args[0]->as<parser::IdentExpr>();
+                                if (locals_.find(arg_ident.name) != locals_.end()) {
+                                    mark_var_consumed(arg_ident.name);
+                                }
+                            }
+
                             // Skip store for Unit payload - "{}" is zero-sized
                             if (last_expr_type_ != "{}") {
                                 std::string payload_ptr = fresh_reg();
@@ -1197,6 +1259,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             for (size_t ai = 0; ai < call.args.size(); ++ai) {
                                 arg_vals.push_back(gen_expr(*call.args[ai]));
                                 arg_types.push_back(last_expr_type_);
+
+                                // Mark variable as consumed (moved into enum variant)
+                                if (call.args[ai]->is<parser::IdentExpr>()) {
+                                    const auto& arg_ident = call.args[ai]->as<parser::IdentExpr>();
+                                    if (locals_.find(arg_ident.name) != locals_.end()) {
+                                        mark_var_consumed(arg_ident.name);
+                                    }
+                                }
                             }
                             std::string tuple_type = "{ ";
                             for (size_t ai = 0; ai < arg_types.size(); ++ai) {

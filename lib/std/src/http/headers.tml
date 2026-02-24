@@ -39,7 +39,11 @@ impl Headers {
 
     /// Sets a header value, replacing any existing value for that key.
     pub func set(this, key: Str, value: Str) {
-        let lower: Str = str::to_lowercase(key)
+        // Cast to I64 immediately to prevent @allocates cleanup from freeing
+        // the lowercased key when this function returns. We own this memory
+        // and store it in the keys array — it will be freed in destroy().
+        let lower_i64: I64 = str::to_lowercase(key) as I64
+        let lower: Str = lower_i64 as Str
         let hdr: I64 = this.handle as I64
         let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
@@ -50,7 +54,8 @@ impl Headers {
         loop (i < cur_len) {
             let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
             if existing_key == lower {
-                // Overwrite value
+                // Overwrite value — free the duplicate key since we don't need it
+                lowlevel { mem_free(lower_i64 as *Unit) }
                 lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, value as I64) }
                 return
             }
@@ -72,10 +77,10 @@ impl Headers {
             lowlevel { ptr_write[I64]((hdr + 8) as *I64, new_vals) }
             lowlevel { ptr_write[I64]((hdr + 24) as *I64, new_cap) }
 
-            lowlevel { ptr_write[I64]((new_keys + cur_len * 8) as *I64, lower as I64) }
+            lowlevel { ptr_write[I64]((new_keys + cur_len * 8) as *I64, lower_i64) }
             lowlevel { ptr_write[I64]((new_vals + cur_len * 8) as *I64, value as I64) }
         } else {
-            lowlevel { ptr_write[I64]((keys_addr + cur_len * 8) as *I64, lower as I64) }
+            lowlevel { ptr_write[I64]((keys_addr + cur_len * 8) as *I64, lower_i64) }
             lowlevel { ptr_write[I64]((vals_addr + cur_len * 8) as *I64, value as I64) }
         }
         lowlevel { ptr_write[I64]((hdr + 16) as *I64, cur_len + 1) }

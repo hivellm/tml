@@ -25,6 +25,12 @@ pub mod error
 pub mod encoding
 pub mod cookie
 
+// ── Connection, Request, Response, Client ─────────────────────
+pub mod connection
+pub mod request
+pub mod response
+pub mod client
+
 // ── Routing ─────────────────────────────────────────────────
 pub mod router
 
@@ -37,3 +43,7 @@ pub use std::http::error::{HttpError, HttpErrorKind}
 pub use std::http::cookie::Cookie
 pub use std::http::router::{Router, RouteMatch}
 pub use std::http::encoding::{compress, decompress, accepted_encodings}
+pub use std::http::connection::{Connection, ConnectionInfo}
+pub use std::http::request::Request
+pub use std::http::response::Response
+pub use std::http::client::HttpClient

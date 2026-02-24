@@ -1,0 +1,217 @@
+//! HTTP client — sends requests and receives responses.
+//!
+//! Uses Connection for DNS + TCP + TLS, Request for serialization,
+//! and Response for parsing the wire format.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::http::client::HttpClient
+//!
+//! let client = HttpClient::new()
+//! let result = client.get("https://example.com")
+//! when result {
+//!     Ok(resp) => print("Status: {resp.status().code()}\n"),
+//!     Err(e) => print("Error: {e.message}\n"),
+//! }
+//! ```
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use std::http::method::Method
+use std::http::request::Request
+use std::http::response::Response
+use std::http::connection::Connection
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// Maximum response size to prevent OOM (8 MB).
+const MAX_RESPONSE_SIZE: I64 = 8388608
+
+/// An HTTP client that sends requests and returns parsed responses.
+pub type HttpClient {
+    user_agent: Str,
+}
+
+impl HttpClient {
+    /// Creates a new HTTP client with default settings.
+    pub func new() -> HttpClient {
+        HttpClient { user_agent: "tml/1.0" }
+    }
+
+    /// Creates a client with a custom User-Agent.
+    pub func with_user_agent(ua: Str) -> HttpClient {
+        HttpClient { user_agent: ua }
+    }
+
+    // ── Convenience methods ───────────────────────────────────
+
+    /// Sends a GET request to the given URL.
+    pub func get(this, url: Str) -> Outcome[Response, HttpError] {
+        let req = Request::get(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+            .header("Accept", "*/*")
+        return this.send(req)
+    }
+
+    /// Sends a POST request with the given body.
+    pub func post(this, url: Str, body: Str) -> Outcome[Response, HttpError] {
+        let req = Request::post(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+            .header("Accept", "*/*")
+            .body(body)
+        return this.send(req)
+    }
+
+    /// Sends a POST request with JSON body.
+    pub func post_json(this, url: Str, json_body: Str) -> Outcome[Response, HttpError] {
+        let req = Request::post(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+            .header("Accept", "application/json")
+            .json(json_body)
+        return this.send(req)
+    }
+
+    /// Sends a PUT request with the given body.
+    pub func put(this, url: Str, body: Str) -> Outcome[Response, HttpError] {
+        let req = Request::put(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+            .body(body)
+        return this.send(req)
+    }
+
+    /// Sends a DELETE request.
+    pub func delete(this, url: Str) -> Outcome[Response, HttpError] {
+        let req = Request::delete(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+        return this.send(req)
+    }
+
+    /// Sends a HEAD request (response has no body).
+    pub func head(this, url: Str) -> Outcome[Response, HttpError] {
+        let req = Request::head(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+        return this.send(req)
+    }
+
+    // ── Core send ─────────────────────────────────────────────
+
+    /// Sends a Request and returns the parsed Response.
+    pub func send(this, req: Request) -> Outcome[Response, HttpError] {
+        let host: Str = req.host()
+        if str::len(host) == 0 {
+            return Err(HttpError::invalid_url("no host in URL"))
+        }
+
+        let is_https: Bool = req.scheme() == "https"
+        var port: I64 = req.port()
+        if port <= 0 {
+            if is_https { port = 443 }
+            else { port = 80 }
+        }
+
+        // Open connection
+        let conn_result = Connection::open(host, port, is_https)
+        when conn_result {
+            Err(e) => return Err(e),
+            Ok(conn) => {
+                // Serialize and send
+                let wire: Str = req.serialize()
+                let write_result = conn.write_str(wire)
+                when write_result {
+                    Err(e) => {
+                        conn.close()
+                        return Err(e)
+                    },
+                    Ok(n) => {},
+                }
+
+                // Read full response
+                let raw = read_all(conn)
+                conn.close()
+
+                when raw {
+                    Err(e) => return Err(e),
+                    Ok(data) => return Response::parse(data),
+                }
+            },
+        }
+    }
+}
+
+/// Converts a byte buffer slice [U8] to a Str (assumes UTF-8/ASCII).
+/// Allocates a new null-terminated string of length `n`.
+@allocates
+func bytes_to_str(buf: ref [U8], n: I64) -> Str {
+    // Allocate n+1 bytes for null-terminated string
+    let dst: *Unit = lowlevel { mem_alloc(n + 1) }
+    let dst_addr: I64 = dst as I64
+
+    // Copy n bytes from buffer
+    let src_addr: I64 = (ref buf) as I64
+    // fat pointer {data_ptr, len} — extract data_ptr
+    let data_ptr: I64 = lowlevel { ptr_read[I64](src_addr as *I64) }
+
+    lowlevel { copy_nonoverlapping(data_ptr as *Unit, dst, n) }
+
+    // Null-terminate
+    lowlevel { ptr_write[U8]((dst_addr + n) as *U8, 0 as U8) }
+
+    dst as Str
+}
+
+/// Reads all data from a connection until EOF.
+/// Returns the raw response as a string.
+func read_all(conn: Connection) -> Outcome[Str, HttpError] {
+    // Accumulate into a growing buffer using mem_alloc + copy
+    var capacity: I64 = 32768
+    var data: *Unit = lowlevel { mem_alloc(capacity) }
+    var total: I64 = 0
+
+    var buf: [U8; 16384] = [0 as U8; 16384]
+
+    loop (total < MAX_RESPONSE_SIZE) {
+        let read_result = conn.read(mut ref buf)
+        when read_result {
+            Err(e) => {
+                if total > 0 {
+                    break
+                }
+                lowlevel { mem_free(data) }
+                return Err(e)
+            },
+            Ok(n) => {
+                if n <= 0 {
+                    break
+                }
+
+                // Grow buffer if needed
+                if total + n >= capacity {
+                    let new_cap: I64 = capacity * 2
+                    let new_data: *Unit = lowlevel { mem_alloc(new_cap) }
+                    lowlevel { copy_nonoverlapping(data, new_data, total) }
+                    lowlevel { mem_free(data) }
+                    data = new_data
+                    capacity = new_cap
+                }
+
+                // Copy chunk from buf into data at offset total
+                let src_addr: I64 = (ref buf) as I64
+                let buf_data: I64 = lowlevel { ptr_read[I64](src_addr as *I64) }
+                let dst_offset: I64 = (data as I64) + total
+                lowlevel { copy_nonoverlapping(buf_data as *Unit, dst_offset as *Unit, n) }
+                total = total + n
+            },
+        }
+    }
+
+    // Null-terminate and return as Str
+    lowlevel { ptr_write[U8](((data as I64) + total) as *U8, 0 as U8) }
+    let result: Str = data as Str
+    return Ok(result)
+}

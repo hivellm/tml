@@ -94,9 +94,10 @@ impl BufferedReader {
         // buf_cap at offset 8
         lowlevel { ptr_write[I64]((h + 8) as *I64, cap) }
         // buf_pos at offset 16
-        lowlevel { ptr_write[I64]((h + 16) as *I64, 0) }
+        let zero: I64 = 0
+        lowlevel { ptr_write[I64]((h + 16) as *I64, zero) }
         // buf_filled at offset 24
-        lowlevel { ptr_write[I64]((h + 24) as *I64, 0) }
+        lowlevel { ptr_write[I64]((h + 24) as *I64, zero) }
 
         BufferedReader { handle: header }
     }
@@ -383,7 +384,8 @@ impl BufferedWriter {
 
         lowlevel { ptr_write[I64](h as *I64, buf_data as I64) }
         lowlevel { ptr_write[I64]((h + 8) as *I64, cap) }
-        lowlevel { ptr_write[I64]((h + 16) as *I64, 0) }
+        let bw_zero: I64 = 0
+        lowlevel { ptr_write[I64]((h + 16) as *I64, bw_zero) }
 
         BufferedWriter { handle: header }
     }

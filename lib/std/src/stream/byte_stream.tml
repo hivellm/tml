@@ -397,18 +397,19 @@ impl Writable for ByteStream {
 
 /// Reads all remaining bytes from a ByteStream into a new Buffer.
 pub func read_all(source: mut ref ByteStream) -> Outcome[Buffer, IoError] {
-    let result: Buffer = Buffer::new(256)
-    var tmp: [U8; 4096] = [0 as U8; 4096]
-    loop (true) {
-        let n: I64 = source.read(mut ref tmp)!
-        if n == 0 {
-            break
-        }
+    let h: I64 = source.handle as I64
+    let rp: I64 = bs_get_read_pos(h)
+    let len: I64 = bs_get_len(h)
+    let remaining: I64 = len - rp
+    let result: Buffer = Buffer::new(remaining)
+    if remaining > 0 {
+        let data: *Unit = bs_get_data(h)
         var i: I64 = 0
-        loop (i < n) {
-            result.write_byte(tmp[i] as I32)
+        loop (i < remaining) {
+            result.write_byte(bs_read_byte(data, rp + i) as I32)
             i = i + 1
         }
+        bs_set_read_pos(h, len)
     }
     Ok(result)
 }

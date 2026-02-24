@@ -1,6 +1,6 @@
 // Tests for std::stream ByteStream reading.
 use test::{assert, assert_eq}
-use std::stream::byte_stream::ByteStream
+use std::stream::byte_stream::{ByteStream, read_all, read_to_string}
 
 @test
 func test_bytestream_create_destroy() -> I32 {
@@ -63,6 +63,142 @@ func test_bytestream_partial_read() -> I32 {
     }
     assert_eq(stream.remaining(), 6 as I64, "6 remaining")
     assert(not stream.is_eof(), "not eof yet")
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_bytestream_from_bytes() -> I32 {
+    var bytes: [U8; 3] = [65 as U8, 66 as U8, 67 as U8]
+    var stream: ByteStream = ByteStream::from_bytes(ref bytes)
+    assert_eq(stream.len(), 3 as I64, "len 3")
+    assert_eq(stream.remaining(), 3 as I64, "remaining 3")
+    assert_eq(stream.get(0) as I64, 65 as I64, "A")
+    assert_eq(stream.get(1) as I64, 66 as I64, "B")
+    assert_eq(stream.get(2) as I64, 67 as I64, "C")
+    let s: Str = stream.to_string()
+    assert_eq(s, "ABC", "to_string")
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_bytestream_read_position() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("abcdef")
+    assert_eq(stream.read_position(), 0 as I64, "initial pos 0")
+
+    var buf: [U8; 3] = [0 as U8; 3]
+    when stream.read(mut ref buf) {
+        Err(e) => return 1,
+        Ok(n) => assert_eq(n, 3 as I64, "read 3"),
+    }
+    assert_eq(stream.read_position(), 3 as I64, "pos after read")
+    assert_eq(stream.remaining(), 3 as I64, "remaining 3")
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_bytestream_reset_read() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("hello")
+    var buf: [U8; 5] = [0 as U8; 5]
+    when stream.read(mut ref buf) {
+        Err(e) => return 1,
+        Ok(n) => assert_eq(n, 5 as I64, "read all"),
+    }
+    assert(stream.is_eof(), "eof")
+    assert_eq(stream.remaining(), 0 as I64, "remaining 0")
+
+    // Reset and read again
+    stream.reset_read()
+    assert_eq(stream.read_position(), 0 as I64, "pos reset")
+    assert_eq(stream.remaining(), 5 as I64, "remaining 5 after reset")
+    assert(not stream.is_eof(), "not eof after reset")
+
+    var buf2: [U8; 5] = [0 as U8; 5]
+    when stream.read(mut ref buf2) {
+        Err(e) => return 1,
+        Ok(n) => {
+            assert_eq(n, 5 as I64, "re-read 5")
+            assert_eq(buf2[0] as I64, 104 as I64, "h")
+        },
+    }
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_read_to_string() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("hello world")
+    when read_to_string(mut ref stream) {
+        Err(e) => return 1,
+        Ok(s) => {
+            assert_eq(s, "hello world", "full string")
+        },
+    }
+    assert(stream.is_eof(), "eof after read_to_string")
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_read_to_string_eof() -> I32 {
+    // Calling read_to_string on an already-consumed stream returns empty
+    var stream: ByteStream = ByteStream::from_string("x")
+    var buf: [U8; 1] = [0 as U8; 1]
+    when stream.read(mut ref buf) {
+        Err(e) => return 1,
+        Ok(n) => assert_eq(n, 1 as I64, "read 1"),
+    }
+    when read_to_string(mut ref stream) {
+        Err(e) => return 1,
+        Ok(s) => assert_eq(s, "", "empty on eof"),
+    }
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_read_to_string_partial() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("abcdef")
+    // Read 3 bytes first
+    var buf: [U8; 3] = [0 as U8; 3]
+    when stream.read(mut ref buf) {
+        Err(e) => return 1,
+        Ok(n) => assert_eq(n, 3 as I64, "read 3"),
+    }
+    // read_to_string should get remaining
+    when read_to_string(mut ref stream) {
+        Err(e) => return 1,
+        Ok(s) => assert_eq(s, "def", "remaining string"),
+    }
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_read_all() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("data")
+    when read_all(mut ref stream) {
+        Err(e) => return 1,
+        Ok(buf) => {
+            assert_eq(buf.len(), 4 as I64, "buf len 4")
+            buf.destroy()
+        },
+    }
+    assert(stream.is_eof(), "eof after read_all")
+    stream.destroy()
+    return 0
+}
+
+@test
+func test_read_eof_returns_zero() -> I32 {
+    var stream: ByteStream = ByteStream::new()
+    var buf: [U8; 4] = [0 as U8; 4]
+    when stream.read(mut ref buf) {
+        Err(e) => return 1,
+        Ok(n) => assert_eq(n, 0 as I64, "empty read returns 0"),
+    }
     stream.destroy()
     return 0
 }
