@@ -196,9 +196,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             return 1; // Fail compilation
         }
 
-        // Apply MIR optimizations based on optimization level
+        // Apply MIR optimizations based on optimization level.
+        // Even at O0, basic strength reduction runs (mul→shl, div→shr, mod→and).
         int opt_level = tml::CompilerOptions::optimization_level;
-        if (opt_level > 0) {
+        {
             mir::OptLevel mir_opt = mir::OptLevel::O0;
             if (opt_level == 1)
                 mir_opt = mir::OptLevel::O1;

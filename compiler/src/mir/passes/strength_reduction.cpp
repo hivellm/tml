@@ -145,6 +145,105 @@ auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, s
         return true;
     }
 
+    // Determine the constant multiplier (from either side)
+    int64_t const_val = 0;
+    ValueId var_operand = INVALID_VALUE;
+    if (right_const) {
+        const_val = *right_const;
+        var_operand = mul.left.id;
+    } else if (left_const) {
+        const_val = *left_const;
+        var_operand = mul.right.id;
+    }
+
+    if (var_operand == INVALID_VALUE) {
+        return false;
+    }
+
+    // x * -1 -> 0 - x (negate)
+    if (const_val == -1) {
+        ValueId zero_id = func.fresh_value();
+        ConstantInst zero_inst;
+        zero_inst.value = ConstInt{0, false, 32};
+        InstructionData zero_data;
+        zero_data.result = zero_id;
+        zero_data.type = mul.result_type;
+        zero_data.inst = zero_inst;
+        block.instructions.insert(
+            block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx), zero_data);
+
+        BinaryInst sub;
+        sub.op = BinOp::Sub;
+        sub.left.id = zero_id;
+        sub.left.type = mul.result_type;
+        sub.right.id = var_operand;
+        sub.right.type = mul.result_type;
+        sub.result_type = mul.result_type;
+        block.instructions[inst_idx + 1].inst = sub;
+        return true;
+    }
+
+    // x * (2^n + 1) -> (x << n) + x  for 3, 5, 9
+    // x * (2^n - 1) -> (x << n) - x  for 7
+    // These use LEA-friendly patterns and avoid mul latency.
+    struct ShiftAddPattern {
+        int64_t multiplier;
+        int shift;
+        BinOp combine_op;
+    };
+    static constexpr ShiftAddPattern patterns[] = {
+        {3, 1, BinOp::Add}, // x*3 = (x<<1) + x
+        {5, 2, BinOp::Add}, // x*5 = (x<<2) + x
+        {7, 3, BinOp::Sub}, // x*7 = (x<<3) - x
+        {9, 3, BinOp::Add}, // x*9 = (x<<3) + x
+    };
+
+    for (const auto& pat : patterns) {
+        if (const_val == pat.multiplier) {
+            // Create shift constant
+            ValueId shift_const_id = func.fresh_value();
+            ConstantInst shift_ci;
+            shift_ci.value = ConstInt{pat.shift, false, 32};
+            InstructionData shift_data;
+            shift_data.result = shift_const_id;
+            shift_data.type = make_i32_type();
+            shift_data.inst = shift_ci;
+
+            // Create shl instruction: x << n
+            ValueId shl_id = func.fresh_value();
+            BinaryInst shl;
+            shl.op = BinOp::Shl;
+            shl.left.id = var_operand;
+            shl.left.type = mul.result_type;
+            shl.right.id = shift_const_id;
+            shl.right.type = make_i32_type();
+            shl.result_type = mul.result_type;
+            InstructionData shl_data;
+            shl_data.result = shl_id;
+            shl_data.type = mul.result_type;
+            shl_data.inst = shl;
+
+            // Insert shift constant and shl before the mul (order matters:
+            // shift_data must come first since shl_data references shift_const_id).
+            // Use index-based insertion since iterators are invalidated after insert.
+            block.instructions.insert(
+                block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx), shift_data);
+            block.instructions.insert(
+                block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx + 1), shl_data);
+
+            // The mul is now at inst_idx + 2; replace with add/sub
+            BinaryInst combine;
+            combine.op = pat.combine_op;
+            combine.left.id = shl_id;
+            combine.left.type = mul.result_type;
+            combine.right.id = var_operand;
+            combine.right.type = mul.result_type;
+            combine.result_type = mul.result_type;
+            block.instructions[inst_idx + 2].inst = combine;
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -206,8 +305,11 @@ auto StrengthReductionPass::reduce_modulo(Function& func, BasicBlock& block, siz
     }
 
     if (*right_const == 1) {
-        // x % 1 = 0 (should create constant 0, but let other passes handle it)
-        return false;
+        // x % 1 = 0 — replace with constant zero
+        ConstantInst zero_inst;
+        zero_inst.value = ConstInt{0, false, 32};
+        block.instructions[inst_idx].inst = zero_inst;
+        return true;
     }
 
     int64_t mask = *right_const - 1;

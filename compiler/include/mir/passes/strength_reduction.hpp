@@ -4,13 +4,18 @@
 //!
 //! ## Transformations
 //!
-//! | Original | Replacement | Condition |
-//! |----------|-------------|-----------|
-//! | x * 2^n  | x << n      | power of 2 |
-//! | x / 2^n  | x >> n      | unsigned, power of 2 |
-//! | x % 2^n  | x & (2^n-1) | unsigned, power of 2 |
-//! | x * 2    | x + x       | sometimes faster |
-//! | x * 3    | x + x + x   | or (x << 1) + x |
+//! | Original | Replacement     | Condition |
+//! |----------|-----------------|-----------|
+//! | x * 2^n  | x << n          | power of 2 |
+//! | x / 2^n  | x >> n          | unsigned, power of 2 |
+//! | x % 2^n  | x & (2^n-1)     | unsigned, power of 2 |
+//! | x % 1    | 0               | always |
+//! | x * 2    | x + x           | sometimes faster |
+//! | x * 3    | (x << 1) + x    | LEA-friendly |
+//! | x * 5    | (x << 2) + x    | LEA-friendly |
+//! | x * 7    | (x << 3) - x    | LEA-friendly |
+//! | x * 9    | (x << 3) + x    | LEA-friendly |
+//! | x * -1   | 0 - x           | negate |
 //!
 //! ## Example
 //!

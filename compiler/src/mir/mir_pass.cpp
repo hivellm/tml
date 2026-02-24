@@ -15,7 +15,7 @@ TML_MODULE("compiler")
 //!
 //! | Level | Passes                                   |
 //! |-------|------------------------------------------|
-//! | O0    | (none)                                   |
+//! | O0    | InstSimplify, StrengthReduction           |
 //! | O1    | Constant folding/propagation             |
 //! | O2    | O1 + CSE, copy prop, DCE, UCE            |
 //! | O3    | O2 + second optimization round           |
@@ -212,7 +212,11 @@ void PassManager::configure_standard_pipeline() {
     add_pass(std::make_unique<SretConversionPass>());
 
     if (level_ == OptLevel::O0) {
-        // No optimizations beyond ABI correctness
+        // Strength reduction is safe and semantics-preserving even at O0.
+        // Converts expensive mul/div/mod to cheap shift/and when the operand
+        // is a compile-time power-of-2 constant. No impact on debuggability.
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<StrengthReductionPass>());
         return;
     }
 
@@ -433,7 +437,12 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
     add_pass(std::make_unique<SretConversionPass>());
 
     if (level_ == OptLevel::O0) {
-        return; // No optimizations beyond ABI correctness
+        // Strength reduction is safe and semantics-preserving even at O0.
+        // Converts expensive mul/div/mod to cheap shift/and when the operand
+        // is a compile-time power-of-2 constant. No impact on debuggability.
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<StrengthReductionPass>());
+        return;
     }
 
     // ==========================================================================

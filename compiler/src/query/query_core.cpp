@@ -391,9 +391,9 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
         return result;
     }
 
-    // Apply MIR optimizations
+    // Apply MIR optimizations (even O0 runs basic strength reduction)
     int opt_level = ctx.options().optimization_level;
-    if (opt_level > 0) {
+    {
         mir::OptLevel mir_opt = mir::OptLevel::O0;
         if (opt_level == 1)
             mir_opt = mir::OptLevel::O1;
