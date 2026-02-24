@@ -66,3 +66,25 @@ func test_raw_mut_ptr_cast() -> I32 {
     assert_eq(byte_ptr.addr(), 2000 as I64, "cast should preserve address")
     return 0
 }
+
+@test
+func test_raw_mut_ptr_is_aligned() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(1024 as I64)
+    assert(ptr.is_aligned(), "1024 should be aligned for I64")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_to_usize() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(5000 as I64)
+    assert_eq(ptr.to_usize(), 5000 as I64, "to_usize should return address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_null_is_null() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::null_ptr()
+    assert(ptr.is_null(), "null_ptr is_null")
+    assert_eq(ptr.addr(), 0 as I64, "null addr is 0")
+    return 0
+}

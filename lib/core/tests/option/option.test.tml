@@ -1,5 +1,6 @@
 // Consolidated tests for core::option (51 tests)
 use test::*
+use test::{assert, assert_eq}
 
 // =============================================================================
 // Helper functions
@@ -500,5 +501,49 @@ func test_contains_false() -> I32 {
 func test_nothing_contains() -> I32 {
     let m: Maybe[I32] = Nothing
     assert(not m.contains(42), "Nothing should not contain anything")
+    return 0
+}
+
+@test
+func test_option_unwrap_or_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    assert_eq(x.unwrap_or(0), 42, "unwrap_or Just should return inner value")
+    return 0
+}
+
+@test
+func test_option_unwrap_or_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    assert_eq(x.unwrap_or(99), 99, "unwrap_or Nothing should return default")
+    return 0
+}
+
+@test
+func test_option_expect_just() -> I32 {
+    let x: Maybe[I32] = Just(7)
+    assert_eq(x.expect("should have value"), 7, "expect Just should return value")
+    return 0
+}
+
+@test
+func test_option_is_just_true() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    assert(x.is_just(), "Just should be is_just")
+    assert(not x.is_nothing(), "Just should not be is_nothing")
+    return 0
+}
+
+@test
+func test_option_is_nothing_true() -> I32 {
+    let x: Maybe[I32] = Nothing
+    assert(x.is_nothing(), "Nothing should be is_nothing")
+    assert(not x.is_just(), "Nothing should not be is_just")
+    return 0
+}
+
+@test
+func test_option_unwrap_just() -> I32 {
+    let x: Maybe[I32] = Just(123)
+    assert_eq(x.unwrap(), 123, "unwrap Just should return 123")
     return 0
 }

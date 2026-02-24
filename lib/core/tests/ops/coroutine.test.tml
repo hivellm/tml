@@ -1,6 +1,7 @@
 // Tests for core::ops::coroutine - CoroutineState and CoroutineResumePoint
 use test::{assert, assert_eq}
 use core::ops::coroutine::{CoroutineState, CoroutineResumePoint}
+use core::ops::coroutine::{CoroutineResumePoint, CoroutineState}
 
 @test
 func test_coroutine_state_yielded() -> I32 {
@@ -51,5 +52,29 @@ func test_resume_point_start_debug() -> I32 {
 func test_resume_point_finished_debug() -> I32 {
     let rp: CoroutineResumePoint = CoroutineResumePoint::Finished
     assert_eq(rp.debug_string(), "Finished", "Finished debug_string")
+    return 0
+}
+
+@test
+func test_resume_point_at_yield_debug() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::AtYield(3)
+    let s: Str = rp.debug_string()
+    assert(s.len() > 0, "AtYield debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_resume_point_at_yield_zero() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::AtYield(0)
+    let s: Str = rp.debug_string()
+    assert(s.len() > 0, "AtYield(0) debug should be non-empty")
+    return 0
+}
+
+@test
+func test_coroutine_state_yielded_i64() -> I32 {
+    let s: CoroutineState[I64, I32] = CoroutineState::Yielded(100)
+    assert(s.is_yielded(), "Yielded is_yielded")
+    assert(not s.is_complete(), "Yielded not is_complete")
     return 0
 }

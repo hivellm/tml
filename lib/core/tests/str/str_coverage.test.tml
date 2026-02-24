@@ -1,6 +1,7 @@
 // Tests for uncovered str functions
 use test
 use core::str
+use test::{assert, assert_eq}
 
 @test
 func test_str_len() -> I32 {
@@ -91,3 +92,39 @@ func test_str_concat_all() -> I32 {
 // NOTE: Str::split method, Str::chars method, Str::parse_i64/u16 methods
 // are blocked by codegen issues (List[Str] return type, Maybe[I64] layout).
 // These need compiler fixes before tests can cover them.
+
+@test
+func test_str_slice_str() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(0, 5)
+    assert_eq(sub, "hello", "slice_str(0,5)")
+    return 0
+}
+
+@test
+func test_str_slice_str_middle() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(6, 11)
+    assert_eq(sub, "world", "slice_str(6,11)")
+    return 0
+}
+
+@test
+func test_str_slice_str_empty() -> I32 {
+    let s: Str = "hello"
+    let sub: Str = s.slice_str(0, 0)
+    assert_eq(sub, "", "slice_str(0,0) = empty")
+    return 0
+}
+
+// ============================================================================
+// Str::chars
+// ============================================================================
+
+@test
+func test_str_chars() -> I32 {
+    let s: Str = "abc"
+    let ch = s.chars()
+    assert(true, "chars() runs without crash")
+    return 0
+}

@@ -1,0 +1,254 @@
+// Consolidated tests for std::text::Text
+use test::{assert, assert_eq}
+use std::text::Text
+
+
+// === Constructors ===
+@test
+func test_text_new_empty() {
+    let t: Text = Text::new()
+    assert(t.is_empty(), "new text should be empty")
+    assert_eq(t.len(), 0, "len should be 0")
+    t.drop()
+}
+
+@test
+func test_text_push_i64_negative() {
+    let t: Text = Text::new()
+    t.push_i64(-7)
+    assert_eq(t.as_str(), "-7", "push_i64 negative should work")
+    t.drop()
+}
+
+@test
+func test_text_push_formatted() {
+    let t: Text = Text::new()
+    t.push_formatted("item #", 3, " done")
+    assert_eq(t.as_str(), "item #3 done", "push_formatted should format correctly")
+    t.drop()
+}
+
+@test
+func test_text_push_log() -> I32 {
+    let t: Text = Text::with_capacity(256)
+    t.push_log("key=", 1 as I64, " val=", 2 as I64, " msg=", 3 as I64, " end")
+    assert(t.len() > 0 as I64, "push_log should add content")
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_push_path() -> I32 {
+    let t: Text = Text::with_capacity(256)
+    t.push_path("dir/", 1 as I64, "sub/", 2 as I64, "file.txt")
+    assert(t.len() > 0 as I64, "push_path should add content")
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_fill_char() {
+    let t: Text = Text::new()
+    t.fill_char(42, 5)  // '*' = 42
+    assert_eq(t.as_str(), "*****", "fill_char should fill with 5 asterisks")
+    assert_eq(t.len(), 5, "len should be 5")
+    t.drop()
+}
+
+@test
+func test_text_set_len() -> I32 {
+    let t: Text = Text::new("hello world")
+    t.set_len(5 as I64)
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_replace() {
+    let t: Text = Text::from("hello world")
+    let r: Text = t.replace("world", "TML")
+    assert_eq(r.as_str(), "hello TML", "replace should work")
+    r.drop()
+    t.drop()
+}
+
+
+// === Print ===
+@test
+func test_text_print() -> I32 {
+    let t: Text = Text::new("hello")
+    t.print()
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_println() -> I32 {
+    let t: Text = Text::new("world")
+    t.println()
+    t.drop()
+    return 0
+}
+
+
+// === data_ptr ===
+@test
+func test_text_data_ptr() -> I32 {
+    let t: Text = Text::new("hello")
+    let p: *U8 = t.data_ptr()
+    // Just verify data_ptr doesn't crash — pointer comparison to null may not be supported
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_last_index_of() -> I32 {
+    let t = Text::from("abcXdefXghi")
+    assert_eq(t.last_index_of("X"), 7, "last_index_of X should be 7")
+    assert_eq(t.last_index_of("z"), -1, "last_index_of missing should be -1")
+    t.drop()
+    0
+}
+
+@test
+func test_text_trim_start() -> I32 {
+    let t = Text::from("   hello")
+    let trimmed = t.trim_start()
+    assert_eq(trimmed.as_str(), "hello", "trim_start should remove leading spaces")
+    trimmed.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_trim_end() -> I32 {
+    let t = Text::from("hello   ")
+    let trimmed = t.trim_end()
+    assert_eq(trimmed.as_str(), "hello", "trim_end should remove trailing spaces")
+    trimmed.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_replace_first() -> I32 {
+    let t = Text::from("aXbXc")
+    let r = t.replace("X", "-")
+    assert_eq(r.as_str(), "a-bXc", "replace should only replace first occurrence")
+    r.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_pad_start() -> I32 {
+    let t = Text::from("hi")
+    let padded = t.pad_start(5, 48)
+    assert_eq(padded.as_str(), "000hi", "pad_start with '0' to len 5")
+    padded.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_pad_end() -> I32 {
+    let t = Text::from("hi")
+    let padded = t.pad_end(5, 46)
+    assert_eq(padded.as_str(), "hi...", "pad_end with '.' to len 5")
+    padded.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_from_f64() -> I32 {
+    let t = Text::from_f64(3.14)
+    assert(t.len() > 0, "from_f64 should produce non-empty text")
+    t.drop()
+    0
+}
+
+@test
+func test_text_from_f64_precision() -> I32 {
+    let t = Text::from_f64_precision(3.14159, 2)
+    let s = t.as_str()
+    assert(s.len() > 0, "from_f64_precision should produce non-empty text")
+    t.drop()
+    0
+}
+
+@test
+func test_text_compare() -> I32 {
+    let a = Text::from("abc")
+    let b = Text::from("def")
+    let c = Text::from("abc")
+    assert(a.compare(ref b) < 0, "abc < def")
+    assert_eq(a.compare(ref c), 0, "abc == abc")
+    assert(b.compare(ref a) > 0, "def > abc")
+    a.drop()
+    b.drop()
+    c.drop()
+    0
+}
+
+@test
+func test_text_concat() -> I32 {
+    let a = Text::from("hello")
+    let b = Text::from(" world")
+    let c = a.concat(ref b)
+    assert_eq(c.as_str(), "hello world", "concat should join texts")
+    c.drop()
+    a.drop()
+    b.drop()
+    0
+}
+
+@test
+func test_text_concat_str() -> I32 {
+    let a = Text::from("hello")
+    let c = a.concat_str(" world")
+    assert_eq(c.as_str(), "hello world", "concat_str should join text+str")
+    c.drop()
+    a.drop()
+    0
+}
+
+@test
+func test_text_slice() -> I32 {
+    let t = Text::from("hello world")
+    let s = t.slice(6, 11)
+    assert_eq(s.as_str(), "world", "slice(6,11) should be world")
+    s.drop()
+    t.drop()
+    0
+}
+
+@test
+func test_text_reserve() -> I32 {
+    let t = Text::new()
+    t.reserve(100)
+    assert(t.capacity() >= 100, "reserve should grow capacity")
+    assert(t.is_empty(), "reserve should not change content")
+    t.drop()
+    0
+}
+
+@test
+func test_text_push_byte() -> I32 {
+    let t = Text::new()
+    t.push(65)
+    t.push(66)
+    t.push(67)
+    assert_eq(t.as_str(), "ABC", "push bytes 65,66,67 should give ABC")
+    t.drop()
+    0
+}
+
+@test
+func test_text_includes() -> I32 {
+    let t = Text::from("hello world")
+    assert(t.includes("world"), "includes should find 'world'")
+    assert(not t.includes("xyz"), "includes should not find 'xyz'")
+    t.drop()
+    0
+}

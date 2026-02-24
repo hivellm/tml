@@ -80,3 +80,25 @@ func test_raw_ptr_hash() -> I32 {
     assert_eq(h, 7777 as I64, "hash should return address")
     return 0
 }
+
+@test
+func test_raw_ptr_not_aligned_odd() -> I32 {
+    let ptr: RawPtr[I64] = RawPtr::from_addr(3 as I64)
+    assert(not ptr.is_aligned(), "address 3 should not be aligned for I64")
+    return 0
+}
+
+@test
+func test_raw_ptr_aligned_powers() -> I32 {
+    let ptr: RawPtr[I64] = RawPtr::from_addr(64 as I64)
+    assert(ptr.is_aligned(), "address 64 should be aligned for I64")
+    return 0
+}
+
+@test
+func test_raw_ptr_offset_negative() -> I32 {
+    let ptr: RawPtr[I64] = RawPtr::from_addr(2000 as I64)
+    let prev: RawPtr[I64] = ptr.offset(-1 as I64)
+    assert(prev.addr() < ptr.addr(), "offset(-1) should decrease address")
+    return 0
+}

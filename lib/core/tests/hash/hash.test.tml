@@ -7,9 +7,10 @@
 //   hash_primitives.test.tml
 //   hash_maybe.test.tml
 //   hash_outcome.test.tml
-
 use test
 use core::hash::{Hash, combine_hashes}
+use test::{assert, assert_eq}
+use core::hash::{DefaultHasher, RandomState, combine_hashes}
 
 // =============================================================================
 // I8 Hash Tests (from hash.test.tml)

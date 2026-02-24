@@ -25,3 +25,11 @@ func test_cache_aligned_box_get_mut() -> I32 {
     assert_eq(*box_val.get(), 99, "CacheAlignedBox::get_mut allows mutation")
     return 0
 }
+
+@test
+func test_cache_aligned_box_into_inner() -> I32 {
+    var box_val: CacheAlignedBox[I32] = CacheAlignedBox::new(77)
+    let val: I32 = box_val.into_inner()
+    assert_eq(val, 77, "into_inner should return 77")
+    return 0
+}

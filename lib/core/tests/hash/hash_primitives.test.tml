@@ -1,6 +1,7 @@
 // Tests for core::hash — combine_hashes and DefaultHasher
 use test::{assert, assert_eq}
 use core::hash::{combine_hashes, DefaultHasher}
+use core::hash::{combine_hashes}
 
 @test
 func test_combine_hashes_basic() -> I32 {
@@ -93,5 +94,49 @@ func test_default_hasher_different_input() -> I32 {
     h1.write_i64(1)
     h2.write_i64(2)
     assert(h1.finish() != h2.finish(), "different input should produce different hash")
+    return 0
+}
+
+@test
+func test_hash_i8_nonzero() -> I32 {
+    let h: I64 = (42 as I8).hash()
+    assert(h != 0 as I64, "I8(42) hash should be non-zero")
+    return 0
+}
+
+@test
+func test_hash_i16_nonzero() -> I32 {
+    let h: I64 = (1000 as I16).hash()
+    assert(h != 0 as I64, "I16(1000) hash should be non-zero")
+    return 0
+}
+
+@test
+func test_hash_u16_nonzero() -> I32 {
+    let h: I64 = (50000 as U16).hash()
+    assert(h != 0 as I64, "U16(50000) hash should be non-zero")
+    return 0
+}
+
+@test
+func test_hash_u32_nonzero() -> I32 {
+    let h: I64 = (100000 as U32).hash()
+    assert(h != 0 as I64, "U32(100000) hash should be non-zero")
+    return 0
+}
+
+@test
+func test_hash_u64_nonzero() -> I32 {
+    let h: I64 = (999 as U64).hash()
+    assert(h != 0 as I64, "U64(999) hash should be non-zero")
+    return 0
+}
+
+@test
+func test_combine_hashes_differs() -> I32 {
+    let h1: I64 = (10 as I32).hash()
+    let h2: I64 = (20 as I32).hash()
+    let combined: I64 = combine_hashes(h1, h2)
+    assert(combined != 0 as I64, "combined hash should be non-zero")
     return 0
 }

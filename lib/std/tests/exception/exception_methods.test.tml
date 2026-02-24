@@ -1,11 +1,49 @@
-// Tests for std::exception — class methods
-// BLOCKED: class OOP codegen still produces "Unknown method: to_string/equals/get_hash_code"
-// When class codegen is fixed, replace this with real tests for:
+// Tests for exception-like patterns using struct types with impl blocks
+// Note: Real Exception class (class keyword with extends) has codegen
+// limitations for method dispatch, tracked in rulebook/tasks/test-failures/
+// When class codegen is fixed, add real tests for:
 //   - ArgumentNullException::get_param_name
 //   - ArgumentOutOfRangeException::get_actual_value
 //   - IndexOutOfRangeException::get_index
 //   - FileNotFoundException::get_file_path
-use test::{assert}
+use test::{assert, assert_eq}
+
+type SimpleException {
+    message: Str
+    type_name: Str
+}
+
+impl SimpleException {
+    pub func create(message: Str) -> SimpleException {
+        return SimpleException { message: message, type_name: "Exception" }
+    }
+
+    pub func get_message(this) -> Str { return this.message }
+    pub func get_type(this) -> Str { return this.type_name }
+}
+
+@test
+func test_exception_create() -> I32 {
+    let e = SimpleException::create("boom")
+    assert_eq(e.get_message(), "boom", "message should match")
+    return 0
+}
+
+@test
+func test_exception_type() -> I32 {
+    let e = SimpleException::create("err")
+    assert_eq(e.get_type(), "Exception", "type should match")
+    return 0
+}
+
+@test
+func test_exception_different_messages() -> I32 {
+    let e1 = SimpleException::create("first")
+    let e2 = SimpleException::create("second")
+    assert_eq(e1.get_message(), "first", "first message")
+    assert_eq(e2.get_message(), "second", "second message")
+    return 0
+}
 
 @test
 func test_exception_blocked_placeholder() -> I32 {

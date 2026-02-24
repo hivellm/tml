@@ -1,7 +1,7 @@
 // Consolidated tests for core::error (23 tests)
-
 use test
 use core::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
+use core::error::{SimpleError, ParseError}
 
 // =============================================================================
 // IoErrorKind Tests - These work because IoErrorKind has explicit Display impl
@@ -334,4 +334,28 @@ func test_parse_error_debug_with_position() -> I32 {
     let s: Str = err.debug_string()
     assert_eq(s, "ParseError { message: \"bad token\", position: Just(10) }", "ParseError debug with position")
     return 0
+}
+
+@test
+func test_parse_error_with_position_debug() -> I32 {
+    let err = ParseError::with_position("bad input", 10)
+    let dbg = err.debug_string()
+    assert(dbg.len() > 0, "ParseError debug_string should produce output")
+    0
+}
+
+@test
+func test_simple_error_description() -> I32 {
+    let err = SimpleError::new("something failed")
+    let desc = err.description()
+    assert_eq(desc, "something failed", "description should match to_string")
+    0
+}
+
+@test
+func test_simple_error_source_is_nothing() -> I32 {
+    let err = SimpleError::new("no cause")
+    let src = err.source()
+    assert(src.is_nothing(), "SimpleError source should be Nothing")
+    0
 }

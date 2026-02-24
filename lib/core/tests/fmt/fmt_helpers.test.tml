@@ -2,6 +2,8 @@
 // Covers: u64_to_str, u64_digit_char, i8/i16/i32_to_str, u8/u16/u32_to_str
 use test
 use core::fmt::helpers::{u64_to_str, i8_to_str, i16_to_str, i32_to_str, u8_to_str, u16_to_str, u32_to_str}
+use test::{assert, assert_eq}
+use core::fmt::helpers::{repeat_string, pad_center, format_with_sign}
 
 // =============================================================================
 // u64_to_str (also exercises u64_digit_char internally)
@@ -97,5 +99,26 @@ func test_u32_to_str() -> I32 {
     assert_eq(u32_to_str(0 as U32), "0", "u32 0")
     assert_eq(u32_to_str(100000 as U32), "100000", "u32 100000")
     assert_eq(u32_to_str(42 as U32), "42", "u32 42")
+    return 0
+}
+
+@test
+func test_repeat_string_basic() -> I32 {
+    let s: Str = repeat_string("ab", 3 as I64)
+    assert_eq(s, "ababab", "repeat_string 3 times")
+    return 0
+}
+
+@test
+func test_repeat_string_zero() -> I32 {
+    let s: Str = repeat_string("x", 0 as I64)
+    assert_eq(s, "", "repeat_string 0 times is empty")
+    return 0
+}
+
+@test
+func test_repeat_string_one() -> I32 {
+    let s: Str = repeat_string("hello", 1 as I64)
+    assert_eq(s, "hello", "repeat_string 1 time")
     return 0
 }

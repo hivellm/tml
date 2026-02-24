@@ -1,6 +1,7 @@
 // Tests for core::ops::range - Bound enum
 use test::{assert, assert_eq}
 use core::ops::range::Bound
+use core::ops::range::{Bound, RangeFrom, RangeTo, RangeToInclusive}
 
 @test
 func test_bound_is_included() -> I32 {
@@ -46,5 +47,80 @@ func test_bound_debug_string() -> I32 {
     assert_eq(inc.debug_string(), "Included(5)", "Included debug")
     let unb: Bound[I32] = Bound::Unbounded
     assert_eq(unb.debug_string(), "Unbounded", "Unbounded debug")
+    return 0
+}
+
+@test
+func test_bound_static_included() -> I32 {
+    let b: Bound[I32] = Bound::included(42)
+    assert(b.is_included(), "Bound::included creates Included")
+    return 0
+}
+
+@test
+func test_bound_static_excluded() -> I32 {
+    let b: Bound[I32] = Bound::excluded(10)
+    assert(b.is_excluded(), "Bound::excluded creates Excluded")
+    return 0
+}
+
+@test
+func test_bound_static_unbounded() -> I32 {
+    let b: Bound[I32] = Bound::unbounded()
+    assert(b.is_unbounded(), "Bound::unbounded creates Unbounded")
+    return 0
+}
+
+@test
+func test_bound_cloned_included() -> I32 {
+    let b: Bound[I32] = Bound::Included(77)
+    let c: Bound[I32] = b.cloned()
+    assert(c.is_included(), "cloned Included should be Included")
+    return 0
+}
+
+@test
+func test_bound_cloned_unbounded() -> I32 {
+    let b: Bound[I32] = Bound::Unbounded
+    let c: Bound[I32] = b.cloned()
+    assert(c.is_unbounded(), "cloned Unbounded should be Unbounded")
+    return 0
+}
+
+// === RangeFrom to_string ===
+
+@test
+func test_range_from_to_string() -> I32 {
+    let r: RangeFrom[I32] = RangeFrom::new(5)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeFrom to_string should produce output")
+    return 0
+}
+
+// === RangeTo to_string ===
+
+@test
+func test_range_to_to_string() -> I32 {
+    let r: RangeTo[I32] = RangeTo::new(10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeTo to_string should produce output")
+    return 0
+}
+
+// === RangeToInclusive to_string and debug ===
+
+@test
+func test_range_to_inclusive_to_string() -> I32 {
+    let r: RangeToInclusive[I32] = RangeToInclusive::new(10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeToInclusive to_string should produce output")
+    return 0
+}
+
+@test
+func test_range_to_inclusive_debug() -> I32 {
+    let r: RangeToInclusive[I32] = RangeToInclusive::new(10)
+    let s: Str = r.debug_string()
+    assert(s.len() > 0, "RangeToInclusive debug_string should produce output")
     return 0
 }

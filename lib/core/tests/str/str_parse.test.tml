@@ -10,3 +10,96 @@ func test_str_parse_placeholder() -> I32 {
     assert("42".contains("4"), "contains 4")
     return 0
 }
+
+@test
+func test_str_len_empty() -> I32 {
+    let s: Str = ""
+    assert_eq(s.len(), 0, "empty string len should be 0")
+    return 0
+}
+
+@test
+func test_str_len_nonempty() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.len(), 5, "hello len should be 5")
+    return 0
+}
+
+@test
+func test_str_is_empty_true() -> I32 {
+    let s: Str = ""
+    assert(s.is_empty(), "empty string should be is_empty")
+    return 0
+}
+
+@test
+func test_str_is_empty_false() -> I32 {
+    let s: Str = "x"
+    assert(not s.is_empty(), "non-empty string should not be is_empty")
+    return 0
+}
+
+@test
+func test_str_contains_found() -> I32 {
+    let s: Str = "hello world"
+    assert(s.contains("world"), "should contain 'world'")
+    return 0
+}
+
+@test
+func test_str_contains_not_found() -> I32 {
+    let s: Str = "hello world"
+    assert(not s.contains("xyz"), "should not contain 'xyz'")
+    return 0
+}
+
+@test
+func test_str_starts_with() -> I32 {
+    let s: Str = "hello world"
+    assert(s.starts_with("hello"), "should start with 'hello'")
+    assert(not s.starts_with("world"), "should not start with 'world'")
+    return 0
+}
+
+@test
+func test_str_ends_with() -> I32 {
+    let s: Str = "hello world"
+    assert(s.ends_with("world"), "should end with 'world'")
+    assert(not s.ends_with("hello"), "should not end with 'hello'")
+    return 0
+}
+
+@test
+func test_str_to_uppercase() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.to_uppercase(), "HELLO", "to_uppercase should return HELLO")
+    return 0
+}
+
+@test
+func test_str_to_lowercase() -> I32 {
+    let s: Str = "HELLO"
+    assert_eq(s.to_lowercase(), "hello", "to_lowercase should return hello")
+    return 0
+}
+
+@test
+func test_str_trim() -> I32 {
+    let s: Str = "  hello  "
+    assert_eq(s.trim(), "hello", "trim should remove whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_start() -> I32 {
+    let s: Str = "  hello  "
+    assert_eq(s.trim_start(), "hello  ", "trim_start should remove leading whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_end() -> I32 {
+    let s: Str = "  hello  "
+    assert_eq(s.trim_end(), "  hello", "trim_end should remove trailing whitespace")
+    return 0
+}
