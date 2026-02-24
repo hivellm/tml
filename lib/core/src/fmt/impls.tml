@@ -441,6 +441,7 @@ impl Octal for U32 {
 
 /// Octal format for `U64`.
 impl Octal for U64 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this)
     }
@@ -448,6 +449,7 @@ impl Octal for U64 {
 
 /// Octal format for `I8`.
 impl Octal for I8 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U8) as U64)
     }
@@ -455,6 +457,7 @@ impl Octal for I8 {
 
 /// Octal format for `I16`.
 impl Octal for I16 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U16) as U64)
     }
@@ -462,6 +465,7 @@ impl Octal for I16 {
 
 /// Octal format for `I32`.
 impl Octal for I32 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U32) as U64)
     }
@@ -469,6 +473,7 @@ impl Octal for I32 {
 
 /// Octal format for `I64`.
 impl Octal for I64 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
@@ -488,6 +493,7 @@ impl LowerHex for U8 {
 
 /// Lower hex format for `U16`.
 impl LowerHex for U16 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
@@ -495,6 +501,7 @@ impl LowerHex for U16 {
 
 /// Lower hex format for `U32`.
 impl LowerHex for U32 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
@@ -502,6 +509,7 @@ impl LowerHex for U32 {
 
 /// Lower hex format for `U64`.
 impl LowerHex for U64 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this, false)
     }

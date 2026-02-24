@@ -205,6 +205,7 @@ func parse_url_impl(input: Str) -> Outcome[Url, Str] {
 }
 
 /// Internal: reconstruct URL from components.
+@allocates
 func url_to_string_impl(scheme: Str, userinfo: Str, host: Str, port: I64, path: Str, raw_query: Str, frag: Str) -> Str {
     var result: Str = scheme + "://"
     if str::len(userinfo) > 0 {

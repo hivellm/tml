@@ -359,6 +359,7 @@ func parse_mime_impl(s: Str) -> Outcome[Mime, Str] {
 }
 
 /// Format a MIME type back to string.
+@allocates
 func format_mime(type_name: Str, subtype: Str, suffix: Str, param_str: Str) -> Str {
     var result: Str = type_name + "/" + subtype
     if str::len(suffix) > 0 {
@@ -472,6 +473,7 @@ func skip_ws(s: Str, pos: I64, slen: I64) -> I64 {
 }
 
 /// Trim trailing whitespace from a string.
+@allocates
 func trim_right(s: Str) -> Str {
     let slen: I64 = str::len(s)
     if slen == 0 { return s }
@@ -485,6 +487,7 @@ func trim_right(s: Str) -> Str {
 }
 
 /// Trim leading whitespace from a string.
+@allocates
 func trim_left(s: Str) -> Str {
     let slen: I64 = str::len(s)
     var start: I64 = 0

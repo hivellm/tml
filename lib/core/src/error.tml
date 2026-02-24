@@ -800,6 +800,7 @@ impl Display for IoError {
 }
 
 impl Debug for IoError {
+    @allocates
     pub func debug_string(this) -> Str {
         let kind_str: Str = this.kind.to_string()
         let msg_str: Str = when this.message {
