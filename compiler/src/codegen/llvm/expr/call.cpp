@@ -681,7 +681,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         }
 
                         // Nullable pointer optimization: Maybe[ptr] → bare ptr
-                        if (enum_type == "ptr") {
+                        // ONLY apply for Maybe, not for Outcome or other enums
+                        if (enum_type == "ptr" && enum_name == "Maybe") {
                             if (has_payload && !call.args.empty()) {
                                 std::string payload = gen_expr(*call.args[0]);
                                 last_expr_type_ = "ptr";
@@ -858,7 +859,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     }
 
                     // Nullable pointer optimization: Maybe[ptr] → bare ptr
-                    if (enum_type == "ptr") {
+                    // ONLY apply for Maybe, not for Outcome or other enums
+                    if (enum_type == "ptr" && gen_enum_name == "Maybe") {
                         if (has_payload && !call.args.empty()) {
                             std::string payload = gen_expr(*call.args[0]);
                             last_expr_type_ = "ptr";

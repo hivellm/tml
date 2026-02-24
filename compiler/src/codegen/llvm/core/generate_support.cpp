@@ -496,7 +496,10 @@ static std::string generate_decls_from_ir(const std::string& full_ir,
     while (std::getline(stream, line)) {
         // Match lines starting with "define " (function definitions) -> convert to declare
         if (line.size() > 7 && line.substr(0, 7) == "define ") {
-            auto brace_pos = line.find('{');
+            // Use rfind to find the LAST '{' on the line — the function body opener.
+            // line.find('{') would incorrectly match '{' inside struct return types
+            // like "{ i64, %struct.Maybe__I64 }", producing empty/truncated signatures.
+            auto brace_pos = line.rfind('{');
             if (brace_pos != std::string::npos) {
                 std::string signature = line.substr(7, brace_pos - 7);
                 // Trim trailing whitespace
@@ -526,7 +529,10 @@ static std::string generate_decls_from_ir(const std::string& full_ir,
                         }
                     }
                 }
-                decls << "declare " << signature << "\n";
+                // Skip empty or malformed signatures (safety check)
+                if (!signature.empty() && signature.find('@') != std::string::npos) {
+                    decls << "declare " << signature << "\n";
+                }
             }
         }
         // Include `declare` lines for FFI functions NOT already in preamble.

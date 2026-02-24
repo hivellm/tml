@@ -330,7 +330,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 }
 
                 // Nullable pointer optimization: Nothing → null
-                if (enum_type == "ptr") {
+                // ONLY apply for Maybe, not for other enums
+                if (enum_type == "ptr" && enum_name == "Maybe") {
                     last_expr_type_ = "ptr";
                     return "null";
                 }
@@ -430,7 +431,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                     }
                 }
                 // Nullable pointer optimization: Nothing → null
-                if (enum_type == "ptr") {
+                // ONLY apply for Maybe, not for other enums
+                if (enum_type == "ptr" && enum_name == "Maybe") {
                     last_expr_type_ = "ptr";
                     return "null";
                 }
@@ -514,7 +516,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         }
                     }
                     // Nullable pointer optimization: Nothing → null
-                    if (enum_type == "ptr") {
+                    // ONLY apply for Maybe, not for other enums
+                    if (enum_type == "ptr" && enum_name == "Maybe") {
                         last_expr_type_ = "ptr";
                         return "null";
                     }

@@ -189,6 +189,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     block_terminated_ = false;
     temp_drops_.clear();
     pending_str_temps_.clear();
+    expected_enum_type_.clear();
 
     // Determine return type
     std::string ret_type = "void";
@@ -710,6 +711,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     block_terminated_ = false;
     temp_drops_.clear();
     pending_str_temps_.clear();
+    expected_enum_type_.clear();
 
     // Build full type_subs including method-level type parameters
     auto full_type_subs = type_subs;

@@ -475,18 +475,42 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                     }
 
                     if (variant_tag >= 0) {
-                        // Extract tag from the i-th element of the tuple
+                        // Extract the i-th element from the tuple
                         std::string elem_ptr = fresh_reg();
                         emit_line("  " + elem_ptr + " = getelementptr inbounds " + scrutinee_type +
                                   ", ptr " + scrutinee_ptr + ", i32 0, i32 " + std::to_string(ei));
-                        std::string tag_ptr = fresh_reg();
-                        emit_line("  " + tag_ptr + " = getelementptr inbounds " + et + ", ptr " +
-                                  elem_ptr + ", i32 0, i32 0");
-                        std::string elem_tag = fresh_reg();
-                        emit_line("  " + elem_tag + " = load i32, ptr " + tag_ptr);
-                        std::string cmp = fresh_reg();
-                        emit_line("  " + cmp + " = icmp eq i32 " + elem_tag + ", " +
-                                  std::to_string(variant_tag));
+
+                        // Check for nullable Maybe (ptr-optimized)
+                        bool elem_is_nullable_maybe = (et == "ptr" && enum_name == "Maybe");
+
+                        std::string cmp;
+                        if (elem_is_nullable_maybe) {
+                            // Nullable: null = Nothing (tag 1), non-null = Just (tag 0)
+                            std::string elem_val = fresh_reg();
+                            emit_line("  " + elem_val + " = load ptr, ptr " + elem_ptr);
+                            std::string is_null = fresh_reg();
+                            emit_line("  " + is_null + " = icmp eq ptr " + elem_val + ", null");
+                            // tag 0 = Just, tag 1 = Nothing
+                            // variant_tag 0 = Just: match when NOT null (is_null == false)
+                            // variant_tag 1 = Nothing: match when null (is_null == true)
+                            if (variant_tag == 0) {
+                                // Just: match when not null
+                                cmp = fresh_reg();
+                                emit_line("  " + cmp + " = icmp ne ptr " + elem_val + ", null");
+                            } else {
+                                // Nothing: match when null
+                                cmp = is_null;
+                            }
+                        } else {
+                            std::string tag_ptr = fresh_reg();
+                            emit_line("  " + tag_ptr + " = getelementptr inbounds " + et +
+                                      ", ptr " + elem_ptr + ", i32 0, i32 0");
+                            std::string elem_tag = fresh_reg();
+                            emit_line("  " + elem_tag + " = load i32, ptr " + tag_ptr);
+                            cmp = fresh_reg();
+                            emit_line("  " + cmp + " = icmp eq i32 " + elem_tag + ", " +
+                                      std::to_string(variant_tag));
+                        }
                         cmp_results.push_back(cmp);
                     }
                 } else if (elem_pat.is<parser::IdentPattern>()) {
@@ -508,14 +532,33 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                             emit_line("  " + elem_ptr + " = getelementptr inbounds " +
                                       scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 " +
                                       std::to_string(ei));
-                            std::string tag_ptr = fresh_reg();
-                            emit_line("  " + tag_ptr + " = getelementptr inbounds " + et +
-                                      ", ptr " + elem_ptr + ", i32 0, i32 0");
-                            std::string elem_tag = fresh_reg();
-                            emit_line("  " + elem_tag + " = load i32, ptr " + tag_ptr);
-                            std::string cmp = fresh_reg();
-                            emit_line("  " + cmp + " = icmp eq i32 " + elem_tag + ", " +
-                                      std::to_string(it->second));
+
+                            bool elem_is_nullable_maybe = (et == "ptr" && enum_name == "Maybe");
+
+                            std::string cmp;
+                            if (elem_is_nullable_maybe) {
+                                // Nullable Maybe: null = Nothing (tag 1), non-null = Just (tag 0)
+                                std::string elem_val = fresh_reg();
+                                emit_line("  " + elem_val + " = load ptr, ptr " + elem_ptr);
+                                if (it->second == 0) {
+                                    // Just: match when not null
+                                    cmp = fresh_reg();
+                                    emit_line("  " + cmp + " = icmp ne ptr " + elem_val + ", null");
+                                } else {
+                                    // Nothing: match when null
+                                    cmp = fresh_reg();
+                                    emit_line("  " + cmp + " = icmp eq ptr " + elem_val + ", null");
+                                }
+                            } else {
+                                std::string tag_ptr = fresh_reg();
+                                emit_line("  " + tag_ptr + " = getelementptr inbounds " + et +
+                                          ", ptr " + elem_ptr + ", i32 0, i32 0");
+                                std::string elem_tag = fresh_reg();
+                                emit_line("  " + elem_tag + " = load i32, ptr " + tag_ptr);
+                                cmp = fresh_reg();
+                                emit_line("  " + cmp + " = icmp eq i32 " + elem_tag + ", " +
+                                          std::to_string(it->second));
+                            }
                             cmp_results.push_back(cmp);
                         }
                         // else: binding pattern, always matches - no cmp needed

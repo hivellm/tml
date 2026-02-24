@@ -419,6 +419,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
         for (const auto& [k, v] : state.struct_types) {
             if (struct_types_.find(k) == struct_types_.end()) {
                 struct_types_[k] = v;
+                // Restore nullable_maybe_types_ for nullable Maybe types from cache
+                // These were optimized to "ptr" during gen_enum_instantiation
+                if (v == "ptr" && k.starts_with("Maybe__")) {
+                    nullable_maybe_types_.insert(k);
+                }
             }
         }
         for (const auto& k : state.union_types) {
