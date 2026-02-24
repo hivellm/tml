@@ -1,0 +1,20 @@
+// Tests for OnceCell::default (Default trait impl)
+use test
+use core::cell::once::OnceCell
+
+@test
+func test_oncecell_default_is_empty() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::default()
+    assert(cell.is_empty(), "default cell should be empty")
+    assert(not cell.is_initialized(), "default cell not initialized")
+    0
+}
+
+@test
+func test_oncecell_default_can_be_set() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::default()
+    let result = cell.set(99)
+    assert(result.is_ok(), "set on default cell should succeed")
+    assert(cell.is_initialized(), "cell initialized after set")
+    0
+}

@@ -1,0 +1,36 @@
+// @flags enum basic tests: creation, bitwise operators, equality
+use test
+
+@flags
+type Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+@test
+func test_flags_variant_values() -> I32 {
+    let r = Perms::Read
+    let w = Perms::Write
+    let x = Perms::Execute
+    // Variant values should be powers of 2: 1, 2, 4
+    assert_eq(r.bits(), 1, "Read should be 1")
+    assert_eq(w.bits(), 2, "Write should be 2")
+    assert_eq(x.bits(), 4, "Execute should be 4")
+    return 0
+}
+
+@test
+func test_flags_bitor() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    assert_eq(rw.bits(), 3, "Read | Write should be 3")
+    return 0
+}
+
+@test
+func test_flags_bitand() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    let r = rw & Perms::Read
+    assert_eq(r.bits(), 1, "rw & Read should be 1")
+    return 0
+}

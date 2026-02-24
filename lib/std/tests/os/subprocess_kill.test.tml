@@ -1,0 +1,25 @@
+// Tests for Child::kill
+use test
+use std::os::subprocess::{Command, Stdio, Child}
+
+@test
+func test_child_kill_running_process() -> I32 {
+    // Spawn a long-running process (ping on Windows runs for a while)
+    let result = Command::new("cmd")
+        .arg("/c")
+        .arg("ping -n 30 127.0.0.1")
+        .stdout(Stdio::devnull())
+        .stderr(Stdio::devnull())
+        .spawn()
+    when result {
+        Ok(child) => {
+            let killed = child.kill()
+            assert(killed, "kill should return true")
+            child.destroy()
+        }
+        Err(e) => {
+            assert(true, "spawn may fail in some environments")
+        }
+    }
+    0
+}

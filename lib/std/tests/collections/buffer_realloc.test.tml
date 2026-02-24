@@ -1,0 +1,35 @@
+// Tests to trigger buf_mem_realloc via buffer growth past initial capacity
+use test
+use std::collections::Buffer
+
+@test
+func test_buffer_grow_past_capacity() -> I32 {
+    // Create a buffer with small initial capacity
+    var buf = Buffer::new(4)
+    // Write more bytes than initial capacity to trigger realloc
+    var i: I32 = 0
+    loop (i < 20) {
+        buf.write_byte(i as U8)
+        i = i + 1
+    }
+    assert_eq(buf.len(), 20 as I64, "buffer should have 20 bytes after growth")
+    buf.reset_read()
+    let first = buf.read_byte()
+    assert_eq(first, 0 as U8, "first byte should be 0")
+    buf.destroy()
+    0
+}
+
+@test
+func test_buffer_grow_large() -> I32 {
+    // Start tiny and grow significantly
+    var buf = Buffer::new(2)
+    var i: I32 = 0
+    loop (i < 100) {
+        buf.write_byte((i % 256) as U8)
+        i = i + 1
+    }
+    assert_eq(buf.len(), 100 as I64, "buffer should have 100 bytes")
+    buf.destroy()
+    0
+}

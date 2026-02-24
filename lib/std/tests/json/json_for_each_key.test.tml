@@ -1,0 +1,27 @@
+// Tests for JsonObject::for_each_key
+use test
+use std::json::types::{Json, JsonObject, parse_or_panic}
+
+@test
+func test_for_each_key_basic() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"TML\", \"version\": 1}")
+    let o: JsonObject = j.as_object().unwrap()
+    var count: I32 = 0
+    o.for_each_key(do(key: Str) {
+        count = count + 1
+    })
+    assert_eq(count, 2, "should iterate over 2 keys")
+    0
+}
+
+@test
+func test_for_each_key_empty() -> I32 {
+    let j: Json = parse_or_panic("{}")
+    let o: JsonObject = j.as_object().unwrap()
+    var count: I32 = 0
+    o.for_each_key(do(key: Str) {
+        count = count + 1
+    })
+    assert_eq(count, 0, "empty object has 0 keys")
+    0
+}

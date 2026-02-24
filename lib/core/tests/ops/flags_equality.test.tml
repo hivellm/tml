@@ -1,0 +1,55 @@
+// @flags enum equality and complement tests
+use test
+
+@flags
+type Color {
+    Red,
+    Green,
+    Blue,
+}
+
+@test
+func test_flags_equality() -> I32 {
+    let a = Color::Red | Color::Green
+    let b = Color::Red | Color::Green
+    assert(a == b, "same flags should be equal")
+    return 0
+}
+
+@test
+func test_flags_inequality() -> I32 {
+    let a = Color::Red
+    let b = Color::Green
+    assert(a != b, "different flags should not be equal")
+    return 0
+}
+
+@test
+func test_flags_xor() -> I32 {
+    let rg = Color::Red | Color::Green
+    let result = rg ^ Color::Red
+    assert_eq(result.bits(), 2, "rg ^ Red should be Green (2)")
+    assert(not result.has(Color::Red), "should not have Red")
+    assert(result.has(Color::Green), "should have Green")
+    return 0
+}
+
+@test
+func test_flags_complement() -> I32 {
+    let r = Color::Red
+    let complement = ~r
+    assert(not complement.has(Color::Red), "complement should not have Red")
+    assert(complement.has(Color::Green), "complement should have Green")
+    assert(complement.has(Color::Blue), "complement should have Blue")
+    assert_eq(complement.bits(), 6, "~Red should be Green|Blue = 6")
+    return 0
+}
+
+@test
+func test_flags_bitand_empty() -> I32 {
+    let r = Color::Red
+    let g = Color::Green
+    let result = r & g
+    assert(result.is_empty(), "Red & Green should be empty")
+    return 0
+}

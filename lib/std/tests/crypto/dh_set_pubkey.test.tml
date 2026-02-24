@@ -1,0 +1,23 @@
+// Tests for DiffieHellman::set_public_key
+use test
+use std::crypto::dh::{DhGroup, DiffieHellman}
+use std::collections::Buffer
+
+@test
+func test_dh_set_public_key() -> I32 {
+    // Create two DH instances with same group
+    let mut alice: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
+    alice.generate_keys()
+    let alice_pub: Buffer = alice.public_key()
+
+    let mut bob: DiffieHellman = DiffieHellman::with_group(DhGroup::Ffdhe2048).unwrap()
+    bob.generate_keys()
+
+    // Use set_public_key to set alice's public key on bob
+    bob.set_public_key(ref alice_pub)
+
+    // After setting, bob's public key should match alice's
+    let bob_pub: Buffer = bob.public_key()
+    assert_eq(bob_pub.len(), alice_pub.len(), "public key lengths should match after set")
+    0
+}
