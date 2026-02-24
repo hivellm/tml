@@ -1221,7 +1221,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
             (llvm_type.starts_with("%struct.") || llvm_type.starts_with("%class."))) {
             std::string offset_ptr = fresh_reg();
             std::string offset_val = fresh_reg();
-            emit_line("  " + offset_ptr + " = getelementptr " + llvm_type +
+            emit_line("  " + offset_ptr + " = getelementptr inbounds " + llvm_type +
                       ", ptr null, i32 0, i32 " + std::to_string(index));
             emit_line("  " + offset_val + " = ptrtoint ptr " + offset_ptr + " to i64");
             last_expr_type_ = "i64";

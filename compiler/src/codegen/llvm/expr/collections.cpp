@@ -16,7 +16,7 @@ TML_MODULE("codegen_x86")
 //!
 //! `arr[i]` generates GEP and load:
 //! ```llvm
-//! %ptr = getelementptr [N x T], ptr %arr, i64 0, i64 %i
+//! %ptr = getelementptr inbounds [N x T], ptr %arr, i64 0, i64 %i
 //! %val = load T, ptr %ptr
 //! ```
 //!
@@ -70,8 +70,8 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         for (size_t i = 0; i < elements.size(); ++i) {
             std::string val = gen_expr(*elements[i]);
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + array_type + ", ptr " + arr_ptr +
-                      ", i32 0, i32 " + std::to_string(i));
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type + ", ptr " +
+                      arr_ptr + ", i32 0, i32 " + std::to_string(i));
             emit_line("  store " + llvm_elem_type + " " + val + ", ptr " + elem_ptr);
         }
 
@@ -125,8 +125,8 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         // Store the same value in each element
         for (size_t i = 0; i < count; ++i) {
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + array_type + ", ptr " + arr_ptr +
-                      ", i32 0, i32 " + std::to_string(i));
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type + ", ptr " +
+                      arr_ptr + ", i32 0, i32 " + std::to_string(i));
             emit_line("  store " + llvm_elem_type + " " + init_val + ", ptr " + elem_ptr);
         }
 
@@ -183,7 +183,7 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
         // Extract the data pointer from the slice struct (field 0)
         std::string data_ptr_ptr = fresh_reg();
-        emit_line("  " + data_ptr_ptr + " = getelementptr { ptr, i64 }, ptr " + slice_ptr +
+        emit_line("  " + data_ptr_ptr + " = getelementptr inbounds { ptr, i64 }, ptr " + slice_ptr +
                   ", i32 0, i32 0");
         std::string data_ptr = fresh_reg();
         emit_line("  " + data_ptr + " = load ptr, ptr " + data_ptr_ptr);
@@ -201,8 +201,8 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
         // GEP to get element pointer (using element array, not fixed array)
         std::string elem_ptr = fresh_reg();
-        emit_line("  " + elem_ptr + " = getelementptr " + elem_llvm_type + ", ptr " + data_ptr +
-                  ", i64 " + index_i64);
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + elem_llvm_type + ", ptr " +
+                  data_ptr + ", i64 " + index_i64);
 
         // Load and return the element
         std::string result = fresh_reg();
@@ -259,8 +259,8 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
         // GEP to get element pointer (use i64 for index to match 64-bit systems)
         std::string elem_ptr = fresh_reg();
-        emit_line("  " + elem_ptr + " = getelementptr " + array_llvm_type + ", ptr " + arr_ptr +
-                  ", i64 0, i64 " + index_i64);
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                  arr_ptr + ", i64 0, i64 " + index_i64);
 
         // Load and return the element
         std::string result = fresh_reg();
@@ -303,8 +303,8 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
             // GEP to get element pointer (use i64 for index)
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + array_type + ", ptr " + arr_ptr +
-                      ", i64 0, i64 " + index_i64);
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + index_i64);
 
             // Load and return the element
             std::string result = fresh_reg();
@@ -588,8 +588,8 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
 
         // Get pointer to the tag field (GEP with indices 0, 0)
         std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr " + struct_type + ", ptr " + alloca_reg +
-                  ", i32 0, i32 0");
+        emit_line("  " + tag_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
 
         // Store the tag/value
         emit_line("  store " + tag_llvm_type + " " + std::to_string(it->second) + ", ptr " +

@@ -104,13 +104,13 @@ auto LLVMIRGen::try_gen_dyn_dispatch_call(const parser::MethodCallExpr& call,
     }
 
     std::string data_field = fresh_reg();
-    emit_line("  " + data_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr +
+    emit_line("  " + data_field + " = getelementptr inbounds " + dyn_type + ", ptr " + dyn_ptr +
               ", i32 0, i32 0");
     std::string data_ptr = fresh_reg();
     emit_line("  " + data_ptr + " = load ptr, ptr " + data_field);
 
     std::string vtable_field = fresh_reg();
-    emit_line("  " + vtable_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr +
+    emit_line("  " + vtable_field + " = getelementptr inbounds " + dyn_type + ", ptr " + dyn_ptr +
               ", i32 0, i32 1");
     std::string vtable_ptr = fresh_reg();
     emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_field);
@@ -125,8 +125,8 @@ auto LLVMIRGen::try_gen_dyn_dispatch_call(const parser::MethodCallExpr& call,
     vtable_type += " }";
 
     std::string fn_ptr_loc = fresh_reg();
-    emit_line("  " + fn_ptr_loc + " = getelementptr " + vtable_type + ", ptr " + vtable_ptr +
-              ", i32 0, i32 " + std::to_string(method_idx));
+    emit_line("  " + fn_ptr_loc + " = getelementptr inbounds " + vtable_type + ", ptr " +
+              vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
     std::string fn_ptr = fresh_reg();
     emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
 

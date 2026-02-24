@@ -88,16 +88,16 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
 
     // Load vtable pointer from object (field 0)
     std::string vtable_ptr_ptr = fresh_reg();
-    emit_line("  " + vtable_ptr_ptr + " = getelementptr " + class_type + ", ptr " + obj_reg +
-              ", i32 0, i32 0");
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr inbounds " + class_type + ", ptr " +
+              obj_reg + ", i32 0, i32 0");
 
     std::string vtable_ptr = fresh_reg();
     emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_ptr_ptr);
 
     // Load function pointer from vtable slot
     std::string func_ptr_ptr = fresh_reg();
-    emit_line("  " + func_ptr_ptr + " = getelementptr " + vtable_type + ", ptr " + vtable_ptr +
-              ", i32 0, i32 " + std::to_string(vtable_slot));
+    emit_line("  " + func_ptr_ptr + " = getelementptr inbounds " + vtable_type + ", ptr " +
+              vtable_ptr + ", i32 0, i32 " + std::to_string(vtable_slot));
 
     std::string func_ptr = fresh_reg();
     emit_line("  " + func_ptr + " = load ptr, ptr " + func_ptr_ptr);
@@ -300,7 +300,7 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
 
         // Cast this to base class type (embedded at field 1 after vtable)
         std::string base_ptr = fresh_reg();
-        emit_line("  " + base_ptr + " = getelementptr %class." + current_class + ", ptr " +
+        emit_line("  " + base_ptr + " = getelementptr inbounds %class." + current_class + ", ptr " +
                   this_ptr + ", i32 0, i32 1");
 
         // Generate arguments
@@ -362,12 +362,12 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
         }
 
         std::string base_ptr = fresh_reg();
-        emit_line("  " + base_ptr + " = getelementptr %class." + current_class + ", ptr " +
+        emit_line("  " + base_ptr + " = getelementptr inbounds %class." + current_class + ", ptr " +
                   this_ptr + ", i32 0, i32 1");
 
         std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr %class." + base_class + ", ptr " + base_ptr +
-                  ", i32 0, i32 " + std::to_string(field_idx));
+        emit_line("  " + field_ptr + " = getelementptr inbounds %class." + base_class + ", ptr " +
+                  base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
         std::string value = fresh_reg();
         emit_line("  " + value + " = load " + field_type + ", ptr " + field_ptr);
@@ -506,7 +506,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
             if (found) {
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + class_type +
+                emit_line("  " + field_ptr + " = getelementptr inbounds " + class_type +
                           ", ptr %this, i32 0, i32 " + std::to_string(field_idx));
                 std::string value = fresh_reg();
                 emit_line("  " + value + " = load " + prop_type + ", ptr " + field_ptr);
@@ -577,7 +577,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
             if (found) {
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + class_type +
+                emit_line("  " + field_ptr + " = getelementptr inbounds " + class_type +
                           ", ptr %this, i32 0, i32 " + std::to_string(field_idx));
                 emit_line("  store " + prop_type + " %value, ptr " + field_ptr);
             }
@@ -981,8 +981,8 @@ auto LLVMIRGen::gen_guarded_virtual_call(const std::string& obj_reg,
 
     // Load actual vtable pointer
     std::string vtable_ptr_ptr = fresh_reg();
-    emit_line("  " + vtable_ptr_ptr + " = getelementptr " + class_type + ", ptr " + obj_reg +
-              ", i32 0, i32 0");
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr inbounds " + class_type + ", ptr " +
+              obj_reg + ", i32 0, i32 0");
 
     std::string actual_vtable = fresh_reg();
     emit_line("  " + actual_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
@@ -1033,8 +1033,8 @@ auto LLVMIRGen::gen_guarded_virtual_call(const std::string& obj_reg,
     std::string vtable_type = "%vtable." + receiver_class;
 
     std::string func_ptr_ptr = fresh_reg();
-    emit_line("  " + func_ptr_ptr + " = getelementptr " + vtable_type + ", ptr " + actual_vtable +
-              ", i32 0, i32 " + std::to_string(vtable_slot));
+    emit_line("  " + func_ptr_ptr + " = getelementptr inbounds " + vtable_type + ", ptr " +
+              actual_vtable + ", i32 0, i32 " + std::to_string(vtable_slot));
 
     std::string func_ptr = fresh_reg();
     emit_line("  " + func_ptr + " = load ptr, ptr " + func_ptr_ptr);

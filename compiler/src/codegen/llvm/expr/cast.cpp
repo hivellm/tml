@@ -365,7 +365,7 @@ auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
     // Get object vtable
     std::string vtable_ptr_ptr = fresh_reg();
     std::string obj_vtable = fresh_reg();
-    emit_line("  " + vtable_ptr_ptr + " = getelementptr %class." + target_name + ", ptr " +
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr inbounds %class." + target_name + ", ptr " +
               obj_ptr + ", i32 0, i32 0");
     emit_line("  " + obj_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
 
@@ -485,8 +485,8 @@ auto LLVMIRGen::gen_class_safe_cast(const std::string& src_ptr, const std::strin
     // Load the object's vtable pointer
     std::string vtable_ptr_ptr = fresh_reg();
     std::string obj_vtable = fresh_reg();
-    emit_line("  " + vtable_ptr_ptr + " = getelementptr %class." + src_class + ", ptr " + src_ptr +
-              ", i32 0, i32 0");
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr inbounds %class." + src_class + ", ptr " +
+              src_ptr + ", i32 0, i32 0");
     emit_line("  " + obj_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
 
     // Check if vtable matches target or any ancestor
@@ -536,19 +536,19 @@ auto LLVMIRGen::gen_class_safe_cast(const std::string& src_ptr, const std::strin
     // Invalid: return Nothing (tag = 1)
     emit_line(label_invalid + ":");
     std::string tag_ptr_invalid = fresh_reg();
-    emit_line("  " + tag_ptr_invalid + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-              ", i32 0, i32 0");
+    emit_line("  " + tag_ptr_invalid + " = getelementptr inbounds " + maybe_type + ", ptr " +
+              maybe_ptr + ", i32 0, i32 0");
     emit_line("  store i32 1, ptr " + tag_ptr_invalid);
     emit_line("  br label %" + label_end);
 
     // Valid: return Just(casted_ptr) (tag = 0)
     emit_line(label_valid + ":");
     std::string tag_ptr_valid = fresh_reg();
-    emit_line("  " + tag_ptr_valid + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-              ", i32 0, i32 0");
+    emit_line("  " + tag_ptr_valid + " = getelementptr inbounds " + maybe_type + ", ptr " +
+              maybe_ptr + ", i32 0, i32 0");
     emit_line("  store i32 0, ptr " + tag_ptr_valid);
     std::string val_ptr = fresh_reg();
-    emit_line("  " + val_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
+    emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " + maybe_ptr +
               ", i32 0, i32 1");
     emit_line("  store ptr " + src_ptr + ", ptr " + val_ptr);
     emit_line("  br label %" + label_end);

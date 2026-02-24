@@ -23,7 +23,7 @@ TML_MODULE("codegen_x86")
 //!   ; Start with FNV-1a offset basis
 //!   %hash = 14695981039346656037
 //!   ; Hash each field and combine
-//!   %x_ptr = getelementptr %struct.Point, ptr %this, i32 0, i32 0
+//!   %x_ptr = getelementptr inbounds %struct.Point, ptr %this, i32 0, i32 0
 //!   %x_val = load i32, ptr %x_ptr
 //!   %x_ext = sext i32 %x_val to i64
 //!   %hash1 = xor i64 %hash, %x_ext
@@ -162,7 +162,7 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
     // Hash each field and combine
     for (const auto& field : fields) {
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string field_hash;
@@ -272,7 +272,7 @@ void LLVMIRGen::gen_derive_hash_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tag
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
     type_defs_buffer_ << "  %tag_ext = sext i32 %tag to i64\n";

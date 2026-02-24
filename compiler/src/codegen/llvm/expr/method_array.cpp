@@ -112,23 +112,23 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         // Out of bounds: return Nothing (tag = 1, second variant)
         emit_line(label_oob + ":");
         std::string tag_ptr_oob = fresh_reg();
-        emit_line("  " + tag_ptr_oob + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + tag_ptr_oob + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  maybe_ptr + ", i32 0, i32 0");
         emit_line("  store i32 1, ptr " + tag_ptr_oob);
         emit_line("  br label %" + label_end);
 
         // In bounds: return Just(ptr) (tag = 0, first variant)
         emit_line(label_ok + ":");
         std::string elem_ptr = fresh_reg();
-        emit_line("  " + elem_ptr + " = getelementptr " + array_llvm_type + ", ptr " + arr_ptr +
-                  ", i64 0, i64 " + index_i64);
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                  arr_ptr + ", i64 0, i64 " + index_i64);
         std::string tag_ptr_ok = fresh_reg();
-        emit_line("  " + tag_ptr_ok + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + tag_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  maybe_ptr + ", i32 0, i32 0");
         emit_line("  store i32 0, ptr " + tag_ptr_ok);
         std::string val_ptr = fresh_reg();
-        emit_line("  " + val_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                  ", i32 0, i32 1");
+        emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  maybe_ptr + ", i32 0, i32 1");
         emit_line("  store ptr " + elem_ptr + ", ptr " + val_ptr);
         emit_line("  br label %" + label_end);
 
@@ -157,21 +157,21 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         if (arr_size == 0) {
             // Empty array: return Nothing (tag = 1, second variant)
             std::string tag_ptr = fresh_reg();
-            emit_line("  " + tag_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 0");
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + tag_ptr);
         } else {
             // Non-empty: return Just(ptr to first element) (tag = 0, first variant)
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + array_llvm_type + ", ptr " + arr_ptr +
-                      ", i64 0, i64 0");
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 0");
             std::string tag_ptr = fresh_reg();
-            emit_line("  " + tag_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 0");
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 0, ptr " + tag_ptr);
             std::string val_ptr = fresh_reg();
-            emit_line("  " + val_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 1");
+            emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 1");
             emit_line("  store ptr " + elem_ptr + ", ptr " + val_ptr);
         }
 
@@ -198,21 +198,21 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         if (arr_size == 0) {
             // Empty array: return Nothing (tag = 1, second variant)
             std::string tag_ptr = fresh_reg();
-            emit_line("  " + tag_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 0");
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + tag_ptr);
         } else {
             // Non-empty: return Just(ptr to last element) (tag = 0, first variant)
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + array_llvm_type + ", ptr " + arr_ptr +
-                      ", i64 0, i64 " + std::to_string(arr_size - 1));
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(arr_size - 1));
             std::string tag_ptr = fresh_reg();
-            emit_line("  " + tag_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 0");
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 0, ptr " + tag_ptr);
             std::string val_ptr = fresh_reg();
-            emit_line("  " + val_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
-                      ", i32 0, i32 1");
+            emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 1");
             emit_line("  store ptr " + elem_ptr + ", ptr " + val_ptr);
         }
 
@@ -242,8 +242,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         // Loop through each element and apply closure
         for (size_t i = 0; i < arr_size; ++i) {
             std::string elem_ptr_src = fresh_reg();
-            emit_line("  " + elem_ptr_src + " = getelementptr " + array_llvm_type + ", ptr " +
-                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            emit_line("  " + elem_ptr_src + " = getelementptr inbounds " + array_llvm_type +
+                      ", ptr " + arr_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem_val = fresh_reg();
             emit_line("  " + elem_val + " = load " + elem_llvm_type + ", ptr " + elem_ptr_src);
 
@@ -254,8 +254,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
             // Store result
             std::string result_elem_ptr = fresh_reg();
-            emit_line("  " + result_elem_ptr + " = getelementptr " + result_type + ", ptr " +
-                      result_ptr + ", i64 0, i64 " + std::to_string(i));
+            emit_line("  " + result_elem_ptr + " = getelementptr inbounds " + result_type +
+                      ", ptr " + result_ptr + ", i64 0, i64 " + std::to_string(i));
             emit_line("  store " + elem_llvm_type + " " + mapped_val + ", ptr " + result_elem_ptr);
         }
 
@@ -293,13 +293,13 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         for (size_t i = 0; i < arr_size; ++i) {
             std::string elem1_ptr = fresh_reg();
-            emit_line("  " + elem1_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem1_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       arr_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem1 = fresh_reg();
             emit_line("  " + elem1 + " = load " + elem_llvm_type + ", ptr " + elem1_ptr);
 
             std::string elem2_ptr = fresh_reg();
-            emit_line("  " + elem2_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem2_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       other_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem2 = fresh_reg();
             emit_line("  " + elem2 + " = load " + elem_llvm_type + ", ptr " + elem2_ptr);
@@ -347,13 +347,13 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         for (size_t i = 0; i < arr_size; ++i) {
             std::string elem1_ptr = fresh_reg();
-            emit_line("  " + elem1_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem1_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       arr_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem1 = fresh_reg();
             emit_line("  " + elem1 + " = load " + elem_llvm_type + ", ptr " + elem1_ptr);
 
             std::string elem2_ptr = fresh_reg();
-            emit_line("  " + elem2_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem2_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       other_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem2 = fresh_reg();
             emit_line("  " + elem2 + " = load " + elem_llvm_type + ", ptr " + elem2_ptr);
@@ -404,13 +404,13 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         for (size_t i = 0; i < arr_size; ++i) {
             std::string elem1_ptr = fresh_reg();
-            emit_line("  " + elem1_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem1_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       arr_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem1 = fresh_reg();
             emit_line("  " + elem1 + " = load " + elem_llvm_type + ", ptr " + elem1_ptr);
 
             std::string elem2_ptr = fresh_reg();
-            emit_line("  " + elem2_ptr + " = getelementptr " + array_llvm_type + ", ptr " +
+            emit_line("  " + elem2_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       other_ptr + ", i64 0, i64 " + std::to_string(i));
             std::string elem2 = fresh_reg();
             emit_line("  " + elem2 + " = load " + elem_llvm_type + ", ptr " + elem2_ptr);
@@ -444,8 +444,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         std::string tag_val = fresh_reg();
         emit_line("  " + tag_val + " = load i32, ptr " + ordering_result_ptr);
         std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr %struct.Ordering, ptr " + ordering_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + tag_ptr + " = getelementptr inbounds %struct.Ordering, ptr " +
+                  ordering_ptr + ", i32 0, i32 0");
         emit_line("  store i32 " + tag_val + ", ptr " + tag_ptr);
 
         std::string result = fresh_reg();
@@ -463,14 +463,14 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         // Store the array pointer as the data field
         std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + data_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 0");
         emit_line("  store ptr " + arr_ptr + ", ptr " + data_ptr);
 
         // Store the array length
         std::string len_ptr = fresh_reg();
-        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
-                  ", i32 0, i32 1");
+        emit_line("  " + len_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 1");
         emit_line("  store i64 " + std::to_string(arr_size) + ", ptr " + len_ptr);
 
         std::string result = fresh_reg();
@@ -488,14 +488,14 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         // Store the array pointer as the data field
         std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + data_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 0");
         emit_line("  store ptr " + arr_ptr + ", ptr " + data_ptr);
 
         // Store the array length
         std::string len_ptr = fresh_reg();
-        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
-                  ", i32 0, i32 1");
+        emit_line("  " + len_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 1");
         emit_line("  store i64 " + std::to_string(arr_size) + ", ptr " + len_ptr);
 
         std::string result = fresh_reg();

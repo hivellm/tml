@@ -21,9 +21,9 @@ TML_MODULE("codegen_x86")
 //! define %struct.Point @tml_Point_default() {
 //! entry:
 //!   %ret = alloca %struct.Point
-//!   %x_ptr = getelementptr %struct.Point, ptr %ret, i32 0, i32 0
+//!   %x_ptr = getelementptr inbounds %struct.Point, ptr %ret, i32 0, i32 0
 //!   store i32 0, ptr %x_ptr
-//!   %y_ptr = getelementptr %struct.Point, ptr %ret, i32 0, i32 1
+//!   %y_ptr = getelementptr inbounds %struct.Point, ptr %ret, i32 0, i32 1
 //!   store i32 0, ptr %y_ptr
 //!   %result = load %struct.Point, ptr %ret
 //!   ret %struct.Point %result
@@ -160,7 +160,7 @@ void LLVMIRGen::gen_derive_default_struct(const parser::StructDecl& s) {
     // Initialize each field to its default value
     for (const auto& field : fields) {
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %ret, i32 0, i32 " << field.index << "\n";
 
         std::string default_val = get_default_value(field.llvm_type);

@@ -221,7 +221,7 @@ void LLVMIRGen::gen_derive_reflect_enum_methods(const parser::EnumDecl& e,
         type_defs_buffer_ << "define internal ptr " << variant_name_func << "(ptr %this) {\n";
         type_defs_buffer_ << "entry:\n";
         // Load the discriminant tag (first field of enum struct)
-        type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+        type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 0\n";
         type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
 
@@ -254,7 +254,7 @@ void LLVMIRGen::gen_derive_reflect_enum_methods(const parser::EnumDecl& e,
         type_defs_buffer_ << "define internal i64 " << variant_tag_func << "(ptr %this) {\n";
         type_defs_buffer_ << "entry:\n";
         // Load the discriminant tag and sign-extend to i64
-        type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+        type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 0\n";
         type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
         type_defs_buffer_ << "  %tag64 = sext i32 %tag to i64\n";

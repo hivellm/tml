@@ -420,7 +420,7 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
         // Str fields: emit tml_str_free directly (no Drop impl lookup needed)
         if (is_str_field) {
             std::string field_ptr = fresh_reg();
-            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " +
+            emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
                       info.var_reg + ", i32 0, i32 " + std::to_string(field.index));
             require_runtime_decl("tml_str_free");
             std::string str_val = fresh_reg();
@@ -454,8 +454,8 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
 
         // GEP to get field pointer
         std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + info.var_reg +
-                  ", i32 0, i32 " + std::to_string(field.index));
+        emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                  info.var_reg + ", i32 0, i32 " + std::to_string(field.index));
 
         if (field_needs_recursive) {
             // Recursively emit field-level drops for nested structs

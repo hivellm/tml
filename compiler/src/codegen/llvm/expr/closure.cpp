@@ -301,7 +301,8 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         // Calculate env struct size using LLVM's getelementptr trick
         std::string size_reg = fresh_reg();
         std::string size_int_reg = fresh_reg();
-        emit_line("  " + size_reg + " = getelementptr " + env_struct_type + ", ptr null, i32 1");
+        emit_line("  " + size_reg + " = getelementptr inbounds " + env_struct_type +
+                  ", ptr null, i32 1");
         emit_line("  " + size_int_reg + " = ptrtoint ptr " + size_reg + " to i64");
 
         // Allocate env struct on heap via malloc

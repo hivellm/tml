@@ -207,8 +207,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                             // GEP to get mutex field (field 0) of MutexGuard
                             std::string mutex_field_ptr = fresh_reg();
-                            emit_line("  " + mutex_field_ptr + " = getelementptr " + guard_type +
-                                      ", ptr " + guard_ptr + ", i32 0, i32 0");
+                            emit_line("  " + mutex_field_ptr + " = getelementptr inbounds " +
+                                      guard_type + ", ptr " + guard_ptr + ", i32 0, i32 0");
 
                             // Load the mutex pointer
                             std::string mutex_ptr = fresh_reg();
@@ -216,7 +216,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                             // GEP to get data field (field 0) of Mutex
                             std::string data_ptr = fresh_reg();
-                            emit_line("  " + data_ptr + " = getelementptr " + mutex_type +
+                            emit_line("  " + data_ptr + " = getelementptr inbounds " + mutex_type +
                                       ", ptr " + mutex_ptr + ", i32 0, i32 0");
 
                             // Store the value
@@ -400,8 +400,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                             std::string field_type = get_field_type(type_name, fname);
 
                             std::string next_ptr = fresh_reg();
-                            emit_line("  " + next_ptr + " = getelementptr " + current_type +
-                                      ", ptr " + current_ptr + ", i32 0, i32 " +
+                            emit_line("  " + next_ptr + " = getelementptr inbounds " +
+                                      current_type + ", ptr " + current_ptr + ", i32 0, i32 " +
                                       std::to_string(field_idx));
 
                             current_ptr = next_ptr;
@@ -513,9 +513,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                                     // GEP to mutex field (field 0) of MutexGuard
                                     std::string mutex_field_ptr = fresh_reg();
-                                    emit_line("  " + mutex_field_ptr + " = getelementptr " +
-                                              guard_llvm_type + ", ptr " + temp_alloca +
-                                              ", i32 0, i32 0");
+                                    emit_line("  " + mutex_field_ptr +
+                                              " = getelementptr inbounds " + guard_llvm_type +
+                                              ", ptr " + temp_alloca + ", i32 0, i32 0");
 
                                     // Load the mutex pointer
                                     std::string mutex_ptr = fresh_reg();
@@ -524,7 +524,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                                     // GEP to data field (field 0) of Mutex
                                     std::string data_ptr = fresh_reg();
-                                    emit_line("  " + data_ptr + " = getelementptr " +
+                                    emit_line("  " + data_ptr + " = getelementptr inbounds " +
                                               mutex_llvm_type + ", ptr " + mutex_ptr +
                                               ", i32 0, i32 0");
 
@@ -575,7 +575,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                                     // GEP to ptr field (field 0) of Arc
                                     std::string ptr_field_ptr = fresh_reg();
-                                    emit_line("  " + ptr_field_ptr + " = getelementptr " +
+                                    emit_line("  " + ptr_field_ptr + " = getelementptr inbounds " +
                                               arc_llvm_type + ", ptr " + temp_alloca +
                                               ", i32 0, i32 0");
 
@@ -586,7 +586,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                                     // GEP to data field (field 2) of ArcInner
                                     std::string data_ptr = fresh_reg();
-                                    emit_line("  " + data_ptr + " = getelementptr " +
+                                    emit_line("  " + data_ptr + " = getelementptr inbounds " +
                                               inner_llvm_type + ", ptr " + inner_ptr +
                                               ", i32 0, i32 2");
 
@@ -726,8 +726,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     emit_line("  store " + vec_type + " " + new_vec + ", ptr " + struct_ptr);
                 } else {
                     std::string field_ptr = fresh_reg();
-                    emit_line("  " + field_ptr + " = getelementptr " + gep_type + ", ptr " +
-                              struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+                    emit_line("  " + field_ptr + " = getelementptr inbounds " + gep_type +
+                              ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
                     // Store value to field
                     emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
@@ -800,8 +800,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Get element pointer
                 std::string elem_ptr = fresh_reg();
-                emit_line("  " + elem_ptr + " = getelementptr " + arr_type + ", ptr " + arr_ptr +
-                          ", i64 0, i64 " + idx_i64);
+                emit_line("  " + elem_ptr + " = getelementptr inbounds " + arr_type + ", ptr " +
+                          arr_ptr + ", i64 0, i64 " + idx_i64);
 
                 // Store value to element
                 emit_line("  store " + elem_type + " " + right + ", ptr " + elem_ptr);

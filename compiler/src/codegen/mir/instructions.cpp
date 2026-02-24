@@ -139,7 +139,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emitln("    call void @llvm.assume(i1 " + bounded_cmp + ")");
                 }
 
-                emit("    " + result_reg + " = getelementptr " + type_str + ", ptr " + base);
+                emit("    " + result_reg + " = getelementptr inbounds " + type_str + ", ptr " +
+                     base);
                 for (const auto& idx : i.indices) {
                     emit(", i32 " + get_value_reg(idx));
                 }

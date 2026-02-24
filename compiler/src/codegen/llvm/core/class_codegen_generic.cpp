@@ -102,7 +102,7 @@ void LLVMIRGen::gen_class_constructor_instantiation(
 
     // Initialize vtable pointer
     std::string vtable_ptr = fresh_reg();
-    emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
+    emit_line("  " + vtable_ptr + " = getelementptr inbounds " + class_type + ", ptr " + obj +
               ", i32 0, i32 0");
     emit_line("  store ptr @vtable." + mangled_name + ", ptr " + vtable_ptr);
 

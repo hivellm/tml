@@ -805,8 +805,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             }
 
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + ptr + ", i64 " +
-                      count64);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + ptr +
+                      ", i64 " + count64);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -835,8 +835,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
             // GEP to compute address: data + index * sizeof(T)
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      index);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + index);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -862,8 +862,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string index = gen_expr(*call.args[1]);
 
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      index);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + index);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -891,8 +891,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
             // Compute address and store
             std::string addr = fresh_reg();
-            emit_line("  " + addr + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      index);
+            emit_line("  " + addr + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + index);
             emit_line("  store " + value_type + " " + value + ", ptr " + addr);
             last_expr_type_ = "void";
             return "0";
@@ -918,8 +918,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string count = gen_expr(*call.args[1]);
 
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      count);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + count);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -947,10 +947,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             // Compute addresses
             std::string addr_a = fresh_reg();
             std::string addr_b = fresh_reg();
-            emit_line("  " + addr_a + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      idx_a);
-            emit_line("  " + addr_b + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      idx_b);
+            emit_line("  " + addr_a + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + idx_a);
+            emit_line("  " + addr_b + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + idx_b);
 
             // Load both values
             std::string val_a = fresh_reg();
@@ -1018,8 +1018,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string count = gen_expr(*call.args[1]);
 
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      count);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + count);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -1046,8 +1046,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string count = gen_expr(*call.args[1]);
 
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
-                      count);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " + data +
+                      ", i64 " + count);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -1092,7 +1092,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                         // For structs, use GEP trick to get size
                         std::string size_ptr = fresh_reg();
                         std::string size_val = fresh_reg();
-                        emit_line("  " + size_ptr + " = getelementptr " + type_llvm +
+                        emit_line("  " + size_ptr + " = getelementptr inbounds " + type_llvm +
                                   ", ptr null, i32 1");
                         emit_line("  " + size_val + " = ptrtoint ptr " + size_ptr + " to i64");
                         last_expr_type_ = "i64";
@@ -1170,7 +1170,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                              type_llvm.starts_with("%class.")) {
                         std::string size_ptr = fresh_reg();
                         std::string size_val = fresh_reg();
-                        emit_line("  " + size_ptr + " = getelementptr " + type_llvm +
+                        emit_line("  " + size_ptr + " = getelementptr inbounds " + type_llvm +
                                   ", ptr null, i32 1");
                         emit_line("  " + size_val + " = ptrtoint ptr " + size_ptr + " to i64");
                         last_expr_type_ = "i64";

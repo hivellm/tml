@@ -270,7 +270,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                         base_type_name == "Rc") {
                         // Arc layout: { ptr: Ptr[ArcInner[T]] }
                         std::string arc_ptr_field = fresh_reg();
-                        emit_line("  " + arc_ptr_field + " = getelementptr " + outer_type +
+                        emit_line("  " + arc_ptr_field + " = getelementptr inbounds " + outer_type +
                                   ", ptr " + outer_ptr + ", i32 0, i32 0");
                         std::string inner_ptr = fresh_reg();
                         emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
@@ -282,7 +282,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
                         // GEP to data field (index 2)
                         std::string data_ptr = fresh_reg();
-                        emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type +
+                        emit_line("  " + data_ptr + " = getelementptr inbounds " + arc_inner_type +
                                   ", ptr " + inner_ptr + ", i32 0, i32 2");
 
                         // Update outer_ptr and outer_type to point to inner struct
@@ -301,7 +301,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                     } else if (base_type_name == "Box" || base_type_name == "Heap") {
                         // Box layout: { ptr: Ptr[T] }
                         std::string box_ptr_field = fresh_reg();
-                        emit_line("  " + box_ptr_field + " = getelementptr " + outer_type +
+                        emit_line("  " + box_ptr_field + " = getelementptr inbounds " + outer_type +
                                   ", ptr " + outer_ptr + ", i32 0, i32 0");
                         std::string inner_ptr = fresh_reg();
                         emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
@@ -327,7 +327,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
                 // Get pointer to nested field
                 std::string nested_ptr = fresh_reg();
-                emit_line("  " + nested_ptr + " = getelementptr " + outer_type + ", ptr " +
+                emit_line("  " + nested_ptr + " = getelementptr inbounds " + outer_type + ", ptr " +
                           outer_ptr + ", i32 0, i32 " + std::to_string(nested_idx));
 
                 struct_type = nested_type;
@@ -641,7 +641,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
             // Use getelementptr to access element, then load
             std::string elem_ptr = fresh_reg();
-            emit_line("  " + elem_ptr + " = getelementptr " + tuple_llvm_type + ", ptr " +
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + tuple_llvm_type + ", ptr " +
                       struct_ptr + ", i32 0, i32 " + std::to_string(idx));
 
             std::string result = fresh_reg();
@@ -701,7 +701,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
             // Load the inner ptr from Arc struct (field 0)
             std::string arc_ptr_field = fresh_reg();
-            emit_line("  " + arc_ptr_field + " = getelementptr " + struct_type + ", ptr " +
+            emit_line("  " + arc_ptr_field + " = getelementptr inbounds " + struct_type + ", ptr " +
                       struct_ptr + ", i32 0, i32 0");
             std::string inner_ptr = fresh_reg();
             emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
@@ -718,7 +718,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             // GEP to get data field of ArcInner (field index 2: strong=0, weak=1, data=2)
             std::string arc_inner_type = "%struct." + arc_inner_mangled;
             std::string data_ptr = fresh_reg();
-            emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type + ", ptr " +
+            emit_line("  " + data_ptr + " = getelementptr inbounds " + arc_inner_type + ", ptr " +
                       inner_ptr + ", i32 0, i32 2");
 
             // Now update struct_ptr to point to the data and struct_type to the inner type
@@ -744,7 +744,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
             // Load the inner ptr from Box struct (field 0)
             std::string box_ptr_field = fresh_reg();
-            emit_line("  " + box_ptr_field + " = getelementptr " + struct_type + ", ptr " +
+            emit_line("  " + box_ptr_field + " = getelementptr inbounds " + struct_type + ", ptr " +
                       struct_ptr + ", i32 0, i32 0");
             std::string inner_ptr = fresh_reg();
             emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
@@ -845,7 +845,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
         for (const auto& step : field_info->inheritance_path) {
             std::string next_ptr = fresh_reg();
-            emit_line("  " + next_ptr + " = getelementptr " + current_type + ", ptr " +
+            emit_line("  " + next_ptr + " = getelementptr inbounds " + current_type + ", ptr " +
                       current_ptr + ", i32 0, i32 " + std::to_string(step.index));
             current_ptr = next_ptr;
             current_type = "%class." + step.class_name;
@@ -854,8 +854,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     } else {
         // Direct field access
         field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr +
-                  ", i32 0, i32 " + std::to_string(field_idx));
+        emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                  struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
     }
 
     std::string result = fresh_reg();

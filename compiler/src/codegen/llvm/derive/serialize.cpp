@@ -157,7 +157,7 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
 
     // Start with opening brace
     std::string current = fresh_temp();
-    type_defs_buffer_ << "  " << current << " = getelementptr [2 x i8], ptr " << open_brace
+    type_defs_buffer_ << "  " << current << " = getelementptr inbounds [2 x i8], ptr " << open_brace
                       << ", i32 0, i32 0\n";
 
     // Add each field
@@ -167,8 +167,9 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
         // Add field name with quote
         std::string field_const = "@.json_" + suite_prefix + type_name + "_f_" + field.name;
         std::string field_name = fresh_temp();
-        type_defs_buffer_ << "  " << field_name << " = getelementptr [" << (field.name.size() + 2)
-                          << " x i8], ptr " << field_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << field_name << " = getelementptr inbounds ["
+                          << (field.name.size() + 2) << " x i8], ptr " << field_const
+                          << ", i32 0, i32 0\n";
 
         std::string with_name = fresh_temp();
         type_defs_buffer_ << "  " << with_name << " = call ptr @str_concat_opt(ptr " << current
@@ -176,15 +177,15 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
 
         // Add colon
         std::string colon_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << colon_ptr << " = getelementptr [4 x i8], ptr " << colon
-                          << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << colon_ptr << " = getelementptr inbounds [4 x i8], ptr "
+                          << colon << ", i32 0, i32 0\n";
         std::string with_colon = fresh_temp();
         type_defs_buffer_ << "  " << with_colon << " = call ptr @str_concat_opt(ptr " << with_name
                           << ", ptr " << colon_ptr << ")\n";
 
         // Get field value and convert to JSON
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
@@ -233,8 +234,8 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
         if (needs_quotes) {
             // Add quote, value, quote
             std::string quote_ptr = fresh_temp();
-            type_defs_buffer_ << "  " << quote_ptr << " = getelementptr [2 x i8], ptr " << quote
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << quote_ptr << " = getelementptr inbounds [2 x i8], ptr "
+                              << quote << ", i32 0, i32 0\n";
             std::string with_open_quote = fresh_temp();
             type_defs_buffer_ << "  " << with_open_quote << " = call ptr @str_concat_opt(ptr "
                               << with_colon << ", ptr " << quote_ptr << ")\n";
@@ -254,8 +255,8 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
         // Add separator if not last field
         if (i < fields.size() - 1) {
             std::string sep = fresh_temp();
-            type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sep << " = getelementptr inbounds [3 x i8], ptr "
+                              << separator << ", i32 0, i32 0\n";
             std::string with_sep = fresh_temp();
             type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
                               << ", ptr " << sep << ")\n";
@@ -265,7 +266,7 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
 
     // Add closing brace
     std::string close = fresh_temp();
-    type_defs_buffer_ << "  " << close << " = getelementptr [2 x i8], ptr " << close_brace
+    type_defs_buffer_ << "  " << close << " = getelementptr inbounds [2 x i8], ptr " << close_brace
                       << ", i32 0, i32 0\n";
     std::string result = fresh_temp();
     type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << current << ", ptr "
@@ -330,7 +331,7 @@ void LLVMIRGen::gen_derive_serialize_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tag
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
 
@@ -349,8 +350,8 @@ void LLVMIRGen::gen_derive_serialize_enum(const parser::EnumDecl& e) {
         size_t len = 16 + variant.name.size();
 
         type_defs_buffer_ << "variant_" << tag_idx << ":\n";
-        type_defs_buffer_ << "  %json_" << tag_idx << " = getelementptr [" << len << " x i8], ptr "
-                          << variant_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  %json_" << tag_idx << " = getelementptr inbounds [" << len
+                          << " x i8], ptr " << variant_const << ", i32 0, i32 0\n";
         type_defs_buffer_ << "  ret ptr %json_" << tag_idx << "\n\n";
         tag_idx++;
     }

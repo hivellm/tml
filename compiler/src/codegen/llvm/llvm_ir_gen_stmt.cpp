@@ -553,13 +553,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                 // Store data pointer (field 0)
                 std::string data_field = fresh_reg();
-                emit_line("  " + data_field + " = getelementptr " + var_type + ", ptr " +
+                emit_line("  " + data_field + " = getelementptr inbounds " + var_type + ", ptr " +
                           dyn_alloca + ", i32 0, i32 0");
                 emit_line("  store ptr " + data_ptr + ", ptr " + data_field);
 
                 // Store vtable pointer (field 1)
                 std::string vtable_field = fresh_reg();
-                emit_line("  " + vtable_field + " = getelementptr " + var_type + ", ptr " +
+                emit_line("  " + vtable_field + " = getelementptr inbounds " + var_type + ", ptr " +
                           dyn_alloca + ", i32 0, i32 1");
                 emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
 
@@ -963,7 +963,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 for (size_t i = 0; i < arr_size; ++i) {
                     // Load from source
                     std::string src_elem_ptr = fresh_reg();
-                    emit_line("  " + src_elem_ptr + " = getelementptr " + last_expr_type_ +
+                    emit_line("  " + src_elem_ptr + " = getelementptr inbounds " + last_expr_type_ +
                               ", ptr " + src_ptr + ", i32 0, i32 " + std::to_string(i));
                     std::string src_elem = fresh_reg();
                     emit_line("  " + src_elem + " = load " + elem_type_actual + ", ptr " +
@@ -1015,8 +1015,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                     // Store to destination
                     std::string dst_elem_ptr = fresh_reg();
-                    emit_line("  " + dst_elem_ptr + " = getelementptr " + var_type + ", ptr " +
-                              alloca_reg + ", i32 0, i32 " + std::to_string(i));
+                    emit_line("  " + dst_elem_ptr + " = getelementptr inbounds " + var_type +
+                              ", ptr " + alloca_reg + ", i32 0, i32 " + std::to_string(i));
                     emit_line("  store " + elem_type_expected + " " + conv_elem + ", ptr " +
                               dst_elem_ptr);
                 }

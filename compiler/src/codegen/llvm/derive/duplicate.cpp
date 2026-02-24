@@ -21,9 +21,9 @@ TML_MODULE("codegen_x86")
 //! ```llvm
 //! define void @tml_Point_duplicate(ptr sret(%struct.Point) %ret, ptr %this) {
 //! entry:
-//!   %x_ptr = getelementptr %struct.Point, ptr %this, i32 0, i32 0
+//!   %x_ptr = getelementptr inbounds %struct.Point, ptr %this, i32 0, i32 0
 //!   %x_val = load i32, ptr %x_ptr
-//!   %ret_x = getelementptr %struct.Point, ptr %ret, i32 0, i32 0
+//!   %ret_x = getelementptr inbounds %struct.Point, ptr %ret, i32 0, i32 0
 //!   store i32 %x_val, ptr %ret_x
 //!   ; ... similar for y field ...
 //!   ret void
@@ -157,9 +157,9 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
         std::string dst_ptr = fresh_temp();
 
         // Get source and destination pointers
-        type_defs_buffer_ << "  " << src_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << src_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
-        type_defs_buffer_ << "  " << dst_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << dst_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %ret, i32 0, i32 " << field.index << "\n";
 
         if (is_primitive_copyable(field.llvm_type)) {

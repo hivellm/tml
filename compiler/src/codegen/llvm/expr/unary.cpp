@@ -224,8 +224,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         if (nested_idx >= 0) {
                             // Generate GEP to get pointer to the nested struct field
                             std::string nested_ptr = fresh_reg();
-                            emit_line("  " + nested_ptr + " = getelementptr " + outer_type +
-                                      ", ptr " + outer_ptr + ", i32 0, i32 " +
+                            emit_line("  " + nested_ptr + " = getelementptr inbounds " +
+                                      outer_type + ", ptr " + outer_ptr + ", i32 0, i32 " +
                                       std::to_string(nested_idx));
                             struct_ptr = nested_ptr;
 
@@ -512,9 +512,9 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         }
 
                         std::string field_ptr = fresh_reg();
-                        emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type +
-                                  ", ptr " + actual_struct_ptr + ", i32 0, i32 " +
-                                  std::to_string(field_idx));
+                        emit_line("  " + field_ptr + " = getelementptr inbounds " +
+                                  llvm_struct_type + ", ptr " + actual_struct_ptr +
+                                  ", i32 0, i32 " + std::to_string(field_idx));
                         last_expr_type_ = "ptr";
                         return field_ptr;
                     }
@@ -595,8 +595,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get mutex field (field 0) of MutexGuard
                     std::string mutex_field_ptr = fresh_reg();
-                    emit_line("  " + mutex_field_ptr + " = getelementptr " + guard_type + ", ptr " +
-                              guard_ptr + ", i32 0, i32 0");
+                    emit_line("  " + mutex_field_ptr + " = getelementptr inbounds " + guard_type +
+                              ", ptr " + guard_ptr + ", i32 0, i32 0");
 
                     // Load the mutex pointer (since mutex is a mut ref, it's stored as a ptr)
                     std::string mutex_ptr = fresh_reg();
@@ -604,8 +604,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get data field (field 0) of Mutex
                     std::string data_ptr = fresh_reg();
-                    emit_line("  " + data_ptr + " = getelementptr " + mutex_type + ", ptr " +
-                              mutex_ptr + ", i32 0, i32 0");
+                    emit_line("  " + data_ptr + " = getelementptr inbounds " + mutex_type +
+                              ", ptr " + mutex_ptr + ", i32 0, i32 0");
 
                     // Load the data value
                     inner_llvm_type = llvm_type_from_semantic(concrete_inner);
@@ -667,8 +667,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get lock field (field 0) of guard
                     std::string lock_field_ptr = fresh_reg();
-                    emit_line("  " + lock_field_ptr + " = getelementptr " + guard_type + ", ptr " +
-                              guard_ptr + ", i32 0, i32 0");
+                    emit_line("  " + lock_field_ptr + " = getelementptr inbounds " + guard_type +
+                              ", ptr " + guard_ptr + ", i32 0, i32 0");
 
                     // Load the rwlock pointer (since lock is a mut ref, stored as ptr)
                     std::string rwlock_ptr = fresh_reg();
@@ -676,8 +676,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get data field (field 0) of RwLock
                     std::string data_ptr = fresh_reg();
-                    emit_line("  " + data_ptr + " = getelementptr " + rwlock_type + ", ptr " +
-                              rwlock_ptr + ", i32 0, i32 0");
+                    emit_line("  " + data_ptr + " = getelementptr inbounds " + rwlock_type +
+                              ", ptr " + rwlock_ptr + ", i32 0, i32 0");
 
                     // Load the data value
                     inner_llvm_type = llvm_type_from_semantic(concrete_inner);
@@ -738,8 +738,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get ptr field (field 0) of Arc
                     std::string ptr_field_ptr = fresh_reg();
-                    emit_line("  " + ptr_field_ptr + " = getelementptr " + arc_type + ", ptr " +
-                              arc_ptr + ", i32 0, i32 0");
+                    emit_line("  " + ptr_field_ptr + " = getelementptr inbounds " + arc_type +
+                              ", ptr " + arc_ptr + ", i32 0, i32 0");
 
                     // Load the ArcInner pointer
                     std::string inner_ptr = fresh_reg();
@@ -747,8 +747,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // GEP to get data field (field 2) of ArcInner
                     std::string data_ptr = fresh_reg();
-                    emit_line("  " + data_ptr + " = getelementptr " + inner_type + ", ptr " +
-                              inner_ptr + ", i32 0, i32 2");
+                    emit_line("  " + data_ptr + " = getelementptr inbounds " + inner_type +
+                              ", ptr " + inner_ptr + ", i32 0, i32 2");
 
                     // Load the data value
                     inner_llvm_type = llvm_type_from_semantic(concrete_inner);
@@ -877,7 +877,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 emit_line("  " + alloca_reg + " = alloca " + operand_type);
                 emit_line("  store " + operand_type + " " + operand + ", ptr " + alloca_reg);
                 std::string val_ptr = fresh_reg();
-                emit_line("  " + val_ptr + " = getelementptr " + operand_type + ", ptr " +
+                emit_line("  " + val_ptr + " = getelementptr inbounds " + operand_type + ", ptr " +
                           alloca_reg + ", i32 0, i32 0");
                 std::string val = fresh_reg();
                 emit_line("  " + val + " = load " + iN + ", ptr " + val_ptr);
@@ -889,7 +889,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 std::string res_alloca = fresh_reg();
                 emit_line("  " + res_alloca + " = alloca " + operand_type);
                 std::string res_ptr = fresh_reg();
-                emit_line("  " + res_ptr + " = getelementptr " + operand_type + ", ptr " +
+                emit_line("  " + res_ptr + " = getelementptr inbounds " + operand_type + ", ptr " +
                           res_alloca + ", i32 0, i32 0");
                 emit_line("  store " + iN + " " + flipped + ", ptr " + res_ptr);
                 result = fresh_reg();

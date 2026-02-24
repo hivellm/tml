@@ -862,7 +862,7 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
     // Initialize vtable pointer (field 0) - skip for @value classes
     if (!is_value_class) {
         std::string vtable_ptr = fresh_reg();
-        emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
+        emit_line("  " + vtable_ptr + " = getelementptr inbounds " + class_type + ", ptr " + obj +
                   ", i32 0, i32 0");
         emit_line("  store ptr @vtable." + c.name + ", ptr " + vtable_ptr);
     }
@@ -918,8 +918,8 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
         // The base constructor returns a pointer to a new base object
         // We need to copy its contents into our embedded base
         std::string base_field_ptr = fresh_reg();
-        emit_line("  " + base_field_ptr + " = getelementptr " + class_type + ", ptr " + obj +
-                  ", i32 0, i32 1");
+        emit_line("  " + base_field_ptr + " = getelementptr inbounds " + class_type + ", ptr " +
+                  obj + ", i32 0, i32 1");
 
         // Copy base vtable pointer
         std::string base_vtable_ptr = fresh_reg();

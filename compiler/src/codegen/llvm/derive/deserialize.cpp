@@ -141,14 +141,14 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     std::string err_result = fresh_temp();
     type_defs_buffer_ << "  " << err_result << " = alloca " << outcome_type << "\n";
     std::string err_tag = fresh_temp();
-    type_defs_buffer_ << "  " << err_tag << " = getelementptr " << outcome_type << ", ptr "
+    type_defs_buffer_ << "  " << err_tag << " = getelementptr inbounds " << outcome_type << ", ptr "
                       << err_result << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 1, ptr " << err_tag << " ; Err tag\n";
     std::string err_payload = fresh_temp();
-    type_defs_buffer_ << "  " << err_payload << " = getelementptr " << outcome_type << ", ptr "
-                      << err_result << ", i32 0, i32 1\n";
+    type_defs_buffer_ << "  " << err_payload << " = getelementptr inbounds " << outcome_type
+                      << ", ptr " << err_result << ", i32 0, i32 1\n";
     std::string err_msg = fresh_temp();
-    type_defs_buffer_ << "  " << err_msg << " = getelementptr [19 x i8], ptr " << parse_err
+    type_defs_buffer_ << "  " << err_msg << " = getelementptr inbounds [19 x i8], ptr " << parse_err
                       << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store ptr " << err_msg << ", ptr " << err_payload << "\n";
     std::string err_ret = fresh_temp();
@@ -165,13 +165,13 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     for (const auto& field : fields) {
         std::string field_const = "@.deser_" + suite_prefix + type_name + "_f_" + field.name;
         std::string field_name_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_name_ptr << " = getelementptr ["
+        type_defs_buffer_ << "  " << field_name_ptr << " = getelementptr inbounds ["
                           << (field.name.size() + 1) << " x i8], ptr " << field_const
                           << ", i32 0, i32 0\n";
 
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type << ", ptr "
-                          << result_ptr << ", i32 0, i32 " << field.index << "\n";
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
+                          << ", ptr " << result_ptr << ", i32 0, i32 " << field.index << "\n";
 
         if (field.llvm_type == "ptr") {
             // String field - json_get_string(obj, key) -> ptr
@@ -253,12 +253,12 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     std::string ok_result = fresh_temp();
     type_defs_buffer_ << "  " << ok_result << " = alloca " << outcome_type << "\n";
     std::string ok_tag = fresh_temp();
-    type_defs_buffer_ << "  " << ok_tag << " = getelementptr " << outcome_type << ", ptr "
+    type_defs_buffer_ << "  " << ok_tag << " = getelementptr inbounds " << outcome_type << ", ptr "
                       << ok_result << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 0, ptr " << ok_tag << " ; Ok tag\n";
     std::string ok_payload = fresh_temp();
-    type_defs_buffer_ << "  " << ok_payload << " = getelementptr " << outcome_type << ", ptr "
-                      << ok_result << ", i32 0, i32 1\n";
+    type_defs_buffer_ << "  " << ok_payload << " = getelementptr inbounds " << outcome_type
+                      << ", ptr " << ok_result << ", i32 0, i32 1\n";
 
     // Copy struct data to payload
     std::string struct_val = fresh_temp();
@@ -357,14 +357,14 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
     std::string err_result = fresh_temp();
     type_defs_buffer_ << "  " << err_result << " = alloca " << outcome_type << "\n";
     std::string err_tag = fresh_temp();
-    type_defs_buffer_ << "  " << err_tag << " = getelementptr " << outcome_type << ", ptr "
+    type_defs_buffer_ << "  " << err_tag << " = getelementptr inbounds " << outcome_type << ", ptr "
                       << err_result << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 1, ptr " << err_tag << "\n";
     std::string err_payload = fresh_temp();
-    type_defs_buffer_ << "  " << err_payload << " = getelementptr " << outcome_type << ", ptr "
-                      << err_result << ", i32 0, i32 1\n";
+    type_defs_buffer_ << "  " << err_payload << " = getelementptr inbounds " << outcome_type
+                      << ", ptr " << err_result << ", i32 0, i32 1\n";
     std::string err_msg = fresh_temp();
-    type_defs_buffer_ << "  " << err_msg << " = getelementptr [19 x i8], ptr " << parse_err
+    type_defs_buffer_ << "  " << err_msg << " = getelementptr inbounds [19 x i8], ptr " << parse_err
                       << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store ptr " << err_msg << ", ptr " << err_payload << "\n";
     std::string err_ret = fresh_temp();
@@ -375,8 +375,8 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "get_variant:\n";
     // Get "variant" field from JSON
     std::string vkey_ptr = fresh_temp();
-    type_defs_buffer_ << "  " << vkey_ptr << " = getelementptr [8 x i8], ptr " << variant_key
-                      << ", i32 0, i32 0\n";
+    type_defs_buffer_ << "  " << vkey_ptr << " = getelementptr inbounds [8 x i8], ptr "
+                      << variant_key << ", i32 0, i32 0\n";
     std::string variant_str = fresh_temp();
     type_defs_buffer_ << "  " << variant_str << " = call ptr @json_get_string(ptr " << json_obj
                       << ", ptr " << vkey_ptr << ")\n";
@@ -387,8 +387,9 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
     for (const auto& variant : e.variants) {
         std::string var_const = "@.deser_" + suite_prefix + type_name + "_v_" + variant.name;
         std::string var_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << var_ptr << " = getelementptr [" << (variant.name.size() + 1)
-                          << " x i8], ptr " << var_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << var_ptr << " = getelementptr inbounds ["
+                          << (variant.name.size() + 1) << " x i8], ptr " << var_const
+                          << ", i32 0, i32 0\n";
         std::string cmp = fresh_temp();
         type_defs_buffer_ << "  " << cmp << " = call i32 @strcmp(ptr " << variant_str << ", ptr "
                           << var_ptr << ")\n";
@@ -402,12 +403,12 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
         std::string ok_result = fresh_temp();
         type_defs_buffer_ << "  " << ok_result << " = alloca " << outcome_type << "\n";
         std::string ok_tag_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << ok_tag_ptr << " = getelementptr " << outcome_type << ", ptr "
-                          << ok_result << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << ok_tag_ptr << " = getelementptr inbounds " << outcome_type
+                          << ", ptr " << ok_result << ", i32 0, i32 0\n";
         type_defs_buffer_ << "  store i32 0, ptr " << ok_tag_ptr << "\n";
         std::string ok_payload = fresh_temp();
-        type_defs_buffer_ << "  " << ok_payload << " = getelementptr " << outcome_type << ", ptr "
-                          << ok_result << ", i32 0, i32 1\n";
+        type_defs_buffer_ << "  " << ok_payload << " = getelementptr inbounds " << outcome_type
+                          << ", ptr " << ok_result << ", i32 0, i32 1\n";
         // Set enum tag
         type_defs_buffer_ << "  store i32 " << tag << ", ptr " << ok_payload << "\n";
         std::string ok_ret = fresh_temp();
@@ -423,15 +424,15 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
     std::string unk_result = fresh_temp();
     type_defs_buffer_ << "  " << unk_result << " = alloca " << outcome_type << "\n";
     std::string unk_tag = fresh_temp();
-    type_defs_buffer_ << "  " << unk_tag << " = getelementptr " << outcome_type << ", ptr "
+    type_defs_buffer_ << "  " << unk_tag << " = getelementptr inbounds " << outcome_type << ", ptr "
                       << unk_result << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 1, ptr " << unk_tag << "\n";
     std::string unk_payload = fresh_temp();
-    type_defs_buffer_ << "  " << unk_payload << " = getelementptr " << outcome_type << ", ptr "
-                      << unk_result << ", i32 0, i32 1\n";
+    type_defs_buffer_ << "  " << unk_payload << " = getelementptr inbounds " << outcome_type
+                      << ", ptr " << unk_result << ", i32 0, i32 1\n";
     std::string unk_msg = fresh_temp();
-    type_defs_buffer_ << "  " << unk_msg << " = getelementptr [16 x i8], ptr " << variant_err
-                      << ", i32 0, i32 0\n";
+    type_defs_buffer_ << "  " << unk_msg << " = getelementptr inbounds [16 x i8], ptr "
+                      << variant_err << ", i32 0, i32 0\n";
     type_defs_buffer_ << "  store ptr " << unk_msg << ", ptr " << unk_payload << "\n";
     std::string unk_ret = fresh_temp();
     type_defs_buffer_ << "  " << unk_ret << " = load " << outcome_type << ", ptr " << unk_result

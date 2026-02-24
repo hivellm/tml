@@ -307,8 +307,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         // Arc layout: { ptr: Ptr[ArcInner[T]] }
                         // ArcInner layout: { strong, weak, data }
                         std::string arc_ptr_field = fresh_reg();
-                        emit_line("  " + arc_ptr_field + " = getelementptr " + llvm_struct_type +
-                                  ", ptr " + base_ptr + ", i32 0, i32 0");
+                        emit_line("  " + arc_ptr_field + " = getelementptr inbounds " +
+                                  llvm_struct_type + ", ptr " + base_ptr + ", i32 0, i32 0");
                         std::string inner_ptr = fresh_reg();
                         emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
 
@@ -319,7 +319,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                         // GEP to data field (index 2)
                         std::string data_ptr = fresh_reg();
-                        emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type +
+                        emit_line("  " + data_ptr + " = getelementptr inbounds " + arc_inner_type +
                                   ", ptr " + inner_ptr + ", i32 0, i32 2");
 
                         // Update base_ptr and types to point to inner struct
@@ -338,8 +338,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     } else if (smart_ptr_name == "Box" || smart_ptr_name == "Heap") {
                         // Box layout: { ptr: Ptr[T] }
                         std::string box_ptr_field = fresh_reg();
-                        emit_line("  " + box_ptr_field + " = getelementptr " + llvm_struct_type +
-                                  ", ptr " + base_ptr + ", i32 0, i32 0");
+                        emit_line("  " + box_ptr_field + " = getelementptr inbounds " +
+                                  llvm_struct_type + ", ptr " + base_ptr + ", i32 0, i32 0");
                         std::string inner_ptr = fresh_reg();
                         emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
 
@@ -366,8 +366,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                     // Generate getelementptr to get pointer to the field
                     std::string field_ptr = fresh_reg();
-                    emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type + ", ptr " +
-                              base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+                    emit_line("  " + field_ptr + " = getelementptr inbounds " + llvm_struct_type +
+                              ", ptr " + base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
                     // Load the field value for method calls - structs, primitives, and pointers
                     // all need to be loaded from the field pointer before use.
@@ -697,8 +697,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string offset_i64 = fresh_reg();
             emit_line("  " + offset_i64 + " = sext i32 " + offset + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + inner_llvm_type + ", ptr " + receiver +
-                      ", i64 " + offset_i64);
+            emit_line("  " + result + " = getelementptr inbounds " + inner_llvm_type + ", ptr " +
+                      receiver + ", i64 " + offset_i64);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -1086,8 +1086,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
 
         std::string handle_field_ptr = fresh_reg();
-        emit_line("  " + handle_field_ptr + " = getelementptr %struct.File, ptr " + file_ptr +
-                  ", i32 0, i32 0");
+        emit_line("  " + handle_field_ptr + " = getelementptr inbounds %struct.File, ptr " +
+                  file_ptr + ", i32 0, i32 0");
         std::string handle = fresh_reg();
         emit_line("  " + handle + " = load ptr, ptr " + handle_field_ptr);
 

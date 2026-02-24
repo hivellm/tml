@@ -650,11 +650,11 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                     std::string fat_alloca = fresh_reg();
                     emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
                     std::string data_field = fresh_reg();
-                    emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
+                    emit_line("  " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
                               fat_alloca + ", i32 0, i32 0");
                     emit_line("  store ptr " + val + ", ptr " + data_field);
                     std::string len_field = fresh_reg();
-                    emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
+                    emit_line("  " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
                               fat_alloca + ", i32 0, i32 1");
                     emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
                     val = fat_alloca;
@@ -862,11 +862,11 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
                     std::string fat_alloca = fresh_reg();
                     emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
                     std::string data_field = fresh_reg();
-                    emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
+                    emit_line("  " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
                               fat_alloca + ", i32 0, i32 0");
                     emit_line("  store ptr " + val + ", ptr " + data_field);
                     std::string len_field = fresh_reg();
-                    emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
+                    emit_line("  " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
                               fat_alloca + ", i32 0, i32 1");
                     emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
                     val = fat_alloca;

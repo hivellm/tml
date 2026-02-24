@@ -157,7 +157,7 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
 
         // Get field value and convert to string
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
@@ -205,8 +205,8 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
         } else {
             // Add separator and concatenate
             std::string sep = fresh_temp();
-            type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator_const
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sep << " = getelementptr inbounds [3 x i8], ptr "
+                              << separator_const << ", i32 0, i32 0\n";
             std::string with_sep = fresh_temp();
             type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
                               << ", ptr " << sep << ")\n";
@@ -269,7 +269,7 @@ void LLVMIRGen::gen_derive_display_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tag
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
 
@@ -286,7 +286,7 @@ void LLVMIRGen::gen_derive_display_enum(const parser::EnumDecl& e) {
         std::string variant_const = "@.display_" + suite_prefix + type_name + "_v_" + variant.name;
 
         type_defs_buffer_ << "variant_" << tag_idx << ":\n";
-        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr ["
+        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr inbounds ["
                           << (variant.name.size() + 1) << " x i8], ptr " << variant_const
                           << ", i32 0, i32 0\n";
         type_defs_buffer_ << "  ret ptr %name_" << tag_idx << "\n\n";

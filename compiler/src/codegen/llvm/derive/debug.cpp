@@ -167,13 +167,13 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 
     // Start with type name
     std::string current = fresh_temp();
-    type_defs_buffer_ << "  " << current << " = getelementptr [" << (type_name.size() + 1)
+    type_defs_buffer_ << "  " << current << " = getelementptr inbounds [" << (type_name.size() + 1)
                       << " x i8], ptr " << type_name_const << ", i32 0, i32 0\n";
 
     // Add opening brace
     std::string open = fresh_temp();
-    type_defs_buffer_ << "  " << open << " = getelementptr [4 x i8], ptr " << open_brace_const
-                      << ", i32 0, i32 0\n";
+    type_defs_buffer_ << "  " << open << " = getelementptr inbounds [4 x i8], ptr "
+                      << open_brace_const << ", i32 0, i32 0\n";
     std::string with_open = fresh_temp();
     type_defs_buffer_ << "  " << with_open << " = call ptr @str_concat_opt(ptr " << current
                       << ", ptr " << open << ")\n";
@@ -186,8 +186,9 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         // Add field name
         std::string field_const = "@.debug_" + suite_prefix + type_name + "_f_" + field.name;
         std::string field_name = fresh_temp();
-        type_defs_buffer_ << "  " << field_name << " = getelementptr [" << (field.name.size() + 1)
-                          << " x i8], ptr " << field_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << field_name << " = getelementptr inbounds ["
+                          << (field.name.size() + 1) << " x i8], ptr " << field_const
+                          << ", i32 0, i32 0\n";
 
         std::string with_name = fresh_temp();
         type_defs_buffer_ << "  " << with_name << " = call ptr @str_concat_opt(ptr " << current
@@ -195,15 +196,15 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 
         // Add colon
         std::string colon = fresh_temp();
-        type_defs_buffer_ << "  " << colon << " = getelementptr [3 x i8], ptr " << colon_const
-                          << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  " << colon << " = getelementptr inbounds [3 x i8], ptr "
+                          << colon_const << ", i32 0, i32 0\n";
         std::string with_colon = fresh_temp();
         type_defs_buffer_ << "  " << with_colon << " = call ptr @str_concat_opt(ptr " << with_name
                           << ", ptr " << colon << ")\n";
 
         // Get field value and convert to string
         std::string field_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << field_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
@@ -254,8 +255,8 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         // Add separator if not last field
         if (i < fields.size() - 1) {
             std::string sep = fresh_temp();
-            type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator_const
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sep << " = getelementptr inbounds [3 x i8], ptr "
+                              << separator_const << ", i32 0, i32 0\n";
             std::string with_sep = fresh_temp();
             type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
                               << ", ptr " << sep << ")\n";
@@ -265,8 +266,8 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 
     // Add closing brace
     std::string close = fresh_temp();
-    type_defs_buffer_ << "  " << close << " = getelementptr [3 x i8], ptr " << close_brace_const
-                      << ", i32 0, i32 0\n";
+    type_defs_buffer_ << "  " << close << " = getelementptr inbounds [3 x i8], ptr "
+                      << close_brace_const << ", i32 0, i32 0\n";
     std::string result = fresh_temp();
     type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << current << ", ptr "
                       << close << ")\n";
@@ -324,7 +325,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tag
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
 
@@ -342,8 +343,9 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
         std::string full_name = type_name + "::" + variant.name;
 
         type_defs_buffer_ << "variant_" << tag_idx << ":\n";
-        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr [" << (full_name.size() + 1)
-                          << " x i8], ptr " << variant_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr inbounds ["
+                          << (full_name.size() + 1) << " x i8], ptr " << variant_const
+                          << ", i32 0, i32 0\n";
         type_defs_buffer_ << "  ret ptr %name_" << tag_idx << "\n\n";
         tag_idx++;
     }

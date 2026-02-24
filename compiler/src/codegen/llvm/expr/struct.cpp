@@ -10,9 +10,9 @@ TML_MODULE("codegen_x86")
 //! `Point { x: 10, y: 20 }` generates:
 //! ```llvm
 //! %ptr = alloca %struct.Point
-//! %field0 = getelementptr %struct.Point, ptr %ptr, i32 0, i32 0
+//! %field0 = getelementptr inbounds %struct.Point, ptr %ptr, i32 0, i32 0
 //! store i32 10, ptr %field0
-//! %field1 = getelementptr %struct.Point, ptr %ptr, i32 0, i32 1
+//! %field1 = getelementptr inbounds %struct.Point, ptr %ptr, i32 0, i32 1
 //! store i32 20, ptr %field1
 //! ```
 //!
@@ -312,8 +312,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
 
             std::string field_ptr = fresh_reg();
-            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
-                      ", i32 0, i32 " + std::to_string(field_idx));
+            emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                      ptr + ", i32 0, i32 " + std::to_string(field_idx));
             emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
         }
 
@@ -385,8 +385,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
 
             std::string field_ptr = fresh_reg();
-            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
-                      ", i32 0, i32 " + std::to_string(field_idx));
+            emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                      ptr + ", i32 0, i32 " + std::to_string(field_idx));
             emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
         }
 
@@ -540,13 +540,14 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         // Get the address offset from element 0 to element 1, which equals the struct size
         std::string size_ptr = fresh_reg();
         std::string size_reg = fresh_reg();
-        emit_line("  " + size_ptr + " = getelementptr " + struct_type + ", ptr null, i32 1");
+        emit_line("  " + size_ptr + " = getelementptr inbounds " + struct_type +
+                  ", ptr null, i32 1");
         emit_line("  " + size_reg + " = ptrtoint ptr " + size_ptr + " to i64");
         emit_line("  " + ptr + " = call ptr @malloc(i64 " + size_reg + ")");
 
         // Initialize vtable pointer (field 0) for class instances
         std::string vtable_ptr = fresh_reg();
-        emit_line("  " + vtable_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
+        emit_line("  " + vtable_ptr + " = getelementptr inbounds " + struct_type + ", ptr " + ptr +
                   ", i32 0, i32 0");
         emit_line("  store ptr @vtable." + base_name + ", ptr " + vtable_ptr);
     } else {
@@ -757,8 +758,9 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                      ++step_idx) {
                     const auto& step = field_info->inheritance_path[step_idx];
                     std::string next_ptr = fresh_reg();
-                    emit_line("  " + next_ptr + " = getelementptr " + current_type + ", ptr " +
-                              current_ptr + ", i32 0, i32 " + std::to_string(step.index));
+                    emit_line("  " + next_ptr + " = getelementptr inbounds " + current_type +
+                              ", ptr " + current_ptr + ", i32 0, i32 " +
+                              std::to_string(step.index));
                     current_ptr = next_ptr;
                     current_type = "%class." + step.class_name;
                 }
@@ -769,8 +771,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         if (!is_inherited) {
             // Direct field access
             field_ptr = fresh_reg();
-            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
-                      ", i32 0, i32 " + std::to_string(field_idx));
+            emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                      ptr + ", i32 0, i32 " + std::to_string(field_idx));
         }
 
         emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
@@ -842,8 +844,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 }
 
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
-                          ", i32 0, i32 " + std::to_string(field_idx));
+                emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                          ptr + ", i32 0, i32 " + std::to_string(field_idx));
                 emit_line("  store " +
                           (target_field_type.empty() ? actual_type : target_field_type) + " " +
                           default_val + ", ptr " + field_ptr);

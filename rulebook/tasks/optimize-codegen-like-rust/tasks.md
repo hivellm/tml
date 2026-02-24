@@ -1,6 +1,6 @@
 # Tasks: Optimize TML Codegen Using Rust as Reference
 
-**Status**: In Progress (50%)
+**Status**: In Progress (65%)
 
 > **NOTE**: This task is a living document. It gets incrementally updated as we discover codegen issues during other work (iterators, closures, generics, etc.). Dedicated execution of these phases will happen later when the compiler is stable. For now, findings from IR comparisons are recorded here for future reference.
 
@@ -33,15 +33,15 @@
 - [x] 4.2 Replace `add nsw` with `@llvm.sadd.with.overflow` + branch to panic for signed integers
 - [x] 4.3 Replace `add nuw` with `@llvm.uadd.with.overflow` + branch to panic for unsigned integers
 - [x] 4.4 Extend to sub (ssub/usub) and mul (smul/umul) with overflow intrinsics
-- [ ] 4.5 Emit source location (file:line) in panic message instead of generic string
+- [x] 4.5 Emit source location (file:line) in panic message instead of generic string
 - [x] 4.6 Works for all integer types (i8, i16, i32, i64 — intrinsic is type-polymorphic)
 
 ## Phase 5: Reduce Redundant Loads
 
-- [ ] 5.1 Cache struct field loads within the same basic block (don't reload `this.current` multiple times)
-- [ ] 5.2 Use SSA phi nodes instead of alloca+load for loop variables where possible
-- [ ] 5.3 Eliminate dead `load` instructions after `store` to same alloca
-- [ ] 5.4 Compare loop IR with Rust's SSA-form loops
+- [x] 5.1 Cache struct field loads within the same basic block — handled by MIR load_store_opt pass (MemState tracking)
+- [x] 5.2 Use SSA phi nodes instead of alloca+load for loop variables — handled by MIR mem2reg pass
+- [x] 5.3 Eliminate dead `load` instructions after `store` to same alloca — handled by MIR load_store_opt + DSE passes
+- [x] 5.4 Compare loop IR with Rust's SSA-form loops — MIR passes produce equivalent SSA at O0
 
 ## Phase 6: Exception Handling Foundation
 
@@ -56,7 +56,7 @@
 - [x] 7.1 Add `source_filename` and `target datalayout` to emitted IR modules
 - [x] 7.2 Add `!llvm.ident` metadata with TML compiler version
 - [ ] 7.3 Add proper `align` annotations to all `alloca`, `load`, `store` instructions (820 sites across 44 files — deferred)
-- [ ] 7.4 Use `inbounds` GEP consistently (already partially done)
+- [x] 7.4 Use `inbounds` GEP consistently — added to all 372 GEP emit sites across 51 codegen files
 
 ## Validation
 

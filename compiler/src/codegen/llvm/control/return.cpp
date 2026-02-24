@@ -292,14 +292,14 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
 
                     // Store data pointer (field 0)
                     std::string data_field = fresh_reg();
-                    emit_line("  " + data_field + " = getelementptr " + current_ret_type_ +
+                    emit_line("  " + data_field + " = getelementptr inbounds " + current_ret_type_ +
                               ", ptr " + dyn_alloca + ", i32 0, i32 0");
                     emit_line("  store ptr " + data_alloca + ", ptr " + data_field);
 
                     // Store vtable pointer (field 1)
                     std::string vtable_field = fresh_reg();
-                    emit_line("  " + vtable_field + " = getelementptr " + current_ret_type_ +
-                              ", ptr " + dyn_alloca + ", i32 0, i32 1");
+                    emit_line("  " + vtable_field + " = getelementptr inbounds " +
+                              current_ret_type_ + ", ptr " + dyn_alloca + ", i32 0, i32 1");
                     emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
 
                     // Load the fat pointer and return it

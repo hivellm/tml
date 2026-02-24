@@ -497,12 +497,14 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         std::string fat_ptr_alloca = fresh_reg();
                         emit_line("  " + fat_ptr_alloca + " = alloca { ptr, i64 }");
                         std::string data_field = fresh_reg();
-                        emit_line("  " + data_field + " = getelementptr { ptr, i64 }, ptr " +
-                                  fat_ptr_alloca + ", i32 0, i32 0");
+                        emit_line("  " + data_field +
+                                  " = getelementptr inbounds { ptr, i64 }, ptr " + fat_ptr_alloca +
+                                  ", i32 0, i32 0");
                         emit_line("  store ptr " + it->second.reg + ", ptr " + data_field);
                         std::string len_field = fresh_reg();
-                        emit_line("  " + len_field + " = getelementptr { ptr, i64 }, ptr " +
-                                  fat_ptr_alloca + ", i32 0, i32 1");
+                        emit_line("  " + len_field +
+                                  " = getelementptr inbounds { ptr, i64 }, ptr " + fat_ptr_alloca +
+                                  ", i32 0, i32 1");
                         emit_line("  store i64 " + std::to_string(array_size) + ", ptr " +
                                   len_field);
                         val = fat_ptr_alloca;

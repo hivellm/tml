@@ -173,9 +173,9 @@ void LLVMIRGen::gen_derive_ord_struct(const parser::StructDecl& s) {
         std::string this_ptr = fresh_temp();
         std::string other_ptr = fresh_temp();
 
-        type_defs_buffer_ << "  " << this_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << this_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
-        type_defs_buffer_ << "  " << other_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << other_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %other, i32 0, i32 " << field.index << "\n";
 
         if (is_primitive_comparable(field.llvm_type)) {
@@ -327,10 +327,10 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
     if (fields.empty()) {
         // Empty struct - always equal, return Just(Equal)
         type_defs_buffer_ << "  %ret = alloca " << maybe_type << "\n";
-        type_defs_buffer_ << "  %tag_ptr = getelementptr " << maybe_type
+        type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << maybe_type
                           << ", ptr %ret, i32 0, i32 0\n";
         type_defs_buffer_ << "  store i32 0, ptr %tag_ptr ; Just\n";
-        type_defs_buffer_ << "  %payload_ptr = getelementptr " << maybe_type
+        type_defs_buffer_ << "  %payload_ptr = getelementptr inbounds " << maybe_type
                           << ", ptr %ret, i32 0, i32 1\n";
         type_defs_buffer_ << "  store i32 1, ptr %payload_ptr ; Equal\n";
         type_defs_buffer_ << "  %result = load " << maybe_type << ", ptr %ret\n";
@@ -350,9 +350,9 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
         std::string this_ptr = fresh_temp();
         std::string other_ptr = fresh_temp();
 
-        type_defs_buffer_ << "  " << this_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << this_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
-        type_defs_buffer_ << "  " << other_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << other_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %other, i32 0, i32 " << field.index << "\n";
 
         if (is_primitive_comparable(field.llvm_type)) {
@@ -393,11 +393,11 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
             type_defs_buffer_ << label_less << ":\n";
             // Return Just(Less)
             type_defs_buffer_ << "  %less_ret" << field_idx << " = alloca " << maybe_type << "\n";
-            type_defs_buffer_ << "  %less_tag" << field_idx << " = getelementptr " << maybe_type
-                              << ", ptr %less_ret" << field_idx << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  %less_tag" << field_idx << " = getelementptr inbounds "
+                              << maybe_type << ", ptr %less_ret" << field_idx << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store i32 0, ptr %less_tag" << field_idx << "\n";
-            type_defs_buffer_ << "  %less_payload" << field_idx << " = getelementptr " << maybe_type
-                              << ", ptr %less_ret" << field_idx << ", i32 0, i32 1\n";
+            type_defs_buffer_ << "  %less_payload" << field_idx << " = getelementptr inbounds "
+                              << maybe_type << ", ptr %less_ret" << field_idx << ", i32 0, i32 1\n";
             type_defs_buffer_ << "  store i32 0, ptr %less_payload" << field_idx << "\n";
             type_defs_buffer_ << "  %less_result" << field_idx << " = load " << maybe_type
                               << ", ptr %less_ret" << field_idx << "\n";
@@ -411,10 +411,11 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
             // Return Just(Greater)
             type_defs_buffer_ << "  %greater_ret" << field_idx << " = alloca " << maybe_type
                               << "\n";
-            type_defs_buffer_ << "  %greater_tag" << field_idx << " = getelementptr " << maybe_type
-                              << ", ptr %greater_ret" << field_idx << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  %greater_tag" << field_idx << " = getelementptr inbounds "
+                              << maybe_type << ", ptr %greater_ret" << field_idx
+                              << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store i32 0, ptr %greater_tag" << field_idx << "\n";
-            type_defs_buffer_ << "  %greater_payload" << field_idx << " = getelementptr "
+            type_defs_buffer_ << "  %greater_payload" << field_idx << " = getelementptr inbounds "
                               << maybe_type << ", ptr %greater_ret" << field_idx
                               << ", i32 0, i32 1\n";
             type_defs_buffer_ << "  store i32 2, ptr %greater_payload" << field_idx << "\n";
@@ -514,10 +515,10 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
     // All fields equal - return Just(Equal)
     type_defs_buffer_ << "ret_equal:\n";
     type_defs_buffer_ << "  %eq_ret = alloca " << maybe_type << "\n";
-    type_defs_buffer_ << "  %eq_tag = getelementptr " << maybe_type
+    type_defs_buffer_ << "  %eq_tag = getelementptr inbounds " << maybe_type
                       << ", ptr %eq_ret, i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 0, ptr %eq_tag ; Just\n";
-    type_defs_buffer_ << "  %eq_payload = getelementptr " << maybe_type
+    type_defs_buffer_ << "  %eq_payload = getelementptr inbounds " << maybe_type
                       << ", ptr %eq_ret, i32 0, i32 1\n";
     type_defs_buffer_ << "  store i32 1, ptr %eq_payload ; Equal\n";
     type_defs_buffer_ << "  %eq_result = load " << maybe_type << ", ptr %eq_ret\n";
@@ -565,9 +566,9 @@ void LLVMIRGen::gen_derive_ord_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tags
-    type_defs_buffer_ << "  %tag_this_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_this_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
-    type_defs_buffer_ << "  %tag_other_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_other_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %other, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag_this = load i32, ptr %tag_this_ptr\n";
     type_defs_buffer_ << "  %tag_other = load i32, ptr %tag_other_ptr\n";
@@ -631,9 +632,9 @@ void LLVMIRGen::gen_derive_partial_ord_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tags
-    type_defs_buffer_ << "  %tag_this_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_this_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
-    type_defs_buffer_ << "  %tag_other_ptr = getelementptr " << llvm_type
+    type_defs_buffer_ << "  %tag_other_ptr = getelementptr inbounds " << llvm_type
                       << ", ptr %other, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag_this = load i32, ptr %tag_this_ptr\n";
     type_defs_buffer_ << "  %tag_other = load i32, ptr %tag_other_ptr\n";
@@ -648,10 +649,10 @@ void LLVMIRGen::gen_derive_partial_ord_enum(const parser::EnumDecl& e) {
 
     // Build Just(ordering) result
     type_defs_buffer_ << "  %ret = alloca " << maybe_type << "\n";
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << maybe_type
+    type_defs_buffer_ << "  %tag_ptr = getelementptr inbounds " << maybe_type
                       << ", ptr %ret, i32 0, i32 0\n";
     type_defs_buffer_ << "  store i32 0, ptr %tag_ptr ; Just\n";
-    type_defs_buffer_ << "  %payload_ptr = getelementptr " << maybe_type
+    type_defs_buffer_ << "  %payload_ptr = getelementptr inbounds " << maybe_type
                       << ", ptr %ret, i32 0, i32 1\n";
     type_defs_buffer_ << "  store i32 %ordering, ptr %payload_ptr\n";
     type_defs_buffer_ << "  %result = load " << maybe_type << ", ptr %ret\n";

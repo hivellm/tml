@@ -78,13 +78,13 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         for (size_t i = 0; i < elem_types.size(); ++i) {
             // Get pointers to elements
             std::string left_elem_ptr = fresh_reg();
-            emit_line("  " + left_elem_ptr + " = getelementptr " + left_type + ", ptr " +
+            emit_line("  " + left_elem_ptr + " = getelementptr inbounds " + left_type + ", ptr " +
                       left_alloca + ", i32 0, i32 " + std::to_string(i));
             std::string left_elem = fresh_reg();
             emit_line("  " + left_elem + " = load " + elem_types[i] + ", ptr " + left_elem_ptr);
 
             std::string right_elem_ptr = fresh_reg();
-            emit_line("  " + right_elem_ptr + " = getelementptr " + right_type + ", ptr " +
+            emit_line("  " + right_elem_ptr + " = getelementptr inbounds " + right_type + ", ptr " +
                       right_alloca + ", i32 0, i32 " + std::to_string(i));
             std::string right_elem = fresh_reg();
             emit_line("  " + right_elem + " = load " + elem_types[i] + ", ptr " + right_elem_ptr);
@@ -157,13 +157,13 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         for (size_t i = 0; i < elem_types.size(); ++i) {
             // Get pointers to elements
             std::string left_elem_ptr = fresh_reg();
-            emit_line("  " + left_elem_ptr + " = getelementptr " + left_type + ", ptr " +
+            emit_line("  " + left_elem_ptr + " = getelementptr inbounds " + left_type + ", ptr " +
                       left_alloca + ", i32 0, i32 " + std::to_string(i));
             std::string left_elem = fresh_reg();
             emit_line("  " + left_elem + " = load " + elem_types[i] + ", ptr " + left_elem_ptr);
 
             std::string right_elem_ptr = fresh_reg();
-            emit_line("  " + right_elem_ptr + " = getelementptr " + right_type + ", ptr " +
+            emit_line("  " + right_elem_ptr + " = getelementptr inbounds " + right_type + ", ptr " +
                       right_alloca + ", i32 0, i32 " + std::to_string(i));
             std::string right_elem = fresh_reg();
             emit_line("  " + right_elem + " = load " + elem_types[i] + ", ptr " + right_elem_ptr);
@@ -267,8 +267,8 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         emit_line("  " + left_alloca + " = alloca " + left_type);
         emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
         std::string left_tag_ptr = fresh_reg();
-        emit_line("  " + left_tag_ptr + " = getelementptr " + left_type + ", ptr " + left_alloca +
-                  ", i32 0, i32 0");
+        emit_line("  " + left_tag_ptr + " = getelementptr inbounds " + left_type + ", ptr " +
+                  left_alloca + ", i32 0, i32 0");
         std::string left_tag = fresh_reg();
         emit_line("  " + left_tag + " = load " + tag_type + ", ptr " + left_tag_ptr);
 
@@ -277,7 +277,7 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         emit_line("  " + right_alloca + " = alloca " + right_type);
         emit_line("  store " + right_type + " " + right + ", ptr " + right_alloca);
         std::string right_tag_ptr = fresh_reg();
-        emit_line("  " + right_tag_ptr + " = getelementptr " + right_type + ", ptr " +
+        emit_line("  " + right_tag_ptr + " = getelementptr inbounds " + right_type + ", ptr " +
                   right_alloca + ", i32 0, i32 0");
         std::string right_tag = fresh_reg();
         emit_line("  " + right_tag + " = load " + tag_type + ", ptr " + right_tag_ptr);
@@ -301,8 +301,8 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             std::string res_alloca = fresh_reg();
             emit_line("  " + res_alloca + " = alloca " + left_type);
             std::string res_ptr = fresh_reg();
-            emit_line("  " + res_ptr + " = getelementptr " + left_type + ", ptr " + res_alloca +
-                      ", i32 0, i32 0");
+            emit_line("  " + res_ptr + " = getelementptr inbounds " + left_type + ", ptr " +
+                      res_alloca + ", i32 0, i32 0");
             emit_line("  store " + tag_type + " " + raw_result + ", ptr " + res_ptr);
             std::string final_result = fresh_reg();
             emit_line("  " + final_result + " = load " + left_type + ", ptr " + res_alloca);
@@ -587,8 +587,8 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                     elem_type = llvm_type_from_semantic(ptr.inner);
                 }
             }
-            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + ptr_operand +
-                      ", i64 " + idx_operand);
+            emit_line("  " + result + " = getelementptr inbounds " + elem_type + ", ptr " +
+                      ptr_operand + ", i64 " + idx_operand);
             last_expr_type_ = "ptr";
         } else if (is_string) {
             // String concatenation using str_concat_opt (O(1) amortized)
@@ -615,7 +615,9 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
                       label_ok);
             emit_line(label_panic + ":");
-            std::string panic_msg = add_string_literal("integer overflow on addition");
+            std::string panic_msg =
+                add_string_literal("integer overflow on addition at " + options_.source_file + ":" +
+                                   std::to_string(bin.span.start.line));
             emit_line("  call void @panic(ptr " + panic_msg + ")");
             emit_line("  unreachable");
             emit_line(label_ok + ":");
@@ -652,7 +654,9 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
                       label_ok);
             emit_line(label_panic + ":");
-            std::string panic_msg = add_string_literal("integer overflow on subtraction");
+            std::string panic_msg =
+                add_string_literal("integer overflow on subtraction at " + options_.source_file +
+                                   ":" + std::to_string(bin.span.start.line));
             emit_line("  call void @panic(ptr " + panic_msg + ")");
             emit_line("  unreachable");
             emit_line(label_ok + ":");
@@ -689,7 +693,9 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
                       label_ok);
             emit_line(label_panic + ":");
-            std::string panic_msg = add_string_literal("integer overflow on multiplication");
+            std::string panic_msg =
+                add_string_literal("integer overflow on multiplication at " + options_.source_file +
+                                   ":" + std::to_string(bin.span.start.line));
             emit_line("  call void @panic(ptr " + panic_msg + ")");
             emit_line("  unreachable");
             emit_line(label_ok + ":");

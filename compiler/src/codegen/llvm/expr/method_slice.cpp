@@ -73,8 +73,8 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
     if (method == "len" || method == "length") {
         emit_coverage("Slice::len");
         std::string len_ptr = fresh_reg();
-        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + slice_ptr +
-                  ", i32 0, i32 1");
+        emit_line("  " + len_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  slice_ptr + ", i32 0, i32 1");
         std::string len_val = fresh_reg();
         emit_line("  " + len_val + " = load i64, ptr " + len_ptr);
         last_expr_type_ = "i64";
@@ -85,8 +85,8 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
     if (method == "is_empty" || method == "isEmpty") {
         emit_coverage("Slice::is_empty");
         std::string len_ptr = fresh_reg();
-        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + slice_ptr +
-                  ", i32 0, i32 1");
+        emit_line("  " + len_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  slice_ptr + ", i32 0, i32 1");
         std::string len_val = fresh_reg();
         emit_line("  " + len_val + " = load i64, ptr " + len_ptr);
         std::string result = fresh_reg();

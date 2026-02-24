@@ -489,10 +489,10 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "define internal i1 " << fn << "(ptr %self, ptr %flag) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t(), fp = t(), fv = t(), a = t(), r = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
-            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << fp << " = getelementptr inbounds " << struct_type
                               << ", ptr %flag, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
             type_defs_buffer_ << "  " << a << " = and " << iN << " " << sv << ", " << fv << "\n";
@@ -512,7 +512,7 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "define internal i1 " << fn << "(ptr %self) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t(), r = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
             type_defs_buffer_ << "  " << r << " = icmp eq " << iN << " " << sv << ", 0\n";
@@ -529,7 +529,7 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "define internal " << iN << " " << fn << "(ptr %self) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
             type_defs_buffer_ << "  ret " << iN << " " << sv << "\n";
@@ -547,17 +547,17 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
                               << "(ptr %self, ptr %flag) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t(), fp = t(), fv = t(), r = t(), a = t(), sv2 = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
-            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << fp << " = getelementptr inbounds " << struct_type
                               << ", ptr %flag, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
             type_defs_buffer_ << "  " << r << " = or " << iN << " " << sv << ", " << fv << "\n";
             // Build result struct
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << sv2 << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv2 << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << sv2 << "\n";
             auto res = t();
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
@@ -576,17 +576,17 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
                               << "(ptr %self, ptr %flag) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t(), fp = t(), fv = t(), nf = t(), r = t(), a = t(), p = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
-            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << fp << " = getelementptr inbounds " << struct_type
                               << ", ptr %flag, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
             type_defs_buffer_ << "  " << nf << " = xor " << iN << " " << fv << ", -1\n";
             type_defs_buffer_ << "  " << r << " = and " << iN << " " << sv << ", " << nf << "\n";
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << p << "\n";
             auto res = t();
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
@@ -605,16 +605,16 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
                               << "(ptr %self, ptr %flag) {\n";
             type_defs_buffer_ << "entry:\n";
             auto sp = t(), sv = t(), fp = t(), fv = t(), r = t(), a = t(), p = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
-            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << fp << " = getelementptr inbounds " << struct_type
                               << ", ptr %flag, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
             type_defs_buffer_ << "  " << r << " = xor " << iN << " " << sv << ", " << fv << "\n";
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << p << "\n";
             auto res = t();
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
@@ -633,10 +633,10 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "define internal i1 " << fn << "(ptr %this, ptr %other) {\n";
             type_defs_buffer_ << "entry:\n";
             auto tp = t(), tv = t(), op = t(), ov = t(), r = t();
-            type_defs_buffer_ << "  " << tp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << tp << " = getelementptr inbounds " << struct_type
                               << ", ptr %this, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << tv << " = load " << iN << ", ptr " << tp << "\n";
-            type_defs_buffer_ << "  " << op << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << op << " = getelementptr inbounds " << struct_type
                               << ", ptr %other, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << ov << " = load " << iN << ", ptr " << op << "\n";
             type_defs_buffer_ << "  " << r << " = icmp eq " << iN << " " << tv << ", " << ov
@@ -658,8 +658,8 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "entry:\n";
             auto a = t(), p = t(), res = t();
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " 0, ptr " << p << "\n";
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
             type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
@@ -677,8 +677,8 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "entry:\n";
             auto a = t(), p = t(), res = t();
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " " << std::to_string(info.all_bits_mask)
                               << ", ptr " << p << "\n";
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
@@ -697,8 +697,8 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "entry:\n";
             auto a = t(), p = t(), res = t();
             type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
-            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
-                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr inbounds " << struct_type
+                              << ", ptr " << a << ", i32 0, i32 0\n";
             type_defs_buffer_ << "  store " << iN << " %val, ptr " << p << "\n";
             type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
             type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
@@ -732,7 +732,7 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
 
             // Load the raw value
             auto sp = t(), sv = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
 
@@ -876,7 +876,7 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
 
             // Load the raw value
             auto sp = t(), sv = t();
-            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+            type_defs_buffer_ << "  " << sp << " = getelementptr inbounds " << struct_type
                               << ", ptr %self, i32 0, i32 0\n";
             type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
 

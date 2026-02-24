@@ -21,9 +21,9 @@ TML_MODULE("codegen_x86")
 //! ```llvm
 //! define i1 @tml_Point_eq(ptr %this, ptr %other) {
 //! entry:
-//!   %x_this = getelementptr %struct.Point, ptr %this, i32 0, i32 0
+//!   %x_this = getelementptr inbounds %struct.Point, ptr %this, i32 0, i32 0
 //!   %x_val_this = load i32, ptr %x_this
-//!   %x_other = getelementptr %struct.Point, ptr %other, i32 0, i32 0
+//!   %x_other = getelementptr inbounds %struct.Point, ptr %other, i32 0, i32 0
 //!   %x_val_other = load i32, ptr %x_other
 //!   %eq_x = icmp eq i32 %x_val_this, %x_val_other
 //!   br i1 %eq_x, label %check_y, label %ret_false
@@ -172,9 +172,9 @@ void LLVMIRGen::gen_derive_partial_eq_struct(const parser::StructDecl& s) {
         // Get field pointers
         std::string this_ptr = fresh_temp();
         std::string other_ptr = fresh_temp();
-        type_defs_buffer_ << "  " << this_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << this_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
-        type_defs_buffer_ << "  " << other_ptr << " = getelementptr " << llvm_type
+        type_defs_buffer_ << "  " << other_ptr << " = getelementptr inbounds " << llvm_type
                           << ", ptr %other, i32 0, i32 " << field.index << "\n";
 
         if (is_primitive_comparable(field.llvm_type)) {
@@ -289,9 +289,9 @@ void LLVMIRGen::gen_derive_partial_eq_enum(const parser::EnumDecl& e) {
     std::string other_tag = fresh_temp();
     std::string tags_eq = fresh_temp();
 
-    type_defs_buffer_ << "  " << this_tag_ptr << " = getelementptr " << llvm_type
+    type_defs_buffer_ << "  " << this_tag_ptr << " = getelementptr inbounds " << llvm_type
                       << ", ptr %this, i32 0, i32 0\n";
-    type_defs_buffer_ << "  " << other_tag_ptr << " = getelementptr " << llvm_type
+    type_defs_buffer_ << "  " << other_tag_ptr << " = getelementptr inbounds " << llvm_type
                       << ", ptr %other, i32 0, i32 0\n";
     type_defs_buffer_ << "  " << this_tag << " = load i32, ptr " << this_tag_ptr << "\n";
     type_defs_buffer_ << "  " << other_tag << " = load i32, ptr " << other_tag_ptr << "\n";
@@ -348,10 +348,10 @@ void LLVMIRGen::gen_derive_partial_eq_enum(const parser::EnumDecl& e) {
                 // Get payload pointers (index 1 in enum struct)
                 std::string this_payload = fresh_temp();
                 std::string other_payload = fresh_temp();
-                type_defs_buffer_ << "  " << this_payload << " = getelementptr " << llvm_type
-                                  << ", ptr %this, i32 0, i32 1\n";
-                type_defs_buffer_ << "  " << other_payload << " = getelementptr " << llvm_type
-                                  << ", ptr %other, i32 0, i32 1\n";
+                type_defs_buffer_ << "  " << this_payload << " = getelementptr inbounds "
+                                  << llvm_type << ", ptr %this, i32 0, i32 1\n";
+                type_defs_buffer_ << "  " << other_payload << " = getelementptr inbounds "
+                                  << llvm_type << ", ptr %other, i32 0, i32 1\n";
 
                 // For single-element tuple, compare the element directly
                 // For now, we'll just call the eq method on the payload
