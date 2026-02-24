@@ -1,6 +1,7 @@
 // Tests for std::log module filtering and file sink
 use test::{assert}
 use std::log
+use std::file::path::Path
 
 @test
 func test_set_filter() -> I32 {
@@ -20,12 +21,14 @@ func test_module_enabled() -> I32 {
 
 @test
 func test_open_close_file() -> I32 {
-    let ok = log::open_file("build/debug/_test_log_output.log")
+    let path: Str = "build/debug/_test_log_output.log"
+    let ok = log::open_file(path)
     assert(ok, "open_file should succeed")
     log::set_level(0)
     log::info("test", "message to file")
     log::close_file()
     assert(true, "close_file should not crash")
+    Path::remove(path)
     0
 }
 

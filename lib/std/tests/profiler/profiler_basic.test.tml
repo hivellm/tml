@@ -2,6 +2,7 @@
 // Tests profiler state management and convenience functions
 use test::{assert, assert_eq}
 use std::profiler
+use std::file::path::Path
 
 // All profiler outputs go to build/debug/ to avoid polluting the project root
 
@@ -18,21 +19,25 @@ func test_profiler_not_active_by_default() -> I32 {
 
 @test
 func test_profiler_init_and_check() -> I32 {
-    profiler::init("build/debug/test_output.cpuprofile")
+    let path: Str = "build/debug/test_output.cpuprofile"
+    profiler::init(path)
     let active: I32 = profiler::is_active()
     assert_eq(active, 0, "Profiler should not be active after init only")
+    Path::remove(path)
     return 0
 }
 
 @test
 func test_profiler_start_stop() -> I32 {
-    profiler::init("build/debug/test_start_stop.cpuprofile")
+    let path: Str = "build/debug/test_start_stop.cpuprofile"
+    profiler::init(path)
     profiler::start()
     let active: I32 = profiler::is_active()
     assert_eq(active, 1, "Profiler should be active after start")
     profiler::stop()
     let inactive: I32 = profiler::is_active()
     assert_eq(inactive, 0, "Profiler should not be active after stop")
+    Path::remove(path)
     return 0
 }
 
@@ -42,10 +47,12 @@ func test_profiler_start_stop() -> I32 {
 
 @test
 func test_profiler_begin() -> I32 {
-    profiler::begin("build/debug/test_begin.cpuprofile")
+    let path: Str = "build/debug/test_begin.cpuprofile"
+    profiler::begin(path)
     let active: I32 = profiler::is_active()
     assert_eq(active, 1, "Profiler should be active after begin")
     profiler::stop()
+    Path::remove(path)
     return 0
 }
 
@@ -55,6 +62,7 @@ func test_profiler_begin_default() -> I32 {
     let active: I32 = profiler::is_active()
     assert_eq(active, 1, "Profiler should be active after begin_default")
     profiler::stop()
+    Path::remove("profile.cpuprofile")
     return 0
 }
 
@@ -68,28 +76,34 @@ func test_profiler_section_when_inactive() -> I32 {
 
 @test
 func test_profiler_section_when_active() -> I32 {
-    profiler::begin("build/debug/test_section_active.cpuprofile")
+    let path: Str = "build/debug/test_section_active.cpuprofile"
+    profiler::begin(path)
     profiler::section("my_section", "test.tml", 10)
     profiler::end_section()
     profiler::stop()
     let inactive: I32 = profiler::is_active()
     assert_eq(inactive, 0, "Profiler should not be active after stop")
+    Path::remove(path)
     return 0
 }
 
 @test
 func test_profiler_enter_exit() -> I32 {
-    profiler::begin("build/debug/test_enter_exit.cpuprofile")
+    let path: Str = "build/debug/test_enter_exit.cpuprofile"
+    profiler::begin(path)
     profiler::enter("test_func", "test.tml", 42)
     profiler::exit()
     profiler::stop()
+    Path::remove(path)
     return 0
 }
 
 @test
 func test_profiler_sample() -> I32 {
-    profiler::begin("build/debug/test_sample.cpuprofile")
+    let path: Str = "build/debug/test_sample.cpuprofile"
+    profiler::begin(path)
     profiler::sample()
     profiler::stop()
+    Path::remove(path)
     return 0
 }

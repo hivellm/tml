@@ -23,8 +23,10 @@ func test_file_is_open_false() -> I32 {
 
 @test
 func test_file_open_append() -> I32 {
-    var f: File = File::open_append("build/debug/test_append_file.txt")
+    let path: Str = "build/debug/test_append_file.txt"
+    var f: File = File::open_append(path)
     f.close()
+    Path::remove(path)
     return 0
 }
 
@@ -73,34 +75,40 @@ func test_file_open_write_close() -> I32 {
 
 @test
 func test_file_open_append_write_str() -> I32 {
-    var f: File = File::open_append("build/debug/test_write_via_append.txt")
+    let path: Str = "build/debug/test_write_via_append.txt"
+    var f: File = File::open_append(path)
     let ok: Bool = f.write_str("hello from append\n")
     f.close()
+    Path::remove(path)
     return 0
 }
 
 @test
 func test_file_size() -> I32 {
-    var fw: File = File::open_append("build/debug/test_size_check.txt")
+    let path: Str = "build/debug/test_size_check.txt"
+    var fw: File = File::open_append(path)
     fw.write_str("data\n")
     fw.close()
 
-    var fr: File = File::open_read("build/debug/test_size_check.txt")
+    var fr: File = File::open_read(path)
     let sz: I64 = fr.size()
     assert(sz >= 0 as I64, "file size should be >= 0")
     fr.close()
+    Path::remove(path)
     return 0
 }
 
 @test
 func test_file_read_line() -> I32 {
-    var fw: File = File::open_append("build/debug/test_readline2.txt")
+    let path: Str = "build/debug/test_readline2.txt"
+    var fw: File = File::open_append(path)
     fw.write_str("line one\nline two\n")
     fw.close()
 
-    var fr: File = File::open_read("build/debug/test_readline2.txt")
+    var fr: File = File::open_read(path)
     let line: Str = fr.read_line()
     assert(line.len() > 0, "read_line should return content")
     fr.close()
+    Path::remove(path)
     return 0
 }

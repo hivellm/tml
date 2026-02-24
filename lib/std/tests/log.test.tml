@@ -3,6 +3,7 @@
 use std::log
 use std::log::{TRACE, DEBUG, INFO, WARN, ERROR, FATAL}
 use std::log::{FORMAT_TEXT, FORMAT_JSON, FORMAT_COMPACT}
+use std::file::path::Path
 use test::{assert, assert_eq}
 
 // ============================================================================
@@ -346,14 +347,15 @@ func test_structured_filtered_no_crash() -> I32 {
 
 @test
 func test_open_close_file_no_crash() -> I32 {
+    let path: Str = "build/debug/_tml_test_log.tmp"
     log::set_level(TRACE)
-    // Use a temp path that should be writable
-    let opened = log::open_file("build/debug/_tml_test_log.tmp")
+    let opened = log::open_file(path)
     if opened {
         log::info("test", "Writing to file sink")
         log::close_file()
     }
     log::set_level(WARN)
+    Path::remove(path)
     return 0
 }
 
