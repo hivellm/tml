@@ -466,23 +466,6 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                         } else if (kind == types::PrimitiveKind::Bool) {
                             var_type = "i1";
                         }
-                    } else if (sig_opt->return_type->is<types::NamedType>()) {
-                        // Handle named types (Maybe[T], Outcome[T,E], structs, etc.)
-                        var_type = llvm_type_from_semantic(sig_opt->return_type);
-                        semantic_var_type = sig_opt->return_type;
-                        if (var_type.starts_with("%struct.") || var_type.starts_with("%union.")) {
-                            is_struct = true;
-                        } else if (var_type == "ptr") {
-                            is_ptr = true;
-                        }
-                    } else if (sig_opt->return_type->is<types::ClassType>()) {
-                        var_type = llvm_type_from_semantic(sig_opt->return_type);
-                        semantic_var_type = sig_opt->return_type;
-                        if (var_type.starts_with("%class.") || var_type.starts_with("%struct.")) {
-                            is_struct = true;
-                        } else if (var_type == "ptr") {
-                            is_ptr = true;
-                        }
                     }
                 }
             }
