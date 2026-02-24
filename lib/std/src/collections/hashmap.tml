@@ -382,13 +382,13 @@ impl[K, V] HashMap[K, V] {
     }
 
     // Private: FNV-1a hash of an I64 key.
+    // Uses wrapping multiplication (overflow is intentional for hash mixing).
     // Result may be negative; callers use & mask to get valid index.
-    // Uses unsigned arithmetic to avoid signed overflow panic.
     func hash_key(key: I64) -> I64 {
-        var h: U64 = 14695981039346656037 as U64  // FNV offset basis
-        h = h ^ (key as U64)
-        h = h * (1099511628211 as U64)            // FNV prime
-        h as I64
+        var h: I64 = -3750763034362895579
+        h = h ^ key
+        h = h.wrapping_mul(1099511628211)
+        h
     }
 
     // Private: extract h2 fingerprint (top 7 bits) from hash.
