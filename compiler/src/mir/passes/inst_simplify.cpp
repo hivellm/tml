@@ -22,6 +22,7 @@ auto InstSimplifyPass::run_on_function(Function& func) -> bool {
             for (size_t i = 0; i < block.instructions.size(); ++i) {
                 auto& inst = block.instructions[i];
                 ValueId simplified = INVALID_VALUE;
+                std::optional<bool> folded_bool;
 
                 std::visit(
                     [&](const auto& inner) {
@@ -29,6 +30,9 @@ auto InstSimplifyPass::run_on_function(Function& func) -> bool {
 
                         if constexpr (std::is_same_v<T, BinaryInst>) {
                             simplified = simplify_binary(inner, func);
+                            if (simplified == INVALID_VALUE) {
+                                folded_bool = fold_comparison(inner, func);
+                            }
                         } else if constexpr (std::is_same_v<T, UnaryInst>) {
                             simplified = simplify_unary(inner, func);
                         } else if constexpr (std::is_same_v<T, SelectInst>) {
@@ -41,6 +45,10 @@ auto InstSimplifyPass::run_on_function(Function& func) -> bool {
                     // Replace all uses of this result with the simplified value
                     replace_uses(func, inst.result, simplified);
                     to_remove.push_back(i);
+                    made_progress = true;
+                } else if (folded_bool.has_value()) {
+                    // Fold comparison to constant bool in-place
+                    inst.inst = ConstantInst{ConstBool{*folded_bool}};
                     made_progress = true;
                 }
             }
@@ -380,6 +388,29 @@ void InstSimplifyPass::replace_uses(Function& func, ValueId old_value, ValueId n
                 *block.terminator);
         }
     }
+}
+
+auto InstSimplifyPass::fold_comparison(const BinaryInst& inst, const Function& func)
+    -> std::optional<bool> {
+    bool same_operands = are_same_value(func, inst.left.id, inst.right.id);
+
+    // Same-operand comparisons (Rust: SimplifyComparisonIntegral)
+    if (same_operands) {
+        switch (inst.op) {
+        case BinOp::Eq:
+        case BinOp::Le:
+        case BinOp::Ge:
+            return true; // x == x, x <= x, x >= x are always true
+        case BinOp::Ne:
+        case BinOp::Lt:
+        case BinOp::Gt:
+            return false; // x != x, x < x, x > x are always false
+        default:
+            break;
+        }
+    }
+
+    return std::nullopt;
 }
 
 } // namespace tml::mir

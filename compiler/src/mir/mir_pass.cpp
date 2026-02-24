@@ -15,10 +15,11 @@ TML_MODULE("compiler")
 //!
 //! | Level | Passes                                                |
 //! |-------|-------------------------------------------------------|
-//! | O0    | InstSimplify, StrengthReduction, ConstFold/Prop,      |
-//! |       | SROA, Mem2Reg, EarlyCSE, SimplifyCfg, DCE, CopyProp,  |
-//! |       | MatchSimplify, UCE, BlockMerge, Inlining(@inline only),|
-//! |       | post-inline cleanup, DeadFuncElim, MergeReturns        |
+//! | O0    | InstSimplify(+cmp fold), StrengthReduction,            |
+//! |       | ConstFold/Prop, SROA, Mem2Reg, EarlyCSE, SimplifyCfg,  |
+//! |       | DCE, CopyProp, MatchSimplify, UCE, BlockMerge,         |
+//! |       | Inlining(@inline only), RemoveUnneededDrops,            |
+//! |       | LoadStoreOpt(DSE), DeadFuncElim, MergeReturns           |
 //! | O1    | O0 + full Inlining heuristics                         |
 //! | O2    | O1 + GVN, LICM, Devirt, IPO, etc.                     |
 //! | O3    | O2 + second optimization round, vectorization         |
@@ -60,6 +61,7 @@ TML_MODULE("compiler")
 #include "mir/passes/peephole.hpp"
 #include "mir/passes/pgo.hpp"
 #include "mir/passes/reassociate.hpp"
+#include "mir/passes/remove_unneeded_drops.hpp"
 #include "mir/passes/simplify_cfg.hpp"
 #include "mir/passes/simplify_select.hpp"
 #include "mir/passes/sinking.hpp"
@@ -246,6 +248,11 @@ void PassManager::configure_standard_pipeline() {
         // Post-inline cleanup
         add_pass(std::make_unique<SimplifyCfgPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // Phase 4: New O0 passes matching Rust's mir-opt-level=1
+        add_pass(std::make_unique<RemoveUnneededDropsPass>());
+        add_pass(std::make_unique<LoadStoreOptPass>()); // DSE + redundant load elimination
+
         add_pass(std::make_unique<DeadFunctionEliminationPass>());
         add_pass(std::make_unique<MergeReturnsPass>());
         return;
@@ -497,6 +504,11 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         // Post-inline cleanup
         add_pass(std::make_unique<SimplifyCfgPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // Phase 4: New O0 passes matching Rust's mir-opt-level=1
+        add_pass(std::make_unique<RemoveUnneededDropsPass>());
+        add_pass(std::make_unique<LoadStoreOptPass>()); // DSE + redundant load elimination
+
         add_pass(std::make_unique<DeadFunctionEliminationPass>());
         add_pass(std::make_unique<MergeReturnsPass>());
         return;

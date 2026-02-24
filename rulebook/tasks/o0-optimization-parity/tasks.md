@@ -1,6 +1,6 @@
 # Tasks: O0 Optimization Parity with Rust
 
-**Status**: In Progress (45%)
+**Status**: In Progress (55%)
 
 ## Phase 1: Already Implemented (Always-On at O0)
 
@@ -43,13 +43,13 @@ These are passes Rust runs at O0 that TML has no equivalent for yet.
 
 - [ ] 4.1 DestinationPropagation — Eliminate intermediate copies by propagating destination (Rust: `DestinationPropagation`)
 - [ ] 4.2 DataflowConstProp — SSA-aware constant propagation using dataflow analysis (Rust: `DataflowConstProp`)
-- [ ] 4.3 RemoveUnneededDrops — Elide drop calls for types that don't implement Drop (Rust: `RemoveUnneededDrops`)
+- [x] 4.3 RemoveUnneededDrops — Elide drop calls for types that don't implement Drop (Rust: `RemoveUnneededDrops`)
 - [ ] 4.4 UnreachablePropagation — Propagate unreachable status through branches after const-prop (Rust: `UnreachablePropagation`)
 - [ ] 4.5 NormalizeArrayLen — Normalize array length checks for bounds check elimination (Rust: `NormalizeArrayLen`)
 - [ ] 4.6 RemoveNoopLandingPads — Remove no-op exception landing pads (Rust: `RemoveNoopLandingPads`)
-- [ ] 4.7 SimplifyComparisonIntegral — Simplify integer comparisons (Rust: `SimplifyComparisonIntegral`)
-- [ ] 4.8 DeadStoreElimination (basic) — Remove stores to locations never read (Rust: `DeadStoreElimination` at mir-opt-level=1)
-- [ ] 4.9 Verify new passes with full test suite
+- [x] 4.7 SimplifyComparisonIntegral — Simplify integer comparisons (Rust: `SimplifyComparisonIntegral`)
+- [x] 4.8 DeadStoreElimination (basic) — Remove stores to locations never read (Rust: `DeadStoreElimination` at mir-opt-level=1)
+- [x] 4.9 Verify new passes with full test suite
 - [ ] 4.10 Benchmark combined impact
 
 ## Phase 5: Type Layout Optimizations (Always-On Like Rust)

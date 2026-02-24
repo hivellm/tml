@@ -594,6 +594,7 @@ add_library(tml_mir STATIC
     src/mir/passes/loop_opts.cpp
     src/mir/passes/pgo.cpp
     src/mir/passes/vectorization.cpp
+    src/mir/passes/remove_unneeded_drops.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_thir tml_types)
 target_include_directories(tml_mir PUBLIC include src)

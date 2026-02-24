@@ -92,6 +92,11 @@ private:
 
     /// Replaces all uses of old_value with new_value.
     void replace_uses(Function& func, ValueId old_value, ValueId new_value);
+
+    /// Tries to fold a comparison to a constant bool.
+    /// Handles same-operand patterns: x==x→true, x!=x→false, x<x→false, etc.
+    /// Returns nullopt if no folding possible.
+    auto fold_comparison(const BinaryInst& inst, const Function& func) -> std::optional<bool>;
 };
 
 } // namespace tml::mir
