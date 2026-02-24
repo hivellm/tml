@@ -1,0 +1,97 @@
+// Tests for HashMap[I64, Str] — integer keys, string values
+use test::{assert, assert_eq}
+use std::collections::hashmap::{HashMap, HashMapIter}
+
+@test
+func test_i64_str_basic() -> I32 {
+    let map = HashMap[I64, Str].new(16)
+    map.set(1 as I64, "one")
+    map.set(2 as I64, "two")
+    map.set(3 as I64, "three")
+
+    assert_eq(map.get(1 as I64), "one", "get 1=one")
+    assert_eq(map.get(2 as I64), "two", "get 2=two")
+    assert_eq(map.get(3 as I64), "three", "get 3=three")
+    assert_eq(map.len(), 3 as I64, "len=3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i64_str_has_remove() -> I32 {
+    let map = HashMap[I64, Str].new(16)
+    map.set(100 as I64, "hundred")
+    map.set(200 as I64, "two hundred")
+
+    assert(map.has(100 as I64), "has 100")
+    assert(not map.has(300 as I64), "no 300")
+
+    map.remove(100 as I64)
+    assert(not map.has(100 as I64), "100 removed")
+    assert_eq(map.get(200 as I64), "two hundred", "200 intact")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i64_str_overwrite() -> I32 {
+    let map = HashMap[I64, Str].new(16)
+    map.set(42 as I64, "first")
+    map.set(42 as I64, "second")
+
+    assert_eq(map.get(42 as I64), "second", "overwritten")
+    assert_eq(map.len(), 1 as I64, "len=1")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i64_str_many() -> I32 {
+    let map = HashMap[I64, Str].new(16)
+
+    // Insert enough to trigger resize
+    map.set(1 as I64, "a")
+    map.set(2 as I64, "b")
+    map.set(3 as I64, "c")
+    map.set(4 as I64, "d")
+    map.set(5 as I64, "e")
+    map.set(6 as I64, "f")
+    map.set(7 as I64, "g")
+    map.set(8 as I64, "h")
+    map.set(9 as I64, "i")
+    map.set(10 as I64, "j")
+    map.set(11 as I64, "k")
+    map.set(12 as I64, "l")
+    map.set(13 as I64, "m")
+
+    assert_eq(map.len(), 13 as I64, "len=13")
+    assert_eq(map.get(1 as I64), "a", "get 1=a")
+    assert_eq(map.get(7 as I64), "g", "get 7=g")
+    assert_eq(map.get(13 as I64), "m", "get 13=m")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i64_str_iterate() -> I32 {
+    let map = HashMap[I64, Str].new(16)
+    map.set(10 as I64, "ten")
+    map.set(20 as I64, "twenty")
+
+    var count: I64 = 0
+    let iter = map.iter()
+    loop (iter.has_next()) {
+        count = count + 1
+        iter.next()
+    }
+    iter.destroy()
+
+    assert_eq(count, 2 as I64, "count=2")
+
+    map.destroy()
+    return 0
+}

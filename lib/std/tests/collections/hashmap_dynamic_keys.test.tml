@@ -1,0 +1,164 @@
+// Tests for HashMap with dynamically-created Str keys
+// This is the CRITICAL test — string literals share pointers (interning),
+// but dynamically allocated strings (from interpolation, concat, etc.)
+// produce DIFFERENT pointers for the same content.
+// If HashMap compares pointers instead of content, these tests FAIL.
+use test::{assert, assert_eq}
+use core::str
+use std::collections::hashmap::{HashMap, HashMapIter}
+
+@test
+func test_dynamic_str_keys_interpolation() -> I32 {
+    // Build keys dynamically via string interpolation
+    // Each call to "{prefix}_{i}" allocates a NEW string with a different pointer
+    let map = HashMap[Str, I64].new(16)
+
+    let prefix: Str = "key"
+    // Insert with interpolated keys
+    map.set("{prefix}_1", 100 as I64)
+    map.set("{prefix}_2", 200 as I64)
+    map.set("{prefix}_3", 300 as I64)
+
+    // Look up with FRESHLY interpolated keys (different pointer, same content)
+    assert_eq(map.get("{prefix}_1"), 100 as I64, "dynamic get key_1")
+    assert_eq(map.get("{prefix}_2"), 200 as I64, "dynamic get key_2")
+    assert_eq(map.get("{prefix}_3"), 300 as I64, "dynamic get key_3")
+
+    // has() with fresh interpolation
+    assert(map.has("{prefix}_1"), "dynamic has key_1")
+    assert(not map.has("{prefix}_99"), "dynamic no key_99")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_keys_overwrite() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    let pfx: Str = "k"
+
+    // Set with one interpolation
+    map.set("{pfx}_x", "first")
+    // Overwrite with a DIFFERENT interpolation (different pointer, same content)
+    map.set("{pfx}_x", "second")
+
+    assert_eq(map.get("{pfx}_x"), "second", "overwrite with dynamic key")
+    assert_eq(map.len(), 1 as I64, "len=1 after overwrite")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_keys_remove() -> I32 {
+    let map = HashMap[Str, I32].new(16)
+    let tag: Str = "item"
+
+    map.set("{tag}_a", 1)
+    map.set("{tag}_b", 2)
+
+    // Remove with fresh interpolation
+    assert(map.remove("{tag}_a"), "remove dynamic key")
+    assert(not map.has("{tag}_a"), "gone after remove")
+    assert(map.has("{tag}_b"), "other key intact")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_keys_loop_generated() -> I32 {
+    // Generate keys in a loop — each iteration creates a unique dynamic string
+    let map = HashMap[Str, I64].new(16)
+
+    var i: I64 = 0
+    loop (i < 20) {
+        let k: Str = "entry_{i}"
+        map.set(k, i * 10)
+        i = i + 1
+    }
+
+    assert_eq(map.len(), 20 as I64, "len=20")
+
+    // Verify with freshly generated keys (different pointers)
+    i = 0
+    loop (i < 20) {
+        let k: Str = "entry_{i}"
+        assert(map.has(k), "has entry_{i}")
+        assert_eq(map.get(k), i * 10, "get entry_{i}")
+        i = i + 1
+    }
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_str_both_dynamic() -> I32 {
+    // Both keys AND values are dynamic strings
+    let map = HashMap[Str, Str].new(16)
+
+    var i: I64 = 0
+    loop (i < 10) {
+        map.set("k_{i}", "v_{i}")
+        i = i + 1
+    }
+
+    assert_eq(map.len(), 10 as I64, "len=10")
+
+    // Verify with fresh interpolations
+    i = 0
+    loop (i < 10) {
+        let v: Str = map.get("k_{i}")
+        assert_eq(v, "v_{i}", "k_{i} -> v_{i}")
+        i = i + 1
+    }
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_keys_substring() -> I32 {
+    // Keys created via substring (yet another way to get different pointers)
+    let map = HashMap[Str, I32].new(16)
+
+    let full: Str = "hello world"
+    let k1: Str = str::substring(full, 0 as I64, 5 as I64)  // "hello"
+    map.set(k1, 42)
+
+    // Look up with literal "hello" — different pointer, same content
+    assert(map.has("hello"), "has hello via literal")
+    assert_eq(map.get("hello"), 42, "get hello=42")
+
+    // Look up with ANOTHER substring call
+    let k2: Str = str::substring(full, 0 as I64, 5 as I64)
+    assert(map.has(k2), "has hello via another substring")
+    assert_eq(map.get(k2), 42, "get via substring=42")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_dynamic_str_keys_concat() -> I32 {
+    // Keys created via str::concat
+    let map = HashMap[Str, I32].new(16)
+
+    let a: Str = "foo"
+    let b: Str = "bar"
+    let key: Str = str::concat(a, b)  // "foobar"
+
+    map.set(key, 99)
+
+    // Look up with a different concat of same parts
+    let key2: Str = str::concat("foo", "bar")
+    assert(map.has(key2), "has foobar via concat")
+    assert_eq(map.get(key2), 99, "get foobar=99")
+
+    // Look up with literal
+    assert(map.has("foobar"), "has foobar via literal")
+
+    map.destroy()
+    return 0
+}

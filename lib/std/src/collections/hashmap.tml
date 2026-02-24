@@ -4,9 +4,9 @@
 //! Uses open-addressing with linear probing, FNV-1a hashing, and Swiss Table-style
 //! control bytes for fast probe filtering.
 //!
-//! All keys and values are stored internally as I64 (type-erased).
-//! For integer types, the value is sign-extended. For pointer types
-//! (Str, *T), the pointer address is stored directly.
+//! Keys and values are stored internally as I64 (type-erased).
+//! Hashing uses K's `Hash` impl (content-based for Str, value-based for integers).
+//! Key comparison uses K's `==` operator (strcmp for Str, value equality for integers).
 //!
 //! # Example
 //!
@@ -19,6 +19,8 @@
 //! ```
 
 use core::intrinsics::{ptr_read, ptr_write}
+use core::hash::Hash
+use core::clone::Duplicate
 
 /// A hash-based key-value collection.
 ///
@@ -119,7 +121,9 @@ impl[K, V] HashMap[K, V] {
                     let e_key: I64 = lowlevel { ptr_read[I64](old_base as *I64) }
                     let e_val: I64 = lowlevel { ptr_read[I64]((old_base + 8) as *I64) }
 
-                    let hash: I64 = HashMap[K, V].hash_key(e_key)
+                    // Cast stored I64 back to K for content-based hashing
+                    let e_key_typed: K = e_key as K
+                    let hash: I64 = HashMap[K, V].hash_typed(e_key_typed)
                     var h: I64 = hash & new_mask
                     let h2: I8 = HashMap[K, V].h2(hash)
 
@@ -152,9 +156,8 @@ impl[K, V] HashMap[K, V] {
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-        let key_i64: I64 = key as I64
         let mask: I64 = cur_cap - 1
-        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        let hash: I64 = HashMap[K, V].hash_typed(key)
         var h: I64 = hash & mask
         let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
@@ -181,9 +184,10 @@ impl[K, V] HashMap[K, V] {
                     // OCCUPIED: check if h2 fingerprint matches
                     if c == h2 {
                         let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
-                        if e_key == key_i64 {
-                            // Key exists: update value in place
-                            lowlevel { ptr_write[I64]((entries_addr + h * 16 + 8) as *I64, value as I64) }
+                        if HashMap[K, V].keys_equal(e_key, key) {
+                            // Key exists: update value in place (duplicate to own)
+                            let owned_val_i64: I64 = value.duplicate() as I64
+                            lowlevel { ptr_write[I64]((entries_addr + h * 16 + 8) as *I64, owned_val_i64) }
                             return
                         }
                     }
@@ -195,10 +199,15 @@ impl[K, V] HashMap[K, V] {
             }
         }
 
-        // Insert new entry
+        // Insert new entry — duplicate key to own the storage
+        // (prevents use-after-free when caller's key binding goes out of scope)
+        // Cast to I64 immediately so the compiler doesn't track it as an owned Str
+        // (otherwise @allocates cleanup would free the duplicate on scope exit)
+        let owned_key_i64: I64 = key.duplicate() as I64
+        let owned_val_i64: I64 = value.duplicate() as I64
         let slot_base: I64 = entries_addr + insert_slot * 16
-        lowlevel { ptr_write[I64](slot_base as *I64, key_i64) }
-        lowlevel { ptr_write[I64]((slot_base + 8) as *I64, value as I64) }
+        lowlevel { ptr_write[I64](slot_base as *I64, owned_key_i64) }
+        lowlevel { ptr_write[I64]((slot_base + 8) as *I64, owned_val_i64) }
         lowlevel { ptr_write[I8]((ctrl_addr + insert_slot) as *I8, h2) }
 
         cur_len = cur_len + 1
@@ -221,9 +230,8 @@ impl[K, V] HashMap[K, V] {
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-        let key_i64: I64 = key as I64
         let mask: I64 = cur_cap - 1
-        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        let hash: I64 = HashMap[K, V].hash_typed(key)
         var h: I64 = hash & mask
         let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
@@ -233,7 +241,7 @@ impl[K, V] HashMap[K, V] {
             if c == (-1 as I8) { return 0 as V }
             if c == h2 {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
-                if e_key == key_i64 {
+                if HashMap[K, V].keys_equal(e_key, key) {
                     return lowlevel { ptr_read[I64]((entries_addr + h * 16 + 8) as *I64) } as V
                 }
             }
@@ -254,9 +262,8 @@ impl[K, V] HashMap[K, V] {
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-        let key_i64: I64 = key as I64
         let mask: I64 = cur_cap - 1
-        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        let hash: I64 = HashMap[K, V].hash_typed(key)
         var h: I64 = hash & mask
         let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
@@ -266,7 +273,7 @@ impl[K, V] HashMap[K, V] {
             if c == (-1 as I8) { return false }
             if c == h2 {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
-                if e_key == key_i64 { return true }
+                if HashMap[K, V].keys_equal(e_key, key) { return true }
             }
             h = (h + 1) & mask
             if h == start { return false }
@@ -287,9 +294,8 @@ impl[K, V] HashMap[K, V] {
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-        let key_i64: I64 = key as I64
         let mask: I64 = cur_cap - 1
-        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        let hash: I64 = HashMap[K, V].hash_typed(key)
         var h: I64 = hash & mask
         let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
@@ -299,7 +305,7 @@ impl[K, V] HashMap[K, V] {
             if c == (-1 as I8) { return false }
             if c == h2 {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
-                if e_key == key_i64 {
+                if HashMap[K, V].keys_equal(e_key, key) {
                     lowlevel { ptr_write[I8]((ctrl_addr + h) as *I8, -128 as I8) }
                     lowlevel { ptr_write[I64](p_len, cur_len - 1) }
                     return true
@@ -381,14 +387,19 @@ impl[K, V] HashMap[K, V] {
         HashMapIter[K, V] { handle: iter_mem }
     }
 
-    // Private: FNV-1a hash of an I64 key.
-    // Uses wrapping multiplication (overflow is intentional for hash mixing).
-    // Result may be negative; callers use & mask to get valid index.
-    func hash_key(key: I64) -> I64 {
-        var h: I64 = -3750763034362895579
-        h = h ^ key
-        h = h.wrapping_mul(1099511628211)
-        h
+    // Private: hash a key using K's Hash impl.
+    // For Str: hashes string content (bytes). For integers: hashes the value.
+    // This ensures equal keys always produce equal hashes regardless of pointer address.
+    func hash_typed(key: K) -> I64 {
+        key.hash()
+    }
+
+    // Private: compare a stored key (as I64) with a lookup key (as K).
+    // Casts the stored I64 back to K so the comparison uses K's == operator.
+    // For Str: uses strcmp (content comparison). For integers: value comparison.
+    func keys_equal(stored: I64, lookup: K) -> Bool {
+        let stored_k: K = stored as K
+        stored_k == lookup
     }
 
     // Private: extract h2 fingerprint (top 7 bits) from hash.

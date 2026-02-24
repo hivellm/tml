@@ -227,6 +227,33 @@ impl Duplicate for Bool {
     pub func duplicate(this) -> Bool { return this }
 }
 
+/// `Duplicate` implementation for `Str`.
+/// Creates a deep copy of the string (new allocation with same content).
+impl Duplicate for Str {
+    @allocates
+    pub func duplicate(this) -> Str {
+        let src: I64 = this as I64
+        if src == 0 {
+            return this
+        }
+        // Compute string length by scanning for null terminator
+        var slen: I64 = 0
+        var scanning: Bool = true
+        loop (scanning) {
+            let byte: U8 = lowlevel { ptr_read[U8]((src + slen) as *U8) }
+            if byte == (0 as U8) {
+                scanning = false
+            } else {
+                slen = slen + 1
+            }
+        }
+        // Allocate new buffer and copy bytes (including null terminator)
+        let new_buf: *Unit = lowlevel { mem_alloc(slen + 1) }
+        lowlevel { copy_nonoverlapping(src as *Unit, new_buf, slen + 1) }
+        return new_buf as Str
+    }
+}
+
 // ============================================================================
 // Copy implementations for primitives (marker only)
 // ============================================================================

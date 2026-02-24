@@ -1,0 +1,95 @@
+// Tests for HashMap with mixed integer widths: I32/I64, I32/Bool, Str/I32
+use test::{assert, assert_eq}
+use std::collections::hashmap::{HashMap, HashMapIter}
+
+@test
+func test_i32_i64_basic() -> I32 {
+    let map = HashMap[I32, I64].new(16)
+    map.set(1, 1000000 as I64)
+    map.set(2, 2000000 as I64)
+    map.set(-5, 9999999 as I64)
+
+    assert_eq(map.get(1), 1000000 as I64, "get 1")
+    assert_eq(map.get(2), 2000000 as I64, "get 2")
+    assert_eq(map.get(-5), 9999999 as I64, "get -5")
+    assert_eq(map.len(), 3 as I64, "len=3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i64_overwrite() -> I32 {
+    let map = HashMap[I32, I64].new(16)
+    map.set(7, 100 as I64)
+    map.set(7, 200 as I64)
+
+    assert_eq(map.get(7), 200 as I64, "overwritten")
+    assert_eq(map.len(), 1 as I64, "len=1")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i64_remove() -> I32 {
+    let map = HashMap[I32, I64].new(16)
+    map.set(10, 100 as I64)
+    map.set(20, 200 as I64)
+
+    assert(map.remove(10), "remove 10")
+    assert(not map.has(10), "10 gone")
+    assert_eq(map.get(20), 200 as I64, "20 intact")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i64_many() -> I32 {
+    let map = HashMap[I32, I64].new(16)
+
+    var i: I32 = 0
+    loop (i < 50) {
+        map.set(i, (i * 11) as I64)
+        i = i + 1
+    }
+
+    assert_eq(map.len(), 50 as I64, "len=50")
+    assert_eq(map.get(0), 0 as I64, "get 0")
+    assert_eq(map.get(25), 275 as I64, "get 25")
+    assert_eq(map.get(49), 539 as I64, "get 49")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_i32_basic() -> I32 {
+    let map = HashMap[Str, I32].new(16)
+    map.set("x", 10)
+    map.set("y", 20)
+    map.set("z", 30)
+
+    assert_eq(map.get("x"), 10, "get x=10")
+    assert_eq(map.get("y"), 20, "get y=20")
+    assert_eq(map.get("z"), 30, "get z=30")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_i32_remove_and_reinsert() -> I32 {
+    let map = HashMap[Str, I32].new(16)
+    map.set("key", 1)
+    map.remove("key")
+    assert(not map.has("key"), "removed")
+
+    map.set("key", 2)
+    assert(map.has("key"), "reinserted")
+    assert_eq(map.get("key"), 2, "new value=2")
+
+    map.destroy()
+    return 0
+}

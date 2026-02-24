@@ -1,0 +1,124 @@
+// Tests for HashMap[I32, I32] — small integer types
+use test::{assert, assert_eq}
+use std::collections::hashmap::{HashMap, HashMapIter}
+
+@test
+func test_i32_i32_basic() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+    map.set(1, 100)
+    map.set(2, 200)
+    map.set(3, 300)
+
+    assert_eq(map.get(1), 100, "get 1=100")
+    assert_eq(map.get(2), 200, "get 2=200")
+    assert_eq(map.get(3), 300, "get 3=300")
+    assert_eq(map.len(), 3 as I64, "len=3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_negative_keys() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+    map.set(-1, 10)
+    map.set(-100, 20)
+    map.set(0, 30)
+
+    assert_eq(map.get(-1), 10, "get -1=10")
+    assert_eq(map.get(-100), 20, "get -100=20")
+    assert_eq(map.get(0), 30, "get 0=30")
+    assert(map.has(-1), "has -1")
+    assert(not map.has(999), "no 999")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_overwrite() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+    map.set(42, 1)
+    map.set(42, 2)
+    map.set(42, 3)
+
+    assert_eq(map.get(42), 3, "overwritten to 3")
+    assert_eq(map.len(), 1 as I64, "still one entry")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_remove() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+    map.set(10, 1)
+    map.set(20, 2)
+    map.set(30, 3)
+
+    assert(map.remove(20), "remove 20 ok")
+    assert(not map.has(20), "20 gone")
+    assert(map.has(10), "10 still there")
+    assert(map.has(30), "30 still there")
+    assert_eq(map.len(), 2 as I64, "len=2")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_many() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+
+    // Insert 100 entries
+    var i: I32 = 0
+    loop (i < 100) {
+        map.set(i, i * 3)
+        i = i + 1
+    }
+
+    assert_eq(map.len(), 100 as I64, "len=100")
+    assert_eq(map.get(0), 0, "get 0")
+    assert_eq(map.get(50), 150, "get 50=150")
+    assert_eq(map.get(99), 297, "get 99=297")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_iterate() -> I32 {
+    let map = HashMap[I32, I32].new(16)
+    map.set(1, 10)
+    map.set(2, 20)
+    map.set(3, 30)
+
+    var count: I64 = 0
+    var sum: I32 = 0
+    let iter = map.iter()
+    loop (iter.has_next()) {
+        sum = sum + iter.value()
+        count = count + 1
+        iter.next()
+    }
+    iter.destroy()
+
+    assert_eq(count, 3 as I64, "count=3")
+    assert_eq(sum, 60, "sum=60")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_i32_i32_zero_key() -> I32 {
+    // Edge case: key=0 should work (not confused with "empty")
+    let map = HashMap[I32, I32].new(16)
+    map.set(0, 777)
+
+    assert(map.has(0), "has key 0")
+    assert_eq(map.get(0), 777, "get 0=777")
+
+    map.destroy()
+    return 0
+}

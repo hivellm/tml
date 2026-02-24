@@ -1,0 +1,59 @@
+// Tests for HashMap[Str, Bool] — boolean values
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_str_bool_basic() -> I32 {
+    let map = HashMap[Str, Bool].new(16)
+    map.set("enabled", true)
+    map.set("debug", false)
+    map.set("verbose", true)
+
+    assert_eq(map.get("enabled"), true, "enabled=true")
+    assert_eq(map.get("debug"), false, "debug=false")
+    assert_eq(map.get("verbose"), true, "verbose=true")
+    assert_eq(map.len(), 3 as I64, "len=3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_bool_overwrite() -> I32 {
+    let map = HashMap[Str, Bool].new(16)
+    map.set("flag", true)
+    assert_eq(map.get("flag"), true, "initially true")
+
+    map.set("flag", false)
+    assert_eq(map.get("flag"), false, "overwritten to false")
+    assert_eq(map.len(), 1 as I64, "still one entry")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_bool_has_remove() -> I32 {
+    let map = HashMap[Str, Bool].new(16)
+    map.set("a", true)
+    map.set("b", false)
+
+    assert(map.has("a"), "has a")
+    assert(map.has("b"), "has b")
+
+    map.remove("a")
+    assert(not map.has("a"), "a removed")
+    assert(map.has("b"), "b intact")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_bool_default_value() -> I32 {
+    // Missing key returns 0 as Bool = false
+    let map = HashMap[Str, Bool].new(16)
+    assert_eq(map.get("nonexistent"), false, "missing key returns false")
+    map.destroy()
+    return 0
+}

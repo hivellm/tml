@@ -185,7 +185,7 @@ impl Hash for Str {
                 return state as I64
             }
             state = state ^ (byte as U64)
-            state = state * FNV_PRIME
+            state = state.wrapping_mul(FNV_PRIME)
             i = i + 1
         }
         return state as I64
@@ -411,14 +411,14 @@ impl Hasher for DefaultHasher {
         let len: I64 = bytes.len()
         loop (i < len) {
             this.state = this.state ^ (bytes[i] as U64)
-            this.state = this.state * FNV_PRIME
+            this.state = this.state.wrapping_mul(FNV_PRIME)
             i = i + 1
         }
     }
 
     pub func write_u8(mut this, value: U8) {
         this.state = this.state ^ (value as U64)
-        this.state = this.state * FNV_PRIME
+        this.state = this.state.wrapping_mul(FNV_PRIME)
     }
 
     pub func write_i32(mut this, value: I32) {

@@ -837,7 +837,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     }
 
     // duplicate() -> Self (copy semantics for primitives)
-    if (method == "duplicate") {
+    // Str is excluded: it needs a deep copy (heap allocation), handled by
+    // the Str::duplicate impl in method_prim_behavior.cpp
+    if (method == "duplicate" && kind != types::PrimitiveKind::Str) {
         emit_coverage("Duplicate::duplicate");
         emit_coverage(types::primitive_kind_to_string(kind) + "::duplicate");
         last_expr_type_ = llvm_ty;

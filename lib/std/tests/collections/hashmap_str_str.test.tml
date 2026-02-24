@@ -1,0 +1,133 @@
+// Tests for HashMap[Str, Str] — the type combo that broke Headers
+use test::{assert, assert_eq}
+use std::collections::hashmap::{HashMap, HashMapIter}
+
+@test
+func test_str_str_basic() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("hello", "world")
+    map.set("foo", "bar")
+
+    assert_eq(map.get("hello"), "world", "get hello")
+    assert_eq(map.get("foo"), "bar", "get foo")
+    assert_eq(map.len(), 2 as I64, "len=2")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_has() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("key1", "val1")
+
+    assert(map.has("key1"), "has key1")
+    assert(not map.has("missing"), "no missing")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_overwrite() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("key", "first")
+    map.set("key", "second")
+
+    assert_eq(map.get("key"), "second", "overwritten to second")
+    assert_eq(map.len(), 1 as I64, "still one entry")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_remove() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("a", "alpha")
+    map.set("b", "beta")
+
+    assert(map.remove("a"), "remove a returns true")
+    assert(not map.has("a"), "a gone after remove")
+    assert(map.has("b"), "b still exists")
+    assert_eq(map.get("b"), "beta", "b value intact")
+    assert_eq(map.len(), 1 as I64, "len=1 after remove")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_many_entries() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+
+    // Insert enough to force resize (>70% of 16 = >11)
+    map.set("k01", "v01")
+    map.set("k02", "v02")
+    map.set("k03", "v03")
+    map.set("k04", "v04")
+    map.set("k05", "v05")
+    map.set("k06", "v06")
+    map.set("k07", "v07")
+    map.set("k08", "v08")
+    map.set("k09", "v09")
+    map.set("k10", "v10")
+    map.set("k11", "v11")
+    map.set("k12", "v12")
+    map.set("k13", "v13")
+    map.set("k14", "v14")
+    map.set("k15", "v15")
+
+    assert_eq(map.len(), 15 as I64, "len=15")
+    assert_eq(map.get("k01"), "v01", "k01")
+    assert_eq(map.get("k08"), "v08", "k08")
+    assert_eq(map.get("k15"), "v15", "k15")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_iterate() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("x", "1")
+    map.set("y", "2")
+    map.set("z", "3")
+
+    var count: I64 = 0
+    let iter = map.iter()
+    loop (iter.has_next()) {
+        count = count + 1
+        iter.next()
+    }
+    iter.destroy()
+
+    assert_eq(count, 3 as I64, "iterate count=3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_clear() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    map.set("a", "1")
+    map.set("b", "2")
+    map.clear()
+
+    assert_eq(map.len(), 0 as I64, "len=0 after clear")
+    assert(not map.has("a"), "a gone after clear")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_str_str_get_missing() -> I32 {
+    let map = HashMap[Str, Str].new(16)
+    // Get on empty map should return zero-value (null ptr -> "")
+    let v: Str = map.get("nope")
+    // v is 0 as Str (null pointer) — just verify no crash
+    map.destroy()
+    return 0
+}
