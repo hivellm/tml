@@ -9,14 +9,17 @@
 //! - **Block removal**: Delete unreachable basic blocks
 //! - **Branch simplification**: Convert conditional branches with constant
 //!   conditions to unconditional branches
-//! - **Dead code removal**: Remove instructions after `return` or `unreachable`
+//! - **Unreachable propagation**: If a branch target is an unreachable block,
+//!   redirect or simplify the branch (Rust: `UnreachablePropagation`)
+//! - **Switch case pruning**: Remove switch cases targeting unreachable blocks
 //!
 //! ## Algorithm
 //!
-//! 1. Start from entry block, traverse CFG via DFS/BFS
-//! 2. Mark all visited blocks as reachable
-//! 3. Remove blocks not marked as reachable
-//! 4. Simplify branches with constant conditions
+//! 1. Simplify branches with constant conditions
+//! 2. Propagate unreachable status through branches
+//! 3. BFS from entry block to find reachable blocks
+//! 4. Remove blocks not marked as reachable
+//! 5. Update predecessor lists and phi nodes
 //!
 //! ## Example
 //!
@@ -27,6 +30,17 @@
 //!     ...
 //! bb2:
 //!     return
+//! ```
+//!
+//! Unreachable propagation example:
+//! ```mir
+//! bb0:
+//!     br_if %cond, bb1, bb2
+//! bb1:
+//!     unreachable            ; bb1 is trivially unreachable
+//! bb2:
+//!     return
+//! ; Result: br_if simplified to br bb2
 //! ```
 //!
 //! ## When to Run
@@ -68,8 +82,14 @@ private:
     /// Converts conditional branches with constant conditions to unconditional.
     auto simplify_constant_branches(Function& func) -> bool;
 
-    /// Removes instructions after terminators (dead code).
-    auto remove_dead_instructions_after_terminator(Function& func) -> bool;
+    /// Propagates unreachable status: if a branch target is an unreachable
+    /// block, simplify the branch (redirect to the other target or mark
+    /// the block itself as unreachable).
+    auto propagate_unreachable(Function& func) -> bool;
+
+    /// Checks if a block is trivially unreachable (empty instructions +
+    /// UnreachableTerm, or only side-effect-free instructions + UnreachableTerm).
+    auto is_unreachable_block(const BasicBlock& block) const -> bool;
 };
 
 } // namespace tml::mir

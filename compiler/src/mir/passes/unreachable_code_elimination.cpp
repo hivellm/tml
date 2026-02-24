@@ -43,6 +43,10 @@ auto UnreachableCodeEliminationPass::run_on_function(Function& func) -> bool {
     // First, simplify constant conditional branches
     changed |= simplify_constant_branches(func);
 
+    // Propagate unreachable status through branches.
+    // If a branch target is a trivially unreachable block, simplify the branch.
+    changed |= propagate_unreachable(func);
+
     // Compute reachable blocks
     auto reachable = compute_reachable_blocks(func);
 
@@ -198,12 +202,109 @@ auto UnreachableCodeEliminationPass::simplify_constant_branches(Function& func) 
     return changed;
 }
 
-auto UnreachableCodeEliminationPass::remove_dead_instructions_after_terminator(Function& /*func*/)
-    -> bool {
-    // This is actually not needed in MIR because terminators are separate from instructions
-    // In LLVM IR, a terminator is also an instruction, but in MIR they are stored separately
-    // So there can never be instructions after a terminator
-    return false;
+auto UnreachableCodeEliminationPass::is_unreachable_block(const BasicBlock& block) const -> bool {
+    if (!block.terminator.has_value()) {
+        return false;
+    }
+
+    // Block must terminate with UnreachableTerm
+    if (!std::holds_alternative<UnreachableTerm>(*block.terminator)) {
+        return false;
+    }
+
+    // All instructions must be side-effect-free for safe removal
+    for (const auto& inst : block.instructions) {
+        if (has_side_effects(inst.inst)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+auto UnreachableCodeEliminationPass::propagate_unreachable(Function& func) -> bool {
+    bool changed = false;
+
+    // Build a set of unreachable block IDs for fast lookup
+    std::unordered_set<uint32_t> unreachable_blocks;
+    for (const auto& block : func.blocks) {
+        if (is_unreachable_block(block)) {
+            unreachable_blocks.insert(block.id);
+        }
+    }
+
+    if (unreachable_blocks.empty()) {
+        return false;
+    }
+
+    for (auto& block : func.blocks) {
+        if (!block.terminator.has_value()) {
+            continue;
+        }
+
+        // CondBranch: if one target is unreachable, redirect to the other
+        if (auto* cond_br = std::get_if<CondBranchTerm>(&*block.terminator)) {
+            bool true_unreachable = unreachable_blocks.count(cond_br->true_block) > 0;
+            bool false_unreachable = unreachable_blocks.count(cond_br->false_block) > 0;
+
+            if (true_unreachable && false_unreachable) {
+                // Both targets unreachable — this block is also unreachable
+                block.terminator = UnreachableTerm{};
+                changed = true;
+            } else if (true_unreachable) {
+                // True branch unreachable — always go to false branch
+                block.terminator = BranchTerm{cond_br->false_block};
+                changed = true;
+            } else if (false_unreachable) {
+                // False branch unreachable — always go to true branch
+                block.terminator = BranchTerm{cond_br->true_block};
+                changed = true;
+            }
+        }
+
+        // Switch: remove cases targeting unreachable blocks
+        if (auto* sw = std::get_if<SwitchTerm>(&*block.terminator)) {
+            // Remove cases that target unreachable blocks
+            auto orig_size = sw->cases.size();
+            sw->cases.erase(std::remove_if(sw->cases.begin(), sw->cases.end(),
+                                           [&unreachable_blocks](const auto& c) {
+                                               return unreachable_blocks.count(c.second) > 0;
+                                           }),
+                            sw->cases.end());
+
+            if (sw->cases.size() < orig_size) {
+                changed = true;
+            }
+
+            // If default is unreachable and we have cases left, pick first case as default
+            if (unreachable_blocks.count(sw->default_block) > 0 && !sw->cases.empty()) {
+                sw->default_block = sw->cases[0].second;
+                changed = true;
+            }
+
+            // If no cases left and default is unreachable, mark block as unreachable
+            if (sw->cases.empty() && unreachable_blocks.count(sw->default_block) > 0) {
+                block.terminator = UnreachableTerm{};
+                changed = true;
+            }
+
+            // If only one case left and it matches default, simplify to unconditional branch
+            if (sw->cases.empty()) {
+                block.terminator = BranchTerm{sw->default_block};
+                changed = true;
+            }
+        }
+
+        // Unconditional branch to unreachable block: propagate unreachable
+        if (auto* br = std::get_if<BranchTerm>(&*block.terminator)) {
+            if (unreachable_blocks.count(br->target) > 0) {
+                block.terminator = UnreachableTerm{};
+                changed = true;
+            }
+        }
+    }
+
+    return changed;
 }
 
 } // namespace tml::mir

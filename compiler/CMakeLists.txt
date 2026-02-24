@@ -595,6 +595,8 @@ add_library(tml_mir STATIC
     src/mir/passes/pgo.cpp
     src/mir/passes/vectorization.cpp
     src/mir/passes/remove_unneeded_drops.cpp
+    src/mir/passes/destination_propagation.cpp
+    src/mir/passes/normalize_array_len.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_thir tml_types)
 target_include_directories(tml_mir PUBLIC include src)

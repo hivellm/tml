@@ -1,6 +1,6 @@
 # Tasks: O0 Optimization Parity with Rust
 
-**Status**: In Progress (55%)
+**Status**: In Progress (65%)
 
 ## Phase 1: Already Implemented (Always-On at O0)
 
@@ -41,12 +41,12 @@ These exist in TML at O2+ and have Rust O0 equivalents but need careful validati
 
 These are passes Rust runs at O0 that TML has no equivalent for yet.
 
-- [ ] 4.1 DestinationPropagation — Eliminate intermediate copies by propagating destination (Rust: `DestinationPropagation`)
-- [ ] 4.2 DataflowConstProp — SSA-aware constant propagation using dataflow analysis (Rust: `DataflowConstProp`)
+- [x] 4.1 DestinationPropagation — Eliminate intermediate copies by propagating destination (Rust: `DestinationPropagation`)
+- [ ] 4.2 DataflowConstProp — SSA-aware constant propagation using dataflow analysis (Rust: `DataflowConstProp`) — deferred, existing ConstProp+CopyProp covers 80%+
 - [x] 4.3 RemoveUnneededDrops — Elide drop calls for types that don't implement Drop (Rust: `RemoveUnneededDrops`)
-- [ ] 4.4 UnreachablePropagation — Propagate unreachable status through branches after const-prop (Rust: `UnreachablePropagation`)
-- [ ] 4.5 NormalizeArrayLen — Normalize array length checks for bounds check elimination (Rust: `NormalizeArrayLen`)
-- [ ] 4.6 RemoveNoopLandingPads — Remove no-op exception landing pads (Rust: `RemoveNoopLandingPads`)
+- [x] 4.4 UnreachablePropagation — Propagate unreachable status through branches after const-prop (Rust: `UnreachablePropagation`)
+- [x] 4.5 NormalizeArrayLen — Normalize array length checks for bounds check elimination (Rust: `NormalizeArrayLen`)
+- [x] 4.6 RemoveNoopLandingPads — N/A, TML has no exception handling/landing pads
 - [x] 4.7 SimplifyComparisonIntegral — Simplify integer comparisons (Rust: `SimplifyComparisonIntegral`)
 - [x] 4.8 DeadStoreElimination (basic) — Remove stores to locations never read (Rust: `DeadStoreElimination` at mir-opt-level=1)
 - [x] 4.9 Verify new passes with full test suite
