@@ -672,6 +672,7 @@ impl[A: Debug, B: Debug, C: Debug] Debug for (A, B, C) {
 
 /// Display for 4-tuples: `"(a, b, c, d)"`.
 impl[A: Display, B: Display, C: Display, D: Display] Display for (A, B, C, D) {
+    @allocates
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
                this.2.to_string() + ", " + this.3.to_string() + ")"
@@ -680,6 +681,7 @@ impl[A: Display, B: Display, C: Display, D: Display] Display for (A, B, C, D) {
 
 /// Debug for 4-tuples: `"(a, b, c, d)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug] Debug for (A, B, C, D) {
+    @allocates
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
                this.2.debug_string() + ", " + this.3.debug_string() + ")"
@@ -692,6 +694,7 @@ impl[A: Debug, B: Debug, C: Debug, D: Debug] Debug for (A, B, C, D) {
 
 /// Display for 5-tuples: `"(a, b, c, d, e)"`.
 impl[A: Display, B: Display, C: Display, D: Display, E: Display] Display for (A, B, C, D, E) {
+    @allocates
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
                this.2.to_string() + ", " + this.3.to_string() + ", " +
@@ -701,6 +704,7 @@ impl[A: Display, B: Display, C: Display, D: Display, E: Display] Display for (A,
 
 /// Debug for 5-tuples: `"(a, b, c, d, e)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug] Debug for (A, B, C, D, E) {
+    @allocates
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
                this.2.debug_string() + ", " + this.3.debug_string() + ", " +
@@ -714,6 +718,7 @@ impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug] Debug for (A, B, C, D, E)
 
 /// Display for 6-tuples: `"(a, b, c, d, e, f)"`.
 impl[A: Display, B: Display, C: Display, D: Display, E: Display, F: Display] Display for (A, B, C, D, E, F) {
+    @allocates
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
                this.2.to_string() + ", " + this.3.to_string() + ", " +
@@ -723,6 +728,7 @@ impl[A: Display, B: Display, C: Display, D: Display, E: Display, F: Display] Dis
 
 /// Debug for 6-tuples: `"(a, b, c, d, e, f)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug, F: Debug] Debug for (A, B, C, D, E, F) {
+    @allocates
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
                this.2.debug_string() + ", " + this.3.debug_string() + ", " +

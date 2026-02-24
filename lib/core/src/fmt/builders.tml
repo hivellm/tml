@@ -240,6 +240,7 @@ impl DebugTuple {
     }
 
     /// Finishes building and returns the formatted string.
+    @allocates
     pub func finish(this) -> Str {
         if this.has_fields {
             return this.name + "(" + this.fields + ")"
@@ -248,6 +249,7 @@ impl DebugTuple {
     }
 
     /// Finishes with a non-exhaustive marker.
+    @allocates
     pub func finish_non_exhaustive(this) -> Str {
         if this.has_fields {
             return this.name + "(" + this.fields + ", ..)"
@@ -331,6 +333,7 @@ impl DebugList {
     }
 
     /// Finishes building and returns the formatted string.
+    @allocates
     pub func finish(this) -> Str {
         return "[" + this.entries + "]"
     }
@@ -387,6 +390,7 @@ impl DebugSet {
     }
 
     /// Finishes building and returns the formatted string.
+    @allocates
     pub func finish(this) -> Str {
         return "{" + this.entries + "}"
     }
