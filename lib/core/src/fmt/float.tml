@@ -279,12 +279,14 @@ impl FloatParts {
 }
 
 impl Display for FloatParts {
+    @allocates
     pub func to_string(this) -> Str {
         return this.to_decimal()
     }
 }
 
 impl Debug for FloatParts {
+    @allocates
     pub func debug_string(this) -> Str {
         // Use to_string() for nested types to avoid cross-module method resolution issues
         let exp_str: Str = when this.exponent {

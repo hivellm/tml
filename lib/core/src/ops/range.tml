@@ -478,12 +478,14 @@ impl[T: PartialOrd] RangeTo[T] {
 }
 
 impl[T: Debug] Debug for RangeTo[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return "to " + this.end.debug_string()
     }
 }
 
 impl[T: Display] Display for RangeTo[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return "to " + this.end.to_string()
     }
@@ -536,12 +538,14 @@ impl[T: PartialOrd] RangeToInclusive[T] {
 }
 
 impl[T: Debug] Debug for RangeToInclusive[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return "through " + this.end.debug_string()
     }
 }
 
 impl[T: Display] Display for RangeToInclusive[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return "through " + this.end.to_string()
     }

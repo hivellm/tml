@@ -591,6 +591,7 @@ impl UpperHex for I32 {
 
 /// Upper hex format for `I64`.
 impl UpperHex for I64 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
@@ -610,6 +611,7 @@ impl LowerExp for F32 {
 
 /// Lower exponent format for `F64` (e.g. `"1.5e2"`).
 impl LowerExp for F64 {
+    @allocates
     pub func fmt_lower_exp(this) -> Str {
         return lowlevel { f64_to_exp_string(this, false) }
     }
@@ -625,6 +627,7 @@ impl UpperExp for F32 {
 
 /// Upper exponent format for `F64` (e.g. `"1.5E2"`).
 impl UpperExp for F64 {
+    @allocates
     pub func fmt_upper_exp(this) -> Str {
         return lowlevel { f64_to_exp_string(this, true) }
     }
@@ -636,6 +639,7 @@ impl UpperExp for F64 {
 
 /// Display for 2-tuples: `"(a, b)"`.
 impl[A: Display, B: Display] Display for (A, B) {
+    @allocates
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ")"
     }

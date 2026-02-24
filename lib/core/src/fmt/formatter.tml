@@ -414,6 +414,7 @@ func char_to_str(c: Char) -> Str {
 }
 
 /// Repeats a string n times.
+@allocates
 func repeat_char(s: Str, n: I64) -> Str {
     if n <= 0 {
         return ""
@@ -428,6 +429,7 @@ func repeat_char(s: Str, n: I64) -> Str {
 }
 
 /// Returns a slice of a string from start to end (exclusive).
+@allocates
 func string_slice(s: Str, start: I64, end: I64) -> Str {
     return str::substring(s, start, end)
 }
@@ -473,6 +475,7 @@ impl Display for Arguments {
 }
 
 impl Debug for Arguments {
+    @allocates
     pub func debug_string(this) -> Str {
         return "Arguments { pieces: " + this.pieces.debug_string() + " }"
     }
