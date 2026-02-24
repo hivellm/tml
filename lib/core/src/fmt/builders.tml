@@ -466,6 +466,7 @@ impl DebugMap {
     }
 
     /// Finishes building and returns the formatted string.
+    @allocates
     pub func finish(this) -> Str {
         return "{" + this.entries + "}"
     }

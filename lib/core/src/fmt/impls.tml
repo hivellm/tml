@@ -643,6 +643,7 @@ impl[A: Display, B: Display] Display for (A, B) {
 
 /// Debug for 2-tuples: `"(a, b)"`.
 impl[A: Debug, B: Debug] Debug for (A, B) {
+    @allocates
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ")"
     }
@@ -654,6 +655,7 @@ impl[A: Debug, B: Debug] Debug for (A, B) {
 
 /// Display for 3-tuples: `"(a, b, c)"`.
 impl[A: Display, B: Display, C: Display] Display for (A, B, C) {
+    @allocates
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " + this.2.to_string() + ")"
     }
@@ -661,6 +663,7 @@ impl[A: Display, B: Display, C: Display] Display for (A, B, C) {
 
 /// Debug for 3-tuples: `"(a, b, c)"`.
 impl[A: Debug, B: Debug, C: Debug] Debug for (A, B, C) {
+    @allocates
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " + this.2.debug_string() + ")"
     }

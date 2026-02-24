@@ -238,12 +238,14 @@ impl[T: PartialOrd] Range[T] {
 }
 
 impl[T: Debug] Debug for Range[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return this.start.debug_string() + " to " + this.end.debug_string()
     }
 }
 
 impl[T: Display] Display for Range[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return this.start.to_string() + " to " + this.end.to_string()
     }
@@ -354,12 +356,14 @@ impl[T: PartialOrd] RangeInclusive[T] {
 }
 
 impl[T: Debug] Debug for RangeInclusive[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return this.start.debug_string() + " through " + this.end.debug_string()
     }
 }
 
 impl[T: Display] Display for RangeInclusive[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return this.start.to_string() + " through " + this.end.to_string()
     }
@@ -413,12 +417,14 @@ impl[T: PartialOrd] RangeFrom[T] {
 }
 
 impl[T: Debug] Debug for RangeFrom[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return this.start.debug_string() + " to"
     }
 }
 
 impl[T: Display] Display for RangeFrom[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return this.start.to_string() + " to"
     }
