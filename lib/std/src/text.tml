@@ -185,22 +185,74 @@ func text_set_byte(data: *U8, index: I64, value: U8) {
     lowlevel { ptr_write[U8](p, value) }
 }
 
+// FFI to libc strlen (SIMD-optimized, much faster than byte loop)
+@extern("strlen")
+func text_c_strlen(s: Str) -> I64
+
 // Get length of a Str (null-terminated)
 func text_str_len(s: Str) -> I64 {
     let addr: I64 = s as I64
     if addr == 0 {
         return 0
     }
-    var i: I64 = 0
-    loop (true) {
-        let p: *U8 = (addr + i) as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](p) }
-        if byte == (0 as U8) {
-            return i
-        }
-        i = i + 1
+    return text_c_strlen(s)
+}
+
+// Count decimal digits of an I64 (for pre-calculating buffer size)
+func text_i64_digit_count(n: I64) -> I64 {
+    if n == 0 { return 1 }
+    var val: I64 = n
+    if val < 0 { val = 0 - val }
+    var count: I64 = 0
+    loop (val > 0) {
+        count = count + 1
+        val = val / 10
     }
-    0
+    count
+}
+
+// Write an I64 directly into a data buffer at offset, return bytes written
+func text_i64_write_at(data: *U8, offset: I64, n: I64) -> I64 {
+    if n == 0 {
+        text_set_byte(data, offset, 48 as U8) // '0'
+        return 1
+    }
+
+    var val: I64 = n
+    var is_neg: Bool = false
+    if val < 0 {
+        is_neg = true
+        val = 0 - val
+    }
+
+    // Count digits
+    var temp: I64 = val
+    var digit_count: I64 = 0
+    loop (temp > 0) {
+        digit_count = digit_count + 1
+        temp = temp / 10
+    }
+
+    var sign_len: I64 = 0
+    if is_neg { sign_len = 1 }
+    let total: I64 = digit_count + sign_len
+
+    // Write sign
+    if is_neg {
+        text_set_byte(data, offset, 45 as U8) // '-'
+    }
+
+    // Write digits backwards
+    var write_pos: I64 = offset + total - 1
+    var v: I64 = val
+    loop (v > 0) {
+        let digit: I64 = v % 10
+        text_set_byte(data, write_pos, (digit + 48) as U8)
+        write_pos = write_pos - 1
+        v = v / 10
+    }
+
+    total
 }
 
 // Push a Str into text
@@ -512,23 +564,90 @@ impl Text {
     }
 
     /// Append log-style message: s1 + n1 + s2 + n2 + s3 + n3 + s4
+    /// Optimized: single capacity check, single data pointer read, batched writes
     pub func push_log(this, s1: Str, n1: I64, s2: Str, n2: I64, s3: Str, n3: I64, s4: Str) {
-        text_push_str_raw(this.handle, s1)
-        text_i64_to_str_push(this.handle, n1)
-        text_push_str_raw(this.handle, s2)
-        text_i64_to_str_push(this.handle, n2)
-        text_push_str_raw(this.handle, s3)
-        text_i64_to_str_push(this.handle, n3)
-        text_push_str_raw(this.handle, s4)
+        // Pre-calculate all lengths
+        let slen1: I64 = text_str_len(s1)
+        let nlen1: I64 = text_i64_digit_count(n1) + (if n1 < 0 { 1 } else { 0 })
+        let slen2: I64 = text_str_len(s2)
+        let nlen2: I64 = text_i64_digit_count(n2) + (if n2 < 0 { 1 } else { 0 })
+        let slen3: I64 = text_str_len(s3)
+        let nlen3: I64 = text_i64_digit_count(n3) + (if n3 < 0 { 1 } else { 0 })
+        let slen4: I64 = text_str_len(s4)
+        let total: I64 = slen1 + nlen1 + slen2 + nlen2 + slen3 + nlen3 + slen4
+
+        // Single capacity check
+        let cur_len: I64 = text_get_len(this.handle)
+        text_ensure_cap(this.handle, cur_len + total)
+
+        // Single data pointer read
+        let data: *U8 = text_get_data(this.handle)
+        var pos: I64 = cur_len
+
+        // Batch writes
+        if slen1 > 0 {
+            text_copy_str_at(data, pos, s1, slen1)
+            pos = pos + slen1
+        }
+        pos = pos + text_i64_write_at(data, pos, n1)
+        if slen2 > 0 {
+            text_copy_str_at(data, pos, s2, slen2)
+            pos = pos + slen2
+        }
+        pos = pos + text_i64_write_at(data, pos, n2)
+        if slen3 > 0 {
+            text_copy_str_at(data, pos, s3, slen3)
+            pos = pos + slen3
+        }
+        pos = pos + text_i64_write_at(data, pos, n3)
+        if slen4 > 0 {
+            text_copy_str_at(data, pos, s4, slen4)
+            pos = pos + slen4
+        }
+
+        // Single length update + null terminator
+        text_set_len(this.handle, pos)
+        text_set_byte(data, pos, 0 as U8)
     }
 
     /// Append path-style pattern: s1 + n1 + s2 + n2 + s3
+    /// Optimized: single capacity check, single data pointer read, batched writes
     pub func push_path(this, s1: Str, n1: I64, s2: Str, n2: I64, s3: Str) {
-        text_push_str_raw(this.handle, s1)
-        text_i64_to_str_push(this.handle, n1)
-        text_push_str_raw(this.handle, s2)
-        text_i64_to_str_push(this.handle, n2)
-        text_push_str_raw(this.handle, s3)
+        // Pre-calculate all lengths
+        let slen1: I64 = text_str_len(s1)
+        let nlen1: I64 = text_i64_digit_count(n1) + (if n1 < 0 { 1 } else { 0 })
+        let slen2: I64 = text_str_len(s2)
+        let nlen2: I64 = text_i64_digit_count(n2) + (if n2 < 0 { 1 } else { 0 })
+        let slen3: I64 = text_str_len(s3)
+        let total: I64 = slen1 + nlen1 + slen2 + nlen2 + slen3
+
+        // Single capacity check
+        let cur_len: I64 = text_get_len(this.handle)
+        text_ensure_cap(this.handle, cur_len + total)
+
+        // Single data pointer read (reuse for all writes)
+        let data: *U8 = text_get_data(this.handle)
+        var pos: I64 = cur_len
+
+        // Batch writes using cached pointer
+        if slen1 > 0 {
+            text_copy_str_at(data, pos, s1, slen1)
+            pos = pos + slen1
+        }
+        pos = pos + text_i64_write_at(data, pos, n1)
+        if slen2 > 0 {
+            text_copy_str_at(data, pos, s2, slen2)
+            pos = pos + slen2
+        }
+        pos = pos + text_i64_write_at(data, pos, n2)
+        if slen3 > 0 {
+            text_copy_str_at(data, pos, s3, slen3)
+            pos = pos + slen3
+        }
+
+        // Single length update + null terminator
+        text_set_len(this.handle, pos)
+        text_set_byte(data, pos, 0 as U8)
     }
 
     // ========================================================================
