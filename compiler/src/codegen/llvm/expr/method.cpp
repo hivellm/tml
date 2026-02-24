@@ -391,7 +391,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             const auto& ident = call.receiver->as<parser::IdentExpr>();
             auto it = locals_.find(ident.name);
             if (it != locals_.end()) {
-                receiver_ptr = it->second.reg;
+                // For direct SSA params, create a temp alloca so methods get a pointer
+                if (it->second.is_direct_param && it->second.type.find("%struct.") == 0) {
+                    std::string tmp = fresh_reg();
+                    emit_line("  " + tmp + " = alloca " + it->second.type);
+                    emit_line("  store " + it->second.type + " " + receiver + ", ptr " + tmp);
+                    receiver_ptr = tmp;
+                } else {
+                    receiver_ptr = it->second.reg;
+                }
             } else if (ident.name == "this") {
                 // 'this' is an implicit parameter, not in locals_ map
                 receiver_ptr = "%this";

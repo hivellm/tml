@@ -1,6 +1,6 @@
 # Tasks: Optimize TML Codegen Using Rust as Reference
 
-**Status**: In Progress (65%)
+**Status**: In Progress (75%)
 
 > **NOTE**: This task is a living document. It gets incrementally updated as we discover codegen issues during other work (iterators, closures, generics, etc.). Dedicated execution of these phases will happen later when the compiler is stable. For now, findings from IR comparisons are recorded here for future reference.
 
@@ -15,10 +15,10 @@
 ## Phase 2: Eliminate Redundant Alloca in Constructors
 
 - [x] 2.1 Use `insertvalue` directly for struct construction when all fields are known at init time
-- [ ] 2.2 Use `extractvalue` directly for struct field reads on SSA values (not via GEP+load)
-- [ ] 2.3 Eliminate alloca+store+load pattern for function parameters in simple functions
+- [x] 2.2 Use `extractvalue` directly for struct field reads on SSA values (not via GEP+load)
+- [x] 2.3 Eliminate alloca+store+load pattern for function parameters in simple functions
 - [x] 2.4 Keep alloca path for mutable locals and complex patterns (address-taken, closures, arrays, generics)
-- [ ] 2.5 Compare IR output with Rust for `new()`, `next()`, and similar functions
+- [x] 2.5 Compare IR output with Rust for `new()`, `next()`, and similar functions
 
 ## Phase 3: Dead Declaration Elimination (DONE)
 

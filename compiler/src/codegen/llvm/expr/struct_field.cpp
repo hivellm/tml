@@ -153,6 +153,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     // Handle field access on struct
     std::string struct_type;
     std::string struct_ptr;
+    bool is_ssa_struct_value = false; // True if struct_ptr is an SSA value (not a pointer)
 
     // If the object is an identifier, look up its type
     if (field.object->is<parser::IdentExpr>()) {
@@ -161,6 +162,9 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         if (it != locals_.end()) {
             struct_type = it->second.type;
             struct_ptr = it->second.reg;
+            // Only SSA struct values (not pointer params like 'this') can use extractvalue
+            is_ssa_struct_value =
+                it->second.is_direct_param && it->second.type.find("%struct.") == 0;
 
             // Special handling for 'this' in impl methods
             if (ident.name == "this" && !current_impl_type_.empty()) {
@@ -831,6 +835,18 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         emit_line("  " + result + " = extractelement " + vec_type + " " + vec_val + ", i32 " +
                   std::to_string(field_idx));
         last_expr_type_ = info.element_llvm_type;
+        return result;
+    }
+
+    // For SSA struct values (direct params), use extractvalue instead of GEP+load.
+    // This produces: %result = extractvalue %struct.Point %p, 0
+    // Instead of:    %ptr = getelementptr %struct.Point, ptr %alloca, 0, 0
+    //               %result = load i32, ptr %ptr
+    if (is_ssa_struct_value && field_idx >= 0) {
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = extractvalue " + struct_type + " " + struct_ptr + ", " +
+                  std::to_string(field_idx));
+        last_expr_type_ = field_type;
         return result;
     }
 

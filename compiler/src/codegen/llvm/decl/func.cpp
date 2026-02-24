@@ -593,18 +593,35 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     for (size_t i = 0; i < func.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(func.params[i].type);
         // Function-typed parameters use fat pointer { ptr, ptr } to support closures
-        if (func.params[i].type && func.params[i].type->is<parser::FuncType>()) {
+        bool is_func_type = func.params[i].type && func.params[i].type->is<parser::FuncType>();
+        if (is_func_type) {
             param_type = "{ ptr, ptr }";
         }
         std::string param_name = get_param_name(func.params[i], i);
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + param_type);
-        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+
+        // For by-value struct parameters (immutable, no debug info), keep as SSA values.
+        // This avoids the alloca+store+GEP+load pattern — enables extractvalue for field access.
+        bool has_tuple_pattern =
+            func.params[i].pattern && func.params[i].pattern->is<parser::TuplePattern>();
+        bool is_struct_value = param_type.find("%struct.") == 0 && param_type != "ptr";
+        bool can_be_direct = is_struct_value && !is_func_type && !has_tuple_pattern &&
+                             !(options_.emit_debug_info && options_.debug_level >= 2);
+
+        if (can_be_direct) {
+            locals_[param_name] = VarInfo{"%" + param_name, param_type, semantic_type,
+                                          std::nullopt,     false,      true /*is_direct_param*/};
+        } else {
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_type);
+            emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+            locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+        }
 
         // Emit debug info for parameters (if enabled and debug level >= 2)
+        // Note: can_be_direct is false when debug info is enabled, so locals_ always
+        // has an alloca reg here.
         if (options_.emit_debug_info && options_.debug_level >= 2 && current_scope_id_ != 0) {
             uint32_t line = func.params[i].span.start.line;
             uint32_t column = func.params[i].span.start.column;
@@ -623,7 +640,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             debug_metadata_.push_back(meta.str());
 
             // Emit llvm.dbg.declare intrinsic
-            emit_debug_declare(alloca_reg, param_debug_id, loc_id);
+            emit_debug_declare(locals_[param_name].reg, param_debug_id, loc_id);
         }
     }
 

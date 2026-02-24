@@ -136,6 +136,14 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
             const auto& ident = unary.operand->as<parser::IdentExpr>();
             auto it = locals_.find(ident.name);
             if (it != locals_.end()) {
+                // For direct SSA params, create a temp alloca to get an address
+                if (it->second.is_direct_param && it->second.type.find("%struct.") == 0) {
+                    std::string tmp = fresh_reg();
+                    emit_line("  " + tmp + " = alloca " + it->second.type);
+                    emit_line("  store " + it->second.type + " " + it->second.reg + ", ptr " + tmp);
+                    last_expr_type_ = "ptr";
+                    return tmp;
+                }
                 // Return the alloca pointer directly (don't load)
                 last_expr_type_ = "ptr";
                 return it->second.reg;

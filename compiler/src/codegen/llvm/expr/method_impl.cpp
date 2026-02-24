@@ -549,6 +549,12 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         if (it != locals_.end()) {
             if (is_primitive_impl) {
                 impl_receiver_val = receiver;
+            } else if (it->second.is_direct_param && it->second.type.find("%struct.") == 0) {
+                // Direct SSA param — spill to stack for method call
+                std::string tmp = fresh_reg();
+                emit_line("  " + tmp + " = alloca " + it->second.type);
+                emit_line("  store " + it->second.type + " " + receiver + ", ptr " + tmp);
+                impl_receiver_val = tmp;
             } else {
                 impl_receiver_val = (it->second.type == "ptr") ? receiver : it->second.reg;
             }
@@ -778,6 +784,12 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
             if (is_primitive_impl) {
                 // For primitives, pass the value directly
                 impl_receiver_val = receiver;
+            } else if (it->second.is_direct_param && it->second.type.find("%struct.") == 0) {
+                // Direct SSA param — spill to stack for method call
+                std::string tmp = fresh_reg();
+                emit_line("  " + tmp + " = alloca " + it->second.type);
+                emit_line("  store " + it->second.type + " " + receiver + ", ptr " + tmp);
+                impl_receiver_val = tmp;
             } else {
                 // For structs, pass the pointer
                 impl_receiver_val = (it->second.type == "ptr") ? receiver : it->second.reg;
