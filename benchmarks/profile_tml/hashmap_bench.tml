@@ -1,95 +1,10 @@
 // HashMap Benchmarks (TML)
 //
 // Tests HashMap operations: insert, get, contains, remove.
-// Comparable with C++ std::unordered_map benchmarks.
+// Comparable with C++ std::unordered_map and Rust std::collections::HashMap.
 
 use std::collections::HashMap
 use std::time::Instant
-
-func run_and_print(name: Str, iterations: I64, total_ns: I64) {
-    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
-    let ops_sec: I64 = if total_ns > 0 {
-        (iterations * 1000000000) / total_ns
-    } else {
-        0
-    }
-    print("  {}:\n", name)
-    print("    Iterations: {}\n", iterations)
-    print("    Total time: {} ms\n", total_ns / 1000000)
-    print("    Per op:     {} ns\n", per_op)
-    print("    Ops/sec:    {}\n\n", ops_sec)
-}
-
-// HashMap insert (I64 -> I64)
-func bench_hashmap_insert(iterations: I64) -> I64 {
-    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
-    var i: I64 = 0
-    loop (i < iterations) {
-        map.set(i, i * 2)
-        i = i + 1
-    }
-    let result: I64 = map.len()
-    map.destroy()
-    result
-}
-
-// HashMap lookup
-func bench_hashmap_lookup(iterations: I64) -> I64 {
-    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
-    var i: I64 = 0
-    loop (i < 10000) {
-        map.set(i, i * 2)
-        i = i + 1
-    }
-
-    var sum: I64 = 0
-    i = 0
-    loop (i < iterations) {
-        sum = sum + map.get(i % 10000)
-        i = i + 1
-    }
-    map.destroy()
-    sum
-}
-
-// HashMap contains_key
-func bench_hashmap_contains(iterations: I64) -> I64 {
-    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
-    var i: I64 = 0
-    loop (i < 10000) {
-        map.set(i, i)
-        i = i + 1
-    }
-
-    var found: I64 = 0
-    i = 0
-    loop (i < iterations) {
-        // Check half existing, half non-existing
-        if map.has(i % 20000) { found = found + 1 }
-        i = i + 1
-    }
-    map.destroy()
-    found
-}
-
-// HashMap remove
-func bench_hashmap_remove(iterations: I64) -> I64 {
-    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
-    var i: I64 = 0
-    loop (i < iterations) {
-        map.set(i, i)
-        i = i + 1
-    }
-
-    var removed: I64 = 0
-    i = 0
-    loop (i < iterations) {
-        if map.remove(i) { removed = removed + 1 }
-        i = i + 1
-    }
-    map.destroy()
-    removed
-}
 
 pub func main() -> I32 {
     print("\n")
@@ -97,33 +12,106 @@ pub func main() -> I32 {
     print("  HashMap Benchmarks (TML)\n")
     print("================================================================\n\n")
 
-    let MAP_ITER: I64 = 100000
-    let LOOKUP_ITER: I64 = 1000000
+    let N: I64 = 100000
+    let NL: I64 = 1000000
 
     // Warmup
-    let warmup_map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    let wm: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     var w: I64 = 0
-    loop (w < 100) {
-        warmup_map.set(w, w)
-        w = w + 1
+    loop (w < 100) { wm.set(w, w); w = w + 1 }
+    wm.destroy()
+
+    var i: I64 = 0
+
+    // === HashMap Insert ===
+    let t1: Instant = Instant::now()
+    let m1: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    i = 0
+    loop (i < N) { m1.set(i, i * 2); i = i + 1 }
+    let ns1: I64 = t1.elapsed().as_nanos()
+    m1.destroy()
+    let pop1: I64 = if ns1 > 0 { ns1 / N } else { 0 }
+    let ops1: I64 = if ns1 > 0 { (N * 1000000000) / ns1 } else { 0 }
+    print("  HashMap Insert:\n")
+    print("    Iterations: {N}\n")
+    print("    Total time: {ns1 / 1000000} ms\n")
+    print("    Per op:     {pop1} ns\n")
+    print("    Ops/sec:    {ops1}\n\n")
+
+    // === HashMap Insert (reserved) ===
+    let t2: Instant = Instant::now()
+    let m2: HashMap[I64, I64] = HashMap[I64, I64].new(N)
+    i = 0
+    loop (i < N) { m2.set(i, i * 2); i = i + 1 }
+    let ns2: I64 = t2.elapsed().as_nanos()
+    m2.destroy()
+    let pop2: I64 = if ns2 > 0 { ns2 / N } else { 0 }
+    let ops2: I64 = if ns2 > 0 { (N * 1000000000) / ns2 } else { 0 }
+    print("  HashMap Insert (reserved):\n")
+    print("    Iterations: {N}\n")
+    print("    Total time: {ns2 / 1000000} ms\n")
+    print("    Per op:     {pop2} ns\n")
+    print("    Ops/sec:    {ops2}\n\n")
+
+    // === HashMap Lookup ===
+    let m3: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    i = 0
+    loop (i < 10000) { m3.set(i, i * 2); i = i + 1 }
+    let t3: Instant = Instant::now()
+    var sum: I64 = 0
+    i = 0
+    loop (i < NL) { sum = sum + m3.get(i % 10000); i = i + 1 }
+    let ns3: I64 = t3.elapsed().as_nanos()
+    m3.destroy()
+    let pop3: I64 = if ns3 > 0 { ns3 / NL } else { 0 }
+    let ops3: I64 = if ns3 > 0 { (NL * 1000000000) / ns3 } else { 0 }
+    print("  HashMap Lookup:\n")
+    print("    Iterations: {NL}\n")
+    print("    Total time: {ns3 / 1000000} ms\n")
+    print("    Per op:     {pop3} ns\n")
+    print("    Ops/sec:    {ops3}\n\n")
+
+    // === HashMap Contains ===
+    let m4: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    i = 0
+    loop (i < 10000) { m4.set(i, i); i = i + 1 }
+    let t4: Instant = Instant::now()
+    var found: I64 = 0
+    i = 0
+    loop (i < NL) {
+        if m4.has(i % 20000) { found = found + 1 }
+        i = i + 1
     }
-    warmup_map.destroy()
+    let ns4: I64 = t4.elapsed().as_nanos()
+    m4.destroy()
+    let pop4: I64 = if ns4 > 0 { ns4 / NL } else { 0 }
+    let ops4: I64 = if ns4 > 0 { (NL * 1000000000) / ns4 } else { 0 }
+    print("  HashMap Contains:\n")
+    print("    Iterations: {NL}\n")
+    print("    Total time: {ns4 / 1000000} ms\n")
+    print("    Per op:     {pop4} ns\n")
+    print("    Ops/sec:    {ops4}\n\n")
 
-    var start: Instant = Instant::now()
-    let _ins: I64 = bench_hashmap_insert(MAP_ITER)
-    run_and_print("HashMap Insert", MAP_ITER, start.elapsed().as_nanos())
-
-    start = Instant::now()
-    let _look: I64 = bench_hashmap_lookup(LOOKUP_ITER)
-    run_and_print("HashMap Lookup", LOOKUP_ITER, start.elapsed().as_nanos())
-
-    start = Instant::now()
-    let _cont: I64 = bench_hashmap_contains(LOOKUP_ITER)
-    run_and_print("HashMap Contains", LOOKUP_ITER, start.elapsed().as_nanos())
-
-    start = Instant::now()
-    let _rem: I64 = bench_hashmap_remove(MAP_ITER)
-    run_and_print("HashMap Remove", MAP_ITER, start.elapsed().as_nanos())
+    // === HashMap Remove ===
+    let m5: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    i = 0
+    loop (i < N) { m5.set(i, i); i = i + 1 }
+    let t5: Instant = Instant::now()
+    var removed: I64 = 0
+    i = 0
+    loop (i < N) {
+        if m5.remove(i) { removed = removed + 1 }
+        i = i + 1
+    }
+    let ns5: I64 = t5.elapsed().as_nanos()
+    m5.destroy()
+    let pop5: I64 = if ns5 > 0 { ns5 / N } else { 0 }
+    let ops5: I64 = if ns5 > 0 { (N * 1000000000) / ns5 } else { 0 }
+    print("  HashMap Remove:\n")
+    print("    Iterations: {N}\n")
+    print("    Total time: {ns5 / 1000000} ms\n")
+    print("    Per op:     {pop5} ns\n")
+    print("    Ops/sec:    {ops5}\n\n")
 
     0
 }

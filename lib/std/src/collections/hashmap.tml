@@ -53,10 +53,13 @@ pub type HashMap[K, V] {
 
 impl[K, V] HashMap[K, V] {
     /// Creates a new hashmap with the specified initial capacity.
+    /// The actual capacity is rounded up to the next power of 2 (minimum 16)
+    /// for correct hash masking with `mask = cap - 1`.
     pub func new(initial_capacity: I64) -> HashMap[K, V] {
-        var cap: I64 = initial_capacity
-        if cap < 16 {
-            cap = 16
+        // Round up to next power of 2 (required for mask = cap - 1 probing)
+        var cap: I64 = 16
+        loop (cap < initial_capacity) {
+            cap = cap * 2
         }
 
         // Allocate header (32 bytes)
