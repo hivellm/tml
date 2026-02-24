@@ -149,7 +149,21 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
         return "%t" + std::to_string(temp_counter++);
     };
 
+    // Helper: emit concat and free consumed heap operands
+    auto emit_concat_free = [&](const std::string& lhs, const std::string& rhs, bool free_lhs,
+                                bool free_rhs) -> std::string {
+        std::string out = fresh_temp();
+        type_defs_buffer_ << "  " << out << " = call ptr @str_concat_opt(ptr " << lhs << ", ptr "
+                          << rhs << ")\n";
+        if (free_lhs)
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << lhs << ")\n";
+        if (free_rhs)
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << rhs << ")\n";
+        return out;
+    };
+
     std::string current = "";
+    bool current_is_heap = false; // whether current needs freeing after next concat
 
     // Convert each field to string and concatenate
     for (size_t i = 0; i < fields.size(); ++i) {
@@ -161,12 +175,14 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
+        bool value_is_heap = false;
         if (field.llvm_type == "ptr") {
-            // String type - use directly
+            // String type - use directly (borrowed from struct field)
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = load ptr, ptr " << field_ptr << "\n";
+            value_is_heap = false;
         } else if (is_primitive_displayable(field.llvm_type)) {
-            // Primitive type - convert to string
+            // Primitive type - convert to string (heap-allocated)
             std::string val = fresh_temp();
             type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
                               << field_ptr << "\n";
@@ -184,8 +200,9 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func << "("
                                   << field.llvm_type << " " << val << ")\n";
             }
+            value_is_heap = true;
         } else {
-            // Non-primitive type - call to_string() on the field
+            // Non-primitive type - call to_string() on the field (heap-allocated)
             std::string field_type_name;
             if (field.llvm_type.substr(0, 8) == "%struct.") {
                 field_type_name = field.llvm_type.substr(8);
@@ -198,22 +215,20 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = call ptr " << field_display_func
                               << "(ptr " << field_ptr << ")\n";
+            value_is_heap = true;
         }
 
         if (i == 0) {
             current = value_str;
+            current_is_heap = value_is_heap;
         } else {
-            // Add separator and concatenate
+            // Add separator and concatenate, freeing intermediates
             std::string sep = fresh_temp();
             type_defs_buffer_ << "  " << sep << " = getelementptr inbounds [3 x i8], ptr "
                               << separator_const << ", i32 0, i32 0\n";
-            std::string with_sep = fresh_temp();
-            type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
-                              << ", ptr " << sep << ")\n";
-            std::string with_value = fresh_temp();
-            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
-                              << with_sep << ", ptr " << value_str << ")\n";
-            current = with_value;
+            std::string with_sep = emit_concat_free(current, sep, current_is_heap, false);
+            current = emit_concat_free(with_sep, value_str, true, value_is_heap);
+            current_is_heap = true;
         }
     }
 

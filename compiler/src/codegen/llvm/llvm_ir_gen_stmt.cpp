@@ -85,13 +85,9 @@ bool LLVMIRGen::is_heap_str_producer(const parser::Expr& expr) const {
             return false; // Folded to global constant, no heap allocation
         return true;
     }
-    // Function/method calls returning Str:
-    // - Non-extern TML functions/methods: ALWAYS assumed to allocate (default).
-    //   Any TML function returning Str must have built it via concat/interpolation/etc.
-    // - @extern FFI functions: assumed to BORROW (return C-owned pointer) unless
-    //   explicitly marked @allocates. Freeing borrowed C pointers (e.g., sqlite3
-    //   column_text, getenv, static buffers) would corrupt memory.
-    // - tml_str_free validates pointers at runtime as a safety net.
+    // Function/method calls: only track if the function is explicitly marked @allocates.
+    // @allocates populates allocating_functions_ and means the function returns a
+    // heap-allocated Str that the caller must free.
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
         std::string func_name;
@@ -103,19 +99,11 @@ bool LLVMIRGen::is_heap_str_producer(const parser::Expr& expr) const {
                 func_name = path.segments.back();
             }
         }
-        if (func_name.empty())
-            return false;
-        // @extern functions default to borrow unless explicitly @allocates
-        auto it = functions_.find(func_name);
-        if (it != functions_.end() && it->second.is_extern) {
-            return allocating_functions_.count(func_name) > 0;
-        }
-        // Non-extern TML functions: always assume allocation
-        return true;
+        return !func_name.empty() && allocating_functions_.count(func_name) > 0;
     }
     if (expr.is<parser::MethodCallExpr>()) {
-        // Methods are always TML code — always assume allocation
-        return true;
+        const auto& mcall = expr.as<parser::MethodCallExpr>();
+        return allocating_functions_.count(mcall.method) > 0;
     }
     // String literals are global constants — tml_str_free skips them (not heap)
     // Identifiers are aliases — freeing would double-free the original

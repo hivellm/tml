@@ -155,33 +155,43 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
         return "%t" + std::to_string(temp_counter++);
     };
 
-    // Start with opening brace
+    // Helper: emit concat and free consumed heap operands
+    auto emit_concat_free = [&](const std::string& lhs, const std::string& rhs, bool free_lhs,
+                                bool free_rhs) -> std::string {
+        std::string out = fresh_temp();
+        type_defs_buffer_ << "  " << out << " = call ptr @str_concat_opt(ptr " << lhs << ", ptr "
+                          << rhs << ")\n";
+        if (free_lhs)
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << lhs << ")\n";
+        if (free_rhs)
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << rhs << ")\n";
+        return out;
+    };
+
+    // Start with opening brace (GEP constant, not heap)
     std::string current = fresh_temp();
     type_defs_buffer_ << "  " << current << " = getelementptr inbounds [2 x i8], ptr " << open_brace
                       << ", i32 0, i32 0\n";
+    bool current_is_heap = false;
 
     // Add each field
     for (size_t i = 0; i < fields.size(); ++i) {
         const auto& field = fields[i];
 
-        // Add field name with quote
+        // Add field name with quote (GEP constant)
         std::string field_const = "@.json_" + suite_prefix + type_name + "_f_" + field.name;
         std::string field_name = fresh_temp();
         type_defs_buffer_ << "  " << field_name << " = getelementptr inbounds ["
                           << (field.name.size() + 2) << " x i8], ptr " << field_const
                           << ", i32 0, i32 0\n";
 
-        std::string with_name = fresh_temp();
-        type_defs_buffer_ << "  " << with_name << " = call ptr @str_concat_opt(ptr " << current
-                          << ", ptr " << field_name << ")\n";
+        std::string with_name = emit_concat_free(current, field_name, current_is_heap, false);
 
-        // Add colon
+        // Add colon (GEP constant)
         std::string colon_ptr = fresh_temp();
         type_defs_buffer_ << "  " << colon_ptr << " = getelementptr inbounds [4 x i8], ptr "
                           << colon << ", i32 0, i32 0\n";
-        std::string with_colon = fresh_temp();
-        type_defs_buffer_ << "  " << with_colon << " = call ptr @str_concat_opt(ptr " << with_name
-                          << ", ptr " << colon_ptr << ")\n";
+        std::string with_colon = emit_concat_free(with_name, colon_ptr, true, false);
 
         // Get field value and convert to JSON
         std::string field_ptr = fresh_temp();
@@ -189,15 +199,17 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
+        bool value_is_heap = false;
         bool needs_quotes = false;
 
         if (field.llvm_type == "ptr") {
-            // String type - load and quote
+            // String type - load (borrowed from struct field)
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = load ptr, ptr " << field_ptr << "\n";
             needs_quotes = true;
+            value_is_heap = false;
         } else if (is_primitive_serializable(field.llvm_type)) {
-            // Primitive type - convert to string
+            // Primitive type - convert to string (heap-allocated)
             std::string val = fresh_temp();
             type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
                               << field_ptr << "\n";
@@ -215,8 +227,9 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func << "("
                                   << field.llvm_type << " " << val << ")\n";
             }
+            value_is_heap = true;
         } else {
-            // Non-primitive type - call to_json() on the field
+            // Non-primitive type - call to_json() on the field (heap-allocated)
             std::string field_type_name;
             if (field.llvm_type.substr(0, 8) == "%struct.") {
                 field_type_name = field.llvm_type.substr(8);
@@ -228,49 +241,39 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = call ptr " << field_json_func << "(ptr "
                               << field_ptr << ")\n";
+            value_is_heap = true;
         }
 
         std::string with_value;
         if (needs_quotes) {
-            // Add quote, value, quote
+            // Add quote, value, quote — freeing intermediates
             std::string quote_ptr = fresh_temp();
             type_defs_buffer_ << "  " << quote_ptr << " = getelementptr inbounds [2 x i8], ptr "
                               << quote << ", i32 0, i32 0\n";
-            std::string with_open_quote = fresh_temp();
-            type_defs_buffer_ << "  " << with_open_quote << " = call ptr @str_concat_opt(ptr "
-                              << with_colon << ", ptr " << quote_ptr << ")\n";
-            std::string with_str = fresh_temp();
-            type_defs_buffer_ << "  " << with_str << " = call ptr @str_concat_opt(ptr "
-                              << with_open_quote << ", ptr " << value_str << ")\n";
-            with_value = fresh_temp();
-            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
-                              << with_str << ", ptr " << quote_ptr << ")\n";
+            std::string with_open_quote = emit_concat_free(with_colon, quote_ptr, true, false);
+            std::string with_str =
+                emit_concat_free(with_open_quote, value_str, true, value_is_heap);
+            with_value = emit_concat_free(with_str, quote_ptr, true, false);
         } else {
-            with_value = fresh_temp();
-            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
-                              << with_colon << ", ptr " << value_str << ")\n";
+            with_value = emit_concat_free(with_colon, value_str, true, value_is_heap);
         }
         current = with_value;
+        current_is_heap = true;
 
         // Add separator if not last field
         if (i < fields.size() - 1) {
             std::string sep = fresh_temp();
             type_defs_buffer_ << "  " << sep << " = getelementptr inbounds [3 x i8], ptr "
                               << separator << ", i32 0, i32 0\n";
-            std::string with_sep = fresh_temp();
-            type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
-                              << ", ptr " << sep << ")\n";
-            current = with_sep;
+            current = emit_concat_free(current, sep, true, false);
         }
     }
 
-    // Add closing brace
+    // Add closing brace, freeing the accumulated string
     std::string close = fresh_temp();
     type_defs_buffer_ << "  " << close << " = getelementptr inbounds [2 x i8], ptr " << close_brace
                       << ", i32 0, i32 0\n";
-    std::string result = fresh_temp();
-    type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << current << ", ptr "
-                      << close << ")\n";
+    std::string result = emit_concat_free(current, close, current_is_heap, false);
 
     type_defs_buffer_ << "  ret ptr " << result << "\n";
     type_defs_buffer_ << "}\n\n";

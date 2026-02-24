@@ -158,8 +158,7 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
                 is_str_temp = true;
             }
         } else if (!in_library_body_ && expr.is<parser::CallExpr>()) {
-            // Track Str temporaries from non-extern function calls.
-            // @extern functions default to borrow (unless @allocates).
+            // Track Str temporaries from @allocates-annotated function calls.
             const auto& call = expr.as<parser::CallExpr>();
             std::string func_name;
             if (call.callee->is<parser::IdentExpr>()) {
@@ -170,24 +169,22 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
                     func_name = path.segments.back();
                 }
             }
-            if (!func_name.empty()) {
-                auto it = functions_.find(func_name);
-                bool is_extern = (it != functions_.end() && it->second.is_extern);
-                bool should_track = is_extern ? allocating_functions_.count(func_name) > 0 : true;
-                if (should_track) {
-                    auto sem = infer_expr_type(expr);
-                    if (sem && sem->is<types::PrimitiveType>() &&
-                        sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                        is_str_temp = true;
-                    }
+            if (!func_name.empty() && allocating_functions_.count(func_name) > 0) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
                 }
             }
         } else if (!in_library_body_ && expr.is<parser::MethodCallExpr>()) {
-            // Methods are always TML code — always track Str temporaries.
-            auto sem = infer_expr_type(expr);
-            if (sem && sem->is<types::PrimitiveType>() &&
-                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                is_str_temp = true;
+            // Track Str temporaries from @allocates-annotated method calls.
+            const auto& mcall = expr.as<parser::MethodCallExpr>();
+            if (allocating_functions_.count(mcall.method) > 0) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
+                }
             }
         }
         if (is_str_temp) {

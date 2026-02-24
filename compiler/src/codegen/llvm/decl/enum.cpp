@@ -825,9 +825,16 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
                 auto with_sep = t();
                 type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << cur
                                   << ", ptr " << const_prefix << "_sep)\n";
+                // Free old accumulator (consumed by concat); safe if null
+                type_defs_buffer_ << "  call void @tml_str_free(ptr " << cur << ")\n";
                 auto base = t();
                 type_defs_buffer_ << "  " << base << " = select i1 " << is_first
                                   << ", ptr null, ptr " << with_sep << "\n";
+                // Free unused with_sep when is_first (select chose null, with_sep leaks)
+                auto unused_sep = t();
+                type_defs_buffer_ << "  " << unused_sep << " = select i1 " << is_first << ", ptr "
+                                  << with_sep << ", ptr null\n";
+                type_defs_buffer_ << "  call void @tml_str_free(ptr " << unused_sep << ")\n";
                 auto result = t();
                 type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << base
                                   << ", ptr " << const_prefix << "_v_" << vname << ")\n";
@@ -873,13 +880,15 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "  " << display << " = call ptr @" << prefix
                               << "to_string(ptr %self)\n";
 
-            // Wrap with "TypeName(" ... ")"
+            // Wrap with "TypeName(" ... ")", freeing intermediates
             auto with_prefix = t();
             type_defs_buffer_ << "  " << with_prefix << " = call ptr @str_concat_opt(ptr "
                               << const_prefix << "_dbg_prefix, ptr " << display << ")\n";
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << display << ")\n";
             auto result = t();
             type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << with_prefix
                               << ", ptr " << const_prefix << "_dbg_suffix)\n";
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << with_prefix << ")\n";
             type_defs_buffer_ << "  ret ptr " << result << "\n";
             type_defs_buffer_ << "}\n\n";
 
@@ -969,22 +978,31 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
                 auto base = t();
                 type_defs_buffer_ << "  " << base << " = select i1 " << nc << ", ptr " << with_comma
                                   << ", ptr " << cur << "\n";
+                // Free old accumulator when comma was added (cur consumed into with_comma)
+                // Free unused with_comma when no comma needed
+                auto to_free = t();
+                type_defs_buffer_ << "  " << to_free << " = select i1 " << nc << ", ptr " << cur
+                                  << ", ptr " << with_comma << "\n";
+                type_defs_buffer_ << "  call void @tml_str_free(ptr " << to_free << ")\n";
                 // Add quoted variant name
                 auto result = t();
                 type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << base
                                   << ", ptr " << const_prefix << "_jv_" << vname << ")\n";
+                // Free intermediate (base was consumed into result)
+                type_defs_buffer_ << "  call void @tml_str_free(ptr " << base << ")\n";
                 type_defs_buffer_ << "  store ptr " << result << ", ptr " << acc << "\n";
                 type_defs_buffer_ << "  store i1 1, ptr " << need_comma << "\n";
                 type_defs_buffer_ << "  br label %" << next_label << "\n\n";
             }
 
-            // Close with "]"
+            // Close with "]", freeing the accumulated intermediate
             type_defs_buffer_ << "jdone:\n";
             auto final_val = t();
             type_defs_buffer_ << "  " << final_val << " = load ptr, ptr " << acc << "\n";
             auto closed = t();
             type_defs_buffer_ << "  " << closed << " = call ptr @str_concat_opt(ptr " << final_val
                               << ", ptr " << const_prefix << "_json_close)\n";
+            type_defs_buffer_ << "  call void @tml_str_free(ptr " << final_val << ")\n";
             type_defs_buffer_ << "  ret ptr " << closed << "\n";
             type_defs_buffer_ << "}\n\n";
 
