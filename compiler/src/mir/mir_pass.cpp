@@ -13,12 +13,13 @@ TML_MODULE("compiler")
 //!
 //! Coordinates optimization passes with standard pipelines:
 //!
-//! | Level | Passes                                   |
-//! |-------|------------------------------------------|
-//! | O0    | InstSimplify, StrengthReduction           |
-//! | O1    | Constant folding/propagation             |
-//! | O2    | O1 + CSE, copy prop, DCE, UCE            |
-//! | O3    | O2 + second optimization round           |
+//! | Level | Passes                                                |
+//! |-------|-------------------------------------------------------|
+//! | O0    | InstSimplify, StrengthReduction, ConstFold/Prop,      |
+//! |       | SimplifyCfg, DCE, CopyProp, MatchSimplify, UCE, Merge |
+//! | O1    | O0 + EarlyCSE                                        |
+//! | O2    | O1 + SROA, Mem2Reg, GVN, Inlining, LICM, etc.        |
+//! | O3    | O2 + second optimization round, vectorization         |
 //!
 //! ## Analysis Utilities
 //!
@@ -212,11 +213,20 @@ void PassManager::configure_standard_pipeline() {
     add_pass(std::make_unique<SretConversionPass>());
 
     if (level_ == OptLevel::O0) {
-        // Strength reduction is safe and semantics-preserving even at O0.
-        // Converts expensive mul/div/mod to cheap shift/and when the operand
-        // is a compile-time power-of-2 constant. No impact on debuggability.
+        // These passes are safe, semantics-preserving, and don't affect
+        // debuggability. Rust runs equivalent passes even at -C opt-level=0
+        // (mir-opt-level defaults to 1). Order matters: simplify first, then
+        // fold constants, clean up CFG, eliminate dead code, propagate copies.
         add_pass(std::make_unique<InstSimplifyPass>());
         add_pass(std::make_unique<StrengthReductionPass>());
+        add_pass(std::make_unique<ConstantFoldingPass>());
+        add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<CopyPropagationPass>());
+        add_pass(std::make_unique<MatchSimplifyPass>());
+        add_pass(std::make_unique<UnreachableCodeEliminationPass>());
+        add_pass(std::make_unique<BlockMergePass>());
         return;
     }
 
@@ -437,11 +447,19 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
     add_pass(std::make_unique<SretConversionPass>());
 
     if (level_ == OptLevel::O0) {
-        // Strength reduction is safe and semantics-preserving even at O0.
-        // Converts expensive mul/div/mod to cheap shift/and when the operand
-        // is a compile-time power-of-2 constant. No impact on debuggability.
+        // These passes are safe, semantics-preserving, and don't affect
+        // debuggability. Rust runs equivalent passes even at -C opt-level=0
+        // (mir-opt-level defaults to 1). Must match the no-arg overload.
         add_pass(std::make_unique<InstSimplifyPass>());
         add_pass(std::make_unique<StrengthReductionPass>());
+        add_pass(std::make_unique<ConstantFoldingPass>());
+        add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<CopyPropagationPass>());
+        add_pass(std::make_unique<MatchSimplifyPass>());
+        add_pass(std::make_unique<UnreachableCodeEliminationPass>());
+        add_pass(std::make_unique<BlockMergePass>());
         return;
     }
 
