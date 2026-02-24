@@ -302,6 +302,36 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
             enum_variants_[key] = tag++;
         }
     } else {
+        // Nullable pointer optimization: Maybe[ptr-type] → bare ptr (null = Nothing)
+        // When Maybe has exactly 2 variants (one with ptr payload, one empty),
+        // represent as just "ptr" where null = Nothing. Matches Rust's Option<&T>.
+        if (decl.name == "Maybe" && decl.variants.size() == 2) {
+            bool has_payload = false;
+            bool has_empty = false;
+            std::string payload_llvm_type;
+            for (const auto& variant : decl.variants) {
+                if (variant.tuple_fields.has_value() && !variant.tuple_fields->empty()) {
+                    types::TypePtr resolved =
+                        resolve_parser_type_with_subs(*variant.tuple_fields->at(0), subs);
+                    payload_llvm_type = llvm_type_from_semantic(resolved, true);
+                    has_payload = true;
+                } else {
+                    has_empty = true;
+                }
+            }
+            if (has_payload && has_empty && payload_llvm_type == "ptr") {
+                // Use bare ptr representation — no struct type emitted
+                nullable_maybe_types_.insert(mangled);
+                struct_types_[mangled] = "ptr";
+                int tag = 0;
+                for (const auto& variant : decl.variants) {
+                    std::string key = mangled + "::" + variant.name;
+                    enum_variants_[key] = tag++;
+                }
+                return;
+            }
+        }
+
         // Complex enum with data
         // Calculate max size with substituted types
         // Use for_data=true since these are data fields (Unit -> "{}" not "void")

@@ -582,6 +582,10 @@ private:
     // "i32" = compact 4-byte, "i64" = compact 8-byte, "" = uses [N x i64] union
     std::unordered_map<std::string, std::string> enum_payload_type_;
 
+    // Nullable Maybe optimization: set of mangled type names (e.g. "Maybe__ref_I32")
+    // where Maybe[ptr-type] is represented as bare ptr (null = Nothing)
+    std::unordered_set<std::string> nullable_maybe_types_;
+
     // @flags enum metadata
     struct FlagsEnumInfo {
         std::string underlying_llvm_type; ///< "i8", "i16", "i32", "i64"

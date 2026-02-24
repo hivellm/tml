@@ -230,21 +230,26 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 }
                 // Or try to infer from function return type
                 else if (!current_ret_type_.empty()) {
-                    std::string prefix = "%struct." + enum_name + "__";
-                    if (current_ret_type_.starts_with(prefix)) {
-                        enum_type = current_ret_type_;
-                    }
-                    // If current_ret_type_ is a composite (e.g. tuple like "{ i64,
-                    // %struct.Maybe__I64 }"), extract just the %struct.EnumName__* substring
-                    else {
-                        auto pos = current_ret_type_.find(prefix);
-                        if (pos != std::string::npos) {
-                            // Extract from %struct. to the end of the type name (next , or } or
-                            // space)
-                            auto end = current_ret_type_.find_first_of(",} ", pos + prefix.size());
-                            if (end == std::string::npos)
-                                end = current_ret_type_.size();
-                            enum_type = current_ret_type_.substr(pos, end - pos);
+                    // Nullable Maybe optimization: ret type is bare "ptr"
+                    if (current_ret_type_ == "ptr" && enum_name == "Maybe") {
+                        enum_type = "ptr";
+                    } else {
+                        std::string prefix = "%struct." + enum_name + "__";
+                        if (current_ret_type_.starts_with(prefix)) {
+                            enum_type = current_ret_type_;
+                        }
+                        // If current_ret_type_ is a composite (e.g. tuple like "{ i64,
+                        // %struct.Maybe__I64 }"), extract just the %struct.EnumName__*
+                        // substring
+                        else {
+                            auto pos = current_ret_type_.find(prefix);
+                            if (pos != std::string::npos) {
+                                auto end =
+                                    current_ret_type_.find_first_of(",} ", pos + prefix.size());
+                                if (end == std::string::npos)
+                                    end = current_ret_type_.size();
+                                enum_type = current_ret_type_.substr(pos, end - pos);
+                            }
                         }
                     }
                 }
@@ -324,6 +329,12 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                     enum_type = "%struct." + mangled;
                 }
 
+                // Nullable pointer optimization: Nothing → null
+                if (enum_type == "ptr") {
+                    last_expr_type_ = "ptr";
+                    return "null";
+                }
+
                 std::string result = fresh_reg();
                 std::string enum_val = fresh_reg();
 
@@ -362,19 +373,24 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 }
                 // Or try to infer from function return type
                 else if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
-                    std::string prefix = "%struct." + enum_name + "__";
-                    if (current_ret_type_.starts_with(prefix)) {
-                        enum_type = current_ret_type_;
-                    }
-                    // If current_ret_type_ is a composite (e.g. tuple like "{ i64,
-                    // %struct.Maybe__I64 }"), extract just the %struct.EnumName__* substring
-                    else {
-                        auto pos = current_ret_type_.find(prefix);
-                        if (pos != std::string::npos) {
-                            auto end = current_ret_type_.find_first_of(",} ", pos + prefix.size());
-                            if (end == std::string::npos)
-                                end = current_ret_type_.size();
-                            enum_type = current_ret_type_.substr(pos, end - pos);
+                    // Nullable Maybe: ret type is bare ptr
+                    if (current_ret_type_ == "ptr" && enum_name == "Maybe") {
+                        enum_type = "ptr";
+                    } else {
+                        std::string prefix = "%struct." + enum_name + "__";
+                        if (current_ret_type_.starts_with(prefix)) {
+                            enum_type = current_ret_type_;
+                        }
+                        // If current_ret_type_ is a composite, extract %struct.EnumName__*
+                        else {
+                            auto pos = current_ret_type_.find(prefix);
+                            if (pos != std::string::npos) {
+                                auto end =
+                                    current_ret_type_.find_first_of(",} ", pos + prefix.size());
+                                if (end == std::string::npos)
+                                    end = current_ret_type_.size();
+                                enum_type = current_ret_type_.substr(pos, end - pos);
+                            }
                         }
                     }
                 }
@@ -413,6 +429,12 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         enum_type = "%struct." + mangled;
                     }
                 }
+                // Nullable pointer optimization: Nothing → null
+                if (enum_type == "ptr") {
+                    last_expr_type_ = "ptr";
+                    return "null";
+                }
+
                 std::string result = fresh_reg();
                 std::string enum_val = fresh_reg();
 
@@ -451,10 +473,15 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                     }
                     // Or try to infer from function return type
                     else if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
-                        std::string prefix = "%struct." + enum_name + "__";
-                        if (current_ret_type_.starts_with(prefix) ||
-                            current_ret_type_.find(enum_name + "__") != std::string::npos) {
-                            enum_type = current_ret_type_;
+                        // Nullable Maybe: ret type is bare ptr
+                        if (current_ret_type_ == "ptr" && enum_name == "Maybe") {
+                            enum_type = "ptr";
+                        } else {
+                            std::string prefix = "%struct." + enum_name + "__";
+                            if (current_ret_type_.starts_with(prefix) ||
+                                current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                                enum_type = current_ret_type_;
+                            }
                         }
                     }
                     // Inside inline closure evaluation: check closure_return_type_
@@ -486,6 +513,12 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                             enum_type = "%struct." + mangled;
                         }
                     }
+                    // Nullable pointer optimization: Nothing → null
+                    if (enum_type == "ptr") {
+                        last_expr_type_ = "ptr";
+                        return "null";
+                    }
+
                     std::string result = fresh_reg();
                     std::string enum_val = fresh_reg();
 

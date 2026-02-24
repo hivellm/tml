@@ -207,6 +207,8 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                 auto enum_it = pending_generic_enums_.find(base_name);
                 if (enum_it != pending_generic_enums_.end()) {
                     std::string mangled = require_enum_instantiation(base_name, type_args);
+                    if (nullable_maybe_types_.count(mangled))
+                        return "ptr";
                     return "%struct." + mangled;
                 }
 
@@ -227,6 +229,8 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                         if (import_enum_it != mod.enums.end() &&
                             !import_enum_it->second.type_params.empty()) {
                             std::string mangled = require_enum_instantiation(base_name, type_args);
+                            if (nullable_maybe_types_.count(mangled))
+                                return "ptr";
                             return "%struct." + mangled;
                         }
                     }
@@ -542,6 +546,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             auto enum_it = pending_generic_enums_.find(named.name);
             if (enum_it != pending_generic_enums_.end()) {
                 std::string mangled = require_enum_instantiation(named.name, resolved_type_args);
+                if (nullable_maybe_types_.count(mangled))
+                    return "ptr";
                 return "%struct." + mangled;
             }
             // Otherwise try as struct
