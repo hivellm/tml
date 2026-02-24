@@ -822,6 +822,111 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             allocating_functions_.insert("debug_string");
         }
     }
+
+    // ── to_json(self) -> Str  (Serialize) ──
+    // Returns JSON array of set flag names: ["Read", "Write"]
+    // Returns "[]" if no bits are set
+    {
+        std::string fn = "@" + prefix + "to_json";
+        if (should_emit(fn)) {
+            std::string const_prefix = "@.flags_" + suite_prefix + type_name;
+
+            // Emit JSON string constants for variant names (quoted)
+            type_defs_buffer_ << "; @flags Serialize string constants for " << type_name << "\n";
+            for (const auto& [vname, vval] : info.variant_values) {
+                // \"Name\" format (with escaped quotes for JSON)
+                std::string quoted = "\\22" + vname + "\\22";
+                size_t len = vname.size() + 2 + 1; // 2 quotes + null
+                type_defs_buffer_ << const_prefix << "_jv_" << vname << " = private constant ["
+                                  << len << " x i8] c\"" << quoted << "\\00\"\n";
+            }
+            type_defs_buffer_ << const_prefix
+                              << "_json_open = private constant [2 x i8] c\"[\\00\"\n";
+            type_defs_buffer_ << const_prefix
+                              << "_json_close = private constant [2 x i8] c\"]\\00\"\n";
+            type_defs_buffer_ << const_prefix
+                              << "_json_comma = private constant [3 x i8] c\", \\00\"\n";
+            type_defs_buffer_ << "\n";
+
+            tc = 0;
+            type_defs_buffer_ << "; @flags Serialize for " << type_name << "\n";
+            type_defs_buffer_ << "define internal ptr " << fn << "(ptr %self) {\n";
+            type_defs_buffer_ << "entry:\n";
+
+            // Load the raw value
+            auto sp = t(), sv = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+
+            // Start with "["
+            auto acc = t();
+            type_defs_buffer_ << "  " << acc << " = alloca ptr\n";
+            auto open = t();
+            type_defs_buffer_ << "  " << open << " = call ptr @str_concat_opt(ptr null, ptr "
+                              << const_prefix << "_json_open)\n";
+            type_defs_buffer_ << "  store ptr " << open << ", ptr " << acc << "\n";
+
+            // Track if we need comma
+            auto need_comma = t();
+            type_defs_buffer_ << "  " << need_comma << " = alloca i1\n";
+            type_defs_buffer_ << "  store i1 0, ptr " << need_comma << "\n";
+
+            // For each variant, check if its bit is set
+            for (size_t i = 0; i < info.variant_values.size(); ++i) {
+                const auto& [vname, vval] = info.variant_values[i];
+                std::string check_label = "jcheck_v" + std::to_string(i);
+                std::string set_label = "jset_v" + std::to_string(i);
+                std::string next_label = (i + 1 < info.variant_values.size())
+                                             ? "jcheck_v" + std::to_string(i + 1)
+                                             : "jdone";
+
+                type_defs_buffer_ << "  br label %" << check_label << "\n\n";
+                type_defs_buffer_ << check_label << ":\n";
+
+                auto masked = t(), has_bit = t();
+                type_defs_buffer_ << "  " << masked << " = and " << iN << " " << sv << ", " << vval
+                                  << "\n";
+                type_defs_buffer_ << "  " << has_bit << " = icmp ne " << iN << " " << masked
+                                  << ", 0\n";
+                type_defs_buffer_ << "  br i1 " << has_bit << ", label %" << set_label
+                                  << ", label %" << next_label << "\n\n";
+
+                type_defs_buffer_ << set_label << ":\n";
+                // Load current string and comma flag
+                auto cur = t();
+                type_defs_buffer_ << "  " << cur << " = load ptr, ptr " << acc << "\n";
+                auto nc = t();
+                type_defs_buffer_ << "  " << nc << " = load i1, ptr " << need_comma << "\n";
+                // Add comma if needed
+                auto with_comma = t();
+                type_defs_buffer_ << "  " << with_comma << " = call ptr @str_concat_opt(ptr " << cur
+                                  << ", ptr " << const_prefix << "_json_comma)\n";
+                auto base = t();
+                type_defs_buffer_ << "  " << base << " = select i1 " << nc << ", ptr " << with_comma
+                                  << ", ptr " << cur << "\n";
+                // Add quoted variant name
+                auto result = t();
+                type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << base
+                                  << ", ptr " << const_prefix << "_jv_" << vname << ")\n";
+                type_defs_buffer_ << "  store ptr " << result << ", ptr " << acc << "\n";
+                type_defs_buffer_ << "  store i1 1, ptr " << need_comma << "\n";
+                type_defs_buffer_ << "  br label %" << next_label << "\n\n";
+            }
+
+            // Close with "]"
+            type_defs_buffer_ << "jdone:\n";
+            auto final_val = t();
+            type_defs_buffer_ << "  " << final_val << " = load ptr, ptr " << acc << "\n";
+            auto closed = t();
+            type_defs_buffer_ << "  " << closed << " = call ptr @str_concat_opt(ptr " << final_val
+                              << ", ptr " << const_prefix << "_json_close)\n";
+            type_defs_buffer_ << "  ret ptr " << closed << "\n";
+            type_defs_buffer_ << "}\n\n";
+
+            allocating_functions_.insert("to_json");
+        }
+    }
 }
 
 } // namespace tml::codegen

@@ -1,0 +1,60 @@
+use test
+
+@flags
+type Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+@flags(U8)
+type SmallFlags {
+    A,
+    B,
+    C,
+    D,
+}
+
+// ── to_json serialization ──
+
+@test
+func test_flags_json_single() -> I32 {
+    let r = Perms::Read
+    assert_eq(r.to_json(), "[\"Read\"]", "single flag")
+    return 0
+}
+
+@test
+func test_flags_json_two() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    assert_eq(rw.to_json(), "[\"Read\", \"Write\"]", "two flags")
+    return 0
+}
+
+@test
+func test_flags_json_all() -> I32 {
+    let all = Perms::all()
+    assert_eq(all.to_json(), "[\"Read\", \"Write\", \"Execute\"]", "all flags")
+    return 0
+}
+
+@test
+func test_flags_json_empty() -> I32 {
+    let empty = Perms::none()
+    assert_eq(empty.to_json(), "[]", "empty flags")
+    return 0
+}
+
+@test
+func test_flags_json_non_adjacent() -> I32 {
+    let ac = SmallFlags::A | SmallFlags::C
+    assert_eq(ac.to_json(), "[\"A\", \"C\"]", "non-adjacent flags")
+    return 0
+}
+
+@test
+func test_flags_json_u8_all() -> I32 {
+    let all = SmallFlags::all()
+    assert_eq(all.to_json(), "[\"A\", \"B\", \"C\", \"D\"]", "U8 all flags")
+    return 0
+}

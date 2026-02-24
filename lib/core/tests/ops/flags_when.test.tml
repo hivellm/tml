@@ -1,0 +1,105 @@
+use test
+
+@flags
+type Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+@flags
+type Status {
+    Active,
+    Paused,
+    Error,
+    Complete,
+}
+
+// ── when matching checks if flag IS SET (bitwise AND) ──
+
+@test
+func test_when_single_flag() -> I32 {
+    let r = Perms::Read
+    let result = when (r) {
+        Perms::Read => 1,
+        _ => 0,
+    }
+    assert_eq(result, 1, "when should match Read flag")
+    return 0
+}
+
+@test
+func test_when_combined_first_match_wins() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    let result = when (rw) {
+        Perms::Read => 1,
+        Perms::Write => 2,
+        _ => 0,
+    }
+    assert_eq(result, 1, "Read|Write matches Read arm first")
+    return 0
+}
+
+@test
+func test_when_combined_second_flag() -> I32 {
+    let wx = Perms::Write | Perms::Execute
+    let result = when (wx) {
+        Perms::Read => 1,
+        Perms::Write => 2,
+        _ => 0,
+    }
+    assert_eq(result, 2, "Write|Execute matches Write arm")
+    return 0
+}
+
+@test
+func test_when_no_match_wildcard() -> I32 {
+    let x = Perms::Execute
+    let result = when (x) {
+        Perms::Read => 1,
+        Perms::Write => 2,
+        _ => 0,
+    }
+    assert_eq(result, 0, "Execute falls through to wildcard")
+    return 0
+}
+
+@test
+func test_when_empty_flags() -> I32 {
+    let empty = Perms::none()
+    let result = when (empty) {
+        Perms::Read => 1,
+        Perms::Write => 2,
+        Perms::Execute => 3,
+        _ => -1,
+    }
+    assert_eq(result, -1, "empty flags match wildcard")
+    return 0
+}
+
+@test
+func test_when_all_flags() -> I32 {
+    let all = Perms::all()
+    let result = when (all) {
+        Perms::Execute => 3,
+        Perms::Write => 2,
+        Perms::Read => 1,
+        _ => 0,
+    }
+    assert_eq(result, 3, "all() matches first listed arm (Execute)")
+    return 0
+}
+
+@test
+func test_when_four_variants() -> I32 {
+    let s = Status::Active | Status::Error
+    let result = when (s) {
+        Status::Complete => 4,
+        Status::Error => 3,
+        Status::Paused => 2,
+        Status::Active => 1,
+        _ => 0,
+    }
+    assert_eq(result, 3, "Active|Error matches Error first (listed before Active)")
+    return 0
+}

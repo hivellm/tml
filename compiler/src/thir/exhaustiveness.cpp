@@ -292,6 +292,11 @@ auto ExhaustivenessChecker::type_constructors(ThirType type) -> std::vector<Cons
         const auto& named = type->as<types::NamedType>();
         auto enum_def = env_->lookup_enum(named.name);
         if (enum_def) {
+            // @flags enums have combinable variants (2^N possible values)
+            // Treat like integers — infinite constructors, wildcard required
+            if (enum_def->is_flags) {
+                return {};
+            }
             std::vector<Constructor> ctors;
             for (size_t i = 0; i < enum_def->variants.size(); ++i) {
                 const auto& variant = enum_def->variants[i];

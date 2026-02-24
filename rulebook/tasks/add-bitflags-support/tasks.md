@@ -1,6 +1,6 @@
 # Tasks: Add Bitflags Support
 
-**Status**: In Progress (95%)
+**Status**: Complete (100%)
 
 ## Phase 1: Parser — Explicit Discriminant Values
 
@@ -87,6 +87,6 @@
 
 ## Phase 10: Serialization & Pattern Matching
 
-- [ ] 10.1.1 Support `when` matching on individual flag variants
-- [ ] 10.1.2 Support serialization of `@flags` enums to JSON
-- [ ] 10.1.3 Support `Display` formatting as pipe-separated names
+- [x] 10.1.1 Support `when` matching on individual flag variants
+- [x] 10.1.2 Support serialization of `@flags` enums to JSON
+- [x] 10.1.3 Support `Display` formatting as pipe-separated names

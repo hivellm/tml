@@ -776,6 +776,13 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
                                  .type_params = {},
                                  .is_async = false,
                                  .span = decl.span});
+        env_.register_impl(decl.name, "Serialize");
+        env_.define_func(FuncSig{.name = decl.name + "::to_json",
+                                 .params = {ref_self},
+                                 .return_type = str_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
     }
 
     // Handle @derive(Reflect) - register impl and type_info method

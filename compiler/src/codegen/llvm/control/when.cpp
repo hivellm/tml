@@ -134,13 +134,25 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
         }
 
         if (variant_tag >= 0) {
-            std::string cmp = fresh_reg();
             // For unit-only enums (represented as just i32), scrutinee IS the tag
             // If tag is empty, use scrutinee directly
             std::string tag_value = tag.empty() ? scrutinee : tag;
             // Use appropriate type: i32 for normal enums, scrutinee_type for primitive
             // representations
             std::string cmp_type = tag.empty() ? scrutinee_type : "i32";
+
+            // For @flags enums, use bitwise AND (check if flag IS SET)
+            // instead of equality (which only matches exact value)
+            if (!scrutinee_enum_name.empty() && flags_enums_.count(scrutinee_enum_name) > 0) {
+                std::string masked = fresh_reg();
+                emit_line("  " + masked + " = and " + cmp_type + " " + tag_value + ", " +
+                          std::to_string(variant_tag));
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp ne " + cmp_type + " " + masked + ", 0");
+                return cmp;
+            }
+
+            std::string cmp = fresh_reg();
             emit_line("  " + cmp + " = icmp eq " + cmp_type + " " + tag_value + ", " +
                       std::to_string(variant_tag));
             return cmp;
@@ -170,13 +182,24 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
         }
 
         if (variant_tag >= 0) {
-            std::string cmp = fresh_reg();
             // For unit-only enums (represented as just i32), scrutinee IS the tag
             // If tag is empty, use scrutinee directly
             std::string tag_value = tag.empty() ? scrutinee : tag;
             // Use appropriate type: i32 for normal enums, scrutinee_type for primitive
             // representations
             std::string cmp_type = tag.empty() ? scrutinee_type : "i32";
+
+            // For @flags enums, use bitwise AND (check if flag IS SET)
+            if (!scrutinee_enum_name.empty() && flags_enums_.count(scrutinee_enum_name) > 0) {
+                std::string masked = fresh_reg();
+                emit_line("  " + masked + " = and " + cmp_type + " " + tag_value + ", " +
+                          std::to_string(variant_tag));
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp ne " + cmp_type + " " + masked + ", 0");
+                return cmp;
+            }
+
+            std::string cmp = fresh_reg();
             emit_line("  " + cmp + " = icmp eq " + cmp_type + " " + tag_value + ", " +
                       std::to_string(variant_tag));
             return cmp;
