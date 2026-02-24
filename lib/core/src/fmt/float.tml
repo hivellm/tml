@@ -94,16 +94,19 @@ impl FloatFormatOptions {
 // ============================================================================
 
 /// Formats an F32 value with default formatting.
+@allocates
 pub func format_f32(value: F32) -> Str {
     return lowlevel { f32_to_string(value) }
 }
 
 /// Formats an F32 value with specified precision.
+@allocates
 pub func format_f32_precision(value: F32, precision: I64) -> Str {
     return lowlevel { f32_to_string_precision(value, precision) }
 }
 
 /// Formats an F32 value in scientific notation.
+@allocates
 pub func format_f32_exp(value: F32, uppercase: Bool) -> Str {
     return lowlevel { f32_to_exp_string(value, uppercase) }
 }
@@ -131,16 +134,19 @@ pub func is_finite_f32(value: F32) -> Bool {
 // ============================================================================
 
 /// Formats an F64 value with default formatting.
+@allocates
 pub func format_f64(value: F64) -> Str {
     return lowlevel { f64_to_string(value) }
 }
 
 /// Formats an F64 value with specified precision.
+@allocates
 pub func format_f64_precision(value: F64, precision: I64) -> Str {
     return lowlevel { f64_to_string_precision(value, precision) }
 }
 
 /// Formats an F64 value in scientific notation.
+@allocates
 pub func format_f64_exp(value: F64, uppercase: Bool) -> Str {
     return lowlevel { f64_to_exp_string(value, uppercase) }
 }
@@ -168,6 +174,7 @@ pub func is_finite_f64(value: F64) -> Bool {
 // ============================================================================
 
 /// Formats a float with the given options.
+@allocates
 pub func format_float(value: F64) -> Str {
     if is_nan_f64(value) {
         return "NaN"
@@ -182,6 +189,7 @@ pub func format_float(value: F64) -> Str {
 }
 
 /// Formats a float with specified precision.
+@allocates
 pub func format_float_precision(value: F64, precision: I64) -> Str {
     if is_nan_f64(value) {
         return "NaN"
@@ -196,6 +204,7 @@ pub func format_float_precision(value: F64, precision: I64) -> Str {
 }
 
 /// Formats a float in scientific notation.
+@allocates
 pub func format_float_exp(value: F64, uppercase: Bool) -> Str {
     if is_nan_f64(value) {
         if uppercase {
@@ -236,6 +245,7 @@ pub type FloatParts {
 
 impl FloatParts {
     /// Formats the parts as a regular decimal string.
+    @allocates
     pub func to_decimal(this) -> Str {
         if this.fraction.len() > 0 {
             return this.sign + this.integer + "." + this.fraction
@@ -244,6 +254,7 @@ impl FloatParts {
     }
 
     /// Formats the parts in scientific notation.
+    @allocates
     pub func to_scientific(this, uppercase: Bool) -> Str {
         var result: Str = this.sign + this.integer
         if this.fraction.len() > 0 {

@@ -106,19 +106,23 @@ lowlevel func tls_stream_read(ssl: *Unit, buf: mut ref [U8], len: I64) -> I64
 lowlevel func tls_stream_write(ssl: *Unit, buf: ref [U8], len: I64) -> I64
 lowlevel func tls_stream_write_str(ssl: *Unit, s: Str, len: I64) -> I64
 
-// Stream inspection
+// Stream inspection (version/cipher return static OpenSSL strings — NOT allocating)
 @extern("tls_stream_get_version")
 func ffi_tls_stream_get_version(ssl: *Unit) -> Str
 
 @extern("tls_stream_get_cipher")
 func ffi_tls_stream_get_cipher(ssl: *Unit) -> Str
 
+// alpn/peer_cn/peer_cert_pem return heap-allocated strings via mem_alloc
+@allocates
 @extern("tls_stream_get_alpn")
 func ffi_tls_stream_get_alpn(ssl: *Unit) -> Str
 
+@allocates
 @extern("tls_stream_get_peer_cn")
 func ffi_tls_stream_get_peer_cn(ssl: *Unit) -> Str
 
+@allocates
 @extern("tls_stream_get_peer_cert_pem")
 func ffi_tls_stream_get_peer_cert_pem(ssl: *Unit) -> Str
 
@@ -442,18 +446,21 @@ impl TlsStream {
 
     /// Returns the negotiated ALPN protocol (e.g., "h2", "http/1.1").
     /// Returns an empty string if no ALPN was negotiated.
+    @allocates
     pub func alpn(this) -> Str {
         ffi_tls_stream_get_alpn(this.ssl_handle)
     }
 
     /// Returns the Common Name (CN) of the peer certificate.
     /// Returns an empty string if no peer certificate is available.
+    @allocates
     pub func peer_cn(this) -> Str {
         ffi_tls_stream_get_peer_cn(this.ssl_handle)
     }
 
     /// Returns the peer certificate as a PEM string.
     /// Returns an empty string if no peer certificate is available.
+    @allocates
     pub func peer_cert_pem(this) -> Str {
         ffi_tls_stream_get_peer_cert_pem(this.ssl_handle)
     }

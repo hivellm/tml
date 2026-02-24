@@ -945,6 +945,68 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
+    // 7b. Handle @flags enum instance methods
+    // =========================================================================
+    {
+        auto flags_it = flags_enums_.find(receiver_type_name);
+        if (flags_it != flags_enums_.end() &&
+            (method == "has" || method == "is_empty" || method == "bits" || method == "add" ||
+             method == "remove" || method == "toggle")) {
+            std::string struct_type = "%struct." + receiver_type_name;
+            std::string suite_prefix;
+            if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+                current_module_prefix_.empty()) {
+                suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+            }
+            std::string fn_prefix = "@tml_" + suite_prefix + receiver_type_name + "_";
+
+            // Get pointer to receiver
+            std::string self_ptr = receiver_ptr;
+            if (self_ptr.empty()) {
+                self_ptr = fresh_reg();
+                emit_line("  " + self_ptr + " = alloca " + struct_type);
+                emit_line("  store " + struct_type + " " + receiver + ", ptr " + self_ptr);
+            }
+
+            if (method == "is_empty") {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call i1 " + fn_prefix + "is_empty(ptr " + self_ptr +
+                          ")");
+                last_expr_type_ = "i1";
+                return result;
+            }
+            if (method == "bits") {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call " + flags_it->second.underlying_llvm_type + " " +
+                          fn_prefix + "bits(ptr " + self_ptr + ")");
+                last_expr_type_ = flags_it->second.underlying_llvm_type;
+                return result;
+            }
+            // Methods that take a flag argument: has, add, remove, toggle
+            if (!call.args.empty()) {
+                std::string arg = gen_expr(*call.args[0]);
+                std::string arg_ptr = fresh_reg();
+                emit_line("  " + arg_ptr + " = alloca " + struct_type);
+                emit_line("  store " + struct_type + " " + arg + ", ptr " + arg_ptr);
+
+                if (method == "has") {
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 " + fn_prefix + "has(ptr " + self_ptr +
+                              ", ptr " + arg_ptr + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                // add, remove, toggle return Self
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call " + struct_type + " " + fn_prefix + method +
+                          "(ptr " + self_ptr + ", ptr " + arg_ptr + ")");
+                last_expr_type_ = struct_type;
+                return result;
+            }
+        }
+    }
+
+    // =========================================================================
     // 8. Handle Slice/MutSlice methods
     // =========================================================================
     auto slice_result = gen_slice_method(call, receiver, receiver_type_name, receiver_type);

@@ -44,6 +44,7 @@ func idx_of_char(c: I32) -> I32 {
 /// Encode bytes as base62. Each byte -> 2 base62 characters.
 ///
 /// Since 62^2 = 3844 > 256, each byte fits in exactly 2 base62 digits.
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

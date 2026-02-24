@@ -384,6 +384,7 @@ impl SecretKey {
     }
 
     /// Exports the key as base64.
+    @allocates
     pub func to_base64(this) -> Str {
         let bytes = this.to_bytes()
         let b64: Str = ffi_bytes_to_base64(bytes.handle)
@@ -391,6 +392,7 @@ impl SecretKey {
     }
 
     /// Exports the key as hex.
+    @allocates
     pub func to_hex(this) -> Str {
         let bytes = this.to_bytes()
         let hex: Str = ffi_bytes_to_hex(bytes.handle)
@@ -469,12 +471,14 @@ impl PrivateKey {
     }
 
     /// Exports the key to PEM format.
+    @allocates
     pub func to_pem(this) -> Str {
         let pem: Str = ffi_private_key_to_pem(this.handle)
         return pem
     }
 
     /// Exports the key to encrypted PEM format.
+    @allocates
     pub func to_pem_encrypted(this, passphrase: Str, cipher: Str) -> Str {
         let pem: Str = ffi_private_key_to_pem_encrypted(this.handle, passphrase, cipher)
         return pem
@@ -487,6 +491,7 @@ impl PrivateKey {
     }
 
     /// Exports the key to JWK format.
+    @allocates
     pub func to_jwk(this) -> Str {
         let jwk: Str = ffi_private_key_to_jwk(this.handle)
         return jwk
@@ -587,6 +592,7 @@ impl PublicKey {
     }
 
     /// Exports the key to PEM format.
+    @allocates
     pub func to_pem(this) -> Str {
         let pem: Str = ffi_public_key_to_pem(this.handle)
         return pem
@@ -599,6 +605,7 @@ impl PublicKey {
     }
 
     /// Exports the key to JWK format.
+    @allocates
     pub func to_jwk(this) -> Str {
         let jwk: Str = ffi_public_key_to_jwk(this.handle)
         return jwk

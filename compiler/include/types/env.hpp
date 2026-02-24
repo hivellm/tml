@@ -212,8 +212,11 @@ struct EnumDef {
     std::vector<std::string> type_params;        ///< Generic type parameter names.
     std::vector<ConstGenericParam> const_params; ///< Const generic parameters.
     std::vector<std::pair<std::string, std::vector<TypePtr>>>
-        variants;    ///< Variant name and payload types.
-    SourceSpan span; ///< Declaration location.
+        variants;                              ///< Variant name and payload types.
+    SourceSpan span;                           ///< Declaration location.
+    bool is_flags = false;                     ///< True if @flags decorator present.
+    std::string flags_underlying_type = "U32"; ///< @flags underlying type: "U8","U16","U32","U64".
+    std::vector<uint64_t> discriminant_values; ///< Per-variant discriminant values.
 };
 
 /// Associated type declaration in a behavior.

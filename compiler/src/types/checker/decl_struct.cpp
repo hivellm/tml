@@ -582,11 +582,183 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         }
     }
 
+    // Check for @flags decorator
+    bool is_flags = false;
+    std::string flags_underlying = "U32";
+    for (const auto& decorator : decl.decorators) {
+        if (decorator.name == "flags") {
+            is_flags = true;
+            if (!decorator.args.empty() && decorator.args[0]->is<parser::IdentExpr>()) {
+                const auto& type_arg = decorator.args[0]->as<parser::IdentExpr>().name;
+                if (type_arg == "U8" || type_arg == "U16" || type_arg == "U32" ||
+                    type_arg == "U64") {
+                    flags_underlying = type_arg;
+                } else {
+                    error("@flags underlying type must be U8, U16, U32, or U64, got '" + type_arg +
+                              "'",
+                          decorator.span, "T080");
+                    return;
+                }
+            }
+            break;
+        }
+    }
+
+    // Validate @flags constraints
+    std::vector<uint64_t> discriminant_values;
+    if (is_flags) {
+        if (!decl.generics.empty()) {
+            error("@flags enum cannot have generic parameters", decl.span, "T081");
+            return;
+        }
+        for (const auto& variant : decl.variants) {
+            if (variant.tuple_fields.has_value() || variant.struct_fields.has_value()) {
+                error("@flags enum variant '" + variant.name +
+                          "' cannot have data fields. "
+                          "Bitflag enums must use unit variants only.",
+                      variant.span, "T082");
+                return;
+            }
+        }
+        size_t max_bits = 32;
+        if (flags_underlying == "U8")
+            max_bits = 8;
+        else if (flags_underlying == "U16")
+            max_bits = 16;
+        else if (flags_underlying == "U64")
+            max_bits = 64;
+        if (decl.variants.size() > max_bits) {
+            error("@flags(" + flags_underlying + ") enum has " +
+                      std::to_string(decl.variants.size()) +
+                      " variants but underlying type only supports " + std::to_string(max_bits) +
+                      " bits",
+                  decl.span, "T083");
+            return;
+        }
+
+        // Compute discriminant values (power-of-2 auto-assignment)
+        uint64_t next_power = 1;
+        for (const auto& variant : decl.variants) {
+            if (variant.discriminant) {
+                // Evaluate integer literal discriminant
+                if (variant.discriminant->get()->is<parser::LiteralExpr>()) {
+                    const auto& lit = variant.discriminant->get()->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        uint64_t val = std::stoull(std::string(lit.token.lexeme));
+                        discriminant_values.push_back(val);
+                        // Don't advance next_power for explicit values
+                        continue;
+                    }
+                }
+                error("@flags discriminant must be an integer literal", variant.span, "T084");
+                return;
+            } else {
+                discriminant_values.push_back(next_power);
+                next_power <<= 1;
+            }
+        }
+    }
+
     env_.define_enum(EnumDef{.name = decl.name,
                              .type_params = std::move(type_params),
                              .const_params = std::move(const_params),
                              .variants = std::move(variants),
-                             .span = decl.span});
+                             .span = decl.span,
+                             .is_flags = is_flags,
+                             .flags_underlying_type = flags_underlying,
+                             .discriminant_values = std::move(discriminant_values)});
+
+    // Handle @flags — register built-in method signatures
+    if (is_flags) {
+        auto underlying_type = std::make_shared<Type>();
+        if (flags_underlying == "U8")
+            underlying_type->kind = PrimitiveType{PrimitiveKind::U8};
+        else if (flags_underlying == "U16")
+            underlying_type->kind = PrimitiveType{PrimitiveKind::U16};
+        else if (flags_underlying == "U64")
+            underlying_type->kind = PrimitiveType{PrimitiveKind::U64};
+        else
+            underlying_type->kind = PrimitiveType{PrimitiveKind::U32};
+
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+        auto bool_type = make_bool();
+
+        // .has(flag) -> Bool
+        env_.define_func(FuncSig{.name = decl.name + "::has",
+                                 .params = {ref_self, ref_self},
+                                 .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // .is_empty() -> Bool
+        env_.define_func(FuncSig{.name = decl.name + "::is_empty",
+                                 .params = {ref_self},
+                                 .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // .bits() -> UnderlyingType
+        env_.define_func(FuncSig{.name = decl.name + "::bits",
+                                 .params = {ref_self},
+                                 .return_type = underlying_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // .add(flag) -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::add",
+                                 .params = {ref_self, ref_self},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // .remove(flag) -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::remove",
+                                 .params = {ref_self, ref_self},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // .toggle(flag) -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::toggle",
+                                 .params = {ref_self, ref_self},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // ::none() -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::none",
+                                 .params = {},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // ::all() -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::all",
+                                 .params = {},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        // ::from_bits(val) -> Self
+        env_.define_func(FuncSig{.name = decl.name + "::from_bits",
+                                 .params = {underlying_type},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Auto-register PartialEq
+        env_.register_impl(decl.name, "PartialEq");
+        env_.define_func(FuncSig{.name = decl.name + "::eq",
+                                 .params = {ref_self, ref_self},
+                                 .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
 
     // Handle @derive(Reflect) - register impl and type_info method
     // Skip generic enums - they need instantiation first

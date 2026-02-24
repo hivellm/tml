@@ -238,6 +238,7 @@ impl Builder {
     // ========================================================================
 
     /// Build and return the JSON string
+    @allocates
     pub func build(this) -> Str {
         return this.buffer.as_str()
     }
@@ -499,6 +500,7 @@ impl PrettyBuilder {
     }
 
     /// Build and return the pretty JSON string
+    @allocates
     pub func build(this) -> Str {
         return this.buffer.as_str()
     }

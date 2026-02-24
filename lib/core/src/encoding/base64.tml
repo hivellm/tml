@@ -53,16 +53,19 @@ func decode_char(c: I32) -> I32 {
 /// assert(encode("foo") == "Zm9v")
 /// assert(encode("foobar") == "Zm9vYmFy")
 /// ```
+@allocates
 pub func encode(input: Str) -> Str {
     return encode_with(input, false)
 }
 
 /// Encode using URL-safe alphabet (- and _ instead of + and /).
+@allocates
 pub func encode_url(input: Str) -> Str {
     return encode_with(input, true)
 }
 
 /// Internal encode with alphabet selection.
+@allocates
 func encode_with(input: Str, url_safe: Bool) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

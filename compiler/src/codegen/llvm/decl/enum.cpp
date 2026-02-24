@@ -44,6 +44,71 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
         return;
     }
 
+    // Check if this is a @flags enum
+    bool is_flags = false;
+    std::string flags_underlying_llvm = "i32";
+    for (const auto& deco : e.decorators) {
+        if (deco.name == "flags") {
+            is_flags = true;
+            if (!deco.args.empty() && deco.args[0]->is<parser::IdentExpr>()) {
+                const auto& type_arg = deco.args[0]->as<parser::IdentExpr>().name;
+                if (type_arg == "U8")
+                    flags_underlying_llvm = "i8";
+                else if (type_arg == "U16")
+                    flags_underlying_llvm = "i16";
+                else if (type_arg == "U64")
+                    flags_underlying_llvm = "i64";
+            }
+            break;
+        }
+    }
+
+    if (is_flags) {
+        // @flags enums are raw unsigned integers, NOT struct { i32 }
+        std::string type_name = "%struct." + e.name;
+        type_defs_buffer_ << "; @flags enum " << e.name << "\n";
+        type_defs_buffer_ << type_name << " = type { " << flags_underlying_llvm << " }\n";
+        struct_types_[e.name] = type_name;
+
+        // Register variant values with power-of-2 assignment
+        FlagsEnumInfo info;
+        info.underlying_llvm_type = flags_underlying_llvm;
+        info.all_bits_mask = 0;
+        uint64_t next_power = 1;
+
+        for (const auto& variant : e.variants) {
+            uint64_t value;
+            if (variant.discriminant) {
+                // Evaluate integer literal discriminant
+                if ((*variant.discriminant)->is<parser::LiteralExpr>()) {
+                    const auto& lit = (*variant.discriminant)->as<parser::LiteralExpr>();
+                    value = std::stoull(std::string(lit.token.lexeme));
+                } else {
+                    value = next_power;
+                    next_power <<= 1;
+                }
+            } else {
+                value = next_power;
+                next_power <<= 1;
+            }
+
+            std::string key = e.name + "::" + variant.name;
+            enum_variants_[key] = static_cast<int>(value);
+            info.variant_values.emplace_back(variant.name, value);
+            info.all_bits_mask |= value;
+        }
+
+        flags_enums_[e.name] = info;
+
+        // Generate built-in methods for @flags
+        gen_flags_enum_methods(e, info);
+
+        // Generate @derive support (Debug, Display, PartialEq are auto-derived)
+        gen_derive_debug_enum(e);
+        gen_derive_display_enum(e);
+        return;
+    }
+
     // TML enums are represented as tagged unions
     // For now, simple enums are just integers (tag only)
     // Complex enums with data would need { i32, union_data }
@@ -364,6 +429,259 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         for (const auto& variant : decl.variants) {
             std::string key = mangled + "::" + variant.name;
             enum_variants_[key] = tag++;
+        }
+    }
+}
+
+void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnumInfo& info) {
+    std::string type_name = e.name;
+    std::string struct_type = "%struct." + type_name;
+    const std::string& iN = info.underlying_llvm_type;
+
+    // Suite prefix for test-local types
+    std::string suite_prefix;
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+
+    std::string prefix = "tml_" + suite_prefix + type_name + "_";
+
+    // Helper to emit only if not already generated
+    auto should_emit = [this](const std::string& name) -> bool {
+        if (generated_functions_.count(name) > 0)
+            return false;
+        generated_functions_.insert(name);
+        return true;
+    };
+
+    int tc = 0;
+    auto t = [&tc]() { return "%t" + std::to_string(tc++); };
+
+    // ── has(self, flag) -> Bool ──
+    // Returns (self & flag) != 0
+    {
+        std::string fn = "@" + prefix + "has";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "; @flags method " << type_name << "::has\n";
+            type_defs_buffer_ << "define internal i1 " << fn << "(ptr %self, ptr %flag) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t(), fp = t(), fv = t(), a = t(), r = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+                              << ", ptr %flag, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
+            type_defs_buffer_ << "  " << a << " = and " << iN << " " << sv << ", " << fv << "\n";
+            type_defs_buffer_ << "  " << r << " = icmp eq " << iN << " " << a << ", " << fv << "\n";
+            type_defs_buffer_ << "  ret i1 " << r << "\n";
+            type_defs_buffer_ << "}\n\n";
+            // Register in functions_ for call resolution
+            // Method call dispatch happens in method.cpp, no need to register in functions_
+        }
+    }
+
+    // ── is_empty(self) -> Bool ──
+    {
+        std::string fn = "@" + prefix + "is_empty";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal i1 " << fn << "(ptr %self) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t(), r = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  " << r << " = icmp eq " << iN << " " << sv << ", 0\n";
+            type_defs_buffer_ << "  ret i1 " << r << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── bits(self) -> underlying integer type ──
+    {
+        std::string fn = "@" + prefix + "bits";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << iN << " " << fn << "(ptr %self) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  ret " << iN << " " << sv << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── add(self, flag) -> Self ──
+    // Returns self | flag
+    {
+        std::string fn = "@" + prefix + "add";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn
+                              << "(ptr %self, ptr %flag) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t(), fp = t(), fv = t(), r = t(), a = t(), sv2 = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+                              << ", ptr %flag, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
+            type_defs_buffer_ << "  " << r << " = or " << iN << " " << sv << ", " << fv << "\n";
+            // Build result struct
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << sv2 << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << sv2 << "\n";
+            auto res = t();
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── remove(self, flag) -> Self ──
+    // Returns self & ~flag
+    {
+        std::string fn = "@" + prefix + "remove";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn
+                              << "(ptr %self, ptr %flag) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t(), fp = t(), fv = t(), nf = t(), r = t(), a = t(), p = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+                              << ", ptr %flag, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
+            type_defs_buffer_ << "  " << nf << " = xor " << iN << " " << fv << ", -1\n";
+            type_defs_buffer_ << "  " << r << " = and " << iN << " " << sv << ", " << nf << "\n";
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << p << "\n";
+            auto res = t();
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── toggle(self, flag) -> Self ──
+    // Returns self ^ flag
+    {
+        std::string fn = "@" + prefix + "toggle";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn
+                              << "(ptr %self, ptr %flag) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto sp = t(), sv = t(), fp = t(), fv = t(), r = t(), a = t(), p = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+            type_defs_buffer_ << "  " << fp << " = getelementptr " << struct_type
+                              << ", ptr %flag, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << fv << " = load " << iN << ", ptr " << fp << "\n";
+            type_defs_buffer_ << "  " << r << " = xor " << iN << " " << sv << ", " << fv << "\n";
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " " << r << ", ptr " << p << "\n";
+            auto res = t();
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── eq(self, other) -> Bool ──
+    // Tag comparison (both are just { iN })
+    {
+        std::string fn = "@" + prefix + "eq";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "; @flags PartialEq for " << type_name << "\n";
+            type_defs_buffer_ << "define internal i1 " << fn << "(ptr %this, ptr %other) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto tp = t(), tv = t(), op = t(), ov = t(), r = t();
+            type_defs_buffer_ << "  " << tp << " = getelementptr " << struct_type
+                              << ", ptr %this, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << tv << " = load " << iN << ", ptr " << tp << "\n";
+            type_defs_buffer_ << "  " << op << " = getelementptr " << struct_type
+                              << ", ptr %other, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << ov << " = load " << iN << ", ptr " << op << "\n";
+            type_defs_buffer_ << "  " << r << " = icmp eq " << iN << " " << tv << ", " << ov
+                              << "\n";
+            type_defs_buffer_ << "  ret i1 " << r << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── Static methods ──
+
+    // ── none() -> Self ──
+    // Returns 0 (empty set)
+    {
+        std::string fn = "@" + prefix + "none";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn << "() {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto a = t(), p = t(), res = t();
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " 0, ptr " << p << "\n";
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── all() -> Self ──
+    // Returns all_bits_mask
+    {
+        std::string fn = "@" + prefix + "all";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn << "() {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto a = t(), p = t(), res = t();
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " " << std::to_string(info.all_bits_mask)
+                              << ", ptr " << p << "\n";
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
+        }
+    }
+
+    // ── from_bits(value: underlying) -> Self ──
+    {
+        std::string fn = "@" + prefix + "from_bits";
+        if (should_emit(fn)) {
+            tc = 0;
+            type_defs_buffer_ << "define internal " << struct_type << " " << fn << "(" << iN
+                              << " %val) {\n";
+            type_defs_buffer_ << "entry:\n";
+            auto a = t(), p = t(), res = t();
+            type_defs_buffer_ << "  " << a << " = alloca " << struct_type << "\n";
+            type_defs_buffer_ << "  " << p << " = getelementptr " << struct_type << ", ptr " << a
+                              << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store " << iN << " %val, ptr " << p << "\n";
+            type_defs_buffer_ << "  " << res << " = load " << struct_type << ", ptr " << a << "\n";
+            type_defs_buffer_ << "  ret " << struct_type << " " << res << "\n";
+            type_defs_buffer_ << "}\n\n";
         }
     }
 }

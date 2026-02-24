@@ -377,11 +377,21 @@ auto Parser::parse_sum_type_variant() -> Result<EnumVariant, ParseError> {
         struct_fields = std::move(fields);
     }
 
+    // Parse optional discriminant value: Variant = <integer_expr>
+    std::optional<ExprPtr> discriminant;
+    if (match(lexer::TokenKind::Assign)) {
+        auto disc_expr = parse_expr();
+        if (is_err(disc_expr))
+            return unwrap_err(disc_expr);
+        discriminant = std::move(unwrap(disc_expr));
+    }
+
     auto variant_end = previous().span;
     return EnumVariant{.doc = std::nullopt,
                        .name = std::move(variant_name),
                        .tuple_fields = std::move(tuple_fields),
                        .struct_fields = std::move(struct_fields),
+                       .discriminant = std::move(discriminant),
                        .span = SourceSpan::merge(start_span, variant_end)};
 }
 

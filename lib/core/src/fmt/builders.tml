@@ -145,6 +145,7 @@ impl DebugStruct {
     ///     .field("x", "10")
     ///     .finish()  // "Point { x: 10 }"
     /// ```
+    @allocates
     pub func finish(this) -> Str {
         if this.has_fields {
             return this.name + " { " + this.fields + " }"
@@ -161,6 +162,7 @@ impl DebugStruct {
     ///     .field("visible", "true")
     ///     .finish_non_exhaustive()  // "Config { visible: true, .. }"
     /// ```
+    @allocates
     pub func finish_non_exhaustive(this) -> Str {
         if this.has_fields {
             return this.name + " { " + this.fields + ", .. }"

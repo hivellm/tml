@@ -577,6 +577,17 @@ private:
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
 
+    // @flags enum metadata
+    struct FlagsEnumInfo {
+        std::string underlying_llvm_type; ///< "i8", "i16", "i32", "i64"
+        uint64_t all_bits_mask;           ///< OR of all variant values
+        std::vector<std::pair<std::string, uint64_t>> variant_values;
+    };
+    std::unordered_map<std::string, FlagsEnumInfo> flags_enums_;
+
+    /// Generate built-in methods for @flags enums.
+    void gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnumInfo& info);
+
     // Struct field info for dynamic field access
     struct FieldInfo {
         std::string name;

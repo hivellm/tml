@@ -516,6 +516,7 @@ impl Uuid {
     }
 
     /// Format as URN: "urn:uuid:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    @allocates
     pub func to_urn(this) -> Str {
         let uuid_str: Str = this.to_string()
         return "urn:uuid:" + uuid_str

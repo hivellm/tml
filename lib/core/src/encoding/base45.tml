@@ -67,6 +67,7 @@ func idx_of_char(c: I32) -> I32 {
 ///
 /// Two input bytes are encoded as three Base45 characters.
 /// A trailing single byte is encoded as two Base45 characters.
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

@@ -272,6 +272,7 @@ pub type Alignment {
 }
 
 impl Display for Alignment {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Alignment::Left => return "Left",
@@ -282,6 +283,7 @@ impl Display for Alignment {
 }
 
 impl Debug for Alignment {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Alignment::Left => return "Alignment::Left",
@@ -323,6 +325,7 @@ pub type Sign {
 }
 
 impl Display for Sign {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Sign::Minus => return "Minus",
@@ -333,6 +336,7 @@ impl Display for Sign {
 }
 
 impl Debug for Sign {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Sign::Minus => return "Sign::Minus",

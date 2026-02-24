@@ -556,6 +556,12 @@ pub func verify_rsa_pss(
     return Ok(result)
 }
 
+impl Drop for Signature {
+    func drop(mut this) {
+        this.data.destroy()
+    }
+}
+
 impl Drop for Signer {
     func drop(mut this) {
         this.destroy()

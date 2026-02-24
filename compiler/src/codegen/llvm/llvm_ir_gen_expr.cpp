@@ -132,34 +132,59 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
     //   - InterpolatedStringExpr: snprintf + malloc
     //   - TemplateLiteralExpr: snprintf + malloc
     //   - BinaryExpr(Add) on Str: str_concat_opt → malloc
-    //   - CallExpr/MethodCallExpr returning Str: stdlib functions allocate fresh heap Str
+    //   - CallExpr/MethodCallExpr returning Str: @allocates-annotated functions
     // tml_str_free validates heap pointers (HeapValidate on Windows), so calling it
     // on non-heap pointers (globals, stack) is safe — they are skipped.
     //
     // IMPORTANT: Skip tracking inside library function bodies (in_library_body_).
     // Library functions manage their own allocations — e.g., split() stores
     // substring() results in a List. Auto-freeing those temps causes use-after-free.
-    if (!in_library_body_ && !result.empty() && result[0] == '%' && last_expr_type_ == "ptr") {
+    //
+    // EXCEPTION: String concatenation intermediates (BinaryExpr::Add on Str) are
+    // always safe to track even inside library bodies — str_concat_opt always returns
+    // a fresh allocation, and intermediates in chains like a+b+c+d are consumed
+    // immediately by the next concat, never stored in data structures.
+    if (!result.empty() && result[0] == '%' && last_expr_type_ == "ptr") {
         bool is_str_temp = false;
         if (expr.is<parser::InterpolatedStringExpr>() || expr.is<parser::TemplateLiteralExpr>()) {
-            is_str_temp = true;
+            if (!in_library_body_)
+                is_str_temp = true;
         } else if (expr.is<parser::BinaryExpr>() &&
                    expr.as<parser::BinaryExpr>().op == parser::BinaryOp::Add) {
+            // String concat intermediates are safe to track even in library bodies
             auto sem = infer_expr_type(expr);
             if (sem && sem->is<types::PrimitiveType>() &&
                 sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
                 is_str_temp = true;
             }
-        } else if (expr.is<parser::CallExpr>() || expr.is<parser::MethodCallExpr>()) {
-            // Track ALL Str-returning calls/methods as temporaries.
-            // tml_str_free validates heap pointers (HeapValidate on Windows,
-            // malloc_usable_size on Linux, malloc_size on macOS), so calling it
-            // on non-heap pointers (global constants, stack) is safe — they are skipped.
-            // This eliminates the need for @allocates annotations on every Str-returning function.
-            auto sem = infer_expr_type(expr);
-            if (sem && sem->is<types::PrimitiveType>() &&
-                sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
-                is_str_temp = true;
+        } else if (!in_library_body_ && expr.is<parser::CallExpr>()) {
+            // Track Str temporaries from @allocates free functions.
+            const auto& call = expr.as<parser::CallExpr>();
+            std::string func_name;
+            if (call.callee->is<parser::IdentExpr>()) {
+                func_name = call.callee->as<parser::IdentExpr>().name;
+            } else if (call.callee->is<parser::PathExpr>()) {
+                const auto& path = call.callee->as<parser::PathExpr>().path;
+                if (!path.segments.empty()) {
+                    func_name = path.segments.back();
+                }
+            }
+            if (!func_name.empty() && allocating_functions_.count(func_name)) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
+                }
+            }
+        } else if (!in_library_body_ && expr.is<parser::MethodCallExpr>()) {
+            // Track Str temporaries from @allocates methods.
+            const auto& mcall = expr.as<parser::MethodCallExpr>();
+            if (allocating_functions_.count(mcall.method)) {
+                auto sem = infer_expr_type(expr);
+                if (sem && sem->is<types::PrimitiveType>() &&
+                    sem->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    is_str_temp = true;
+                }
             }
         }
         if (is_str_temp) {

@@ -33,6 +33,7 @@ func decode_char(c: I32) -> I32 {
 /// Encode a string's bytes as Base32.
 ///
 /// Processes 5 bytes at a time into 8 Base32 characters, with '=' padding.
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

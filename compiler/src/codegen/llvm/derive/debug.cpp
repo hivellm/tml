@@ -121,6 +121,8 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         return;
     }
     generated_functions_.insert(func_name);
+    // Register as allocating function for Str temp tracking
+    allocating_functions_.insert("debug_string");
 
     // Get field info for this struct
     auto fields_it = struct_fields_.find(type_name);

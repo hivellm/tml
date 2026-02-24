@@ -927,6 +927,16 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 if (!type_name.empty()) {
                     register_for_drop(name, info.reg, type_name, info.type);
                 }
+                // Register Str bindings from pattern destructuring (e.g., Ok(s))
+                // for heap-str drop. These are heap-allocated strings extracted
+                // from Outcome/Maybe payloads that need cleanup at arm scope exit.
+                else if (info.type == "ptr" && info.semantic_type) {
+                    if (info.semantic_type->is<types::PrimitiveType>() &&
+                        info.semantic_type->as<types::PrimitiveType>().kind ==
+                            types::PrimitiveKind::Str) {
+                        register_heap_str_for_drop(name, info.reg);
+                    }
+                }
             }
         }
 

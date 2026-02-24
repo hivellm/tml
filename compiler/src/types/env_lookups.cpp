@@ -644,10 +644,11 @@ bool TypeEnv::type_needs_drop(const std::string& type_name) const {
         return false;
     }
 
-    // Str is a special case - it may need drop depending on implementation
-    // For now, we don't drop Str since it's managed by the runtime
+    // Str needs drop: heap-allocated strings must be freed via tml_str_free.
+    // tml_str_free validates the pointer is a genuine heap allocation before
+    // freeing, so it's safe for global string constants and stack pointers too.
     if (type_name == "Str") {
-        return false;
+        return true;
     }
 
     // Check if it's a struct with fields that need drop
@@ -707,7 +708,11 @@ bool TypeEnv::type_needs_drop(const TypePtr& type) const {
             using T = std::decay_t<decltype(t)>;
 
             if constexpr (std::is_same_v<T, PrimitiveType>) {
-                // Primitives never need drop (includes Unit and Never kinds)
+                // Str needs drop (heap-allocated strings freed via tml_str_free)
+                if (t.kind == PrimitiveKind::Str) {
+                    return true;
+                }
+                // Other primitives never need drop
                 return false;
             } else if constexpr (std::is_same_v<T, NamedType>) {
                 // Check if the named type needs drop

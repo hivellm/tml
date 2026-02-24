@@ -134,22 +134,26 @@ impl DateTime {
     }
 
     /// Returns ISO 8601 formatted string: `YYYY-MM-DDThh:mm:ssZ`.
+    @allocates
     pub func to_iso8601(this) -> Str {
         return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
              + "T" + pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second) + "Z"
     }
 
     /// Returns date-only string: `YYYY-MM-DD`.
+    @allocates
     pub func to_date_string(this) -> Str {
         return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
     }
 
     /// Returns time-only string: `hh:mm:ss`.
+    @allocates
     pub func to_time_string(this) -> Str {
         return pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second)
     }
 
     /// Returns RFC 2822 formatted string: `Thu, 01 Jan 1970 00:00:00 +0000`.
+    @allocates
     pub func to_rfc2822(this) -> Str {
         let wd: I64 = this.weekday()
         let day_name: Str = weekday_short(wd)
@@ -160,12 +164,14 @@ impl DateTime {
     }
 
     /// Returns `Display`-friendly string: `YYYY-MM-DD hh:mm:ss UTC`.
+    @allocates
     pub func to_string(this) -> Str {
         return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
              + " " + pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second) + " UTC"
     }
 
     /// Returns debug representation.
+    @allocates
     pub func debug_string(this) -> Str {
         return "DateTime(" + this.to_iso8601() + ")"
     }
@@ -253,6 +259,7 @@ func is_leap(year: I64) -> Bool {
 }
 
 /// Zero-pad an integer to 2 digits.
+@allocates
 func pad2(n: I64) -> Str {
     if n < 10 {
         return "0" + n.to_string()
@@ -261,6 +268,7 @@ func pad2(n: I64) -> Str {
 }
 
 /// Zero-pad an integer to 4 digits (for year).
+@allocates
 func pad4(n: I64) -> Str {
     if n < 10 {
         return "000" + n.to_string()
@@ -299,22 +307,6 @@ func month_short(m: I64) -> Str {
     if m == 10 { return "Oct" }
     if m == 11 { return "Nov" }
     return "Dec"
-}
-
-/// Parse a single ASCII digit character to its integer value.
-/// Returns -1 for non-digit input.
-func parse_digit_char(s: Str) -> I64 {
-    if s == "0" { return 0 }
-    if s == "1" { return 1 }
-    if s == "2" { return 2 }
-    if s == "3" { return 3 }
-    if s == "4" { return 4 }
-    if s == "5" { return 5 }
-    if s == "6" { return 6 }
-    if s == "7" { return 7 }
-    if s == "8" { return 8 }
-    if s == "9" { return 9 }
-    return -1
 }
 
 /// Parse an unsigned integer from a substring of `s` at [start, end).

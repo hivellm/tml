@@ -230,11 +230,11 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         bool is_enum = false;
         if (check(lexer::TokenKind::Identifier)) {
             advance(); // consume first identifier
-            // If followed by '(' or '{' or ',' or '}' or newline, it's an enum
+            // If followed by '(' or '{' or ',' or '}' or newline or '=', it's an enum
             // If followed by ':', it's a struct
             if (check(lexer::TokenKind::LParen) || check(lexer::TokenKind::LBrace) ||
                 check(lexer::TokenKind::Comma) || check(lexer::TokenKind::RBrace) ||
-                check(lexer::TokenKind::Newline)) {
+                check(lexer::TokenKind::Newline) || check(lexer::TokenKind::Assign)) {
                 is_enum = true;
             }
         } else if (check(lexer::TokenKind::RBrace)) {
@@ -753,11 +753,22 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
             struct_fields = std::move(fields);
         }
 
+        // Parse optional discriminant value: Variant = <integer_expr>
+        std::optional<ExprPtr> variant_discriminant;
+        if (!struct_fields.has_value() && !tuple_fields.has_value() &&
+            match(lexer::TokenKind::Assign)) {
+            auto disc_expr = parse_expr();
+            if (is_err(disc_expr))
+                return unwrap_err(disc_expr);
+            variant_discriminant = std::move(unwrap(disc_expr));
+        }
+
         auto variant_end = previous().span;
         variants.push_back(EnumVariant{.doc = std::move(variant_doc),
                                        .name = std::move(variant_name),
                                        .tuple_fields = std::move(tuple_fields),
                                        .struct_fields = std::move(struct_fields),
+                                       .discriminant = std::move(variant_discriminant),
                                        .span = SourceSpan::merge(variant_start, variant_end)});
 
         skip_newlines();

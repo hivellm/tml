@@ -154,6 +154,35 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
             }
         }
 
+        // Check for @flags enum static methods (none, all, from_bits)
+        {
+            auto flags_it = flags_enums_.find(type_name);
+            if (flags_it != flags_enums_.end() &&
+                (method == "none" || method == "all" || method == "from_bits")) {
+                std::string struct_type = "%struct." + type_name;
+                std::string suite_prefix;
+                if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+                    current_module_prefix_.empty()) {
+                    suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+                }
+                std::string fn_name = "@tml_" + suite_prefix + type_name + "_" + method;
+
+                if (method == "from_bits" && !call.args.empty()) {
+                    std::string arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call " + struct_type + " " + fn_name + "(" +
+                              flags_it->second.underlying_llvm_type + " " + arg + ")");
+                    last_expr_type_ = struct_type;
+                    return result;
+                }
+                // none() and all() take no arguments
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call " + struct_type + " " + fn_name + "()");
+                last_expr_type_ = struct_type;
+                return result;
+            }
+        }
+
         // Check for class static method call (ClassName.staticMethod())
         auto class_def = env_.lookup_class(type_name);
         if (class_def.has_value()) {

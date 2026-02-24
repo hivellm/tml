@@ -58,6 +58,7 @@ impl Mime {
     }
 
     /// Get the full essence (type/subtype without params).
+    @allocates
     pub func essence(this) -> Str {
         if str::len(this.suffix) > 0 {
             return this.type_name + "/" + this.subtype + "+" + this.suffix

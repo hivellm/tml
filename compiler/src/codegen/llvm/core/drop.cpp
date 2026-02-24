@@ -172,6 +172,14 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
             auto fields_it = struct_fields_.find(type_name);
             if (fields_it != struct_fields_.end()) {
                 for (const auto& field : fields_it->second) {
+                    // Check for Str fields (llvm_type == "ptr" with Str semantic type)
+                    if (field.llvm_type == "ptr" && field.semantic_type &&
+                        field.semantic_type->is<types::PrimitiveType>() &&
+                        field.semantic_type->as<types::PrimitiveType>().kind ==
+                            types::PrimitiveKind::Str) {
+                        needs_field_drops = true;
+                        break;
+                    }
                     // Extract field type name from LLVM type
                     std::string ft_name;
                     if (field.llvm_type.starts_with("%struct.")) {
@@ -389,6 +397,7 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
         // For generic types (Mutex[I32]), use the mangled LLVM type name
         // (%struct.Mutex__I32 -> Mutex__I32) since that's what register_for_drop uses.
         std::string field_type_name;
+        bool is_str_field = false;
         if (field.llvm_type.starts_with("%struct.")) {
             field_type_name = field.llvm_type.substr(8); // "%struct.X" -> "X"
         } else if (field.semantic_type) {
@@ -396,6 +405,11 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
                 field_type_name = field.semantic_type->as<types::NamedType>().name;
             } else if (field.semantic_type->is<types::ClassType>()) {
                 field_type_name = field.semantic_type->as<types::ClassType>().name;
+            } else if (field.semantic_type->is<types::PrimitiveType>() &&
+                       field.semantic_type->as<types::PrimitiveType>().kind ==
+                           types::PrimitiveKind::Str) {
+                field_type_name = "Str";
+                is_str_field = true;
             }
         }
 
@@ -403,8 +417,28 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
             continue;
         }
 
+        // Str fields: emit tml_str_free directly (no Drop impl lookup needed)
+        if (is_str_field) {
+            std::string field_ptr = fresh_reg();
+            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " +
+                      info.var_reg + ", i32 0, i32 " + std::to_string(field.index));
+            require_runtime_decl("tml_str_free");
+            std::string str_val = fresh_reg();
+            emit_line("  " + str_val + " = load ptr, ptr " + field_ptr);
+            emit_line("  call void @tml_str_free(ptr " + str_val + ")");
+            continue;
+        }
+
         // Check if this specific field needs drop
         bool field_has_drop = env_.type_implements(field_type_name, "Drop");
+        // For generic types (List__Arg), check the base type too
+        if (!field_has_drop) {
+            auto sep_pos = field_type_name.find("__");
+            if (sep_pos != std::string::npos) {
+                std::string base_type = field_type_name.substr(0, sep_pos);
+                field_has_drop = env_.type_implements(base_type, "Drop");
+            }
+        }
         bool field_needs_recursive = false;
         if (!field_has_drop) {
             field_needs_recursive = env_.type_needs_drop(field_type_name);
@@ -457,26 +491,52 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
                     }
                 }
                 // Also check generic base types (e.g., Mutex from Mutex__I32)
-                if (!is_library) {
-                    auto sep = field_type_name.find("__");
-                    if (sep != std::string::npos) {
-                        std::string base = field_type_name.substr(0, sep);
-                        if (env_.module_registry()) {
-                            const auto& all_modules = env_.module_registry()->get_all_modules();
-                            for (const auto& [mod_name, mod] : all_modules) {
-                                if (mod_name.starts_with("std::") ||
-                                    mod_name.starts_with("core::")) {
-                                    if (mod.structs.count(base) || mod.classes.count(base)) {
-                                        is_library = true;
-                                        break;
-                                    }
+                std::string base_type_name;
+                auto sep = field_type_name.find("__");
+                if (sep != std::string::npos) {
+                    base_type_name = field_type_name.substr(0, sep);
+                    if (!is_library && env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            if (mod_name.starts_with("std::") || mod_name.starts_with("core::")) {
+                                if (mod.structs.count(base_type_name) ||
+                                    mod.classes.count(base_type_name)) {
+                                    is_library = true;
+                                    break;
                                 }
                             }
                         }
                     }
                 }
                 std::string prefix = is_library ? "" : get_suite_prefix();
-                drop_func = "@tml_" + prefix + field_type_name + "_drop";
+                std::string func_llvm_name = "tml_" + prefix + field_type_name + "_drop";
+                drop_func = "@" + func_llvm_name;
+
+                // Register in functions_ so future lookups find it
+                functions_[drop_lookup_key] = FuncInfo{drop_func, "void (ptr)", "void", {"ptr"}};
+
+                // For generic types, queue instantiation so the drop method
+                // body is actually generated (prevents UNRESOLVED references)
+                if (!base_type_name.empty() &&
+                    generated_impl_methods_.find(func_llvm_name) == generated_impl_methods_.end()) {
+                    std::unordered_map<std::string, types::TypePtr> empty_subs;
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{field_type_name, "drop", empty_subs, base_type_name, "",
+                                          /*is_library_type=*/is_library});
+                    generated_impl_methods_.insert(func_llvm_name);
+                    TML_DEBUG_LN("[DROP]   Queued generic drop instantiation for field type: "
+                                 << field_type_name << " (base=" << base_type_name << ")");
+                } else if (base_type_name.empty()) {
+                    // Non-generic field type with Drop — also queue instantiation
+                    if (generated_impl_methods_.find(func_llvm_name) ==
+                        generated_impl_methods_.end()) {
+                        std::unordered_map<std::string, types::TypePtr> empty_subs;
+                        pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                            field_type_name, "drop", empty_subs, field_type_name, "",
+                            /*is_library_type=*/is_library});
+                        generated_impl_methods_.insert(func_llvm_name);
+                    }
+                }
             }
             emit_line("  call void " + drop_func + "(ptr " + field_ptr + ")");
         }

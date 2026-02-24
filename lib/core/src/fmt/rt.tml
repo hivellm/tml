@@ -97,6 +97,7 @@ impl Count {
 }
 
 impl Display for Count {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Count::Is(n) => return "Is(" + n.to_string() + ")",
@@ -107,6 +108,7 @@ impl Display for Count {
 }
 
 impl Debug for Count {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Count::Is(n) => return "Count::Is(" + n.to_string() + ")",
@@ -186,6 +188,7 @@ impl FormatSpec {
 }
 
 impl Debug for FormatSpec {
+    @allocates
     pub func debug_string(this) -> Str {
         // Use to_string() instead of debug_string() for nested types
         // to avoid cross-module method resolution issues
@@ -272,6 +275,7 @@ impl UnsafeArg {
 /// # Returns
 ///
 /// The formatted string with all placeholders replaced.
+@allocates
 pub func format_args(pieces: ref [Str], args: ref [Argument]) -> Str {
     var result: Str = ""
     var arg_idx: I64 = 0
@@ -296,6 +300,7 @@ pub func format_args(pieces: ref [Str], args: ref [Argument]) -> Str {
 }
 
 /// Simple format function that joins arguments with a separator.
+@allocates
 pub func format_join(args: ref [Str], sep: Str) -> Str {
     if args.len() == 0 {
         return ""
@@ -318,6 +323,7 @@ pub func format_join(args: ref [Str], sep: Str) -> Str {
 // ============================================================================
 
 /// Helper to format a slice of Debug items.
+@allocates
 pub func debug_slice[T: Debug](slice: ref [T]) -> Str {
     if slice.len() == 0 {
         return "[]"
@@ -339,6 +345,7 @@ pub func debug_slice[T: Debug](slice: ref [T]) -> Str {
 }
 
 /// Helper to format a slice of Display items.
+@allocates
 pub func display_slice[T: Display](slice: ref [T]) -> Str {
     if slice.len() == 0 {
         return "[]"

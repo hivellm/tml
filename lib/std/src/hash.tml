@@ -314,6 +314,7 @@ pub func murmur2_64_bytes(data: ref Buffer, seed: U64) -> Hash64 {
 /// let content = "<html>...</html>"
 /// let etag = etag_weak(content)  // e.g., "W/\"a430d84680aabd0b\""
 /// ```
+@allocates
 pub func etag_weak(content: Str) -> Str {
     let hash: Str = fnv1a64(content).to_hex()
     return "W/\"{hash}\""
@@ -331,18 +332,21 @@ pub func etag_weak(content: Str) -> Str {
 /// let content = read_file_bytes("image.png")
 /// let etag = etag_strong_bytes(ref content)  // e.g., "\"a430d84680aabd0b\""
 /// ```
+@allocates
 pub func etag_strong(content: Str) -> Str {
     let hash: Str = fnv1a64(content).to_hex()
     return "\"{hash}\""
 }
 
 /// Generates a strong ETag from binary content using FNV-1a.
+@allocates
 pub func etag_strong_bytes(content: ref Buffer) -> Str {
     let hash: Str = fnv1a64_bytes(content).to_hex()
     return "\"{hash}\""
 }
 
 /// Generates a weak ETag from binary content using FNV-1a.
+@allocates
 pub func etag_weak_bytes(content: ref Buffer) -> Str {
     let hash: Str = fnv1a64_bytes(content).to_hex()
     return "W/\"{hash}\""

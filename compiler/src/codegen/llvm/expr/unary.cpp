@@ -865,8 +865,46 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::UnaryOp::BitNot:
-        emit_line("  " + result + " = xor i32 " + operand + ", -1");
-        last_expr_type_ = "i32";
+        if (operand_type.starts_with("%struct.")) {
+            // @flags enum: extract underlying value, complement masked to valid bits, wrap back
+            std::string enum_name = operand_type.substr(8);
+            auto flags_it = flags_enums_.find(enum_name);
+            if (flags_it != flags_enums_.end()) {
+                const auto& finfo = flags_it->second;
+                std::string iN = finfo.underlying_llvm_type;
+                // Extract value from struct
+                std::string alloca_reg = fresh_reg();
+                emit_line("  " + alloca_reg + " = alloca " + operand_type);
+                emit_line("  store " + operand_type + " " + operand + ", ptr " + alloca_reg);
+                std::string val_ptr = fresh_reg();
+                emit_line("  " + val_ptr + " = getelementptr " + operand_type + ", ptr " +
+                          alloca_reg + ", i32 0, i32 0");
+                std::string val = fresh_reg();
+                emit_line("  " + val + " = load " + iN + ", ptr " + val_ptr);
+                // XOR with all_bits_mask to flip only valid bits
+                std::string flipped = fresh_reg();
+                emit_line("  " + flipped + " = xor " + iN + " " + val + ", " +
+                          std::to_string(finfo.all_bits_mask));
+                // Wrap back into struct
+                std::string res_alloca = fresh_reg();
+                emit_line("  " + res_alloca + " = alloca " + operand_type);
+                std::string res_ptr = fresh_reg();
+                emit_line("  " + res_ptr + " = getelementptr " + operand_type + ", ptr " +
+                          res_alloca + ", i32 0, i32 0");
+                emit_line("  store " + iN + " " + flipped + ", ptr " + res_ptr);
+                result = fresh_reg();
+                emit_line("  " + result + " = load " + operand_type + ", ptr " + res_alloca);
+                last_expr_type_ = operand_type;
+            } else {
+                // Regular enum — shouldn't normally BitNot an enum, but handle gracefully
+                emit_line("  " + result + " = xor i32 " + operand + ", -1");
+                last_expr_type_ = "i32";
+            }
+        } else {
+            // Regular integer BitNot — use the actual operand type
+            emit_line("  " + result + " = xor " + operand_type + " " + operand + ", -1");
+            last_expr_type_ = operand_type;
+        }
         break;
     default:
         return operand;

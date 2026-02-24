@@ -48,6 +48,7 @@ func idx_of_char(c: I32) -> I32 {
 ///
 /// Processes input as a bit stream, extracting 13 bits at a time.
 /// Each 13-bit value is encoded as 1 or 2 base91 characters.
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

@@ -358,6 +358,7 @@ impl Debug for Ordering {
 
 /// Binary format for `U8` (e.g. `"0b10101010"`).
 impl Binary for U8 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + u8_to_binary_str(this)
     }
@@ -418,6 +419,7 @@ impl Binary for I64 {
 
 /// Octal format for `U8` (e.g. `"0o377"`).
 impl Octal for U8 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
@@ -478,6 +480,7 @@ impl Octal for I64 {
 
 /// Lower hex format for `U8` (e.g. `"0xff"`).
 impl LowerHex for U8 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
@@ -538,6 +541,7 @@ impl LowerHex for I64 {
 
 /// Upper hex format for `U8` (e.g. `"0xFF"`).
 impl UpperHex for U8 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
@@ -598,6 +602,7 @@ impl UpperHex for I64 {
 
 /// Lower exponent format for `F32` (e.g. `"1.5e2"`).
 impl LowerExp for F32 {
+    @allocates
     pub func fmt_lower_exp(this) -> Str {
         return lowlevel { f32_to_exp_string(this, false) }
     }
@@ -612,6 +617,7 @@ impl LowerExp for F64 {
 
 /// Upper exponent format for `F32` (e.g. `"1.5E2"`).
 impl UpperExp for F32 {
+    @allocates
     pub func fmt_upper_exp(this) -> Str {
         return lowlevel { f32_to_exp_string(this, true) }
     }

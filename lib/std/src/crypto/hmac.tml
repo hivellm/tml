@@ -138,6 +138,7 @@ pub type HmacDigest {
 
 impl HmacDigest {
     /// Returns the digest as a hexadecimal string.
+    @allocates
     pub func to_hex(this) -> Str {
         return ffi_crypto_bytes_to_hex(this.data.handle)
     }

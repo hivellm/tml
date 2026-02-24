@@ -178,6 +178,7 @@ impl JsonNumber {
     }
 
     /// Convert to JSON string representation
+    @allocates
     pub func to_json_string(this) -> Str {
         when this {
             JsonNumber::Int(n) => n.to_string(),
@@ -274,6 +275,7 @@ impl JsonObject {
     }
 
     /// Serialize this object to a JSON string
+    @allocates
     pub func to_string(this) -> Str {
         return json_to_string(this.handle)
     }
@@ -418,6 +420,7 @@ impl JsonArray {
     }
 
     /// Serialize this array to a JSON string
+    @allocates
     pub func to_string(this) -> Str {
         return json_to_string(this.handle)
     }
@@ -621,6 +624,7 @@ impl Json {
     }
 
     /// Get string value, panics if not a String
+    @allocates
     pub func unwrap_str(this) -> Str {
         if not this.is_string() {
             panic("JSON value is not a string")
@@ -890,6 +894,7 @@ impl Json {
     // ------------------------------------------------------------------------
 
     /// Serialize this JSON value to a string
+    @allocates
     pub func to_string(this) -> Str {
         return json_to_string(this.handle)
     }

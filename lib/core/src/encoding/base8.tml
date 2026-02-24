@@ -17,6 +17,7 @@ use core::str
 ///
 /// Each byte produces exactly 3 octal digits (zero-padded).
 /// Example: 'A' (65) -> "101", '\0' (0) -> "000"
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

@@ -506,17 +506,60 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
             // Non-generic enum: register variants if not already done
             std::string first_key = type_name + "::" + enum_def->variants[0].first;
             if (enum_variants_.find(first_key) == enum_variants_.end()) {
-                int tag = 0;
-                for (const auto& variant : enum_def->variants) {
-                    std::string key = type_name + "::" + variant.first;
-                    enum_variants_[key] = tag++;
+                if (enum_def->is_flags && !enum_def->discriminant_values.empty()) {
+                    // @flags enum: use power-of-2 discriminant values
+                    for (size_t i = 0; i < enum_def->variants.size(); ++i) {
+                        std::string key = type_name + "::" + enum_def->variants[i].first;
+                        uint64_t val = (i < enum_def->discriminant_values.size())
+                                           ? enum_def->discriminant_values[i]
+                                           : (1ULL << i);
+                        enum_variants_[key] = static_cast<int>(val);
+                    }
+                    // Register FlagsEnumInfo if not yet done
+                    if (flags_enums_.find(type_name) == flags_enums_.end()) {
+                        FlagsEnumInfo finfo;
+                        std::string underlying = enum_def->flags_underlying_type;
+                        if (underlying == "U8")
+                            finfo.underlying_llvm_type = "i8";
+                        else if (underlying == "U16")
+                            finfo.underlying_llvm_type = "i16";
+                        else if (underlying == "U64")
+                            finfo.underlying_llvm_type = "i64";
+                        else
+                            finfo.underlying_llvm_type = "i32";
+                        finfo.all_bits_mask = 0;
+                        for (size_t i = 0; i < enum_def->variants.size(); ++i) {
+                            uint64_t val = (i < enum_def->discriminant_values.size())
+                                               ? enum_def->discriminant_values[i]
+                                               : (1ULL << i);
+                            finfo.variant_values.emplace_back(enum_def->variants[i].first, val);
+                            finfo.all_bits_mask |= val;
+                        }
+                        flags_enums_[type_name] = finfo;
+                    }
+                } else {
+                    // Regular enum: sequential tags
+                    int tag = 0;
+                    for (const auto& variant : enum_def->variants) {
+                        std::string key = type_name + "::" + variant.first;
+                        enum_variants_[key] = tag++;
+                    }
                 }
                 // Also register the struct type if not done
                 if (struct_types_.find(type_name) == struct_types_.end()) {
                     std::string struct_type_name = "%struct." + type_name;
-                    // Use type_defs_buffer_ for type definitions, not emit_line()
-                    // emit_line() would put the definition inside the current function
-                    type_defs_buffer_ << struct_type_name << " = type { i32 }\n";
+                    if (enum_def->is_flags) {
+                        std::string iN = "i32";
+                        if (enum_def->flags_underlying_type == "U8")
+                            iN = "i8";
+                        else if (enum_def->flags_underlying_type == "U16")
+                            iN = "i16";
+                        else if (enum_def->flags_underlying_type == "U64")
+                            iN = "i64";
+                        type_defs_buffer_ << struct_type_name << " = type { " << iN << " }\n";
+                    } else {
+                        type_defs_buffer_ << struct_type_name << " = type { i32 }\n";
+                    }
                     struct_types_[type_name] = struct_type_name;
                 }
             }
@@ -526,10 +569,18 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
     }
 
     if (it != enum_variants_.end()) {
-        // For enum variants, we need to create a struct { i32 } value
+        // For enum variants, we need to create a struct value
         // Extract the enum type name (first segment)
         std::string enum_name = path.path.segments[0];
         std::string struct_type = "%struct." + enum_name;
+
+        // Determine the underlying integer type for the tag field
+        // @flags enums may use i8/i16/i32/i64, regular enums always use i32
+        std::string tag_llvm_type = "i32";
+        auto flags_it = flags_enums_.find(enum_name);
+        if (flags_it != flags_enums_.end()) {
+            tag_llvm_type = flags_it->second.underlying_llvm_type;
+        }
 
         // Allocate the enum struct on stack
         std::string alloca_reg = fresh_reg();
@@ -540,8 +591,9 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
         emit_line("  " + tag_ptr + " = getelementptr " + struct_type + ", ptr " + alloca_reg +
                   ", i32 0, i32 0");
 
-        // Store the tag value
-        emit_line("  store i32 " + std::to_string(it->second) + ", ptr " + tag_ptr);
+        // Store the tag/value
+        emit_line("  store " + tag_llvm_type + " " + std::to_string(it->second) + ", ptr " +
+                  tag_ptr);
 
         // Load the entire struct value
         std::string result = fresh_reg();

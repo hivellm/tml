@@ -386,6 +386,7 @@ impl AuthTag {
     }
 
     /// Returns the tag as a hexadecimal string.
+    @allocates
     pub func to_hex(this) -> Str {
         let hex: Str = ffi_crypto_bytes_to_hex(this.data.handle)
         return hex
@@ -950,6 +951,12 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     aad.destroy()
     plaintext.destroy()
     return Ok(result)
+}
+
+impl Drop for AuthTag {
+    func drop(mut this) {
+        this.data.destroy()
+    }
 }
 
 impl Drop for Cipher {

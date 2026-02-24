@@ -268,6 +268,7 @@ struct EnumVariant {
     std::string name;                                      ///< Variant name.
     std::optional<std::vector<TypePtr>> tuple_fields;      ///< Tuple variant fields.
     std::optional<std::vector<StructField>> struct_fields; ///< Struct variant fields.
+    std::optional<ExprPtr> discriminant;                   ///< Explicit discriminant value (`= 4`).
     SourceSpan span;                                       ///< Source location.
 };
 

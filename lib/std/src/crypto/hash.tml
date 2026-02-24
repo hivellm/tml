@@ -185,11 +185,13 @@ pub type Digest {
 
 impl Digest {
     /// Returns the digest as a hexadecimal string.
+    @allocates
     pub func to_hex(this) -> Str {
         return ffi_crypto_bytes_to_hex(this.data.handle)
     }
 
     /// Returns the digest as a base64 string.
+    @allocates
     pub func to_base64(this) -> Str {
         return ffi_crypto_bytes_to_base64(this.data.handle)
     }

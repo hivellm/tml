@@ -212,6 +212,7 @@ pub func random_u64() -> U64 {
 /// let uuid = random_uuid()
 /// print("Session ID: {uuid}\n")
 /// ```
+@allocates
 pub func random_uuid() -> Str {
     return ffi_crypto_random_uuid()
 }

@@ -59,6 +59,7 @@ impl Match {
     pub func start(this) -> I64 { return this._start }
     pub func end(this) -> I64 { return this._end }
     pub func matched(this) -> Bool { return this._matched }
+    @allocates
     pub func group(this, s: Str) -> Str {
         if not this._matched { return "" }
         return s.slice(this._start, this._end)
@@ -97,6 +98,7 @@ impl Captures {
     }
 
     /// Extracts the matched substring for group `i`.
+    @allocates
     pub func get(this, i: I64, s: Str) -> Str {
         if not this._matched { return "" }
         if i < 0 or i >= this._num_groups { return "" }
@@ -197,6 +199,7 @@ impl Regex {
     }
 
     /// Replaces the first match.
+    @allocates
     pub func replace(this, s: Str, rep: Str) -> Str {
         let m: Match = this.find(s)
         if not m._matched { return s }
@@ -207,6 +210,7 @@ impl Regex {
     }
 
     /// Replaces all matches.
+    @allocates
     pub func replace_all(this, s: Str, rep: Str) -> Str {
         if not this._valid { return s }
         let slen: I64 = s.len()

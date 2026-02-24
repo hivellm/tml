@@ -282,6 +282,7 @@ impl Formatter {
     ///
     /// println(fmt.pad("test"))  // "......test"
     /// ```
+    @allocates
     pub func pad(this, s: Str) -> Str {
         when this.width {
             Nothing => return s,
@@ -324,6 +325,7 @@ impl Formatter {
     /// println(fmt.pad_integral(true, "", "42"))   // "000042"
     /// println(fmt.pad_integral(false, "", "42"))  // "-00042"
     /// ```
+    @allocates
     pub func pad_integral(this, is_positive: Bool, prefix: Str, num: Str) -> Str {
         var sign_str: Str = ""
         when this.sign {
@@ -373,6 +375,7 @@ impl Formatter {
     /// Applies precision truncation to a string.
     ///
     /// If precision is set and the string is longer, it is truncated.
+    @allocates
     pub func apply_precision(this, s: Str) -> Str {
         when this.precision {
             Nothing => return s,

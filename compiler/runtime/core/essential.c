@@ -754,6 +754,19 @@ static void tml_classify_crash(DWORD code, EXCEPTION_RECORD* rec) {
 }
 
 /**
+ * @brief Saved CONTEXT from setjmp point for crash recovery.
+ *
+ * Populated by tml_save_recovery_context() when entering tml_run_test_with_catch.
+ * Used by the VEH handler for severe crashes (corrupted stack) where longjmp and
+ * SEH unwinding both fail. The VEH handler calls RtlRestoreContext() with this
+ * saved context to resume at the setjmp point without any stack walking.
+ */
+#ifdef _M_X64
+static CONTEXT tml_recovery_context;
+static volatile int32_t tml_recovery_context_valid = 0;
+#endif
+
+/**
  * @brief Vectored Exception Handler (VEH) for crash catching.
  *
  * Uses VEH instead of SetUnhandledExceptionFilter because:
@@ -904,13 +917,52 @@ static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
                  tml_get_exception_name(code), (unsigned long)code);
     }
 
-    // Return EXCEPTION_CONTINUE_SEARCH to pass through to the SEH
-    // __try/__except in call_run_with_catch_seh() on the C++ side.
-    // We cannot use longjmp here because certain crashes (e.g., OpenSSL DH)
-    // corrupt RBP, making longjmp itself crash. SEH __except blocks handle
-    // hardware exceptions without relying on the corrupted stack frame.
+    // Recovery strategy: ALWAYS recover via longjmp or context redirection.
+    //
+    // VEH runs BEFORE SEH unwinding, so the stack frames are still on the stack.
+    // For the common case (null deref, arithmetic), the stack is fully intact and
+    // longjmp works directly.
+    //
+    // For severe crashes (heap corruption, write violation, use-after-free with wild
+    // pointers), the stack/RBP may be corrupted. longjmp on MSVC x64 internally calls
+    // RtlUnwindEx which walks the stack — if the stack is corrupted, this crashes too.
+    // So for severe crashes we redirect execution via CONTEXT modification:
+    // set RIP to our recovery thunk and RSP to a known-good value from the jmp_buf,
+    // then return EXCEPTION_CONTINUE_EXECUTION. The CPU resumes at the thunk without
+    // any stack unwinding.
+    //
+    // Why this matters: previously we used EXCEPTION_CONTINUE_SEARCH for severe crashes,
+    // relying on SEH __except to catch them. But SEH unwinding ALSO walks the stack,
+    // and when the stack is corrupted (RBP=0x81), SEH unwinding itself crashes,
+    // killing the entire process. Direct context redirection avoids all stack walking.
     tml_catching_panic = 0;
-    return EXCEPTION_CONTINUE_SEARCH;
+
+    if (!tml_crash_abort_suite) {
+        // Recoverable: null deref, arithmetic — stack intact, longjmp is safe
+        longjmp(tml_panic_jmp_buf, 2);
+        // longjmp doesn't return
+    }
+
+#ifdef _M_X64
+    // Severe crash: restore full CPU context from the setjmp point.
+    //
+    // RtlRestoreContext() restores ALL registers (RIP, RSP, RBP, etc.) from
+    // the saved CONTEXT without any stack walking or SEH unwinding. This is
+    // the safest recovery method when the stack is corrupted.
+    //
+    // After restoration, execution resumes at the RtlCaptureContext call site
+    // in tml_run_test_with_catch, where we check tml_catching_panic==0 to
+    // detect that we arrived via crash recovery rather than normal return.
+    if (tml_recovery_context_valid) {
+        RtlRestoreContext(&tml_recovery_context, NULL);
+        // RtlRestoreContext does not return
+    }
+#endif
+
+    // Fallback: try longjmp (may crash if stack is corrupted, but at this point
+    // we have no better option — the process would die anyway)
+    longjmp(tml_panic_jmp_buf, 2);
+    return EXCEPTION_CONTINUE_SEARCH; // unreachable, but satisfies compiler
 }
 
 /** @brief Install the VEH crash handler (thread-safe, ref-counted). */
@@ -966,29 +1018,62 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
     tml_catching_panic = 1;
 
 #ifdef _WIN32
-    // Windows: Use VEH for crash reporting + SEH for recovery
+    // Windows: Use VEH for crash reporting + context redirection for recovery
     tml_install_exception_filter();
+
+#ifdef _M_X64
+    // Save recovery context BEFORE setjmp. RtlCaptureContext saves the full CPU
+    // state. If a severe crash occurs and longjmp/SEH both fail, the VEH handler
+    // calls RtlRestoreContext(&tml_recovery_context) which resumes here.
+    // We detect the recovery by checking tml_catching_panic == 0 (set by VEH).
+    RtlCaptureContext(&tml_recovery_context);
+    tml_recovery_context_valid = 1;
+
+    if (tml_catching_panic == 0) {
+        // We got here via RtlRestoreContext from the VEH handler (severe crash).
+        // tml_panic_msg was already filled by the VEH handler.
+        tml_recovery_context_valid = 0;
+        tml_remove_exception_filter();
+        RT_FATAL("runtime", "%s",
+                 tml_panic_msg[0] ? tml_panic_msg
+                                  : "CRASH: Unknown (recovered via context restore)");
+        fflush(stderr);
+        return -2;
+    }
+#endif
 
     int jmp_result = setjmp(tml_panic_jmp_buf);
     if (jmp_result == 0) {
-        // First time through - run the test with SEH crash protection.
-        // VEH handler prints crash info and returns EXCEPTION_CONTINUE_SEARCH.
-        // SEH __try/__except in tml_run_test_seh() catches the exception.
+        // Run the test. VEH handler intercepts crashes and either:
+        // 1. longjmp directly (recoverable: null deref, arithmetic)
+        // 2. RtlRestoreContext (severe: heap corruption, wild pointer)
+        // SEH __try/__except is kept as belt-and-suspenders fallback.
         int32_t result = tml_run_test_seh(test_fn);
         tml_catching_panic = 0;
+#ifdef _M_X64
+        tml_recovery_context_valid = 0;
+#endif
         tml_remove_exception_filter();
         return result;
     } else if (jmp_result == 1) {
         // Got here via longjmp from panic()
         tml_catching_panic = 0;
+#ifdef _M_X64
+        tml_recovery_context_valid = 0;
+#endif
         tml_remove_exception_filter();
         RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
         fflush(stderr);
         return -1;
     } else {
-        // Got here via longjmp (jmp_result == 2) — shouldn't happen now
+        // Got here via longjmp (jmp_result == 2) from VEH handler (recoverable crash)
         tml_catching_panic = 0;
+#ifdef _M_X64
+        tml_recovery_context_valid = 0;
+#endif
         tml_remove_exception_filter();
+        RT_FATAL("runtime", "%s", tml_panic_msg[0] ? tml_panic_msg : "CRASH: Unknown");
+        fflush(stderr);
         return -2;
     }
 

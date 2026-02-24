@@ -55,6 +55,7 @@ pub func char_to_nibble(c: I32) -> I32 {
 /// assert(encode("Hello") == "48656c6c6f")
 /// assert(encode("") == "")
 /// ```
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {
@@ -84,6 +85,7 @@ pub func encode(input: Str) -> Str {
 /// ```tml
 /// assert(encode_upper("Hello") == "48656C6C6F")
 /// ```
+@allocates
 pub func encode_upper(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

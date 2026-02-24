@@ -216,21 +216,6 @@ func text_str_len(s: Str) -> I64 {
     0
 }
 
-// Push raw bytes into text
-func text_push_raw(h: *Unit, src: *U8, src_offset: I64, count: I64) {
-    if count <= 0 {
-        return
-    }
-    let cur_len: I64 = text_get_len(h)
-    text_ensure_cap(h, cur_len + count)
-    let data: *U8 = text_get_data(h)
-    text_copy_bytes(data, cur_len, src, src_offset, count)
-    let new_len: I64 = cur_len + count
-    text_set_len(h, new_len)
-    // null-terminate
-    text_set_byte(data, new_len, 0 as U8)
-}
-
 // Push a Str into text
 func text_push_str_raw(h: *Unit, s: Str) {
     let slen: I64 = text_str_len(s)
@@ -381,6 +366,7 @@ impl Text {
     // ========================================================================
 
     /// Get the string data as a Str (returns a fresh heap copy).
+    @allocates
     pub func as_str(this) -> Str {
         let data: *U8 = text_get_data(this.handle)
         let addr: I64 = data as I64

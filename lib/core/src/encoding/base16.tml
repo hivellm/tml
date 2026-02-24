@@ -16,11 +16,13 @@ use core::str
 use core::encoding::hex
 
 /// Encode a string's bytes as lowercase base16 (hexadecimal).
+@allocates
 pub func encode(input: Str) -> Str {
     return hex::encode(input)
 }
 
 /// Encode a string's bytes as uppercase base16 (hexadecimal).
+@allocates
 pub func encode_upper(input: Str) -> Str {
     return hex::encode_upper(input)
 }

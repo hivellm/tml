@@ -249,37 +249,72 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         return final_result;
     }
 
-    // For enum struct comparisons, extract the tag field (first i32)
+    // For @flags enum bitwise operations, extract underlying iN, operate, wrap back
     if (is_enum_struct) {
-        // Allocate space for left struct
+        // Check if this is a @flags enum
+        std::string enum_name = left_type.substr(8); // Remove "%struct."
+        auto flags_it = flags_enums_.find(enum_name);
+        bool is_flags = (flags_it != flags_enums_.end());
+
+        // Determine underlying integer type for tag field
+        std::string tag_type = "i32";
+        if (is_flags) {
+            tag_type = flags_it->second.underlying_llvm_type;
+        }
+
+        // Extract tag/value from left
         std::string left_alloca = fresh_reg();
         emit_line("  " + left_alloca + " = alloca " + left_type);
         emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
-
-        // Extract tag from left
         std::string left_tag_ptr = fresh_reg();
         emit_line("  " + left_tag_ptr + " = getelementptr " + left_type + ", ptr " + left_alloca +
                   ", i32 0, i32 0");
         std::string left_tag = fresh_reg();
-        emit_line("  " + left_tag + " = load i32, ptr " + left_tag_ptr);
+        emit_line("  " + left_tag + " = load " + tag_type + ", ptr " + left_tag_ptr);
 
-        // Allocate space for right struct
+        // Extract tag/value from right
         std::string right_alloca = fresh_reg();
         emit_line("  " + right_alloca + " = alloca " + right_type);
         emit_line("  store " + right_type + " " + right + ", ptr " + right_alloca);
-
-        // Extract tag from right
         std::string right_tag_ptr = fresh_reg();
         emit_line("  " + right_tag_ptr + " = getelementptr " + right_type + ", ptr " +
                   right_alloca + ", i32 0, i32 0");
         std::string right_tag = fresh_reg();
-        emit_line("  " + right_tag + " = load i32, ptr " + right_tag_ptr);
+        emit_line("  " + right_tag + " = load " + tag_type + ", ptr " + right_tag_ptr);
 
-        // Replace left/right with tag values
+        // For @flags enums with bitwise ops, operate on raw values and wrap result
+        if (is_flags && (bin.op == parser::BinaryOp::BitOr || bin.op == parser::BinaryOp::BitAnd ||
+                         bin.op == parser::BinaryOp::BitXor)) {
+            std::string op_str;
+            if (bin.op == parser::BinaryOp::BitOr)
+                op_str = "or";
+            else if (bin.op == parser::BinaryOp::BitAnd)
+                op_str = "and";
+            else
+                op_str = "xor";
+
+            std::string raw_result = fresh_reg();
+            emit_line("  " + raw_result + " = " + op_str + " " + tag_type + " " + left_tag + ", " +
+                      right_tag);
+
+            // Wrap back into struct
+            std::string res_alloca = fresh_reg();
+            emit_line("  " + res_alloca + " = alloca " + left_type);
+            std::string res_ptr = fresh_reg();
+            emit_line("  " + res_ptr + " = getelementptr " + left_type + ", ptr " + res_alloca +
+                      ", i32 0, i32 0");
+            emit_line("  store " + tag_type + " " + raw_result + ", ptr " + res_ptr);
+            std::string final_result = fresh_reg();
+            emit_line("  " + final_result + " = load " + left_type + ", ptr " + res_alloca);
+            last_expr_type_ = left_type;
+            return final_result;
+        }
+
+        // For comparison ops (==, !=, etc.) just use extracted values
         left = left_tag;
         right = right_tag;
-        left_type = "i32";
-        right_type = "i32";
+        left_type = tag_type;
+        right_type = tag_type;
     }
 
     // Get semantic types for signedness detection

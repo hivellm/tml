@@ -251,6 +251,7 @@ impl Url {
     pub func get_fragment(this) -> Str { return this.fragment }
 
     /// Get the authority string: [userinfo@]host[:port].
+    @allocates
     pub func authority(this) -> Str {
         var result: Str = ""
         if str::len(this.userinfo) > 0 {
@@ -264,6 +265,7 @@ impl Url {
     }
 
     /// Get host:port or just host if no port.
+    @allocates
     pub func host_port(this) -> Str {
         if this.port >= 0 {
             return this.host + ":" + helpers::i64_to_str(this.port)
@@ -272,6 +274,7 @@ impl Url {
     }
 
     /// Reconstruct the URL as a string.
+    @allocates
     pub func to_string(this) -> Str {
         return url_to_string_impl(this.scheme, this.userinfo, this.host, this.port, this.path, this.raw_query, this.fragment)
     }

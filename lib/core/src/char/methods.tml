@@ -556,6 +556,7 @@ pub func encode_utf16(c: Char) -> ([U16; 2], I64) {
 /// assert_eq(escape_unicode('A'), "\\u{41}")
 /// assert_eq(escape_unicode('🦀'), "\\u{1F980}")
 /// ```
+@allocates
 pub func escape_unicode(c: Char) -> Str {
     return "\\u{" + to_hex_string(c) + "}"
 }
@@ -573,6 +574,7 @@ pub func escape_unicode(c: Char) -> Str {
 /// assert_eq(escape_default('\n'), "\\n")
 /// assert_eq(escape_default('λ'), "\\u{3BB}")
 /// ```
+@allocates
 pub func escape_default(c: Char) -> Str {
     let code: U32 = c as U32
     when code {
@@ -596,6 +598,7 @@ pub func escape_default(c: Char) -> Str {
 /// Returns a debug escape sequence for this character.
 ///
 /// Similar to `escape_default` but always includes quotes.
+@allocates
 pub func escape_debug(c: Char) -> Str {
     return "'" + escape_default(c) + "'"
 }
