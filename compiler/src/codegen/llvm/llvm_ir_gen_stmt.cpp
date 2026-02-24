@@ -50,6 +50,22 @@ static bool is_semantic_str(const types::TypePtr& sem_type) {
            sem_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
 }
 
+// Helper to check if a string concat chain consists entirely of string literals.
+// When all operands are literals, the codegen folds them into a single global
+// constant at compile time — no heap allocation occurs.
+static bool is_all_literal_str_concat(const parser::Expr& expr) {
+    if (expr.is<parser::LiteralExpr>()) {
+        return expr.as<parser::LiteralExpr>().token.kind == lexer::TokenKind::StringLiteral;
+    }
+    if (expr.is<parser::BinaryExpr>()) {
+        const auto& bin = expr.as<parser::BinaryExpr>();
+        if (bin.op == parser::BinaryOp::Add) {
+            return is_all_literal_str_concat(*bin.left) && is_all_literal_str_concat(*bin.right);
+        }
+    }
+    return false;
+}
+
 // Helper to check if an expression produces a heap-allocated Str.
 // Returns true for expressions that produce uniquely-owned heap Str.
 // tml_str_free validates heap pointers before freeing, so it's safe to
@@ -62,9 +78,13 @@ bool LLVMIRGen::is_heap_str_producer(const parser::Expr& expr) const {
     // Template literals always heap-allocate
     if (expr.is<parser::TemplateLiteralExpr>())
         return true;
-    // Binary expressions on strings (concatenation) heap-allocate
-    if (expr.is<parser::BinaryExpr>())
+    // Binary expressions on strings (concatenation) heap-allocate —
+    // EXCEPT when all operands are string literals (compile-time folded to constant).
+    if (expr.is<parser::BinaryExpr>()) {
+        if (is_all_literal_str_concat(expr))
+            return false; // Folded to global constant, no heap allocation
         return true;
+    }
     // Function/method calls returning Str: only those marked @allocates produce
     // fresh heap-allocated Str. Non-@allocates functions may return borrowed
     // pointers (e.g., FFI functions returning const char* from C data structures).

@@ -7,6 +7,10 @@ TML_MODULE("test")
 
 #include "test_runner_internal.hpp"
 
+#ifdef _WIN32
+extern "C" void tml_str_free_register_module(void*);
+#endif
+
 namespace tml::cli {
 
 // ============================================================================
@@ -342,6 +346,10 @@ bool DynamicLibrary::load(const std::string& path) {
             return false;
         }
     }
+
+    // Register the DLL's image range so tml_str_free can distinguish
+    // string constants in the DLL's .rdata from heap allocations.
+    tml_str_free_register_module(handle_);
 #else
     handle_ = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (!handle_) {
