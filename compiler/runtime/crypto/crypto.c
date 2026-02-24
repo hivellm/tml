@@ -216,9 +216,26 @@ static const char* map_hash_name(const char* name) {
     return name; // md5, sha1, sha256, sha384, sha512 are the same
 }
 
-static TmlBuffer* hash_string(const char* data, const char* algorithm) {
+// Get EVP_MD pointer using direct API calls for common algorithms.
+// EVP_sha256() etc. return internal cached pointers - no string lookup needed.
+static const EVP_MD* get_evp_md(const char* algorithm) {
+    if (strcmp(algorithm, "sha256") == 0)
+        return EVP_sha256();
+    if (strcmp(algorithm, "sha512") == 0)
+        return EVP_sha512();
+    if (strcmp(algorithm, "sha384") == 0)
+        return EVP_sha384();
+    if (strcmp(algorithm, "md5") == 0)
+        return EVP_md5();
+    if (strcmp(algorithm, "sha1") == 0)
+        return EVP_sha1();
+    // Fallback for uncommon algorithms (sha3-*, blake2*, sha512-256)
     const char* ossl_name = map_hash_name(algorithm);
-    const EVP_MD* md = EVP_get_digestbyname(ossl_name);
+    return EVP_get_digestbyname(ossl_name);
+}
+
+static TmlBuffer* hash_string(const char* data, const char* algorithm) {
+    const EVP_MD* md = get_evp_md(algorithm);
     if (!md)
         return NULL;
 
@@ -250,8 +267,7 @@ static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
     if (!input)
         return NULL;
 
-    const char* ossl_name = map_hash_name(algorithm);
-    const EVP_MD* md = EVP_get_digestbyname(ossl_name);
+    const EVP_MD* md = get_evp_md(algorithm);
     if (!md)
         return NULL;
 
@@ -345,8 +361,7 @@ typedef struct {
 } HashContext;
 
 TML_EXPORT void* crypto_hash_create(const char* algorithm) {
-    const char* ossl_name = map_hash_name(algorithm);
-    const EVP_MD* md = EVP_get_digestbyname(ossl_name);
+    const EVP_MD* md = get_evp_md(algorithm);
     if (!md)
         return NULL;
 

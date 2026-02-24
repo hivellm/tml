@@ -7,8 +7,33 @@
 // Integer to string conversion (pure TML)
 // ============================================================================
 
+// Count decimal digits using comparisons (no divisions).
+// Binary search over powers of 10 - avg ~4 comparisons for any I64.
+func count_digits_u64(n: U64) -> I64 {
+    if n < 10 { return 1 }
+    if n < 100 { return 2 }
+    if n < 1000 { return 3 }
+    if n < 10000 { return 4 }
+    if n < 100000 { return 5 }
+    if n < 1000000 { return 6 }
+    if n < 10000000 { return 7 }
+    if n < 100000000 { return 8 }
+    if n < 1000000000 { return 9 }
+    if n < 10000000000 { return 10 }
+    if n < 100000000000 { return 11 }
+    if n < 1000000000000 { return 12 }
+    if n < 10000000000000 { return 13 }
+    if n < 100000000000000 { return 14 }
+    if n < 1000000000000000 { return 15 }
+    if n < 10000000000000000 { return 16 }
+    if n < 100000000000000000 { return 17 }
+    if n < 1000000000000000000 { return 18 }
+    if n < 10000000000000000000 { return 19 }
+    return 20
+}
+
 /// Converts an I64 to its decimal string representation.
-/// Uses a single heap allocation by counting digits first.
+/// Uses comparison-based digit counting (no division) + single write pass.
 @allocates
 pub func i64_to_str(value: I64) -> Str {
     if value == 0 {
@@ -16,26 +41,20 @@ pub func i64_to_str(value: I64) -> Str {
     }
 
     let is_negative: Bool = value < 0
-    var v: I64 = value
     let min_i64: I64 = -9223372036854775807 - 1
 
     // Handle MIN_VALUE specially: can't negate it
-    if is_negative and v == min_i64 {
+    if is_negative and value == min_i64 {
         return "-9223372036854775808"
     }
 
+    var v: I64 = value
     if is_negative {
         v = 0 - v
     }
 
-    // Count digits first to allocate exactly once
-    var num_digits: I64 = 0
-    var tmp: I64 = v
-    loop (tmp > 0) {
-        num_digits = num_digits + 1
-        tmp = tmp / 10
-    }
-
+    // Count digits with comparisons (no divisions needed for counting)
+    let num_digits: I64 = count_digits_u64(v as U64)
     let total_len: I64 = if is_negative { num_digits + 1 } else { num_digits }
     let buf: *U8 = lowlevel { mem_alloc(total_len + 1) } as *U8
     let buf_addr: I64 = buf as I64
@@ -61,20 +80,15 @@ pub func i64_to_str(value: I64) -> Str {
 }
 
 /// Converts a U64 to its decimal string representation.
-/// Uses a single heap allocation by counting digits first.
+/// Uses comparison-based digit counting (no division) + single write pass.
 @allocates
 pub func u64_to_str(value: U64) -> Str {
     if value == 0 {
         return "0"
     }
 
-    // Count digits first
-    var num_digits: I64 = 0
-    var tmp: U64 = value
-    loop (tmp > 0) {
-        num_digits = num_digits + 1
-        tmp = tmp / 10
-    }
+    // Count digits with comparisons (no divisions needed for counting)
+    let num_digits: I64 = count_digits_u64(value)
 
     let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
     let buf_addr: I64 = buf as I64

@@ -1,10 +1,10 @@
 # TML vs C++ Profile Benchmark Report
 
-**Date:** 2026-02-24 02:43:39
+**Date:** 2026-02-24 04:54:30
 **Platform:** Windows 10 (AMD64)
 **C++ Compiler:** MSVC /O2 (Visual Studio 2022)
 **TML Compiler:** tml.exe --release (LLVM -O3)
-**Total runtime:** 148.0s
+**Total runtime:** 154.4s
 
 ---
 
@@ -20,7 +20,7 @@
 | Float Addition | 0 | 0 | ~tied |
 | Float Multiplication | 0 | 0 | ~tied |
 | Square Root | 1 | - | C++ only |
-| Fibonacci Recursive (n=20) | 18 | 0 | **TML 18.0x faster** |
+| Fibonacci Recursive (n=20) | 26 | 0 | **TML 26.0x faster** |
 | Fibonacci Iterative (n=50) | 10 | 0 | **TML 10.0x faster** |
 | Empty Loop | 0 | 0 | ~tied |
 
@@ -28,38 +28,38 @@
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| Concat Small (3 strings) | 8 | 135 | C++ 17x |
+| Concat Small (3 strings) | 8 | 0 | **TML 8.0x faster** |
 | Concat Loop (with reserve) | 4 | - | C++ only |
 | Concat Loop (naive) | 4 | - | C++ only |
 | String Length | 0 | 0 | ~tied |
 | String Compare (equal) | 0 | 0 | ~tied |
 | String Compare (different) | 0 | 0 | ~tied |
-| Int to String | 9 | 36 | C++ 4x |
+| Int to String | 9 | 41 | C++ 5x |
 | String Copy | 3 | - | C++ only |
-| String Repeat (50 chars) | 155 | - | C++ only |
-| Sprintf Formatting | 72 | - | C++ only |
-| Log Building | 12 | - | C++ only |
+| String Repeat (50 chars) | 159 | - | C++ only |
+| Sprintf Formatting | 74 | - | C++ only |
+| Log Building | 13 | - | C++ only |
 | Concat Loop (Text - O(n)) | - | 1 | TML only |
-| Concat Loop (Str - O(n^2)) | - | 3172 | TML only |
-| Log Building (Text - O(n)) | - | 45 | TML only |
-| Log Building (Str - O(n^2)) | - | 4120 | TML only |
+| Concat Loop (Str - O(n^2)) | - | 3450 | TML only |
+| Log Building (Text - O(n)) | - | 91 | TML only |
+| Log Building (Str - O(n^2)) | - | 4487 | TML only |
 
 ## Collections
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| Vec Push (grow) | 4 | - | C++ only |
+| Vec Push (grow) | 5 | - | C++ only |
 | Vec Push (reserved) | 1 | - | C++ only |
 | Vec Random Access | 0 | - | C++ only |
 | Vec Iteration | 0 | - | C++ only |
-| Vec Pop | 1 | - | C++ only |
+| Vec Pop | 2 | - | C++ only |
 | Vec Set | 0 | - | C++ only |
-| HashMap Insert | 73 | - | C++ only |
-| HashMap Insert (reserved) | 64 | - | C++ only |
+| HashMap Insert | 127 | - | C++ only |
+| HashMap Insert (reserved) | 95 | - | C++ only |
 | HashMap Lookup | 5 | - | C++ only |
-| HashMap Contains | 5 | - | C++ only |
-| HashMap Remove | 95 | - | C++ only |
-| HashMap String Key | 174 | - | C++ only |
+| HashMap Contains | 4 | - | C++ only |
+| HashMap Remove | 96 | - | C++ only |
+| HashMap String Key | 202 | - | C++ only |
 | Array Sequential Read | - | 0 | TML only |
 | Array Random Access | - | 0 | TML only |
 | Array Write | - | 0 | TML only |
@@ -73,10 +73,10 @@
 
 | Operation | TML (ns/op) | TML Ops/sec |
 |---|---|---|
-| HashMap Insert | 29 | 33,533,416 |
-| HashMap Lookup | 11 | 86,772,413 |
-| HashMap Contains | 8 | 116,890,707 |
-| HashMap Remove | 41 | 23,833,357 |
+| HashMap Insert | 37 | 26,690,866 |
+| HashMap Lookup | 12 | 81,303,457 |
+| HashMap Contains | 8 | 113,240,023 |
+| HashMap Remove | 47 | 21,130,480 |
 
 ## List
 
@@ -84,17 +84,17 @@
 
 | Operation | TML (ns/op) | TML Ops/sec |
 |---|---|---|
-| List Push (grow) | 2 | 353,406,841 |
-| List Random Access | 0 | 17,301,038,062 |
-| List Iteration | 0 | 3,591,954,022 |
-| List Pop | 1 | 749,681,385 |
-| List Set | 0 | 2,983,293,556 |
+| List Push (grow) | 3 | 276,946,936 |
+| List Random Access | 0 | 126,582,278,481 |
+| List Iteration | 0 | 2,579,979,360 |
+| List Pop | 1 | 526,870,389 |
+| List Set | 0 | 2,543,234,994 |
 
 ## Control Flow
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| If-Else Chain (4 branches) | 0 | 0 | ~tied |
+| If-Else Chain (4 branches) | 1 | 0 | ~tied |
 | Nested If (4 levels) | 0 | 0 | ~tied |
 | Switch Dense (10 cases) | 1 | - | C++ only |
 | Switch Sparse (10 cases) | 1 | - | C++ only |
@@ -129,7 +129,7 @@
 | Filter Pattern | 0 | - | C++ only |
 | Chain Operations | 0 | 0 | ~tied |
 | Function Pointer | - | 0 | TML only |
-| Function Pointer Switch | - | 3 | TML only |
+| Function Pointer Switch | - | 4 | TML only |
 | Function Composition | - | 0 | TML only |
 | Manual Loop (array) | - | 0 | TML only |
 | Map Simulation | - | 0 | TML only |
@@ -141,13 +141,13 @@
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
 | Inline Call | 0 | 0 | ~tied |
-| Direct Call (noinline) | 0 | 0 | ~tied |
-| Many Parameters (6 args) | 0 | 0 | ~tied |
-| Fibonacci Recursive (n=20) | 21 | 10 | **TML 2.1x faster** |
+| Direct Call (noinline) | 1 | 0 | ~tied |
+| Many Parameters (6 args) | 1 | 0 | ~tied |
+| Fibonacci Recursive (n=20) | 26 | 10 | **TML 2.6x faster** |
 | Fibonacci Tail (n=50) | 0 | 0 | ~tied |
 | Mutual Recursion (n=100) | 0 | 0 | ~tied |
 | Function Pointer | 1 | - | C++ only |
-| std::function | 2 | - | C++ only |
+| std::function | 3 | - | C++ only |
 | Virtual Call | 0 | - | C++ only |
 | Devirtualized Call | 0 | - | C++ only |
 
@@ -155,15 +155,15 @@
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| malloc/free (64 bytes) | 154 | - | C++ only |
-| new/delete Small (16 bytes) | 22 | - | C++ only |
-| new/delete Medium (64 bytes) | 154 | - | C++ only |
-| new/delete Large (192 bytes) | 28 | - | C++ only |
+| malloc/free (64 bytes) | 166 | - | C++ only |
+| new/delete Small (16 bytes) | 23 | - | C++ only |
+| new/delete Medium (64 bytes) | 159 | - | C++ only |
+| new/delete Large (192 bytes) | 30 | - | C++ only |
 | Stack Struct Creation | 0 | - | C++ only |
 | unique_ptr RAII | 23 | - | C++ only |
 | Struct Copy (64 bytes) | 0 | - | C++ only |
 | memcpy (1KB) | 0 | - | C++ only |
-| Array Alloc (1000 structs) | 30 | - | C++ only |
+| Array Alloc (1000 structs) | 29 | - | C++ only |
 | Sequential Access | 0 | 0 | ~tied |
 | Random Access | 0 | 0 | ~tied |
 | Pointer Indirection | 0 | - | C++ only |
@@ -179,19 +179,19 @@
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| stringstream Append | 172 | - | C++ only |
-| string Reserve+Append | 16 | - | C++ only |
-| string Naive Append | 5 | - | C++ only |
-| Build JSON | 345 | - | C++ only |
-| Build HTML | 17 | - | C++ only |
+| stringstream Append | 165 | - | C++ only |
+| string Reserve+Append | 13 | - | C++ only |
+| string Naive Append | 4 | - | C++ only |
+| Build JSON | 341 | - | C++ only |
+| Build HTML | 16 | - | C++ only |
 | Build CSV | 39 | - | C++ only |
 | Small Appends (1 char) | 0 | - | C++ only |
-| Number Formatting | 679 | 78 | **TML 8.7x faster** |
-| Log Messages | 46 | 37 | ~tied |
+| Number Formatting | 785 | 91 | **TML 8.6x faster** |
+| Log Messages | 47 | 38 | ~tied |
 | Path Building | 24 | 9 | **TML 2.7x faster** |
-| Text Append (O(1) amortized) | - | 41 | TML only |
-| Str Naive Append (O(n^2)) | - | 3191 | TML only |
-| Build JSON (10K items) | - | 82 | TML only |
+| Text Append (O(1) amortized) | - | 46 | TML only |
+| Str Naive Append (O(n^2)) | - | 3102 | TML only |
+| Build JSON (10K items) | - | 95 | TML only |
 | Build HTML (10K items) | - | 4 | TML only |
 | Build CSV (10K rows) | - | 26 | TML only |
 | Small Appends push() | - | 0 | TML only |
@@ -211,8 +211,8 @@
 | Deep Inheritance (4 levels) | 0 | - | C++ only |
 | Multiple Inheritance | 0 | - | C++ only |
 | Stack Allocation | 0 | 0 | ~tied |
-| Heap Allocation (unique_ptr) | 23 | - | C++ only |
-| Shared Pointer (shared_ptr) | 27 | - | C++ only |
+| Heap Allocation (unique_ptr) | 27 | - | C++ only |
+| Shared Pointer (shared_ptr) | 35 | - | C++ only |
 | Circle Method Calls | - | 1 | TML only |
 | Rectangle Method Calls | - | 1 | TML only |
 | Deep Composition (4 levels) | - | 0 | TML only |
@@ -239,23 +239,23 @@
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| Base64 Encode (13 bytes) | 36 | 39 | ~tied |
-| Base64 Encode (95 bytes) | 94 | 73 | **TML 1.3x faster** |
-| Base64 Decode (20 chars) | 71 | 57 | ~tied |
-| Hex Encode (13 bytes) | 35 | 37 | ~tied |
-| Hex Decode (26 chars) | 59 | 52 | ~tied |
-| Base32 Encode (13 bytes) | 39 | 47 | C++ 1.2x |
+| Base64 Encode (13 bytes) | 37 | 46 | C++ 1.2x |
+| Base64 Encode (95 bytes) | 95 | 78 | ~tied |
+| Base64 Decode (20 chars) | 61 | 64 | ~tied |
+| Hex Encode (13 bytes) | 35 | 42 | ~tied |
+| Hex Decode (26 chars) | 61 | 58 | ~tied |
+| Base32 Encode (13 bytes) | 40 | 51 | C++ 1.3x |
 
 ## Crypto
 
 | Operation | C++ (ns/op) | TML (ns/op) | Verdict |
 |---|---:|---:|---|
-| SHA256 (13 bytes) | 335 | 485 | C++ 1.4x |
-| SHA256 (95 bytes) | 346 | 498 | C++ 1.4x |
-| SHA256 Streaming (3 updates) | 345 | 545 | C++ 1.6x |
-| SHA512 (13 bytes) | 434 | 610 | C++ 1.4x |
-| MD5 (13 bytes) | 331 | 476 | C++ 1.4x |
-| SHA256 + to_hex (13 bytes) | 385 | 577 | C++ 1.5x |
+| SHA256 (13 bytes) | 317 | 413 | C++ 1.3x |
+| SHA256 (95 bytes) | 364 | 438 | C++ 1.2x |
+| SHA256 Streaming (3 updates) | 335 | 453 | C++ 1.4x |
+| SHA512 (13 bytes) | 431 | 531 | C++ 1.2x |
+| MD5 (13 bytes) | 344 | 424 | C++ 1.2x |
+| SHA256 + to_hex (13 bytes) | 374 | 521 | C++ 1.4x |
 
 ## Json
 
@@ -263,15 +263,15 @@
 
 | Operation | TML (ns/op) | TML Ops/sec |
 |---|---|---|
-| Parse Tiny (27 bytes) | 283 | 3,525,446 |
-| Parse Small (200 bytes) | 1207 | 828,362 |
-| Parse Medium (500 bytes) | 2940 | 340,109 |
-| Parse Standard (non-SIMD) | 2112 | 473,383 |
-| Field Access | 1128 | 886,513 |
-| Array Iteration | 1231 | 811,945 |
-| Nested Object Access | 1554 | 643,284 |
-| Parse + Validate | 1075 | 929,805 |
-| Object Traversal | 1093 | 914,899 |
+| Parse Tiny (27 bytes) | 309 | 3,234,435 |
+| Parse Small (200 bytes) | 1081 | 924,523 |
+| Parse Medium (500 bytes) | 2887 | 346,377 |
+| Parse Standard (non-SIMD) | 2127 | 470,047 |
+| Field Access | 1122 | 891,005 |
+| Array Iteration | 1280 | 781,003 |
+| Nested Object Access | 1642 | 608,694 |
+| Parse + Validate | 1140 | 876,903 |
+| Object Traversal | 1255 | 796,355 |
 
 ---
 
