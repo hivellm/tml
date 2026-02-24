@@ -461,12 +461,14 @@ impl[E: Error] ChainedError[E] {
 }
 
 impl[E: Error] Display for ChainedError[E] {
+    @allocates
     pub func to_string(this) -> Str {
         return this.message + ": " + this.cause.to_string()
     }
 }
 
 impl[E: Error] Debug for ChainedError[E] {
+    @allocates
     pub func debug_string(this) -> Str {
         // Use to_string() since E: Error implies E: Display, but not E: Debug
         return "ChainedError { message: \"" + this.message + "\", cause: " + this.cause.to_string() + " }"
@@ -554,6 +556,7 @@ impl ParseError {
 }
 
 impl Display for ParseError {
+    @allocates
     pub func to_string(this) -> Str {
         when this.position {
             Just(pos) => return "parse error at position " + pos.to_string() + ": " + this.message,
@@ -563,6 +566,7 @@ impl Display for ParseError {
 }
 
 impl Debug for ParseError {
+    @allocates
     pub func debug_string(this) -> Str {
         let pos_str: Str = when this.position {
             Just(p) => "Just(" + p.to_string() + ")",
@@ -786,6 +790,7 @@ impl IoError {
 }
 
 impl Display for IoError {
+    @allocates
     pub func to_string(this) -> Str {
         when this.message {
             Just(msg) => return this.kind.to_string() + ": " + msg,

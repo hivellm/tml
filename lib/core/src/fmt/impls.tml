@@ -509,6 +509,7 @@ impl LowerHex for U64 {
 
 /// Lower hex format for `I8`.
 impl LowerHex for I8 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U8) as U64, false)
     }
@@ -516,6 +517,7 @@ impl LowerHex for I8 {
 
 /// Lower hex format for `I16`.
 impl LowerHex for I16 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U16) as U64, false)
     }
@@ -523,6 +525,7 @@ impl LowerHex for I16 {
 
 /// Lower hex format for `I32`.
 impl LowerHex for I32 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U32) as U64, false)
     }
@@ -530,6 +533,7 @@ impl LowerHex for I32 {
 
 /// Lower hex format for `I64`.
 impl LowerHex for I64 {
+    @allocates
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
@@ -549,6 +553,7 @@ impl UpperHex for U8 {
 
 /// Upper hex format for `U16`.
 impl UpperHex for U16 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
