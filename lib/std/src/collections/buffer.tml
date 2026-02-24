@@ -911,6 +911,7 @@ impl Buffer {
     // ========================================================================
 
     /// Converts the buffer to a hexadecimal string.
+    @allocates
     pub func to_hex(this) -> Str {
         let h: I64 = this.handle as I64
         let len: I64 = buf_get_len(h)
@@ -934,6 +935,7 @@ impl Buffer {
     }
 
     /// Converts the buffer to a UTF-8 string.
+    @allocates
     pub func to_string(this) -> Str {
         let h: I64 = this.handle as I64
         let len: I64 = buf_get_len(h)

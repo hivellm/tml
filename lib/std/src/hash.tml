@@ -109,6 +109,7 @@ impl Hash32 {
     /// let hash = fnv1a32("hello")
     /// let hex = hash.to_hex()  // e.g., "4f9f2cab"
     /// ```
+    @allocates
     pub func to_hex(this) -> Str {
         return ffi_u32_to_hex(this.value)
     }
@@ -144,6 +145,7 @@ impl Hash64 {
     /// let hash = fnv1a64("hello")
     /// let hex = hash.to_hex()  // e.g., "a430d84680aabd0b"
     /// ```
+    @allocates
     pub func to_hex(this) -> Str {
         return ffi_u64_to_hex(this.value)
     }

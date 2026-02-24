@@ -146,6 +146,7 @@ impl CryptoError {
     }
 
     /// Convert to string.
+    @allocates
     pub func to_string(this) -> Str {
         return "CryptoError: " + this.message
     }

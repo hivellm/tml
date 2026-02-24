@@ -132,6 +132,7 @@ impl ZlibError {
     }
 
     /// Returns the error message.
+    @allocates
     pub func to_string(this) -> Str {
         if this.code != 0 {
             return this.message + " (code: " + this.code.to_string() + ")"

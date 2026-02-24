@@ -199,6 +199,7 @@ impl[T] Default for List[T] {
 
 /// Formats a list as `[elem1, elem2, elem3]`.
 impl[T: Display] Display for List[T] {
+    @allocates
     pub func to_string(this) -> Str {
         let mut result: Str = "["
         let mut i: I64 = 0
@@ -215,6 +216,7 @@ impl[T: Display] Display for List[T] {
 
 /// Formats a list with type info as `List[elem1, elem2, elem3]`.
 impl[T: Debug] Debug for List[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         let mut result: Str = "List["
         let mut i: I64 = 0
@@ -396,6 +398,7 @@ impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
 
 /// Displays the map as `{key1: value1, key2: value2, ...}`.
 impl[K: Display, V: Display] Display for HashMap[K, V] {
+    @allocates
     pub func to_string(this) -> Str {
         let mut result: Str = "{"
         var iter = this.iter()
@@ -415,6 +418,7 @@ impl[K: Display, V: Display] Display for HashMap[K, V] {
 
 /// Displays debug info as `HashMap{key1: value1, key2: value2, ...}`.
 impl[K: Debug, V: Debug] Debug for HashMap[K, V] {
+    @allocates
     pub func debug_string(this) -> Str {
         let mut result: Str = "HashMap{"
         var iter = this.iter()

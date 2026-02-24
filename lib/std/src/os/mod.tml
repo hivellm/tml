@@ -144,12 +144,14 @@ func ffi_get_priority(pid: I32) -> I32
 @extern("tml_os_set_priority")
 func ffi_set_priority(pid: I32, priority: I32) -> I32
 
+@allocates
 @extern("tml_os_current_dir")
 func ffi_current_dir() -> Str
 
 @extern("tml_os_set_current_dir")
 func ffi_set_current_dir(path: Str) -> I32
 
+@allocates
 @extern("tml_os_exec")
 func ffi_exec(command: Str) -> Str
 

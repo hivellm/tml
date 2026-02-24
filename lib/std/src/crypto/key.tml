@@ -656,11 +656,13 @@ pub type KeyPair {
 
 impl KeyPair {
     /// Exports both keys to PEM format.
+    @allocates
     pub func to_pem(this) -> (Str, Str) {
         return (this.public_key.to_pem(), this.private_key.to_pem())
     }
 
     /// Exports both keys to JWK format.
+    @allocates
     pub func to_jwk(this) -> (Str, Str) {
         return (this.public_key.to_jwk(), this.private_key.to_jwk())
     }

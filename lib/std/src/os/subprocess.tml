@@ -71,9 +71,11 @@ func ffi_kill(handle: I64) -> I32
 @extern("tml_process_id")
 func ffi_id(handle: I64) -> I32
 
+@allocates
 @extern("tml_process_read_stdout")
 func ffi_read_stdout(handle: I64) -> Str
 
+@allocates
 @extern("tml_process_read_stderr")
 func ffi_read_stderr(handle: I64) -> Str
 

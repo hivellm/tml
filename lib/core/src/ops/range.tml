@@ -135,6 +135,7 @@ impl[T: Duplicate] Bound[T] {
 }
 
 impl[T: Debug] Debug for Bound[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         when this {
             Bound::Included(t) => return "Included(" + t.debug_string() + ")",
@@ -145,6 +146,7 @@ impl[T: Debug] Debug for Bound[T] {
 }
 
 impl[T: Display] Display for Bound[T] {
+    @allocates
     pub func to_string(this) -> Str {
         when this {
             Bound::Included(t) => return "Included(" + t.to_string() + ")",
