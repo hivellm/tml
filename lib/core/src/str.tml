@@ -80,6 +80,9 @@ func c_strlen(s: Str) -> I64
 @extern("memcmp")
 func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
 
+@extern("memchr")
+func c_memchr(s: *U8, c: I32, n: I64) -> *U8
+
 // ============================================================================
 // String Length and Emptiness
 // ============================================================================
@@ -204,17 +207,8 @@ pub func substring(s: Str, start: I64, end: I64) -> Str {
     }
     let sub_len: I64 = en - st
     let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
-    let src: I64 = s as I64
-    var i: I64 = 0
-    loop (i < sub_len) {
-        let sp: *U8 = (src + st + i) as *U8
-        let dp: *U8 = (buf as I64 + i) as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](sp) }
-        lowlevel { ptr_write[U8](dp, byte) }
-        i = i + 1
-    }
-    let null_p: *U8 = (buf as I64 + sub_len) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    lowlevel { copy_nonoverlapping((s as I64 + st) as *U8, buf as *U8, sub_len) }
+    lowlevel { ptr_write[U8]((buf as I64 + sub_len) as *U8, 0 as U8) }
     return buf as Str
 }
 
@@ -599,20 +593,7 @@ pub func split(s: Str, delimiter: Str) -> List[Str] {
     var start: I64 = 0
     var pos: I64 = 0
     loop (pos <= s_len - d_len) {
-        var matched: Bool = true
-        var k: I64 = 0
-        loop (k < d_len) {
-            let sp: *U8 = (s_base + pos + k) as *U8
-            let dp: *U8 = (d_base + k) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let db: U8 = lowlevel { ptr_read[U8](dp) }
-            if (sb as I32) != (db as I32) {
-                matched = false
-                break
-            }
-            k = k + 1
-        }
-        if matched {
+        if c_memcmp((s_base + pos) as *U8, d_base as *U8, d_len) == 0 {
             result.push(substring(s, start, pos))
             start = pos + d_len
             pos = start
@@ -687,38 +668,30 @@ pub func lines(s: Str) -> List[Str] {
     }
     let src: I64 = s as I64
     var start: I64 = 0
-    var i: I64 = 0
-    loop (i < s_len) {
-        let p: *U8 = (src + i) as *U8
-        let b: U8 = lowlevel { ptr_read[U8](p) }
-        let ch: I32 = b as I32
-        if ch == 10 {
-            // Check for \r\n
-            var line_end: I64 = i
-            if line_end > start {
-                let prev_p: *U8 = (src + line_end - 1) as *U8
-                let prev_b: U8 = lowlevel { ptr_read[U8](prev_p) }
-                if (prev_b as I32) == 13 {
-                    line_end = line_end - 1
-                }
+    loop (start <= s_len) {
+        let remaining: I64 = s_len - start
+        if remaining <= 0 { break }
+        let found: *U8 = c_memchr((src + start) as *U8, 10, remaining)
+        let found_addr: I64 = found as I64
+        if found_addr == 0 {
+            // No more newlines — push the rest
+            var end: I64 = s_len
+            if end > start {
+                let last_b: U8 = lowlevel { ptr_read[U8]((src + end - 1) as *U8) }
+                if (last_b as I32) == 13 { end = end - 1 }
             }
-            result.push(substring(s, start, line_end))
-            start = i + 1
+            result.push(substring(s, start, end))
+            break
         }
-        i = i + 1
-    }
-    // Push last line if there is remaining content
-    if start < s_len {
-        // Strip trailing \r
-        var end: I64 = s_len
-        if end > start {
-            let last_p: *U8 = (src + end - 1) as *U8
-            let last_b: U8 = lowlevel { ptr_read[U8](last_p) }
-            if (last_b as I32) == 13 {
-                end = end - 1
-            }
+        let i: I64 = found_addr - src
+        // Check for \r\n
+        var line_end: I64 = i
+        if line_end > start {
+            let prev_b: U8 = lowlevel { ptr_read[U8]((src + line_end - 1) as *U8) }
+            if (prev_b as I32) == 13 { line_end = line_end - 1 }
         }
-        result.push(substring(s, start, end))
+        result.push(substring(s, start, line_end))
+        start = i + 1
     }
     return result
 }
@@ -824,40 +797,21 @@ pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
         let r_len: I64 = len(replacement)
         let new_len: I64 = s_len - p_len + r_len
         let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
-        let src: I64 = s as I64
         let dst: I64 = buf as I64
-        let r_base: I64 = replacement as I64
         // Copy before match
-        var i: I64 = 0
-        loop (i < pos) {
-            let sp: *U8 = (src + i) as *U8
-            let dp: *U8 = (dst + i) as *U8
-            let b: U8 = lowlevel { ptr_read[U8](sp) }
-            lowlevel { ptr_write[U8](dp, b) }
-            i = i + 1
+        if pos > 0 {
+            lowlevel { copy_nonoverlapping(s as *U8, dst as *U8, pos) }
         }
         // Copy replacement
-        var ri: I64 = 0
-        loop (ri < r_len) {
-            let rp: *U8 = (r_base + ri) as *U8
-            let dp: *U8 = (dst + pos + ri) as *U8
-            let b: U8 = lowlevel { ptr_read[U8](rp) }
-            lowlevel { ptr_write[U8](dp, b) }
-            ri = ri + 1
+        if r_len > 0 {
+            lowlevel { copy_nonoverlapping(replacement as *U8, (dst + pos) as *U8, r_len) }
         }
         // Copy after match
-        var si: I64 = pos + p_len
-        var di: I64 = pos + r_len
-        loop (si < s_len) {
-            let sp: *U8 = (src + si) as *U8
-            let dp: *U8 = (dst + di) as *U8
-            let b: U8 = lowlevel { ptr_read[U8](sp) }
-            lowlevel { ptr_write[U8](dp, b) }
-            si = si + 1
-            di = di + 1
+        let after_len: I64 = s_len - pos - p_len
+        if after_len > 0 {
+            lowlevel { copy_nonoverlapping((s as I64 + pos + p_len) as *U8, (dst + pos + r_len) as *U8, after_len) }
         }
-        let null_p: *U8 = (dst + new_len) as *U8
-        lowlevel { ptr_write[U8](null_p, 0 as U8) }
+        lowlevel { ptr_write[U8]((dst + new_len) as *U8, 0 as U8) }
         return buf as Str
     }
     return s
@@ -892,22 +846,13 @@ pub func repeat(s: Str, n: I64) -> Str {
     }
     let total: I64 = s_len * n
     let buf: *Unit = lowlevel { mem_alloc(total + 1) }
-    let src: I64 = s as I64
     let dst: I64 = buf as I64
     var i: I64 = 0
     loop (i < n) {
-        var j: I64 = 0
-        loop (j < s_len) {
-            let sp: *U8 = (src + j) as *U8
-            let dp: *U8 = (dst + i * s_len + j) as *U8
-            let b: U8 = lowlevel { ptr_read[U8](sp) }
-            lowlevel { ptr_write[U8](dp, b) }
-            j = j + 1
-        }
+        lowlevel { copy_nonoverlapping(s as *U8, (dst + i * s_len) as *U8, s_len) }
         i = i + 1
     }
-    let null_p: *U8 = (dst + total) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    lowlevel { ptr_write[U8]((dst + total) as *U8, 0 as U8) }
     return buf as Str
 }
 
@@ -1285,39 +1230,22 @@ pub func join(parts: List[Str], separator: Str) -> Str {
     }
     let buf: *Unit = lowlevel { mem_alloc(total + 1) }
     let dst: I64 = buf as I64
-    let sep_base: I64 = separator as I64
     var di: I64 = 0
     idx = 0
     loop (idx < count) {
         let part: Str = parts.get(idx)
         let p_len: I64 = len(part)
-        let p_base: I64 = part as I64
-        // Copy part bytes
-        var pi: I64 = 0
-        loop (pi < p_len) {
-            let sp: *U8 = (p_base + pi) as *U8
-            let dp: *U8 = (dst + di) as *U8
-            let b: U8 = lowlevel { ptr_read[U8](sp) }
-            lowlevel { ptr_write[U8](dp, b) }
-            pi = pi + 1
-            di = di + 1
+        if p_len > 0 {
+            lowlevel { copy_nonoverlapping(part as *U8, (dst + di) as *U8, p_len) }
+            di = di + p_len
         }
-        // Copy separator between parts
-        if idx < count - 1 {
-            var si: I64 = 0
-            loop (si < sep_len) {
-                let sp: *U8 = (sep_base + si) as *U8
-                let dp: *U8 = (dst + di) as *U8
-                let b: U8 = lowlevel { ptr_read[U8](sp) }
-                lowlevel { ptr_write[U8](dp, b) }
-                si = si + 1
-                di = di + 1
-            }
+        if idx < count - 1 and sep_len > 0 {
+            lowlevel { copy_nonoverlapping(separator as *U8, (dst + di) as *U8, sep_len) }
+            di = di + sep_len
         }
         idx = idx + 1
     }
-    let null_p: *U8 = (dst + di) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
     return buf as Str
 }
 
