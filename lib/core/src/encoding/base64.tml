@@ -14,21 +14,16 @@
 use core::str
 
 /// Maps a 6-bit value (0-63) to the standard Base64 alphabet character code.
+/// Uses a lookup table for branch-free O(1) access.
 func encode_char(idx: I32) -> U8 {
-    if idx < 26 { return (idx + 65) as U8 }         // A-Z
-    if idx < 52 { return (idx - 26 + 97) as U8 }    // a-z
-    if idx < 62 { return (idx - 52 + 48) as U8 }    // 0-9
-    if idx == 62 { return 43 as U8 }                 // +
-    return 47 as U8                                   // /
+    let table: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    return lowlevel { ptr_read[U8]((table as I64 + idx as I64) as *U8) }
 }
 
 /// Maps a 6-bit value (0-63) to the URL-safe Base64 alphabet character code.
 func encode_char_url(idx: I32) -> U8 {
-    if idx < 26 { return (idx + 65) as U8 }         // A-Z
-    if idx < 52 { return (idx - 26 + 97) as U8 }    // a-z
-    if idx < 62 { return (idx - 52 + 48) as U8 }    // 0-9
-    if idx == 62 { return 45 as U8 }                 // -
-    return 95 as U8                                   // _
+    let table: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    return lowlevel { ptr_read[U8]((table as I64 + idx as I64) as *U8) }
 }
 
 /// Maps a Base64 character code to its 6-bit value.
@@ -91,10 +86,10 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
         let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
 
-        let c0: I32 = b0 / 4                                // bits 7-2 of b0
-        let c1: I32 = (b0 % 4) * 16 + b1 / 16               // bits 1-0 of b0 + bits 7-4 of b1
-        let c2: I32 = (b1 % 16) * 4 + b2 / 64                // bits 3-0 of b1 + bits 7-6 of b2
-        let c3: I32 = b2 % 64                                 // bits 5-0 of b2
+        let c0: I32 = (b0 >> 2) & 63                           // bits 7-2 of b0
+        let c1: I32 = ((b0 & 3) << 4) | ((b1 >> 4) & 15)     // bits 1-0 of b0 + bits 7-4 of b1
+        let c2: I32 = ((b1 & 15) << 2) | ((b2 >> 6) & 3)     // bits 3-0 of b1 + bits 7-6 of b2
+        let c3: I32 = b2 & 63                                  // bits 5-0 of b2
 
         if url_safe {
             lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
@@ -114,8 +109,8 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
     // Handle remainder (1 or 2 bytes)
     if remainder == 1 {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
-        let c0: I32 = b0 / 4
-        let c1: I32 = (b0 % 4) * 16
+        let c0: I32 = (b0 >> 2) & 63
+        let c1: I32 = (b0 & 3) << 4
         if url_safe {
             lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
             lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
@@ -130,9 +125,9 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
     if remainder == 2 {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
-        let c0: I32 = b0 / 4
-        let c1: I32 = (b0 % 4) * 16 + b1 / 16
-        let c2: I32 = (b1 % 16) * 4
+        let c0: I32 = (b0 >> 2) & 63
+        let c1: I32 = ((b0 & 3) << 4) | ((b1 >> 4) & 15)
+        let c2: I32 = (b1 & 15) << 2
         if url_safe {
             lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
             lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
@@ -217,9 +212,9 @@ func decode_impl(b64: Str) -> Outcome[Str, Str] {
         let cv: I32 = if c == -2 { 0 } else { c }
         let dv: I32 = if d == -2 { 0 } else { d }
 
-        let byte0: U8 = (a * 4 + b / 16) as U8
-        let byte1: U8 = ((b % 16) * 16 + cv / 4) as U8
-        let byte2: U8 = ((cv % 4) * 64 + dv) as U8
+        let byte0: U8 = ((a << 2) | ((b >> 4) & 3)) as U8
+        let byte1: U8 = (((b & 15) << 4) | ((cv >> 2) & 15)) as U8
+        let byte2: U8 = (((cv & 3) << 6) | dv) as U8
 
         if di < out_len {
             lowlevel { ptr_write[U8]((dst + di) as *U8, byte0) }

@@ -68,8 +68,8 @@ pub func encode(input: Str) -> Str {
     loop (i < in_len) {
         let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
         let b: I32 = byte as I32
-        let hi: U8 = nibble_to_lower(b / 16)
-        let lo: U8 = nibble_to_lower(b % 16)
+        let hi: U8 = nibble_to_lower((b >> 4) & 15)
+        let lo: U8 = nibble_to_lower(b & 15)
         lowlevel { ptr_write[U8]((buf as I64 + i * 2) as *U8, hi) }
         lowlevel { ptr_write[U8]((buf as I64 + i * 2 + 1) as *U8, lo) }
         i = i + 1
@@ -98,8 +98,8 @@ pub func encode_upper(input: Str) -> Str {
     loop (i < in_len) {
         let byte: U8 = lowlevel { ptr_read[U8]((src + i) as *U8) }
         let b: I32 = byte as I32
-        let hi: U8 = nibble_to_upper(b / 16)
-        let lo: U8 = nibble_to_upper(b % 16)
+        let hi: U8 = nibble_to_upper((b >> 4) & 15)
+        let lo: U8 = nibble_to_upper(b & 15)
         lowlevel { ptr_write[U8]((buf as I64 + i * 2) as *U8, hi) }
         lowlevel { ptr_write[U8]((buf as I64 + i * 2 + 1) as *U8, lo) }
         i = i + 1
@@ -140,7 +140,7 @@ pub func decode(hex_str: Str) -> Outcome[Str, Str] {
             lowlevel { mem_free(buf) }
             return Err("hex: invalid character")
         }
-        let byte: U8 = (hi * 16 + lo) as U8
+        let byte: U8 = ((hi << 4) | lo) as U8
         lowlevel { ptr_write[U8]((buf as I64 + i) as *U8, byte) }
         i = i + 1
     }

@@ -164,20 +164,36 @@ pub func u32_to_binary_str(n: U32) -> Str {
 }
 
 /// Converts a U64 to its binary string representation (without prefix).
+/// Uses a single allocation with backwards digit writing.
 @allocates
 pub func u64_to_binary_str(n: U64) -> Str {
     if n == 0 { return "0" }
-    var result: Str = ""
+
+    // Count bits needed (max 64)
+    var num_bits: I64 = 0
+    var tmp: U64 = n
+    loop (tmp != 0) {
+        num_bits = num_bits + 1
+        tmp = tmp >> 1
+    }
+
+    let buf: *U8 = lowlevel { mem_alloc(num_bits + 1) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator
+    lowlevel { ptr_write[U8]((buf_addr + num_bits) as *U8, 0 as U8) }
+
+    // Write digits backwards
+    var pos: I64 = num_bits - 1
     var val: U64 = n
     loop (val != 0) {
-        if val % 2 == 1 {
-            result = "1" + result
-        } else {
-            result = "0" + result
-        }
-        val = val / 2
+        let digit: U8 = ((val & 1) as U8) + (48 as U8)  // '0' = 48
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
+        val = val >> 1
+        pos = pos - 1
     }
-    return result
+
+    return buf as Str
 }
 
 /// Converts an I8 to its binary string representation (two's complement).
@@ -209,17 +225,36 @@ pub func i64_to_binary_str(n: I64) -> Str {
 // ============================================================================
 
 /// Converts a U64 to its octal string representation (without prefix).
+/// Uses a single allocation with backwards digit writing.
 @allocates
 pub func u64_to_octal_str(n: U64) -> Str {
     if n == 0 { return "0" }
-    var result: Str = ""
+
+    // Count digits needed (max 22 for U64)
+    var num_digits: I64 = 0
+    var tmp: U64 = n
+    loop (tmp != 0) {
+        num_digits = num_digits + 1
+        tmp = tmp >> 3
+    }
+
+    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator
+    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
+
+    // Write digits backwards
+    var pos: I64 = num_digits - 1
     var val: U64 = n
     loop (val != 0) {
-        let digit: U64 = val % 8
-        result = digit_to_char(digit as I32) + result
-        val = val / 8
+        let digit: U8 = ((val & 7) as U8) + (48 as U8)  // '0' = 48
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
+        val = val >> 3
+        pos = pos - 1
     }
-    return result
+
+    return buf as Str
 }
 
 // ============================================================================
@@ -228,17 +263,39 @@ pub func u64_to_octal_str(n: U64) -> Str {
 
 /// Converts a U64 to its hexadecimal string representation (without prefix).
 /// If `upper` is true, uses uppercase letters (A-F), otherwise lowercase (a-f).
+/// Uses a single allocation with backwards digit writing and lookup table.
 @allocates
 pub func u64_to_hex_str(n: U64, upper: Bool) -> Str {
     if n == 0 { return "0" }
-    var result: Str = ""
+
+    let table: Str = if upper { "0123456789ABCDEF" } else { "0123456789abcdef" }
+    let table_addr: I64 = table as I64
+
+    // Count digits needed (max 16 for U64)
+    var num_digits: I64 = 0
+    var tmp: U64 = n
+    loop (tmp != 0) {
+        num_digits = num_digits + 1
+        tmp = tmp >> 4
+    }
+
+    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator
+    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
+
+    // Write digits backwards using lookup table
+    var pos: I64 = num_digits - 1
     var val: U64 = n
     loop (val != 0) {
-        let digit: U64 = val % 16
-        result = hex_digit(digit as I32, upper) + result
-        val = val / 16
+        let digit: U8 = lowlevel { ptr_read[U8]((table_addr + (val & 15) as I64) as *U8) }
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
+        val = val >> 4
+        pos = pos - 1
     }
-    return result
+
+    return buf as Str
 }
 
 // ============================================================================

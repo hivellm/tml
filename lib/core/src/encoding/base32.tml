@@ -14,11 +14,10 @@
 use core::str
 
 /// Maps a 5-bit value (0-31) to the Base32 alphabet character code.
+/// Uses a lookup table for branch-free O(1) access.
 func encode_char(idx: I32) -> U8 {
-    if idx < 26 {
-        return (idx + 65) as U8   // A-Z
-    }
-    return (idx - 26 + 50) as U8  // 2-7
+    let table: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    return lowlevel { ptr_read[U8]((table as I64 + idx as I64) as *U8) }
 }
 
 /// Maps a Base32 character to its 5-bit value, or -1 for invalid, -2 for padding.
@@ -61,14 +60,14 @@ pub func encode(input: Str) -> Str {
         let b3: I32 = lowlevel { ptr_read[U8]((src + si + 3) as *U8) } as I32
         let b4: I32 = lowlevel { ptr_read[U8]((src + si + 4) as *U8) } as I32
 
-        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
-        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
-        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
-        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2 + b3 / 128)) }
-        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 / 4) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char((b3 % 4) * 8 + b4 / 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, encode_char(b4 % 32)) }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char((b0 >> 3) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(((b0 & 7) << 2) | ((b1 >> 6) & 3))) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 >> 1) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char(((b1 & 1) << 4) | ((b2 >> 4) & 15))) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char(((b2 & 15) << 1) | ((b3 >> 7) & 1))) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 >> 2) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char(((b3 & 3) << 3) | ((b4 >> 5) & 7))) }
+        lowlevel { ptr_write[U8]((dst + di + 7) as *U8, encode_char(b4 & 31)) }
 
         si = si + 5
         di = di + 8
@@ -77,8 +76,8 @@ pub func encode(input: Str) -> Str {
     // Handle remainder with padding
     if remainder == 1 {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
-        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
-        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4)) }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char((b0 >> 3) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 & 7) << 2)) }
         lowlevel { ptr_write[U8]((dst + di + 2) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 4) as *U8, 61 as U8) }
@@ -90,10 +89,10 @@ pub func encode(input: Str) -> Str {
     if remainder == 2 {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
-        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
-        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
-        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16)) }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char((b0 >> 3) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(((b0 & 7) << 2) | ((b1 >> 6) & 3))) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 >> 1) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 & 1) << 4)) }
         lowlevel { ptr_write[U8]((dst + di + 4) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 5) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 6) as *U8, 61 as U8) }
@@ -104,11 +103,11 @@ pub func encode(input: Str) -> Str {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
         let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
-        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
-        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
-        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
-        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2)) }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char((b0 >> 3) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(((b0 & 7) << 2) | ((b1 >> 6) & 3))) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 >> 1) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char(((b1 & 1) << 4) | ((b2 >> 4) & 15))) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 & 15) << 1)) }
         lowlevel { ptr_write[U8]((dst + di + 5) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 6) as *U8, 61 as U8) }
         lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
@@ -119,13 +118,13 @@ pub func encode(input: Str) -> Str {
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
         let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
         let b3: I32 = lowlevel { ptr_read[U8]((src + si + 3) as *U8) } as I32
-        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(b0 / 8)) }
-        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char((b0 % 8) * 4 + b1 / 64)) }
-        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 / 2) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char((b1 % 2) * 16 + b2 / 16)) }
-        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char((b2 % 16) * 2 + b3 / 128)) }
-        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 / 4) % 32)) }
-        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char((b3 % 4) * 8)) }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char((b0 >> 3) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(((b0 & 7) << 2) | ((b1 >> 6) & 3))) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char((b1 >> 1) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char(((b1 & 1) << 4) | ((b2 >> 4) & 15))) }
+        lowlevel { ptr_write[U8]((dst + di + 4) as *U8, encode_char(((b2 & 15) << 1) | ((b3 >> 7) & 1))) }
+        lowlevel { ptr_write[U8]((dst + di + 5) as *U8, encode_char((b3 >> 2) & 31)) }
+        lowlevel { ptr_write[U8]((dst + di + 6) as *U8, encode_char(((b3 & 3) << 3))) }
         lowlevel { ptr_write[U8]((dst + di + 7) as *U8, 61 as U8) }
         di = di + 8
     }
