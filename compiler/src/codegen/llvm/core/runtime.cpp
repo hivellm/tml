@@ -56,11 +56,13 @@ void LLVMIRGen::emit_header() {
     emit_line("");
 
     // Compiler identification embedded in the binary.
-    // @llvm.used prevents LLVM from stripping the unreferenced constant.
+    // comdat any + linkonce_odr: linker keeps one copy across multiple .obj files.
+    // @llvm.used: prevents LLVM from stripping the unreferenced constant.
     // Identifiable via `strings foo.exe | grep "tml version"`.
     std::string ident = "tml version " + std::string(tml::VERSION);
-    emit_line("@__tml_ident = constant [" + std::to_string(ident.size() + 1) + " x i8] c\"" +
-              ident + "\\00\", align 1");
+    emit_line("$__tml_ident = comdat any");
+    emit_line("@__tml_ident = linkonce_odr constant [" + std::to_string(ident.size() + 1) +
+              " x i8] c\"" + ident + "\\00\", comdat, align 1");
     emit_line(
         "@llvm.used = appending global [1 x ptr] [ptr @__tml_ident], section \"llvm.metadata\"");
     emit_line("");

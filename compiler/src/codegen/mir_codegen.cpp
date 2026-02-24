@@ -278,8 +278,9 @@ void MirCodegen::emit_preamble() {
 
     // Compiler identification embedded in the binary
     std::string ident = "tml version " + std::string(tml::VERSION);
-    emitln("@__tml_ident = constant [" + std::to_string(ident.size() + 1) + " x i8] c\"" + ident +
-           "\\00\", align 1");
+    emitln("$__tml_ident = comdat any");
+    emitln("@__tml_ident = linkonce_odr constant [" + std::to_string(ident.size() + 1) +
+           " x i8] c\"" + ident + "\\00\", comdat, align 1");
     emitln("@llvm.used = appending global [1 x ptr] [ptr @__tml_ident], section \"llvm.metadata\"");
     emitln();
 
