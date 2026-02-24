@@ -42,18 +42,23 @@ func ffi_path_rename(src_path: Str, dst_path: Str) -> Bool
 @extern("path_copy")
 func ffi_path_copy(src_path: Str, dst_path: Str) -> Bool
 
+@allocates
 @extern("path_join")
 func ffi_path_join(base_path: Str, child_path: Str) -> Str
 
+@allocates
 @extern("path_parent")
 func ffi_path_parent(path: Str) -> Str
 
+@allocates
 @extern("path_filename")
 func ffi_path_filename(path: Str) -> Str
 
+@allocates
 @extern("path_extension")
 func ffi_path_extension(path: Str) -> Str
 
+@allocates
 @extern("path_absolute")
 func ffi_path_absolute(path: Str) -> Str
 

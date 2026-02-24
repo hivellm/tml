@@ -39,6 +39,7 @@
 @extern("glob_match")
 func ffi_glob_match(base_dir: Str, pattern: Str) -> *Unit
 
+@allocates
 @extern("glob_result_next")
 func ffi_glob_result_next(result: *Unit) -> Str
 

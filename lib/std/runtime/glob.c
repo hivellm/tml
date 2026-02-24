@@ -578,7 +578,7 @@ TmlGlobResult* glob_match(const char* base_dir, const char* pattern) {
 const char* glob_result_next(TmlGlobResult* result) {
     if (!result || result->cursor >= result->count)
         return "";
-    return result->paths[result->cursor++];
+    return _strdup(result->paths[result->cursor++]);
 }
 
 int64_t glob_result_count(TmlGlobResult* result) {

@@ -27,6 +27,7 @@ func ffi_file_close(handle: *Unit)
 @extern("file_is_open")
 func ffi_file_is_open(handle: *Unit) -> Bool
 
+@allocates
 @extern("file_read_line")
 func ffi_file_read_line(handle: *Unit) -> Str
 
@@ -39,6 +40,7 @@ func ffi_file_size(handle: *Unit) -> I64
 @extern("file_flush")
 func ffi_file_flush(handle: *Unit) -> Bool
 
+@allocates
 @extern("file_read_all")
 func ffi_file_read_all(path: Str) -> Str
 

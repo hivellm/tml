@@ -243,6 +243,7 @@ impl VersionReq {
 // === Internal helpers ===
 
 /// Format version components to string.
+@allocates
 func format_version(major: I64, minor: I64, patch: I64, pre: Str, build_meta: Str) -> Str {
     let maj: Str = helpers::i64_to_str(major)
     let min: Str = helpers::i64_to_str(minor)
