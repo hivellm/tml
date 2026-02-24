@@ -70,18 +70,16 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
         } else if (lit_pat.literal.kind == lexer::TokenKind::FloatLiteral) {
             lit_val = std::to_string(lit_pat.literal.float_value().value);
         } else if (lit_pat.literal.kind == lexer::TokenKind::StringLiteral) {
-            // String pattern matching: use str_eq runtime function
+            // String pattern matching: direct strcmp (Str is never null)
             std::string str_val = std::string(lit_pat.literal.string_value().value);
             std::string pattern_str = add_string_literal(str_val);
 
-            // Call str_eq(scrutinee, pattern) - returns i32 (0 or 1)
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + scrutinee + ", ptr " +
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + scrutinee + ", ptr " +
                       pattern_str + ")");
 
-            // Convert i32 to i1 for branch condition
             std::string cmp = fresh_reg();
-            emit_line("  " + cmp + " = icmp ne i32 " + eq_i32 + ", 0");
+            emit_line("  " + cmp + " = icmp eq i32 " + cmp_result + ", 0");
             return cmp;
         } else {
             // Unsupported literal type

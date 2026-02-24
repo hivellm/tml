@@ -390,10 +390,10 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
         type_defs_buffer_ << "  " << var_ptr << " = getelementptr [" << (variant.name.size() + 1)
                           << " x i8], ptr " << var_const << ", i32 0, i32 0\n";
         std::string cmp = fresh_temp();
-        type_defs_buffer_ << "  " << cmp << " = call i32 @str_eq(ptr " << variant_str << ", ptr "
+        type_defs_buffer_ << "  " << cmp << " = call i32 @strcmp(ptr " << variant_str << ", ptr "
                           << var_ptr << ")\n";
         std::string is_match = fresh_temp();
-        type_defs_buffer_ << "  " << is_match << " = icmp ne i32 " << cmp << ", 0\n";
+        type_defs_buffer_ << "  " << is_match << " = icmp eq i32 " << cmp << ", 0\n";
         type_defs_buffer_ << "  br i1 " << is_match << ", label %match_" << tag << ", label %check_"
                           << (tag + 1) << "\n\n";
 

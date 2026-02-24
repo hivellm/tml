@@ -63,13 +63,13 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                 msg_literal = add_string_literal("values not equal");
             }
 
-            // For strings, use str_eq
+            // For strings, use direct strcmp (Str is never null)
             if (cmp_type == "ptr" || left_type == "ptr" || right_type == "ptr") {
                 std::string cmp_result = fresh_reg();
-                emit_line("  " + cmp_result + " = call i32 @str_eq(ptr " + left + ", ptr " + right +
+                emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + left + ", ptr " + right +
                           ")");
                 std::string bool_result = fresh_reg();
-                emit_line("  " + bool_result + " = icmp ne i32 " + cmp_result + ", 0");
+                emit_line("  " + bool_result + " = icmp eq i32 " + cmp_result + ", 0");
 
                 std::string ok_label = fresh_label("assert_ok");
                 std::string fail_label = fresh_label("assert_fail");

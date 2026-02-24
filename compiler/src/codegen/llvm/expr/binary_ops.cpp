@@ -732,10 +732,12 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fcmp oeq " + float_type + " " + left + ", " + right);
         } else if (is_string) {
-            // String comparison using str_eq runtime function (returns i32, convert to i1)
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
-            emit_line("  " + result + " = icmp ne i32 " + eq_i32 + ", 0");
+            // Direct strcmp — TML Str is never null by language design,
+            // so we skip the null checks that str_eq performs
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + left + ", ptr " + right +
+                      ")");
+            emit_line("  " + result + " = icmp eq i32 " + cmp_result + ", 0");
         } else if (left_type == "ptr" && right_type == "ptr") {
             // Pointer equality comparison (non-string pointers)
             emit_line("  " + result + " = icmp eq ptr " + left + ", " + right);
@@ -749,10 +751,11 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fcmp one " + float_type + " " + left + ", " + right);
         } else if (is_string) {
-            // String comparison: NOT str_eq (str_eq returns i32, convert to i1)
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
-            emit_line("  " + result + " = icmp eq i32 " + eq_i32 + ", 0");
+            // Direct strcmp — TML Str is never null by language design
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + left + ", ptr " + right +
+                      ")");
+            emit_line("  " + result + " = icmp ne i32 " + cmp_result + ", 0");
         } else if (left_type == "ptr" && right_type == "ptr") {
             // Pointer inequality comparison (non-string pointers)
             emit_line("  " + result + " = icmp ne ptr " + left + ", " + right);

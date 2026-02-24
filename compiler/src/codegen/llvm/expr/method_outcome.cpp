@@ -335,11 +335,11 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
         std::string values_eq = fresh_reg();
         if (ok_llvm_type == "ptr") {
-            // str_eq returns i32, convert to i1
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + ok_val + ", ptr " +
+            // Direct strcmp — Str is never null
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + ok_val + ", ptr " +
                       cmp_val_deref + ")");
-            emit_line("  " + values_eq + " = icmp ne i32 " + eq_i32 + ", 0");
+            emit_line("  " + values_eq + " = icmp eq i32 " + cmp_result + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + ok_llvm_type + " " + ok_val + ", " +
                       cmp_val_deref);
@@ -399,11 +399,11 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
         std::string values_eq = fresh_reg();
         if (err_llvm_type == "ptr") {
-            // str_eq returns i32, convert to i1
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + err_val + ", ptr " +
+            // Direct strcmp — Str is never null
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + err_val + ", ptr " +
                       cmp_val_deref + ")");
-            emit_line("  " + values_eq + " = icmp ne i32 " + eq_i32 + ", 0");
+            emit_line("  " + values_eq + " = icmp eq i32 " + cmp_result + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + err_llvm_type + " " + err_val + ", " +
                       cmp_val_deref);

@@ -554,11 +554,11 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
         std::string values_eq = fresh_reg();
         if (inner_llvm_type == "ptr") {
-            // str_eq returns i32, convert to i1
-            std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + just_val + ", ptr " + cmp_val +
-                      ")");
-            emit_line("  " + values_eq + " = icmp ne i32 " + eq_i32 + ", 0");
+            // Direct strcmp — Str is never null
+            std::string cmp_result = fresh_reg();
+            emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + just_val + ", ptr " +
+                      cmp_val + ")");
+            emit_line("  " + values_eq + " = icmp eq i32 " + cmp_result + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + inner_llvm_type + " " + just_val + ", " +
                       cmp_val);
