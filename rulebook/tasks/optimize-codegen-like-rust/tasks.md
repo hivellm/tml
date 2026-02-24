@@ -14,10 +14,10 @@
 
 ## Phase 2: Eliminate Redundant Alloca in Constructors
 
-- [ ] 2.1 Use `insertvalue` directly for struct construction when all fields are known at init time
+- [x] 2.1 Use `insertvalue` directly for struct construction when all fields are known at init time
 - [ ] 2.2 Use `extractvalue` directly for struct field reads on SSA values (not via GEP+load)
 - [ ] 2.3 Eliminate alloca+store+load pattern for function parameters in simple functions
-- [ ] 2.4 Keep alloca path for mutable locals and complex patterns (address-taken, closures)
+- [x] 2.4 Keep alloca path for mutable locals and complex patterns (address-taken, closures, arrays, generics)
 - [ ] 2.5 Compare IR output with Rust for `new()`, `next()`, and similar functions
 
 ## Phase 3: Dead Declaration Elimination (DONE)

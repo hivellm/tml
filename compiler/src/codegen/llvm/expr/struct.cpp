@@ -855,8 +855,139 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
 }
 
 auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
-    std::string ptr = gen_struct_expr_ptr(s);
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
+
+    // Fast path: use insertvalue chain for simple value-type struct literals.
+    // Conditions: not SIMD, not union, not class, no ..base update syntax,
+    // all fields explicitly provided (no defaults), and all field types are
+    // simple (no arrays or complex types that may need store-through-memory coercion).
+    bool use_insertvalue = false;
+    if (!s.base.has_value() && !s.fields.empty() &&
+        simd_types_.find(base_name) == simd_types_.end() &&
+        union_types_.find(base_name) == union_types_.end() &&
+        !env_.lookup_class(base_name).has_value()) {
+        auto generic_it = pending_generic_structs_.find(base_name);
+        if (generic_it == pending_generic_structs_.end()) {
+            auto fields_it = struct_fields_.find(base_name);
+            if (fields_it != struct_fields_.end() && s.fields.size() == fields_it->second.size()) {
+                // Verify all field types are insertvalue-safe (no arrays, no complex types)
+                use_insertvalue = true;
+                for (const auto& fi : fields_it->second) {
+                    if (fi.llvm_type.starts_with("[") || fi.llvm_type.empty()) {
+                        use_insertvalue = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (use_insertvalue) {
+        // Resolve struct type
+        std::string struct_type;
+        if (base_name == "Self" && !current_impl_type_.empty()) {
+            struct_type = "%struct." + current_impl_type_;
+        } else {
+            std::string ret_type_prefix = "%struct." + base_name + "__";
+            if (!current_ret_type_.empty() && current_ret_type_.starts_with(ret_type_prefix)) {
+                struct_type = current_ret_type_;
+            } else {
+                auto sem_type = std::make_shared<types::Type>(types::NamedType{base_name, "", {}});
+                struct_type = llvm_type_from_semantic(sem_type, true);
+            }
+        }
+
+        // Resolve the lookup name from struct_type
+        std::string struct_name_for_lookup = struct_type;
+        if (struct_name_for_lookup.starts_with("%struct.")) {
+            struct_name_for_lookup = struct_name_for_lookup.substr(8);
+        }
+
+        // Build the struct value with insertvalue chain
+        std::string current = "undef";
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            const std::string& field_name = s.fields[i].first;
+            int field_idx = get_field_index(struct_name_for_lookup, field_name);
+            std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
+
+            // Set expected types for integer/float literal coercion
+            std::string saved_expected_enum_type = expected_enum_type_;
+            if (!target_field_type.empty() && target_field_type.starts_with("%struct.")) {
+                expected_enum_type_ = target_field_type;
+            }
+            if (target_field_type == "i8" || target_field_type == "i16" ||
+                target_field_type == "i64") {
+                expected_literal_type_ = target_field_type;
+                expected_literal_is_unsigned_ = false;
+            }
+
+            std::string field_val = gen_expr(*s.fields[i].second);
+            std::string actual_type = last_expr_type_;
+
+            // Mark variable as consumed (move semantics)
+            if (s.fields[i].second->is<parser::IdentExpr>()) {
+                const auto& ident = s.fields[i].second->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
+
+            expected_enum_type_ = saved_expected_enum_type;
+            expected_literal_type_.clear();
+            expected_literal_is_unsigned_ = false;
+
+            // Type coercions (same as alloca path)
+            std::string field_type = actual_type;
+            if (actual_type == "ptr" && target_field_type.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + target_field_type + ", ptr " + field_val);
+                field_val = loaded;
+                field_type = target_field_type;
+            } else if (target_field_type != actual_type && target_field_type != "i32") {
+                if (actual_type == "i32" && target_field_type == "i64") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = sext i32 " + field_val + " to i64");
+                    field_val = casted;
+                    field_type = "i64";
+                } else if (actual_type == "i64" && target_field_type == "i32") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = trunc i64 " + field_val + " to i32");
+                    field_val = casted;
+                    field_type = "i32";
+                } else if (actual_type == "ptr" && target_field_type == "{ ptr, ptr }") {
+                    std::string fat = fresh_reg();
+                    emit_line("  " + fat +
+                              " = insertvalue { ptr, ptr } { ptr null, ptr null }, ptr " +
+                              field_val + ", 0");
+                    field_val = fat;
+                    field_type = "{ ptr, ptr }";
+                } else if (actual_type == "double" && target_field_type == "float") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = fptrunc double " + field_val + " to float");
+                    field_val = casted;
+                    field_type = "float";
+                } else if (actual_type == "float" && target_field_type == "double") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = fpext float " + field_val + " to double");
+                    field_val = casted;
+                    field_type = "double";
+                } else {
+                    // Unhandled type mismatch — keep actual_type so insertvalue
+                    // uses the correct type for the value.
+                    field_type = actual_type;
+                }
+            }
+
+            std::string next = fresh_reg();
+            emit_line("  " + next + " = insertvalue " + struct_type + " " + current + ", " +
+                      field_type + " " + field_val + ", " + std::to_string(field_idx));
+            current = next;
+        }
+
+        last_expr_type_ = struct_type;
+        return current;
+    }
+
+    // Fallback: alloca+GEP+store+load path (for classes, unions, SIMD, ..base, defaults)
+    std::string ptr = gen_struct_expr_ptr(s);
     std::string struct_type;
 
     // Check if this is a SIMD vector type
