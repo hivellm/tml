@@ -369,6 +369,7 @@ pub type DebugAsDisplay[T: Display] {
 }
 
 impl[T: Display] Debug for DebugAsDisplay[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return this.value.to_string()
     }

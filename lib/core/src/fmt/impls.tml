@@ -556,6 +556,7 @@ impl UpperHex for U16 {
 
 /// Upper hex format for `U32`.
 impl UpperHex for U32 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
@@ -563,6 +564,7 @@ impl UpperHex for U32 {
 
 /// Upper hex format for `U64`.
 impl UpperHex for U64 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this, true)
     }
@@ -570,6 +572,7 @@ impl UpperHex for U64 {
 
 /// Upper hex format for `I8`.
 impl UpperHex for I8 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U8) as U64, true)
     }
@@ -577,6 +580,7 @@ impl UpperHex for I8 {
 
 /// Upper hex format for `I16`.
 impl UpperHex for I16 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U16) as U64, true)
     }
@@ -584,6 +588,7 @@ impl UpperHex for I16 {
 
 /// Upper hex format for `I32`.
 impl UpperHex for I32 {
+    @allocates
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U32) as U64, true)
     }
