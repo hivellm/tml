@@ -16,7 +16,7 @@
 
 ### Phase 0.1: Verify Core Language Features
 
-- [ ] 0.1.1 Test: recursive enum (AST-like tree with enum variants containing the same enum type)
+- [ ] 0.1.1 Test: recursive enum (AST-like tree with enum variants containing `Heap[Self]`)
 - [ ] 0.1.2 Test: `HashMap[Str, T]` with 10K+ entries — insert, get, iterate, remove
 - [ ] 0.1.3 Test: `List[T]` with polymorphic element types (List of enums)
 - [ ] 0.1.4 Test: nested generics — `HashMap[Str, List[AstNode]]`
@@ -24,13 +24,27 @@
 - [ ] 0.1.6 Test: `Outcome[T, E]` error propagation through 5+ function call chain
 - [ ] 0.1.7 Test: file read → process → file write round-trip (read .tml source, write .ll output)
 - [ ] 0.1.8 Test: string concatenation performance — build 100K+ char string incrementally
-- [ ] 0.1.9 Test: closures with variable capture (if implemented; if not, document workaround)
+- [x] 0.1.9 Closures with variable capture — DONE (fat pointer architecture, verified)
 - [ ] 0.1.10 Fix any compiler bugs found in 0.1.1–0.1.9 before proceeding
+
+### Phase 0.1b: Fix Compiler Bugs Blocking Self-Hosting
+
+- [ ] 0.1b.1 Fix: default behavior method dispatch returns `()` instead of correct type — blocks Visitor pattern, iterator accumulators (fold, reduce, all, any, find), and behavior-based polymorphism
+- [ ] 0.1b.2 Fix: generic closures in combinators — `map[U]`, `and_then[U]`, `filter` on `Maybe[T]` and `Outcome[T,E]` are blocked by generic codegen
+- [ ] 0.1b.3 Fix: tuple return codegen — functions returning tuples have codegen issues
+- [ ] 0.1b.4 Fix: const generics codegen — incomplete, blocks fixed-size array types `[T; N]`
+- [ ] 0.1b.5 Fix: `BTreeMap` genericity — currently I64-only, needs generic `[K, V]` for ordered symbol tables
+- [ ] 0.1b.6 Test: `dyn Behavior` (dynamic dispatch) — verify vtable dispatch works for type-erased AST visitors
+- [ ] 0.1b.7 Fix: inline module support (`mod foo { ... }`) — parser currently only supports file-based modules
 
 ### Phase 0.2: LLVM C API Bindings
 
 > The LLVM C API (llvm-c/*.h) provides ~500 functions for building IR.
 > TML must declare these as `@extern("c")` to call them.
+>
+> **Alternative for Stage 1 proof-of-concept**: Emit LLVM IR as text (Str) and
+> shell out to `llc`/`clang` via `Command::new()`. Simpler but slower. Can be
+> used to validate the frontend before investing in full C API bindings.
 
 - [ ] 0.2.1 Create `lib/std/src/llvm/mod.tml` — LLVM FFI module
 - [ ] 0.2.2 Declare core types: `LLVMModuleRef`, `LLVMBuilderRef`, `LLVMValueRef`, `LLVMTypeRef`, `LLVMContextRef`, `LLVMBasicBlockRef`
@@ -417,7 +431,7 @@
 
 - [ ] 5.2.1 Use `tml_stage2.exe` to compile TML compiler → `tml_stage3.exe`
 - [ ] 5.2.2 Verify: `tml_stage2.exe` and `tml_stage3.exe` produce identical output (byte compare of binaries OR compare test suite output)
-- [ ] 5.2.3 Run full test suite (6,400+ tests) with `tml_stage2.exe` — all must pass
+- [ ] 5.2.3 Run full test suite (10,000+ tests) with `tml_stage2.exe` — all must pass
 - [ ] 5.2.4 Run full test suite with `tml_stage3.exe` — all must pass
 - [ ] 5.2.5 Verify: both stage executables produce identical test results
 

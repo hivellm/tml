@@ -7,7 +7,7 @@
 ## Phase 1: Enum/Maybe Layout Optimization
 
 - [x] 1.1 Specialize `Maybe[T]` layout for primitive types (I32, I64, Bool, F32, F64) to use `{ i32, T }` instead of `{ i32, [1 x i64] }`
-- [ ] 1.2 Specialize `Maybe[T]` layout for pointer types (Str, ref T) to use nullable pointer (null = Nothing) with no tag
+- [x] 1.2 Specialize `Maybe[T]` layout for pointer types (Str, ref T) to use nullable pointer (null = Nothing) with no tag
 - [x] 1.3 Specialize `Outcome[T, E]` layout for primitive types similarly
 - [x] 1.4 Ensure `when` pattern matching codegen handles both compact and generic layouts
 - [x] 1.5 Run full test suite to verify no regressions (10,281 pass, 0 fail)

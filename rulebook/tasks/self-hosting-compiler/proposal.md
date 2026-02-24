@@ -2,6 +2,7 @@
 
 ## Status
 - **Created**: 2026-02-13
+- **Updated**: 2026-02-24
 - **Status**: Proposed
 - **Priority**: Strategic (Long-term)
 
@@ -18,7 +19,7 @@ The TML compiler is currently written in ~238,000 lines of C++. Every mature lan
 | Compiler (lexer→codegen) | C++ | ~158,900 | Production |
 | Compiler headers | C++ | ~78,900 | Production |
 | C Runtime | C | ~19,100 | Partially unnecessary (see migrate-runtime-to-tml) |
-| Standard Library | TML | ~137,300 | 50% test coverage |
+| Standard Library | TML | ~137,300 | 84.7% test coverage (4,095/4,836 functions) |
 | **Total** | | **~394,200** | |
 
 ### What self-hosting means
@@ -35,8 +36,8 @@ After Stage 2, the only role of the C++ compiler is bootstrapping: compiling the
 ### Prerequisites (must be done BEFORE self-hosting)
 
 1. **`migrate-runtime-to-tml`** — Stdlib must be pure TML (collections, strings, formatting)
-2. **Language features** — Closures with captures, dynamic dispatch (optional but helpful)
-3. **File I/O** — Working file reading/writing for source files
+2. **Language features** — Closures with captures (DONE), recursive enums (BLOCKED), default behavior method dispatch (BUG), generic combinators on Maybe/Outcome (BLOCKED)
+3. **File I/O** — Working file reading/writing for source files (DONE)
 4. **Stable LLVM C API bindings** — TML must be able to call LLVM via `@extern("c")`
 
 ## The compiler in numbers
@@ -153,6 +154,19 @@ When Stage 2 is complete, the TML compiler can compile a subset of TML. At some 
 - **Scope creep**: Must resist adding language features "for the compiler." The compiler should work with existing TML.
 - **LLVM API stability**: LLVM C API changes between versions. Need version pinning.
 
+## Known Blockers (as of 2026-02-24)
+
+| Blocker | Severity | Status | Impact |
+|---------|----------|--------|--------|
+| Recursive enums (`Heap[Self]` in variants) | CRITICAL | Not implemented | Cannot represent AST, Type, CFG nodes |
+| LLVM C API bindings (~500 functions) | CRITICAL | Not started | Cannot emit code |
+| Default behavior method dispatch bug | HIGH | Returns `()` instead of correct type | Blocks Visitor pattern, iterator accumulators |
+| Generic combinators (`map[U]` on Maybe) | MEDIUM | Blocked by generic codegen | Ergonomics for compiler code |
+| BTreeMap genericity (I64-only) | MEDIUM | Compiler limitation | No ordered symbol tables |
+| Tuple return codegen | LOW | Broken | Workaround: use structs |
+| Const generics codegen | LOW | Incomplete | Workaround: use `List[T]` instead of `[T; N]` |
+| Inline modules (`mod foo { ... }`) | LOW | Parser doesn't support | Workaround: file-based modules |
+
 ## Dependencies
 
 - `migrate-runtime-to-tml` (MUST complete first)
@@ -167,5 +181,5 @@ When Stage 2 is complete, the TML compiler can compile a subset of TML. At some 
 - TML compiler written in TML compiles the full test suite identically to C++ compiler
 - Bootstrap chain produces byte-identical output at Stage 3
 - Compiler performance within 3x of C++ version
-- All 6,400+ tests pass
+- All 10,000+ tests pass
 - C++ compiler relegated to bootstrap-only role
