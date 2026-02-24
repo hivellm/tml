@@ -279,16 +279,31 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
 
             // Build Maybe[T] result using alloca/store pattern
             // If overflow: Nothing (tag=1), else: Just(value) (tag=0)
-            // The Maybe[T] layout is { i32 tag, [1 x i64] data }, so we must store
-            // the payload as i64 to match the when-pattern extraction which loads i64.
             std::string alloca_reg = fresh_reg();
             emit_line("  " + alloca_reg + " = alloca " + maybe_type);
 
-            // Extend value to i64 for payload storage (enum payload is always [N x i64])
+            // Determine store type based on compact enum layout
+            // With compact layout, Maybe[I32] is { i32, i32 } — store payload as-is
+            // With [N x i64] layout, store as i64 for alignment
             std::string store_value = value;
-            if (target_type != "i64") {
-                store_value = fresh_reg();
-                emit_line("  " + store_value + " = sext " + target_type + " " + value + " to i64");
+            std::string store_type = target_type;
+            auto payload_it = enum_payload_type_.find(maybe_type);
+            if (payload_it != enum_payload_type_.end() && !payload_it->second.empty()) {
+                // Compact layout: store in the payload's natural type
+                store_type = payload_it->second;
+                if (store_type != target_type) {
+                    store_value = fresh_reg();
+                    emit_line("  " + store_value + " = sext " + target_type + " " + value + " to " +
+                              store_type);
+                }
+            } else {
+                // Legacy [N x i64] layout: extend to i64
+                store_type = "i64";
+                if (target_type != "i64") {
+                    store_value = fresh_reg();
+                    emit_line("  " + store_value + " = sext " + target_type + " " + value +
+                              " to i64");
+                }
             }
 
             std::string label_just = "checked.just." + std::to_string(label_counter_++);
@@ -298,7 +313,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
             emit_line("  br i1 " + overflow + ", label %" + label_nothing + ", label %" +
                       label_just);
 
-            // Just branch: tag=0, store value as i64
+            // Just branch: tag=0, store value
             emit_line(label_just + ":");
             std::string tag_ptr_j = fresh_reg();
             emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
@@ -307,7 +322,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
             std::string data_ptr_j = fresh_reg();
             emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
                       alloca_reg + ", i32 0, i32 1");
-            emit_line("  store i64 " + store_value + ", ptr " + data_ptr_j);
+            emit_line("  store " + store_type + " " + store_value + ", ptr " + data_ptr_j);
             emit_line("  br label %" + label_end);
 
             // Nothing branch: tag=1
@@ -386,12 +401,24 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
             emit_line(label_ok + ":");
             std::string div_result = fresh_reg();
             emit_line("  " + div_result + " = sdiv " + target_type + " " + a + ", " + b);
-            // Extend to i64 for payload storage
+            // Determine store type based on compact enum layout
             std::string store_val = div_result;
-            if (target_type != "i64") {
-                store_val = fresh_reg();
-                emit_line("  " + store_val + " = sext " + target_type + " " + div_result +
-                          " to i64");
+            std::string div_store_type = target_type;
+            auto div_payload_it = enum_payload_type_.find(maybe_type);
+            if (div_payload_it != enum_payload_type_.end() && !div_payload_it->second.empty()) {
+                div_store_type = div_payload_it->second;
+                if (div_store_type != target_type) {
+                    store_val = fresh_reg();
+                    emit_line("  " + store_val + " = sext " + target_type + " " + div_result +
+                              " to " + div_store_type);
+                }
+            } else {
+                div_store_type = "i64";
+                if (target_type != "i64") {
+                    store_val = fresh_reg();
+                    emit_line("  " + store_val + " = sext " + target_type + " " + div_result +
+                              " to i64");
+                }
             }
             std::string tag_ptr_ok = fresh_reg();
             emit_line("  " + tag_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
@@ -400,7 +427,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
             std::string data_ptr_ok = fresh_reg();
             emit_line("  " + data_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
                       alloca_reg + ", i32 0, i32 1");
-            emit_line("  store i64 " + store_val + ", ptr " + data_ptr_ok);
+            emit_line("  store " + div_store_type + " " + store_val + ", ptr " + data_ptr_ok);
             emit_line("  br label %" + label_end);
 
             // Zero branch: return Nothing (tag=1)

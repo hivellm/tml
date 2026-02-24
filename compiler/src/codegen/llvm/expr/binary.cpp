@@ -975,7 +975,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             // Then: malloc(total_len + 1), memcpy each string, null terminate
             //
             // This saves ~5-10ns per concat by avoiding the function call overhead.
-            if (strings.size() >= 2 && strings.size() <= 4) {
+            if (strings.size() >= 2) {
                 // Collect string values and their lengths
                 struct StringInfo {
                     std::string value;  // LLVM register or constant
@@ -1092,8 +1092,6 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 return result_ptr;
             }
             // =========================================================================
-
-            // For 5+ strings, fall through to default two-operand concatenation
         }
     }
     // =========================================================================

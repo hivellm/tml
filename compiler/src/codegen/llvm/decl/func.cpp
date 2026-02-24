@@ -767,14 +767,22 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                         // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                         emit_line("  ret " + ret_type + " zeroinitializer");
                     } else {
-                        // Handle integer type extension when actual differs from expected
+                        // Handle type coercion when actual differs from expected
                         std::string final_result = result;
                         std::string actual_type = last_expr_type_;
                         if (actual_type != ret_type) {
+                            // Ptr-to-struct coercion: load struct from alloca ptr
+                            if (actual_type == "ptr" && (ret_type.starts_with("%class.") ||
+                                                         ret_type.starts_with("%struct."))) {
+                                std::string loaded = fresh_reg();
+                                emit_line("  " + loaded + " = load " + ret_type + ", ptr " +
+                                          result);
+                                final_result = loaded;
+                            }
                             // Integer extension: i32 -> i64, i16 -> i64, i8 -> i64
-                            if (ret_type == "i64" &&
-                                (actual_type == "i32" || actual_type == "i16" ||
-                                 actual_type == "i8")) {
+                            else if (ret_type == "i64" &&
+                                     (actual_type == "i32" || actual_type == "i16" ||
+                                      actual_type == "i8")) {
                                 std::string ext_reg = fresh_reg();
                                 emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
                                           " to i64");

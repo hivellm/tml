@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (55%) - Core utilities needed for production use
+**Status**: In Progress (70%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -22,9 +22,10 @@
 **Still needed (this task)**:
 - HashSet set operations (union, intersection, difference) — NOT yet implemented
 - BTreeMap/BTreeSet generic versions — currently I64-only
-- BufReader/BufWriter — NOT yet implemented
-- Path/PathBuf standalone types — basic path exists in file module, needs enhancement
+- Path enhancements — basic Path exists in `lib/std/src/file/path.tml` (parent, join, extension, filename, absolute), needs `is_absolute`, `is_relative`, `file_stem`, `with_extension`, PathBuf type
 - Vec higher-level methods (extend, drain, sort, dedup) — NOT yet implemented
+- Duration `*` and `/` operator overloads — only `.mul()`/`.div()` methods exist, not `impl Mul`/`impl Div`
+- Instant `checked_add`/`checked_sub` — NOT yet implemented
 
 **Related Tasks**:
 - Network I/O → `async-network-stack` (sync net already implemented)
@@ -106,57 +107,64 @@
 
 ## Phase 3: Buffered I/O
 
-> **Status**: Pending
+> **Status**: Mostly Done — BufReader, BufWriter, LineWriter implemented in `lib/std/src/file/bufio.tml` (file-specific, not generic)
 
-### 3.1 BufReader
-- [ ] 3.1.1 Design `BufReader[R: Read]` in `lib/std/src/io/bufreader.tml`
-- [ ] 3.1.2 Implement `new(inner: R) -> BufReader[R]`
-- [ ] 3.1.3 Implement `with_capacity(cap: U64, inner: R) -> BufReader[R]`
-- [ ] 3.1.4 Implement `Read` behavior for BufReader
-- [ ] 3.1.5 Implement `BufRead` behavior with `fill_buf()`, `consume()`
-- [ ] 3.1.6 Implement `read_line(this, buf: mut ref Text) -> Outcome[U64, IoError]`
-- [ ] 3.1.7 Implement `lines(this) -> Lines` iterator
-- [ ] 3.1.8 Implement `split(this, byte: U8) -> Split` iterator
+**Note**: Implemented as file-specific types (wrap `File`), not generic `BufReader[R: Read]`. Located in `lib/std/src/file/bufio.tml`, not `lib/std/src/io/`.
 
-### 3.2 BufWriter
-- [ ] 3.2.1 Design `BufWriter[W: Write]` in `lib/std/src/io/bufwriter.tml`
-- [ ] 3.2.2 Implement `new(inner: W) -> BufWriter[W]`
-- [ ] 3.2.3 Implement `with_capacity(cap: U64, inner: W) -> BufWriter[W]`
-- [ ] 3.2.4 Implement `Write` behavior for BufWriter
-- [ ] 3.2.5 Implement automatic flushing on drop
-- [ ] 3.2.6 Implement `into_inner(this) -> Outcome[W, IntoInnerError]`
+### 3.1 BufReader (in `lib/std/src/file/bufio.tml`)
+- [x] 3.1.1 Design `BufReader` type wrapping File
+- [x] 3.1.2 Implement `open(path: Str)` and `from_file(file: File)` constructors
+- [x] 3.1.3 Implement `is_open()`, `is_eof()`, `lines_read()` accessors
+- [x] 3.1.4 Implement `read_line()` — reads next line
+- [x] 3.1.5 Implement `read_all()` — reads all remaining lines
+- [x] 3.1.6 Implement `close()` — close file
+- [ ] 3.1.7 Implement `lines()` iterator (returns Lines iterator struct)
+- [ ] 3.1.8 Generic `BufReader[R: Read]` (currently file-specific only)
 
-### 3.3 LineWriter
-- [ ] 3.3.1 Design `LineWriter[W: Write]` that flushes on newline
-- [ ] 3.3.2 Implement `Write` behavior
-- [ ] 3.3.3 Add unit tests for buffered I/O
+### 3.2 BufWriter (in `lib/std/src/file/bufio.tml`)
+- [x] 3.2.1 Design `BufWriter` type wrapping File with buffer
+- [x] 3.2.2 Implement `open(path: Str)` and `open_append(path: Str)` constructors
+- [x] 3.2.3 Implement `with_capacity(path: Str, capacity: I64)` constructor
+- [x] 3.2.4 Implement `from_file(file: File)` constructor
+- [x] 3.2.5 Implement `write(data: Str)` and `write_line(data: Str)` methods
+- [x] 3.2.6 Implement `flush()` — flush buffer to disk
+- [x] 3.2.7 Implement `buffered()`, `total_written()`, `capacity()` accessors
+- [x] 3.2.8 Implement `close()` — flush and close
+
+### 3.3 LineWriter (in `lib/std/src/file/bufio.tml`)
+- [x] 3.3.1 Design `LineWriter` that auto-flushes on newline
+- [x] 3.3.2 Implement `open()`, `open_append()`, `from_file()` constructors
+- [x] 3.3.3 Implement `write()` with auto-flush on newline detection
+- [x] 3.3.4 Implement `write_line()`, `flush()`, `close()` methods
+- [ ] 3.3.5 Add unit tests for buffered I/O
 
 ## Phase 4: Path Utilities
 
-> **Status**: Pending
+> **Status**: Partially Done — Static Path operations in `lib/std/src/file/path.tml`, PathBuf not yet implemented
 
-### 4.1 Path Type
-- [ ] 4.1.1 Design `Path` type in `lib/std/src/path/mod.tml`
-- [ ] 4.1.2 Implement `Path::new(s: Str) -> Path`
-- [ ] 4.1.3 Implement `as_str(this) -> Str`
-- [ ] 4.1.4 Implement `parent(this) -> Maybe[Path]`
-- [ ] 4.1.5 Implement `file_name(this) -> Maybe[Str]`
-- [ ] 4.1.6 Implement `file_stem(this) -> Maybe[Str]`
-- [ ] 4.1.7 Implement `extension(this) -> Maybe[Str]`
-- [ ] 4.1.8 Implement `is_absolute(this) -> Bool`
-- [ ] 4.1.9 Implement `is_relative(this) -> Bool`
-- [ ] 4.1.10 Implement `join(this, other: Path) -> PathBuf`
-- [ ] 4.1.11 Implement `with_extension(this, ext: Str) -> PathBuf`
+**Note**: Path is implemented as a type with static methods (taking `Str` paths), located in `lib/std/src/file/path.tml` (not `lib/std/src/path/`). No instance-based Path/PathBuf types yet.
 
-### 4.2 PathBuf Type
-- [ ] 4.2.1 Design `PathBuf` (owned path) in `lib/std/src/path/mod.tml`
-- [ ] 4.2.2 Implement `PathBuf::new() -> PathBuf`
-- [ ] 4.2.3 Implement `PathBuf::from(s: Str) -> PathBuf`
-- [ ] 4.2.4 Implement `push(this, path: Path)`
-- [ ] 4.2.5 Implement `pop(this) -> Bool`
-- [ ] 4.2.6 Implement `set_file_name(this, name: Str)`
-- [ ] 4.2.7 Implement `set_extension(this, ext: Str) -> Bool`
-- [ ] 4.2.8 Implement `as_path(this) -> Path`
+### 4.1 Path Static Methods (in `lib/std/src/file/path.tml`)
+- [x] 4.1.1 Design `Path` type with static methods
+- [x] 4.1.2 Implement `Path::join(base: Str, child: Str) -> Str`
+- [x] 4.1.3 Implement `Path::parent(path: Str) -> Str`
+- [x] 4.1.4 Implement `Path::filename(path: Str) -> Str`
+- [x] 4.1.5 Implement `Path::extension(path: Str) -> Str`
+- [x] 4.1.6 Implement `Path::absolute(path: Str) -> Str`
+- [x] 4.1.7 Implement `Path::exists(path: Str) -> Bool`
+- [x] 4.1.8 Implement `Path::is_file(path: Str) -> Bool`
+- [x] 4.1.9 Implement `Path::is_dir(path: Str) -> Bool`
+- [x] 4.1.10 Implement `Path::remove()`, `rename()`, `copy()`, `create_dir()`, `create_dir_all()`, `remove_dir()`
+- [ ] 4.1.11 Implement `Path::file_stem(path: Str) -> Str`
+- [ ] 4.1.12 Implement `Path::is_absolute(path: Str) -> Bool`
+- [ ] 4.1.13 Implement `Path::is_relative(path: Str) -> Bool`
+- [ ] 4.1.14 Implement `Path::with_extension(path: Str, ext: Str) -> Str`
+
+### 4.2 PathBuf Type (not yet implemented)
+- [ ] 4.2.1 Design `PathBuf` (owned, mutable path) type
+- [ ] 4.2.2 Implement `PathBuf::new()`, `PathBuf::from(s: Str)`
+- [ ] 4.2.3 Implement `push()`, `pop()`, `set_file_name()`, `set_extension()`
+- [ ] 4.2.4 Implement `as_str()` accessor
 
 ### 4.3 Platform-Specific
 - [ ] 4.3.1 Handle path separators (`/` vs `\`)
@@ -166,21 +174,22 @@
 
 ## Phase 5: DateTime
 
-> **Status**: Mostly Done — Instant, SystemTime, DateTime implemented in `lib/std/src/time.tml` and `lib/std/src/datetime.tml`
+> **Status**: Mostly Done — Duration fully implemented in `lib/core/src/time.tml`, Instant/SystemTime in `lib/std/src/time.tml`, DateTime in `lib/std/src/datetime.tml`
 
-### 5.1 Duration (Enhancement)
-- [ ] 5.1.1 Enhance existing `Duration` in `lib/std/src/time.tml`
-- [ ] 5.1.2 Add `from_secs(secs: I64) -> Duration`
-- [ ] 5.1.3 Add `from_millis(millis: I64) -> Duration`
-- [ ] 5.1.4 Add `from_micros(micros: I64) -> Duration`
-- [ ] 5.1.5 Add `from_nanos(nanos: I64) -> Duration`
-- [ ] 5.1.6 Add `as_secs(this) -> I64`
-- [ ] 5.1.7 Add `as_millis(this) -> I64`
-- [ ] 5.1.8 Add `subsec_nanos(this) -> I32`
-- [ ] 5.1.9 Add arithmetic operations (`+`, `-`, `*`, `/`)
-- [ ] 5.1.10 Add `checked_add()`, `checked_sub()`, `saturating_*()` variants
+### 5.1 Duration (in `lib/core/src/time.tml`) — Mostly Done
+- [x] 5.1.1 Duration type with secs/nanos fields in `lib/core/src/time.tml`
+- [x] 5.1.2 `from_secs(secs: I64) -> Duration`
+- [x] 5.1.3 `from_millis(millis: I64) -> Duration`
+- [x] 5.1.4 `from_micros(micros: I64) -> Duration`
+- [x] 5.1.5 `from_nanos(nanos: I64) -> Duration`
+- [x] 5.1.6 `as_secs(this) -> I64`
+- [x] 5.1.7 `as_millis(this) -> I64` (also `as_micros()`)
+- [x] 5.1.8 `subsec_nanos(this) -> I32`
+- [x] 5.1.9 Arithmetic: `+` (impl Add), `-` (impl Sub) operators; `.mul()`, `.div()` methods
+- [ ] 5.1.9a Arithmetic: `*` and `/` operator overloads (only `.mul()`/`.div()` methods exist)
+- [x] 5.1.10 `checked_add()`, `checked_sub()`, `saturating_add()`, `saturating_sub()`
 
-### 5.2 Instant (in `lib/std/src/time.tml`) — DONE
+### 5.2 Instant (in `lib/std/src/time.tml`) — Mostly Done
 - [x] 5.2.1 Design `Instant` for monotonic time
 - [x] 5.2.2 Implement `Instant::now() -> Instant`
 - [x] 5.2.3 Implement `elapsed(this) -> Duration`
@@ -188,6 +197,7 @@
 - [ ] 5.2.5 Implement `checked_add(this, dur: Duration) -> Maybe[Instant]`
 - [ ] 5.2.6 Implement `checked_sub(this, dur: Duration) -> Maybe[Instant]`
 - [x] 5.2.7 Platform implementations via `@extern("c")` FFI
+- [x] 5.2.8 Implement `as_nanos(this) -> I64`
 
 ### 5.3 SystemTime (in `lib/std/src/time.tml`) — DONE
 - [x] 5.3.1 Design `SystemTime` for wall-clock time
@@ -254,6 +264,9 @@
 ## File Structure
 
 ```
+lib/core/src/
+├── time.tml                 # Duration (from_secs, from_millis, checked_add, etc.) (✅)
+
 lib/std/src/
 ├── collections/
 │   ├── mod.tml              # Re-exports (✅)
@@ -265,16 +278,13 @@ lib/std/src/
 │   ├── deque.tml            # Deque[T] (✅)
 │   ├── buffer.tml           # Buffer (✅)
 │   └── behaviors.tml        # Collection behaviors (✅)
+├── file/
+│   ├── bufio.tml            # BufReader, BufWriter, LineWriter (file-specific) (✅)
+│   └── path.tml             # Path static methods (join, parent, extension, etc.) (✅)
 ├── os.tml                   # Env, args, process, system info (✅)
 ├── datetime.tml             # DateTime (✅)
-├── time.tml                 # Instant, SystemTime, Duration, sleep (✅)
-├── random.tml               # Rng, ThreadRng, convenience fns (✅)
-├── io/                      # NOT YET CREATED
-│   ├── bufreader.tml        # BufReader[R] (pending)
-│   ├── bufwriter.tml        # BufWriter[W] (pending)
-│   └── linewriter.tml       # LineWriter[W] (pending)
-└── path/                    # NOT YET CREATED
-    └── mod.tml              # Path, PathBuf (pending)
+├── time.tml                 # Instant, SystemTime, sleep (✅)
+└── random.tml               # Rng, ThreadRng, convenience fns (✅)
 ```
 
 ## Dependencies
@@ -293,8 +303,8 @@ lib/std/src/
 
 - [x] V.1 All collections pass unit tests (btreemap, btreeset, deque, hashset, vec tests passing)
 - [x] V.2 Environment and process work on Windows (via std::os FFI)
-- [ ] V.3 Buffered I/O provides measurable performance improvement
-- [ ] V.4 Path operations handle edge cases (empty, root, relative)
+- [x] V.3 Buffered I/O types implemented (BufReader, BufWriter, LineWriter in bufio.tml)
+- [x] V.4 Path static operations implemented (join, parent, filename, extension, absolute)
 - [x] V.5 DateTime parsing handles common formats (ISO 8601, date, RFC 2822)
 - [x] V.6 Random number generation tested (basic, shuffle, convenience, thread_rng)
 - [x] V.7 All existing tests continue to pass

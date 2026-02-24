@@ -8,7 +8,7 @@
 // ============================================================================
 
 /// Converts an I64 to its decimal string representation.
-/// Pure TML: extracts digits via % 10 and builds string with concatenation.
+/// Uses a single heap allocation by counting digits first.
 @allocates
 pub func i64_to_str(value: I64) -> Str {
     if value == 0 {
@@ -21,7 +21,6 @@ pub func i64_to_str(value: I64) -> Str {
 
     // Handle MIN_VALUE specially: can't negate it
     if is_negative and v == min_i64 {
-        // -9223372036854775808 = "-9223372036854775808"
         return "-9223372036854775808"
     }
 
@@ -29,35 +28,71 @@ pub func i64_to_str(value: I64) -> Str {
         v = 0 - v
     }
 
-    // Extract digits and build string (digits come out reversed)
-    var result: Str = ""
-    loop (v > 0) {
-        let digit: I64 = v % 10
-        v = v / 10
-        result = i64_digit_char(digit) + result
+    // Count digits first to allocate exactly once
+    var num_digits: I64 = 0
+    var tmp: I64 = v
+    loop (tmp > 0) {
+        num_digits = num_digits + 1
+        tmp = tmp / 10
     }
 
-    if is_negative {
-        result = "-" + result
+    let total_len: I64 = if is_negative { num_digits + 1 } else { num_digits }
+    let buf: *U8 = lowlevel { mem_alloc(total_len + 1) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator
+    lowlevel { ptr_write[U8]((buf_addr + total_len) as *U8, 0 as U8) }
+
+    // Write digits backwards from the end
+    var pos: I64 = total_len - 1
+    loop (v > 0) {
+        let digit: U8 = (v % 10) as U8 + (48 as U8)
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
+        v = v / 10
+        pos = pos - 1
     }
-    return result
+
+    // Write sign if negative
+    if is_negative {
+        lowlevel { ptr_write[U8](buf, 45 as U8) }
+    }
+
+    return buf as Str
 }
 
 /// Converts a U64 to its decimal string representation.
+/// Uses a single heap allocation by counting digits first.
 @allocates
 pub func u64_to_str(value: U64) -> Str {
     if value == 0 {
         return "0"
     }
 
-    var result: Str = ""
+    // Count digits first
+    var num_digits: I64 = 0
+    var tmp: U64 = value
+    loop (tmp > 0) {
+        num_digits = num_digits + 1
+        tmp = tmp / 10
+    }
+
+    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator
+    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
+
+    // Write digits backwards
+    var pos: I64 = num_digits - 1
     var v: U64 = value
     loop (v > 0) {
-        let digit: U64 = v % 10
+        let digit: U8 = (v % 10) as U8 + (48 as U8)
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
         v = v / 10
-        result = u64_digit_char(digit) + result
+        pos = pos - 1
     }
-    return result
+
+    return buf as Str
 }
 
 // Internal: convert a digit 0-9 (as I64) to its string character

@@ -364,6 +364,27 @@ int tml_main(int argc, char* argv[]) {
                 polonius = true;
             } else if (arg == "--no-thir") {
                 tml::CompilerOptions::use_thir = false;
+            } else if (arg == "--checked-math") {
+                tml::CompilerOptions::checked_math = true;
+            } else if (arg == "--no-checked-math") {
+                tml::CompilerOptions::checked_math = false;
+            }
+        }
+
+        // Default checked_math: enabled at O0 (debug), disabled at O1+ (release)
+        // This can be overridden by explicit --checked-math / --no-checked-math flags above
+        // Only set default if the user didn't explicitly pass either flag
+        {
+            bool explicit_checked_math = false;
+            for (int i = 3; i < argc; ++i) {
+                std::string a = argv[i];
+                if (a == "--checked-math" || a == "--no-checked-math") {
+                    explicit_checked_math = true;
+                    break;
+                }
+            }
+            if (!explicit_checked_math) {
+                tml::CompilerOptions::checked_math = (opt_level == 0);
             }
         }
 
@@ -481,10 +502,30 @@ int tml_main(int argc, char* argv[]) {
                                                              << "'. Valid: llvm, cranelift");
                     return 1;
                 }
+            } else if (arg == "--checked-math") {
+                CompilerOptions::checked_math = true;
+            } else if (arg == "--no-checked-math") {
+                CompilerOptions::checked_math = false;
             } else {
                 opts.args.push_back(arg);
             }
         }
+
+        // Default checked_math for run: enabled at O0, disabled at O1+
+        {
+            bool explicit_checked_math = false;
+            for (int i = 3; i < argc; ++i) {
+                std::string a = argv[i];
+                if (a == "--checked-math" || a == "--no-checked-math") {
+                    explicit_checked_math = true;
+                    break;
+                }
+            }
+            if (!explicit_checked_math) {
+                CompilerOptions::checked_math = (CompilerOptions::optimization_level == 0);
+            }
+        }
+
         // Set default coverage output if not specified
         if (opts.coverage && CompilerOptions::coverage_output.empty()) {
             fs::path coverage_dir = fs::path("build") / "coverage";

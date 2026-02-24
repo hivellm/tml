@@ -569,9 +569,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                     std::string final_result = result;
                     std::string actual_type = last_expr_type_;
                     if (actual_type != ret_type) {
-                        if (actual_type == "ptr" && ret_type.find("%struct.") == 0) {
-                            // Returning 'this' (ptr) from a method that returns a struct by value.
-                            // Load the struct from the pointer.
+                        if (actual_type == "ptr" &&
+                            (ret_type.starts_with("%struct.") || ret_type.starts_with("%class."))) {
+                            // Returning ptr from a method that returns a struct/class by value.
+                            // Load the value from the pointer.
                             std::string load_reg = fresh_reg();
                             emit_line("  " + load_reg + " = load " + ret_type + ", ptr " + result);
                             final_result = load_reg;
@@ -1016,9 +1017,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
                     std::string final_result = result;
                     std::string actual_type = last_expr_type_;
                     if (actual_type != ret_type) {
-                        if (actual_type == "ptr" && ret_type.find("%struct.") == 0) {
-                            // Returning 'this' (ptr) from a method that returns a struct by value.
-                            // Load the struct from the pointer.
+                        if (actual_type == "ptr" &&
+                            (ret_type.starts_with("%struct.") || ret_type.starts_with("%class."))) {
+                            // Returning ptr from a method that returns a struct/class by value.
+                            // Load the value from the pointer.
                             std::string load_reg = fresh_reg();
                             emit_line("  " + load_reg + " = load " + ret_type + ", ptr " + result);
                             final_result = load_reg;

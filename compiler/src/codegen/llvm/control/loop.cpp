@@ -118,6 +118,11 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     current_block_ = label_body;
     block_terminated_ = false;
 
+    // Save stack pointer at loop body entry to reclaim allocas each iteration
+    std::string stack_save_reg = fresh_reg();
+    emit_line("  " + stack_save_reg + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save_reg;
+
     // Push a lifetime scope for the loop body so allocas inside are tracked
     // and can have lifetime.end emitted at end of each iteration
     push_lifetime_scope();
@@ -127,6 +132,8 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     if (!block_terminated_) {
         // Emit lifetime.end for all allocas created in this iteration
         emit_scope_lifetime_ends();
+        // Restore stack to reclaim dynamic allocas from this iteration
+        emit_line("  call void @llvm.stackrestore(ptr " + stack_save_reg + ")");
         emit_line("  br label %" + label_latch);
     }
 
@@ -206,6 +213,11 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     current_block_ = label_body;
     block_terminated_ = false;
 
+    // Save stack pointer at loop body entry to reclaim allocas each iteration
+    std::string stack_save_reg = fresh_reg();
+    emit_line("  " + stack_save_reg + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save_reg;
+
     // Push a lifetime scope for the loop body
     push_lifetime_scope();
 
@@ -214,6 +226,8 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     if (!block_terminated_) {
         // Emit lifetime.end for allocas in this iteration
         emit_scope_lifetime_ends();
+        // Restore stack to reclaim dynamic allocas from this iteration
+        emit_line("  call void @llvm.stackrestore(ptr " + stack_save_reg + ")");
         emit_line("  br label %" + label_latch);
     }
 
@@ -369,7 +383,11 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line(label_body + ":");
     current_block_ = label_body;
     block_terminated_ = false;
-    current_loop_stack_save_ = ""; // No stack save for break/continue
+
+    // Save stack pointer at loop body entry to reclaim allocas each iteration
+    std::string stack_save_reg = fresh_reg();
+    emit_line("  " + stack_save_reg + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save_reg;
 
     // Push a lifetime scope for the loop body
     push_lifetime_scope();
@@ -379,6 +397,8 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     if (!block_terminated_) {
         // Emit lifetime.end for allocas in this iteration
         emit_scope_lifetime_ends();
+        // Restore stack to reclaim dynamic allocas from this iteration
+        emit_line("  call void @llvm.stackrestore(ptr " + stack_save_reg + ")");
         emit_line("  br label %" + label_latch);
     }
 

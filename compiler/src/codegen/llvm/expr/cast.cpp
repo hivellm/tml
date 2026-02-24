@@ -44,10 +44,23 @@ static bool is_unsigned_parser_type(const parser::Type& type) {
 }
 
 auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
+    // Save and clear the outer literal-type context before evaluating the
+    // cast's inner expression. The cast target type handles the conversion;
+    // any outer float context (e.g., "let x: F32 = (i % 1000) as F32") must
+    // not leak into the sub-expression and corrupt integer literal formatting.
+    std::string saved_literal_type = expected_literal_type_;
+    bool saved_literal_unsigned = expected_literal_is_unsigned_;
+    expected_literal_type_.clear();
+    expected_literal_is_unsigned_ = false;
+
     // Generate the source expression
     std::string src = gen_expr(*cast.expr);
     std::string src_type = last_expr_type_;
     bool src_is_unsigned = last_expr_is_unsigned_;
+
+    // Restore outer context
+    expected_literal_type_ = saved_literal_type;
+    expected_literal_is_unsigned_ = saved_literal_unsigned;
 
     // Also check if either source or target type is explicitly unsigned.
     // The last_expr_is_unsigned_ flag may not propagate correctly through all

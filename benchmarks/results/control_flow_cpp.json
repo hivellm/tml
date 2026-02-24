@@ -1,0 +1,83 @@
+{
+  "category": "Control Flow",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "If-Else Chain (4 branches)",
+      "iterations": 10000000,
+      "total_ns": 9907200,
+      "per_op_ns": 0,
+      "ops_per_sec": 1009366925
+    },
+    {
+      "name": "Nested If (4 levels)",
+      "iterations": 10000000,
+      "total_ns": 3870600,
+      "per_op_ns": 0,
+      "ops_per_sec": 2583578773
+    },
+    {
+      "name": "Switch Dense (10 cases)",
+      "iterations": 10000000,
+      "total_ns": 9892900,
+      "per_op_ns": 0,
+      "ops_per_sec": 1010825945
+    },
+    {
+      "name": "Switch Sparse (10 cases)",
+      "iterations": 10000000,
+      "total_ns": 9303200,
+      "per_op_ns": 0,
+      "ops_per_sec": 1074898959
+    },
+    {
+      "name": "For Loop",
+      "iterations": 10000000,
+      "total_ns": 1928500,
+      "per_op_ns": 0,
+      "ops_per_sec": 5185377236
+    },
+    {
+      "name": "While + Break",
+      "iterations": 10000000,
+      "total_ns": 1949800,
+      "per_op_ns": 0,
+      "ops_per_sec": 5128731151
+    },
+    {
+      "name": "Nested Loops (1000x1000)",
+      "iterations": 1000000,
+      "total_ns": 234100,
+      "per_op_ns": 0,
+      "ops_per_sec": 4271678769
+    },
+    {
+      "name": "Loop + Continue",
+      "iterations": 10000000,
+      "total_ns": 3884800,
+      "per_op_ns": 0,
+      "ops_per_sec": 2574135090
+    },
+    {
+      "name": "Ternary Chain",
+      "iterations": 10000000,
+      "total_ns": 9616100,
+      "per_op_ns": 0,
+      "ops_per_sec": 1039922629
+    },
+    {
+      "name": "Short-Circuit AND",
+      "iterations": 10000000,
+      "total_ns": 4627100,
+      "per_op_ns": 0,
+      "ops_per_sec": 2161180869
+    },
+    {
+      "name": "Short-Circuit OR",
+      "iterations": 10000000,
+      "total_ns": 4560300,
+      "per_op_ns": 0,
+      "ops_per_sec": 2192838190
+    }
+  ]
+}

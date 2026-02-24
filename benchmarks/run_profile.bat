@@ -63,15 +63,15 @@ for %%c in (%CATEGORIES%) do (
     :: TML builds with same name, check if it's different
     :: For now, run the TML source directly if no separate exe
 
-    set TML_SRC=tml\%%c_bench.tml
+    set TML_SRC=profile_tml\%%c_bench.tml
     if exist "!TML_SRC!" (
         echo.
         echo --- TML ---
         echo. >> "%REPORT_FILE%"
         echo --- TML Results --- >> "%REPORT_FILE%"
 
-        set TML_COMPILER=..\build\release\tml.exe
-        if not exist "!TML_COMPILER!" set TML_COMPILER=..\build\debug\tml.exe
+        set TML_COMPILER=..\..\build\release\tml.exe
+        if not exist "!TML_COMPILER!" set TML_COMPILER=..\..\build\debug\tml.exe
 
         if exist "!TML_COMPILER!" (
             "!TML_COMPILER!" run "!TML_SRC!" --release >> "%REPORT_FILE%" 2>&1

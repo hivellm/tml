@@ -4,21 +4,21 @@
 // Compares with C++ stringstream and string patterns.
 
 use std::text::Text
+use std::time::Instant
 
 // Helper to run and print a benchmark
 func run_and_print(name: Str, iterations: I64, total_ns: I64) {
-    let per_op: I64 = total_ns / iterations
-    let ops_sec: I64 = if total_ns > 0 then {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
         (iterations * 1000000000) / total_ns
     } else {
         0
     }
-    println("  " + name + ":")
-    println("    Iterations: " + iterations.to_string())
-    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
-    println("    Per op:     " + per_op.to_string() + " ns")
-    println("    Ops/sec:    " + ops_sec.to_string())
-    println("")
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
 }
 
 // Text append (O(1) amortized)
@@ -33,7 +33,7 @@ func bench_text_append(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Str naive append (O(n^2) worst case)
@@ -44,7 +44,7 @@ func bench_str_naive_append(iterations: I64) -> I64 {
         s = s + "ab"
         i = i + 1
     }
-    return s.len() as I64
+    s.len() as I64
 }
 
 // Build JSON-like structure with Text
@@ -53,7 +53,7 @@ func bench_build_json(iterations: I64) -> I64 {
     t.push_str("{\"items\":[")
     var i: I64 = 0
     loop (i < iterations) {
-        if i > 0 then {
+        if i > 0 {
             t.push_str(",")
         }
         t.push_str("{\"id\":")
@@ -66,7 +66,7 @@ func bench_build_json(iterations: I64) -> I64 {
     t.push_str("]}")
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Build HTML-like structure
@@ -82,7 +82,7 @@ func bench_build_html(iterations: I64) -> I64 {
     t.push_str("</ul>\n")
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Build CSV-like data (optimized: single FFI call per row)
@@ -97,7 +97,7 @@ func bench_build_csv(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Small appends (1 char equivalent) - optimized version using push
@@ -110,7 +110,7 @@ func bench_small_appends(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Small appends using push_str for comparison
@@ -123,7 +123,7 @@ func bench_small_appends_str(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Small appends using fill_char batch operation (single FFI call)
@@ -132,7 +132,7 @@ func bench_small_appends_batch(iterations: I64) -> I64 {
     t.fill_char(120, iterations)  // 'x' = 120 ASCII - single FFI call for all N chars
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Small appends using raw pointer (C++ style - register-based loop)
@@ -148,7 +148,7 @@ func bench_small_appends_raw(iterations: I64) -> I64 {
     t.set_len(len)  // Update length once at end
     let final_len: I64 = t.len()
     t.drop()
-    return final_len
+    final_len
 }
 
 // Number formatting
@@ -166,7 +166,7 @@ func bench_number_formatting(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Log messages (optimized: single FFI call per iteration)
@@ -180,7 +180,7 @@ func bench_log_messages(iterations: I64) -> I64 {
     }
     let len: I64 = t.len()
     t.drop()
-    return len
+    len
 }
 
 // Path building (reuses single Text to match C++ benchmark)
@@ -197,15 +197,14 @@ func bench_path_building(iterations: I64) -> I64 {
         i = i + 1
     }
     t.drop()
-    return last_len
+    last_len
 }
 
 pub func main() -> I32 {
-    println("")
-    println("================================================================")
-    println("  Text/StringBuilder Benchmarks (TML)")
-    println("================================================================")
-    println("")
+    print("\n")
+    print("================================================================\n")
+    print("  Text/StringBuilder Benchmarks (TML)\n")
+    print("================================================================\n\n")
 
     let BUILD_ITER: I64 = 100000     // 100K for build ops
     let APPEND_ITER: I64 = 1000000   // 1M for simple appends
@@ -221,79 +220,67 @@ pub func main() -> I32 {
     }
 
     // Text Append (O(1) amortized)
-    var start: I64 = time_ns()
+    var start: Instant = Instant::now()
     let _ta: I64 = bench_text_append(BUILD_ITER)
-    var end: I64 = time_ns()
-    run_and_print("Text Append (O(1) amortized)", BUILD_ITER, end - start)
+    run_and_print("Text Append (O(1) amortized)", BUILD_ITER, start.elapsed().as_nanos())
 
     // Str Naive Append (O(n^2)) - fewer iterations!
-    start = time_ns()
+    start = Instant::now()
     let _sn: I64 = bench_str_naive_append(NAIVE_ITER)
-    end = time_ns()
-    run_and_print("Str Naive Append (O(n^2))", NAIVE_ITER, end - start)
+    run_and_print("Str Naive Append (O(n^2))", NAIVE_ITER, start.elapsed().as_nanos())
 
     // Build JSON
-    start = time_ns()
+    start = Instant::now()
     let _bj: I64 = bench_build_json(BUILD_ITER / 10)
-    end = time_ns()
-    run_and_print("Build JSON (10K items)", BUILD_ITER / 10, end - start)
+    run_and_print("Build JSON (10K items)", BUILD_ITER / 10, start.elapsed().as_nanos())
 
     // Build HTML
-    start = time_ns()
+    start = Instant::now()
     let _bh: I64 = bench_build_html(BUILD_ITER / 10)
-    end = time_ns()
-    run_and_print("Build HTML (10K items)", BUILD_ITER / 10, end - start)
+    run_and_print("Build HTML (10K items)", BUILD_ITER / 10, start.elapsed().as_nanos())
 
     // Build CSV
-    start = time_ns()
+    start = Instant::now()
     let _bc: I64 = bench_build_csv(BUILD_ITER / 10)
-    end = time_ns()
-    run_and_print("Build CSV (10K rows)", BUILD_ITER / 10, end - start)
+    run_and_print("Build CSV (10K rows)", BUILD_ITER / 10, start.elapsed().as_nanos())
 
     // Small Appends (push byte - optimized)
-    start = time_ns()
+    start = Instant::now()
     let _sm: I64 = bench_small_appends(APPEND_ITER)
-    end = time_ns()
-    run_and_print("Small Appends push()", APPEND_ITER, end - start)
+    run_and_print("Small Appends push()", APPEND_ITER, start.elapsed().as_nanos())
 
     // Small Appends (push_str - for comparison)
-    start = time_ns()
+    start = Instant::now()
     let _sm2: I64 = bench_small_appends_str(APPEND_ITER)
-    end = time_ns()
-    run_and_print("Small Appends push_str()", APPEND_ITER, end - start)
+    run_and_print("Small Appends push_str()", APPEND_ITER, start.elapsed().as_nanos())
 
     // Small Appends (batch - single FFI call)
-    start = time_ns()
+    start = Instant::now()
     let _sm3: I64 = bench_small_appends_batch(APPEND_ITER)
-    end = time_ns()
-    run_and_print("Small Appends fill_char() batch", APPEND_ITER, end - start)
+    run_and_print("Small Appends fill_char() batch", APPEND_ITER, start.elapsed().as_nanos())
 
     // Small Appends (raw pointer - C++ style)
-    start = time_ns()
+    start = Instant::now()
     let _sm4: I64 = bench_small_appends_raw(APPEND_ITER)
-    end = time_ns()
-    run_and_print("Small Appends raw ptr", APPEND_ITER, end - start)
+    run_and_print("Small Appends raw ptr", APPEND_ITER, start.elapsed().as_nanos())
 
     // Number Formatting
-    start = time_ns()
+    start = Instant::now()
     let _nf: I64 = bench_number_formatting(BUILD_ITER)
-    end = time_ns()
-    run_and_print("Number Formatting", BUILD_ITER, end - start)
+    run_and_print("Number Formatting", BUILD_ITER, start.elapsed().as_nanos())
 
     // Log Messages
-    start = time_ns()
+    start = Instant::now()
     let _lm: I64 = bench_log_messages(BUILD_ITER)
-    end = time_ns()
-    run_and_print("Log Messages", BUILD_ITER, end - start)
+    run_and_print("Log Messages", BUILD_ITER, start.elapsed().as_nanos())
 
     // Path Building
-    start = time_ns()
+    start = Instant::now()
     let _pb: I64 = bench_path_building(BUILD_ITER)
-    end = time_ns()
-    run_and_print("Path Building", BUILD_ITER, end - start)
+    run_and_print("Path Building", BUILD_ITER, start.elapsed().as_nanos())
 
-    println("Note: Text uses O(1) amortized append, Str uses O(n^2) naive.")
-    println("For fair comparison with C++, compare Text times with string+reserve.")
+    print("Note: Text uses O(1) amortized append, Str uses O(n^2) naive.\n")
+    print("For fair comparison with C++, compare Text times with string+reserve.\n")
 
-    return 0
+    0
 }

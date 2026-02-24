@@ -17,13 +17,22 @@ inline int64_t add_inline(int64_t a, int64_t b) {
 }
 
 // Non-inline function
-__attribute__((noinline)) int64_t add_noinline(int64_t a, int64_t b) {
+#ifdef _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+int64_t add_noinline(int64_t a, int64_t b) {
     return a + b;
 }
 
 // Function with more parameters
-__attribute__((noinline)) int64_t add_many_params(int64_t a, int64_t b, int64_t c, int64_t d,
-                                                  int64_t e, int64_t f) {
+#ifdef _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+int64_t add_many_params(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, int64_t f) {
     return a + b + c + d + e + f;
 }
 

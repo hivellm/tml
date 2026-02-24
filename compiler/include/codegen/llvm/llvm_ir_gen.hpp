@@ -577,6 +577,11 @@ private:
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
 
+    // Enum payload type info for compact layout optimization
+    // Maps enum LLVM type name (e.g. "%struct.Maybe__I32") to payload field type
+    // "i32" = compact 4-byte, "i64" = compact 8-byte, "" = uses [N x i64] union
+    std::unordered_map<std::string, std::string> enum_payload_type_;
+
     // @flags enum metadata
     struct FlagsEnumInfo {
         std::string underlying_llvm_type; ///< "i8", "i16", "i32", "i64"

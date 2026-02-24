@@ -2,22 +2,24 @@
 //
 // Tests function call overhead: direct, indirect, recursive, inlined.
 
+use std::time::Instant
+
 // Simple function (should be inlined)
 @inline
 func add_inline(a: I64, b: I64) -> I64 {
-    return a + b
+    a + b
 }
 
 // Non-inline function
 @noinline
 func add_noinline(a: I64, b: I64) -> I64 {
-    return a + b
+    a + b
 }
 
 // Function with more parameters
 @noinline
 func add_many_params(a: I64, b: I64, c: I64, d: I64, e: I64, f: I64) -> I64 {
-    return a + b + c + d + e + f
+    a + b + c + d + e + f
 }
 
 // Recursive function
@@ -25,29 +27,29 @@ func fib_recursive(n: I32) -> I64 {
     if n <= 1 {
         return n as I64
     }
-    return fib_recursive(n - 1) + fib_recursive(n - 2)
+    fib_recursive(n - 1) + fib_recursive(n - 2)
 }
 
 // Tail recursive (optimizable)
 func fib_tail_helper(n: I32, a: I64, b: I64) -> I64 {
     if n == 0 { return a }
     if n == 1 { return b }
-    return fib_tail_helper(n - 1, b, a + b)
+    fib_tail_helper(n - 1, b, a + b)
 }
 
 func fib_tail(n: I32) -> I64 {
-    return fib_tail_helper(n, 0, 1)
+    fib_tail_helper(n, 0, 1)
 }
 
 // Mutual recursion - is_odd defined first to avoid forward declaration
 func is_odd(n: I64) -> I64 {
     if n == 0 { return 0 as I64 }
-    return is_even(n - 1)
+    is_even(n - 1)
 }
 
 func is_even(n: I64) -> I64 {
     if n == 0 { return 1 as I64 }
-    return is_odd(n - 1)
+    is_odd(n - 1)
 }
 
 // Benchmarks - return results to prevent dead code elimination
@@ -58,7 +60,7 @@ func bench_inline_call(iterations: I64) -> I64 {
         sum = add_inline(sum, i)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_direct_call(iterations: I64) -> I64 {
@@ -68,7 +70,7 @@ func bench_direct_call(iterations: I64) -> I64 {
         sum = add_noinline(sum, i)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_many_params(iterations: I64) -> I64 {
@@ -78,7 +80,7 @@ func bench_many_params(iterations: I64) -> I64 {
         sum = add_many_params(i, i+1, i+2, i+3, i+4, i+5)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_fib_recursive(iterations: I64) -> I64 {
@@ -88,7 +90,7 @@ func bench_fib_recursive(iterations: I64) -> I64 {
         sum = sum + fib_recursive(20)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_fib_tail(iterations: I64) -> I64 {
@@ -98,7 +100,7 @@ func bench_fib_tail(iterations: I64) -> I64 {
         sum = sum + fib_tail(50)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_mutual_recursion(iterations: I64) -> I64 {
@@ -108,7 +110,7 @@ func bench_mutual_recursion(iterations: I64) -> I64 {
         sum = sum + is_even(100)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 // Helper to run and print a benchmark
@@ -119,14 +121,13 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
     var best_ns: I64 = 9223372036854775807  // I64 max
     var run: I32 = 0
     loop (run < runs) {
-        let start: I64 = time_ns()
+        let start: Instant = Instant::now()
         let result: I64 = bench_fn(iterations)
-        let end: I64 = time_ns()
-        let elapsed: I64 = end - start
+        let elapsed: I64 = start.elapsed().as_nanos()
 
         // Debug: print timing info for first run
         if run == 0 {
-            println("    [DEBUG] elapsed=" + elapsed.to_string() + " result=" + result.to_string())
+            print("    [DEBUG] elapsed={} result={}\n", elapsed, result)
         }
 
         if elapsed < best_ns {
@@ -142,18 +143,16 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
         0
     }
 
-    println("  " + name + ":")
-    println("    " + per_op.to_string() + " ns/op")
-    println("    " + ops_sec.to_string() + " ops/sec")
-    println("")
+    print("  {}:\n", name)
+    print("    {} ns/op\n", per_op)
+    print("    {} ops/sec\n\n", ops_sec)
 }
 
 pub func main() -> I32 {
-    println("")
-    println("================================================================")
-    println("  Function Call Benchmarks (TML)")
-    println("================================================================")
-    println("")
+    print("\n")
+    print("================================================================\n")
+    print("  Function Call Benchmarks (TML)\n")
+    print("================================================================\n\n")
 
     let ITERATIONS: I64 = 10000000   // 10M
     let FIB_ITER: I64 = 1000         // Fewer for recursive
@@ -165,5 +164,5 @@ pub func main() -> I32 {
     run_bench("Fibonacci Tail (n=50)", ITERATIONS, 10, bench_fib_tail)
     run_bench("Mutual Recursion (n=100)", ITERATIONS, 10, bench_mutual_recursion)
 
-    return 0
+    0
 }

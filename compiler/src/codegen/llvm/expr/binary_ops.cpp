@@ -598,6 +598,30 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         } else if (is_float) {
             emit_line("  " + result + " = fadd " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
+        } else if (CompilerOptions::checked_math) {
+            // Checked addition: panic on overflow instead of UB
+            std::string ov_type = "{ " + int_type + ", i1 }";
+            std::string intrinsic =
+                is_unsigned ? "@llvm.uadd.with.overflow." : "@llvm.sadd.with.overflow.";
+            std::string ov_result = fresh_reg();
+            emit_line("  " + ov_result + " = call " + ov_type + " " + intrinsic + int_type + "(" +
+                      int_type + " " + left + ", " + int_type + " " + right + ")");
+            emit_line("  " + result + " = extractvalue " + ov_type + " " + ov_result + ", 0");
+            std::string overflow_flag = fresh_reg();
+            emit_line("  " + overflow_flag + " = extractvalue " + ov_type + " " + ov_result +
+                      ", 1");
+            std::string label_ok = fresh_label("add_ok");
+            std::string label_panic = fresh_label("add_overflow");
+            emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
+                      label_ok);
+            emit_line(label_panic + ":");
+            std::string panic_msg = add_string_literal("integer overflow on addition");
+            emit_line("  call void @panic(ptr " + panic_msg + ")");
+            emit_line("  unreachable");
+            emit_line(label_ok + ":");
+            current_block_ = label_ok;
+            block_terminated_ = false;
+            last_expr_type_ = int_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = add nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -611,6 +635,30 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fsub " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
+        } else if (CompilerOptions::checked_math) {
+            // Checked subtraction: panic on overflow instead of UB
+            std::string ov_type = "{ " + int_type + ", i1 }";
+            std::string intrinsic =
+                is_unsigned ? "@llvm.usub.with.overflow." : "@llvm.ssub.with.overflow.";
+            std::string ov_result = fresh_reg();
+            emit_line("  " + ov_result + " = call " + ov_type + " " + intrinsic + int_type + "(" +
+                      int_type + " " + left + ", " + int_type + " " + right + ")");
+            emit_line("  " + result + " = extractvalue " + ov_type + " " + ov_result + ", 0");
+            std::string overflow_flag = fresh_reg();
+            emit_line("  " + overflow_flag + " = extractvalue " + ov_type + " " + ov_result +
+                      ", 1");
+            std::string label_ok = fresh_label("sub_ok");
+            std::string label_panic = fresh_label("sub_overflow");
+            emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
+                      label_ok);
+            emit_line(label_panic + ":");
+            std::string panic_msg = add_string_literal("integer overflow on subtraction");
+            emit_line("  call void @panic(ptr " + panic_msg + ")");
+            emit_line("  unreachable");
+            emit_line(label_ok + ":");
+            current_block_ = label_ok;
+            block_terminated_ = false;
+            last_expr_type_ = int_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = sub nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -624,6 +672,30 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fmul " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
+        } else if (CompilerOptions::checked_math) {
+            // Checked multiplication: panic on overflow instead of UB
+            std::string ov_type = "{ " + int_type + ", i1 }";
+            std::string intrinsic =
+                is_unsigned ? "@llvm.umul.with.overflow." : "@llvm.smul.with.overflow.";
+            std::string ov_result = fresh_reg();
+            emit_line("  " + ov_result + " = call " + ov_type + " " + intrinsic + int_type + "(" +
+                      int_type + " " + left + ", " + int_type + " " + right + ")");
+            emit_line("  " + result + " = extractvalue " + ov_type + " " + ov_result + ", 0");
+            std::string overflow_flag = fresh_reg();
+            emit_line("  " + overflow_flag + " = extractvalue " + ov_type + " " + ov_result +
+                      ", 1");
+            std::string label_ok = fresh_label("mul_ok");
+            std::string label_panic = fresh_label("mul_overflow");
+            emit_line("  br i1 " + overflow_flag + ", label %" + label_panic + ", label %" +
+                      label_ok);
+            emit_line(label_panic + ":");
+            std::string panic_msg = add_string_literal("integer overflow on multiplication");
+            emit_line("  call void @panic(ptr " + panic_msg + ")");
+            emit_line("  unreachable");
+            emit_line(label_ok + ":");
+            current_block_ = label_ok;
+            block_terminated_ = false;
+            last_expr_type_ = int_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = mul nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;

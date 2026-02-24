@@ -149,6 +149,12 @@ struct CompilerOptions {
     /// operator overloading, and checks pattern exhaustiveness.
     /// Enabled by default. Use --no-thir to fall back to direct HIR→MIR.
     static inline bool use_thir = true;
+
+    /// Emit overflow-checking intrinsics for integer +, -, * operators.
+    /// When enabled, arithmetic overflow panics instead of being UB.
+    /// Default: enabled in debug mode (O0), disabled at O1+.
+    /// Use --checked-math / --no-checked-math to override.
+    static inline bool checked_math = false;
 };
 
 // ============================================================================

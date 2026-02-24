@@ -1,0 +1,149 @@
+// Crypto Benchmarks (TML)
+//
+// Tests cryptographic operations: hashing (SHA256, SHA512, MD5).
+// Uses OpenSSL via FFI, comparable with C++ OpenSSL benchmarks.
+
+use std::crypto::hash::{sha256, sha512, md5, Hash, HashAlgorithm, Digest}
+use std::time::Instant
+
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
+}
+
+// SHA256 one-shot (short string)
+func bench_sha256_short(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var d: Digest = sha256("Hello, World!")
+        total = total + 1
+        d.destroy()
+        i = i + 1
+    }
+    total
+}
+
+// SHA256 one-shot (medium string)
+func bench_sha256_medium(iterations: I64) -> I64 {
+    let input: Str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog again!"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var d: Digest = sha256(input)
+        total = total + 1
+        d.destroy()
+        i = i + 1
+    }
+    total
+}
+
+// SHA256 streaming (multiple updates)
+func bench_sha256_streaming(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var hash: Hash = Hash::create(HashAlgorithm::Sha256)
+        hash.update("Hello")
+        hash.update(", ")
+        hash.update("World!")
+        var d: Digest = hash.digest()
+        total = total + 1
+        d.destroy()
+        hash.destroy()
+        i = i + 1
+    }
+    total
+}
+
+// SHA512 one-shot
+func bench_sha512_short(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var d: Digest = sha512("Hello, World!")
+        total = total + 1
+        d.destroy()
+        i = i + 1
+    }
+    total
+}
+
+// MD5 one-shot
+func bench_md5_short(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var d: Digest = md5("Hello, World!")
+        total = total + 1
+        d.destroy()
+        i = i + 1
+    }
+    total
+}
+
+// SHA256 + to_hex
+func bench_sha256_to_hex(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        var d: Digest = sha256("Hello, World!")
+        let hex: Str = d.to_hex()
+        total = total + hex.len()
+        d.destroy()
+        i = i + 1
+    }
+    total
+}
+
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  Crypto Benchmarks (TML)\n")
+    print("================================================================\n\n")
+
+    let ITERATIONS: I64 = 100000
+
+    // Warmup
+    var w: I64 = 0
+    loop (w < 100) {
+        var d: Digest = sha256("warmup")
+        d.destroy()
+        w = w + 1
+    }
+
+    var start: Instant = Instant::now()
+    let _s256s: I64 = bench_sha256_short(ITERATIONS)
+    run_and_print("SHA256 (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _s256m: I64 = bench_sha256_medium(ITERATIONS)
+    run_and_print("SHA256 (95 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _s256st: I64 = bench_sha256_streaming(ITERATIONS)
+    run_and_print("SHA256 Streaming (3 updates)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _s512: I64 = bench_sha512_short(ITERATIONS)
+    run_and_print("SHA512 (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _md5: I64 = bench_md5_short(ITERATIONS)
+    run_and_print("MD5 (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _hex: I64 = bench_sha256_to_hex(ITERATIONS)
+    run_and_print("SHA256 + to_hex (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    0
+}

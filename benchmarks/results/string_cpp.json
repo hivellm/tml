@@ -1,0 +1,85 @@
+{
+  "category": "String",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Concat Small (3 strings)",
+      "iterations": 1000000,
+      "total_ns": 15552600,
+      "per_op_ns": 15,
+      "ops_per_sec": 64297930
+    },
+    {
+      "name": "Concat Loop (with reserve)",
+      "iterations": 100000,
+      "total_ns": 143500,
+      "per_op_ns": 1,
+      "ops_per_sec": 696864111,
+      "notes": "O(n) amortized"
+    },
+    {
+      "name": "Concat Loop (naive)",
+      "iterations": 100000,
+      "total_ns": 214900,
+      "per_op_ns": 2,
+      "ops_per_sec": 465332712,
+      "notes": "O(n^2) worst case"
+    },
+    {
+      "name": "String Length",
+      "iterations": 1000000,
+      "total_ns": 0,
+      "per_op_ns": 0,
+      "ops_per_sec": 0
+    },
+    {
+      "name": "String Compare (equal)",
+      "iterations": 1000000,
+      "total_ns": 209600,
+      "per_op_ns": 0,
+      "ops_per_sec": 4770992366
+    },
+    {
+      "name": "String Compare (different)",
+      "iterations": 1000000,
+      "total_ns": 0,
+      "per_op_ns": 0,
+      "ops_per_sec": 0
+    },
+    {
+      "name": "Int to String",
+      "iterations": 1000000,
+      "total_ns": 9714900,
+      "per_op_ns": 9,
+      "ops_per_sec": 102934667
+    },
+    {
+      "name": "String Copy",
+      "iterations": 1000000,
+      "total_ns": 9397100,
+      "per_op_ns": 9,
+      "ops_per_sec": 106415809
+    },
+    {
+      "name": "String Repeat (50 chars)",
+      "iterations": 1000000,
+      "total_ns": 23948100,
+      "per_op_ns": 23,
+      "ops_per_sec": 41756966
+    },
+    {
+      "name": "Sprintf Formatting",
+      "iterations": 1000000,
+      "total_ns": 79856300,
+      "per_op_ns": 79,
+      "ops_per_sec": 12522493
+    },
+    {
+      "name": "Log Building",
+      "iterations": 10000,
+      "total_ns": 165500,
+      "per_op_ns": 16,
+      "ops_per_sec": 60422960
+    }
+  ]
+}

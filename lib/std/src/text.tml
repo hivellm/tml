@@ -160,30 +160,17 @@ func text_alloc_with_cap(cap: I64) -> *Unit {
 
 // Copy bytes from Str into data buffer at offset
 func text_copy_str_at(data: *U8, offset: I64, s: Str, slen: I64) {
-    let src_addr: I64 = s as I64
-    let dst_addr: I64 = data as I64 + offset
-    var i: I64 = 0
-    loop (i < slen) {
-        let sp: *U8 = (src_addr + i) as *U8
-        let dp: *U8 = (dst_addr + i) as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](sp) }
-        lowlevel { ptr_write[U8](dp, byte) }
-        i = i + 1
-    }
+    if slen <= 0 { return }
+    let dst: *U8 = (data as I64 + offset) as *U8
+    lowlevel { copy_nonoverlapping(s as *U8, dst, slen) }
 }
 
 // Copy bytes from one buffer to another
 func text_copy_bytes(dst: *U8, dst_offset: I64, src: *U8, src_offset: I64, count: I64) {
-    let d: I64 = dst as I64 + dst_offset
-    let s: I64 = src as I64 + src_offset
-    var i: I64 = 0
-    loop (i < count) {
-        let sp: *U8 = (s + i) as *U8
-        let dp: *U8 = (d + i) as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](sp) }
-        lowlevel { ptr_write[U8](dp, byte) }
-        i = i + 1
-    }
+    if count <= 0 { return }
+    let d: *U8 = (dst as I64 + dst_offset) as *U8
+    let s: *U8 = (src as I64 + src_offset) as *U8
+    lowlevel { copy_nonoverlapping(s, d, count) }
 }
 
 // Get byte at index from data buffer
@@ -377,17 +364,9 @@ impl Text {
         if slen == 0 {
             return ""
         }
-        let buf: *Unit = lowlevel { mem_alloc(slen + 1) }
-        var i: I64 = 0
-        loop (i < slen) {
-            let sp: *U8 = (addr + i) as *U8
-            let dp: *U8 = (buf as I64 + i) as *U8
-            let byte: U8 = lowlevel { ptr_read[U8](sp) }
-            lowlevel { ptr_write[U8](dp, byte) }
-            i = i + 1
-        }
-        let null_p: *U8 = (buf as I64 + slen) as *U8
-        lowlevel { ptr_write[U8](null_p, 0 as U8) }
+        let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
+        lowlevel { copy_nonoverlapping(data, buf, slen) }
+        lowlevel { ptr_write[U8]((buf as I64 + slen) as *U8, 0 as U8) }
         return buf as Str
     }
 

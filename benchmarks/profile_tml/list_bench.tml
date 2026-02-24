@@ -1,0 +1,150 @@
+// List/Vec Benchmarks (TML)
+//
+// Tests dynamic list operations: push, pop, get, iteration.
+// Comparable with C++ std::vector benchmarks.
+
+use std::collections::List
+use std::time::Instant
+
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
+}
+
+// List push (grow from empty)
+func bench_list_push(iterations: I64) -> I64 {
+    let list: List[I64] = List[I64].new(8)
+    var i: I64 = 0
+    loop (i < iterations) {
+        list.push(i)
+        i = i + 1
+    }
+    let result: I64 = list.len()
+    list.destroy()
+    result
+}
+
+// List random access
+func bench_list_access(iterations: I64) -> I64 {
+    let list: List[I64] = List[I64].new(10000)
+    var i: I64 = 0
+    loop (i < 10000) {
+        list.push(i)
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    i = 0
+    loop (i < iterations) {
+        sum = sum + list.get(i % 10000)
+        i = i + 1
+    }
+    list.destroy()
+    sum
+}
+
+// List iteration (sequential access)
+func bench_list_iterate(iterations: I64) -> I64 {
+    let list: List[I64] = List[I64].new(10000)
+    var i: I64 = 0
+    loop (i < 10000) {
+        list.push(i)
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    var round: I64 = 0
+    loop (round < iterations / 10000) {
+        i = 0
+        loop (i < 10000) {
+            sum = sum + list.get(i)
+            i = i + 1
+        }
+        round = round + 1
+    }
+    list.destroy()
+    sum
+}
+
+// List pop
+func bench_list_pop(iterations: I64) -> I64 {
+    let list: List[I64] = List[I64].new(iterations)
+    var i: I64 = 0
+    loop (i < iterations) {
+        list.push(i)
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    loop (list.len() > 0) {
+        let val: I64 = list.pop()
+        sum = sum + val
+    }
+    list.destroy()
+    sum
+}
+
+// List set (modify elements)
+func bench_list_set(iterations: I64) -> I64 {
+    let list: List[I64] = List[I64].new(10000)
+    var i: I64 = 0
+    loop (i < 10000) {
+        list.push(0)
+        i = i + 1
+    }
+
+    i = 0
+    loop (i < iterations) {
+        list.set(i % 10000, i)
+        i = i + 1
+    }
+    let result: I64 = list.get(0)
+    list.destroy()
+    result
+}
+
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  List Benchmarks (TML)\n")
+    print("================================================================\n\n")
+
+    let VEC_ITER: I64 = 1000000
+
+    // Warmup
+    let w: List[I64] = List[I64].new(8)
+    var i: I64 = 0
+    loop (i < 100) { w.push(i); i = i + 1 }
+    w.destroy()
+
+    var start: Instant = Instant::now()
+    let _push: I64 = bench_list_push(VEC_ITER)
+    run_and_print("List Push (grow)", VEC_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _acc: I64 = bench_list_access(VEC_ITER)
+    run_and_print("List Random Access", VEC_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _iter: I64 = bench_list_iterate(VEC_ITER)
+    run_and_print("List Iteration", VEC_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _pop: I64 = bench_list_pop(VEC_ITER)
+    run_and_print("List Pop", VEC_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _set: I64 = bench_list_set(VEC_ITER)
+    run_and_print("List Set", VEC_ITER, start.elapsed().as_nanos())
+
+    0
+}

@@ -1,0 +1,90 @@
+{
+  "category": "Collections",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Vec Push (grow)",
+      "iterations": 1000000,
+      "total_ns": 4049900,
+      "per_op_ns": 4,
+      "ops_per_sec": 246919677
+    },
+    {
+      "name": "Vec Push (reserved)",
+      "iterations": 1000000,
+      "total_ns": 1277100,
+      "per_op_ns": 1,
+      "ops_per_sec": 783024038
+    },
+    {
+      "name": "Vec Random Access",
+      "iterations": 1000000,
+      "total_ns": 608800,
+      "per_op_ns": 0,
+      "ops_per_sec": 1642575558
+    },
+    {
+      "name": "Vec Iteration",
+      "iterations": 1000000,
+      "total_ns": 58200,
+      "per_op_ns": 0,
+      "ops_per_sec": 17182130584
+    },
+    {
+      "name": "Vec Pop",
+      "iterations": 1000000,
+      "total_ns": 1809500,
+      "per_op_ns": 1,
+      "ops_per_sec": 552638850
+    },
+    {
+      "name": "Vec Set",
+      "iterations": 1000000,
+      "total_ns": 448000,
+      "per_op_ns": 0,
+      "ops_per_sec": 2232142857
+    },
+    {
+      "name": "HashMap Insert",
+      "iterations": 100000,
+      "total_ns": 9268700,
+      "per_op_ns": 92,
+      "ops_per_sec": 10788999
+    },
+    {
+      "name": "HashMap Insert (reserved)",
+      "iterations": 100000,
+      "total_ns": 6675200,
+      "per_op_ns": 66,
+      "ops_per_sec": 14980824
+    },
+    {
+      "name": "HashMap Lookup",
+      "iterations": 1000000,
+      "total_ns": 5604700,
+      "per_op_ns": 5,
+      "ops_per_sec": 178421681
+    },
+    {
+      "name": "HashMap Contains",
+      "iterations": 1000000,
+      "total_ns": 5071300,
+      "per_op_ns": 5,
+      "ops_per_sec": 197188097
+    },
+    {
+      "name": "HashMap Remove",
+      "iterations": 100000,
+      "total_ns": 10263000,
+      "per_op_ns": 102,
+      "ops_per_sec": 9743739
+    },
+    {
+      "name": "HashMap String Key",
+      "iterations": 100000,
+      "total_ns": 15001400,
+      "per_op_ns": 150,
+      "ops_per_sec": 6666044
+    }
+  ]
+}

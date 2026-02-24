@@ -1,0 +1,86 @@
+{
+  "category": "Math",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Integer Addition",
+      "iterations": 10000000,
+      "total_ns": 1247300,
+      "per_op_ns": 0,
+      "ops_per_sec": 8017317405,
+      "notes": "sum of 0..N"
+    },
+    {
+      "name": "Integer Multiplication",
+      "iterations": 10000000,
+      "total_ns": 27933900,
+      "per_op_ns": 2,
+      "ops_per_sec": 357987964,
+      "notes": "product mod 1e9+7"
+    },
+    {
+      "name": "Integer Division",
+      "iterations": 10000000,
+      "total_ns": 12998900,
+      "per_op_ns": 1,
+      "ops_per_sec": 769295863
+    },
+    {
+      "name": "Integer Modulo",
+      "iterations": 10000000,
+      "total_ns": 5407500,
+      "per_op_ns": 0,
+      "ops_per_sec": 1849283402
+    },
+    {
+      "name": "Bitwise Operations",
+      "iterations": 10000000,
+      "total_ns": 5527300,
+      "per_op_ns": 0,
+      "ops_per_sec": 1809201599
+    },
+    {
+      "name": "Float Addition",
+      "iterations": 10000000,
+      "total_ns": 5692500,
+      "per_op_ns": 0,
+      "ops_per_sec": 1756697408
+    },
+    {
+      "name": "Float Multiplication",
+      "iterations": 10000000,
+      "total_ns": 5521400,
+      "per_op_ns": 0,
+      "ops_per_sec": 1811134857
+    },
+    {
+      "name": "Square Root",
+      "iterations": 10000000,
+      "total_ns": 16293500,
+      "per_op_ns": 1,
+      "ops_per_sec": 613741676
+    },
+    {
+      "name": "Fibonacci Recursive (n=20)",
+      "iterations": 1000,
+      "total_ns": 18400,
+      "per_op_ns": 18,
+      "ops_per_sec": 54347826
+    },
+    {
+      "name": "Fibonacci Iterative (n=50)",
+      "iterations": 10000000,
+      "total_ns": 100,
+      "per_op_ns": 0,
+      "ops_per_sec": 100000000000000
+    },
+    {
+      "name": "Empty Loop",
+      "iterations": 10000000,
+      "total_ns": 1836000,
+      "per_op_ns": 0,
+      "ops_per_sec": 5446623093,
+      "notes": "baseline overhead"
+    }
+  ]
+}

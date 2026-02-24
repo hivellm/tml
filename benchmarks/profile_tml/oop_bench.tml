@@ -3,6 +3,8 @@
 // Tests object-oriented programming overhead: class creation, virtual dispatch,
 // inheritance, method calls.
 
+use std::time::Instant
+
 // ============================================================================
 // Simple class (no inheritance)
 // ============================================================================
@@ -12,19 +14,19 @@ class Point {
     y: F64
 
     static func create() -> Point {
-        return Point { x: 0.0, y: 0.0 }
+        Point { x: 0.0, y: 0.0 }
     }
 
     static func with_coords(x: F64, y: F64) -> Point {
-        return Point { x: x, y: y }
+        Point { x: x, y: y }
     }
 
     func distance_squared(this) -> F64 {
-        return this.x * this.x + this.y * this.y
+        this.x * this.x + this.y * this.y
     }
 
     func add(this, other: Point) -> Point {
-        return Point { x: this.x + other.x, y: this.y + other.y }
+        Point { x: this.x + other.x, y: this.y + other.y }
     }
 }
 
@@ -36,15 +38,15 @@ class Circle {
     radius: F64
 
     static func create(r: F64) -> Circle {
-        return Circle { radius: r }
+        Circle { radius: r }
     }
 
     func area(this) -> F64 {
-        return 3.14159265359 * this.radius * this.radius
+        3.14159265359 * this.radius * this.radius
     }
 
     func perimeter(this) -> F64 {
-        return 2.0 * 3.14159265359 * this.radius
+        2.0 * 3.14159265359 * this.radius
     }
 }
 
@@ -53,15 +55,15 @@ class Rectangle {
     height: F64
 
     static func create(w: F64, h: F64) -> Rectangle {
-        return Rectangle { width: w, height: h }
+        Rectangle { width: w, height: h }
     }
 
     func area(this) -> F64 {
-        return this.width * this.height
+        this.width * this.height
     }
 
     func perimeter(this) -> F64 {
-        return 2.0 * (this.width + this.height)
+        2.0 * (this.width + this.height)
     }
 }
 
@@ -73,11 +75,11 @@ class Level1 {
     value: I64
 
     static func create() -> Level1 {
-        return Level1 { value: 1 }
+        Level1 { value: 1 }
     }
 
     func compute(this, x: I64) -> I64 {
-        return x + this.value
+        x + this.value
     }
 }
 
@@ -86,11 +88,11 @@ class Level2 {
     value: I64
 
     static func create() -> Level2 {
-        return Level2 { level1: Level1::create(), value: 1 }
+        Level2 { level1: Level1::create(), value: 1 }
     }
 
     func compute(this, x: I64) -> I64 {
-        return this.level1.compute(x) + this.value
+        this.level1.compute(x) + this.value
     }
 }
 
@@ -99,11 +101,11 @@ class Level3 {
     value: I64
 
     static func create() -> Level3 {
-        return Level3 { level2: Level2::create(), value: 1 }
+        Level3 { level2: Level2::create(), value: 1 }
     }
 
     func compute(this, x: I64) -> I64 {
-        return this.level2.compute(x) + this.value
+        this.level2.compute(x) + this.value
     }
 }
 
@@ -112,11 +114,11 @@ class Level4 {
     value: I64
 
     static func create() -> Level4 {
-        return Level4 { level3: Level3::create(), value: 1 }
+        Level4 { level3: Level3::create(), value: 1 }
     }
 
     func compute(this, x: I64) -> I64 {
-        return this.level3.compute(x) + this.value
+        this.level3.compute(x) + this.value
     }
 }
 
@@ -134,7 +136,7 @@ func bench_object_creation(iterations: I64) -> I64 {
         sum = sum + p.distance_squared()
         i = i + 1
     }
-    return sum as I64
+    sum as I64
 }
 
 func bench_method_call(iterations: I64) -> I64 {
@@ -145,7 +147,7 @@ func bench_method_call(iterations: I64) -> I64 {
         sum = sum + p.distance_squared()
         i = i + 1
     }
-    return sum as I64
+    sum as I64
 }
 
 func bench_method_chaining(iterations: I64) -> I64 {
@@ -157,7 +159,7 @@ func bench_method_chaining(iterations: I64) -> I64 {
         sum = sum + result.distance_squared()
         i = i + 1
     }
-    return sum as I64
+    sum as I64
 }
 
 func bench_circle_dispatch(iterations: I64) -> I64 {
@@ -168,7 +170,7 @@ func bench_circle_dispatch(iterations: I64) -> I64 {
         sum = sum + c.area() + c.perimeter()
         i = i + 1
     }
-    return sum as I64
+    sum as I64
 }
 
 func bench_rectangle_dispatch(iterations: I64) -> I64 {
@@ -179,7 +181,7 @@ func bench_rectangle_dispatch(iterations: I64) -> I64 {
         sum = sum + r.area() + r.perimeter()
         i = i + 1
     }
-    return sum as I64
+    sum as I64
 }
 
 func bench_deep_composition(iterations: I64) -> I64 {
@@ -190,7 +192,7 @@ func bench_deep_composition(iterations: I64) -> I64 {
         sum = sum + obj.compute(i % 100)
         i = i + 1
     }
-    return sum
+    sum
 }
 
 func bench_stack_allocation(iterations: I64) -> I64 {
@@ -201,7 +203,7 @@ func bench_stack_allocation(iterations: I64) -> I64 {
         sum = sum + (p.x + p.y) as I64
         i = i + 1
     }
-    return sum
+    sum
 }
 
 // Helper to run and print a benchmark
@@ -212,14 +214,13 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
     var best_ns: I64 = 9223372036854775807  // I64 max
     var run: I32 = 0
     loop (run < runs) {
-        let start: I64 = time_ns()
+        let start: Instant = Instant::now()
         let result: I64 = bench_fn(iterations)
-        let end: I64 = time_ns()
-        let elapsed: I64 = end - start
+        let elapsed: I64 = start.elapsed().as_nanos()
 
         // Debug: print timing info for first run
         if run == 0 {
-            println("    [DEBUG] start=" + start.to_string() + " end=" + end.to_string() + " elapsed=" + elapsed.to_string() + " result=" + result.to_string())
+            print("    [DEBUG] elapsed={} result={}\n", elapsed, result)
         }
 
         if elapsed < best_ns {
@@ -235,19 +236,17 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
         0
     }
 
-    println("  " + name + ":")
-    println("    best_ns=" + best_ns.to_string())
-    println("    " + per_op.to_string() + " ns/op")
-    println("    " + ops_sec.to_string() + " ops/sec")
-    println("")
+    print("  {}:\n", name)
+    print("    best_ns={}\n", best_ns)
+    print("    {} ns/op\n", per_op)
+    print("    {} ops/sec\n\n", ops_sec)
 }
 
-func main() -> I32 {
-    println("")
-    println("================================================================")
-    println("  OOP Benchmarks (TML)")
-    println("================================================================")
-    println("")
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  OOP Benchmarks (TML)\n")
+    print("================================================================\n\n")
 
     let ITERATIONS: I64 = 10000000  // 10M
 
@@ -259,5 +258,5 @@ func main() -> I32 {
     run_bench("Deep Composition (4 levels)", ITERATIONS, 10, bench_deep_composition)
     run_bench("Stack Allocation", ITERATIONS, 10, bench_stack_allocation)
 
-    return 0
+    0
 }

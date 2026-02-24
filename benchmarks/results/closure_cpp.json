@@ -1,0 +1,111 @@
+{
+  "category": "Closures and Iterators",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Lambda No Capture",
+      "iterations": 10000000,
+      "total_ns": 2234200,
+      "per_op_ns": 0,
+      "ops_per_sec": 4475875033
+    },
+    {
+      "name": "Lambda Value Capture",
+      "iterations": 10000000,
+      "total_ns": 1896200,
+      "per_op_ns": 0,
+      "ops_per_sec": 5273705305
+    },
+    {
+      "name": "Lambda Ref Capture",
+      "iterations": 10000000,
+      "total_ns": 1906600,
+      "per_op_ns": 0,
+      "ops_per_sec": 5244938634
+    },
+    {
+      "name": "Lambda Multi Capture",
+      "iterations": 10000000,
+      "total_ns": 1960500,
+      "per_op_ns": 0,
+      "ops_per_sec": 5100739607
+    },
+    {
+      "name": "std::function Wrapper",
+      "iterations": 10000000,
+      "total_ns": 11677700,
+      "per_op_ns": 1,
+      "ops_per_sec": 856333010
+    },
+    {
+      "name": "Higher Order Function",
+      "iterations": 10000000,
+      "total_ns": 7747400,
+      "per_op_ns": 0,
+      "ops_per_sec": 1290755608
+    },
+    {
+      "name": "Closure Factory",
+      "iterations": 10000000,
+      "total_ns": 6316000,
+      "per_op_ns": 0,
+      "ops_per_sec": 1583280557
+    },
+    {
+      "name": "Manual Loop (index)",
+      "iterations": 10000000,
+      "total_ns": 1026300,
+      "per_op_ns": 0,
+      "ops_per_sec": 9743739647
+    },
+    {
+      "name": "Iterator Loop",
+      "iterations": 10000000,
+      "total_ns": 2092000,
+      "per_op_ns": 0,
+      "ops_per_sec": 4780114722
+    },
+    {
+      "name": "Range-based For",
+      "iterations": 10000000,
+      "total_ns": 636700,
+      "per_op_ns": 0,
+      "ops_per_sec": 15705983979
+    },
+    {
+      "name": "std::for_each",
+      "iterations": 10000000,
+      "total_ns": 2067400,
+      "per_op_ns": 0,
+      "ops_per_sec": 4836993324
+    },
+    {
+      "name": "std::accumulate",
+      "iterations": 10000000,
+      "total_ns": 815700,
+      "per_op_ns": 0,
+      "ops_per_sec": 12259409096
+    },
+    {
+      "name": "std::transform",
+      "iterations": 10000000,
+      "total_ns": 962900,
+      "per_op_ns": 0,
+      "ops_per_sec": 10385294423
+    },
+    {
+      "name": "Filter Pattern",
+      "iterations": 10000000,
+      "total_ns": 3869200,
+      "per_op_ns": 0,
+      "ops_per_sec": 2584513594
+    },
+    {
+      "name": "Chain Operations",
+      "iterations": 10000000,
+      "total_ns": 2949300,
+      "per_op_ns": 0,
+      "ops_per_sec": 3390635065
+    }
+  ]
+}

@@ -322,8 +322,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             link_options.link_flags.push_back("-ladvapi32");
             link_options.link_flags.push_back("-luserenv");
         }
-        // Add OpenSSL libraries for crypto modules
-        if (has_crypto_modules(compile.registry)) {
+        // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+        {
             auto openssl = find_openssl();
             if (openssl.found) {
                 link_options.link_flags.push_back(
@@ -334,6 +334,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
                 link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
             }
         }
+        link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
         // Link to temporary location first
@@ -516,8 +517,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
             link_options.link_flags.push_back("-ladvapi32");
             link_options.link_flags.push_back("-luserenv");
         }
-        // Add OpenSSL libraries for crypto modules
-        if (has_crypto_modules(compile.registry)) {
+        // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+        {
             auto openssl = find_openssl();
             if (openssl.found) {
                 link_options.link_flags.push_back(
@@ -528,6 +529,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                 link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
             }
         }
+        link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
         // Link to a unique temporary location (avoid race conditions)

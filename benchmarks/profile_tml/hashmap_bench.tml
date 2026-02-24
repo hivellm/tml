@@ -1,0 +1,129 @@
+// HashMap Benchmarks (TML)
+//
+// Tests HashMap operations: insert, get, contains, remove.
+// Comparable with C++ std::unordered_map benchmarks.
+
+use std::collections::HashMap
+use std::time::Instant
+
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
+}
+
+// HashMap insert (I64 -> I64)
+func bench_hashmap_insert(iterations: I64) -> I64 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    var i: I64 = 0
+    loop (i < iterations) {
+        map.set(i, i * 2)
+        i = i + 1
+    }
+    let result: I64 = map.len()
+    map.destroy()
+    result
+}
+
+// HashMap lookup
+func bench_hashmap_lookup(iterations: I64) -> I64 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i * 2)
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    i = 0
+    loop (i < iterations) {
+        sum = sum + map.get(i % 10000)
+        i = i + 1
+    }
+    map.destroy()
+    sum
+}
+
+// HashMap contains_key
+func bench_hashmap_contains(iterations: I64) -> I64 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i)
+        i = i + 1
+    }
+
+    var found: I64 = 0
+    i = 0
+    loop (i < iterations) {
+        // Check half existing, half non-existing
+        if map.has(i % 20000) { found = found + 1 }
+        i = i + 1
+    }
+    map.destroy()
+    found
+}
+
+// HashMap remove
+func bench_hashmap_remove(iterations: I64) -> I64 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    var i: I64 = 0
+    loop (i < iterations) {
+        map.set(i, i)
+        i = i + 1
+    }
+
+    var removed: I64 = 0
+    i = 0
+    loop (i < iterations) {
+        if map.remove(i) { removed = removed + 1 }
+        i = i + 1
+    }
+    map.destroy()
+    removed
+}
+
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  HashMap Benchmarks (TML)\n")
+    print("================================================================\n\n")
+
+    let MAP_ITER: I64 = 100000
+    let LOOKUP_ITER: I64 = 1000000
+
+    // Warmup
+    let warmup_map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    var w: I64 = 0
+    loop (w < 100) {
+        warmup_map.set(w, w)
+        w = w + 1
+    }
+    warmup_map.destroy()
+
+    var start: Instant = Instant::now()
+    let _ins: I64 = bench_hashmap_insert(MAP_ITER)
+    run_and_print("HashMap Insert", MAP_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _look: I64 = bench_hashmap_lookup(LOOKUP_ITER)
+    run_and_print("HashMap Lookup", LOOKUP_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _cont: I64 = bench_hashmap_contains(LOOKUP_ITER)
+    run_and_print("HashMap Contains", LOOKUP_ITER, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _rem: I64 = bench_hashmap_remove(MAP_ITER)
+    run_and_print("HashMap Remove", MAP_ITER, start.elapsed().as_nanos())
+
+    0
+}

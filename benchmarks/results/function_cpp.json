@@ -1,0 +1,76 @@
+{
+  "category": "Function Calls",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Inline Call",
+      "iterations": 10000000,
+      "total_ns": 1202600,
+      "per_op_ns": 0,
+      "ops_per_sec": 8315316813
+    },
+    {
+      "name": "Direct Call (noinline)",
+      "iterations": 10000000,
+      "total_ns": 9575000,
+      "per_op_ns": 0,
+      "ops_per_sec": 1044386422
+    },
+    {
+      "name": "Many Parameters (6 args)",
+      "iterations": 10000000,
+      "total_ns": 11462600,
+      "per_op_ns": 1,
+      "ops_per_sec": 872402421
+    },
+    {
+      "name": "Fibonacci Recursive (n=20)",
+      "iterations": 1000,
+      "total_ns": 19200,
+      "per_op_ns": 19,
+      "ops_per_sec": 52083333
+    },
+    {
+      "name": "Fibonacci Tail (n=50)",
+      "iterations": 10000000,
+      "total_ns": 0,
+      "per_op_ns": 0,
+      "ops_per_sec": 0
+    },
+    {
+      "name": "Mutual Recursion (n=100)",
+      "iterations": 10000000,
+      "total_ns": 100,
+      "per_op_ns": 0,
+      "ops_per_sec": 100000000000000
+    },
+    {
+      "name": "Function Pointer",
+      "iterations": 10000000,
+      "total_ns": 14680700,
+      "per_op_ns": 1,
+      "ops_per_sec": 681166429
+    },
+    {
+      "name": "std::function",
+      "iterations": 10000000,
+      "total_ns": 30121600,
+      "per_op_ns": 3,
+      "ops_per_sec": 331987676
+    },
+    {
+      "name": "Virtual Call",
+      "iterations": 10000000,
+      "total_ns": 3759500,
+      "per_op_ns": 0,
+      "ops_per_sec": 2659928181
+    },
+    {
+      "name": "Devirtualized Call",
+      "iterations": 10000000,
+      "total_ns": 1867100,
+      "per_op_ns": 0,
+      "ops_per_sec": 5355899523
+    }
+  ]
+}

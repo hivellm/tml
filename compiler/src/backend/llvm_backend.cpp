@@ -7,6 +7,7 @@ TML_MODULE("codegen_x86")
 #include "backend/llvm_backend.hpp"
 
 #include "log/log.hpp"
+#include "version_generated.hpp"
 
 #include <fstream>
 #include <mutex>
@@ -223,6 +224,17 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     LLVMSetDataLayout(module, data_layout_str);
     LLVMDisposeMessage(data_layout_str);
     LLVMDisposeTargetData(data_layout);
+
+    // Embed compiler identification as !llvm.ident metadata via the LLVM C API.
+    // The backend emits this into .comment (ELF) or the debug directory (COFF).
+    {
+        std::string ident_str = "tml version " + std::string(tml::VERSION);
+        LLVMMetadataRef ident_val =
+            LLVMMDStringInContext2(ctx, ident_str.c_str(), ident_str.size());
+        LLVMMetadataRef ident_node_md = LLVMMDNodeInContext2(ctx, &ident_val, 1);
+        LLVMValueRef ident_node = LLVMMetadataAsValue(ctx, ident_node_md);
+        LLVMAddNamedMetadataOperand(module, "llvm.ident", ident_node);
+    }
 
     // Run optimization passes if optimization level > 0
     if (options.optimization_level > 0) {

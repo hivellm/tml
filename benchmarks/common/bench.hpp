@@ -154,7 +154,13 @@ private:
 
 // Helper to prevent compiler optimization of dead code
 template <typename T> inline void do_not_optimize(T&& value) {
+#ifdef _MSC_VER
+    // MSVC: use volatile read to prevent optimization
+    volatile auto sink = value;
+    (void)sink;
+#else
     asm volatile("" : : "g"(value) : "memory");
+#endif
 }
 
 // Get current time in nanoseconds

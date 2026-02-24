@@ -71,6 +71,16 @@
 //! ```
 
 // ============================================================================
+// FFI declarations for optimized C library string functions
+// ============================================================================
+
+@extern("strlen")
+func c_strlen(s: Str) -> I64
+
+@extern("memcmp")
+func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
+
+// ============================================================================
 // String Length and Emptiness
 // ============================================================================
 
@@ -91,16 +101,7 @@ pub func len(s: Str) -> I64 {
     if addr == 0 {
         return 0
     }
-    var i: I64 = 0
-    loop (true) {
-        let p: *U8 = (addr + i) as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](p) }
-        if byte == (0 as U8) {
-            return i
-        }
-        i = i + 1
-    }
-    return 0
+    return c_strlen(s)
 }
 
 /// Returns `true` if the string is empty.
@@ -446,24 +447,11 @@ pub func contains(s: Str, pattern: Str) -> Bool {
         return false
     }
     let s_base: I64 = s as I64
-    let p_base: I64 = pattern as I64
+    let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
     var i: I64 = 0
     loop (i <= limit) {
-        var matched: Bool = true
-        var j: I64 = 0
-        loop (j < p_len) {
-            let sp: *U8 = (s_base + i + j) as *U8
-            let pp: *U8 = (p_base + j) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let pb: U8 = lowlevel { ptr_read[U8](pp) }
-            if (sb as I32) != (pb as I32) {
-                matched = false
-                break
-            }
-            j = j + 1
-        }
-        if matched {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return true
         }
         i = i + 1
@@ -485,20 +473,10 @@ pub func starts_with(s: Str, prefix: Str) -> Bool {
     if p_len > s_len {
         return false
     }
-    let s_base: I64 = s as I64
-    let p_base: I64 = prefix as I64
-    var i: I64 = 0
-    loop (i < p_len) {
-        let sp: *U8 = (s_base + i) as *U8
-        let pp: *U8 = (p_base + i) as *U8
-        let sb: U8 = lowlevel { ptr_read[U8](sp) }
-        let pb: U8 = lowlevel { ptr_read[U8](pp) }
-        if (sb as I32) != (pb as I32) {
-            return false
-        }
-        i = i + 1
+    if p_len == 0 {
+        return true
     }
-    return true
+    return c_memcmp(s as *U8, prefix as *U8, p_len) == 0
 }
 
 /// Returns `true` if the string ends with the given suffix.
@@ -515,21 +493,11 @@ pub func ends_with(s: Str, suffix: Str) -> Bool {
     if x_len > s_len {
         return false
     }
-    let s_base: I64 = s as I64
-    let x_base: I64 = suffix as I64
-    let offset: I64 = s_len - x_len
-    var i: I64 = 0
-    loop (i < x_len) {
-        let sp: *U8 = (s_base + offset + i) as *U8
-        let xp: *U8 = (x_base + i) as *U8
-        let sb: U8 = lowlevel { ptr_read[U8](sp) }
-        let xb: U8 = lowlevel { ptr_read[U8](xp) }
-        if (sb as I32) != (xb as I32) {
-            return false
-        }
-        i = i + 1
+    if x_len == 0 {
+        return true
     }
-    return true
+    let offset: I64 = s_len - x_len
+    return c_memcmp((s as I64 + offset) as *U8, suffix as *U8, x_len) == 0
 }
 
 /// Returns the byte index of the first occurrence of the pattern.
@@ -552,24 +520,11 @@ pub func find(s: Str, pattern: Str) -> Maybe[I64] {
         return Nothing
     }
     let s_base: I64 = s as I64
-    let p_base: I64 = pattern as I64
+    let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
     var i: I64 = 0
     loop (i <= limit) {
-        var matched: Bool = true
-        var j: I64 = 0
-        loop (j < p_len) {
-            let sp: *U8 = (s_base + i + j) as *U8
-            let pp: *U8 = (p_base + j) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let pb: U8 = lowlevel { ptr_read[U8](pp) }
-            if (sb as I32) != (pb as I32) {
-                matched = false
-                break
-            }
-            j = j + 1
-        }
-        if matched {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return Just(i)
         }
         i = i + 1
@@ -597,23 +552,10 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
         return Nothing
     }
     let s_base: I64 = s as I64
-    let p_base: I64 = pattern as I64
+    let p_ptr: *U8 = pattern as *U8
     var i: I64 = s_len - p_len
     loop (i >= 0) {
-        var matched: Bool = true
-        var j: I64 = 0
-        loop (j < p_len) {
-            let sp: *U8 = (s_base + i + j) as *U8
-            let pp: *U8 = (p_base + j) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let pb: U8 = lowlevel { ptr_read[U8](pp) }
-            if (sb as I32) != (pb as I32) {
-                matched = false
-                break
-            }
-            j = j + 1
-        }
-        if matched {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return Just(i)
         }
         i = i - 1
@@ -808,26 +750,13 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
     if p_len == 0 or s_len == 0 {
         return s
     }
-    // First pass: count occurrences
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    // First pass: count occurrences using memcmp
     var count: I64 = 0
     var pos: I64 = 0
-    let s_base: I64 = s as I64
-    let p_base: I64 = pattern as I64
     loop (pos <= s_len - p_len) {
-        var matched: Bool = true
-        var k: I64 = 0
-        loop (k < p_len) {
-            let sp: *U8 = (s_base + pos + k) as *U8
-            let pp: *U8 = (p_base + k) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let pb: U8 = lowlevel { ptr_read[U8](pp) }
-            if (sb as I32) != (pb as I32) {
-                matched = false
-                break
-            }
-            k = k + 1
-        }
-        if matched {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
             count = count + 1
             pos = pos + p_len
         } else {
@@ -841,34 +770,15 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
     let new_len: I64 = s_len + count * (r_len - p_len)
     let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
     let dst: I64 = buf as I64
-    let r_base: I64 = replacement as I64
     var si: I64 = 0
     var di: I64 = 0
     loop (si <= s_len - p_len) {
-        var matched: Bool = true
-        var k: I64 = 0
-        loop (k < p_len) {
-            let sp: *U8 = (s_base + si + k) as *U8
-            let pp: *U8 = (p_base + k) as *U8
-            let sb: U8 = lowlevel { ptr_read[U8](sp) }
-            let pb: U8 = lowlevel { ptr_read[U8](pp) }
-            if (sb as I32) != (pb as I32) {
-                matched = false
-                break
+        if c_memcmp((s_base + si) as *U8, p_ptr, p_len) == 0 {
+            // Copy replacement using memcpy
+            if r_len > 0 {
+                lowlevel { copy_nonoverlapping(replacement as *U8, (dst + di) as *U8, r_len) }
             }
-            k = k + 1
-        }
-        if matched {
-            // Copy replacement
-            var ri: I64 = 0
-            loop (ri < r_len) {
-                let rp: *U8 = (r_base + ri) as *U8
-                let dp: *U8 = (dst + di) as *U8
-                let b: U8 = lowlevel { ptr_read[U8](rp) }
-                lowlevel { ptr_write[U8](dp, b) }
-                ri = ri + 1
-                di = di + 1
-            }
+            di = di + r_len
             si = si + p_len
         } else {
             let sp: *U8 = (s_base + si) as *U8
@@ -880,13 +790,10 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
         }
     }
     // Copy remaining bytes after the last possible match position
-    loop (si < s_len) {
-        let sp: *U8 = (s_base + si) as *U8
-        let dp: *U8 = (dst + di) as *U8
-        let b: U8 = lowlevel { ptr_read[U8](sp) }
-        lowlevel { ptr_write[U8](dp, b) }
-        si = si + 1
-        di = di + 1
+    if si < s_len {
+        let remaining: I64 = s_len - si
+        lowlevel { copy_nonoverlapping((s_base + si) as *U8, (dst + di) as *U8, remaining) }
+        di = di + remaining
     }
     let null_p: *U8 = (dst + di) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }

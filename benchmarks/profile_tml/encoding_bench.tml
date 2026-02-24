@@ -1,0 +1,149 @@
+// Encoding Benchmarks (TML)
+//
+// Tests encoding/decoding performance: base64, hex, base32.
+// Pure TML implementations vs C++ standard library equivalents.
+
+use core::encoding::base64
+use core::encoding::hex
+use core::encoding::base32
+use std::time::Instant
+
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
+}
+
+// Base64 encode (short string)
+func bench_b64_encode_short(iterations: I64) -> I64 {
+    let input: Str = "Hello, World!"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let encoded: Str = base64::encode(input)
+        total = total + encoded.len()
+        i = i + 1
+    }
+    total
+}
+
+// Base64 encode (medium string ~100 bytes)
+func bench_b64_encode_medium(iterations: I64) -> I64 {
+    let input: Str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog again!"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let encoded: Str = base64::encode(input)
+        total = total + encoded.len()
+        i = i + 1
+    }
+    total
+}
+
+// Base64 decode
+func bench_b64_decode(iterations: I64) -> I64 {
+    let encoded: Str = "SGVsbG8sIFdvcmxkIQ=="
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let result: Outcome[Str, Str] = base64::decode(encoded)
+        when result {
+            Ok(decoded) => { total = total + decoded.len() }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    total
+}
+
+// Hex encode
+func bench_hex_encode(iterations: I64) -> I64 {
+    let input: Str = "Hello, World!"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let encoded: Str = hex::encode(input)
+        total = total + encoded.len()
+        i = i + 1
+    }
+    total
+}
+
+// Hex decode
+func bench_hex_decode(iterations: I64) -> I64 {
+    let encoded: Str = "48656c6c6f2c20576f726c6421"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let result: Outcome[Str, Str] = hex::decode(encoded)
+        when result {
+            Ok(decoded) => { total = total + decoded.len() }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    total
+}
+
+// Base32 encode
+func bench_b32_encode(iterations: I64) -> I64 {
+    let input: Str = "Hello, World!"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < iterations) {
+        let encoded: Str = base32::encode(input)
+        total = total + encoded.len()
+        i = i + 1
+    }
+    total
+}
+
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  Encoding Benchmarks (TML)\n")
+    print("================================================================\n\n")
+
+    let ITERATIONS: I64 = 100000
+
+    // Warmup
+    var w: I64 = 0
+    loop (w < 100) {
+        let _: Str = base64::encode("warmup")
+        w = w + 1
+    }
+
+    var start: Instant = Instant::now()
+    let _b64s: I64 = bench_b64_encode_short(ITERATIONS)
+    run_and_print("Base64 Encode (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _b64m: I64 = bench_b64_encode_medium(ITERATIONS)
+    run_and_print("Base64 Encode (95 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _b64d: I64 = bench_b64_decode(ITERATIONS)
+    run_and_print("Base64 Decode (20 chars)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _hexe: I64 = bench_hex_encode(ITERATIONS)
+    run_and_print("Hex Encode (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _hexd: I64 = bench_hex_decode(ITERATIONS)
+    run_and_print("Hex Decode (26 chars)", ITERATIONS, start.elapsed().as_nanos())
+
+    start = Instant::now()
+    let _b32e: I64 = bench_b32_encode(ITERATIONS)
+    run_and_print("Base32 Encode (13 bytes)", ITERATIONS, start.elapsed().as_nanos())
+
+    0
+}

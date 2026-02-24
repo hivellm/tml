@@ -14,6 +14,7 @@ TML_MODULE("codegen_x86")
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
+#include "version_generated.hpp"
 
 #include <filesystem>
 #include <iomanip>
@@ -681,6 +682,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
         // Emit loop metadata (generic instantiations may contain loops)
         emit_loop_metadata();
+
+        // Emit module identification metadata
+        {
+            int ident_id = fresh_debug_id();
+            emit_line("");
+            emit_line("!llvm.ident = !{!" + std::to_string(ident_id) + "}");
+            emit_line("!" + std::to_string(ident_id) + " = !{!\"tml version " +
+                      std::string(tml::VERSION) + "\"}");
+        }
 
         // Final sweep: scan the complete library IR for runtime function references
         scan_for_runtime_refs(output_.str());
@@ -1798,6 +1808,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Emit debug info metadata at the end
     emit_debug_info_footer();
+
+    // Emit module identification metadata
+    {
+        int ident_id = fresh_debug_id();
+        emit_line("");
+        emit_line("!llvm.ident = !{!" + std::to_string(ident_id) + "}");
+        emit_line("!" + std::to_string(ident_id) + " = !{!\"tml version " +
+                  std::string(tml::VERSION) + "\"}");
+    }
 
     // Final sweep: scan the complete IR output for any runtime function references
     // that were missed by emit_line() auto-detection. This catches references emitted

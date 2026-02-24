@@ -3,20 +3,21 @@
 // Tests basic collection-like operations.
 // Uses fixed-size arrays to test access patterns.
 
+use std::time::Instant
+
 // Helper to run and print a benchmark
 func run_and_print(name: Str, iterations: I64, total_ns: I64) {
-    let per_op: I64 = total_ns / iterations
-    let ops_sec: I64 = if total_ns > 0 then {
-        (iterations * 100000000) / total_ns
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
     } else {
         0
     }
-    println("  " + name + ":")
-    println("    Iterations: " + iterations.to_string())
-    println("    Total time: " + (total_ns / 100000).to_string() + " ms")
-    println("    Per op:     " + per_op.to_string() + " ns")
-    println("    Ops/sec:    " + ops_sec.to_string())
-    println("")
+    print("  {}:\n", name)
+    print("    Iterations: {}\n", iterations)
+    print("    Total time: {} ms\n", total_ns / 1000000)
+    print("    Per op:     {} ns\n", per_op)
+    print("    Ops/sec:    {}\n\n", ops_sec)
 }
 
 // Array sequential read
@@ -38,7 +39,7 @@ func bench_array_sequential(iterations: I64) -> I64 {
         }
         round = round + 1
     }
-    return sum
+    sum
 }
 
 // Array random access
@@ -57,7 +58,7 @@ func bench_array_random(iterations: I64) -> I64 {
         sum = sum + arr[idx as U64]
         i = i + 1
     }
-    return sum
+    sum
 }
 
 // Array write
@@ -69,7 +70,7 @@ func bench_array_write(iterations: I64) -> I64 {
         arr[idx] = i
         i = i + 1
     }
-    return arr[0]
+    arr[0]
 }
 
 // Array initialization
@@ -81,7 +82,7 @@ func bench_array_init(iterations: I64) -> I64 {
         total = total + arr[0]
         round = round + 1
     }
-    return total
+    total
 }
 
 // Linear search
@@ -99,7 +100,7 @@ func bench_linear_search(iterations: I64) -> I64 {
         let target: I64 = round % 2000
         i = 0
         loop (i < 100) {
-            if arr[i as U64] == target then {
+            if arr[i as U64] == target {
                 found = found + 1
                 break
             }
@@ -107,7 +108,7 @@ func bench_linear_search(iterations: I64) -> I64 {
         }
         round = round + 1
     }
-    return found
+    found
 }
 
 // Accumulate sum
@@ -131,17 +132,15 @@ func bench_accumulate(iterations: I64) -> I64 {
         total_sum = total_sum + sum
         round = round + 1
     }
-    return total_sum
+    total_sum
 }
 
 pub func main() -> I32 {
-    println("")
-    println("================================================================")
-    println("  Collections Benchmarks (TML)")
-    println("================================================================")
-    println("")
-    println("Note: Using fixed-size arrays for benchmarking.")
-    println("")
+    print("\n")
+    print("================================================================\n")
+    print("  Collections Benchmarks (TML)\n")
+    print("================================================================\n\n")
+    print("Note: Using fixed-size arrays for benchmarking.\n\n")
 
     let ITERATIONS: I64 = 10000000    // 10M operations
 
@@ -153,42 +152,34 @@ pub func main() -> I32 {
     }
 
     // Array Sequential Read
-    var start: I64 = time_ns()
-    let seq: I64 = black_box_i64(bench_array_sequential(ITERATIONS))
-    var end: I64 = time_ns()
-    run_and_print("Array Sequential Read", ITERATIONS, end - start)
+    var start: Instant = Instant::now()
+    let _seq: I64 = bench_array_sequential(ITERATIONS)
+    run_and_print("Array Sequential Read", ITERATIONS, start.elapsed().as_nanos())
 
     // Array Random Access
-    start = time_ns()
-    let rand: I64 = black_box_i64(bench_array_random(ITERATIONS))
-    end = time_ns()
-    run_and_print("Array Random Access", ITERATIONS, end - start)
+    start = Instant::now()
+    let _rand: I64 = bench_array_random(ITERATIONS)
+    run_and_print("Array Random Access", ITERATIONS, start.elapsed().as_nanos())
 
     // Array Write
-    start = time_ns()
-    let write: I64 = black_box_i64(bench_array_write(ITERATIONS))
-    end = time_ns()
-    run_and_print("Array Write", ITERATIONS, end - start)
+    start = Instant::now()
+    let _write: I64 = bench_array_write(ITERATIONS)
+    run_and_print("Array Write", ITERATIONS, start.elapsed().as_nanos())
 
     // Array Initialization
-    start = time_ns()
-    let init: I64 = black_box_i64(bench_array_init(ITERATIONS))
-    end = time_ns()
-    run_and_print("Array Initialization", ITERATIONS, end - start)
+    start = Instant::now()
+    let _init: I64 = bench_array_init(ITERATIONS)
+    run_and_print("Array Initialization", ITERATIONS, start.elapsed().as_nanos())
 
     // Linear Search
-    start = time_ns()
-    let search: I64 = black_box_i64(bench_linear_search(ITERATIONS))
-    end = time_ns()
-    run_and_print("Linear Search", ITERATIONS, end - start)
+    start = Instant::now()
+    let _search: I64 = bench_linear_search(ITERATIONS)
+    run_and_print("Linear Search", ITERATIONS, start.elapsed().as_nanos())
 
     // Accumulate
-    start = time_ns()
-    let acc: I64 = black_box_i64(bench_accumulate(ITERATIONS))
-    end = time_ns()
-    run_and_print("Accumulate Sum", ITERATIONS, end - start)
+    start = Instant::now()
+    let _acc: I64 = bench_accumulate(ITERATIONS)
+    run_and_print("Accumulate Sum", ITERATIONS, start.elapsed().as_nanos())
 
-    // Use results to prevent any remaining DCE
-    let checksum: I64 = seq + rand + write + init + search + acc
-    return black_box_i64(checksum) as I32
+    0
 }

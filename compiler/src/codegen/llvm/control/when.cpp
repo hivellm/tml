@@ -730,6 +730,17 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                     std::string bound_type =
                         payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
 
+                    // If payload type inference failed (bound_type is fallback "i64"),
+                    // check the compact enum layout map for the actual field type.
+                    // With compact layouts like { i32, i32 }, loading i64 would
+                    // read past the struct boundary.
+                    if (!payload_type) {
+                        auto pl_it = enum_payload_type_.find(scrutinee_type);
+                        if (pl_it != enum_payload_type_.end() && !pl_it->second.empty()) {
+                            bound_type = pl_it->second;
+                        }
+                    }
+
                     // For struct/tuple types, the variable is a pointer to the payload.
                     // The binding aliases the scrutinee's payload — the value is
                     // "moved" out of the Outcome/enum.  The arm-scope drop logic

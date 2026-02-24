@@ -214,16 +214,29 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             max_size = std::max(max_size, size);
         }
 
-        // Ensure at least 8 bytes for data
-        if (max_size == 0)
-            max_size = 8;
-
         // Emit the enum type to type_defs_buffer_ (ensures types before functions)
         std::string type_name = "%struct." + e.name;
-        // Use [N x i64] for proper 8-byte alignment (same as gen_enum_instantiation)
-        size_t num_i64 = (max_size + 7) / 8;
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
-                          << " x i64] }\n";
+
+        // Compact layout optimization: use smallest payload type that fits
+        if (max_size == 0) {
+            // No payload variants — tag only (e.g. Ordering)
+            type_defs_buffer_ << type_name << " = type { i32 }\n";
+            enum_payload_type_[type_name] = "";
+        } else if (max_size <= 4) {
+            // Fits in i32 (e.g., Maybe[I32], Maybe[Bool])
+            type_defs_buffer_ << type_name << " = type { i32, i32 }\n";
+            enum_payload_type_[type_name] = "i32";
+        } else if (max_size <= 8) {
+            // Fits in i64 (e.g., Maybe[I64], Maybe[F64], enums with ptr payload)
+            type_defs_buffer_ << type_name << " = type { i32, i64 }\n";
+            enum_payload_type_[type_name] = "i64";
+        } else {
+            // Large payloads — keep [N x i64] union
+            size_t num_i64 = (max_size + 7) / 8;
+            type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
+                              << " x i64] }\n";
+            enum_payload_type_[type_name] = "";
+        }
         struct_types_[e.name] = type_name;
 
         // Register variant values
@@ -408,21 +421,29 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
             max_size = std::max(max_size, size);
         }
 
-        // Ensure at least 8 bytes for data
-        if (max_size == 0)
-            max_size = 8;
-
-        // Calculate alignment needed for payload (max alignment of any variant)
-        // Use [N x i64] instead of [N x i8] to ensure 8-byte alignment of the payload data.
-        // This is necessary because payloads may contain i64/double/structs that require
-        // 8-byte alignment. Using i8 array would place data at offset 4 after the i32 tag,
-        // causing alignment issues.
-        //
-        // We round up max_size to the nearest multiple of 8, then divide by 8 to get
-        // the number of i64 elements needed.
-        size_t num_i64 = (max_size + 7) / 8;
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
-                          << " x i64] }\n";
+        // Compact layout optimization: use smallest payload type that fits
+        // For small payloads (≤8 bytes), use i32 or i64 directly instead of [N x i64].
+        // This halves the size of Maybe[I32] from 16 to 8 bytes, matching Rust's layout.
+        if (max_size == 0) {
+            // No payload variants — tag only
+            type_defs_buffer_ << type_name << " = type { i32 }\n";
+            enum_payload_type_[type_name] = "";
+        } else if (max_size <= 4) {
+            // Fits in i32 (e.g., Maybe[I32], Maybe[Bool], Maybe[U8])
+            type_defs_buffer_ << type_name << " = type { i32, i32 }\n";
+            enum_payload_type_[type_name] = "i32";
+        } else if (max_size <= 8) {
+            // Fits in i64 (e.g., Maybe[I64], Maybe[F64], Maybe[Str/ptr])
+            type_defs_buffer_ << type_name << " = type { i32, i64 }\n";
+            enum_payload_type_[type_name] = "i64";
+        } else {
+            // Large payloads — keep [N x i64] union for proper 8-byte alignment.
+            // Use [N x i64] instead of [N x i8] to ensure alignment of the payload data.
+            size_t num_i64 = (max_size + 7) / 8;
+            type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
+                              << " x i64] }\n";
+            enum_payload_type_[type_name] = "";
+        }
         struct_types_[mangled] = type_name;
 
         int tag = 0;

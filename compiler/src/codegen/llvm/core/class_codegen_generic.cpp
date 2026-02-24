@@ -218,7 +218,15 @@ void LLVMIRGen::gen_class_method_instantiation(
             // Only emit return if gen_expr didn't already terminate the block
             // (e.g., if the trailing expression was itself a return)
             if (!block_terminated_ && ret_type != "void") {
-                emit_line("  ret " + ret_type + " " + result);
+                // For value classes/structs returned by value, load from pointer
+                if (last_expr_type_ == "ptr" &&
+                    (ret_type.starts_with("%class.") || ret_type.starts_with("%struct."))) {
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load " + ret_type + ", ptr " + result);
+                    emit_line("  ret " + ret_type + " " + loaded);
+                } else {
+                    emit_line("  ret " + ret_type + " " + result);
+                }
                 block_terminated_ = true;
             }
         }
@@ -329,7 +337,15 @@ void LLVMIRGen::gen_generic_class_static_method(
             std::string expr_val = gen_expr(*method.body->expr.value());
             // Return the expression value for non-void methods
             if (ret_type != "void" && !block_terminated_) {
-                emit_line("  ret " + ret_type + " " + expr_val);
+                // For value classes/structs returned by value, load from pointer
+                if (last_expr_type_ == "ptr" &&
+                    (ret_type.starts_with("%class.") || ret_type.starts_with("%struct."))) {
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load " + ret_type + ", ptr " + expr_val);
+                    emit_line("  ret " + ret_type + " " + loaded);
+                } else {
+                    emit_line("  ret " + ret_type + " " + expr_val);
+                }
                 block_terminated_ = true;
             }
         }
@@ -509,6 +525,14 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
                     emit_line("  " + loaded_struct + " = load " + value_class_struct_type +
                               ", ptr " + expr_val);
                     emit_line("  ret " + ret_type + " " + loaded_struct);
+                } else if (last_expr_type_ == "ptr" &&
+                           (ret_type.starts_with("%class.") || ret_type.starts_with("%struct."))) {
+                    // Value class where ret_type is already the struct type
+                    // (not detected by return_value_class_by_value because
+                    //  llvm_type_ptr already returned the struct type)
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load " + ret_type + ", ptr " + expr_val);
+                    emit_line("  ret " + ret_type + " " + loaded);
                 } else {
                     emit_line("  ret " + ret_type + " " + expr_val);
                 }

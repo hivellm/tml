@@ -460,16 +460,33 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
 
             type_defs_buffer_ << label_just << ":\n";
             // Extract Ordering from payload and check if Equal
-            // For simplicity, extract the payload as i32 (Ordering tag)
-            std::string payload = fresh_temp();
-            type_defs_buffer_ << "  " << payload << " = extractvalue " << maybe_type << " "
-                              << cmp_result << ", 1\n";
-            std::string ordering_tag = fresh_temp();
-            type_defs_buffer_ << "  " << ordering_tag << " = extractvalue [1 x i64] " << payload
-                              << ", 0\n";
+            // With compact enum layout, Maybe[Ordering] is { i32, i32 }
+            // Field 1 is the Ordering tag directly (i32)
             std::string ordering_i32 = fresh_temp();
-            type_defs_buffer_ << "  " << ordering_i32 << " = trunc i64 " << ordering_tag
-                              << " to i32\n";
+            auto payload_it = enum_payload_type_.find(maybe_type);
+            if (payload_it != enum_payload_type_.end() && !payload_it->second.empty()) {
+                // Compact layout: field 1 is the payload type directly
+                // For Maybe[Ordering], payload is i32 (the Ordering tag)
+                type_defs_buffer_ << "  " << ordering_i32 << " = extractvalue " << maybe_type << " "
+                                  << cmp_result << ", 1\n";
+                // If payload is i64, truncate to i32 for comparison
+                if (payload_it->second == "i64") {
+                    std::string trunc_reg = fresh_temp();
+                    type_defs_buffer_ << "  " << trunc_reg << " = trunc i64 " << ordering_i32
+                                      << " to i32\n";
+                    ordering_i32 = trunc_reg;
+                }
+            } else {
+                // Legacy [N x i64] layout (large payloads)
+                std::string payload = fresh_temp();
+                type_defs_buffer_ << "  " << payload << " = extractvalue " << maybe_type << " "
+                                  << cmp_result << ", 1\n";
+                std::string ordering_tag = fresh_temp();
+                type_defs_buffer_ << "  " << ordering_tag << " = extractvalue [1 x i64] " << payload
+                                  << ", 0\n";
+                type_defs_buffer_ << "  " << ordering_i32 << " = trunc i64 " << ordering_tag
+                                  << " to i32\n";
+            }
 
             // Check if not Equal (ordering != 1)
             std::string is_not_equal = fresh_temp();

@@ -15,7 +15,7 @@ echo --- Building C++ Benchmarks ---
 echo.
 
 :: Build C++ benchmarks
-cd cpp
+cd profile_cpp
 
 :: Check for CMake
 where cmake >nul 2>nul
@@ -50,12 +50,12 @@ echo --- Building TML Benchmarks ---
 echo.
 
 :: Build TML benchmarks
-cd tml
+cd profile_tml
 
 :: Check for TML compiler
-set TML_EXE=..\..\build\release\tml.exe
+set TML_EXE=..\..\..\build\release\tml.exe
 if not exist "%TML_EXE%" (
-    set TML_EXE=..\..\build\debug\tml.exe
+    set TML_EXE=..\..\..\build\debug\tml.exe
 )
 if not exist "%TML_EXE%" (
     echo ERROR: TML compiler not found. Run scripts\build.bat first.
@@ -78,7 +78,7 @@ echo ============================================
 echo   Build Complete
 echo ============================================
 echo.
-echo Binaries in: profile\results\bin\
+echo Binaries in: benchmarks\results\bin\
 dir /b results\bin\*.exe 2>nul
 
 endlocal
