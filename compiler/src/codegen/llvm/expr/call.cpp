@@ -819,12 +819,21 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     // If we have expected type from context, use it (for multi-param generics)
                     if (!expected_enum_type_.empty()) {
                         enum_type = expected_enum_type_;
+                    } else if (!current_ret_type_.empty() && current_ret_type_ == "ptr" &&
+                               gen_enum_name == "Maybe") {
+                        // Nullable pointer optimization: return type is ptr (nullable Maybe)
+                        enum_type = "ptr";
                     } else if (!current_ret_type_.empty() &&
                                current_ret_type_.find("%struct." + gen_enum_name + "__") == 0) {
                         // Function returns this generic enum type - use the return type directly
                         // This handles multi-param generics like Outcome[T, E] where we can only
                         // infer T from Ok(value) but need E from context
                         enum_type = current_ret_type_;
+                    } else if (!closure_return_type_.empty() && closure_return_type_ == "ptr" &&
+                               gen_enum_name == "Maybe") {
+                        // Nullable pointer optimization: closure return type is ptr (nullable
+                        // Maybe)
+                        enum_type = "ptr";
                     } else if (!closure_return_type_.empty() &&
                                closure_return_type_.find("%struct." + gen_enum_name + "__") == 0) {
                         // Inside inline closure evaluation (e.g., Outcome::and_then closure):
@@ -842,7 +851,22 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         }
                         std::string mangled_name =
                             require_enum_instantiation(gen_enum_name, inferred_type_args);
-                        enum_type = "%struct." + mangled_name;
+                        if (nullable_maybe_types_.count(mangled_name))
+                            enum_type = "ptr";
+                        else
+                            enum_type = "%struct." + mangled_name;
+                    }
+
+                    // Nullable pointer optimization: Maybe[ptr] → bare ptr
+                    if (enum_type == "ptr") {
+                        if (has_payload && !call.args.empty()) {
+                            std::string payload = gen_expr(*call.args[0]);
+                            last_expr_type_ = "ptr";
+                            return payload;
+                        } else {
+                            last_expr_type_ = "ptr";
+                            return "null";
+                        }
                     }
 
                     std::string result = fresh_reg();

@@ -179,7 +179,8 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_coverage("Outcome::ok");
         std::vector<types::TypePtr> maybe_type_args = {ok_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-        std::string maybe_type = "%struct." + maybe_mangled;
+        bool nullable = nullable_maybe_types_.count(maybe_mangled) > 0;
+        std::string maybe_type = nullable ? "ptr" : "%struct." + maybe_mangled;
 
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
@@ -200,30 +201,42 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
         emit_line(is_ok_label + ":");
         current_block_ = is_ok_label;
-        std::string just_alloca = fresh_reg();
-        emit_line("  " + just_alloca + " = alloca " + maybe_type);
-        std::string just_tag_ptr = fresh_reg();
-        emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  just_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 0, ptr " + just_tag_ptr);
-        std::string just_data_ptr = fresh_reg();
-        emit_line("  " + just_data_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  just_alloca + ", i32 0, i32 1");
-        emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + just_data_ptr);
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + maybe_type + ", ptr " + just_alloca);
+        std::string just_val;
+        if (nullable) {
+            // Nullable: Just(val) = val directly (it's a ptr)
+            just_val = ok_val;
+        } else {
+            std::string just_alloca = fresh_reg();
+            emit_line("  " + just_alloca + " = alloca " + maybe_type);
+            std::string just_tag_ptr = fresh_reg();
+            emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      just_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + just_tag_ptr);
+            std::string just_data_ptr = fresh_reg();
+            emit_line("  " + just_data_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      just_alloca + ", i32 0, i32 1");
+            emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + just_data_ptr);
+            just_val = fresh_reg();
+            emit_line("  " + just_val + " = load " + maybe_type + ", ptr " + just_alloca);
+        }
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
         current_block_ = is_err_label;
-        std::string nothing_alloca = fresh_reg();
-        emit_line("  " + nothing_alloca + " = alloca " + maybe_type);
-        std::string nothing_tag_ptr = fresh_reg();
-        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  nothing_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
-        std::string nothing_val = fresh_reg();
-        emit_line("  " + nothing_val + " = load " + maybe_type + ", ptr " + nothing_alloca);
+        std::string nothing_val;
+        if (nullable) {
+            // Nullable: Nothing = null
+            nothing_val = "null";
+        } else {
+            std::string nothing_alloca = fresh_reg();
+            emit_line("  " + nothing_alloca + " = alloca " + maybe_type);
+            std::string nothing_tag_ptr = fresh_reg();
+            emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + maybe_type +
+                      ", ptr " + nothing_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_tag_ptr);
+            nothing_val = fresh_reg();
+            emit_line("  " + nothing_val + " = load " + maybe_type + ", ptr " + nothing_alloca);
+        }
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");
@@ -240,7 +253,8 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_coverage("Outcome::err");
         std::vector<types::TypePtr> maybe_type_args = {err_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-        std::string maybe_type = "%struct." + maybe_mangled;
+        bool nullable = nullable_maybe_types_.count(maybe_mangled) > 0;
+        std::string maybe_type = nullable ? "ptr" : "%struct." + maybe_mangled;
 
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
@@ -261,30 +275,42 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
         emit_line(is_err_label + ":");
         current_block_ = is_err_label;
-        std::string just_alloca = fresh_reg();
-        emit_line("  " + just_alloca + " = alloca " + maybe_type);
-        std::string just_tag_ptr = fresh_reg();
-        emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  just_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 0, ptr " + just_tag_ptr);
-        std::string just_data_ptr = fresh_reg();
-        emit_line("  " + just_data_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  just_alloca + ", i32 0, i32 1");
-        emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + just_data_ptr);
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + maybe_type + ", ptr " + just_alloca);
+        std::string just_val;
+        if (nullable) {
+            // Nullable: Just(val) = val directly (it's a ptr)
+            just_val = err_val;
+        } else {
+            std::string just_alloca = fresh_reg();
+            emit_line("  " + just_alloca + " = alloca " + maybe_type);
+            std::string just_tag_ptr = fresh_reg();
+            emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      just_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + just_tag_ptr);
+            std::string just_data_ptr = fresh_reg();
+            emit_line("  " + just_data_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      just_alloca + ", i32 0, i32 1");
+            emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + just_data_ptr);
+            just_val = fresh_reg();
+            emit_line("  " + just_val + " = load " + maybe_type + ", ptr " + just_alloca);
+        }
         emit_line("  br label %" + end_label);
 
         emit_line(is_ok_label + ":");
         current_block_ = is_ok_label;
-        std::string nothing_alloca = fresh_reg();
-        emit_line("  " + nothing_alloca + " = alloca " + maybe_type);
-        std::string nothing_tag_ptr = fresh_reg();
-        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  nothing_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
-        std::string nothing_val = fresh_reg();
-        emit_line("  " + nothing_val + " = load " + maybe_type + ", ptr " + nothing_alloca);
+        std::string nothing_val;
+        if (nullable) {
+            // Nullable: Nothing = null
+            nothing_val = "null";
+        } else {
+            std::string nothing_alloca = fresh_reg();
+            emit_line("  " + nothing_alloca + " = alloca " + maybe_type);
+            std::string nothing_tag_ptr = fresh_reg();
+            emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + maybe_type +
+                      ", ptr " + nothing_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_tag_ptr);
+            nothing_val = fresh_reg();
+            emit_line("  " + nothing_val + " = load " + maybe_type + ", ptr " + nothing_alloca);
+        }
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");

@@ -34,6 +34,8 @@ TML_MODULE("compiler")
 
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -480,8 +482,28 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         }
     }
 
-    // Check if there are local generic types
+    // Check if there are local generic types or usage of imported generic enums
+    // (MIR codegen doesn't support generic enum construction yet)
     bool has_local_generics = false;
+
+    // Helper: check if a parser type references a generic enum (Maybe[T], Outcome[T,E])
+    // These are the built-in generic enums that MIR codegen cannot handle yet
+    static const std::unordered_set<std::string> generic_enum_names = {"Maybe", "Outcome", "Poll"};
+    std::function<bool(const parser::TypePtr&)> uses_generic_enum;
+    uses_generic_enum = [&](const parser::TypePtr& type) -> bool {
+        if (!type)
+            return false;
+        if (type->is<parser::NamedType>()) {
+            const auto& named = type->as<parser::NamedType>();
+            if (named.generics.has_value() && !named.generics->args.empty()) {
+                if (!named.path.segments.empty() &&
+                    generic_enum_names.count(named.path.segments.back()))
+                    return true;
+            }
+        }
+        return false;
+    };
+
     for (const auto& decl : parsed.module->decls) {
         if (decl->is<parser::StructDecl>()) {
             if (!decl->as<parser::StructDecl>().generics.empty()) {
@@ -506,6 +528,34 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
                     break;
                 }
             }
+        } else if (decl->is<parser::FuncDecl>()) {
+            // Check if function uses generic enum types in signature or body
+            const auto& func = decl->as<parser::FuncDecl>();
+            if (func.return_type.has_value() && uses_generic_enum(*func.return_type)) {
+                has_local_generics = true;
+                break;
+            }
+            for (const auto& param : func.params) {
+                if (uses_generic_enum(param.type)) {
+                    has_local_generics = true;
+                    break;
+                }
+            }
+            // Also check let/var type annotations in function body
+            if (!has_local_generics && func.body.has_value()) {
+                for (const auto& stmt : func.body->stmts) {
+                    if (stmt->is<parser::LetStmt>()) {
+                        const auto& let_stmt = stmt->as<parser::LetStmt>();
+                        if (let_stmt.type_annotation.has_value() &&
+                            uses_generic_enum(*let_stmt.type_annotation)) {
+                            has_local_generics = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (has_local_generics)
+                break;
         }
     }
 

@@ -33,6 +33,9 @@ TML_MODULE("compiler")
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
+#include <functional>
+#include <unordered_set>
+
 namespace tml::cli {
 
 // Using helpers from builder namespace
@@ -273,7 +276,23 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     // Check if there are local generic types that need instantiation
     // MIR codegen doesn't support generic type instantiation, so we need AST codegen
+    // Also check for usage of imported generic enums (Maybe[T], Outcome[T,E]) in function
+    // signatures — MIR codegen cannot construct or destructure generic enum values yet
     bool has_local_generics = false;
+    static const std::unordered_set<std::string> generic_enum_names = {"Maybe", "Outcome", "Poll"};
+    auto uses_generic_enum = [&](const parser::TypePtr& type) -> bool {
+        if (!type)
+            return false;
+        if (type->is<parser::NamedType>()) {
+            const auto& named = type->as<parser::NamedType>();
+            if (named.generics.has_value() && !named.generics->args.empty()) {
+                if (!named.path.segments.empty() &&
+                    generic_enum_names.count(named.path.segments.back()))
+                    return true;
+            }
+        }
+        return false;
+    };
     for (const auto& decl : module.decls) {
         if (decl->is<parser::StructDecl>()) {
             if (!decl->as<parser::StructDecl>().generics.empty()) {
@@ -298,6 +317,33 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                     break;
                 }
             }
+        } else if (decl->is<parser::FuncDecl>()) {
+            const auto& func = decl->as<parser::FuncDecl>();
+            if (func.return_type.has_value() && uses_generic_enum(*func.return_type)) {
+                has_local_generics = true;
+                break;
+            }
+            for (const auto& param : func.params) {
+                if (uses_generic_enum(param.type)) {
+                    has_local_generics = true;
+                    break;
+                }
+            }
+            // Also check let/var type annotations in function body
+            if (!has_local_generics && func.body.has_value()) {
+                for (const auto& stmt : func.body->stmts) {
+                    if (stmt->is<parser::LetStmt>()) {
+                        const auto& let_stmt = stmt->as<parser::LetStmt>();
+                        if (let_stmt.type_annotation.has_value() &&
+                            uses_generic_enum(*let_stmt.type_annotation)) {
+                            has_local_generics = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (has_local_generics)
+                break;
         }
     }
 

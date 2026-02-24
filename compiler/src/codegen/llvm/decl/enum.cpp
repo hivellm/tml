@@ -305,21 +305,34 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         // Nullable pointer optimization: Maybe[ptr-type] → bare ptr (null = Nothing)
         // When Maybe has exactly 2 variants (one with ptr payload, one empty),
         // represent as just "ptr" where null = Nothing. Matches Rust's Option<&T>.
+        // Excludes function types (closures are { ptr, ptr }, not ptr) and dyn types.
         if (decl.name == "Maybe" && decl.variants.size() == 2) {
             bool has_payload = false;
             bool has_empty = false;
+            bool is_func_type = false;
             std::string payload_llvm_type;
             for (const auto& variant : decl.variants) {
                 if (variant.tuple_fields.has_value() && !variant.tuple_fields->empty()) {
                     types::TypePtr resolved =
                         resolve_parser_type_with_subs(*variant.tuple_fields->at(0), subs);
                     payload_llvm_type = llvm_type_from_semantic(resolved, true);
+                    // Check if resolved type is a function/closure (stored as { ptr, ptr })
+                    if (resolved) {
+                        // Unwrap ref types to get the inner type
+                        auto inner = resolved;
+                        while (inner->is<types::RefType>()) {
+                            inner = inner->as<types::RefType>().inner;
+                        }
+                        if (inner->is<types::FuncType>()) {
+                            is_func_type = true;
+                        }
+                    }
                     has_payload = true;
                 } else {
                     has_empty = true;
                 }
             }
-            if (has_payload && has_empty && payload_llvm_type == "ptr") {
+            if (has_payload && has_empty && payload_llvm_type == "ptr" && !is_func_type) {
                 // Use bare ptr representation — no struct type emitted
                 nullable_maybe_types_.insert(mangled);
                 struct_types_[mangled] = "ptr";

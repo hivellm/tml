@@ -91,20 +91,47 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     }
     std::string inner_llvm_type = inner_type ? llvm_type_from_semantic(inner_type, true) : "i32";
 
-    // unwrap() -> T (get the value from Just, panics on Nothing)
-    if (method == "unwrap" || method == "expect") {
-        emit_coverage(method == "expect" ? "Maybe::expect" : "Maybe::unwrap");
-        // Extract the data bytes as a pointer
-        std::string data_ptr = fresh_reg();
+    // Nullable pointer optimization: Maybe[ptr-type] is represented as bare ptr
+    bool is_nullable = (enum_type_name == "ptr");
+
+    // Helper: extract the Just value from a Maybe receiver.
+    // For nullable: receiver IS the value. For struct: alloca+GEP field 1+load.
+    auto extract_just_value = [&]() -> std::string {
+        if (is_nullable) {
+            return receiver; // receiver is the ptr value itself
+        }
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
         emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
+        std::string data_ptr = fresh_reg();
         emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
                   alloca_reg + ", i32 0, i32 1");
+        std::string val = fresh_reg();
+        emit_line("  " + val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        return val;
+    };
 
-        // Load the value
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+    // Helper: create a Nothing value for the result type.
+    // For nullable: null. For struct: alloca with tag=1.
+    auto make_nothing = [&]() -> std::string {
+        if (is_nullable) {
+            return "null";
+        }
+        std::string nothing_alloca = fresh_reg();
+        emit_line("  " + nothing_alloca + " = alloca " + enum_type_name);
+        std::string nothing_tag_ptr = fresh_reg();
+        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + enum_type_name +
+                  ", ptr " + nothing_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
+        std::string nothing_result = fresh_reg();
+        emit_line("  " + nothing_result + " = load " + enum_type_name + ", ptr " + nothing_alloca);
+        return nothing_result;
+    };
+
+    // unwrap() -> T (get the value from Just, panics on Nothing)
+    if (method == "unwrap" || method == "expect") {
+        emit_coverage(method == "expect" ? "Maybe::expect" : "Maybe::unwrap");
+        std::string result = extract_just_value();
         last_expr_type_ = inner_llvm_type;
         return result;
     }
@@ -120,15 +147,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // Generate the default value
         std::string default_val = gen_expr(*call.args[0]);
 
-        // Extract the data from Maybe if Just
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         // Select: is_just ? just_val : default_val
         std::string is_just = fresh_reg();
@@ -161,14 +180,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // just block: return the value
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
         emit_line("  br label %" + end_label);
 
         // nothing block: call closure
@@ -229,15 +241,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
             default_val = "zeroinitializer";
         }
 
-        // Extract just value
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         // Select: is_just ? just_val : default
         std::string is_just = fresh_reg();
@@ -270,14 +274,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // just block: apply closure and wrap in Just
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         std::string param_name = "_";
         if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
@@ -289,9 +286,6 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
 
         // Set up closure return redirect for `return` inside the map closure.
-        // The closure returns a mapped value (same type as inner_llvm_type for T->T map).
-        // We use inner_llvm_type as default; if the closure has a declared return type,
-        // we could use that, but inner_llvm_type works for the common T->T case.
         std::string map_merge = fresh_label("map_closure_merge");
         std::string map_ret_alloca = fresh_reg();
         emit_line("  " + map_ret_alloca + " = alloca " + inner_llvm_type);
@@ -323,42 +317,56 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line("  " + mapped_val + " = load " + mapped_type + ", ptr " + map_ret_alloca);
         locals_.erase(param_name);
 
-        // Create Just(mapped_val)
+        // Create Just(mapped_val) — for nullable, just use the value directly
         std::string result_type_name = enum_type_name;
-        if (mapped_type != inner_llvm_type) {
-            types::TypePtr mapped_semantic_type = semantic_type_from_llvm(mapped_type);
-            std::vector<types::TypePtr> new_type_args = {mapped_semantic_type};
-            std::string new_mangled = require_enum_instantiation("Maybe", new_type_args);
-            result_type_name = "%struct." + new_mangled;
-        }
+        std::string just_result;
+        if (is_nullable) {
+            just_result = mapped_val;
+            result_type_name = "ptr";
+        } else {
+            if (mapped_type != inner_llvm_type) {
+                types::TypePtr mapped_semantic_type = semantic_type_from_llvm(mapped_type);
+                std::vector<types::TypePtr> new_type_args = {mapped_semantic_type};
+                std::string new_mangled = require_enum_instantiation("Maybe", new_type_args);
+                result_type_name = "%struct." + new_mangled;
+            }
 
-        std::string just_alloca = fresh_reg();
-        emit_line("  " + just_alloca + " = alloca " + result_type_name);
-        std::string just_tag_ptr = fresh_reg();
-        emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + result_type_name + ", ptr " +
-                  just_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 0, ptr " + just_tag_ptr);
-        std::string just_data_ptr = fresh_reg();
-        emit_line("  " + just_data_ptr + " = getelementptr inbounds " + result_type_name +
-                  ", ptr " + just_alloca + ", i32 0, i32 1");
-        emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + just_data_ptr);
-        std::string just_result = fresh_reg();
-        emit_line("  " + just_result + " = load " + result_type_name + ", ptr " + just_alloca);
+            std::string just_alloca = fresh_reg();
+            emit_line("  " + just_alloca + " = alloca " + result_type_name);
+            std::string just_tag_ptr = fresh_reg();
+            emit_line("  " + just_tag_ptr + " = getelementptr inbounds " + result_type_name +
+                      ", ptr " + just_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + just_tag_ptr);
+            std::string just_data_ptr = fresh_reg();
+            emit_line("  " + just_data_ptr + " = getelementptr inbounds " + result_type_name +
+                      ", ptr " + just_alloca + ", i32 0, i32 1");
+            emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + just_data_ptr);
+            just_result = fresh_reg();
+            emit_line("  " + just_result + " = load " + result_type_name + ", ptr " + just_alloca);
+        }
         std::string just_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
-        // nothing block: return Nothing
+        // nothing block: return Nothing (using result type, which may differ from input type)
         emit_line(is_nothing_label + ":");
         current_block_ = is_nothing_label;
-        std::string nothing_alloca = fresh_reg();
-        emit_line("  " + nothing_alloca + " = alloca " + result_type_name);
-        std::string nothing_tag_ptr = fresh_reg();
-        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + result_type_name +
-                  ", ptr " + nothing_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
-        std::string nothing_result = fresh_reg();
-        emit_line("  " + nothing_result + " = load " + result_type_name + ", ptr " +
-                  nothing_alloca);
+        std::string nothing_result;
+        if (result_type_name == "ptr" || is_nullable) {
+            nothing_result = "null";
+        } else if (result_type_name == enum_type_name) {
+            nothing_result = make_nothing();
+        } else {
+            // Result type differs from input type (e.g., map changed I32 -> I64)
+            std::string nothing_alloca = fresh_reg();
+            emit_line("  " + nothing_alloca + " = alloca " + result_type_name);
+            std::string nothing_tag_ptr = fresh_reg();
+            emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + result_type_name +
+                      ", ptr " + nothing_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_tag_ptr);
+            nothing_result = fresh_reg();
+            emit_line("  " + nothing_result + " = load " + result_type_name + ", ptr " +
+                      nothing_alloca);
+        }
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");
@@ -391,14 +399,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // just block: call closure (which returns a Maybe)
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         std::string param_name = "_";
         if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
@@ -543,14 +544,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         std::string values_eq = fresh_reg();
         if (inner_llvm_type == "ptr") {
@@ -601,14 +595,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // just block: test predicate
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         std::string param_name = "_";
         if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
@@ -676,14 +663,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // discard block: return Nothing
         emit_line(discard_label + ":");
         current_block_ = discard_label;
-        std::string nothing_alloca = fresh_reg();
-        emit_line("  " + nothing_alloca + " = alloca " + enum_type_name);
-        std::string nothing_tag_ptr = fresh_reg();
-        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + enum_type_name +
-                  ", ptr " + nothing_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
-        std::string nothing_result = fresh_reg();
-        emit_line("  " + nothing_result + " = load " + enum_type_name + ", ptr " + nothing_alloca);
+        std::string nothing_result = make_nothing();
         emit_line("  br label %" + end_label);
 
         // nothing block: return Nothing (original)
@@ -734,14 +714,22 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string other_type = last_expr_type_;
 
         // Get tag from other
-        std::string other_alloca = fresh_reg();
-        emit_line("  " + other_alloca + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + other + ", ptr " + other_alloca);
-        std::string other_tag_ptr = fresh_reg();
-        emit_line("  " + other_tag_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  other_alloca + ", i32 0, i32 0");
-        std::string other_tag = fresh_reg();
-        emit_line("  " + other_tag + " = load i32, ptr " + other_tag_ptr);
+        std::string other_tag;
+        if (is_nullable) {
+            std::string other_is_null = fresh_reg();
+            emit_line("  " + other_is_null + " = icmp eq ptr " + other + ", null");
+            other_tag = fresh_reg();
+            emit_line("  " + other_tag + " = zext i1 " + other_is_null + " to i32");
+        } else {
+            std::string other_alloca = fresh_reg();
+            emit_line("  " + other_alloca + " = alloca " + enum_type_name);
+            emit_line("  store " + enum_type_name + " " + other + ", ptr " + other_alloca);
+            std::string other_tag_ptr = fresh_reg();
+            emit_line("  " + other_tag_ptr + " = getelementptr inbounds " + enum_type_name +
+                      ", ptr " + other_alloca + ", i32 0, i32 0");
+            other_tag = fresh_reg();
+            emit_line("  " + other_tag + " = load i32, ptr " + other_tag_ptr);
+        }
 
         // Check conditions
         std::string self_is_just = fresh_reg();
@@ -785,14 +773,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // both are just or both are nothing -> return nothing
         emit_line(nothing_label + ":");
         current_block_ = nothing_label;
-        std::string nothing_alloca = fresh_reg();
-        emit_line("  " + nothing_alloca + " = alloca " + enum_type_name);
-        std::string nothing_tag_ptr = fresh_reg();
-        emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + enum_type_name +
-                  ", ptr " + nothing_alloca + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + nothing_tag_ptr);
-        std::string nothing_result = fresh_reg();
-        emit_line("  " + nothing_result + " = load " + enum_type_name + ", ptr " + nothing_alloca);
+        std::string nothing_result = make_nothing();
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");
@@ -844,14 +825,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // just block: apply closure
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         std::string param_name = "_";
         if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
@@ -923,14 +897,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // Just block: extract value, call to_string on it, wrap with "Just(...)"
         emit_line(is_just_label + ":");
         current_block_ = is_just_label;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
-        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
-        std::string data_ptr = fresh_reg();
-        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
-        std::string just_val = fresh_reg();
-        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+        std::string just_val = extract_just_value();
 
         // Call to_string/debug_string on inner value via TML behavior dispatch
         // (Phase 44: replaced hardcoded IR function calls with TML Display/Debug impls)

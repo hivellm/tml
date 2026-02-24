@@ -41,9 +41,65 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     bool is_outcome = expr_type.find("Outcome") != std::string::npos;
     bool is_maybe = expr_type.find("Maybe") != std::string::npos;
 
+    // Check for nullable pointer optimization: Maybe[ptr-type] represented as bare ptr
+    bool is_nullable_maybe = false;
+    if (!is_outcome && !is_maybe && expr_type == "ptr") {
+        auto sem = infer_expr_type(*try_expr.expr);
+        if (sem && sem->is<types::NamedType>() && sem->as<types::NamedType>().name == "Maybe") {
+            is_nullable_maybe = true;
+            is_maybe = true;
+        }
+    }
+
     if (!is_outcome && !is_maybe) {
         // Not an Outcome or Maybe type - just return the value as-is
         // This shouldn't happen if type checking is working correctly
+        return expr_val;
+    }
+
+    // Nullable Maybe fast path: null = Nothing, non-null = Just(ptr)
+    if (is_nullable_maybe) {
+        std::string ok_block = fresh_label();
+        std::string err_block = fresh_label();
+
+        std::string is_ok = fresh_reg();
+        emit_line("  " + is_ok + " = icmp ne ptr " + expr_val + ", null");
+        emit_line("  br i1 " + is_ok + ", label %" + ok_block + ", label %" + err_block);
+
+        // Nothing block - early return
+        emit_line(err_block + ":");
+        emit_all_drops();
+
+        bool ret_is_maybe =
+            !current_ret_type_.empty() &&
+            (current_ret_type_.find("Maybe") != std::string::npos || current_ret_type_ == "ptr");
+        if (ret_is_maybe) {
+            if (current_ret_type_ == "ptr") {
+                // Nullable return: return null
+                emit_line("  ret ptr null");
+            } else {
+                // Struct-based Maybe return: construct Nothing
+                std::string ret_alloc = fresh_reg();
+                emit_line("  " + ret_alloc + " = alloca " + current_ret_type_);
+                emit_line("  store " + current_ret_type_ + " zeroinitializer, ptr " + ret_alloc);
+                std::string ret_tag_ptr = fresh_reg();
+                emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + current_ret_type_ +
+                          ", ptr " + ret_alloc + ", i32 0, i32 0");
+                emit_line("  store i32 1, ptr " + ret_tag_ptr);
+                std::string ret_val = fresh_reg();
+                emit_line("  " + ret_val + " = load " + current_ret_type_ + ", ptr " + ret_alloc);
+                emit_line("  ret " + current_ret_type_ + " " + ret_val);
+            }
+        } else {
+            std::string panic_msg =
+                add_string_literal("try operator (!) failed: unwrap on Nothing");
+            emit_line("  call void @panic(ptr " + panic_msg + ")");
+            emit_line("  unreachable");
+        }
+
+        // Just block - the ptr IS the unwrapped value
+        emit_line(ok_block + ":");
+        last_expr_type_ = "ptr";
         return expr_val;
     }
 

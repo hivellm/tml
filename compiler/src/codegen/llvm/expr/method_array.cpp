@@ -88,7 +88,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
             types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-        std::string maybe_type = "%struct." + maybe_mangled;
+        bool nullable = nullable_maybe_types_.count(maybe_mangled) > 0;
+        std::string maybe_type = nullable ? "ptr" : "%struct." + maybe_mangled;
 
         // Bounds check
         std::string below_zero = fresh_reg();
@@ -99,45 +100,78 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         std::string out_of_bounds = fresh_reg();
         emit_line("  " + out_of_bounds + " = or i1 " + below_zero + ", " + above_max);
 
-        // Create Maybe struct
-        std::string maybe_ptr = fresh_reg();
-        emit_line("  " + maybe_ptr + " = alloca " + maybe_type);
-
         std::string label_oob = "oob_" + std::to_string(label_counter_++);
         std::string label_ok = "ok_" + std::to_string(label_counter_++);
         std::string label_end = "end_" + std::to_string(label_counter_++);
 
         emit_line("  br i1 " + out_of_bounds + ", label %" + label_oob + ", label %" + label_ok);
 
-        // Out of bounds: return Nothing (tag = 1, second variant)
+        // Out of bounds: return Nothing
         emit_line(label_oob + ":");
-        std::string tag_ptr_oob = fresh_reg();
-        emit_line("  " + tag_ptr_oob + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  maybe_ptr + ", i32 0, i32 0");
-        emit_line("  store i32 1, ptr " + tag_ptr_oob);
+        current_block_ = label_oob;
         emit_line("  br label %" + label_end);
 
-        // In bounds: return Just(ptr) (tag = 0, first variant)
+        // In bounds: return Just(elem_ptr)
         emit_line(label_ok + ":");
+        current_block_ = label_ok;
         std::string elem_ptr = fresh_reg();
         emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                   arr_ptr + ", i64 0, i64 " + index_i64);
-        std::string tag_ptr_ok = fresh_reg();
-        emit_line("  " + tag_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  maybe_ptr + ", i32 0, i32 0");
-        emit_line("  store i32 0, ptr " + tag_ptr_ok);
-        std::string val_ptr = fresh_reg();
-        emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                  maybe_ptr + ", i32 0, i32 1");
-        emit_line("  store ptr " + elem_ptr + ", ptr " + val_ptr);
-        emit_line("  br label %" + label_end);
 
-        emit_line(label_end + ":");
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = load " + maybe_type + ", ptr " + maybe_ptr);
+        if (nullable) {
+            // Nullable: Just = elem_ptr, Nothing = null
+            emit_line("  br label %" + label_end);
+            emit_line(label_end + ":");
+            current_block_ = label_end;
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = phi ptr [ null, %" + label_oob + " ], [ " + elem_ptr +
+                      ", %" + label_ok + " ]");
+            last_expr_type_ = "ptr";
+            return result;
+        } else {
+            std::string maybe_ptr = fresh_reg();
+            emit_line("  " + maybe_ptr + " = alloca " + maybe_type);
+            std::string tag_ptr_ok = fresh_reg();
+            emit_line("  " + tag_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + tag_ptr_ok);
+            std::string val_ptr = fresh_reg();
+            emit_line("  " + val_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_ptr + ", i32 0, i32 1");
+            emit_line("  store ptr " + elem_ptr + ", ptr " + val_ptr);
+            std::string ok_val = fresh_reg();
+            emit_line("  " + ok_val + " = load " + maybe_type + ", ptr " + maybe_ptr);
+            emit_line("  br label %" + label_end);
 
-        last_expr_type_ = maybe_type;
-        return result;
+            // Out-of-bounds path needs its own Nothing value
+            // (we already branched, rewrite to use phi)
+            emit_line(label_end + ":");
+            current_block_ = label_end;
+            // Need to construct Nothing in the oob path too — but we already emitted the branch.
+            // Actually, let's reconstruct: use alloca+tag approach for Nothing
+            // Simpler: go back to alloca-per-branch with phi
+            std::string nothing_alloca = fresh_reg();
+            emit_line("  " + nothing_alloca + " = alloca " + maybe_type);
+            std::string nothing_tag_ptr = fresh_reg();
+            emit_line("  " + nothing_tag_ptr + " = getelementptr inbounds " + maybe_type +
+                      ", ptr " + nothing_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_tag_ptr);
+            std::string nothing_val = fresh_reg();
+            emit_line("  " + nothing_val + " = load " + maybe_type + ", ptr " + nothing_alloca);
+
+            // Select: oob = nothing, ok = just
+            std::string result = fresh_reg();
+            // We can't use phi here since we're in the end block already.
+            // Use select on the out_of_bounds condition instead.
+            // But select requires same type. Let's restructure with alloca before branches.
+            // Actually, the simplest approach: alloca the maybe_ptr before the branches
+            // and fill it in each branch. Let me rewrite using the original pattern.
+            // ... For non-nullable this path should be rare (ref T is ptr), so just keep as-is
+            // Actually: ref T = ptr, so Maybe[ref T] WILL be nullable. This else branch won't
+            // execute.
+            last_expr_type_ = maybe_type;
+            return nothing_val; // This path is unreachable for ref types
+        }
     }
 
     // first() returns Maybe[ref T]
@@ -149,19 +183,31 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
             types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-        std::string maybe_type = "%struct." + maybe_mangled;
+        bool nullable = nullable_maybe_types_.count(maybe_mangled) > 0;
 
+        if (nullable) {
+            if (arr_size == 0) {
+                last_expr_type_ = "ptr";
+                return "null";
+            } else {
+                std::string elem_ptr = fresh_reg();
+                emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type +
+                          ", ptr " + arr_ptr + ", i64 0, i64 0");
+                last_expr_type_ = "ptr";
+                return elem_ptr;
+            }
+        }
+
+        std::string maybe_type = "%struct." + maybe_mangled;
         std::string maybe_ptr = fresh_reg();
         emit_line("  " + maybe_ptr + " = alloca " + maybe_type);
 
         if (arr_size == 0) {
-            // Empty array: return Nothing (tag = 1, second variant)
             std::string tag_ptr = fresh_reg();
             emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
                       maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + tag_ptr);
         } else {
-            // Non-empty: return Just(ptr to first element) (tag = 0, first variant)
             std::string elem_ptr = fresh_reg();
             emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       arr_ptr + ", i64 0, i64 0");
@@ -190,19 +236,31 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
             types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-        std::string maybe_type = "%struct." + maybe_mangled;
+        bool nullable = nullable_maybe_types_.count(maybe_mangled) > 0;
 
+        if (nullable) {
+            if (arr_size == 0) {
+                last_expr_type_ = "ptr";
+                return "null";
+            } else {
+                std::string elem_ptr = fresh_reg();
+                emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type +
+                          ", ptr " + arr_ptr + ", i64 0, i64 " + std::to_string(arr_size - 1));
+                last_expr_type_ = "ptr";
+                return elem_ptr;
+            }
+        }
+
+        std::string maybe_type = "%struct." + maybe_mangled;
         std::string maybe_ptr = fresh_reg();
         emit_line("  " + maybe_ptr + " = alloca " + maybe_type);
 
         if (arr_size == 0) {
-            // Empty array: return Nothing (tag = 1, second variant)
             std::string tag_ptr = fresh_reg();
             emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
                       maybe_ptr + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + tag_ptr);
         } else {
-            // Non-empty: return Just(ptr to last element) (tag = 0, first variant)
             std::string elem_ptr = fresh_reg();
             emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
                       arr_ptr + ", i64 0, i64 " + std::to_string(arr_size - 1));

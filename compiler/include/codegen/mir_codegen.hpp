@@ -105,6 +105,10 @@ private:
     // Enum types used (collected from EnumInitInst, for imported enums)
     std::set<std::string> used_enum_types_;
 
+    // Generic enum type definitions needed (mangled_name -> max payload size in bytes)
+    // Collected from function signatures and instructions referencing generic enums
+    std::unordered_map<std::string, size_t> generic_enum_defs_;
+
     // String constants (value -> global name)
     std::unordered_map<std::string, std::string> string_constants_;
 
@@ -134,6 +138,8 @@ private:
     // Type conversion (implemented in mir/types.cpp)
     auto mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string;
     auto mir_primitive_to_llvm(mir::PrimitiveType kind) -> std::string;
+    auto mangle_mir_type_arg(const mir::MirTypePtr& type) -> std::string;
+    void collect_enum_types_from_type(const mir::MirTypePtr& type);
 
     // Value lookup (implemented in mir/helpers.cpp)
     auto get_value_reg(const mir::Value& val) -> std::string;

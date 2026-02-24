@@ -466,6 +466,23 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                         } else if (kind == types::PrimitiveKind::Bool) {
                             var_type = "i1";
                         }
+                    } else if (sig_opt->return_type->is<types::NamedType>()) {
+                        // Handle named types (Maybe[T], Outcome[T,E], structs, etc.)
+                        var_type = llvm_type_from_semantic(sig_opt->return_type);
+                        semantic_var_type = sig_opt->return_type;
+                        if (var_type.starts_with("%struct.") || var_type.starts_with("%union.")) {
+                            is_struct = true;
+                        } else if (var_type == "ptr") {
+                            is_ptr = true;
+                        }
+                    } else if (sig_opt->return_type->is<types::ClassType>()) {
+                        var_type = llvm_type_from_semantic(sig_opt->return_type);
+                        semantic_var_type = sig_opt->return_type;
+                        if (var_type.starts_with("%class.") || var_type.starts_with("%struct.")) {
+                            is_struct = true;
+                        } else if (var_type == "ptr") {
+                            is_ptr = true;
+                        }
                     }
                 }
             }
@@ -664,15 +681,28 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // For pointer variables, allocate space and store the pointer value
     if (is_ptr && let.init.has_value()) {
         // Set expected type for generic class constructors BEFORE evaluating initializer
+        // Use type_annotation if present, or fall back to semantic_var_type from call inference
+        types::TypePtr sem_type = nullptr;
         if (let.type_annotation) {
-            auto sem_type =
-                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
-            if (sem_type && sem_type->is<types::ClassType>()) {
+            sem_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+        } else if (semantic_var_type) {
+            sem_type = semantic_var_type;
+        }
+        if (sem_type) {
+            if (sem_type->is<types::ClassType>()) {
                 const auto& class_type = sem_type->as<types::ClassType>();
                 if (!class_type.type_args.empty()) {
                     // This is a generic class like Box[I32]
                     std::string mangled = mangle_struct_name(class_type.name, class_type.type_args);
                     expected_enum_type_ = "%class." + mangled;
+                }
+            }
+            // Nullable pointer optimization: set expected_enum_type_ = "ptr" for Maybe[ptr-type]
+            // so that Nothing/Just constructors in core.cpp know to use nullable representation
+            if (sem_type->is<types::NamedType>()) {
+                const auto& named = sem_type->as<types::NamedType>();
+                if (named.name == "Maybe" && var_type == "ptr") {
+                    expected_enum_type_ = "ptr";
                 }
             }
         }
@@ -726,6 +756,14 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Infer semantic type from init expression when no annotation present
         if (!semantic_type) {
             semantic_type = infer_expr_type(*let.init.value());
+        }
+        // Use semantic_var_type from call return type inference if still no semantic type
+        if (!semantic_type && semantic_var_type) {
+            semantic_type = semantic_var_type;
+        }
+        // Use last_semantic_type_ from method dispatch (set by gen_impl_method_call etc.)
+        if (!semantic_type && last_semantic_type_) {
+            semantic_type = last_semantic_type_;
         }
         locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
 
@@ -1038,6 +1076,17 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // For tuple types without type annotation, infer semantic type from the initializer
         // This is needed for tuple field access (pair.0, pair.1) to work correctly
         semantic_type = infer_expr_type(*let.init.value());
+    }
+    // For ptr variables from method calls (e.g., let maybe_ptr = s.get_mut()),
+    // use semantic_var_type or last_semantic_type_ for method dispatch
+    if (!semantic_type && var_type == "ptr") {
+        if (semantic_var_type) {
+            semantic_type = semantic_var_type;
+        } else if (last_semantic_type_) {
+            semantic_type = last_semantic_type_;
+        } else if (let.init.has_value()) {
+            semantic_type = infer_expr_type(*let.init.value());
+        }
     }
     VarInfo var_info{alloca_reg, var_type, semantic_type, std::nullopt};
     if (var_type == "{ ptr, ptr }") {

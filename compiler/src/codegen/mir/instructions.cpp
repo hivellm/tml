@@ -187,10 +187,14 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emit_struct_init_inst(i, result_reg, result_type, inst);
 
             } else if constexpr (std::is_same_v<T, mir::EnumInitInst>) {
-                // Initialize enum: { tag }
-                // Note: Use %struct. prefix to be consistent with AST-based codegen
-                // imported enum types are emitted in emit_type_defs via used_enum_types_
-                std::string enum_type = "%struct." + i.enum_name;
+                // Initialize enum: { tag, payload }
+                // Use result type to get properly mangled enum type name
+                std::string enum_type;
+                if (result_type) {
+                    enum_type = mir_type_to_llvm(result_type);
+                } else {
+                    enum_type = "%struct." + i.enum_name;
+                }
                 // Insert tag
                 std::string with_tag = "%tmp" + std::to_string(temp_counter_++);
                 emitln("    " + with_tag + " = insertvalue " + enum_type + " undef, i32 " +

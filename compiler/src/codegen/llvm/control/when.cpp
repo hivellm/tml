@@ -109,6 +109,13 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
             scrutinee_enum_name = scrutinee_type.substr(8);
         }
 
+        // For nullable Maybe (ptr type), use well-known variant tags
+        // Just=0, Nothing=1 (matches the non-nullable encoding)
+        if (scrutinee_enum_name.empty() && scrutinee_type == "ptr" &&
+            (variant_name == "Just" || variant_name == "Nothing")) {
+            variant_tag = (variant_name == "Just") ? 0 : 1;
+        }
+
         if (!scrutinee_enum_name.empty()) {
             std::string key = scrutinee_enum_name + "::" + variant_name;
             auto it = enum_variants_.find(key);
@@ -169,6 +176,12 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
         std::string scrutinee_enum_name;
         if (scrutinee_type.starts_with("%struct.")) {
             scrutinee_enum_name = scrutinee_type.substr(8);
+        }
+
+        // For nullable Maybe (ptr type), use well-known variant tags
+        if (scrutinee_enum_name.empty() && scrutinee_type == "ptr" &&
+            (ident_pat.name == "Just" || ident_pat.name == "Nothing")) {
+            variant_tag = (ident_pat.name == "Just") ? 0 : 1;
         }
 
         if (!scrutinee_enum_name.empty()) {
@@ -334,15 +347,31 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
          scrutinee_type == "i64" || scrutinee_type == "i128" || scrutinee_type == "float" ||
          scrutinee_type == "double" || scrutinee_type == "i1");
 
+    // Check for nullable Maybe (ptr-optimized Maybe[Str], Maybe[ref T], etc.)
+    bool is_nullable_maybe = false;
+    if (scrutinee_type == "ptr" && !is_string_scrutinee && scrutinee_semantic &&
+        scrutinee_semantic->is<types::NamedType>() &&
+        scrutinee_semantic->as<types::NamedType>().name == "Maybe") {
+        is_nullable_maybe = true;
+    }
+
     // For enums/structs, extract tag; for primitives (including strings), we'll compare directly
     std::string tag;
     if (!is_primitive_scrutinee) {
-        // Extract tag (assumes enum is { i32, i64 })
-        std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
-                  scrutinee_ptr + ", i32 0, i32 0");
-        tag = fresh_reg();
-        emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+        if (is_nullable_maybe) {
+            // Nullable pointer optimization: null = Nothing (tag 1), non-null = Just (tag 0)
+            std::string is_null = fresh_reg();
+            emit_line("  " + is_null + " = icmp eq ptr " + scrutinee + ", null");
+            tag = fresh_reg();
+            emit_line("  " + tag + " = zext i1 " + is_null + " to i32");
+        } else {
+            // Extract tag (assumes enum is { i32, i64 })
+            std::string tag_ptr = fresh_reg();
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+                      scrutinee_ptr + ", i32 0, i32 0");
+            tag = fresh_reg();
+            emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+        }
     }
 
     // Generate labels for each arm + end
@@ -540,9 +569,19 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
             if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
                 // Extract payload pointer (points to the data bytes of the enum)
-                std::string payload_ptr = fresh_reg();
-                emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
-                          ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+                std::string payload_ptr;
+                if (is_nullable_maybe) {
+                    // Nullable pointer optimization: the scrutinee IS the payload (a ptr value)
+                    // For Just(x), bind x to the scrutinee pointer directly
+                    // We need a pointer to the value for consistency with the binding code below
+                    payload_ptr = fresh_reg();
+                    emit_line("  " + payload_ptr + " = alloca ptr");
+                    emit_line("  store ptr " + scrutinee + ", ptr " + payload_ptr);
+                } else {
+                    payload_ptr = fresh_reg();
+                    emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
+                              ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+                }
 
                 // Get the semantic type of the scrutinee to find the payload type
                 // (scrutinee_semantic is already computed at the start of gen_when)

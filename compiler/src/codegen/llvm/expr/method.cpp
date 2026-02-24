@@ -889,17 +889,33 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (named.name == "Maybe") {
             std::string enum_type_name = llvm_type_from_semantic(receiver_type, true);
 
-            // If receiver is from field access, it's a pointer - need to load first
             std::string maybe_val = receiver;
-            if (call.receiver->is<parser::FieldExpr>() && enum_type_name.starts_with("%struct.")) {
-                std::string loaded = fresh_reg();
-                emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
-                maybe_val = loaded;
-            }
+            std::string tag_val;
 
-            std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + maybe_val +
-                      ", 0");
+            if (enum_type_name == "ptr") {
+                // Nullable pointer optimization: tag is null-check
+                // null = Nothing (tag 1), non-null = Just (tag 0)
+                if (call.receiver->is<parser::FieldExpr>()) {
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load ptr, ptr " + receiver);
+                    maybe_val = loaded;
+                }
+                std::string is_null = fresh_reg();
+                emit_line("  " + is_null + " = icmp eq ptr " + maybe_val + ", null");
+                tag_val = fresh_reg();
+                emit_line("  " + tag_val + " = zext i1 " + is_null + " to i32");
+            } else {
+                // Standard struct-based Maybe: extract tag from field 0
+                if (call.receiver->is<parser::FieldExpr>() &&
+                    enum_type_name.starts_with("%struct.")) {
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
+                    maybe_val = loaded;
+                }
+                tag_val = fresh_reg();
+                emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + maybe_val +
+                          ", 0");
+            }
             auto result = gen_maybe_method(call, maybe_val, enum_type_name, tag_val, named);
             if (result) {
                 return *result;

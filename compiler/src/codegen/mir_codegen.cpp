@@ -77,8 +77,15 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     value_string_contents_.clear();
     used_enum_types_.clear();
 
-    // First pass: collect string constants and enum types from all functions
+    // First pass: collect string constants, enum types, and generic enum defs
+    generic_enum_defs_.clear();
     for (const auto& func : module.functions) {
+        // Collect generic enum types from function signatures
+        collect_enum_types_from_type(func.return_type);
+        for (const auto& param : func.params) {
+            collect_enum_types_from_type(param.type);
+        }
+
         for (const auto& block : func.blocks) {
             for (const auto& inst : block.instructions) {
                 if (auto* const_inst = std::get_if<mir::ConstantInst>(&inst.inst)) {
@@ -93,6 +100,10 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
                 // Collect enum types from EnumInitInst (for imported enums)
                 if (auto* enum_inst = std::get_if<mir::EnumInitInst>(&inst.inst)) {
                     used_enum_types_.insert(enum_inst->enum_name);
+                }
+                // Collect generic enum types from instruction result types
+                if (inst.type) {
+                    collect_enum_types_from_type(inst.type);
                 }
             }
         }
@@ -167,9 +178,16 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     // Build index set for O(1) lookup
     std::unordered_set<size_t> included(function_indices.begin(), function_indices.end());
 
-    // First pass: collect string constants and enum types from ALL functions
+    // First pass: collect string constants, enum types, and generic enum defs
     // (same as generate() — all CGUs need the complete set)
+    generic_enum_defs_.clear();
     for (const auto& func : module.functions) {
+        // Collect generic enum types from function signatures
+        collect_enum_types_from_type(func.return_type);
+        for (const auto& param : func.params) {
+            collect_enum_types_from_type(param.type);
+        }
+
         for (const auto& block : func.blocks) {
             for (const auto& inst : block.instructions) {
                 if (auto* const_inst = std::get_if<mir::ConstantInst>(&inst.inst)) {
@@ -183,6 +201,9 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
                 }
                 if (auto* enum_inst = std::get_if<mir::EnumInitInst>(&inst.inst)) {
                     used_enum_types_.insert(enum_inst->enum_name);
+                }
+                if (inst.type) {
+                    collect_enum_types_from_type(inst.type);
                 }
             }
         }
@@ -427,7 +448,22 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
         }
     }
 
-    if (!module.structs.empty() || !module.enums.empty() || !used_enum_types_.empty()) {
+    // Emit definitions for generic enum types collected from function signatures
+    // These are enums like Maybe[Str], Maybe[I32], Outcome[I32, Str], etc.
+    for (const auto& [mangled_name, payload_size] : generic_enum_defs_) {
+        std::string type_name = "%struct." + mangled_name;
+        if (!emitted_types_.count(type_name)) {
+            if (payload_size > 0) {
+                emitln(type_name + " = type { i32, [" + std::to_string(payload_size) + " x i8] }");
+            } else {
+                emitln(type_name + " = type { i32 }");
+            }
+            emitted_types_.insert(type_name);
+        }
+    }
+
+    if (!module.structs.empty() || !module.enums.empty() || !used_enum_types_.empty() ||
+        !generic_enum_defs_.empty()) {
         emitln();
     }
 

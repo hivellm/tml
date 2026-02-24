@@ -128,6 +128,17 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
                 }
             }
 
+            // Shared[T] / Sync[T] get_mut returns Maybe[mut ref T]
+            if ((named.name == "Shared" || named.name == "Sync" || named.name == "Arc") &&
+                !named.type_args.empty() && call.method == "get_mut") {
+                auto mut_ref = std::make_shared<types::Type>();
+                mut_ref->kind = types::RefType{
+                    .is_mut = true, .inner = named.type_args[0], .lifetime = std::nullopt};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"Maybe", "", {mut_ref}};
+                return result;
+            }
+
             // Maybe[T] methods that return T
             if (named.name == "Maybe" && !named.type_args.empty()) {
                 if (call.method == "unwrap" || call.method == "unwrap_or" ||

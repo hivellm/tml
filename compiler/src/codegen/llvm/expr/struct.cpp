@@ -268,10 +268,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Get field type BEFORE generating value - needed for generic enum variant inference
             std::string field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected_enum_type_ if field is an enum type
+            // Set expected_enum_type_ if field is an enum type (or nullable Maybe ptr)
             std::string saved_expected_enum_type = expected_enum_type_;
             if (!field_type.empty() && field_type.starts_with("%struct.")) {
                 expected_enum_type_ = field_type;
+            } else if (field_type == "ptr" && !nullable_maybe_types_.empty()) {
+                expected_enum_type_ = "ptr";
             }
 
             // Set expected_literal_type_ for integer fields to allow coercion of literals
@@ -340,10 +342,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Get field type BEFORE generating value - needed for generic enum variant inference
             std::string field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected_enum_type_ if field is an enum type
+            // Set expected_enum_type_ if field is an enum type (or nullable Maybe ptr)
             std::string saved_expected_enum_type = expected_enum_type_;
             if (!field_type.empty() && field_type.starts_with("%struct.")) {
                 expected_enum_type_ = field_type;
+            } else if (field_type == "ptr" && !nullable_maybe_types_.empty()) {
+                expected_enum_type_ = "ptr";
             }
 
             // Set expected_literal_type_ for integer fields to allow coercion of literals
@@ -634,11 +638,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Get the actual field type from the struct definition
             std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected_enum_type_ if field is a struct type (for generic enum variant
-            // inference)
+            // Set expected_enum_type_ if field is a struct type (or nullable Maybe ptr)
             std::string saved_expected_enum_type = expected_enum_type_;
             if (!target_field_type.empty() && target_field_type.starts_with("%struct.")) {
                 expected_enum_type_ = target_field_type;
+            } else if (target_field_type == "ptr" && !nullable_maybe_types_.empty()) {
+                expected_enum_type_ = "ptr";
             }
 
             // Set expected type for integer literals based on field type
@@ -912,10 +917,12 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
             int field_idx = get_field_index(struct_name_for_lookup, field_name);
             std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected types for integer/float literal coercion
+            // Set expected types for integer/float literal coercion (or nullable Maybe ptr)
             std::string saved_expected_enum_type = expected_enum_type_;
             if (!target_field_type.empty() && target_field_type.starts_with("%struct.")) {
                 expected_enum_type_ = target_field_type;
+            } else if (target_field_type == "ptr" && !nullable_maybe_types_.empty()) {
+                expected_enum_type_ = "ptr";
             }
             if (target_field_type == "i8" || target_field_type == "i16" ||
                 target_field_type == "i64") {
