@@ -1,6 +1,6 @@
 # Tasks: O0 Optimization Parity with Rust
 
-**Status**: In Progress (30%)
+**Status**: In Progress (45%)
 
 ## Phase 1: Already Implemented (Always-On at O0)
 
@@ -28,13 +28,13 @@ These passes exist in TML but only run at O1+. Rust runs equivalent passes at O0
 
 These exist in TML at O2+ and have Rust O0 equivalents but need careful validation.
 
-- [ ] 3.1 Mem2Reg — Promote single-def allocas to SSA registers (Rust: `ScalarReplacementOfAggregates`)
-- [ ] 3.2 SROA — Break up aggregate allocas into individual fields (Rust: `ScalarReplacementOfAggregates`)
-- [ ] 3.3 EarlyCSE — Eliminate redundant computations within basic blocks (no Rust equivalent at O0, but safe)
-- [ ] 3.4 Inlining (always-inline only) — Inline `@inline(always)` functions (Rust: `Inline` for `#[inline(always)]`)
-- [ ] 3.5 DeadFunctionElimination — Remove functions never called (Rust: always runs)
-- [ ] 3.6 MergeReturns — Merge multiple return points into single exit (safe cleanup)
-- [ ] 3.7 Verify O0 pipeline with full test suite after enabling Phase 3 passes
+- [x] 3.1 Mem2Reg — Promote single-def allocas to SSA registers (Rust: `ScalarReplacementOfAggregates`)
+- [x] 3.2 SROA — Break up aggregate allocas into individual fields (Rust: `ScalarReplacementOfAggregates`)
+- [x] 3.3 EarlyCSE — Eliminate redundant computations within basic blocks (no Rust equivalent at O0, but safe)
+- [x] 3.4 Inlining (always-inline only) — Inline `@inline(always)` functions (Rust: `Inline` for `#[inline(always)]`)
+- [x] 3.5 DeadFunctionElimination — Remove functions never called (Rust: always runs)
+- [x] 3.6 MergeReturns — Merge multiple return points into single exit (safe cleanup)
+- [x] 3.7 Verify O0 pipeline with full test suite after enabling Phase 3 passes
 - [ ] 3.8 Benchmark compile time impact (ensure passes are fast enough for O0)
 
 ## Phase 4: Implement Missing Passes (Rust Has, TML Doesn't)

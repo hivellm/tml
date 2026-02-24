@@ -16,9 +16,11 @@ TML_MODULE("compiler")
 //! | Level | Passes                                                |
 //! |-------|-------------------------------------------------------|
 //! | O0    | InstSimplify, StrengthReduction, ConstFold/Prop,      |
-//! |       | SimplifyCfg, DCE, CopyProp, MatchSimplify, UCE, Merge |
-//! | O1    | O0 + EarlyCSE                                        |
-//! | O2    | O1 + SROA, Mem2Reg, GVN, Inlining, LICM, etc.        |
+//! |       | SROA, Mem2Reg, EarlyCSE, SimplifyCfg, DCE, CopyProp,  |
+//! |       | MatchSimplify, UCE, BlockMerge, Inlining(@inline only),|
+//! |       | post-inline cleanup, DeadFuncElim, MergeReturns        |
+//! | O1    | O0 + full Inlining heuristics                         |
+//! | O2    | O1 + GVN, LICM, Devirt, IPO, etc.                     |
 //! | O3    | O2 + second optimization round, vectorization         |
 //!
 //! ## Analysis Utilities
@@ -215,18 +217,37 @@ void PassManager::configure_standard_pipeline() {
     if (level_ == OptLevel::O0) {
         // These passes are safe, semantics-preserving, and don't affect
         // debuggability. Rust runs equivalent passes even at -C opt-level=0
-        // (mir-opt-level defaults to 1). Order matters: simplify first, then
-        // fold constants, clean up CFG, eliminate dead code, propagate copies.
+        // (mir-opt-level defaults to 1). Order matches Rust's pipeline:
+        // simplify → fold constants → promote to SSA → clean up CFG →
+        // eliminate dead code → propagate copies → inline @inline only.
         add_pass(std::make_unique<InstSimplifyPass>());
         add_pass(std::make_unique<StrengthReductionPass>());
         add_pass(std::make_unique<ConstantFoldingPass>());
         add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<SROAPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<EarlyCSEPass>());
         add_pass(std::make_unique<SimplifyCfgPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
         add_pass(std::make_unique<CopyPropagationPass>());
         add_pass(std::make_unique<MatchSimplifyPass>());
         add_pass(std::make_unique<UnreachableCodeEliminationPass>());
         add_pass(std::make_unique<BlockMergePass>());
+
+        // Inline only @inline / @always_inline functions (like Rust's
+        // #[inline(always)] at O0). Threshold=0 prevents heuristic inlining.
+        InliningOptions inline_o0;
+        inline_o0.optimization_level = 0;
+        inline_o0.base_threshold = 0;
+        inline_o0.max_callee_size = 0;
+        inline_o0.always_inline_single_expr = false;
+        add_pass(std::make_unique<InliningPass>(inline_o0));
+
+        // Post-inline cleanup
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<DeadFunctionEliminationPass>());
+        add_pass(std::make_unique<MergeReturnsPass>());
         return;
     }
 
@@ -454,12 +475,30 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         add_pass(std::make_unique<StrengthReductionPass>());
         add_pass(std::make_unique<ConstantFoldingPass>());
         add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<SROAPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<EarlyCSEPass>());
         add_pass(std::make_unique<SimplifyCfgPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
         add_pass(std::make_unique<CopyPropagationPass>());
         add_pass(std::make_unique<MatchSimplifyPass>());
         add_pass(std::make_unique<UnreachableCodeEliminationPass>());
         add_pass(std::make_unique<BlockMergePass>());
+
+        // Inline only @inline / @always_inline functions (like Rust's
+        // #[inline(always)] at O0). Threshold=0 prevents heuristic inlining.
+        InliningOptions inline_o0;
+        inline_o0.optimization_level = 0;
+        inline_o0.base_threshold = 0;
+        inline_o0.max_callee_size = 0;
+        inline_o0.always_inline_single_expr = false;
+        add_pass(std::make_unique<InliningPass>(inline_o0));
+
+        // Post-inline cleanup
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<DeadFunctionEliminationPass>());
+        add_pass(std::make_unique<MergeReturnsPass>());
         return;
     }
 

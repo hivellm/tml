@@ -1469,7 +1469,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_query tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log ${TML_BACKEND_LIB})
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_query tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log tml_runtime ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)
