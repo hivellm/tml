@@ -73,8 +73,10 @@ auto StrengthReductionPass::get_const_int(const Function& func, ValueId id)
 }
 
 auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, size_t inst_idx,
-                                            const BinaryInst& mul) -> bool {
-    auto& inst = block.instructions[inst_idx];
+                                            const BinaryInst& /*mul_ref*/) -> bool {
+    // IMPORTANT: Copy the BinaryInst by value. The reference points into
+    // block.instructions which may reallocate on vector::insert(), causing UB.
+    BinaryInst mul = *std::get_if<BinaryInst>(&block.instructions[inst_idx].inst);
 
     // Check for multiplication by power of 2
     auto right_const = get_const_int(func, mul.right.id);
@@ -141,7 +143,7 @@ auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, s
         add.right.type = mul.right.type;
         add.result_type = mul.result_type;
 
-        inst.inst = add;
+        block.instructions[inst_idx].inst = add;
         return true;
     }
 
@@ -248,7 +250,10 @@ auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, s
 }
 
 auto StrengthReductionPass::reduce_divide(Function& func, BasicBlock& block, size_t inst_idx,
-                                          const BinaryInst& div) -> bool {
+                                          const BinaryInst& /*div_ref*/) -> bool {
+    // IMPORTANT: Copy by value — reference may be invalidated by vector::insert().
+    BinaryInst div = *std::get_if<BinaryInst>(&block.instructions[inst_idx].inst);
+
     // x / 2^n -> x >> n (for unsigned integers)
     auto right_const = get_const_int(func, div.right.id);
 
@@ -296,7 +301,10 @@ auto StrengthReductionPass::reduce_divide(Function& func, BasicBlock& block, siz
 }
 
 auto StrengthReductionPass::reduce_modulo(Function& func, BasicBlock& block, size_t inst_idx,
-                                          const BinaryInst& mod) -> bool {
+                                          const BinaryInst& /*mod_ref*/) -> bool {
+    // IMPORTANT: Copy by value — reference may be invalidated by vector::insert().
+    BinaryInst mod = *std::get_if<BinaryInst>(&block.instructions[inst_idx].inst);
+
     // x % 2^n -> x & (2^n - 1) (for unsigned integers)
     auto right_const = get_const_int(func, mod.right.id);
 
