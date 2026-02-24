@@ -1,0 +1,109 @@
+// Tests for Value type and column_value
+use test::{assert, assert_eq}
+use std::sqlite::database::Database
+use std::sqlite::value::Value
+
+@test
+func test_value_constructors() -> I32 {
+    // Integer
+    let vi: Value = Value::Integer(42)
+    assert(vi.is_integer(), "should be integer")
+    assert(not vi.is_float(), "should not be float")
+    assert(not vi.is_text(), "should not be text")
+    assert(not vi.is_null(), "should not be null")
+    assert_eq(vi.as_i64(), 42, "should be 42")
+    assert_eq(vi.type_code(), 1, "type code should be INTEGER (1)")
+    assert_eq(vi.type_name(), "INTEGER", "type name should be INTEGER")
+
+    // Float
+    let vf: Value = Value::Float(3.14)
+    assert(vf.is_float(), "should be float")
+    assert(not vf.is_integer(), "should not be integer")
+    let f: F64 = vf.as_f64()
+    assert(f > 3.13 and f < 3.15, "should be ~3.14")
+    assert_eq(vf.type_code(), 2, "type code should be FLOAT (2)")
+    assert_eq(vf.type_name(), "REAL", "type name should be REAL")
+
+    // Text
+    let vt: Value = Value::Text("hello")
+    assert(vt.is_text(), "should be text")
+    assert_eq(vt.as_str(), "hello", "should be hello")
+    assert_eq(vt.type_code(), 3, "type code should be TEXT (3)")
+    assert_eq(vt.type_name(), "TEXT", "type name should be TEXT")
+
+    // Null
+    let vn: Value = Value::Null
+    assert(vn.is_null(), "should be null")
+    assert(not vn.is_integer(), "should not be integer")
+    assert(not vn.is_text(), "should not be text")
+    assert_eq(vn.type_code(), 5, "type code should be NULL (5)")
+    assert_eq(vn.type_name(), "NULL", "type name should be NULL")
+
+    // Cross-type accessors
+    assert_eq(vi.as_f64() as I64, 42, "integer as_f64 should be 42.0")
+    assert_eq(vf.as_i64(), 3, "float as_i64 should truncate to 3")
+    assert_eq(vn.as_i64(), 0, "null as_i64 should be 0")
+    assert_eq(vn.as_str(), "", "null as_str should be empty")
+
+    return 0
+}
+
+@test
+func test_column_value_all_types() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (i INTEGER, f REAL, s TEXT, n TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (42, 2.718, 'sqlite', NULL)").unwrap()
+    let stmt = db.prepare("SELECT i, f, s, n FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+
+    // Integer column
+    let vi: Value = stmt.column_value(0)
+    assert(vi.is_integer(), "col 0 should be integer")
+    assert_eq(vi.as_i64(), 42, "col 0 should be 42")
+
+    // Float column
+    let vf: Value = stmt.column_value(1)
+    assert(vf.is_float(), "col 1 should be float")
+    let f: F64 = vf.as_f64()
+    assert(f > 2.717 and f < 2.719, "col 1 should be ~2.718")
+
+    // Text column
+    let vt: Value = stmt.column_value(2)
+    assert(vt.is_text(), "col 2 should be text")
+    assert_eq(vt.as_str(), "sqlite", "col 2 should be sqlite")
+
+    // Null column
+    let vn: Value = stmt.column_value(3)
+    assert(vn.is_null(), "col 3 should be null")
+
+    // bind_value roundtrip
+    let ins = db.prepare("INSERT INTO t VALUES (?, ?, ?, ?)").unwrap()
+    assert(ins.bind_value(1, vi).is_ok(), "bind_value integer should succeed")
+    assert(ins.bind_value(2, vf).is_ok(), "bind_value float should succeed")
+    assert(ins.bind_value(3, vt).is_ok(), "bind_value text should succeed")
+    assert(ins.bind_value(4, vn).is_ok(), "bind_value null should succeed")
+    let _: Outcome[I32, Str] = ins.run()
+    ins.finalize()
+
+    // Verify roundtrip
+    let q2 = db.prepare("SELECT count(*) FROM t WHERE i = 42").unwrap()
+    assert(q2.step(), "should have result")
+    assert_eq(q2.column_i64(0), 2, "should have 2 rows with i=42")
+    q2.finalize()
+
+    // Row.get_value
+    let stmt2 = db.prepare("SELECT i, s FROM t").unwrap()
+    assert(stmt2.step(), "should have row")
+    let row = stmt2.get_row()
+    let rv0: Value = row.get_value(0)
+    let rv1: Value = row.get_value(1)
+    assert(rv0.is_integer(), "row col 0 should be integer")
+    assert_eq(rv0.as_i64(), 42, "row col 0 should be 42")
+    assert(rv1.is_text(), "row col 1 should be text")
+    assert_eq(rv1.as_str(), "sqlite", "row col 1 should be sqlite")
+    stmt2.finalize()
+
+    stmt.finalize()
+    db.close()
+    return 0
+}

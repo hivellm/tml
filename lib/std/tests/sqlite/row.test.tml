@@ -1,0 +1,149 @@
+// Tests for Row type methods
+use test::{assert, assert_eq}
+use std::sqlite::database::Database
+use std::sqlite::constants::{SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_NULL}
+
+@test
+func test_row_columns() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (a INTEGER, b TEXT, c REAL)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (1, 'hello', 3.14)").unwrap()
+    let stmt = db.prepare("SELECT a, b, c FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.columns(), 3, "should have 3 columns")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_column_name() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (alpha INTEGER, beta TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (1, 'x')").unwrap()
+    let stmt = db.prepare("SELECT alpha, beta FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.column_name(0), "alpha", "col 0 should be alpha")
+    assert_eq(row.column_name(1), "beta", "col 1 should be beta")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_column_type() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (i INTEGER, f REAL, s TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (42, 2.5, 'abc')").unwrap()
+    let stmt = db.prepare("SELECT i, f, s FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.column_type(0), SQLITE_INTEGER, "col 0 should be INTEGER")
+    assert_eq(row.column_type(1), SQLITE_FLOAT, "col 1 should be FLOAT")
+    assert_eq(row.column_type(2), SQLITE_TEXT, "col 2 should be TEXT")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_get_i64() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (9876543210)").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.get_i64(0), 9876543210, "should be 9876543210")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_get_i32() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (777)").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.get_i32(0), 777, "should be 777")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_get_f64() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val REAL)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (2.718)").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    let v: F64 = row.get_f64(0)
+    assert(v > 2.717 and v < 2.719, "should be ~2.718")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_get_str() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES ('world')").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.get_str(0), "world", "should be world")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_is_null() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (a INTEGER, b TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (1, NULL)").unwrap()
+    let stmt = db.prepare("SELECT a, b FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert(not row.is_null(0), "col 0 should not be null")
+    assert(row.is_null(1), "col 1 should be null")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_get_bytes() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES ('test')").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.get_bytes(0), 4, "test should be 4 bytes")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_decltype() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val REAL)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (1.0)").unwrap()
+    let stmt = db.prepare("SELECT val FROM t").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    assert_eq(row.decltype(0), "REAL", "decltype should be REAL")
+    stmt.finalize()
+    db.close()
+    return 0
+}

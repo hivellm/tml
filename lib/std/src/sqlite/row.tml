@@ -60,12 +60,17 @@ impl Row {
     /// Returns a [`Value`] for the column at the given 0-based index.
     pub func get_value(this, idx: I32) -> Value {
         let col_type: I32 = ffi::sqlite3_column_type(this.stmt_handle, idx)
-        when col_type {
-            SQLITE_INTEGER => return Value::Integer(ffi::sqlite3_column_int64(this.stmt_handle, idx)),
-            SQLITE_FLOAT => return Value::Float(ffi::sqlite3_column_double(this.stmt_handle, idx)),
-            SQLITE_TEXT => return Value::Text(ffi::sqlite3_column_text(this.stmt_handle, idx)),
-            SQLITE_NULL => return Value::Null,
-            _ => return Value::Null
+        // Use if/else instead of `when` because the compiler does not yet
+        // support matching integer variables against imported constants in
+        // `when` arms (codegen produces no switch, always takes first arm).
+        if col_type == SQLITE_INTEGER {
+            return Value::Integer(ffi::sqlite3_column_int64(this.stmt_handle, idx))
+        } else if col_type == SQLITE_FLOAT {
+            return Value::Float(ffi::sqlite3_column_double(this.stmt_handle, idx))
+        } else if col_type == SQLITE_TEXT {
+            return Value::Text(ffi::sqlite3_column_text(this.stmt_handle, idx))
+        } else {
+            return Value::Null
         }
     }
 
