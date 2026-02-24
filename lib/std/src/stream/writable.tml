@@ -1,0 +1,45 @@
+//! Writable behavior for byte stream sinks.
+//!
+//! The `Writable` behavior is the fundamental abstraction for anything that
+//! can consume bytes: sockets, files, in-memory buffers, compressors, etc.
+//!
+//! # Contract
+//!
+//! - `write()` writes up to `buf.len()` bytes from the provided buffer
+//! - Returns the number of bytes actually written (may be less than buffer size)
+//! - `flush()` ensures all buffered data reaches the underlying sink
+//! - Returns `Err(IoError)` on failure
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::{Writable, ByteStream}
+//!
+//! var stream = ByteStream::new()
+//! let data: [U8; 5] = [72 as U8, 101, 108, 108, 111]  // "Hello"
+//! let n = stream.write(ref data)!   // n == 5
+//! stream.flush()!
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+
+/// A sink of bytes that can be written to.
+///
+/// This is the fundamental output behavior. Implementations must provide
+/// `write()` to accept bytes and `flush()` to ensure delivery.
+///
+/// `write()` may write fewer bytes than provided. Callers that need to
+/// write all bytes should use `write_all()` from `byte_stream`.
+pub behavior Writable {
+    /// Push bytes from `buf` into the sink.
+    ///
+    /// Returns the number of bytes consumed from `buf`, which may be less
+    /// than `buf.len()` if the sink is temporarily full (backpressure).
+    func write(mut this, buf: ref [U8]) -> Outcome[I64, IoError]
+
+    /// Flush all buffered data to the underlying destination.
+    ///
+    /// For unbuffered sinks (e.g., raw TCP), this is typically a no-op.
+    /// For buffered sinks, this forces all pending data to be written.
+    func flush(mut this) -> Outcome[Unit, IoError]
+}

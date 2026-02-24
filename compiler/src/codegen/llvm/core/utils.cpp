@@ -69,6 +69,59 @@ void LLVMIRGen::emit_line(const std::string& code) {
     output_ << code << "\n";
 }
 
+// ============ Entry-Block Alloca Hoisting ============
+
+auto LLVMIRGen::emit_hoisted_alloca(const std::string& type, const std::string& align)
+    -> std::string {
+    std::string reg = fresh_reg();
+    std::string line = "  " + reg + " = alloca " + type;
+    if (!align.empty())
+        line += ", align " + align;
+    if (alloca_hoisting_active_) {
+        entry_allocas_.push_back(line);
+    } else {
+        // Not inside a function body (e.g., during module-level codegen),
+        // emit directly as before
+        emit_line(line);
+    }
+    return reg;
+}
+
+void LLVMIRGen::begin_alloca_hoisting() {
+    entry_allocas_.clear();
+    // Emit a unique marker that we'll replace with hoisted allocas at function end
+    alloca_hoisting_marker_ = "; @HOISTED_ALLOCAS_" + std::to_string(temp_counter_) + "@";
+    emit_line(alloca_hoisting_marker_);
+    alloca_hoisting_active_ = true;
+}
+
+void LLVMIRGen::end_alloca_hoisting() {
+    if (!alloca_hoisting_active_)
+        return;
+    alloca_hoisting_active_ = false;
+
+    // Build the alloca block to replace marker with
+    std::string alloca_block;
+    for (const auto& line : entry_allocas_) {
+        alloca_block += line + "\n";
+    }
+    entry_allocas_.clear();
+
+    // Replace the marker in output_ with the hoisted allocas.
+    // Use rfind (reverse search) — the marker is near the end of the stream
+    // since it was emitted at the start of the CURRENT function.
+    // This avoids O(n) scanning from the beginning of multi-megabyte output.
+    std::string full = output_.str();
+    auto pos = full.rfind(alloca_hoisting_marker_);
+    if (pos != std::string::npos) {
+        // Replace marker line (marker + newline) with alloca block
+        full.replace(pos, alloca_hoisting_marker_.size() + 1, alloca_block);
+        output_.str(full);
+        output_.seekp(0, std::ios_base::end);
+    }
+    alloca_hoisting_marker_.clear();
+}
+
 void LLVMIRGen::emit_coverage(const std::string& func_name) {
     if (options_.coverage_enabled) {
         std::string func_name_str = add_string_literal(func_name);

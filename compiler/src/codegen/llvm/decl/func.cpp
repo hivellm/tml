@@ -730,6 +730,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                   std::to_string(hash) + ", i32 1, i32 0)");
     }
 
+    // Begin collecting hoisted allocas — any alloca emitted via emit_hoisted_alloca()
+    // during body codegen will be spliced back here (entry block) at function close.
+    begin_alloca_hoisting();
+
     // Generate function body
     if (func.body) {
         // Push drop scope for function body - variables here need drop at return
@@ -834,6 +838,9 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             emit_line("  ret " + ret_type + " zeroinitializer");
         }
     }
+
+    // Splice hoisted allocas into the entry block before closing
+    end_alloca_hoisting();
 
     emit_line("}");
     current_func_.clear();
@@ -1109,6 +1116,9 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
                   std::to_string(hash) + ", i32 1, i32 0)");
     }
 
+    // Begin collecting hoisted allocas for generic instantiation
+    begin_alloca_hoisting();
+
     // 8. Generate function body
     if (func.body) {
         // Push drop scope for function body - variables here need drop at return
@@ -1194,6 +1204,9 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
             emit_line("  ret " + ret_type + " zeroinitializer");
         }
     }
+
+    // Splice hoisted allocas into the entry block before closing
+    end_alloca_hoisting();
 
     emit_line("}");
 

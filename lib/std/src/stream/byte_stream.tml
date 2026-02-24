@@ -1,0 +1,462 @@
+//! In-memory byte stream implementing both `Readable` and `Writable`.
+//!
+//! `ByteStream` is a growable byte buffer with separate read and write
+//! positions, making it ideal for testing stream-based APIs and for
+//! constructing HTTP bodies in memory.
+//!
+//! # Memory Layout
+//!
+//! ```
+//! Header (32 bytes at handle):
+//!   offset 0:  data (*Unit) — pointer to byte array
+//!   offset 8:  len (I64)   — number of bytes written
+//!   offset 16: capacity (I64) — allocated size
+//!   offset 24: read_pos (I64) — current read position
+//! ```
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::{ByteStream, Readable, Writable}
+//!
+//! // Write then read
+//! var stream = ByteStream::new()
+//! let data: [U8; 5] = [72 as U8, 101, 108, 108, 111]  // "Hello"
+//! stream.write(ref data)!
+//! stream.reset_read()
+//!
+//! var buf: [U8; 5] = [0 as U8; 5]
+//! let n = stream.read(mut ref buf)!   // n == 5
+//! stream.destroy()
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+use core::intrinsics::{ptr_read, ptr_write}
+use std::collections::buffer::Buffer
+use std::stream::readable::Readable
+use std::stream::writable::Writable
+
+// ============================================================================
+// Memory helpers
+// ============================================================================
+
+func stream_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func stream_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func stream_realloc(ptr: *Unit, new_size: I64) -> *Unit {
+    lowlevel { mem_realloc(ptr, new_size) }
+}
+
+// ============================================================================
+// Header field accessors (same layout as Buffer)
+// ============================================================================
+
+func bs_get_data(h: I64) -> *Unit {
+    let p: *I64 = h as *I64
+    let val: I64 = lowlevel { ptr_read[I64](p) }
+    val as *Unit
+}
+
+func bs_set_data(h: I64, data: *Unit) {
+    let p: *I64 = h as *I64
+    lowlevel { ptr_write[I64](p, data as I64) }
+}
+
+func bs_get_len(h: I64) -> I64 {
+    let p: *I64 = (h + 8) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+func bs_set_len(h: I64, val: I64) {
+    let p: *I64 = (h + 8) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+func bs_get_cap(h: I64) -> I64 {
+    let p: *I64 = (h + 16) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+func bs_set_cap(h: I64, val: I64) {
+    let p: *I64 = (h + 16) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+func bs_get_read_pos(h: I64) -> I64 {
+    let p: *I64 = (h + 24) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+func bs_set_read_pos(h: I64, val: I64) {
+    let p: *I64 = (h + 24) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+func bs_read_byte(data: *Unit, index: I64) -> U8 {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_read[U8](p) }
+}
+
+func bs_write_byte(data: *Unit, index: I64, val: U8) {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_write[U8](p, val) }
+}
+
+func bs_ensure_capacity(h: I64, needed: I64) {
+    let len: I64 = bs_get_len(h)
+    let cap: I64 = bs_get_cap(h)
+    if len + needed <= cap {
+        return
+    }
+    var new_cap: I64 = cap * 2
+    loop (new_cap < len + needed) {
+        new_cap = new_cap * 2
+    }
+    let old_data: *Unit = bs_get_data(h)
+    let new_data: *Unit = stream_realloc(old_data, new_cap)
+    bs_set_data(h, new_data)
+    bs_set_cap(h, new_cap)
+}
+
+// ============================================================================
+// ByteStream type
+// ============================================================================
+
+/// An in-memory byte stream with separate read and write positions.
+///
+/// Bytes written with `write()` are appended to the end. Bytes read with
+/// `read()` are consumed from the current read position. Use `reset_read()`
+/// to rewind the read position to the beginning.
+pub type ByteStream {
+    handle: *Unit
+}
+
+impl ByteStream {
+    /// Creates an empty ByteStream with default capacity (256 bytes).
+    pub func new() -> ByteStream {
+        ByteStream::with_capacity(256)
+    }
+
+    /// Creates an empty ByteStream with the specified initial capacity.
+    pub func with_capacity(capacity: I64) -> ByteStream {
+        var cap: I64 = capacity
+        if cap <= 0 {
+            cap = 256
+        }
+        let header: *Unit = stream_alloc(32)
+        let h: I64 = header as I64
+        let data: *Unit = stream_alloc(cap)
+        bs_set_data(h, data)
+        bs_set_len(h, 0)
+        bs_set_cap(h, cap)
+        bs_set_read_pos(h, 0)
+        ByteStream { handle: header }
+    }
+
+    /// Creates a ByteStream pre-filled with the bytes from a string.
+    ///
+    /// The read position starts at 0, so the string can be read immediately.
+    pub func from_string(s: Str) -> ByteStream {
+        let slen: I64 = s.len()
+        var cap: I64 = slen
+        if cap < 256 {
+            cap = 256
+        }
+        let header: *Unit = stream_alloc(32)
+        let h: I64 = header as I64
+        let data: *Unit = stream_alloc(cap)
+        bs_set_data(h, data)
+        bs_set_len(h, slen)
+        bs_set_cap(h, cap)
+        bs_set_read_pos(h, 0)
+
+        // Copy string bytes
+        let src: *Unit = s as *Unit
+        var i: I64 = 0
+        loop (i < slen) {
+            bs_write_byte(data, i, bs_read_byte(src, i))
+            i = i + 1
+        }
+
+        ByteStream { handle: header }
+    }
+
+    /// Creates a ByteStream pre-filled with the given byte slice.
+    pub func from_bytes(bytes: ref [U8]) -> ByteStream {
+        let blen: I64 = bytes.len() as I64
+        var cap: I64 = blen
+        if cap < 256 {
+            cap = 256
+        }
+        let header: *Unit = stream_alloc(32)
+        let h: I64 = header as I64
+        let data: *Unit = stream_alloc(cap)
+        bs_set_data(h, data)
+        bs_set_len(h, blen)
+        bs_set_cap(h, cap)
+        bs_set_read_pos(h, 0)
+
+        // Copy bytes from slice.
+        // bytes is ref [U8] → at IR level, ptr to {data_ptr, len}.
+        // (ref bytes) gives ptr-to-ptr-to-{data_ptr, len}. Need two derefs.
+        let bytes_header: I64 = (ref bytes) as I64
+        let bytes_ptr: I64 = lowlevel { ptr_read[I64](bytes_header as *I64) }
+        let src_data: I64 = lowlevel { ptr_read[I64](bytes_ptr as *I64) }
+        var i: I64 = 0
+        loop (i < blen) {
+            let src_byte: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
+            bs_write_byte(data, i, src_byte)
+            i = i + 1
+        }
+
+        ByteStream { handle: header }
+    }
+
+    /// Returns the total number of bytes written to the stream.
+    pub func len(this) -> I64 {
+        bs_get_len(this.handle as I64)
+    }
+
+    /// Returns the number of bytes available for reading.
+    pub func remaining(this) -> I64 {
+        let h: I64 = this.handle as I64
+        bs_get_len(h) - bs_get_read_pos(h)
+    }
+
+    /// Returns the current read position.
+    pub func read_position(this) -> I64 {
+        bs_get_read_pos(this.handle as I64)
+    }
+
+    /// Returns true if all written bytes have been read (EOF).
+    pub func is_eof(this) -> Bool {
+        this.remaining() == 0
+    }
+
+    /// Returns true if the stream is empty (nothing written).
+    pub func is_empty(this) -> Bool {
+        this.len() == 0
+    }
+
+    /// Resets the read position to the beginning.
+    pub func reset_read(mut this) {
+        bs_set_read_pos(this.handle as I64, 0)
+    }
+
+    /// Clears all data and resets both positions.
+    pub func clear(mut this) {
+        let h: I64 = this.handle as I64
+        bs_set_len(h, 0)
+        bs_set_read_pos(h, 0)
+    }
+
+    /// Converts the written content to a UTF-8 string.
+    @allocates
+    pub func to_string(this) -> Str {
+        let h: I64 = this.handle as I64
+        let len: I64 = bs_get_len(h)
+        if len == 0 {
+            return ""
+        }
+        let data: *Unit = bs_get_data(h)
+        let str_buf: *Unit = stream_alloc(len + 1)
+        var i: I64 = 0
+        loop (i < len) {
+            bs_write_byte(str_buf, i, bs_read_byte(data, i))
+            i = i + 1
+        }
+        bs_write_byte(str_buf, len, 0 as U8)  // null terminator
+        str_buf as Str
+    }
+
+    /// Returns the byte at the given index (from start of written data).
+    pub func get(this, index: I64) -> U8 {
+        let h: I64 = this.handle as I64
+        if index < 0 or index >= bs_get_len(h) {
+            return 0 as U8
+        }
+        bs_read_byte(bs_get_data(h), index)
+    }
+
+    /// Frees all associated memory.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
+        let h: I64 = this.handle as I64
+        let data: *Unit = bs_get_data(h)
+        stream_free(data)
+        stream_free(this.handle)
+        this.handle = 0 as *Unit
+    }
+}
+
+// ============================================================================
+// Readable implementation
+// ============================================================================
+
+impl Readable for ByteStream {
+    /// Reads bytes from the current read position into `buf`.
+    ///
+    /// Returns the number of bytes read. Returns 0 when all bytes
+    /// have been consumed (EOF).
+    pub func read(mut this, buf: mut ref [U8]) -> Outcome[I64, IoError] {
+        let h: I64 = this.handle as I64
+        let rp: I64 = bs_get_read_pos(h)
+        let len: I64 = bs_get_len(h)
+        let available: I64 = len - rp
+
+        if available <= 0 {
+            return Ok(0)  // EOF
+        }
+
+        let buf_len: I64 = buf.len() as I64
+        var to_read: I64 = available
+        if to_read > buf_len {
+            to_read = buf_len
+        }
+
+        // Copy bytes to output buffer using direct internal data pointer.
+        // We read from our internal data at read_pos offset, and write
+        // byte-by-byte into our internal copy of where buf's data lives.
+        let src_data: *Unit = bs_get_data(h)
+
+        var i: I64 = 0
+        loop (i < to_read) {
+            let byte_val: U8 = bs_read_byte(src_data, rp + i)
+            // Write directly into the destination slice's data area.
+            // buf is mut ref [U8] → at IR level, ptr to {data_ptr, len}.
+            // buf[i] dereferences data_ptr + i*sizeof(U8) for reads,
+            // but index assignment isn't supported. Use the internal
+            // data pointer from the slice header directly.
+            let buf_header: I64 = (mut ref buf) as I64
+            let buf_ptr: I64 = lowlevel { ptr_read[I64](buf_header as *I64) }
+            let data_ptr: I64 = lowlevel { ptr_read[I64](buf_ptr as *I64) }
+            lowlevel { ptr_write[U8]((data_ptr + i) as *U8, byte_val) }
+            i = i + 1
+        }
+
+        bs_set_read_pos(h, rp + to_read)
+        Ok(to_read)
+    }
+}
+
+// ============================================================================
+// Writable implementation
+// ============================================================================
+
+impl Writable for ByteStream {
+    /// Appends bytes from `buf` to the end of the stream.
+    ///
+    /// Always writes all bytes (never returns partial writes for
+    /// an in-memory stream). Returns `buf.len()`.
+    pub func write(mut this, buf: ref [U8]) -> Outcome[I64, IoError] {
+        let buf_len: I64 = buf.len() as I64
+        if buf_len == 0 {
+            return Ok(0)
+        }
+
+        let h: I64 = this.handle as I64
+        bs_ensure_capacity(h, buf_len)
+
+        let len: I64 = bs_get_len(h)
+        let dst_data: *Unit = bs_get_data(h)
+
+        // Copy bytes from input slice.
+        // buf is ref [U8] → at IR level, ptr to {data_ptr, len}.
+        // (ref buf) gives ptr-to-ptr-to-{data_ptr, len}. Need two derefs.
+        let buf_header: I64 = (ref buf) as I64
+        let buf_ptr: I64 = lowlevel { ptr_read[I64](buf_header as *I64) }
+        let src_data: I64 = lowlevel { ptr_read[I64](buf_ptr as *I64) }
+
+        var i: I64 = 0
+        loop (i < buf_len) {
+            let byte_val: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
+            bs_write_byte(dst_data, len + i, byte_val)
+            i = i + 1
+        }
+
+        bs_set_len(h, len + buf_len)
+        Ok(buf_len)
+    }
+
+    /// Flush is a no-op for in-memory streams.
+    pub func flush(mut this) -> Outcome[Unit, IoError] {
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Helper functions for ByteStream
+// ============================================================================
+
+/// Reads all remaining bytes from a ByteStream into a new Buffer.
+pub func read_all(source: mut ref ByteStream) -> Outcome[Buffer, IoError] {
+    let result: Buffer = Buffer::new(256)
+    var tmp: [U8; 4096] = [0 as U8; 4096]
+    loop (true) {
+        let n: I64 = source.read(mut ref tmp)!
+        if n == 0 {
+            break
+        }
+        var i: I64 = 0
+        loop (i < n) {
+            result.write_byte(tmp[i] as I32)
+            i = i + 1
+        }
+    }
+    Ok(result)
+}
+
+/// Reads all remaining bytes from a ByteStream as a UTF-8 string.
+@allocates
+pub func read_to_string(source: mut ref ByteStream) -> Outcome[Str, IoError] {
+    let h: I64 = source.handle as I64
+    let rp: I64 = bs_get_read_pos(h)
+    let len: I64 = bs_get_len(h)
+    let remaining: I64 = len - rp
+    if remaining <= 0 {
+        return Ok("")
+    }
+    let data: *Unit = bs_get_data(h)
+    let str_buf: *Unit = stream_alloc(remaining + 1)
+    var i: I64 = 0
+    loop (i < remaining) {
+        bs_write_byte(str_buf, i, bs_read_byte(data, rp + i))
+        i = i + 1
+    }
+    bs_write_byte(str_buf, remaining, 0 as U8)
+    bs_set_read_pos(h, len)
+    Ok(str_buf as Str)
+}
+
+/// Writes all bytes from a slice to a ByteStream.
+pub func write_all(dest: mut ref ByteStream, buf: ref [U8]) -> Outcome[Unit, IoError] {
+    let n: I64 = dest.write(buf)!
+    Ok(())
+}
+
+/// Writes a string to a ByteStream.
+pub func write_string(dest: mut ref ByteStream, s: Str) -> Outcome[I64, IoError] {
+    let slen: I64 = s.len()
+    if slen == 0 {
+        return Ok(0)
+    }
+    let h: I64 = dest.handle as I64
+    bs_ensure_capacity(h, slen)
+    let len: I64 = bs_get_len(h)
+    let dst_data: *Unit = bs_get_data(h)
+    let src: *Unit = s as *Unit
+    var i: I64 = 0
+    loop (i < slen) {
+        bs_write_byte(dst_data, len + i, bs_read_byte(src, i))
+        i = i + 1
+    }
+    bs_set_len(h, len + slen)
+    Ok(slen)
+}

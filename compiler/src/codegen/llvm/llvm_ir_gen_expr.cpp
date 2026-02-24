@@ -71,10 +71,6 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         if (!current_loop_end_.empty()) {
             // Emit lifetime.end for allocas in current scope
             emit_scope_lifetime_ends();
-            // Restore stack before exiting loop to reclaim allocas
-            if (!current_loop_stack_save_.empty()) {
-                emit_line("  call void @llvm.stackrestore(ptr " + current_loop_stack_save_ + ")");
-            }
             emit_line("  br label %" + current_loop_end_);
             block_terminated_ = true;
         }
@@ -84,10 +80,6 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         if (!current_loop_start_.empty()) {
             // Emit lifetime.end for allocas in current scope
             emit_scope_lifetime_ends();
-            // Restore stack before continuing to reclaim allocas from this iteration
-            if (!current_loop_stack_save_.empty()) {
-                emit_line("  call void @llvm.stackrestore(ptr " + current_loop_stack_save_ + ")");
-            }
             emit_line("  br label %" + current_loop_start_);
             block_terminated_ = true;
         }

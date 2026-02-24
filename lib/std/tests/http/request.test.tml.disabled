@@ -1,0 +1,13 @@
+// Tests for std::http::request
+use test::{assert, assert_eq}
+use std::http::request::Request
+use std::http::method::Method
+
+@test
+func test_request_new_basic() -> I32 {
+    let req = Request::new(Method::GET, "http://example.com")
+    assert_eq(req.method().to_string(), "GET", "method is GET")
+    assert_eq(req.url(), "http://example.com", "url preserved")
+    req.destroy()
+    return 0
+}

@@ -1,7 +1,8 @@
 //! Hash-based key-value collection type — pure TML implementation.
 //!
 //! `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
-//! Uses open-addressing with linear probing and FNV-1a hashing.
+//! Uses open-addressing with linear probing, FNV-1a hashing, and Swiss Table-style
+//! control bytes for fast probe filtering.
 //!
 //! All keys and values are stored internally as I64 (type-erased).
 //! For integer types, the value is sign-extended. For pointer types
@@ -22,7 +23,7 @@ use core::intrinsics::{ptr_read, ptr_write}
 /// A hash-based key-value collection.
 ///
 /// `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
-/// Uses open-addressing with linear probing.
+/// Uses open-addressing with linear probing and Swiss Table-style control bytes.
 ///
 /// # Type Parameters
 ///
@@ -34,46 +35,47 @@ pub type HashMap[K, V] {
 
 // Internal layout of the hashmap header (stored at handle):
 //   offset 0:  entries pointer (*Unit) — 8 bytes
-//   offset 8:  len (I64) — 8 bytes
-//   offset 16: capacity (I64) — 8 bytes
-// Total header: 24 bytes
+//   offset 8:  ctrl pointer (*Unit) — 8 bytes
+//   offset 16: len (I64) — 8 bytes
+//   offset 24: capacity (I64) — 8 bytes
+// Total header: 32 bytes
 //
-// Each entry (24 bytes):
+// Each entry (16 bytes):
 //   offset 0:  key (I64) — 8 bytes
 //   offset 8:  value (I64) — 8 bytes
-//   offset 16: occupied (I32) — 4 bytes
-//   offset 20: deleted (I32) — 4 bytes
+//
+// Control bytes (1 byte per slot, separate dense array):
+//   -1   (0xFF) = EMPTY — slot has never been used
+//   -128 (0x80) = DELETED — slot was removed (tombstone)
+//   0..127      = h2 fingerprint — slot is occupied
 
 impl[K, V] HashMap[K, V] {
     /// Creates a new hashmap with the specified initial capacity.
     pub func new(initial_capacity: I64) -> HashMap[K, V] {
-        // Clamp to minimum 16
         var cap: I64 = initial_capacity
         if cap < 16 {
             cap = 16
         }
 
-        // Allocate header (24 bytes)
-        let header: *Unit = lowlevel { mem_alloc(24) }
+        // Allocate header (32 bytes)
+        let header: *Unit = lowlevel { mem_alloc(32) }
         let hdr: I64 = header as I64
 
-        // Allocate entries array (cap * 24 bytes), zero-initialized
-        let entries_size: I64 = cap * 24
-        let entries: *Unit = lowlevel { mem_alloc(entries_size) }
-        // Zero-initialize all entries (occupied=0, deleted=0)
-        lowlevel { write_bytes[I8](entries, 0 as I8, entries_size) }
+        // Allocate entries array (cap * 16 bytes)
+        let entries: *Unit = lowlevel { mem_alloc(cap * 16) }
+
+        // Allocate control byte array (cap bytes), init to EMPTY (-1 = 0xFF)
+        let ctrl: *Unit = lowlevel { mem_alloc(cap) }
+        lowlevel { write_bytes[I8](ctrl, -1 as I8, cap) }
 
         // Store entries pointer at offset 0
-        let p_entries: *I64 = hdr as *I64
-        lowlevel { ptr_write[I64](p_entries, entries as I64) }
-
-        // Store len (0) at offset 8
-        let p_len: *I64 = (hdr + 8) as *I64
-        lowlevel { ptr_write[I64](p_len, 0 as I64) }
-
-        // Store capacity at offset 16
-        let p_cap: *I64 = (hdr + 16) as *I64
-        lowlevel { ptr_write[I64](p_cap, cap) }
+        lowlevel { ptr_write[I64](hdr as *I64, entries as I64) }
+        // Store ctrl pointer at offset 8
+        lowlevel { ptr_write[I64]((hdr + 8) as *I64, ctrl as I64) }
+        // Store len (0) at offset 16
+        lowlevel { ptr_write[I64]((hdr + 16) as *I64, 0 as I64) }
+        // Store capacity at offset 24
+        lowlevel { ptr_write[I64]((hdr + 24) as *I64, cap) }
 
         HashMap[K, V] { handle: header }
     }
@@ -87,296 +89,244 @@ impl[K, V] HashMap[K, V] {
     /// If the key already exists, the value is updated.
     pub func set(this, key: K, value: V) {
         let hdr: I64 = this.handle as I64
-
-        // Read len, capacity
-        let p_len: *I64 = (hdr + 8) as *I64
-        let p_cap: *I64 = (hdr + 16) as *I64
+        let p_len: *I64 = (hdr + 16) as *I64
+        let p_cap: *I64 = (hdr + 24) as *I64
         var cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
         var cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
 
         // Check load factor: resize if len * 10 > capacity * 7
         if cur_len * 10 > cur_cap * 7 {
-            // Grow: double capacity
             let new_cap: I64 = cur_cap * 2
-            let new_entries_size: I64 = new_cap * 24
-            let new_entries: *Unit = lowlevel { mem_alloc(new_entries_size) }
-            lowlevel { write_bytes[I8](new_entries, 0 as I8, new_entries_size) }
+            let new_mask: I64 = new_cap - 1
+
+            // Allocate new entries and ctrl arrays
+            let new_entries: *Unit = lowlevel { mem_alloc(new_cap * 16) }
+            let new_ctrl: *Unit = lowlevel { mem_alloc(new_cap) }
+            lowlevel { write_bytes[I8](new_ctrl, -1 as I8, new_cap) }
             let new_entries_addr: I64 = new_entries as I64
+            let new_ctrl_addr: I64 = new_ctrl as I64
 
-            // Read old entries pointer
-            let p_entries: *I64 = hdr as *I64
-            let old_entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+            // Read old pointers
+            let old_entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+            let old_ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-            // Rehash all live entries
+            // Rehash all occupied entries (ctrl >= 0 means occupied)
             var i: I64 = 0
             loop (i < cur_cap) {
-                let e_base: I64 = old_entries_addr + i * 24
-                let e_occupied_ptr: *I32 = (e_base + 16) as *I32
-                let e_occupied: I32 = lowlevel { ptr_read[I32](e_occupied_ptr) }
-                if e_occupied != 0 {
-                    let e_deleted_ptr: *I32 = (e_base + 20) as *I32
-                    let e_deleted: I32 = lowlevel { ptr_read[I32](e_deleted_ptr) }
-                    if e_deleted == 0 {
-                        // Read key and value
-                        let e_key_ptr: *I64 = e_base as *I64
-                        let e_key: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
-                        let e_val_ptr: *I64 = (e_base + 8) as *I64
-                        let e_val: I64 = lowlevel { ptr_read[I64](e_val_ptr) }
+                let c: I8 = lowlevel { ptr_read[I8]((old_ctrl_addr + i) as *I8) }
+                if c >= (0 as I8) {
+                    let old_base: I64 = old_entries_addr + i * 16
+                    let e_key: I64 = lowlevel { ptr_read[I64](old_base as *I64) }
+                    let e_val: I64 = lowlevel { ptr_read[I64]((old_base + 8) as *I64) }
 
-                        // Hash and find slot in new array
-                        var h: I64 = HashMap[K, V].fnv1a(e_key) % new_cap
-                        // Linear probe for empty slot
-                        var ne_occ_ptr: *I32 = (new_entries_addr + h * 24 + 16) as *I32
-                        var ne_occ: I32 = lowlevel { ptr_read[I32](ne_occ_ptr) }
-                        loop (ne_occ != 0) {
-                            h = (h + 1) % new_cap
-                            ne_occ_ptr = (new_entries_addr + h * 24 + 16) as *I32
-                            ne_occ = lowlevel { ptr_read[I32](ne_occ_ptr) }
-                        }
+                    let hash: I64 = HashMap[K, V].hash_key(e_key)
+                    var h: I64 = hash & new_mask
+                    let h2: I8 = HashMap[K, V].h2(hash)
 
-                        // Write entry
-                        let ne_base: I64 = new_entries_addr + h * 24
-                        let ne_key_ptr: *I64 = ne_base as *I64
-                        lowlevel { ptr_write[I64](ne_key_ptr, e_key) }
-                        let ne_val_ptr: *I64 = (ne_base + 8) as *I64
-                        lowlevel { ptr_write[I64](ne_val_ptr, e_val) }
-                        let ne_occ_w: *I32 = (ne_base + 16) as *I32
-                        lowlevel { ptr_write[I32](ne_occ_w, 1) }
+                    // Probe for empty slot (fresh table has no DELETED)
+                    loop (lowlevel { ptr_read[I8]((new_ctrl_addr + h) as *I8) } >= (0 as I8)) {
+                        h = (h + 1) & new_mask
                     }
+
+                    // Write entry and ctrl
+                    let new_base: I64 = new_entries_addr + h * 16
+                    lowlevel { ptr_write[I64](new_base as *I64, e_key) }
+                    lowlevel { ptr_write[I64]((new_base + 8) as *I64, e_val) }
+                    lowlevel { ptr_write[I8]((new_ctrl_addr + h) as *I8, h2) }
                 }
                 i = i + 1
             }
 
-            // Free old entries
-            let old_entries: *Unit = old_entries_addr as *Unit
-            lowlevel { mem_free(old_entries) }
+            // Free old arrays
+            lowlevel { mem_free(old_entries_addr as *Unit) }
+            lowlevel { mem_free(old_ctrl_addr as *Unit) }
 
             // Update header
-            lowlevel { ptr_write[I64](p_entries, new_entries_addr) }
+            lowlevel { ptr_write[I64](hdr as *I64, new_entries_addr) }
+            lowlevel { ptr_write[I64]((hdr + 8) as *I64, new_ctrl_addr) }
             lowlevel { ptr_write[I64](p_cap, new_cap) }
-
-            // Re-read capacity after grow
             cur_cap = new_cap
         }
 
-        // Read entries pointer (may have been updated by grow)
-        let p_entries2: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries2) }
-
-        // Hash the key
-        let key_i64: I64 = key as I64
-        var h: I64 = HashMap[K, V].fnv1a(key_i64) % cur_cap
-
-        // Linear probe: find matching key or empty/deleted slot
-        let e0_base: I64 = entries_addr + h * 24
-        var e_occ_ptr: *I32 = (e0_base + 16) as *I32
-        var e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
-        var e_del_ptr: *I32 = (e0_base + 20) as *I32
-        var e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-        var e_key_ptr: *I64 = e0_base as *I64
-        var e_key: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
-
-        loop (e_occ != 0 and e_del == 0 and e_key != key_i64) {
-            h = (h + 1) % cur_cap
-            let e_base: I64 = entries_addr + h * 24
-            e_occ_ptr = (e_base + 16) as *I32
-            e_occ = lowlevel { ptr_read[I32](e_occ_ptr) }
-            e_del_ptr = (e_base + 20) as *I32
-            e_del = lowlevel { ptr_read[I32](e_del_ptr) }
-            e_key_ptr = e_base as *I64
-            e_key = lowlevel { ptr_read[I64](e_key_ptr) }
-        }
-
-        // If slot was empty or deleted, increment len
-        if e_occ == 0 or e_del != 0 {
-            cur_len = cur_len + 1
-            lowlevel { ptr_write[I64](p_len, cur_len) }
-        }
-
-        // Write the entry
-        let slot_base: I64 = entries_addr + h * 24
-        let sk_ptr: *I64 = slot_base as *I64
-        lowlevel { ptr_write[I64](sk_ptr, key_i64) }
-        let sv_ptr: *I64 = (slot_base + 8) as *I64
-        lowlevel { ptr_write[I64](sv_ptr, value as I64) }
-        let so_ptr: *I32 = (slot_base + 16) as *I32
-        lowlevel { ptr_write[I32](so_ptr, 1) }
-        let sd_ptr: *I32 = (slot_base + 20) as *I32
-        lowlevel { ptr_write[I32](sd_ptr, 0) }
-    }
-
-    /// Returns the value associated with the given key.
-    /// Returns the zero value of V if the key is not found.
-    pub func get(this, key: K) -> V {
-        let hdr: I64 = this.handle as I64
-        let p_len: *I64 = (hdr + 8) as *I64
-        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
-        if cur_len == 0 {
-            return 0 as V
-        }
-
-        let p_cap: *I64 = (hdr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+        // Read current pointers
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
         let key_i64: I64 = key as I64
-        var h: I64 = HashMap[K, V].fnv1a(key_i64) % cur_cap
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
 
-        var found: Bool = false
-        var result_val: I64 = 0
-
+        // Probe: find existing key or first available slot
+        var insert_slot: I64 = -1
         var cont: Bool = true
         loop (cont) {
-            let e_base: I64 = entries_addr + h * 24
-            let e_occ_ptr: *I32 = (e_base + 16) as *I32
-            let e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
 
-            if e_occ == 0 {
+            if c == (-1 as I8) {
+                // EMPTY: key not in table — stop probing
+                if insert_slot == -1 {
+                    insert_slot = h
+                }
                 cont = false
             } else {
-                let e_del_ptr: *I32 = (e_base + 20) as *I32
-                let e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-                if e_del == 0 {
-                    let e_key_ptr: *I64 = e_base as *I64
-                    let e_key: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
-                    if e_key == key_i64 {
-                        let e_val_ptr: *I64 = (e_base + 8) as *I64
-                        result_val = lowlevel { ptr_read[I64](e_val_ptr) }
-                        found = true
-                        cont = false
+                if c == (-128 as I8) {
+                    // DELETED: remember first deleted slot for insertion
+                    if insert_slot == -1 {
+                        insert_slot = h
+                    }
+                } else {
+                    // OCCUPIED: check if h2 fingerprint matches
+                    if c == h2 {
+                        let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                        if e_key == key_i64 {
+                            // Key exists: update value in place
+                            lowlevel { ptr_write[I64]((entries_addr + h * 16 + 8) as *I64, value as I64) }
+                            return
+                        }
                     }
                 }
-                if cont {
-                    h = (h + 1) % cur_cap
-                    if h == start {
-                        cont = false
-                    }
+                h = (h + 1) & mask
+                if h == start {
+                    cont = false
                 }
             }
         }
 
-        if found {
-            return result_val as V
+        // Insert new entry
+        let slot_base: I64 = entries_addr + insert_slot * 16
+        lowlevel { ptr_write[I64](slot_base as *I64, key_i64) }
+        lowlevel { ptr_write[I64]((slot_base + 8) as *I64, value as I64) }
+        lowlevel { ptr_write[I8]((ctrl_addr + insert_slot) as *I8, h2) }
+
+        cur_len = cur_len + 1
+        lowlevel { ptr_write[I64](p_len, cur_len) }
+    }
+
+    /// Returns the value associated with the given key.
+    /// Returns the zero value of V if the key is not found.
+    // NOTE: SSE2 SIMD probing works for non-generic functions (4ns/op vs 9ns scalar)
+    // but generic instantiation has codegen bugs with SIMD intrinsics inside lowlevel blocks.
+    // Reverted to scalar until generic+SIMD codegen is fixed.
+    pub func get(this, key: K) -> V {
+        let hdr: I64 = this.handle as I64
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+        if cur_len == 0 {
+            return 0 as V
         }
-        return 0 as V
+
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+
+        let key_i64: I64 = key as I64
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
+        let start: I64 = h
+
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return 0 as V }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                if e_key == key_i64 {
+                    return lowlevel { ptr_read[I64]((entries_addr + h * 16 + 8) as *I64) } as V
+                }
+            }
+            h = (h + 1) & mask
+            if h == start { return 0 as V }
+        }
     }
 
     /// Returns `true` if the hashmap contains the given key.
     pub func has(this, key: K) -> Bool {
         let hdr: I64 = this.handle as I64
-        let p_len: *I64 = (hdr + 8) as *I64
-        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
         if cur_len == 0 {
             return false
         }
 
-        let p_cap: *I64 = (hdr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
         let key_i64: I64 = key as I64
-        var h: I64 = HashMap[K, V].fnv1a(key_i64) % cur_cap
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
 
-        var cont: Bool = true
-        loop (cont) {
-            let e_base: I64 = entries_addr + h * 24
-            let e_occ_ptr: *I32 = (e_base + 16) as *I32
-            let e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
-
-            if e_occ == 0 {
-                return false
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return false }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                if e_key == key_i64 { return true }
             }
-            let e_del_ptr: *I32 = (e_base + 20) as *I32
-            let e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-            if e_del == 0 {
-                let e_key_ptr: *I64 = e_base as *I64
-                let e_key: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
-                if e_key == key_i64 {
-                    return true
-                }
-            }
-            h = (h + 1) % cur_cap
-            if h == start {
-                cont = false
-            }
+            h = (h + 1) & mask
+            if h == start { return false }
         }
-        return false
     }
 
     /// Removes a key-value pair from the hashmap.
     /// Returns `true` if the key was found and removed.
     pub func remove(this, key: K) -> Bool {
         let hdr: I64 = this.handle as I64
-        let p_len: *I64 = (hdr + 8) as *I64
+        let p_len: *I64 = (hdr + 16) as *I64
         let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
         if cur_len == 0 {
             return false
         }
 
-        let p_cap: *I64 = (hdr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
         let key_i64: I64 = key as I64
-        var h: I64 = HashMap[K, V].fnv1a(key_i64) % cur_cap
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_key(key_i64)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
 
-        var cont: Bool = true
-        loop (cont) {
-            let e_base: I64 = entries_addr + h * 24
-            let e_occ_ptr: *I32 = (e_base + 16) as *I32
-            let e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
-
-            if e_occ == 0 {
-                return false
-            }
-            let e_del_ptr: *I32 = (e_base + 20) as *I32
-            let e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-            if e_del == 0 {
-                let e_key_ptr: *I64 = e_base as *I64
-                let e_key: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return false }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
                 if e_key == key_i64 {
-                    // Tombstone: mark as deleted
-                    lowlevel { ptr_write[I32](e_del_ptr, 1) }
+                    lowlevel { ptr_write[I8]((ctrl_addr + h) as *I8, -128 as I8) }
                     lowlevel { ptr_write[I64](p_len, cur_len - 1) }
                     return true
                 }
             }
-            h = (h + 1) % cur_cap
-            if h == start {
-                cont = false
-            }
+            h = (h + 1) & mask
+            if h == start { return false }
         }
-        return false
     }
 
     /// Returns the number of key-value pairs in the hashmap.
     pub func len(this) -> I64 {
         let hdr: I64 = this.handle as I64
-        let p_len: *I64 = (hdr + 8) as *I64
-        lowlevel { ptr_read[I64](p_len) }
+        lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
     }
 
     /// Removes all key-value pairs from the hashmap.
     pub func clear(this) {
         let hdr: I64 = this.handle as I64
-        let p_len: *I64 = (hdr + 8) as *I64
-        let p_cap: *I64 = (hdr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-        // Zero all entries
-        let entries: *Unit = entries_addr as *Unit
-        lowlevel { write_bytes[I8](entries, 0 as I8, cur_cap * 24) }
+        // Reset all control bytes to EMPTY
+        lowlevel { write_bytes[I8](ctrl_addr as *Unit, -1 as I8, cur_cap) }
 
         // Reset len
-        lowlevel { ptr_write[I64](p_len, 0 as I64) }
+        lowlevel { ptr_write[I64]((hdr + 16) as *I64, 0 as I64) }
     }
 
     /// Destroys the hashmap and frees all associated memory.
@@ -388,10 +338,12 @@ impl[K, V] HashMap[K, V] {
         let hdr: I64 = this.handle as I64
 
         // Free entries array
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
-        let entries: *Unit = entries_addr as *Unit
-        lowlevel { mem_free(entries) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        lowlevel { mem_free(entries_addr as *Unit) }
+
+        // Free ctrl array
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        lowlevel { mem_free(ctrl_addr as *Unit) }
 
         // Free header
         lowlevel { mem_free(this.handle) }
@@ -401,56 +353,49 @@ impl[K, V] HashMap[K, V] {
     /// Creates an iterator over the hashmap entries.
     pub func iter(this) -> HashMapIter[K, V] {
         let hdr: I64 = this.handle as I64
-        let p_cap: *I64 = (hdr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = hdr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
         // Allocate iterator (16 bytes: map_handle + index)
         let iter_mem: *Unit = lowlevel { mem_alloc(16) }
         let iter_addr: I64 = iter_mem as I64
 
         // Store map handle at offset 0
-        let pi_map: *I64 = iter_addr as *I64
-        lowlevel { ptr_write[I64](pi_map, this.handle as I64) }
+        lowlevel { ptr_write[I64](iter_addr as *I64, this.handle as I64) }
 
-        // Find first occupied non-deleted entry
+        // Find first occupied entry (ctrl >= 0)
         var first_idx: I64 = -1
         var i: I64 = 0
         loop (i < cur_cap) {
-            let e_base: I64 = entries_addr + i * 24
-            let e_occ_ptr: *I32 = (e_base + 16) as *I32
-            let e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
-            if e_occ != 0 {
-                let e_del_ptr: *I32 = (e_base + 20) as *I32
-                let e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-                if e_del == 0 {
-                    first_idx = i
-                    i = cur_cap  // break
-                }
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+            if c >= (0 as I8) {
+                first_idx = i
+                i = cur_cap  // break
             }
             i = i + 1
         }
 
         // Store index at offset 8
-        let pi_idx: *I64 = (iter_addr + 8) as *I64
-        lowlevel { ptr_write[I64](pi_idx, first_idx) }
+        lowlevel { ptr_write[I64]((iter_addr + 8) as *I64, first_idx) }
 
         HashMapIter[K, V] { handle: iter_mem }
     }
 
-    // Private: FNV-1a hash of an I64 key
-    func fnv1a(key: I64) -> I64 {
-        // FNV offset basis: 14695981039346656037 as unsigned
-        // = -3750763034362895579 as signed I64
-        var h: I64 = -3750763034362895579
-        h = h ^ key
-        h = h * 1099511628211
-        // Ensure positive result
-        if h < 0 {
-            h = h * -1
-        }
-        h
+    // Private: FNV-1a hash of an I64 key.
+    // Result may be negative; callers use & mask to get valid index.
+    // Uses unsigned arithmetic to avoid signed overflow panic.
+    func hash_key(key: I64) -> I64 {
+        var h: U64 = 14695981039346656037 as U64  // FNV offset basis
+        h = h ^ (key as U64)
+        h = h * (1099511628211 as U64)            // FNV prime
+        h as I64
+    }
+
+    // Private: extract h2 fingerprint (top 7 bits) from hash.
+    // Returns 0..127, stored in ctrl byte for occupied slots.
+    // Uncorrelated with h1 (low bits) for optimal filtering.
+    func h2(hash: I64) -> I8 {
+        ((hash >> 57) & 127) as I8
     }
 }
 
@@ -469,103 +414,68 @@ impl[K, V] HashMapIter[K, V] {
     /// Returns `true` if there are more entries to iterate.
     pub func has_next(this) -> Bool {
         let iter_addr: I64 = this.handle as I64
-        let pi_idx: *I64 = (iter_addr + 8) as *I64
-        let idx: I64 = lowlevel { ptr_read[I64](pi_idx) }
+        let idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
         idx >= 0
     }
 
     /// Advances the iterator to the next entry.
     pub func next(this) {
         let iter_addr: I64 = this.handle as I64
-
-        // Read current index
-        let pi_idx: *I64 = (iter_addr + 8) as *I64
-        let cur_idx: I64 = lowlevel { ptr_read[I64](pi_idx) }
+        let cur_idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
         if cur_idx < 0 {
             return
         }
 
-        // Read map handle to access entries
-        let pi_map: *I64 = iter_addr as *I64
-        let map_handle_addr: I64 = lowlevel { ptr_read[I64](pi_map) }
+        // Read map handle to access ctrl array
+        let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 24) as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 8) as *I64) }
 
-        // Read capacity and entries from map header
-        let p_cap: *I64 = (map_handle_addr + 16) as *I64
-        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
-        let p_entries: *I64 = map_handle_addr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
-
-        // Scan forward for next occupied non-deleted entry
+        // Scan forward for next occupied entry (ctrl >= 0)
         var i: I64 = cur_idx + 1
         var found: Bool = false
         loop (i < cur_cap) {
-            let e_base: I64 = entries_addr + i * 24
-            let e_occ_ptr: *I32 = (e_base + 16) as *I32
-            let e_occ: I32 = lowlevel { ptr_read[I32](e_occ_ptr) }
-            if e_occ != 0 {
-                let e_del_ptr: *I32 = (e_base + 20) as *I32
-                let e_del: I32 = lowlevel { ptr_read[I32](e_del_ptr) }
-                if e_del == 0 {
-                    lowlevel { ptr_write[I64](pi_idx, i) }
-                    found = true
-                    i = cur_cap  // break
-                }
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+            if c >= (0 as I8) {
+                lowlevel { ptr_write[I64]((iter_addr + 8) as *I64, i) }
+                found = true
+                i = cur_cap  // break
             }
             i = i + 1
         }
 
         if not found {
-            lowlevel { ptr_write[I64](pi_idx, -1 as I64) }
+            lowlevel { ptr_write[I64]((iter_addr + 8) as *I64, -1 as I64) }
         }
     }
 
     /// Returns the key of the current entry.
     pub func key(this) -> K {
         let iter_addr: I64 = this.handle as I64
-
-        // Read index
-        let pi_idx: *I64 = (iter_addr + 8) as *I64
-        let cur_idx: I64 = lowlevel { ptr_read[I64](pi_idx) }
+        let cur_idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
         if cur_idx < 0 {
             return 0 as K
         }
 
-        // Read map handle
-        let pi_map: *I64 = iter_addr as *I64
-        let map_handle_addr: I64 = lowlevel { ptr_read[I64](pi_map) }
+        let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](map_handle_addr as *I64) }
 
-        // Read entries pointer from map header
-        let p_entries: *I64 = map_handle_addr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
-
-        // Read key at current entry
-        let e_key_ptr: *I64 = (entries_addr + cur_idx * 24) as *I64
-        let key_i64: I64 = lowlevel { ptr_read[I64](e_key_ptr) }
+        let key_i64: I64 = lowlevel { ptr_read[I64]((entries_addr + cur_idx * 16) as *I64) }
         key_i64 as K
     }
 
     /// Returns the value of the current entry.
     pub func value(this) -> V {
         let iter_addr: I64 = this.handle as I64
-
-        // Read index
-        let pi_idx: *I64 = (iter_addr + 8) as *I64
-        let cur_idx: I64 = lowlevel { ptr_read[I64](pi_idx) }
+        let cur_idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
         if cur_idx < 0 {
             return 0 as V
         }
 
-        // Read map handle
-        let pi_map: *I64 = iter_addr as *I64
-        let map_handle_addr: I64 = lowlevel { ptr_read[I64](pi_map) }
+        let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](map_handle_addr as *I64) }
 
-        // Read entries pointer from map header
-        let p_entries: *I64 = map_handle_addr as *I64
-        let entries_addr: I64 = lowlevel { ptr_read[I64](p_entries) }
-
-        // Read value at current entry
-        let e_val_ptr: *I64 = (entries_addr + cur_idx * 24 + 8) as *I64
-        let val_i64: I64 = lowlevel { ptr_read[I64](e_val_ptr) }
+        let val_i64: I64 = lowlevel { ptr_read[I64]((entries_addr + cur_idx * 16 + 8) as *I64) }
         val_i64 as V
     }
 

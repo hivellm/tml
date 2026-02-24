@@ -1,0 +1,38 @@
+//! Readable behavior for byte stream sources.
+//!
+//! The `Readable` behavior is the fundamental abstraction for anything that
+//! can produce bytes: sockets, files, in-memory buffers, decompressors, etc.
+//!
+//! # Contract
+//!
+//! - `read()` fills the provided buffer with up to `buf.len()` bytes
+//! - Returns the number of bytes actually read (may be less than buffer size)
+//! - Returns `0` to signal end-of-stream (EOF)
+//! - Returns `Err(IoError)` on failure
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::{Readable, ByteStream}
+//!
+//! var stream = ByteStream::from_string("hello world")
+//! var buf: [U8; 5] = [0 as U8; 5]
+//! let n = stream.read(mut ref buf)!   // n == 5, buf = "hello"
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+
+/// A source of bytes that can be read from.
+///
+/// This is the fundamental input behavior. Implementations must provide
+/// `read()` which fills a buffer and returns the byte count.
+///
+/// A return of `0` indicates end-of-stream (EOF). Callers should stop
+/// reading after receiving `0`.
+pub behavior Readable {
+    /// Pull bytes from the source into `buf`.
+    ///
+    /// Returns the number of bytes placed into `buf`, which may be less
+    /// than `buf.len()`. Returns `0` when no more data is available (EOF).
+    func read(mut this, buf: mut ref [U8]) -> Outcome[I64, IoError]
+}

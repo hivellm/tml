@@ -1,0 +1,25 @@
+use test::{assert, assert_eq}
+use std::stream::byte_stream::ByteStream
+use std::stream::pipe::copy_bytes
+
+@test func test_copy_bytes_basic() -> I32 {
+    var src: ByteStream = ByteStream::from_string("ABCDEFGHIJ")
+    var dst: ByteStream = ByteStream::new()
+    let lim: I64 = 5
+    when copy_bytes(mut ref src, mut ref dst, lim) {
+        Err(e) => {
+            src.destroy()
+            dst.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 5)
+        },
+    }
+    let s: Str = dst.to_string()
+    assert_eq(s, "ABCDE")
+    assert_eq(src.remaining(), 5)
+    src.destroy()
+    dst.destroy()
+    return 0
+}

@@ -870,8 +870,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (let.init.has_value() && var_type == "ptr" && last_expr_type_.starts_with("%class.")) {
         // Method returned a value class by value - store the struct directly
         std::string struct_type = last_expr_type_;
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + struct_type);
+        std::string alloca_reg = emit_hoisted_alloca(struct_type);
         // Emit lifetime.start for LLVM stack slot optimization
         int64_t struct_size = get_type_size(struct_type);
         emit_lifetime_start(alloca_reg, struct_size);
@@ -885,9 +884,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
-    // Allocate on stack
-    std::string alloca_reg = fresh_reg();
-    emit_line("  " + alloca_reg + " = alloca " + var_type);
+    // Allocate on stack (hoisted to entry block for mem2reg optimization)
+    std::string alloca_reg = emit_hoisted_alloca(var_type);
     // Emit lifetime.start for LLVM stack slot optimization
     int64_t type_size = get_type_size(var_type);
     emit_lifetime_start(alloca_reg, type_size);

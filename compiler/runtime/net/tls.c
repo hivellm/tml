@@ -502,6 +502,14 @@ int64_t tml_tls_stream_write_str(void* ssl_handle, const char* str, int64_t str_
     return tls_stream_write(ssl_handle, (const uint8_t*)str, str_len);
 }
 
+/**
+ * Shutdown TLS stream (lowlevel wrapper).
+ * Signature matches: @extern("c") func tml_tls_stream_shutdown(ssl) -> I32
+ */
+int32_t tml_tls_stream_shutdown(void* ssl_handle) {
+    return tls_stream_shutdown(ssl_handle);
+}
+
 /* ============================================================================
  * TLS Stream Inspection
  * ============================================================================ */
@@ -854,6 +862,10 @@ int64_t tml_tls_stream_write_str(void* h, const char* s, int64_t l) {
     (void)h;
     (void)s;
     (void)l;
+    return -1;
+}
+int32_t tml_tls_stream_shutdown(void* h) {
+    (void)h;
     return -1;
 }
 

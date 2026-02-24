@@ -508,3 +508,33 @@ pub func simd_insert[V, T](vec: V, elem: T, idx: I32) -> V
 /// Broadcast a scalar value to all lanes of a SIMD vector.
 @intrinsic
 pub func simd_splat[V, T](val: T) -> V
+
+/// Load a SIMD vector from a raw pointer (unaligned, align 1).
+/// V must be a @simd type. The pointer does not need alignment.
+@intrinsic
+pub func simd_load_ptr[V](ptr: *Unit) -> V
+
+/// Convert a vector boolean mask (<N x i1>) to an integer bitmask.
+/// Bit i of the result is 1 if lane i of the mask is true.
+@intrinsic
+pub func simd_bitmask[V](mask: V) -> I32
+
+// ============================================================================
+// Native SSE2 Intrinsics (x86-64 only)
+// ============================================================================
+
+#if X86_64
+
+/// Byte-wise equality comparison of two 16-byte SIMD vectors.
+/// Returns 0xFF for matching bytes, 0x00 for non-matching.
+/// Compiles to PCMPEQB on x86.
+@intrinsic
+pub func sse2_cmpeq_epi8[V](a: V, b: V) -> V
+
+/// Extract the most significant bit of each byte into a 16-bit integer mask.
+/// Bit i of the result is 1 if the sign bit of byte i is set.
+/// Compiles to PMOVMSKB on x86.
+@intrinsic
+pub func sse2_movemask_epi8[V](v: V) -> I32
+
+#endif

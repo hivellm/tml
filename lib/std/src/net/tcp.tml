@@ -316,6 +316,13 @@ impl TcpStream {
         this.socket.send(buf)
     }
 
+    /// Writes a string to the socket.
+    ///
+    /// Returns the number of bytes written.
+    pub func write_str(this, s: Str) -> Outcome[I64, NetError] {
+        this.socket.send_str(s)
+    }
+
     /// Flushes this output stream. For TCP, this is a no-op.
     pub func flush(this) -> Outcome[(), NetError] {
         Ok(())

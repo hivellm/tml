@@ -34,6 +34,7 @@
 //! | [`datetime`] | UTC date and time from Unix timestamps |
 //! | [`alloc`] | Specialized allocators (Arena, Pool, Cache, SOO) |
 //! | [`io`] | I/O error types (IoError, IoErrorKind) |
+//! | [`stream`] | Stream abstractions (Readable, Writable, BufferedReader, pipe) |
 //! | [`mime`] | MIME type parsing and extension lookup |
 //! | [`cli`] | CLI argument parsing framework |
 //! | [`http`] | HTTP router (radix tree), client, server |
@@ -66,6 +67,7 @@ pub mod datetime
 pub mod regex
 pub mod alloc
 pub mod io
+pub mod stream     // Stream abstractions (Readable, Writable, pipe)
 pub mod uuid       // UUID v4/v7 generation, parsing, formatting
 pub mod semver     // Semantic versioning parse, compare, ranges
 pub mod url        // URL parsing and building per RFC 3986

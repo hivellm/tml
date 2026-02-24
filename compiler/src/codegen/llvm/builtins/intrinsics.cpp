@@ -138,7 +138,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // Memory copy/set intrinsics
         "copy_nonoverlapping", "copy", "write_bytes",
         // SIMD vector intrinsics
-        "simd_load", "simd_store", "simd_extract", "simd_insert", "simd_splat"};
+        "simd_load", "simd_store", "simd_extract", "simd_insert", "simd_splat", "simd_load_ptr",
+        "simd_bitmask",
+        // Native SSE2 intrinsics
+        "sse2_cmpeq_epi8", "sse2_movemask_epi8"};
 
     // Extract base name for intrinsic matching - handles qualified paths like
     // "core::intrinsics::sqrt" by extracting just "sqrt"
@@ -298,7 +301,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // Comparison Intrinsics
     // ============================================================================
 
-    // llvm_eq[T](a: T, b: T) -> Bool
+    // llvm_eq[T](a: T, b: T) -> Bool (or <N x i1> for vector types)
     if (intrinsic_name == "llvm_eq") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
@@ -311,13 +314,20 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             } else {
                 emit_line("  " + result + " = icmp eq " + a_type + " " + a + ", " + b);
             }
-            last_expr_type_ = "i1";
+            // Vector comparison returns <N x i1>, scalar returns i1
+            if (a_type.starts_with("<")) {
+                auto space_pos = a_type.find(' ');
+                std::string n = a_type.substr(1, space_pos - 1);
+                last_expr_type_ = "<" + n + " x i1>";
+            } else {
+                last_expr_type_ = "i1";
+            }
             return result;
         }
         return "0";
     }
 
-    // llvm_ne[T](a: T, b: T) -> Bool
+    // llvm_ne[T](a: T, b: T) -> Bool (or <N x i1> for vector types)
     if (intrinsic_name == "llvm_ne") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
@@ -330,7 +340,14 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             } else {
                 emit_line("  " + result + " = icmp ne " + a_type + " " + a + ", " + b);
             }
-            last_expr_type_ = "i1";
+            // Vector comparison returns <N x i1>, scalar returns i1
+            if (a_type.starts_with("<")) {
+                auto space_pos = a_type.find(' ');
+                std::string n = a_type.substr(1, space_pos - 1);
+                last_expr_type_ = "<" + n + " x i1>";
+            } else {
+                last_expr_type_ = "i1";
+            }
             return result;
         }
         return "0";
@@ -1398,17 +1415,117 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             auto [name, info] = resolve_simd_from_generics();
             if (info) {
                 std::string vec_type = simd_vec_type_str(*info);
-                // Build vector via insertelement chain from undef
-                std::string current = "undef";
-                for (int i = 0; i < info->lane_count; ++i) {
-                    std::string next = fresh_reg();
-                    emit_line("  " + next + " = insertelement " + vec_type + " " + current + ", " +
-                              val_type + " " + val + ", i32 " + std::to_string(i));
-                    current = next;
+                int n = info->lane_count;
+                // Efficient broadcast: insertelement at 0 + shufflevector zeroinitializer
+                // Generates 2 instructions instead of N insertelements.
+                // LLVM lowers this to a single broadcast instruction (e.g., VPBROADCASTB on x86).
+                std::string insert_reg = fresh_reg();
+                emit_line("  " + insert_reg + " = insertelement " + vec_type + " poison, " +
+                          val_type + " " + val + ", i64 0");
+                // Build zeroinitializer mask: <0, 0, 0, ...> (all lanes read from index 0)
+                std::string mask = "<";
+                for (int i = 0; i < n; ++i) {
+                    if (i > 0)
+                        mask += ", ";
+                    mask += "i32 0";
                 }
+                mask += ">";
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = shufflevector " + vec_type + " " + insert_reg + ", " +
+                          vec_type + " poison, <" + std::to_string(n) + " x i32> " + mask);
                 last_expr_type_ = vec_type;
-                return current;
+                return result;
             }
+        }
+        return "0";
+    }
+
+    // simd_load_ptr[V](ptr: *Unit) -> V
+    // Loads a SIMD vector from a raw pointer (unaligned, align 1).
+    if (intrinsic_name == "simd_load_ptr") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+
+            auto [name, info] = resolve_simd_from_generics();
+            if (info) {
+                std::string vec_type = simd_vec_type_str(*info);
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = load " + vec_type + ", ptr " + ptr + ", align 1");
+                last_expr_type_ = vec_type;
+                return result;
+            }
+        }
+        return "0";
+    }
+
+    // simd_bitmask(mask: <N x i1>) -> I32
+    // Converts a vector boolean mask to an integer bitmask.
+    // Bit i of the result is 1 if lane i of the mask is true.
+    if (intrinsic_name == "simd_bitmask") {
+        if (!call.args.empty()) {
+            std::string mask = gen_expr(*call.args[0]);
+            std::string mask_type = last_expr_type_; // e.g. "<16 x i1>"
+
+            // Extract N from "<N x i1>"
+            if (mask_type.starts_with("<")) {
+                auto space_pos = mask_type.find(' ');
+                std::string n_str = mask_type.substr(1, space_pos - 1);
+                int n = std::stoi(n_str);
+
+                std::string int_type = "i" + std::to_string(n);
+                std::string cast_reg = fresh_reg();
+                emit_line("  " + cast_reg + " = bitcast " + mask_type + " " + mask + " to " +
+                          int_type);
+
+                std::string result = fresh_reg();
+                if (n < 32) {
+                    emit_line("  " + result + " = zext " + int_type + " " + cast_reg + " to i32");
+                } else if (n > 32) {
+                    emit_line("  " + result + " = trunc " + int_type + " " + cast_reg + " to i32");
+                } else {
+                    result = cast_reg;
+                }
+                last_expr_type_ = "i32";
+                return result;
+            }
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // Native SSE2 Intrinsics (x86-64)
+    // ============================================================================
+
+    // sse2_cmpeq_epi8(a: <16 x i8>, b: <16 x i8>) -> <16 x i8>
+    // Byte-wise equality comparison. Returns 0xFF for match, 0x00 for no match.
+    // Compiles to PCMPEQB on x86.
+    if (intrinsic_name == "sse2_cmpeq_epi8") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string a_type = last_expr_type_;
+            std::string b = gen_expr(*call.args[1]);
+            // icmp eq produces <16 x i1>, sext to <16 x i8> gives 0xFF/0x00 per lane
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq " + a_type + " " + a + ", " + b);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = sext <16 x i1> " + cmp + " to <16 x i8>");
+            last_expr_type_ = "<16 x i8>";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse2_movemask_epi8(v: <16 x i8>) -> I32
+    // Extracts the most significant bit of each byte into a 16-bit integer mask.
+    // Compiles to PMOVMSKB on x86.
+    if (intrinsic_name == "sse2_movemask_epi8") {
+        if (!call.args.empty()) {
+            std::string vec = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse2.pmovmskb.128(<16 x i8> " + vec +
+                      ")");
+            last_expr_type_ = "i32";
+            return result;
         }
         return "0";
     }

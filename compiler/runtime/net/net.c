@@ -540,6 +540,10 @@ int64_t tml_sys_send(int64_t handle, const uint8_t* buf, int64_t len) {
     return sys_send_raw(handle, buf, len, 0);
 }
 
+int64_t tml_sys_send_str(int64_t handle, const char* str, int64_t str_len) {
+    return sys_send_raw(handle, (const uint8_t*)str, str_len, 0);
+}
+
 int64_t tml_sys_recv(int64_t handle, uint8_t* buf, int64_t len) {
     return sys_recv_raw(handle, buf, len, 0);
 }

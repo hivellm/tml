@@ -1,0 +1,518 @@
+//! Buffered stream wrappers for efficient I/O.
+//!
+//! `BufferedReader` adds an internal byte buffer to any readable source,
+//! enabling line-oriented reading and reducing the number of underlying
+//! read calls. Essential for parsing HTTP headers line-by-line.
+//!
+//! `BufferedWriter` batches writes and flushes when the buffer is full
+//! or on explicit flush. Reduces syscall overhead for small writes.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::{ByteStream, BufferedReader}
+//!
+//! var stream = ByteStream::from_string("line1\r\nline2\r\nline3\r\n")
+//! var reader = BufferedReader::new(4096)
+//! let line1 = reader.read_line(mut ref stream)!  // "line1"
+//! let line2 = reader.read_line(mut ref stream)!  // "line2"
+//! reader.destroy()
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+use core::intrinsics::{ptr_read, ptr_write}
+use std::stream::readable::Readable
+use std::stream::writable::Writable
+use std::stream::byte_stream::ByteStream
+
+// ============================================================================
+// Memory helpers
+// ============================================================================
+
+func br_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func br_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func br_read_byte(data: *Unit, index: I64) -> U8 {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_read[U8](p) }
+}
+
+func br_write_byte(data: *Unit, index: I64, val: U8) {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_write[U8](p, val) }
+}
+
+// ============================================================================
+// BufferedReader
+// ============================================================================
+
+/// Default buffer capacity for BufferedReader (8 KB).
+const DEFAULT_READ_BUF: I64 = 8192
+
+/// A buffered wrapper that adds line-reading capability to any source.
+///
+/// Maintains an internal byte buffer. When `read_line()` is called, it
+/// scans for `\n` (or `\r\n`) in the buffer. If not found, it reads
+/// more data from the source until a line delimiter is found or EOF.
+///
+/// # Memory Layout
+///
+/// ```
+/// Header (32 bytes at handle):
+///   offset 0:  buf_data (*Unit) — internal buffer memory
+///   offset 8:  buf_cap (I64)    — buffer capacity
+///   offset 16: buf_pos (I64)    — current scan position
+///   offset 24: buf_filled (I64) — bytes available in buffer
+/// ```
+pub type BufferedReader {
+    handle: *Unit
+}
+
+impl BufferedReader {
+    /// Creates a new BufferedReader with default capacity (8 KB).
+    pub func new() -> BufferedReader {
+        BufferedReader::with_capacity(DEFAULT_READ_BUF)
+    }
+
+    /// Creates a new BufferedReader with the specified buffer capacity.
+    pub func with_capacity(capacity: I64) -> BufferedReader {
+        var cap: I64 = capacity
+        if cap <= 0 {
+            cap = DEFAULT_READ_BUF
+        }
+        let header: *Unit = br_alloc(32)
+        let h: I64 = header as I64
+        let buf_data: *Unit = br_alloc(cap)
+
+        // buf_data at offset 0
+        lowlevel { ptr_write[I64](h as *I64, buf_data as I64) }
+        // buf_cap at offset 8
+        lowlevel { ptr_write[I64]((h + 8) as *I64, cap) }
+        // buf_pos at offset 16
+        lowlevel { ptr_write[I64]((h + 16) as *I64, 0) }
+        // buf_filled at offset 24
+        lowlevel { ptr_write[I64]((h + 24) as *I64, 0) }
+
+        BufferedReader { handle: header }
+    }
+
+    // Internal accessors (pub for cross-module visibility)
+    pub func get_buf_data(this) -> *Unit {
+        let h: I64 = this.handle as I64
+        let val: I64 = lowlevel { ptr_read[I64](h as *I64) }
+        val as *Unit
+    }
+
+    pub func get_buf_cap(this) -> I64 {
+        lowlevel { ptr_read[I64]((this.handle as I64 + 8) as *I64) }
+    }
+
+    pub func get_buf_pos(this) -> I64 {
+        lowlevel { ptr_read[I64]((this.handle as I64 + 16) as *I64) }
+    }
+
+    pub func set_buf_pos(this, val: I64) {
+        lowlevel { ptr_write[I64]((this.handle as I64 + 16) as *I64, val) }
+    }
+
+    pub func get_buf_filled(this) -> I64 {
+        lowlevel { ptr_read[I64]((this.handle as I64 + 24) as *I64) }
+    }
+
+    pub func set_buf_filled(this, val: I64) {
+        lowlevel { ptr_write[I64]((this.handle as I64 + 24) as *I64, val) }
+    }
+
+    /// Returns the number of bytes currently buffered.
+    pub func buffered(this) -> I64 {
+        this.get_buf_filled() - this.get_buf_pos()
+    }
+
+    /// Fills the internal buffer from the source.
+    /// Compacts existing data first if needed.
+    pub func fill_buf(this, source: mut ref ByteStream) -> Outcome[I64, IoError] {
+        return this.fill_buf_raw(source.handle as I64)
+    }
+
+    /// Internal: fill from a raw ByteStream handle.
+    pub func fill_buf_raw(this, h_src: I64) -> Outcome[I64, IoError] {
+        let buf_data: *Unit = this.get_buf_data()
+        let cap: I64 = this.get_buf_cap()
+        var pos: I64 = this.get_buf_pos()
+        var filled: I64 = this.get_buf_filled()
+
+        // Compact: move unread data to the beginning
+        if pos > 0 {
+            let remaining: I64 = filled - pos
+            var i: I64 = 0
+            loop (i < remaining) {
+                br_write_byte(buf_data, i, br_read_byte(buf_data, pos + i))
+                i = i + 1
+            }
+            pos = 0
+            filled = remaining
+            this.set_buf_pos(0)
+            this.set_buf_filled(filled)
+        }
+
+        // Read into remaining space
+        let space: I64 = cap - filled
+        if space <= 0 {
+            return Ok(0)
+        }
+
+        // Read directly from source's internal data
+        let src_rp: I64 = lowlevel { ptr_read[I64]((h_src + 24) as *I64) }
+        let src_len: I64 = lowlevel { ptr_read[I64]((h_src + 8) as *I64) }
+        let src_avail: I64 = src_len - src_rp
+        if src_avail <= 0 {
+            return Ok(0)
+        }
+
+        var to_read: I64 = src_avail
+        if to_read > space {
+            to_read = space
+        }
+
+        let src_data: *Unit = lowlevel { ptr_read[I64](h_src as *I64) } as *Unit
+        var i: I64 = 0
+        loop (i < to_read) {
+            br_write_byte(buf_data, filled + i, br_read_byte(src_data, src_rp + i))
+            i = i + 1
+        }
+
+        // Advance source read position
+        lowlevel { ptr_write[I64]((h_src + 24) as *I64, src_rp + to_read) }
+        this.set_buf_filled(filled + to_read)
+        Ok(to_read)
+    }
+
+    /// Reads a single line from the source.
+    ///
+    /// Scans for `\n` in the buffer. If the line ends with `\r\n`, the
+    /// `\r` is also stripped. Returns the line content without delimiters.
+    ///
+    /// Returns an empty string on EOF (check source's `is_eof()` to
+    /// distinguish from a genuinely empty line).
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var stream = ByteStream::from_string("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n")
+    /// var reader = BufferedReader::new()
+    /// let status_line = reader.read_line(mut ref stream)!  // "HTTP/1.1 200 OK"
+    /// let content_type = reader.read_line(mut ref stream)!  // "Content-Type: text/html"
+    /// let empty = reader.read_line(mut ref stream)!  // "" (end of headers)
+    /// ```
+    pub func read_line(this, source: mut ref ByteStream) -> Outcome[Str, IoError] {
+        let src_h: I64 = source.handle as I64
+        // Ensure buffer has data
+        if this.buffered() == 0 {
+            var fill_n: I64 = 0
+            when this.fill_buf_raw(src_h) {
+                Err(e) => return Err(e),
+                Ok(n) => { fill_n = n },
+            }
+            if fill_n == 0 {
+                return Ok("")
+            }
+        }
+
+        let buf_data: *Unit = this.get_buf_data()
+        let pos: I64 = this.get_buf_pos()
+        let filled: I64 = this.get_buf_filled()
+
+        // Scan for \n (byte 10) in buffered data
+        var newline_at: I64 = 0 - 1
+        var scan: I64 = pos
+        loop (scan < filled) {
+            let bval: I64 = br_read_byte(buf_data, scan) as I64
+            if bval == 10 {
+                newline_at = scan
+                break
+            }
+            scan = scan + 1
+        }
+
+        if newline_at < 0 {
+            // No newline found — return all buffered data as a line (EOF case)
+            let chunk_len: I64 = filled - pos
+            let result: *Unit = br_alloc(chunk_len + 1)
+            var i: I64 = 0
+            loop (i < chunk_len) {
+                br_write_byte(result, i, br_read_byte(buf_data, pos + i))
+                i = i + 1
+            }
+            br_write_byte(result, chunk_len, 0 as U8)
+            this.set_buf_pos(filled)
+            return Ok(result as Str)
+        }
+
+        // Found newline at newline_at
+        var end: I64 = newline_at
+        // Strip \r before \n
+        if end > pos {
+            let prev_byte: I64 = br_read_byte(buf_data, end - 1) as I64
+            if prev_byte == 13 {
+                end = end - 1
+            }
+        }
+
+        let line_len: I64 = end - pos
+        let result: *Unit = br_alloc(line_len + 1)
+        var k: I64 = 0
+        loop (k < line_len) {
+            br_write_byte(result, k, br_read_byte(buf_data, pos + k))
+            k = k + 1
+        }
+        br_write_byte(result, line_len, 0 as U8)
+
+        // Advance past \n
+        this.set_buf_pos(newline_at + 1)
+
+        Ok(result as Str)
+    }
+
+    /// Reads bytes from the source through the buffer.
+    ///
+    /// Uses the internal buffer to reduce the number of underlying read
+    /// calls. Returns the number of bytes read into `buf`.
+    pub func read(this, source: mut ref ByteStream, buf: mut ref [U8]) -> Outcome[I64, IoError] {
+        let needed: I64 = buf.len() as I64
+        if needed == 0 {
+            return Ok(0)
+        }
+
+        // If buffer has data, use it
+        let available: I64 = this.buffered()
+        if available > 0 {
+            var to_copy: I64 = available
+            if to_copy > needed {
+                to_copy = needed
+            }
+            let buf_data: *Unit = this.get_buf_data()
+            let pos: I64 = this.get_buf_pos()
+            // Double-deref: (mut ref buf) -> alloca addr -> slice header ptr -> data ptr
+            let out_addr: I64 = (mut ref buf) as I64
+            let out_hdr: I64 = lowlevel { ptr_read[I64](out_addr as *I64) }
+            let out_data: I64 = lowlevel { ptr_read[I64](out_hdr as *I64) }
+            var i: I64 = 0
+            loop (i < to_copy) {
+                let byte_val: U8 = br_read_byte(buf_data, pos + i)
+                lowlevel { ptr_write[U8]((out_data + i) as *U8, byte_val) }
+                i = i + 1
+            }
+            this.set_buf_pos(pos + to_copy)
+            return Ok(to_copy)
+        }
+
+        // Buffer empty — for large reads, bypass buffer
+        if needed >= this.get_buf_cap() {
+            return source.read(mut ref buf)
+        }
+
+        // Fill buffer then copy
+        var bytes_read: I64 = 0
+        when this.fill_buf_raw(source.handle as I64) {
+            Err(e) => return Err(e),
+            Ok(n) => { bytes_read = n },
+        }
+        if bytes_read == 0 {
+            return Ok(0)
+        }
+        // Recurse (now buffer has data)
+        return this.read(source, mut ref buf)
+    }
+
+    /// Frees the internal buffer memory.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
+        let buf_data: *Unit = this.get_buf_data()
+        br_free(buf_data)
+        br_free(this.handle)
+        this.handle = 0 as *Unit
+    }
+}
+
+// ============================================================================
+// BufferedWriter
+// ============================================================================
+
+/// Default buffer capacity for BufferedWriter (8 KB).
+const DEFAULT_WRITE_BUF: I64 = 8192
+
+/// A buffered wrapper that batches writes for efficiency.
+///
+/// Accumulates bytes in an internal buffer and flushes to the
+/// destination when the buffer is full or `flush()` is called.
+///
+/// # Memory Layout
+///
+/// ```
+/// Header (24 bytes at handle):
+///   offset 0:  buf_data (*Unit) — internal buffer memory
+///   offset 8:  buf_cap (I64)    — buffer capacity
+///   offset 16: buf_len (I64)    — bytes currently buffered
+/// ```
+pub type BufferedWriter {
+    handle: *Unit
+}
+
+impl BufferedWriter {
+    /// Creates a new BufferedWriter with default capacity (8 KB).
+    pub func new() -> BufferedWriter {
+        BufferedWriter::with_capacity(DEFAULT_WRITE_BUF)
+    }
+
+    /// Creates a new BufferedWriter with the specified buffer capacity.
+    pub func with_capacity(capacity: I64) -> BufferedWriter {
+        var cap: I64 = capacity
+        if cap <= 0 {
+            cap = DEFAULT_WRITE_BUF
+        }
+        let header: *Unit = br_alloc(24)
+        let h: I64 = header as I64
+        let buf_data: *Unit = br_alloc(cap)
+
+        lowlevel { ptr_write[I64](h as *I64, buf_data as I64) }
+        lowlevel { ptr_write[I64]((h + 8) as *I64, cap) }
+        lowlevel { ptr_write[I64]((h + 16) as *I64, 0) }
+
+        BufferedWriter { handle: header }
+    }
+
+    // Internal accessors (pub for cross-module visibility)
+    pub func get_buf_data(this) -> *Unit {
+        let val: I64 = lowlevel { ptr_read[I64](this.handle as I64 as *I64) }
+        val as *Unit
+    }
+
+    pub func get_buf_cap(this) -> I64 {
+        lowlevel { ptr_read[I64]((this.handle as I64 + 8) as *I64) }
+    }
+
+    pub func get_buf_len(this) -> I64 {
+        lowlevel { ptr_read[I64]((this.handle as I64 + 16) as *I64) }
+    }
+
+    pub func set_buf_len(this, val: I64) {
+        lowlevel { ptr_write[I64]((this.handle as I64 + 16) as *I64, val) }
+    }
+
+    /// Returns the number of bytes currently buffered.
+    pub func buffered(this) -> I64 {
+        this.get_buf_len()
+    }
+
+    /// Writes bytes to the internal buffer, flushing to `dest` as needed.
+    ///
+    /// If the data fits in the buffer, it's simply copied. If it exceeds
+    /// the buffer capacity, the buffer is flushed first, then the data
+    /// is written (either buffered or directly if larger than buffer).
+    pub func write(this, dest: mut ref ByteStream, data: ref [U8]) -> Outcome[I64, IoError] {
+        let data_len: I64 = data.len() as I64
+        if data_len == 0 {
+            return Ok(0)
+        }
+
+        let buf_data: *Unit = this.get_buf_data()
+        let cap: I64 = this.get_buf_cap()
+        let buf_len: I64 = this.get_buf_len()
+
+        // If it fits in the buffer, just append
+        if buf_len + data_len <= cap {
+            // Double-deref: (ref data) -> alloca addr -> slice header ptr -> data ptr
+            let slice_addr: I64 = (ref data) as I64
+            let src_hdr: I64 = lowlevel { ptr_read[I64](slice_addr as *I64) }
+            let src_data: I64 = lowlevel { ptr_read[I64](src_hdr as *I64) }
+            var i: I64 = 0
+            loop (i < data_len) {
+                let byte_val: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
+                br_write_byte(buf_data, buf_len + i, byte_val)
+                i = i + 1
+            }
+            this.set_buf_len(buf_len + data_len)
+            return Ok(data_len)
+        }
+
+        // Flush existing buffer first
+        when this.flush(dest) {
+            Err(e) => return Err(e),
+            Ok(u) => {},
+        }
+
+        // If data is larger than buffer, write directly
+        if data_len >= cap {
+            return dest.write(data)
+        }
+
+        // Buffer the data
+        // Double-deref: (ref data) -> alloca addr -> slice header ptr -> data ptr
+        let slice_addr: I64 = (ref data) as I64
+        let src_hdr2: I64 = lowlevel { ptr_read[I64](slice_addr as *I64) }
+        let src_data: I64 = lowlevel { ptr_read[I64](src_hdr2 as *I64) }
+        var i: I64 = 0
+        loop (i < data_len) {
+            let byte_val: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
+            br_write_byte(buf_data, i, byte_val)
+            i = i + 1
+        }
+        this.set_buf_len(data_len)
+        Ok(data_len)
+    }
+
+    /// Flushes the internal buffer to the destination.
+    pub func flush(this, dest: mut ref ByteStream) -> Outcome[Unit, IoError] {
+        let buf_len: I64 = this.get_buf_len()
+        if buf_len == 0 {
+            return Ok(())
+        }
+        let buf_data: *Unit = this.get_buf_data()
+
+        // Write directly to dest's internals
+        let h_dst: I64 = dest.handle as I64
+        let dst_len: I64 = lowlevel { ptr_read[I64]((h_dst + 8) as *I64) }
+        let dst_cap: I64 = lowlevel { ptr_read[I64]((h_dst + 16) as *I64) }
+
+        // Ensure dest has capacity
+        if dst_len + buf_len > dst_cap {
+            var new_cap: I64 = dst_cap * 2
+            loop (new_cap < dst_len + buf_len) {
+                new_cap = new_cap * 2
+            }
+            let old_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
+            let new_data: *Unit = lowlevel { mem_realloc(old_data, new_cap) }
+            lowlevel { ptr_write[I64](h_dst as *I64, new_data as I64) }
+            lowlevel { ptr_write[I64]((h_dst + 16) as *I64, new_cap) }
+        }
+
+        let dst_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
+        var i: I64 = 0
+        loop (i < buf_len) {
+            br_write_byte(dst_data, dst_len + i, br_read_byte(buf_data, i))
+            i = i + 1
+        }
+        lowlevel { ptr_write[I64]((h_dst + 8) as *I64, dst_len + buf_len) }
+
+        this.set_buf_len(0)
+        Ok(())
+    }
+
+    /// Frees the internal buffer memory.
+    pub func destroy(mut this) {
+        if this.handle == (0 as *Unit) {
+            return
+        }
+        let buf_data: *Unit = this.get_buf_data()
+        br_free(buf_data)
+        br_free(this.handle)
+        this.handle = 0 as *Unit
+    }
+}

@@ -1,0 +1,56 @@
+//! Stream abstractions for byte-oriented I/O.
+//!
+//! This module provides the fundamental behaviors and types for streaming
+//! byte data through readers, writers, and transformers. Inspired by
+//! Node.js streams, adapted for TML's synchronous ownership model.
+//!
+//! # Core Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Readable`] | Byte source — anything you can `read()` from |
+//! | [`Writable`] | Byte sink — anything you can `write()` to |
+//!
+//! # Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`ByteStream`] | In-memory read/write stream (testing, HTTP bodies) |
+//! | [`BufferedReader`] | Adds line-reading and buffering to any source |
+//! | [`BufferedWriter`] | Adds write buffering and auto-flush to any sink |
+//!
+//! # Utilities
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | [`pipe()`] | Copy all bytes from a source to a destination |
+//! | [`copy_bytes()`] | Copy up to N bytes between streams |
+//! | [`read_all()`] | Read all remaining bytes into a Buffer |
+//! | [`read_to_string()`] | Read all remaining bytes as a UTF-8 string |
+//! | [`write_all()`] | Write all bytes, retrying on partial writes |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::{ByteStream, Readable, Writable, pipe}
+//!
+//! // Create an in-memory stream and write data
+//! var src = ByteStream::from_string("Hello, streams!")
+//! var dst = ByteStream::new()
+//!
+//! // Pipe all data from source to destination
+//! let bytes = pipe(mut ref src, mut ref dst)!
+//! assert_eq(dst.to_string(), "Hello, streams!")
+//! ```
+
+pub mod readable
+pub mod writable
+pub mod byte_stream
+pub mod buffered
+pub mod pipe
+
+pub use std::stream::readable::Readable
+pub use std::stream::writable::Writable
+pub use std::stream::byte_stream::{ByteStream, read_all, read_to_string, write_all, write_string}
+pub use std::stream::buffered::{BufferedReader, BufferedWriter}
+pub use std::stream::pipe::{pipe, copy_bytes}

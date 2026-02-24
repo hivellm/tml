@@ -1,0 +1,52 @@
+// Tests for std::http::connection
+use test::{assert, assert_eq}
+use std::http::connection::{Connection, ConnectionInfo}
+
+@test
+func test_connection_https_google() -> I32 {
+    let result = Connection::open("google.com", 443, true)
+    when result {
+        Err(e) => {
+            print("  Connection failed: {e.message}\n")
+            return 1
+        },
+        Ok(conn) => {
+            let info: ConnectionInfo = conn.connection_info()
+            let ver: Str = info.get_tls_version()
+            let cph: Str = info.get_cipher()
+            print("  TLS: {ver} / {cph}\n")
+            assert(ver == "TLSv1.3" or ver == "TLSv1.2", "TLS version")
+
+            // Send HTTP request
+            let req_str = "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n"
+            let write_result = conn.write_str(req_str)
+            when write_result {
+                Err(e) => {
+                    print("  Write failed\n")
+                    return 1
+                },
+                Ok(n) => {
+                    print("  Sent {n} bytes\n")
+                    assert(n > 0, "should send bytes")
+                },
+            }
+
+            // Read response
+            var buf: [U8; 4096] = [0 as U8; 4096]
+            let read_result = conn.read(mut ref buf)
+            when read_result {
+                Err(e) => {
+                    print("  Read failed\n")
+                    return 1
+                },
+                Ok(n) => {
+                    print("  Received {n} bytes\n")
+                    assert(n > 0, "should receive bytes")
+                },
+            }
+
+            conn.close()
+            return 0
+        },
+    }
+}

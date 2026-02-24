@@ -338,7 +338,8 @@ bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) 
            registry->has_module("std::crypto::sign") || registry->has_module("std::crypto::dh") ||
            registry->has_module("std::crypto::ecdh") || registry->has_module("std::crypto::kdf") ||
            registry->has_module("std::crypto::rsa") || registry->has_module("std::hash") ||
-           registry->has_module("std::net::tls");
+           registry->has_module("std::net::tls") || registry->has_module("std::http::connection") ||
+           registry->has_module("std::http::client");
 }
 
 // ============================================================================

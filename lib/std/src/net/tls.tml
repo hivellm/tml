@@ -475,6 +475,11 @@ impl TlsStream {
     pub func verify_result(this) -> I32 {
         ffi_tls_stream_get_verify_result(this.ssl_handle)
     }
+
+    /// Returns the raw SSL handle (for cross-module FFI use).
+    pub func raw_ssl_handle(this) -> *Unit {
+        this.ssl_handle
+    }
 }
 
 // ============================================================================

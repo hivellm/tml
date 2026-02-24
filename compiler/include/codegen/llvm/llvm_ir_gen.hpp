@@ -1248,6 +1248,24 @@ private:
     // Emit all loop metadata at end of module
     void emit_loop_metadata();
 
+    // ============ Entry-Block Alloca Hoisting ============
+    // Collects alloca instructions emitted during function body codegen.
+    // At function close, these are spliced into the entry block so LLVM's
+    // mem2reg can promote them to SSA registers (critical for SIMD perf).
+    std::vector<std::string> entry_allocas_; // Collected alloca lines
+    std::string alloca_hoisting_marker_;     // Unique marker string in output_
+    bool alloca_hoisting_active_ = false;    // True during function body codegen
+
+    /// Emit an alloca that will be hoisted to the function entry block.
+    /// Returns the register name (e.g., "%t5").
+    auto emit_hoisted_alloca(const std::string& type, const std::string& align = "") -> std::string;
+
+    /// Begin collecting hoisted allocas (called after entry: + param allocas).
+    void begin_alloca_hoisting();
+
+    /// Splice collected allocas into the entry block (called before closing brace).
+    void end_alloca_hoisting();
+
     // ============ Lifetime Intrinsics Support ============
     // Track stack allocations for lifetime intrinsics
     struct AllocaInfo {

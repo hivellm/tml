@@ -1,33 +1,101 @@
 //! HTTP header map with case-insensitive keys.
 //!
-//! Keys are stored lowercase internally via HashMap[Str, Str].
+//! Keys are stored lowercase internally in linear arrays.
+//! Uses string content comparison (not pointer equality).
 //! Multi-value headers use comma-separated format per RFC 7230.
 
 use core::str
-use std::collections::{HashMap, HashMapIter}
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 
 /// A collection of HTTP headers with case-insensitive key lookup.
+///
+/// Stores headers in parallel arrays (keys[], values[]) with linear scan.
+/// HTTP messages typically have <30 headers, so linear scan is efficient
+/// and avoids HashMap's pointer-equality limitation for Str keys.
 pub type Headers {
-    map: HashMap[Str, Str],
+    handle: *Unit
 }
+
+// Internal layout at handle:
+//   offset 0:  keys pointer (*Str array) — 8 bytes
+//   offset 8:  values pointer (*Str array) — 8 bytes
+//   offset 16: len (I64) — 8 bytes
+//   offset 24: cap (I64) — 8 bytes
+// Total header: 32 bytes
 
 impl Headers {
     /// Creates an empty header map.
     pub func new() -> Headers {
-        Headers { map: HashMap[Str, Str]::new(16) }
+        let cap: I64 = 16
+        let hdr: I64 = lowlevel { mem_alloc(32) } as I64
+        let keys: I64 = lowlevel { mem_alloc(cap * 8) } as I64
+        let vals: I64 = lowlevel { mem_alloc(cap * 8) } as I64
+        lowlevel { ptr_write[I64](hdr as *I64, keys) }
+        lowlevel { ptr_write[I64]((hdr + 8) as *I64, vals) }
+        lowlevel { ptr_write[I64]((hdr + 16) as *I64, 0 as I64) }
+        lowlevel { ptr_write[I64]((hdr + 24) as *I64, cap) }
+        Headers { handle: hdr as *Unit }
     }
 
     /// Sets a header value, replacing any existing value for that key.
     pub func set(this, key: Str, value: Str) {
         let lower: Str = str::to_lowercase(key)
-        this.map.set(lower, value)
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
+        // Check if key already exists (linear scan with string comparison)
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            if existing_key == lower {
+                // Overwrite value
+                lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, value as I64) }
+                return
+            }
+            i = i + 1
+        }
+
+        // Key not found — append
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        if cur_len == cur_cap {
+            // Grow arrays 2x
+            let new_cap: I64 = cur_cap * 2
+            let new_keys: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
+            let new_vals: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
+            lowlevel { copy_nonoverlapping(keys_addr as *Unit, new_keys as *Unit, cur_cap * 8) }
+            lowlevel { copy_nonoverlapping(vals_addr as *Unit, new_vals as *Unit, cur_cap * 8) }
+            lowlevel { mem_free(keys_addr as *Unit) }
+            lowlevel { mem_free(vals_addr as *Unit) }
+            lowlevel { ptr_write[I64](hdr as *I64, new_keys) }
+            lowlevel { ptr_write[I64]((hdr + 8) as *I64, new_vals) }
+            lowlevel { ptr_write[I64]((hdr + 24) as *I64, new_cap) }
+
+            lowlevel { ptr_write[I64]((new_keys + cur_len * 8) as *I64, lower as I64) }
+            lowlevel { ptr_write[I64]((new_vals + cur_len * 8) as *I64, value as I64) }
+        } else {
+            lowlevel { ptr_write[I64]((keys_addr + cur_len * 8) as *I64, lower as I64) }
+            lowlevel { ptr_write[I64]((vals_addr + cur_len * 8) as *I64, value as I64) }
+        }
+        lowlevel { ptr_write[I64]((hdr + 16) as *I64, cur_len + 1) }
     }
 
     /// Gets the value for a header key, or "" if not present.
     pub func get(this, key: Str) -> Str {
         let lower: Str = str::to_lowercase(key)
-        if this.map.has(lower) {
-            return this.map.get(lower)
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            if existing_key == lower {
+                return lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
+            }
+            i = i + 1
         }
         return ""
     }
@@ -35,45 +103,87 @@ impl Headers {
     /// Returns true if the header exists.
     pub func has(this, key: Str) -> Bool {
         let lower: Str = str::to_lowercase(key)
-        return this.map.has(lower)
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            if existing_key == lower {
+                return true
+            }
+            i = i + 1
+        }
+        return false
     }
 
     /// Removes a header by key.
     pub func remove(this, key: Str) {
         let lower: Str = str::to_lowercase(key)
-        this.map.remove(lower)
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            if existing_key == lower {
+                // Swap with last element
+                let last: I64 = cur_len - 1
+                if i != last {
+                    let last_key: I64 = lowlevel { ptr_read[I64]((keys_addr + last * 8) as *I64) }
+                    let last_val: I64 = lowlevel { ptr_read[I64]((vals_addr + last * 8) as *I64) }
+                    lowlevel { ptr_write[I64]((keys_addr + i * 8) as *I64, last_key) }
+                    lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, last_val) }
+                }
+                lowlevel { ptr_write[I64]((hdr + 16) as *I64, last) }
+                return
+            }
+            i = i + 1
+        }
     }
 
     /// Appends a value to an existing header, comma-separated per RFC 7230.
     /// If the header doesn't exist yet, behaves like set().
     pub func append(this, key: Str, value: Str) {
         let lower: Str = str::to_lowercase(key)
-        if this.map.has(lower) {
-            let existing: Str = this.map.get(lower)
-            this.map.set(lower, "{existing}, {value}")
-        } else {
-            this.map.set(lower, value)
-        }
-    }
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
 
-    /// Returns an iterator over all header key-value pairs.
-    /// Keys are lowercase. Use has_next(), key(), value(), next().
-    pub func iter(this) -> HashMapIter[Str, Str] {
-        return this.map.iter()
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            if existing_key == lower {
+                let existing: Str = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
+                lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, "{existing}, {value}" as I64) }
+                return
+            }
+            i = i + 1
+        }
+        // Not found — set it
+        this.set(lower, value)
     }
 
     /// Serializes all headers to HTTP/1.1 wire format.
     /// Each header becomes "Key: Value\r\n".
     pub func serialize(this) -> Str {
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
         var result: Str = ""
-        let it: HashMapIter[Str, Str] = this.map.iter()
-        loop (it.has_next()) {
-            let k: Str = it.key()
-            let v: Str = it.value()
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let k: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+            let v: Str = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
             result = "{result}{k}: {v}\r\n"
-            it.next()
+            i = i + 1
         }
-        it.destroy()
         return result
     }
 
@@ -157,16 +267,22 @@ impl Headers {
 
     /// Returns the number of headers.
     pub func len(this) -> I64 {
-        return this.map.len()
+        let hdr: I64 = this.handle as I64
+        return lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
     }
 
     /// Returns true if no headers are set.
     pub func is_empty(this) -> Bool {
-        return this.map.len() == 0
+        return this.len() == 0
     }
 
     /// Frees internal storage.
     pub func destroy(this) {
-        this.map.destroy()
+        let hdr: I64 = this.handle as I64
+        let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        lowlevel { mem_free(keys_addr as *Unit) }
+        lowlevel { mem_free(vals_addr as *Unit) }
+        lowlevel { mem_free(hdr as *Unit) }
     }
 }

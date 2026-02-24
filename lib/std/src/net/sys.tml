@@ -377,6 +377,16 @@ impl RawSocket {
         Ok(result)
     }
 
+    /// Sends a string on a connected socket.
+    pub func send_str(this, s: Str) -> Outcome[I64, NetError] {
+        let len: I64 = s.len() as I64
+        let result: I64 = lowlevel { sys_send_str(this.handle, s, len) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
     /// Receives data from a connected socket.
     pub func recv(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
         let len: I64 = buf.len() as I64
@@ -627,6 +637,9 @@ pub lowlevel func sys_accept_v4(handle: I64) -> I64
 
 /// Sends data on a connected socket.
 pub lowlevel func sys_send(handle: I64, buf: ref [U8], len: I64) -> I64
+
+/// Sends a string on a connected socket.
+pub lowlevel func sys_send_str(handle: I64, s: Str, len: I64) -> I64
 
 /// Receives data from a connected socket.
 pub lowlevel func sys_recv(handle: I64, buf: mut ref [U8], len: I64) -> I64

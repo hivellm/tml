@@ -1,0 +1,23 @@
+use test::{assert, assert_eq}
+use std::stream::byte_stream::ByteStream
+use std::stream::pipe::pipe
+
+@test func test_pipe_basic() -> I32 {
+    var src: ByteStream = ByteStream::from_string("Hello")
+    var dst: ByteStream = ByteStream::new()
+    when pipe(mut ref src, mut ref dst) {
+        Err(e) => {
+            src.destroy()
+            dst.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 5)
+        },
+    }
+    let s: Str = dst.to_string()
+    assert_eq(s, "Hello")
+    src.destroy()
+    dst.destroy()
+    return 0
+}
