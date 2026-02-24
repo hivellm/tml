@@ -749,8 +749,97 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                             continue;
                         }
                     }
+                } else if (enum_pat.payload->size() > 1 &&
+                           enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                    // Multi-field variant pattern: Two(a, b) with payload size > 1
+                    // Each element is an IdentPattern binding to a field in the tuple payload
+
+                    // Look up the enum variant's payload types
+                    std::vector<types::TypePtr> field_types;
+                    if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                        const auto& named = scrutinee_semantic->as<types::NamedType>();
+                        std::string variant_name;
+                        if (!enum_pat.path.segments.empty()) {
+                            variant_name = enum_pat.path.segments.back();
+                        }
+                        auto enum_def = env_.lookup_enum(named.name);
+                        if (enum_def.has_value()) {
+                            for (const auto& [var_name, var_payloads] : enum_def->variants) {
+                                if (var_name == variant_name) {
+                                    field_types = var_payloads;
+                                    break;
+                                }
+                            }
+                        }
+                        // For generic enums, substitute type parameters
+                        if (!field_types.empty() && !named.type_args.empty()) {
+                            std::unordered_map<std::string, types::TypePtr> enum_type_subs;
+                            if (enum_def && !enum_def->type_params.empty()) {
+                                for (size_t i = 0;
+                                     i < enum_def->type_params.size() && i < named.type_args.size();
+                                     ++i) {
+                                    enum_type_subs[enum_def->type_params[i]] = named.type_args[i];
+                                }
+                            }
+                            if (!enum_type_subs.empty()) {
+                                for (auto& ft : field_types) {
+                                    ft = types::substitute_type(ft, enum_type_subs);
+                                }
+                            }
+                        }
+                    }
+
+                    // Build tuple LLVM type from field types
+                    std::vector<std::string> field_llvm_types;
+                    for (size_t i = 0; i < field_types.size(); ++i) {
+                        field_llvm_types.push_back(llvm_type_from_semantic(field_types[i], true));
+                    }
+                    // Fallback if type lookup failed
+                    while (field_llvm_types.size() < enum_pat.payload->size()) {
+                        field_llvm_types.push_back("i64");
+                    }
+
+                    std::string tuple_type = "{ ";
+                    for (size_t i = 0; i < field_llvm_types.size(); ++i) {
+                        if (i > 0)
+                            tuple_type += ", ";
+                        tuple_type += field_llvm_types[i];
+                    }
+                    tuple_type += " }";
+
+                    // Bind each field
+                    for (size_t i = 0; i < enum_pat.payload->size(); ++i) {
+                        if (!enum_pat.payload->at(i)->is<parser::IdentPattern>())
+                            continue;
+                        const auto& ident = enum_pat.payload->at(i)->as<parser::IdentPattern>();
+                        if (ident.name.empty() || ident.name[0] == '_')
+                            continue;
+
+                        std::string elem_type = field_llvm_types[i];
+                        types::TypePtr elem_semantic =
+                            i < field_types.size() ? field_types[i] : nullptr;
+
+                        std::string elem_ptr = fresh_reg();
+                        emit_line("  " + elem_ptr + " = getelementptr inbounds " + tuple_type +
+                                  ", ptr " + payload_ptr + ", i32 0, i32 " + std::to_string(i));
+
+                        if (elem_type.starts_with("%struct.") || elem_type.starts_with("{")) {
+                            locals_[ident.name] =
+                                VarInfo{elem_ptr, elem_type, elem_semantic, std::nullopt};
+                        } else {
+                            std::string elem_val = fresh_reg();
+                            emit_line("  " + elem_val + " = load " + elem_type + ", ptr " +
+                                      elem_ptr);
+                            std::string var_alloca = fresh_reg();
+                            emit_line("  " + var_alloca + " = alloca " + elem_type);
+                            emit_line("  store " + elem_type + " " + elem_val + ", ptr " +
+                                      var_alloca);
+                            locals_[ident.name] =
+                                VarInfo{var_alloca, elem_type, elem_semantic, std::nullopt};
+                        }
+                    }
                 } else if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
-                    // Simple ident pattern - original behavior
+                    // Simple ident pattern - original behavior (single field)
                     const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
 
                     // Get payload type from enum type args
@@ -1031,6 +1120,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Register arm-bound variables for drop (e.g., MutexGuard from Just(guard))
+        // BUT: if the scrutinee is an enum with drop glue, the enum's drop function
+        // already handles all field cleanup. Pattern bindings are GEP aliases into
+        // the enum's payload — registering them for independent drop would cause
+        // double-free (once from the arm cleanup, once from the enum drop glue).
+        bool scrutinee_has_enum_drop = false;
+        if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+            const auto& named = scrutinee_semantic->as<types::NamedType>();
+            auto enum_def = env_.lookup_enum(named.name);
+            if (enum_def.has_value() && env_.type_needs_drop(named.name)) {
+                scrutinee_has_enum_drop = true;
+            }
+        }
         for (const auto& [name, info] : locals_) {
             if (saved_locals.find(name) == saved_locals.end()) {
                 // This variable was bound in this arm
@@ -1038,7 +1139,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 if (info.type.starts_with("%struct.")) {
                     type_name = info.type.substr(8); // Strip "%struct."
                 }
-                if (!type_name.empty()) {
+                if (!type_name.empty() && !scrutinee_has_enum_drop) {
                     register_for_drop(name, info.reg, type_name, info.type);
                 }
                 // Register Str bindings from pattern destructuring (e.g., Ok(s))

@@ -1,0 +1,43 @@
+use test
+use core::alloc::heap::Heap
+
+enum IntList {
+    Cons(I32, Heap[IntList]),
+    Nil,
+}
+
+@test
+func test_cons_when_wildcard() -> I32 {
+    let list = IntList::Cons(42, Heap::new(IntList::Nil))
+    when list {
+        Cons(val, _) => {
+            assert_eq(val, 42)
+        },
+        Nil => { return 1 },
+    }
+    return 0
+}
+
+@test
+func test_cons_bind_heap_field() -> I32 {
+    let list = IntList::Cons(99, Heap::new(IntList::Nil))
+    when list {
+        Cons(val, rest) => {
+            assert_eq(val, 99)
+        },
+        Nil => { return 1 },
+    }
+    return 0
+}
+
+@test
+func test_nested_cons_bind() -> I32 {
+    let list = IntList::Cons(1, Heap::new(IntList::Cons(2, Heap::new(IntList::Nil))))
+    when list {
+        Cons(first, rest) => {
+            assert_eq(first, 1)
+        },
+        Nil => { return 1 },
+    }
+    return 0
+}

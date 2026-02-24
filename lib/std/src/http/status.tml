@@ -1,0 +1,212 @@
+//! HTTP response status codes.
+//!
+//! Provides the `Status` type with all standard HTTP status codes (1xx-5xx),
+//! reason phrases, and category classification. Supports both named constants
+//! and custom codes for non-standard responses.
+//!
+//! Based on IANA HTTP Status Code Registry (matching cmmv-server codes.json).
+
+/// An HTTP response status code.
+pub type Status {
+    code_value: I32,
+}
+
+impl Status {
+    /// Creates a status from a numeric code.
+    pub func new(code: I32) -> Status {
+        Status { code_value: code }
+    }
+
+    /// Returns the numeric status code.
+    pub func code(this) -> I32 {
+        this.code_value
+    }
+
+    // ── 1xx Informational ───────────────────────────────────
+    pub func CONTINUE() -> Status { Status { code_value: 100 } }
+    pub func SWITCHING_PROTOCOLS() -> Status { Status { code_value: 101 } }
+    pub func PROCESSING() -> Status { Status { code_value: 102 } }
+    pub func EARLY_HINTS() -> Status { Status { code_value: 103 } }
+
+    // ── 2xx Success ─────────────────────────────────────────
+    pub func OK() -> Status { Status { code_value: 200 } }
+    pub func CREATED() -> Status { Status { code_value: 201 } }
+    pub func ACCEPTED() -> Status { Status { code_value: 202 } }
+    pub func NON_AUTHORITATIVE_INFORMATION() -> Status { Status { code_value: 203 } }
+    pub func NO_CONTENT() -> Status { Status { code_value: 204 } }
+    pub func RESET_CONTENT() -> Status { Status { code_value: 205 } }
+    pub func PARTIAL_CONTENT() -> Status { Status { code_value: 206 } }
+    pub func MULTI_STATUS() -> Status { Status { code_value: 207 } }
+    pub func ALREADY_REPORTED() -> Status { Status { code_value: 208 } }
+    pub func IM_USED() -> Status { Status { code_value: 226 } }
+
+    // ── 3xx Redirection ─────────────────────────────────────
+    pub func MULTIPLE_CHOICES() -> Status { Status { code_value: 300 } }
+    pub func MOVED_PERMANENTLY() -> Status { Status { code_value: 301 } }
+    pub func FOUND() -> Status { Status { code_value: 302 } }
+    pub func SEE_OTHER() -> Status { Status { code_value: 303 } }
+    pub func NOT_MODIFIED() -> Status { Status { code_value: 304 } }
+    pub func USE_PROXY() -> Status { Status { code_value: 305 } }
+    pub func TEMPORARY_REDIRECT() -> Status { Status { code_value: 307 } }
+    pub func PERMANENT_REDIRECT() -> Status { Status { code_value: 308 } }
+
+    // ── 4xx Client Errors ───────────────────────────────────
+    pub func BAD_REQUEST() -> Status { Status { code_value: 400 } }
+    pub func UNAUTHORIZED() -> Status { Status { code_value: 401 } }
+    pub func PAYMENT_REQUIRED() -> Status { Status { code_value: 402 } }
+    pub func FORBIDDEN() -> Status { Status { code_value: 403 } }
+    pub func NOT_FOUND() -> Status { Status { code_value: 404 } }
+    pub func METHOD_NOT_ALLOWED() -> Status { Status { code_value: 405 } }
+    pub func NOT_ACCEPTABLE() -> Status { Status { code_value: 406 } }
+    pub func PROXY_AUTHENTICATION_REQUIRED() -> Status { Status { code_value: 407 } }
+    pub func REQUEST_TIMEOUT() -> Status { Status { code_value: 408 } }
+    pub func CONFLICT() -> Status { Status { code_value: 409 } }
+    pub func GONE() -> Status { Status { code_value: 410 } }
+    pub func LENGTH_REQUIRED() -> Status { Status { code_value: 411 } }
+    pub func PRECONDITION_FAILED() -> Status { Status { code_value: 412 } }
+    pub func PAYLOAD_TOO_LARGE() -> Status { Status { code_value: 413 } }
+    pub func URI_TOO_LONG() -> Status { Status { code_value: 414 } }
+    pub func UNSUPPORTED_MEDIA_TYPE() -> Status { Status { code_value: 415 } }
+    pub func RANGE_NOT_SATISFIABLE() -> Status { Status { code_value: 416 } }
+    pub func EXPECTATION_FAILED() -> Status { Status { code_value: 417 } }
+    pub func IM_A_TEAPOT() -> Status { Status { code_value: 418 } }
+    pub func MISDIRECTED_REQUEST() -> Status { Status { code_value: 421 } }
+    pub func UNPROCESSABLE_ENTITY() -> Status { Status { code_value: 422 } }
+    pub func LOCKED() -> Status { Status { code_value: 423 } }
+    pub func FAILED_DEPENDENCY() -> Status { Status { code_value: 424 } }
+    pub func TOO_EARLY() -> Status { Status { code_value: 425 } }
+    pub func UPGRADE_REQUIRED() -> Status { Status { code_value: 426 } }
+    pub func PRECONDITION_REQUIRED() -> Status { Status { code_value: 428 } }
+    pub func TOO_MANY_REQUESTS() -> Status { Status { code_value: 429 } }
+    pub func REQUEST_HEADER_FIELDS_TOO_LARGE() -> Status { Status { code_value: 431 } }
+    pub func UNAVAILABLE_FOR_LEGAL_REASONS() -> Status { Status { code_value: 451 } }
+
+    // ── 5xx Server Errors ───────────────────────────────────
+    pub func INTERNAL_SERVER_ERROR() -> Status { Status { code_value: 500 } }
+    pub func NOT_IMPLEMENTED() -> Status { Status { code_value: 501 } }
+    pub func BAD_GATEWAY() -> Status { Status { code_value: 502 } }
+    pub func SERVICE_UNAVAILABLE() -> Status { Status { code_value: 503 } }
+    pub func GATEWAY_TIMEOUT() -> Status { Status { code_value: 504 } }
+    pub func HTTP_VERSION_NOT_SUPPORTED() -> Status { Status { code_value: 505 } }
+    pub func VARIANT_ALSO_NEGOTIATES() -> Status { Status { code_value: 506 } }
+    pub func INSUFFICIENT_STORAGE() -> Status { Status { code_value: 507 } }
+    pub func LOOP_DETECTED() -> Status { Status { code_value: 508 } }
+    pub func BANDWIDTH_LIMIT_EXCEEDED() -> Status { Status { code_value: 509 } }
+    pub func NOT_EXTENDED() -> Status { Status { code_value: 510 } }
+    pub func NETWORK_AUTHENTICATION_REQUIRED() -> Status { Status { code_value: 511 } }
+
+    // ── Category Checks ─────────────────────────────────────
+
+    /// True if 1xx (informational).
+    pub func is_informational(this) -> Bool {
+        this.code_value >= 100 and this.code_value < 200
+    }
+
+    /// True if 2xx (success).
+    pub func is_success(this) -> Bool {
+        this.code_value >= 200 and this.code_value < 300
+    }
+
+    /// True if 3xx (redirection).
+    pub func is_redirect(this) -> Bool {
+        this.code_value >= 300 and this.code_value < 400
+    }
+
+    /// True if 4xx (client error).
+    pub func is_client_error(this) -> Bool {
+        this.code_value >= 400 and this.code_value < 500
+    }
+
+    /// True if 5xx (server error).
+    pub func is_server_error(this) -> Bool {
+        this.code_value >= 500 and this.code_value < 600
+    }
+
+    /// True if this redirect preserves method and body (307, 308).
+    pub func is_redirect_with_body(this) -> Bool {
+        this.code_value == 307 or this.code_value == 308
+    }
+
+    /// True if the response has no body (204, 205, 304).
+    pub func is_empty(this) -> Bool {
+        this.code_value == 204 or this.code_value == 205 or this.code_value == 304
+    }
+
+    /// True if this is a retry-able server error (502, 503, 504).
+    pub func is_retry(this) -> Bool {
+        this.code_value == 502 or this.code_value == 503 or this.code_value == 504
+    }
+
+    /// Returns the standard reason phrase for the status code.
+    pub func reason(this) -> Str {
+        // 1xx
+        if this.code_value == 100 { return "Continue" }
+        if this.code_value == 101 { return "Switching Protocols" }
+        if this.code_value == 102 { return "Processing" }
+        if this.code_value == 103 { return "Early Hints" }
+        // 2xx
+        if this.code_value == 200 { return "OK" }
+        if this.code_value == 201 { return "Created" }
+        if this.code_value == 202 { return "Accepted" }
+        if this.code_value == 203 { return "Non-Authoritative Information" }
+        if this.code_value == 204 { return "No Content" }
+        if this.code_value == 205 { return "Reset Content" }
+        if this.code_value == 206 { return "Partial Content" }
+        if this.code_value == 207 { return "Multi-Status" }
+        if this.code_value == 208 { return "Already Reported" }
+        if this.code_value == 226 { return "IM Used" }
+        // 3xx
+        if this.code_value == 300 { return "Multiple Choices" }
+        if this.code_value == 301 { return "Moved Permanently" }
+        if this.code_value == 302 { return "Found" }
+        if this.code_value == 303 { return "See Other" }
+        if this.code_value == 304 { return "Not Modified" }
+        if this.code_value == 305 { return "Use Proxy" }
+        if this.code_value == 307 { return "Temporary Redirect" }
+        if this.code_value == 308 { return "Permanent Redirect" }
+        // 4xx
+        if this.code_value == 400 { return "Bad Request" }
+        if this.code_value == 401 { return "Unauthorized" }
+        if this.code_value == 402 { return "Payment Required" }
+        if this.code_value == 403 { return "Forbidden" }
+        if this.code_value == 404 { return "Not Found" }
+        if this.code_value == 405 { return "Method Not Allowed" }
+        if this.code_value == 406 { return "Not Acceptable" }
+        if this.code_value == 407 { return "Proxy Authentication Required" }
+        if this.code_value == 408 { return "Request Timeout" }
+        if this.code_value == 409 { return "Conflict" }
+        if this.code_value == 410 { return "Gone" }
+        if this.code_value == 411 { return "Length Required" }
+        if this.code_value == 412 { return "Precondition Failed" }
+        if this.code_value == 413 { return "Payload Too Large" }
+        if this.code_value == 414 { return "URI Too Long" }
+        if this.code_value == 415 { return "Unsupported Media Type" }
+        if this.code_value == 416 { return "Range Not Satisfiable" }
+        if this.code_value == 417 { return "Expectation Failed" }
+        if this.code_value == 418 { return "I'm a Teapot" }
+        if this.code_value == 421 { return "Misdirected Request" }
+        if this.code_value == 422 { return "Unprocessable Entity" }
+        if this.code_value == 423 { return "Locked" }
+        if this.code_value == 424 { return "Failed Dependency" }
+        if this.code_value == 425 { return "Too Early" }
+        if this.code_value == 426 { return "Upgrade Required" }
+        if this.code_value == 428 { return "Precondition Required" }
+        if this.code_value == 429 { return "Too Many Requests" }
+        if this.code_value == 431 { return "Request Header Fields Too Large" }
+        if this.code_value == 451 { return "Unavailable For Legal Reasons" }
+        // 5xx
+        if this.code_value == 500 { return "Internal Server Error" }
+        if this.code_value == 501 { return "Not Implemented" }
+        if this.code_value == 502 { return "Bad Gateway" }
+        if this.code_value == 503 { return "Service Unavailable" }
+        if this.code_value == 504 { return "Gateway Timeout" }
+        if this.code_value == 505 { return "HTTP Version Not Supported" }
+        if this.code_value == 506 { return "Variant Also Negotiates" }
+        if this.code_value == 507 { return "Insufficient Storage" }
+        if this.code_value == 508 { return "Loop Detected" }
+        if this.code_value == 509 { return "Bandwidth Limit Exceeded" }
+        if this.code_value == 510 { return "Not Extended" }
+        if this.code_value == 511 { return "Network Authentication Required" }
+        return "Unknown"
+    }
+}

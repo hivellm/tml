@@ -1,0 +1,159 @@
+//! HTTP connection layer.
+//!
+//! Handles DNS resolution, TCP connection, and optional TLS handshake.
+//! Provides write_str/read over plain or encrypted streams.
+
+use core::str
+use std::url::Url
+use std::net::ip::Ipv4Addr
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::tcp::TcpStream
+use std::net::tls::{TlsContext, TlsStream, TlsVerifyMode}
+use std::net::sys::RawSocket
+use std::net::dns
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// TLS/connection metadata.
+pub type ConnectionInfo {
+    tls_version: Str,
+    cipher: Str,
+    peer_verified: Bool,
+    dns_address: Str,
+    alpn: Str,
+}
+
+impl ConnectionInfo {
+    pub func none() -> ConnectionInfo {
+        ConnectionInfo {
+            tls_version: "",
+            cipher: "",
+            peer_verified: false,
+            dns_address: "",
+            alpn: "",
+        }
+    }
+}
+
+/// A TCP (+optional TLS) connection to an HTTP server.
+pub type Connection {
+    tls_stream: Maybe[TlsStream],
+    is_tls: Bool,
+    fd: I64,
+    info: ConnectionInfo,
+}
+
+impl Connection {
+    /// Opens a connection to the given URL.
+    /// Handles DNS lookup, TCP connect, and TLS handshake for HTTPS.
+    pub func open(url: ref Url) -> Outcome[Connection, HttpError] {
+        let host: Str = url.host()
+        let scheme: Str = url.scheme()
+        let is_https: Bool = scheme == "https"
+
+        // Determine port
+        var port: I64 = url.port()
+        if port == 0 {
+            if is_https {
+                port = 443
+            } else {
+                port = 80
+            }
+        }
+
+        // DNS resolve
+        let dns_result = dns::lookup(host)
+        if dns_result.is_err() {
+            return Err(HttpError::dns_failure("failed to resolve: {host}"))
+        }
+        let ip: Ipv4Addr = dns_result.unwrap()
+
+        // TCP connect
+        let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, port as U16))
+        let tcp_result = TcpStream::connect(addr)
+        if tcp_result.is_err() {
+            return Err(HttpError::connection_failed("TCP connect failed to {host}:{port}"))
+        }
+        let tcp: TcpStream = tcp_result.unwrap()
+
+        // Get raw socket FD for TLS
+        let raw: RawSocket = tcp.into_raw_socket()
+        let fd: I64 = raw.handle
+
+        if is_https {
+            // TLS handshake
+            let ctx_result = TlsContext::client()
+            if ctx_result.is_err() {
+                return Err(HttpError::tls_error("TLS context creation failed"))
+            }
+            let ctx: TlsContext = ctx_result.unwrap()
+            ctx.set_verify_mode(TlsVerifyMode::None())
+
+            let tls_result = TlsStream::connect(ctx, fd, host)
+            if tls_result.is_err() {
+                return Err(HttpError::tls_error("TLS handshake failed with {host}"))
+            }
+            let tls: TlsStream = tls_result.unwrap()
+
+            let info = ConnectionInfo {
+                tls_version: tls.version(),
+                cipher: tls.cipher(),
+                peer_verified: tls.peer_verified(),
+                dns_address: "",
+                alpn: tls.alpn(),
+            }
+
+            return Ok(Connection {
+                tls_stream: Just(tls),
+                is_tls: true,
+                fd: fd,
+                info: info,
+            })
+        }
+
+        // Plain HTTP
+        let info = ConnectionInfo::none()
+
+        return Ok(Connection {
+            tls_stream: Nothing,
+            is_tls: false,
+            fd: fd,
+            info: info,
+        })
+    }
+
+    /// Writes a string to the connection (TLS or plain TCP).
+    pub func write_str(this, data: Str) -> Outcome[I64, HttpError] {
+        if this.is_tls {
+            when this.tls_stream {
+                Just(tls) => {
+                    let result = tls.write_str(data)
+                    if result.is_err() {
+                        return Err(HttpError::connection_failed("TLS write failed"))
+                    }
+                    return Ok(result.unwrap())
+                },
+                Nothing => return Err(HttpError::connection_failed("no TLS stream")),
+            }
+        }
+        // For plain TCP, we need to write bytes
+        // TODO: use tcp raw write when string-to-bytes API is available
+        return Err(HttpError::protocol_error("plain HTTP write not yet implemented"))
+    }
+
+    /// Returns connection info (TLS version, cipher, DNS address, etc.).
+    pub func connection_info(this) -> ref ConnectionInfo {
+        return ref this.info
+    }
+
+    /// Closes the connection.
+    pub func close(this) {
+        if this.is_tls {
+            when this.tls_stream {
+                Just(tls) => {
+                    let _ = tls.shutdown()
+                },
+                Nothing => {},
+            }
+        }
+    }
+}

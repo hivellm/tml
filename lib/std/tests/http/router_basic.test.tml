@@ -1,0 +1,93 @@
+// Tests for std::http::router — basic static routing
+use test::{assert, assert_eq}
+use std::http::router::{Router, RouteMatch}
+
+@test
+func test_router_new_destroy() -> I32 {
+    let router = Router::new()
+    router.destroy()
+    return 0
+}
+
+@test
+func test_root_route() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/", 10)
+    let m = router.find("GET", "/")
+    assert(m.found, "should find /")
+    assert_eq(m.handler_id, 10, "handler_id should be 10")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_single_static_route() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/hello", 1)
+    let m = router.find("GET", "/hello")
+    assert(m.found, "should find /hello")
+    assert_eq(m.handler_id, 1, "handler_id should be 1")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_not_found() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/hello", 1)
+    let m = router.find("GET", "/world")
+    assert(not m.found, "should not find /world")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_method_isolation() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users", 1)
+    router.on("POST", "/users", 2)
+    let mg = router.find("GET", "/users")
+    assert(mg.found, "GET should find /users")
+    assert_eq(mg.handler_id, 1, "GET handler_id should be 1")
+    let mp = router.find("POST", "/users")
+    assert(mp.found, "POST should find /users")
+    assert_eq(mp.handler_id, 2, "POST handler_id should be 2")
+    let md = router.find("DELETE", "/users")
+    assert(not md.found, "DELETE should not find /users")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_multiple_routes() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users", 1)
+    router.on("GET", "/posts", 2)
+    router.on("GET", "/comments", 3)
+    let m1 = router.find("GET", "/users")
+    assert(m1.found, "should find /users")
+    assert_eq(m1.handler_id, 1, "users handler")
+    let m2 = router.find("GET", "/posts")
+    assert(m2.found, "should find /posts")
+    assert_eq(m2.handler_id, 2, "posts handler")
+    let m3 = router.find("GET", "/comments")
+    assert(m3.found, "should find /comments")
+    assert_eq(m3.handler_id, 3, "comments handler")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_nested_routes() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users", 1)
+    router.on("GET", "/users/list", 2)
+    let m1 = router.find("GET", "/users")
+    assert(m1.found, "should find /users")
+    assert_eq(m1.handler_id, 1, "users handler")
+    let m2 = router.find("GET", "/users/list")
+    assert(m2.found, "should find /users/list")
+    assert_eq(m2.handler_id, 2, "users/list handler")
+    router.destroy()
+    return 0
+}

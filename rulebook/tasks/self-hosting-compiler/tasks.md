@@ -16,8 +16,8 @@
 
 ### Phase 0.1: Verify Core Language Features
 
-- [ ] 0.1.1 Test: recursive enum (AST-like tree with enum variants containing `Heap[Self]`)
-- [ ] 0.1.2 Test: `HashMap[Str, T]` with 10K+ entries — insert, get, iterate, remove
+- [x] 0.1.1 Test: recursive enum (AST-like tree with enum variants containing `Heap[Self]`)
+- [x] 0.1.2 Test: `HashMap[Str, T]` with 10K+ entries — insert, get, iterate, remove
 - [ ] 0.1.3 Test: `List[T]` with polymorphic element types (List of enums)
 - [ ] 0.1.4 Test: nested generics — `HashMap[Str, List[AstNode]]`
 - [ ] 0.1.5 Test: pattern matching (`when`) on recursive enum with 20+ variants
@@ -36,6 +36,9 @@
 - [ ] 0.1b.5 Fix: `BTreeMap` genericity — currently I64-only, needs generic `[K, V]` for ordered symbol tables
 - [ ] 0.1b.6 Test: `dyn Behavior` (dynamic dispatch) — verify vtable dispatch works for type-erased AST visitors
 - [ ] 0.1b.7 Fix: inline module support (`mod foo { ... }`) — parser currently only supports file-based modules
+- [x] 0.1b.8 Fix: multi-arg enum variant constructors — only first field is stored, blocks `Add(Heap[Expr], Heap[Expr])` pattern needed for AST nodes
+- [x] 0.1b.9 Fix: `Heap[T]::drop` does not drop inner value before freeing — nested `Heap` pointers leak when inner type needs drop
+- [x] 0.1b.10 Fix: when pattern double-free — binding droppable fields from enum variants caused double-free (arm cleanup + enum drop glue)
 
 ### Phase 0.2: LLVM C API Bindings
 

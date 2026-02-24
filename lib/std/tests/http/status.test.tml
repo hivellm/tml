@@ -1,0 +1,41 @@
+// Tests for std::http::status
+use test::{assert, assert_eq}
+use std::http::status::Status
+
+@test
+func test_status_code() -> I32 {
+    let ok = Status::OK()
+    assert_eq(ok.code(), 200 as I32, "OK code")
+    let nf = Status::NOT_FOUND()
+    assert_eq(nf.code(), 404 as I32, "NOT_FOUND code")
+    let custom = Status::new(418 as I32)
+    assert_eq(custom.code(), 418 as I32, "custom code")
+    return 0
+}
+
+@test
+func test_status_reason() -> I32 {
+    assert_eq(Status::OK().reason(), "OK", "200 reason")
+    assert_eq(Status::CREATED().reason(), "Created", "201 reason")
+    assert_eq(Status::NOT_FOUND().reason(), "Not Found", "404 reason")
+    assert_eq(Status::INTERNAL_SERVER_ERROR().reason(), "Internal Server Error", "500 reason")
+    assert_eq(Status::new(999 as I32).reason(), "Unknown", "unknown reason")
+    return 0
+}
+
+@test
+func test_status_categories() -> I32 {
+    assert(Status::CONTINUE().is_informational(), "100 informational")
+    assert(Status::OK().is_success(), "200 success")
+    assert(Status::CREATED().is_success(), "201 success")
+    assert(Status::MOVED_PERMANENTLY().is_redirect(), "301 redirect")
+    assert(Status::TEMPORARY_REDIRECT().is_redirect(), "307 redirect")
+    assert(Status::BAD_REQUEST().is_client_error(), "400 client error")
+    assert(Status::NOT_FOUND().is_client_error(), "404 client error")
+    assert(Status::INTERNAL_SERVER_ERROR().is_server_error(), "500 server error")
+    assert(Status::BAD_GATEWAY().is_server_error(), "502 server error")
+    // Cross-checks
+    assert(not Status::OK().is_redirect(), "200 not redirect")
+    assert(not Status::NOT_FOUND().is_success(), "404 not success")
+    return 0
+}

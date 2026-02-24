@@ -1,0 +1,9 @@
+use test
+use core::alloc::heap::Heap
+
+@test
+func test_heap_basic_drop() -> I32 {
+    let h = Heap::new(42)
+    // h should be dropped automatically here
+    return 0
+}

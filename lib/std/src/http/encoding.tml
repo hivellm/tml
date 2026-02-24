@@ -1,0 +1,91 @@
+//! HTTP Content-Encoding dispatch.
+//!
+//! Routes compression and decompression to the appropriate
+//! std::zlib algorithm based on encoding name.
+
+use core::str
+use std::collections::Buffer
+use std::zlib::{
+    gzip, gunzip,
+    gzip_buffer, gunzip_to_buffer,
+    deflate, inflate,
+    deflate_buffer, inflate_to_buffer,
+    brotli_compress, brotli_decompress,
+    brotli_compress_buffer, brotli_decompress_to_buffer,
+    zstd_compress, zstd_decompress,
+    zstd_compress_buffer, zstd_decompress_to_buffer,
+}
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// Decompresses data based on Content-Encoding header value.
+/// Supported: "gzip", "deflate", "br", "zstd".
+pub func decompress(encoding: Str, data: Str) -> Outcome[Str, HttpError] {
+    if encoding == "gzip" or encoding == "x-gzip" {
+        let result = gunzip(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("gunzip failed")),
+        }
+    }
+    if encoding == "deflate" {
+        let result = inflate(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("inflate failed")),
+        }
+    }
+    if encoding == "br" {
+        let result = brotli_decompress(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("brotli decompress failed")),
+        }
+    }
+    if encoding == "zstd" {
+        let result = zstd_decompress(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("zstd decompress failed")),
+        }
+    }
+    return Err(HttpError::encoding_error("unsupported encoding: {encoding}"))
+}
+
+/// Compresses data with the specified encoding.
+/// Supported: "gzip", "deflate", "br", "zstd".
+pub func compress(encoding: Str, data: Str) -> Outcome[Str, HttpError] {
+    if encoding == "gzip" or encoding == "x-gzip" {
+        let result = gzip(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("gzip failed")),
+        }
+    }
+    if encoding == "deflate" {
+        let result = deflate(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("deflate failed")),
+        }
+    }
+    if encoding == "br" {
+        let result = brotli_compress(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("brotli compress failed")),
+        }
+    }
+    if encoding == "zstd" {
+        let result = zstd_compress(data)
+        when result {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(HttpError::encoding_error("zstd compress failed")),
+        }
+    }
+    return Err(HttpError::encoding_error("unsupported encoding: {encoding}"))
+}
+
+/// Returns the Accept-Encoding value for all supported encodings.
+pub func accepted_encodings() -> Str {
+    return "gzip, deflate, br, zstd"
+}

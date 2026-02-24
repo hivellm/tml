@@ -25,10 +25,117 @@ TML_MODULE("codegen_x86")
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "types/module.hpp"
 
+#include <functional>
 #include <iostream>
+#include <map>
 #include <unordered_set>
 
 namespace tml::codegen {
+
+// Helper: Recursively search a parser field type for a generic parameter name,
+// and extract the corresponding concrete type from the inferred argument type.
+// For example, if field_type is Heap[UnaryTree[T]] and arg_type is
+// Heap[UnaryTree[I32]], this finds T at generics[0].generics[0] and returns I32.
+static types::TypePtr extract_generic_from_nested_type(const parser::TypePtr& field_type,
+                                                       const std::string& generic_name,
+                                                       const types::TypePtr& arg_type) {
+
+    if (!field_type || !arg_type)
+        return nullptr;
+
+    if (field_type->is<parser::NamedType>()) {
+        const auto& named = field_type->as<parser::NamedType>();
+
+        // Direct match: this field type IS the generic parameter
+        if (!named.path.segments.empty() && named.path.segments.back() == generic_name &&
+            !named.generics.has_value()) {
+            return arg_type;
+        }
+
+        // Recurse into generic arguments
+        if (named.generics.has_value() && arg_type->is<types::NamedType>()) {
+            const auto& arg_named = arg_type->as<types::NamedType>();
+            const auto& gen_args = named.generics->args;
+            for (size_t i = 0; i < gen_args.size() && i < arg_named.type_args.size(); ++i) {
+                if (gen_args[i].is_type()) {
+                    const auto& inner_field = std::get<parser::TypePtr>(gen_args[i].value);
+                    auto result = extract_generic_from_nested_type(inner_field, generic_name,
+                                                                   arg_named.type_args[i]);
+                    if (result)
+                        return result;
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+// Helper: Extract a generic parameter from a nested field type by looking at
+// the actual argument expression. When infer_expr_type on the argument returns
+// a type without type_args (e.g., Heap with no [T] resolved), this function
+// unwraps constructor calls to look at inner arguments.
+// For example: field_type=Heap[UnaryTree[T]], arg_expr=Heap::new(UnaryTree::Leaf(10))
+// → unwraps Heap::new(...) to get UnaryTree::Leaf(10), matches field_type's
+// generic arg UnaryTree[T] against inferred type UnaryTree[I32], extracts T=I32.
+static types::TypePtr
+extract_generic_from_call_expr(const parser::TypePtr& field_type, const std::string& generic_name,
+                               const parser::Expr& arg_expr,
+                               std::function<types::TypePtr(const parser::Expr&)> infer_fn) {
+
+    if (!field_type)
+        return nullptr;
+
+    // Only handle NamedType with generics (like Heap[UnaryTree[T]])
+    if (!field_type->is<parser::NamedType>())
+        return nullptr;
+    const auto& named = field_type->as<parser::NamedType>();
+    if (!named.generics.has_value())
+        return nullptr;
+
+    // If the argument is a call expr like Heap::new(X), and the field type
+    // outer name matches (Heap), then try to match field type's generic args
+    // against the arguments of the call
+    if (arg_expr.is<parser::CallExpr>()) {
+        const auto& call = arg_expr.as<parser::CallExpr>();
+        // Check if callee is Type::method (PathExpr with 2 segments)
+        if (call.callee && call.callee->is<parser::PathExpr>()) {
+            const auto& path = call.callee->as<parser::PathExpr>();
+            if (path.path.segments.size() == 2) {
+                const std::string& callee_type = path.path.segments[0];
+                // Check if outer type matches field type's outer name
+                if (!named.path.segments.empty() && named.path.segments.back() == callee_type) {
+                    // Match: field is Heap[...] and arg is Heap::method(...)
+                    // The constructor's first arg should correspond to the
+                    // first generic parameter. Try matching field's generic args
+                    // against the call's arguments.
+                    const auto& gen_args = named.generics->args;
+                    for (size_t i = 0; i < gen_args.size() && i < call.args.size(); ++i) {
+                        if (gen_args[i].is_type()) {
+                            const auto& inner_field = std::get<parser::TypePtr>(gen_args[i].value);
+                            auto inner_inferred = infer_fn(*call.args[i]);
+                            auto result = extract_generic_from_nested_type(
+                                inner_field, generic_name, inner_inferred);
+                            if (result)
+                                return result;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+// Member function: Extract a generic parameter from a field type pattern by
+// matching against an inferred argument type. Combines nested type walking
+// with constructor call unwrapping for robust generic inference.
+types::TypePtr LLVMIRGen::extract_generic_from_type(const parser::TypePtr& field_type,
+                                                    const std::string& generic_name,
+                                                    const types::TypePtr& arg_type) {
+    return extract_generic_from_nested_type(field_type, generic_name, arg_type);
+}
 
 // Helper: Parse a mangled type string back into a semantic type
 // e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
@@ -1174,7 +1281,51 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 if (class_def.has_value()) {
                     for (const auto& m : class_def->methods) {
                         if (m.sig.name == method_name && m.is_static) {
-                            return m.sig.return_type;
+                            auto ret = m.sig.return_type;
+                            // For generic classes (e.g., Heap[T]::new), substitute
+                            // type params with inferred arg types
+                            if (!class_def->type_params.empty() && ret &&
+                                ret->is<types::NamedType>()) {
+                                const auto& ret_named = ret->as<types::NamedType>();
+                                if (ret_named.name == type_name &&
+                                    ret_named.type_args.size() == class_def->type_params.size()) {
+                                    // Build substitution map from method params
+                                    std::map<std::string, types::TypePtr> subst;
+                                    for (size_t pi = 0;
+                                         pi < m.sig.params.size() && pi < call.args.size(); ++pi) {
+                                        auto param_type = m.sig.params[pi];
+                                        if (param_type && param_type->is<types::NamedType>()) {
+                                            const auto& pn = param_type->as<types::NamedType>();
+                                            // Check if param is a type param directly
+                                            for (const auto& tp : class_def->type_params) {
+                                                if (pn.name == tp && pn.type_args.empty()) {
+                                                    subst[tp] = infer_expr_type(*call.args[pi]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Apply substitution to return type args
+                                    if (!subst.empty()) {
+                                        std::vector<types::TypePtr> new_type_args;
+                                        for (const auto& ta : ret_named.type_args) {
+                                            if (ta && ta->is<types::NamedType>()) {
+                                                const auto& tan = ta->as<types::NamedType>();
+                                                auto sit = subst.find(tan.name);
+                                                if (sit != subst.end() && tan.type_args.empty()) {
+                                                    new_type_args.push_back(sit->second);
+                                                    continue;
+                                                }
+                                            }
+                                            new_type_args.push_back(ta);
+                                        }
+                                        auto result = std::make_shared<types::Type>();
+                                        result->kind = types::NamedType{type_name, "",
+                                                                        std::move(new_type_args)};
+                                        return result;
+                                    }
+                                }
+                            }
+                            return ret;
                         }
                     }
                 }
@@ -1194,6 +1345,91 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                         auto func_it = mod.functions.find(qualified_name);
                         if (func_it != mod.functions.end()) {
                             return func_it->second.return_type;
+                        }
+                    }
+                }
+
+                // Check if it's an enum variant constructor (e.g., Expr::Num(1))
+                // For generic enums, prefer the pending_generic_enums_ path which
+                // correctly infers type arguments. Only use the simple path for
+                // truly non-generic enums.
+                {
+                    bool is_generic_enum =
+                        pending_generic_enums_.find(type_name) != pending_generic_enums_.end();
+                    if (!is_generic_enum) {
+                        // Non-generic enums: look up in TypeEnv
+                        auto enum_def = env_.lookup_enum(type_name);
+                        if (enum_def.has_value()) {
+                            for (const auto& v : enum_def->variants) {
+                                if (v.first == method_name) {
+                                    auto result = std::make_shared<types::Type>();
+                                    result->kind = types::NamedType{type_name, "", {}};
+                                    return result;
+                                }
+                            }
+                        }
+                        // Also check all modules for enums
+                        if (env_.module_registry()) {
+                            const auto& all_modules = env_.module_registry()->get_all_modules();
+                            for (const auto& [mod_name, mod] : all_modules) {
+                                auto enum_it = mod.enums.find(type_name);
+                                if (enum_it != mod.enums.end()) {
+                                    for (const auto& v : enum_it->second.variants) {
+                                        if (v.first == method_name) {
+                                            auto result = std::make_shared<types::Type>();
+                                            result->kind = types::NamedType{type_name, "", {}};
+                                            return result;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Generic enums: check pending_generic_enums_
+                auto gen_enum_it = pending_generic_enums_.find(type_name);
+                if (gen_enum_it != pending_generic_enums_.end()) {
+                    const auto& gen_enum_decl = *gen_enum_it->second;
+                    for (const auto& variant : gen_enum_decl.variants) {
+                        if (variant.name == method_name) {
+                            // Infer type args from arguments
+                            std::vector<types::TypePtr> type_args;
+                            for (size_t g = 0; g < gen_enum_decl.generics.size(); ++g) {
+                                const std::string& generic_name = gen_enum_decl.generics[g].name;
+                                types::TypePtr inferred_type = nullptr;
+                                if (variant.tuple_fields.has_value()) {
+                                    for (size_t f = 0;
+                                         f < variant.tuple_fields->size() && f < call.args.size();
+                                         ++f) {
+                                        const auto& field_type = (*variant.tuple_fields)[f];
+                                        auto arg_inferred = infer_expr_type(*call.args[f]);
+                                        auto extracted = extract_generic_from_nested_type(
+                                            field_type, generic_name, arg_inferred);
+                                        if (extracted) {
+                                            inferred_type = extracted;
+                                            break;
+                                        }
+                                        // Fallback: unwrap constructor calls to match
+                                        // inner arguments against nested field type
+                                        auto infer_fn = [this](const parser::Expr& e) {
+                                            return infer_expr_type(e);
+                                        };
+                                        extracted = extract_generic_from_call_expr(
+                                            field_type, generic_name, *call.args[f], infer_fn);
+                                        if (extracted) {
+                                            inferred_type = extracted;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!inferred_type) {
+                                    inferred_type = types::make_unit();
+                                }
+                                type_args.push_back(inferred_type);
+                            }
+                            auto result = std::make_shared<types::Type>();
+                            result->kind = types::NamedType{type_name, "", std::move(type_args)};
+                            return result;
                         }
                     }
                 }
@@ -1222,15 +1458,22 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                      f < variant.tuple_fields->size() && f < call.args.size();
                                      ++f) {
                                     const auto& field_type = (*variant.tuple_fields)[f];
-                                    // Check if this field is the generic parameter
-                                    if (field_type->is<parser::NamedType>()) {
-                                        const auto& named = field_type->as<parser::NamedType>();
-                                        if (!named.path.segments.empty() &&
-                                            named.path.segments.back() == generic_name) {
-                                            // This field uses the generic - infer from argument
-                                            inferred_type = infer_expr_type(*call.args[f]);
-                                            break;
-                                        }
+                                    auto arg_inferred = infer_expr_type(*call.args[f]);
+                                    auto extracted = extract_generic_from_nested_type(
+                                        field_type, generic_name, arg_inferred);
+                                    if (extracted) {
+                                        inferred_type = extracted;
+                                        break;
+                                    }
+                                    // Fallback: unwrap constructor calls
+                                    auto infer_fn = [this](const parser::Expr& e) {
+                                        return infer_expr_type(e);
+                                    };
+                                    extracted = extract_generic_from_call_expr(
+                                        field_type, generic_name, *call.args[f], infer_fn);
+                                    if (extracted) {
+                                        inferred_type = extracted;
+                                        break;
                                     }
                                 }
                             }

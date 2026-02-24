@@ -1,0 +1,39 @@
+//! HTTP client, routing, and shared protocol types.
+//!
+//! Organized following cmmv-server architecture: shared types are separate
+//! from client/server logic so they can be reused by both.
+//!
+//! # Modules
+//!
+//! | Module | Description | Shared? |
+//! |--------|-------------|---------|
+//! | [`method`] | HTTP request methods (GET, POST, PUT, etc.) | Yes |
+//! | [`status`] | HTTP response status codes (full IANA registry) | Yes |
+//! | [`version`] | HTTP protocol versions (1.0, 1.1, 2, 3) | Yes |
+//! | [`headers`] | Case-insensitive header map | Yes |
+//! | [`error`] | HTTP error types (HttpError, HttpErrorKind) | Yes |
+//! | [`encoding`] | Content-Encoding compress/decompress dispatch | Yes |
+//! | [`cookie`] | Cookie parsing and serialization (RFC 6265) | Yes |
+//! | [`router`] | Radix tree router with parametric and wildcard support | Server |
+
+// ── Shared protocol types ───────────────────────────────────
+pub mod method
+pub mod status
+pub mod version
+pub mod headers
+pub mod error
+pub mod encoding
+pub mod cookie
+
+// ── Routing ─────────────────────────────────────────────────
+pub mod router
+
+// ── Re-exports ──────────────────────────────────────────────
+pub use std::http::method::Method
+pub use std::http::status::Status
+pub use std::http::version::HttpVersion
+pub use std::http::headers::Headers
+pub use std::http::error::{HttpError, HttpErrorKind}
+pub use std::http::cookie::Cookie
+pub use std::http::router::{Router, RouteMatch}
+pub use std::http::encoding::{compress, decompress, accepted_encodings}

@@ -404,6 +404,7 @@ func find_char_in(s: Str, target: I32) -> I64 {
 }
 
 /// Generate help text for the app.
+@allocates
 func generate_help(app: ref App) -> Str {
     var result: Str = ""
 

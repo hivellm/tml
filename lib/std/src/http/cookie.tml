@@ -1,0 +1,168 @@
+//! HTTP cookie parsing and serialization.
+//!
+//! Handles Set-Cookie header parsing, cookie serialization,
+//! and cookie attribute management per RFC 6265.
+
+use core::str
+
+/// A parsed HTTP cookie.
+pub type Cookie {
+    name: Str,
+    value: Str,
+    path: Str,
+    domain: Str,
+    max_age: I64,
+    http_only: Bool,
+    secure: Bool,
+    same_site: Str,
+}
+
+impl Cookie {
+    /// Creates a new cookie with name and value.
+    pub func new(name: Str, value: Str) -> Cookie {
+        Cookie {
+            name: name,
+            value: value,
+            path: "/",
+            domain: "",
+            max_age: -1 as I64,
+            http_only: false,
+            secure: false,
+            same_site: "",
+        }
+    }
+
+    pub func with_path(this, path: Str) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: path,
+            domain: this.domain,
+            max_age: this.max_age,
+            http_only: this.http_only,
+            secure: this.secure,
+            same_site: this.same_site,
+        }
+    }
+
+    pub func with_domain(this, domain: Str) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: this.path,
+            domain: domain,
+            max_age: this.max_age,
+            http_only: this.http_only,
+            secure: this.secure,
+            same_site: this.same_site,
+        }
+    }
+
+    pub func with_max_age(this, seconds: I64) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: this.path,
+            domain: this.domain,
+            max_age: seconds,
+            http_only: this.http_only,
+            secure: this.secure,
+            same_site: this.same_site,
+        }
+    }
+
+    pub func with_http_only(this) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: this.path,
+            domain: this.domain,
+            max_age: this.max_age,
+            http_only: true,
+            secure: this.secure,
+            same_site: this.same_site,
+        }
+    }
+
+    pub func with_secure(this) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: this.path,
+            domain: this.domain,
+            max_age: this.max_age,
+            http_only: this.http_only,
+            secure: true,
+            same_site: this.same_site,
+        }
+    }
+
+    pub func with_same_site(this, policy: Str) -> Cookie {
+        Cookie {
+            name: this.name,
+            value: this.value,
+            path: this.path,
+            domain: this.domain,
+            max_age: this.max_age,
+            http_only: this.http_only,
+            secure: this.secure,
+            same_site: policy,
+        }
+    }
+
+    /// Serializes to Set-Cookie header value.
+    pub func to_set_cookie(this) -> Str {
+        var result: Str = "{this.name}={this.value}"
+        if str::len(this.path) > 0 {
+            result = "{result}; Path={this.path}"
+        }
+        if str::len(this.domain) > 0 {
+            result = "{result}; Domain={this.domain}"
+        }
+        if this.max_age >= 0 {
+            result = "{result}; Max-Age={this.max_age}"
+        }
+        if this.http_only {
+            result = "{result}; HttpOnly"
+        }
+        if this.secure {
+            result = "{result}; Secure"
+        }
+        if str::len(this.same_site) > 0 {
+            result = "{result}; SameSite={this.same_site}"
+        }
+        return result
+    }
+}
+
+/// Parses a Cookie request header ("key=value; key2=value2") into a list of pairs.
+/// Returns the value for a given cookie name, or "" if not found.
+pub func parse_cookie(header: Str, name: Str) -> Str {
+    // Simple parser: split by "; " then split by "="
+    var pos: I64 = 0
+    let hlen: I64 = str::len(header)
+    loop (pos < hlen) {
+        // Skip whitespace
+        loop (pos < hlen and str::char_at(header, pos) == 32) {
+            pos = pos + 1
+        }
+        // Find '='
+        var eq_pos: I64 = pos
+        loop (eq_pos < hlen and str::char_at(header, eq_pos) != 61) {
+            eq_pos = eq_pos + 1
+        }
+        if eq_pos >= hlen { return "" }
+        let key: Str = str::substring(header, pos, eq_pos)
+        // Find ';' or end
+        var end_pos: I64 = eq_pos + 1
+        loop (end_pos < hlen and str::char_at(header, end_pos) != 59) {
+            end_pos = end_pos + 1
+        }
+        let val: Str = str::substring(header, eq_pos + 1, end_pos)
+        if key == name {
+            return val
+        }
+        pos = end_pos + 1
+    }
+    return ""
+}

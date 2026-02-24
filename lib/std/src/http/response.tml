@@ -1,0 +1,176 @@
+//! HTTP response parser.
+//!
+//! Parses HTTP/1.1 responses from raw wire format into structured
+//! status, headers, and body components.
+
+use core::str
+use std::http::status::Status
+use std::http::headers::Headers
+use std::http::version::HttpVersion
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// An HTTP response.
+pub type Response {
+    status_code: Status,
+    headers: Headers,
+    body_data: Str,
+    http_version: HttpVersion,
+}
+
+impl Response {
+    /// Creates a response manually (for testing or server-side construction).
+    pub func new(status: Status, headers: Headers, body: Str) -> Response {
+        Response {
+            status_code: status,
+            headers: headers,
+            body_data: body,
+            http_version: HttpVersion::HTTP_1_1,
+        }
+    }
+
+    /// Returns the response status.
+    pub func status(this) -> Status {
+        this.status_code
+    }
+
+    /// Returns the response headers.
+    pub func headers(this) -> ref Headers {
+        return ref this.headers
+    }
+
+    /// Returns the response body as a string.
+    pub func text(this) -> Str {
+        return this.body_data
+    }
+
+    /// Returns the HTTP version.
+    pub func version(this) -> HttpVersion {
+        this.http_version
+    }
+
+    /// Returns the Content-Length, or -1 if not set.
+    pub func content_length(this) -> I64 {
+        return this.headers.content_length()
+    }
+
+    /// Returns the Content-Type, or "".
+    pub func content_type(this) -> Str {
+        return this.headers.content_type()
+    }
+
+    /// True if 2xx status.
+    pub func is_ok(this) -> Bool {
+        return this.status_code.is_success()
+    }
+
+    /// True if redirect (3xx).
+    pub func is_redirect(this) -> Bool {
+        return this.status_code.is_redirect()
+    }
+
+    /// True if client error (4xx).
+    pub func is_client_error(this) -> Bool {
+        return this.status_code.is_client_error()
+    }
+
+    /// True if server error (5xx).
+    pub func is_server_error(this) -> Bool {
+        return this.status_code.is_server_error()
+    }
+
+    /// Parses an HTTP/1.1 response from raw wire format.
+    ///
+    /// Expects: "HTTP/1.1 200 OK\r\nHeader: Value\r\n\r\nbody"
+    pub func parse(raw: Str) -> Outcome[Response, HttpError] {
+        let raw_len: I64 = str::len(raw)
+        if raw_len < 12 {
+            return Err(HttpError::invalid_response("response too short"))
+        }
+
+        // Find end of status line (\r\n)
+        var line_end: I64 = 0
+        loop (line_end < raw_len - 1) {
+            if str::char_at(raw, line_end) == 13 and str::char_at(raw, line_end + 1) == 10 {
+                break
+            }
+            line_end = line_end + 1
+        }
+        if line_end >= raw_len - 1 {
+            return Err(HttpError::invalid_response("no status line terminator"))
+        }
+
+        let status_line: Str = str::substring(raw, 0, line_end)
+
+        // Parse version (first space)
+        var sp1: I64 = 0
+        loop (sp1 < line_end and str::char_at(raw, sp1) != 32) {
+            sp1 = sp1 + 1
+        }
+        let version_str: Str = str::substring(raw, 0, sp1)
+        let version: HttpVersion = HttpVersion::from_string(version_str)
+
+        // Parse status code (between first and second space)
+        var sp2: I64 = sp1 + 1
+        loop (sp2 < line_end and str::char_at(raw, sp2) != 32) {
+            sp2 = sp2 + 1
+        }
+        let code_str: Str = str::substring(raw, sp1 + 1, sp2)
+        let parsed_code: Maybe[I64] = str::parse_i64(code_str)
+        var code_val: I32 = 0
+        when parsed_code {
+            Just(n) => code_val = n as I32,
+            Nothing => return Err(HttpError::invalid_response("invalid status code")),
+        }
+        let status: Status = Status::new(code_val)
+
+        // Parse headers
+        let headers: Headers = Headers::new()
+        var pos: I64 = line_end + 2  // skip \r\n
+        loop (pos < raw_len - 1) {
+            // Check for empty line (end of headers)
+            if str::char_at(raw, pos) == 13 and str::char_at(raw, pos + 1) == 10 {
+                pos = pos + 2
+                break
+            }
+            // Find end of this header line
+            var hline_end: I64 = pos
+            loop (hline_end < raw_len - 1) {
+                if str::char_at(raw, hline_end) == 13 and str::char_at(raw, hline_end + 1) == 10 {
+                    break
+                }
+                hline_end = hline_end + 1
+            }
+            // Find colon
+            var colon: I64 = pos
+            loop (colon < hline_end and str::char_at(raw, colon) != 58) {
+                colon = colon + 1
+            }
+            if colon < hline_end {
+                let key: Str = str::substring(raw, pos, colon)
+                // Skip ": " after colon
+                var val_start: I64 = colon + 1
+                loop (val_start < hline_end and str::char_at(raw, val_start) == 32) {
+                    val_start = val_start + 1
+                }
+                let val: Str = str::substring(raw, val_start, hline_end)
+                headers.set(key, val)
+            }
+            pos = hline_end + 2  // skip \r\n
+        }
+
+        // Body is everything after headers
+        let body: Str = str::substring(raw, pos, raw_len)
+
+        return Ok(Response {
+            status_code: status,
+            headers: headers,
+            body_data: body,
+            http_version: version,
+        })
+    }
+
+    /// Frees internal storage.
+    pub func destroy(this) {
+        this.headers.destroy()
+    }
+}

@@ -1,0 +1,67 @@
+// Tests for std::http::headers
+use test::{assert, assert_eq}
+use std::http::headers::Headers
+
+@test
+func test_headers_set_get() -> I32 {
+    let h = Headers::new()
+    h.set("Content-Type", "application/json")
+    assert_eq(h.get("Content-Type"), "application/json", "exact case")
+    assert_eq(h.get("content-type"), "application/json", "lowercase")
+    assert_eq(h.get("CONTENT-TYPE"), "application/json", "uppercase")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_has_remove() -> I32 {
+    let h = Headers::new()
+    h.set("Accept", "text/html")
+    assert(h.has("accept"), "has accept")
+    assert(not h.has("x-custom"), "no x-custom")
+    h.remove("ACCEPT")
+    assert(not h.has("accept"), "removed")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_content_length() -> I32 {
+    let h = Headers::new()
+    assert_eq(h.content_length(), -1 as I64, "no content-length")
+    h.set("Content-Length", "42")
+    assert_eq(h.content_length(), 42 as I64, "parsed 42")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_content_type() -> I32 {
+    let h = Headers::new()
+    assert_eq(h.content_type(), "", "empty")
+    h.set("Content-Type", "text/plain")
+    assert_eq(h.content_type(), "text/plain", "text/plain")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_chunked() -> I32 {
+    let h = Headers::new()
+    assert(not h.is_chunked(), "not chunked by default")
+    h.set("Transfer-Encoding", "chunked")
+    assert(h.is_chunked(), "chunked")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_overwrite() -> I32 {
+    let h = Headers::new()
+    h.set("X-Custom", "first")
+    h.set("X-Custom", "second")
+    assert_eq(h.get("x-custom"), "second", "overwritten")
+    assert_eq(h.len(), 1 as I64, "still one entry")
+    h.destroy()
+    return 0
+}

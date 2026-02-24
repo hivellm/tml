@@ -366,6 +366,7 @@ impl Binary for U8 {
 
 /// Binary format for `U16`.
 impl Binary for U16 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + u16_to_binary_str(this)
     }
@@ -373,6 +374,7 @@ impl Binary for U16 {
 
 /// Binary format for `U32`.
 impl Binary for U32 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + u32_to_binary_str(this)
     }
@@ -380,6 +382,7 @@ impl Binary for U32 {
 
 /// Binary format for `U64`.
 impl Binary for U64 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + u64_to_binary_str(this)
     }
@@ -387,6 +390,7 @@ impl Binary for U64 {
 
 /// Binary format for `I8`.
 impl Binary for I8 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + i8_to_binary_str(this)
     }
@@ -394,6 +398,7 @@ impl Binary for I8 {
 
 /// Binary format for `I16`.
 impl Binary for I16 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + i16_to_binary_str(this)
     }
@@ -401,6 +406,7 @@ impl Binary for I16 {
 
 /// Binary format for `I32`.
 impl Binary for I32 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + i32_to_binary_str(this)
     }
@@ -408,6 +414,7 @@ impl Binary for I32 {
 
 /// Binary format for `I64`.
 impl Binary for I64 {
+    @allocates
     pub func fmt_binary(this) -> Str {
         return "0b" + i64_to_binary_str(this)
     }
@@ -427,6 +434,7 @@ impl Octal for U8 {
 
 /// Octal format for `U16`.
 impl Octal for U16 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
@@ -434,6 +442,7 @@ impl Octal for U16 {
 
 /// Octal format for `U32`.
 impl Octal for U32 {
+    @allocates
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }

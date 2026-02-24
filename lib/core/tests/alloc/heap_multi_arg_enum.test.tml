@@ -1,0 +1,65 @@
+use test
+use core::alloc::heap::Heap
+
+// Enum with 2-arg variant
+enum Pair {
+    Empty,
+    Two(I32, I32),
+}
+
+@test
+func test_pair_construct() -> I32 {
+    let p = Pair::Two(10, 20)
+    return 0
+}
+
+@test
+func test_pair_extract() -> I32 {
+    let p = Pair::Two(10, 20)
+    when p {
+        Two(a, b) => {
+            assert_eq(a, 10)
+            assert_eq(b, 20)
+        },
+        Empty => { return 1 },
+    }
+    return 0
+}
+
+@test
+func test_pair_sum() -> I32 {
+    let p = Pair::Two(3, 7)
+    let result = when p {
+        Two(a, b) => a + b,
+        Empty => 0,
+    }
+    assert_eq(result, 10)
+    return 0
+}
+
+// AST-like binary expression: the key use case for self-hosting
+enum Expr {
+    Num(I32),
+    Neg(Heap[Expr]),
+    Add(Heap[Expr], Heap[Expr]),
+}
+
+@test
+func test_add_construct() -> I32 {
+    // 1 + 2
+    let e = Expr::Add(
+        Heap::new(Expr::Num(1)),
+        Heap::new(Expr::Num(2)))
+    return 0
+}
+
+@test
+func test_add_nested() -> I32 {
+    // (1 + 2) + 3
+    let e = Expr::Add(
+        Heap::new(Expr::Add(
+            Heap::new(Expr::Num(1)),
+            Heap::new(Expr::Num(2)))),
+        Heap::new(Expr::Num(3)))
+    return 0
+}

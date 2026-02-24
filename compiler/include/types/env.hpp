@@ -735,6 +735,11 @@ private:
     /// Internal resolve helper with cycle detection.
     [[nodiscard]] auto resolve_impl(TypePtr type, std::unordered_set<uint64_t>& visited) -> TypePtr;
 
+    // Cycle detection for recursive type queries
+    mutable std::unordered_set<std::string> type_needs_drop_visiting_; ///< Prevents infinite
+                                                                       ///< recursion in
+                                                                       ///< type_needs_drop.
+
     // Type definition tables
     std::unordered_map<std::string, StructDef> structs_;     ///< Registered structs.
     std::unordered_map<std::string, EnumDef> enums_;         ///< Registered enums.

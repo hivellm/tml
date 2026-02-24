@@ -631,6 +631,22 @@ bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_n
 }
 
 bool TypeEnv::type_needs_drop(const std::string& type_name) const {
+    // Cycle detection: if we're already checking this type, assume it doesn't
+    // need drop for this cycle path. The wrapping type (Heap, Shared, etc.)
+    // handles the actual drop via its own Drop impl.
+    if (type_needs_drop_visiting_.count(type_name) > 0) {
+        return false;
+    }
+    type_needs_drop_visiting_.insert(type_name);
+    // RAII-style cleanup on all exit paths
+    struct VisitGuard {
+        std::unordered_set<std::string>& set;
+        const std::string& name;
+        ~VisitGuard() {
+            set.erase(name);
+        }
+    } guard{type_needs_drop_visiting_, type_name};
+
     // Check if type explicitly implements Drop
     if (type_implements(type_name, "Drop")) {
         return true;

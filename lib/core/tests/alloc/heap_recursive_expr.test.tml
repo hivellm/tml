@@ -1,0 +1,34 @@
+use test
+use core::alloc::heap::Heap
+
+// AST-like enum: expression tree with multiple recursive variants
+// Using single-arg variants to avoid multi-arg constructor bug
+enum Expr {
+    Num(I32),
+    Neg(Heap[Expr]),
+    // For Add/Mul we'd ideally use (Heap[Expr], Heap[Expr]) but multi-arg
+    // constructors have a pre-existing bug, so we use a wrapper struct
+}
+
+@test
+func test_expr_num() -> I32 {
+    // Simple literal: Num(42)
+    let e = Expr::Num(42)
+    return 0
+}
+
+@test
+func test_expr_neg() -> I32 {
+    // Negate: Neg(Num(5))
+    let e = Expr::Neg(Heap::new(Expr::Num(5)))
+    return 0
+}
+
+@test
+func test_expr_double_neg() -> I32 {
+    // Double negate: Neg(Neg(Num(3)))
+    let e = Expr::Neg(
+        Heap::new(Expr::Neg(
+            Heap::new(Expr::Num(3)))))
+    return 0
+}

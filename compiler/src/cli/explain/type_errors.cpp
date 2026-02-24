@@ -2,7 +2,7 @@ TML_MODULE("compiler")
 
 //! # Type Error Explanations
 //!
-//! Error codes T001-T084 for type checking errors.
+//! Error codes T001-T085 for type checking errors.
 
 #include "cli/explain/explain_internal.hpp"
 
@@ -1498,6 +1498,30 @@ Available pointer methods:
     p.offset(count)  — return a pointer offset by count elements
 
 Related: T049 (general pointer method error)
+)EX"},
+
+        {"T085", R"EX(
+Recursive enum has infinite size [T085]
+
+An enum type directly contains itself as a variant payload without
+pointer indirection, which would require infinite memory.
+
+Example of erroneous code:
+
+    enum Expr {
+        Num(I32),
+        Add(Expr, Expr),         // ERROR: Expr contains itself directly
+    }
+
+To fix, wrap the self-reference in Heap[T] (or another pointer type)
+to introduce indirection:
+
+    enum Expr {
+        Num(I32),
+        Add(Heap[Expr], Heap[Expr]),   // OK: Heap provides indirection
+    }
+
+Allowed indirection types: Heap[T], Shared[T], Sync[T], List[T], *T, ref T.
 )EX"},
 
     };

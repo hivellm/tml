@@ -1,0 +1,95 @@
+// Tests for std::http::router — parametric routes
+use test::{assert, assert_eq}
+use std::http::router::{Router, RouteMatch}
+
+@test
+func test_single_param() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/:id", 1)
+    let m = router.find("GET", "/users/42")
+    assert(m.found, "should find /users/42")
+    assert_eq(m.handler_id, 1, "handler_id should be 1")
+    assert_eq(m.param_count(), 1 as I64, "should have 1 param")
+    assert_eq(m.get_param("id"), "42", "id should be 42")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_two_params() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/:id/posts/:post_id", 1)
+    let m = router.find("GET", "/users/7/posts/99")
+    assert(m.found, "should find route")
+    assert_eq(m.handler_id, 1, "handler_id should be 1")
+    assert_eq(m.param_count(), 2 as I64, "should have 2 params")
+    assert_eq(m.get_param("id"), "7", "id should be 7")
+    assert_eq(m.get_param("post_id"), "99", "post_id should be 99")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_param_not_found() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/:id", 1)
+    let m = router.find("GET", "/users/42/extra")
+    assert(not m.found, "should not find /users/42/extra")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_static_over_param() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/:id", 1)
+    router.on("GET", "/users/me", 2)
+    let m1 = router.find("GET", "/users/me")
+    assert(m1.found, "should find /users/me")
+    assert_eq(m1.handler_id, 2, "static handler should win")
+    let m2 = router.find("GET", "/users/42")
+    assert(m2.found, "should find /users/42")
+    assert_eq(m2.handler_id, 1, "param handler")
+    assert_eq(m2.get_param("id"), "42", "id param")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_param_with_static_suffix() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/:id/profile", 1)
+    router.on("GET", "/users/:id/settings", 2)
+    let m1 = router.find("GET", "/users/42/profile")
+    assert(m1.found, "should find profile")
+    assert_eq(m1.handler_id, 1, "profile handler")
+    assert_eq(m1.get_param("id"), "42", "id for profile")
+    let m2 = router.find("GET", "/users/7/settings")
+    assert(m2.found, "should find settings")
+    assert_eq(m2.handler_id, 2, "settings handler")
+    assert_eq(m2.get_param("id"), "7", "id for settings")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_mixed_static_and_param() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/api/health", 1)
+    router.on("GET", "/api/:resource", 2)
+    router.on("GET", "/api/:resource/:id", 3)
+    let m1 = router.find("GET", "/api/health")
+    assert(m1.found, "should find health")
+    assert_eq(m1.handler_id, 1, "health is static")
+    let m2 = router.find("GET", "/api/users")
+    assert(m2.found, "should find users")
+    assert_eq(m2.handler_id, 2, "resource handler")
+    assert_eq(m2.get_param("resource"), "users", "resource param")
+    let m3 = router.find("GET", "/api/users/5")
+    assert(m3.found, "should find users/5")
+    assert_eq(m3.handler_id, 3, "resource/id handler")
+    assert_eq(m3.get_param("resource"), "users", "resource param2")
+    assert_eq(m3.get_param("id"), "5", "id param")
+    router.destroy()
+    return 0
+}

@@ -1,0 +1,240 @@
+// HashMap scale tests: 10K+ entries for insert, get, iterate, remove
+// Validates HashMap handles large-scale data for self-hosting compiler symbol tables
+use test
+use test::{assert, assert_eq}
+use std::collections::{HashMap, HashMapIter}
+
+@test
+func test_hashmap_10k_insert_get() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    // Insert 10,000 entries
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i * 7)
+        i = i + 1
+    }
+
+    assert_eq(map.len(), 10000 as I64, "len after 10K inserts")
+
+    // Verify specific entries
+    assert_eq(map.get(0 as I64), 0 as I64, "get key 0")
+    assert_eq(map.get(5000 as I64), 35000 as I64, "get key 5000")
+    assert_eq(map.get(9999 as I64), 69993 as I64, "get key 9999")
+
+    // Verify has
+    assert(map.has(0 as I64), "has key 0")
+    assert(map.has(9999 as I64), "has key 9999")
+    assert(not map.has(10000 as I64), "does not have key 10000")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_10k_iterate() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    // Insert 10,000 entries: key=i, value=i
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i)
+        i = i + 1
+    }
+
+    // Iterate and count + sum values
+    var count: I64 = 0
+    var sum: I64 = 0
+    let iter: HashMapIter[I64, I64] = map.iter()
+    loop (iter.has_next()) {
+        let v: I64 = iter.value()
+        sum = sum + v
+        count = count + 1
+        iter.next()
+    }
+    iter.destroy()
+
+    assert_eq(count, 10000 as I64, "iterate count should be 10000")
+    // sum of 0..9999 = 9999 * 10000 / 2 = 49995000
+    assert_eq(sum, 49995000 as I64, "iterate sum should be 49995000")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_10k_remove_half() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    // Insert 10,000 entries
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i * 3)
+        i = i + 1
+    }
+    assert_eq(map.len(), 10000 as I64, "len before remove")
+
+    // Remove all even keys (5000 removals)
+    i = 0
+    loop (i < 10000) {
+        map.remove(i)
+        i = i + 2
+    }
+    assert_eq(map.len(), 5000 as I64, "len after removing even keys")
+
+    // Verify even keys gone, odd keys present
+    assert(not map.has(0 as I64), "even key 0 should be gone")
+    assert(not map.has(100 as I64), "even key 100 should be gone")
+    assert(not map.has(9998 as I64), "even key 9998 should be gone")
+
+    assert(map.has(1 as I64), "odd key 1 should exist")
+    assert_eq(map.get(1 as I64), 3 as I64, "odd key 1 value")
+    assert(map.has(9999 as I64), "odd key 9999 should exist")
+    assert_eq(map.get(9999 as I64), 29997 as I64, "odd key 9999 value")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_10k_reinsert_after_remove() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    // Insert 10,000 entries
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i)
+        i = i + 1
+    }
+
+    // Remove first 5000
+    i = 0
+    loop (i < 5000) {
+        map.remove(i)
+        i = i + 1
+    }
+    assert_eq(map.len(), 5000 as I64, "len after removing first 5000")
+
+    // Reinsert with new values
+    i = 0
+    loop (i < 5000) {
+        map.set(i, i + 100000)
+        i = i + 1
+    }
+    assert_eq(map.len(), 10000 as I64, "len after reinsert")
+
+    // Verify reinserted values
+    assert_eq(map.get(0 as I64), 100000 as I64, "reinserted key 0")
+    assert_eq(map.get(4999 as I64), 104999 as I64, "reinserted key 4999")
+
+    // Verify original values still intact
+    assert_eq(map.get(5000 as I64), 5000 as I64, "original key 5000")
+    assert_eq(map.get(9999 as I64), 9999 as I64, "original key 9999")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_str_keys_moderate() -> I32 {
+    let map: HashMap[Str, I32] = HashMap[Str, I32].new(16)
+
+    // Insert 30 string-keyed entries (NATO phonetic alphabet + extras)
+    map.set("alpha", 1)
+    map.set("bravo", 2)
+    map.set("charlie", 3)
+    map.set("delta", 4)
+    map.set("echo", 5)
+    map.set("foxtrot", 6)
+    map.set("golf", 7)
+    map.set("hotel", 8)
+    map.set("india", 9)
+    map.set("juliet", 10)
+    map.set("kilo", 11)
+    map.set("lima", 12)
+    map.set("mike", 13)
+    map.set("november", 14)
+    map.set("oscar", 15)
+    map.set("papa", 16)
+    map.set("quebec", 17)
+    map.set("romeo", 18)
+    map.set("sierra", 19)
+    map.set("tango", 20)
+    map.set("uniform", 21)
+    map.set("victor", 22)
+    map.set("whiskey", 23)
+    map.set("xray", 24)
+    map.set("yankee", 25)
+    map.set("zulu", 26)
+    map.set("one", 27)
+    map.set("two", 28)
+    map.set("three", 29)
+    map.set("four", 30)
+
+    assert_eq(map.len(), 30 as I64, "len after 30 str inserts")
+
+    // Verify gets
+    assert_eq(map.get("alpha"), 1, "get alpha")
+    assert_eq(map.get("mike"), 13, "get mike")
+    assert_eq(map.get("zulu"), 26, "get zulu")
+    assert_eq(map.get("four"), 30, "get four")
+
+    // Verify has
+    assert(map.has("echo"), "has echo")
+    assert(not map.has("missing"), "does not have missing")
+
+    // Remove a subset
+    map.remove("alpha")
+    map.remove("mike")
+    map.remove("zulu")
+    assert_eq(map.len(), 27 as I64, "len after 3 removes")
+    assert(not map.has("alpha"), "alpha removed")
+    assert(not map.has("mike"), "mike removed")
+    assert(map.has("bravo"), "bravo still present")
+    assert_eq(map.get("bravo"), 2, "bravo value intact")
+
+    // Iterate and count
+    var count: I32 = 0
+    let iter: HashMapIter[Str, I32] = map.iter()
+    loop (iter.has_next()) {
+        count = count + 1
+        iter.next()
+    }
+    iter.destroy()
+    assert_eq(count, 27, "iterate count after removes")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_clear_and_refill() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    // Fill with 10,000 entries
+    var i: I64 = 0
+    loop (i < 10000) {
+        map.set(i, i)
+        i = i + 1
+    }
+    assert_eq(map.len(), 10000 as I64, "len before clear")
+
+    // Clear
+    map.clear()
+    assert_eq(map.len(), 0 as I64, "len after clear")
+    assert(not map.has(0 as I64), "key 0 gone after clear")
+    assert(not map.has(9999 as I64), "key 9999 gone after clear")
+
+    // Refill with 10,000 entries (new values)
+    i = 0
+    loop (i < 10000) {
+        map.set(i, i + 50000)
+        i = i + 1
+    }
+    assert_eq(map.len(), 10000 as I64, "len after refill")
+    assert_eq(map.get(0 as I64), 50000 as I64, "refilled key 0")
+    assert_eq(map.get(9999 as I64), 59999 as I64, "refilled key 9999")
+
+    map.destroy()
+    return 0
+}

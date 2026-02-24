@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Recursive Enum Support** (2026-02-24) — Enums can now contain variants with `Heap[Self]` for tree/AST data structures
+  - Cycle detection in `type_needs_drop` prevents stack overflow on recursive types (`env_lookups.cpp`)
+  - Infinite-size detection (error T085) rejects `enum Bad { Loop(Bad) }` with suggestion to wrap in `Heap[T]` (`decl_struct.cpp`)
+  - `calc_type_size` self-reference guard in enum layout computation (`enum.cpp`)
+  - Enum drop-glue generation: switch on discriminant, drop only active variant's fields (`drop.cpp`, +430 lines)
+  - `Heap[T]::drop` now drops inner value before freeing memory — prevents leaks in nested `Heap` pointers
+  - Multi-arg enum variant constructors: `Cons(I32, Heap[IntList])` stores all fields as tuple payload (`call.cpp`, +386 lines)
+  - Multi-ident `when` pattern extraction: `Cons(val, rest)` correctly GEPs each field from payload (`when.cpp`)
+  - When pattern double-free fix: pattern-bound variables from enum variants are GEP aliases — skip independent drop when enum has drop glue
+  - Generic parameter inference from nested constructor calls: `Heap::new(Tree::Leaf(10))` resolves `T=I32` (`infer.cpp`, +286 lines)
+  - 7 new test files: `heap_cons_minimal`, `heap_drop_check`, `heap_multi_arg_enum`, `heap_recursive_enum`, `heap_recursive_enum_drop`, `heap_recursive_expr`, `heap_recursive_tree`
+
+- **HashMap Scale Tests** (2026-02-24) — Validates HashMap with 10K+ entries for self-hosting compiler readiness (task 0.1.2)
+  - `hashmap_scale.test.tml`: 6 tests covering 10K insert/get, 10K iterate (sum=49,995,000), 10K remove half, reinsert after remove, Str keys (30 NATO alphabet entries), clear and refill
+  - Proves resize/probe/tombstone handling at scale — std/collections suite: 304/304 pass
+
+- **HTTP Module** (2026-02-24) — `std::http` with router, request/response, headers, cookies, encoding, multipart
+  - 13 source files: `router.tml` (radix tree), `request.tml`, `response.tml`, `headers.tml`, `cookie.tml`, `encoding.tml`, `multipart.tml`, `method.tml`, `status.tml`, `version.tml`, `error.tml`, `connection.tml`, `mod.tml`
+  - 11 test files covering router (basic, params, wildcard, mixed), headers, cookies, method, status, version, request, error
+
+- **String Concat Memory Leak Fix** (2026-02-24) — Free heap-allocated Str temporaries after concatenation
+  - Multi-part string interpolation: free consumed operands after `memcpy` into result (`binary.cpp`)
+  - Binary `+` concat: free `is_heap_str_producer` operands after `str_concat_opt` (`binary_ops.cpp`)
+  - Removes freed registers from `pending_str_temps_` to prevent double-free at statement end
+
 - **Async Runtime** (2026-02-23) — Real executor, timer, yield, and channel for cooperative multitasking
   - `compiler/runtime/concurrency/async.c` (710 lines) — C runtime with executor loop, waker mechanism, task queue, timer (GetTickCount64/clock_gettime), yield_now, bounded SPSC channel, poll utilities
   - `lib/std/src/runtime/` — TML wrapper module: `Executor`, `TimerState`/`PollResult`, `YieldState`, `Channel`
@@ -46,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New skills: `/test-suite`, `/list-suites`, `/verify`
 
 ### Fixed
+- **Missing `@allocates` annotations** (2026-02-24) — Added `@allocates` to 9 Binary/Octal fmt impls (U16, U32, U64, I8, I16, I32, I64 Binary + U16, U32 Octal), `cli.tml::generate_help()`, and `uuid.tml::to_string()` — prevents leak warnings in callers
+
 - **Drop double-free crashes in crypto test suite** (2026-02-23) — Removed manual `destroy()` calls from tests where types now have Drop impls (auto-cleanup at scope exit). Fixed 4 test files: `cipher_aes.test` (10 tests), `sign.test` (34 tests), `x509.test` (40 tests), `dh.test` (9 tests). Root cause: manual destroy + auto-Drop = double-free → HEAP_CORRUPTION or ACCESS_VIOLATION.
 
 - **DH/DHX key type mismatch in `compute_secret`** (2026-02-23) — `crypto_dh.c` `compute_secret()` always built peer key as "DH" type, but named groups (ffdhe*, modp14+) create "DHX" keys via `EVP_PKEY_CTX_new_from_name`. Type mismatch caused `EVP_PKEY_derive_set_peer` to fail → returned Err → `.unwrap()` panicked → crash during panic cleanup. Fix: detect local key type with `EVP_PKEY_get0_type_name()` and use matching type for peer key.

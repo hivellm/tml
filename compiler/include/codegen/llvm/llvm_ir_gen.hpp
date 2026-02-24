@@ -491,6 +491,7 @@ public:
         std::string llvm_type;          ///< LLVM type (e.g., "%struct.DroppableResource").
         bool is_heap_str = false;       ///< True if this is a heap-allocated Str needing free().
         bool needs_field_drops = false; ///< True if type needs recursive field-level drops.
+        bool needs_enum_drop = false;   ///< True if this is an enum with droppable variant fields.
     };
 
 private:
@@ -524,6 +525,10 @@ private:
     void emit_all_drops();   // Emit drops for all scopes (for return)
     void emit_drop_call(const DropInfo& info);
     void emit_field_level_drops(const DropInfo& info);
+    void emit_enum_variant_drops(const DropInfo& info);
+    void ensure_enum_drop_function(const std::string& enum_type_name);
+    std::stringstream enum_drop_output_;
+    std::unordered_set<std::string> generated_enum_drop_functions_;
 
     // Temporary value drop tracking
     // Tracks droppable values from function/method returns that aren't bound to variables.
@@ -1669,6 +1674,12 @@ private:
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;
     // Continuation of infer_expr_type for method calls, tuples, arrays, index, cast
     auto infer_expr_type_continued(const parser::Expr& expr) -> types::TypePtr;
+    // Extract a generic parameter from a parser field type by matching against
+    // an inferred types::Type. Walks into nested generic args recursively.
+    // Also tries unwrapping constructor calls when direct matching fails.
+    auto extract_generic_from_type(const parser::TypePtr& field_type,
+                                   const std::string& generic_name, const types::TypePtr& arg_type)
+        -> types::TypePtr;
 
     // Deref coercion helpers - for auto-deref on field access
     // Returns the Deref target type for smart pointers like Arc[T], Box[T], etc.

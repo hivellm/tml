@@ -1088,6 +1088,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                           total_len_reg);
                 emit_line("  store i8 0, ptr " + end_ptr);
 
+                // Free runtime string operands that were heap-allocated.
+                // Their content has been memcpy'd into result_ptr, so originals
+                // are no longer needed. Remove from pending_str_temps_ to avoid
+                // double-free at statement end.
+                for (size_t i = 0; i < infos.size(); ++i) {
+                    if (!infos[i].is_literal && is_heap_str_producer(*strings[i])) {
+                        emit_line("  call void @tml_str_free(ptr " + infos[i].value + ")");
+                        auto it = std::find(pending_str_temps_.begin(), pending_str_temps_.end(),
+                                            infos[i].value);
+                        if (it != pending_str_temps_.end())
+                            pending_str_temps_.erase(it);
+                    }
+                }
+
                 last_expr_type_ = "ptr";
                 return result_ptr;
             }

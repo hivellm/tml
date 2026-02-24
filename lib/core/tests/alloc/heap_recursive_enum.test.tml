@@ -1,0 +1,42 @@
+use test
+use core::alloc::heap::Heap
+
+// A simple recursive enum: a linked list of integers
+enum IntList {
+    Cons(I32, Heap[IntList]),
+    Nil,
+}
+
+@test
+func test_recursive_enum_nil() -> I32 {
+    let list = IntList::Nil
+    when list {
+        Nil => assert(true, "is Nil"),
+        Cons(_, _) => assert(false, "should be Nil"),
+    }
+    return 0
+}
+
+@test
+func test_recursive_enum_single() -> I32 {
+    let list = IntList::Cons(42, Heap::new(IntList::Nil))
+    when list {
+        Cons(val, _) => {
+            assert_eq(val, 42, "value should be 42")
+        },
+        Nil => assert(false, "should not be Nil"),
+    }
+    return 0
+}
+
+@test
+func test_recursive_enum_two_elements() -> I32 {
+    let list = IntList::Cons(1, Heap::new(IntList::Cons(2, Heap::new(IntList::Nil))))
+    when list {
+        Cons(first, rest) => {
+            assert_eq(first, 1, "first should be 1")
+        },
+        Nil => assert(false, "should not be Nil"),
+    }
+    return 0
+}

@@ -1,0 +1,49 @@
+//! HTTP protocol versions.
+//!
+//! Defines the HTTP version used for requests and responses.
+
+/// An HTTP protocol version.
+pub type HttpVersion {
+    /// HTTP/1.0
+    HTTP_1_0,
+    /// HTTP/1.1
+    HTTP_1_1,
+    /// HTTP/2
+    HTTP_2,
+    /// HTTP/3
+    HTTP_3,
+}
+
+impl HttpVersion {
+    /// Returns the version string for the request line (e.g. "HTTP/1.1").
+    pub func to_string(this) -> Str {
+        when this {
+            HttpVersion::HTTP_1_0 => "HTTP/1.0",
+            HttpVersion::HTTP_1_1 => "HTTP/1.1",
+            HttpVersion::HTTP_2 => "HTTP/2",
+            HttpVersion::HTTP_3 => "HTTP/3",
+        }
+    }
+
+    /// Parses a version from an HTTP response status line prefix.
+    /// Returns HTTP_1_1 for unrecognized input.
+    pub func from_string(s: Str) -> HttpVersion {
+        when s {
+            "HTTP/1.0" => HttpVersion::HTTP_1_0,
+            "HTTP/1.1" => HttpVersion::HTTP_1_1,
+            "HTTP/2" => HttpVersion::HTTP_2,
+            "HTTP/2.0" => HttpVersion::HTTP_2,
+            "HTTP/3" => HttpVersion::HTTP_3,
+            _ => HttpVersion::HTTP_1_1,
+        }
+    }
+
+    /// True if this is HTTP/2 or later.
+    pub func is_h2_or_later(this) -> Bool {
+        when this {
+            HttpVersion::HTTP_2 => true,
+            HttpVersion::HTTP_3 => true,
+            _ => false,
+        }
+    }
+}

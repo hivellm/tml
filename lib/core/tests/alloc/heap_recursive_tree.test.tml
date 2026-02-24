@@ -1,0 +1,32 @@
+use test
+use core::alloc::heap::Heap
+
+// Generic recursive enum: a unary tree (single child per node)
+// Using single-arg variants to avoid the multi-arg constructor bug
+enum UnaryTree[T] {
+    Leaf(T),
+    Branch(Heap[UnaryTree[T]]),
+}
+
+@test
+func test_tree_leaf() -> I32 {
+    // Leaf variant: no Heap, drop is trivial
+    let tree = UnaryTree::Leaf(42)
+    return 0
+}
+
+@test
+func test_tree_single_branch() -> I32 {
+    // Branch wrapping a Leaf
+    let tree = UnaryTree::Branch(Heap::new(UnaryTree::Leaf(10)))
+    return 0
+}
+
+@test
+func test_tree_nested_branches() -> I32 {
+    // Branch(Branch(Leaf(5))) - 2 levels of Heap indirection
+    let tree = UnaryTree::Branch(
+        Heap::new(UnaryTree::Branch(
+            Heap::new(UnaryTree::Leaf(5)))))
+    return 0
+}

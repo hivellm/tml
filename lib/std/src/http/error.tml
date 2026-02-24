@@ -1,0 +1,111 @@
+//! HTTP error types.
+//!
+//! Provides HttpError and HttpErrorKind for all HTTP client/server
+//! error conditions, matching cmmv-server error categories.
+
+/// The kind of HTTP error that occurred.
+pub type HttpErrorKind {
+    value: I32,
+}
+
+impl HttpErrorKind {
+    /// Invalid or malformed URL.
+    pub func InvalidUrl() -> HttpErrorKind { HttpErrorKind { value: 1 } }
+    /// DNS resolution failed.
+    pub func DnsFailure() -> HttpErrorKind { HttpErrorKind { value: 2 } }
+    /// TCP connection failed.
+    pub func ConnectionFailed() -> HttpErrorKind { HttpErrorKind { value: 3 } }
+    /// TLS handshake or certificate error.
+    pub func TlsError() -> HttpErrorKind { HttpErrorKind { value: 4 } }
+    /// Operation timed out.
+    pub func Timeout() -> HttpErrorKind { HttpErrorKind { value: 5 } }
+    /// Response could not be parsed.
+    pub func InvalidResponse() -> HttpErrorKind { HttpErrorKind { value: 6 } }
+    /// Too many redirects followed.
+    pub func TooManyRedirects() -> HttpErrorKind { HttpErrorKind { value: 7 } }
+    /// Response body exceeds limit.
+    pub func BodyTooLarge() -> HttpErrorKind { HttpErrorKind { value: 8 } }
+    /// Content encoding error (decompress failed).
+    pub func EncodingError() -> HttpErrorKind { HttpErrorKind { value: 9 } }
+    /// HTTP protocol violation.
+    pub func ProtocolError() -> HttpErrorKind { HttpErrorKind { value: 10 } }
+    /// Response already sent (server-side).
+    pub func AlreadySent() -> HttpErrorKind { HttpErrorKind { value: 11 } }
+    /// Invalid status code.
+    pub func InvalidStatusCode() -> HttpErrorKind { HttpErrorKind { value: 12 } }
+    /// Invalid header name or value.
+    pub func InvalidHeader() -> HttpErrorKind { HttpErrorKind { value: 13 } }
+    /// Invalid payload type.
+    pub func InvalidPayload() -> HttpErrorKind { HttpErrorKind { value: 14 } }
+    /// Route handler missing or not a function.
+    pub func RouteError() -> HttpErrorKind { HttpErrorKind { value: 15 } }
+    /// Hook error.
+    pub func HookError() -> HttpErrorKind { HttpErrorKind { value: 16 } }
+
+    /// Returns the raw discriminant value.
+    pub func raw(this) -> I32 { this.value }
+}
+
+/// An HTTP error with kind and message.
+pub type HttpError {
+    error_kind: HttpErrorKind,
+    message: Str,
+}
+
+impl HttpError {
+    /// Creates a new HTTP error.
+    pub func new(kind: HttpErrorKind, msg: Str) -> HttpError {
+        HttpError { error_kind: kind, message: msg }
+    }
+
+    /// Returns the error kind.
+    pub func kind(this) -> HttpErrorKind { this.error_kind }
+
+    /// Returns the error message.
+    pub func msg(this) -> Str { this.message }
+
+    // ── Convenience constructors ────────────────────────────
+
+    pub func invalid_url(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::InvalidUrl(), msg)
+    }
+
+    pub func dns_failure(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::DnsFailure(), msg)
+    }
+
+    pub func connection_failed(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::ConnectionFailed(), msg)
+    }
+
+    pub func tls_error(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::TlsError(), msg)
+    }
+
+    pub func timeout(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::Timeout(), msg)
+    }
+
+    pub func invalid_response(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::InvalidResponse(), msg)
+    }
+
+    pub func too_many_redirects(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::TooManyRedirects(), msg)
+    }
+
+    pub func body_too_large(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::BodyTooLarge(), msg)
+    }
+
+    pub func encoding_error(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::EncodingError(), msg)
+    }
+
+    pub func protocol_error(msg: Str) -> HttpError {
+        HttpError::new(HttpErrorKind::ProtocolError(), msg)
+    }
+}
+
+/// Result alias for HTTP operations.
+pub type HttpResult[T] = Outcome[T, HttpError]

@@ -1,0 +1,30 @@
+// Tests for std::http::version
+use test::{assert, assert_eq}
+use std::http::version::HttpVersion
+
+@test
+func test_version_to_string() -> I32 {
+    assert_eq(HttpVersion::HTTP_1_0.to_string(), "HTTP/1.0", "1.0")
+    assert_eq(HttpVersion::HTTP_1_1.to_string(), "HTTP/1.1", "1.1")
+    assert_eq(HttpVersion::HTTP_2.to_string(), "HTTP/2", "2")
+    assert_eq(HttpVersion::HTTP_3.to_string(), "HTTP/3", "3")
+    return 0
+}
+
+@test
+func test_version_from_string() -> I32 {
+    assert_eq(HttpVersion::from_string("HTTP/1.1").to_string(), "HTTP/1.1", "parse 1.1")
+    assert_eq(HttpVersion::from_string("HTTP/2").to_string(), "HTTP/2", "parse 2")
+    assert_eq(HttpVersion::from_string("HTTP/2.0").to_string(), "HTTP/2", "parse 2.0")
+    assert_eq(HttpVersion::from_string("unknown").to_string(), "HTTP/1.1", "default")
+    return 0
+}
+
+@test
+func test_version_is_h2_or_later() -> I32 {
+    assert(not HttpVersion::HTTP_1_0.is_h2_or_later(), "1.0 not h2+")
+    assert(not HttpVersion::HTTP_1_1.is_h2_or_later(), "1.1 not h2+")
+    assert(HttpVersion::HTTP_2.is_h2_or_later(), "2 is h2+")
+    assert(HttpVersion::HTTP_3.is_h2_or_later(), "3 is h2+")
+    return 0
+}

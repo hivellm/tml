@@ -240,6 +240,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
     errors_.clear();
     output_.str("");
     type_defs_buffer_.str(""); // Clear type definitions buffer
+    enum_drop_output_.str(""); // Clear enum drop function buffer
+    generated_enum_drop_functions_.clear();
     string_literals_.clear();
     string_literal_dedup_.clear();
     temp_counter_ = 0;
@@ -1830,6 +1832,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Also catches references from generate_pending_instantiations() which generates
     // library method bodies (e.g., Text::print calling @print) outside the lazy path.
     scan_for_runtime_refs(output_.str());
+
+    // Append any deferred enum drop functions generated during codegen
+    if (!enum_drop_output_.str().empty()) {
+        output_ << enum_drop_output_.str();
+    }
 
     // Finalize runtime declarations and splice into output
     finalize_runtime_decls();

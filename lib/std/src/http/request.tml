@@ -1,0 +1,332 @@
+//! HTTP request builder and serializer.
+//!
+//! Constructs HTTP/1.1 requests with method, URL, headers, body, and
+//! query parameters. Supports builder-pattern construction and
+//! serialization to wire format.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::http::{Request, Method}
+//!
+//! // Simple GET
+//! let req = Request::get("https://api.example.com/users")
+//!
+//! // POST with JSON body
+//! let req = Request::post("https://api.example.com/users")
+//!     .header("Content-Type", "application/json")
+//!     .body("{\"name\": \"Alice\"}")
+//!
+//! // Custom request
+//! let req = Request::new(Method::PUT, "https://api.example.com/users/1")
+//!     .header("Authorization", "Bearer token123")
+//!     .header("Accept", "application/json")
+//!     .body("updated data")
+//! ```
+
+use core::str
+use core::fmt::helpers::i64_to_str
+use std::url::Url
+use std::http::method::Method
+use std::http::headers::Headers
+use std::http::version::HttpVersion
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// An HTTP request with method, URL, headers, and body.
+pub type Request {
+    /// The HTTP method (GET, POST, PUT, etc.).
+    req_method: Method,
+    /// The full request URL string.
+    req_url: Str,
+    /// The parsed URL components (Nothing if URL is invalid).
+    parsed_url: Maybe[Url],
+    /// Request headers.
+    req_headers: Headers,
+    /// Request body as a string (empty for bodyless methods).
+    req_body: Str,
+    /// HTTP version (defaults to HTTP/1.1).
+    req_version: HttpVersion,
+    /// Request timeout in milliseconds (0 = no timeout).
+    timeout_ms: I64,
+}
+
+impl Request {
+    /// Creates a new request with the given method and URL.
+    pub func new(method: Method, url: Str) -> Request {
+        let parsed = Url::parse(url)
+        var parsed_url: Maybe[Url] = Nothing
+        when parsed {
+            Ok(u) => parsed_url = Just(u),
+            Err(e) => {},
+        }
+        Request {
+            req_method: method,
+            req_url: url,
+            parsed_url: parsed_url,
+            req_headers: Headers::new(),
+            req_body: "",
+            req_version: HttpVersion::HTTP_1_1,
+            timeout_ms: 0,
+        }
+    }
+
+    // ── Convenience constructors ────────────────────────────
+
+    /// Creates a GET request.
+    pub func get(url: Str) -> Request { Request::new(Method::GET, url) }
+
+    /// Creates a POST request.
+    pub func post(url: Str) -> Request { Request::new(Method::POST, url) }
+
+    /// Creates a PUT request.
+    pub func put(url: Str) -> Request { Request::new(Method::PUT, url) }
+
+    /// Creates a DELETE request.
+    pub func delete(url: Str) -> Request { Request::new(Method::DELETE, url) }
+
+    /// Creates a PATCH request.
+    pub func patch(url: Str) -> Request { Request::new(Method::PATCH, url) }
+
+    /// Creates a HEAD request.
+    pub func head(url: Str) -> Request { Request::new(Method::HEAD, url) }
+
+    /// Creates an OPTIONS request.
+    pub func options(url: Str) -> Request { Request::new(Method::OPTIONS, url) }
+
+    // ── Builder methods (return self for chaining) ──────────
+
+    /// Sets a request header. Returns self for chaining.
+    pub func header(this, key: Str, value: Str) -> Request {
+        this.req_headers.set(key, value)
+        return this
+    }
+
+    /// Sets the request body. Also auto-sets Content-Length.
+    /// Returns self for chaining.
+    pub func body(this, data: Str) -> Request {
+        let len: I64 = str::len(data)
+        if len > 0 {
+            this.req_headers.set("content-length", i64_to_str(len))
+        }
+        Request {
+            req_method: this.req_method,
+            req_url: this.req_url,
+            parsed_url: this.parsed_url,
+            req_headers: this.req_headers,
+            req_body: data,
+            req_version: this.req_version,
+            timeout_ms: this.timeout_ms,
+        }
+    }
+
+    /// Sets the request body as JSON (auto-sets Content-Type and Content-Length).
+    pub func json(this, data: Str) -> Request {
+        this.req_headers.set("content-type", "application/json")
+        return this.body(data)
+    }
+
+    /// Sets the request body as form data (auto-sets Content-Type and Content-Length).
+    pub func form(this, data: Str) -> Request {
+        this.req_headers.set("content-type", "application/x-www-form-urlencoded")
+        return this.body(data)
+    }
+
+    /// Sets the HTTP version.
+    pub func version(this, v: HttpVersion) -> Request {
+        Request {
+            req_method: this.req_method,
+            req_url: this.req_url,
+            parsed_url: this.parsed_url,
+            req_headers: this.req_headers,
+            req_body: this.req_body,
+            req_version: v,
+            timeout_ms: this.timeout_ms,
+        }
+    }
+
+    /// Sets the request timeout in milliseconds.
+    pub func timeout(this, ms: I64) -> Request {
+        Request {
+            req_method: this.req_method,
+            req_url: this.req_url,
+            parsed_url: this.parsed_url,
+            req_headers: this.req_headers,
+            req_body: this.req_body,
+            req_version: this.req_version,
+            timeout_ms: ms,
+        }
+    }
+
+    // ── Accessors ───────────────────────────────────────────
+
+    /// Returns the HTTP method.
+    pub func method(this) -> Method { this.req_method }
+
+    /// Returns the full URL string.
+    pub func url(this) -> Str { this.req_url }
+
+    /// Returns the request headers.
+    pub func headers(this) -> ref Headers { return ref this.req_headers }
+
+    /// Returns the request body string.
+    pub func body_data(this) -> Str { this.req_body }
+
+    /// Returns the HTTP version.
+    pub func http_version(this) -> HttpVersion { this.req_version }
+
+    /// Returns the timeout in milliseconds (0 = no timeout).
+    pub func get_timeout(this) -> I64 { this.timeout_ms }
+
+    /// Returns true if the method typically carries a body.
+    pub func has_body(this) -> Bool { this.req_method.has_body() }
+
+    /// Returns true if the method is idempotent.
+    pub func is_idempotent(this) -> Bool { this.req_method.is_idempotent() }
+
+    /// Returns true if the method is safe (no side effects).
+    pub func is_safe(this) -> Bool { this.req_method.is_safe() }
+
+    /// Returns true if the URL scheme is HTTPS.
+    pub func is_secure(this) -> Bool {
+        when this.parsed_url {
+            Just(u) => return u.get_scheme() == "https",
+            Nothing => return false,
+        }
+    }
+
+    /// Returns the URL scheme ("http" or "https").
+    pub func scheme(this) -> Str {
+        when this.parsed_url {
+            Just(u) => return u.get_scheme(),
+            Nothing => return "",
+        }
+    }
+
+    /// Returns the host from the URL.
+    pub func host(this) -> Str {
+        when this.parsed_url {
+            Just(u) => return u.get_host(),
+            Nothing => return "",
+        }
+    }
+
+    /// Returns the port from the URL (0 if not specified).
+    pub func port(this) -> I64 {
+        when this.parsed_url {
+            Just(u) => return u.get_port(),
+            Nothing => return 0,
+        }
+    }
+
+    /// Returns the path from the URL (e.g. "/api/users").
+    pub func path(this) -> Str {
+        when this.parsed_url {
+            Just(u) => {
+                let p: Str = u.get_path()
+                if str::len(p) == 0 { return "/" }
+                return p
+            },
+            Nothing => return "/",
+        }
+    }
+
+    /// Returns the query string from the URL (without leading "?").
+    pub func query(this) -> Str {
+        when this.parsed_url {
+            Just(u) => return u.get_query(),
+            Nothing => return "",
+        }
+    }
+
+    /// Returns path + query string for the request line.
+    pub func path_and_query(this) -> Str {
+        let p: Str = this.path()
+        let q: Str = this.query()
+        if str::len(q) > 0 {
+            return "{p}?{q}"
+        }
+        return p
+    }
+
+    /// Returns the effective host with port for the Host header.
+    /// Omits the port if it's the default for the scheme.
+    pub func host_header(this) -> Str {
+        let h: Str = this.host()
+        let p: I64 = this.port()
+        if p == 0 or (p == 80 and this.scheme() == "http") or (p == 443 and this.scheme() == "https") {
+            return h
+        }
+        return "{h}:{p}"
+    }
+
+    /// Returns the Content-Type header value, or "".
+    pub func content_type(this) -> Str {
+        return this.req_headers.content_type()
+    }
+
+    /// Returns the Content-Length as I64, or -1 if not set.
+    pub func content_length(this) -> I64 {
+        return this.req_headers.content_length()
+    }
+
+    // ── Serialization ───────────────────────────────────────
+
+    /// Serializes the request to HTTP/1.1 wire format.
+    ///
+    /// Auto-sets Host, User-Agent (if not present), and Content-Length
+    /// (if body is present and not already set).
+    ///
+    /// Format:
+    /// ```
+    /// GET /path?query HTTP/1.1\r\n
+    /// Host: example.com\r\n
+    /// User-Agent: tml/1.0\r\n
+    /// Content-Type: application/json\r\n
+    /// Content-Length: 42\r\n
+    /// \r\n
+    /// {"name": "Alice"}
+    /// ```
+    pub func serialize(this) -> Str {
+        let method_str: Str = this.req_method.to_string()
+        let path_query: Str = this.path_and_query()
+        let version_str: Str = this.req_version.to_string()
+
+        // Request line
+        var result: Str = "{method_str} {path_query} {version_str}\r\n"
+
+        // Host header (mandatory in HTTP/1.1)
+        if not this.req_headers.has("host") {
+            let host_val: Str = this.host_header()
+            result = "{result}Host: {host_val}\r\n"
+        }
+
+        // User-Agent (default if not set)
+        if not this.req_headers.has("user-agent") {
+            result = "{result}User-Agent: tml/1.0\r\n"
+        }
+
+        // Content-Length for body (if not already set)
+        let body_len: I64 = str::len(this.req_body)
+        if body_len > 0 and not this.req_headers.has("content-length") {
+            result = "{result}Content-Length: {i64_to_str(body_len)}\r\n"
+        }
+
+        // All custom headers
+        result = "{result}{this.req_headers.serialize()}"
+
+        // Empty line separating headers from body
+        result = "{result}\r\n"
+
+        // Body
+        if body_len > 0 {
+            result = "{result}{this.req_body}"
+        }
+
+        return result
+    }
+
+    /// Frees internal storage.
+    pub func destroy(this) {
+        this.req_headers.destroy()
+    }
+}

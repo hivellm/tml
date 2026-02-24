@@ -235,16 +235,44 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         }
     }
 
-    if (!has_drop && !needs_field_drops) {
+    // Detect enum types that need variant-aware drop.
+    // Enums aren't in struct_fields_, so needs_field_drops from struct lookup won't work.
+    // Check if this type is an enum with droppable variant payloads.
+    bool needs_enum_drop = false;
+    if (!has_drop) {
+        // Check base name (strip mangling for generic enums like IntList or Expr)
+        std::string base_type = type_name;
+        auto sep_pos = type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            base_type = type_name.substr(0, sep_pos);
+        }
+        // Check if it's a registered enum in TypeEnv
+        auto enum_def = env_.lookup_enum(base_type);
+        if (enum_def.has_value() && env_.type_needs_drop(type_name)) {
+            needs_enum_drop = true;
+            needs_field_drops = false; // Override: use enum drop, not field drop
+        }
+        // Also check pending generic enums (for locally-defined generic enums)
+        if (!needs_enum_drop && pending_generic_enums_.count(base_type) > 0) {
+            if (env_.type_needs_drop(type_name) || env_.type_needs_drop(base_type)) {
+                needs_enum_drop = true;
+                needs_field_drops = false;
+            }
+        }
+    }
+
+    if (!has_drop && !needs_field_drops && !needs_enum_drop) {
         return;
     }
 
     TML_DEBUG_LN("[DROP] Registering " << var_name << " for drop, type=" << type_name
+                                       << (needs_enum_drop ? " (enum-drop)" : "")
                                        << (needs_field_drops ? " (field-level)" : ""));
 
     if (!drop_scopes_.empty()) {
         DropInfo di{var_name, var_reg, type_name, llvm_type};
         di.needs_field_drops = needs_field_drops;
+        di.needs_enum_drop = needs_enum_drop;
         drop_scopes_.back().push_back(di);
 
         // For generic imported types, request Drop method instantiation
@@ -334,6 +362,12 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
         std::string ptr_val = fresh_reg();
         emit_line("  " + ptr_val + " = load ptr, ptr " + info.var_reg);
         emit_line("  call void @tml_str_free(ptr " + ptr_val + ")");
+        return;
+    }
+
+    // Enum variant-aware drops: switch on discriminant, drop active variant's fields.
+    if (info.needs_enum_drop) {
+        emit_enum_variant_drops(info);
         return;
     }
 
@@ -541,6 +575,439 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
             emit_line("  call void " + drop_func + "(ptr " + field_ptr + ")");
         }
     }
+}
+
+// Helper: get a mangled type name from a semantic TypePtr for drop purposes.
+// E.g., NamedType{"Heap", type_args=[NamedType{"Expr"}]} → "Heap__Expr"
+static std::string mangled_type_name_for_drop(const types::TypePtr& type) {
+    if (!type)
+        return "";
+    if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+        if (named.type_args.empty())
+            return named.name;
+        std::string result = named.name;
+        for (const auto& arg : named.type_args) {
+            result += "__" + mangled_type_name_for_drop(arg);
+        }
+        return result;
+    }
+    if (type->is<types::PrimitiveType>()) {
+        const auto& prim = type->as<types::PrimitiveType>();
+        switch (prim.kind) {
+        case types::PrimitiveKind::I32:
+            return "I32";
+        case types::PrimitiveKind::I64:
+            return "I64";
+        case types::PrimitiveKind::Bool:
+            return "Bool";
+        case types::PrimitiveKind::Str:
+            return "Str";
+        case types::PrimitiveKind::F32:
+            return "F32";
+        case types::PrimitiveKind::F64:
+            return "F64";
+        case types::PrimitiveKind::I8:
+            return "I8";
+        case types::PrimitiveKind::I16:
+            return "I16";
+        case types::PrimitiveKind::U8:
+            return "U8";
+        case types::PrimitiveKind::U16:
+            return "U16";
+        case types::PrimitiveKind::U32:
+            return "U32";
+        case types::PrimitiveKind::U64:
+            return "U64";
+        case types::PrimitiveKind::I128:
+            return "I128";
+        case types::PrimitiveKind::U128:
+            return "U128";
+        default:
+            return "";
+        }
+    }
+    if (type->is<types::PtrType>()) {
+        return "ptr_" + mangled_type_name_for_drop(type->as<types::PtrType>().inner);
+    }
+    if (type->is<types::RefType>()) {
+        return "ref_" + mangled_type_name_for_drop(type->as<types::RefType>().inner);
+    }
+    return "";
+}
+
+// Helper: get the LLVM type string for a semantic type in drop context.
+// Returns "ptr" for Str, pointer types; "i32"/"i64"/etc for primitives;
+// "%struct.Name" for named types.
+static std::string llvm_type_for_drop(const types::TypePtr& type) {
+    if (!type)
+        return "ptr";
+    if (type->is<types::PrimitiveType>()) {
+        const auto& prim = type->as<types::PrimitiveType>();
+        switch (prim.kind) {
+        case types::PrimitiveKind::I32:
+            return "i32";
+        case types::PrimitiveKind::I64:
+            return "i64";
+        case types::PrimitiveKind::Bool:
+            return "i1";
+        case types::PrimitiveKind::Str:
+            return "ptr";
+        case types::PrimitiveKind::F32:
+            return "float";
+        case types::PrimitiveKind::F64:
+            return "double";
+        case types::PrimitiveKind::I8:
+            return "i8";
+        case types::PrimitiveKind::I16:
+            return "i16";
+        case types::PrimitiveKind::U8:
+            return "i8";
+        case types::PrimitiveKind::U16:
+            return "i16";
+        case types::PrimitiveKind::U32:
+            return "i32";
+        case types::PrimitiveKind::U64:
+            return "i64";
+        case types::PrimitiveKind::I128:
+            return "i128";
+        case types::PrimitiveKind::U128:
+            return "i128";
+        default:
+            return "ptr";
+        }
+    }
+    if (type->is<types::NamedType>()) {
+        return "%struct." + mangled_type_name_for_drop(type);
+    }
+    if (type->is<types::PtrType>() || type->is<types::RefType>()) {
+        return "ptr";
+    }
+    return "ptr";
+}
+
+// Helper: check if a semantic type needs drop.
+static bool type_needs_drop_for_variant(const types::TypePtr& type,
+                                        const tml::types::TypeEnv& env) {
+    if (!type)
+        return false;
+    if (type->is<types::PrimitiveType>()) {
+        auto kind = type->as<types::PrimitiveType>().kind;
+        return kind == types::PrimitiveKind::Str; // Str needs tml_str_free
+    }
+    if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+        std::string mangled = mangled_type_name_for_drop(type);
+        // Check direct Drop impl
+        if (env.type_implements(mangled, "Drop"))
+            return true;
+        if (env.type_implements(named.name, "Drop"))
+            return true;
+        // Check recursive needs_drop
+        if (env.type_needs_drop(mangled))
+            return true;
+        if (env.type_needs_drop(named.name))
+            return true;
+    }
+    return false;
+}
+
+void LLVMIRGen::emit_enum_variant_drops(const DropInfo& info) {
+    // Generate (or find) a standalone enum drop function and call it.
+    // Using a standalone function avoids infinite recursion for recursive enums
+    // like SimpleList { Node(Heap[SimpleList]), End }.
+    ensure_enum_drop_function(info.type_name);
+
+    std::string drop_key = info.type_name + "_drop";
+    auto drop_it = functions_.find(drop_key);
+    std::string drop_func;
+    if (drop_it != functions_.end()) {
+        drop_func = drop_it->second.llvm_name;
+    } else {
+        drop_func = "@tml_" + get_suite_prefix() + info.type_name + "_drop";
+    }
+    emit_line("  call void " + drop_func + "(ptr " + info.var_reg + ")");
+}
+
+void LLVMIRGen::ensure_enum_drop_function(const std::string& enum_type_name) {
+    std::string prefix = get_suite_prefix();
+    std::string func_name = "tml_" + prefix + enum_type_name + "_drop";
+
+    // Already generated or in progress?
+    if (generated_enum_drop_functions_.count(func_name)) {
+        return;
+    }
+    // Mark immediately to prevent infinite recursion for self-referential enums
+    generated_enum_drop_functions_.insert(func_name);
+
+    // Register in functions_ so callers can find it
+    std::string drop_key = enum_type_name + "_drop";
+    functions_[drop_key] = FuncInfo{"@" + func_name, "void (ptr)", "void", {"ptr"}};
+
+    // Look up enum definition
+    std::string base_type = enum_type_name;
+    auto sep_pos = enum_type_name.find("__");
+    if (sep_pos != std::string::npos) {
+        base_type = enum_type_name.substr(0, sep_pos);
+    }
+    auto enum_def = env_.lookup_enum(base_type);
+    if (!enum_def.has_value()) {
+        return;
+    }
+
+    // For generic enums (e.g., UnaryTree__I32), build a substitution map
+    // to resolve type parameters (T -> I32) in variant payload types
+    std::unordered_map<std::string, types::TypePtr> type_subs;
+    bool is_generic = (enum_type_name.find("__") != std::string::npos);
+    if (is_generic) {
+        // Try enum_instantiations_ first
+        auto inst_it = enum_instantiations_.find(enum_type_name);
+        if (inst_it != enum_instantiations_.end()) {
+            // Get the generic param names from the enum decl
+            auto gen_enum_it = pending_generic_enums_.find(base_type);
+            if (gen_enum_it != pending_generic_enums_.end()) {
+                const auto& gen_decl = *gen_enum_it->second;
+                for (size_t g = 0;
+                     g < gen_decl.generics.size() && g < inst_it->second.type_args.size(); ++g) {
+                    type_subs[gen_decl.generics[g].name] = inst_it->second.type_args[g];
+                }
+            }
+        }
+    }
+
+    // Helper to substitute type params in a TypePtr
+    // e.g., Heap[UnaryTree[T]] with T->I32 becomes Heap[UnaryTree[I32]]
+    std::function<types::TypePtr(const types::TypePtr&)> resolve_type;
+    resolve_type = [&](const types::TypePtr& ty) -> types::TypePtr {
+        if (!ty)
+            return ty;
+        if (ty->is<types::NamedType>()) {
+            const auto& named = ty->as<types::NamedType>();
+            // Check if this is a type parameter
+            auto sub_it = type_subs.find(named.name);
+            if (sub_it != type_subs.end()) {
+                return sub_it->second;
+            }
+            // Recurse into type args
+            if (!named.type_args.empty()) {
+                auto result = std::make_shared<types::Type>();
+                std::vector<types::TypePtr> resolved_args;
+                for (const auto& arg : named.type_args) {
+                    resolved_args.push_back(resolve_type(arg));
+                }
+                result->kind =
+                    types::NamedType{named.name, named.module_path, std::move(resolved_args)};
+                return result;
+            }
+        }
+        return ty;
+    };
+
+    // Build the function IR into a local stringstream to avoid conflicting
+    // with the current function being generated in output_
+    std::stringstream fn;
+    auto e = [&fn](const std::string& line) { fn << line << "\n"; };
+    // Use a local counter to avoid conflicting with main codegen
+    int lc = temp_counter_;
+    auto fr = [&lc]() -> std::string { return "%edt" + std::to_string(lc++); };
+
+    e("\ndefine internal void @" + func_name + "(ptr %this) #0 {");
+    e("entry:");
+
+    // Build droppable variants list
+    struct DroppableVariant {
+        int tag;
+        std::string variant_name;
+        std::vector<std::pair<size_t, types::TypePtr>> droppable_fields;
+    };
+    std::vector<DroppableVariant> droppable_variants;
+
+    int tag = 0;
+    for (const auto& [variant_name, payload_types] : enum_def->variants) {
+        DroppableVariant dv;
+        dv.tag = tag++;
+        dv.variant_name = variant_name;
+        for (size_t i = 0; i < payload_types.size(); ++i) {
+            // Resolve generic type params before checking droppability
+            auto resolved = is_generic ? resolve_type(payload_types[i]) : payload_types[i];
+            if (type_needs_drop_for_variant(resolved, env_)) {
+                dv.droppable_fields.push_back({i, resolved});
+            }
+        }
+        if (!dv.droppable_fields.empty()) {
+            droppable_variants.push_back(std::move(dv));
+        }
+    }
+
+    if (droppable_variants.empty()) {
+        e("  ret void");
+        e("}");
+        enum_drop_output_ << fn.str();
+        temp_counter_ = lc;
+        return;
+    }
+
+    std::string enum_llvm_type = "%struct." + enum_type_name;
+
+    // Load discriminant
+    std::string tag_ptr = fr();
+    e("  " + tag_ptr + " = getelementptr inbounds " + enum_llvm_type + ", ptr %this, i32 0, i32 0");
+    std::string tag_val = fr();
+    e("  " + tag_val + " = load i32, ptr " + tag_ptr);
+
+    // Switch
+    std::string end_label = "edf_end" + std::to_string(lc++);
+    std::string default_label = "edf_default" + std::to_string(lc++);
+
+    std::string switch_str = "  switch i32 " + tag_val + ", label %" + default_label + " [";
+    int switch_counter = lc;
+    for (const auto& dv : droppable_variants) {
+        std::string case_label =
+            "edf_v" + std::to_string(dv.tag) + "_" + std::to_string(switch_counter);
+        switch_str += "\n    i32 " + std::to_string(dv.tag) + ", label %" + case_label;
+    }
+    switch_str += "\n  ]";
+    e(switch_str);
+
+    // Emit each variant's drop
+    for (const auto& dv : droppable_variants) {
+        std::string case_label =
+            "edf_v" + std::to_string(dv.tag) + "_" + std::to_string(switch_counter);
+        e(case_label + ":");
+
+        std::string payload_ptr = fr();
+        e("  " + payload_ptr + " = getelementptr inbounds " + enum_llvm_type +
+          ", ptr %this, i32 0, i32 1");
+
+        for (const auto& [field_idx, field_type] : dv.droppable_fields) {
+            std::string mangled = mangled_type_name_for_drop(field_type);
+            std::string llvm_ty = llvm_type_for_drop(field_type);
+            bool is_str = field_type->is<types::PrimitiveType>() &&
+                          field_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
+
+            std::string field_ptr;
+            if (dv.droppable_fields.size() == 1 && field_idx == 0 &&
+                enum_def->variants[dv.tag].second.size() == 1) {
+                field_ptr = payload_ptr;
+            } else {
+                std::string tuple_type = "{ ";
+                for (size_t i = 0; i < enum_def->variants[dv.tag].second.size(); ++i) {
+                    if (i > 0)
+                        tuple_type += ", ";
+                    auto vt = is_generic ? resolve_type(enum_def->variants[dv.tag].second[i])
+                                         : enum_def->variants[dv.tag].second[i];
+                    tuple_type += llvm_type_for_drop(vt);
+                }
+                tuple_type += " }";
+                field_ptr = fr();
+                e("  " + field_ptr + " = getelementptr inbounds " + tuple_type + ", ptr " +
+                  payload_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+            }
+
+            if (is_str) {
+                require_runtime_decl("tml_str_free");
+                std::string str_val = fr();
+                e("  " + str_val + " = load ptr, ptr " + field_ptr);
+                e("  call void @tml_str_free(ptr " + str_val + ")");
+            } else {
+                bool has_drop_impl =
+                    env_.type_implements(mangled, "Drop") ||
+                    (!mangled.empty() && mangled.find("__") != std::string::npos &&
+                     env_.type_implements(mangled.substr(0, mangled.find("__")), "Drop"));
+
+                if (has_drop_impl) {
+                    // For Heap[T] where T needs drop: drop inner before free
+                    if (mangled.starts_with("Heap__")) {
+                        std::string inner = mangled.substr(6);
+                        bool inner_is_this_enum = (inner == enum_type_name);
+                        bool inner_needs = env_.type_needs_drop(inner);
+                        if (!inner_needs) {
+                            auto ie = env_.lookup_enum(inner);
+                            if (ie.has_value())
+                                inner_needs = true;
+                        }
+                        if (inner_is_this_enum || inner_needs) {
+                            // Load Heap.ptr (field 0)
+                            std::string hp = fr();
+                            e("  " + hp + " = getelementptr inbounds %struct." + mangled +
+                              ", ptr " + field_ptr + ", i32 0, i32 0");
+                            std::string rp = fr();
+                            e("  " + rp + " = load ptr, ptr " + hp);
+                            std::string nn = fr();
+                            e("  " + nn + " = icmp ne ptr " + rp + ", null");
+                            std::string idb = "edf_hi" + std::to_string(lc);
+                            std::string aib = "edf_hd" + std::to_string(lc++);
+                            e("  br i1 " + nn + ", label %" + idb + ", label %" + aib);
+                            e(idb + ":");
+                            // Recursive call to THIS function for self-ref enums
+                            if (inner_is_this_enum) {
+                                e("  call void @" + func_name + "(ptr " + rp + ")");
+                            } else {
+                                // Different inner enum: ensure its drop exists
+                                ensure_enum_drop_function(inner);
+                                auto inner_dk = inner + "_drop";
+                                auto inner_it = functions_.find(inner_dk);
+                                std::string inner_fn;
+                                if (inner_it != functions_.end()) {
+                                    inner_fn = inner_it->second.llvm_name;
+                                } else {
+                                    inner_fn = "@tml_" + prefix + inner + "_drop";
+                                }
+                                e("  call void " + inner_fn + "(ptr " + rp + ")");
+                            }
+                            e("  br label %" + aib);
+                            e(aib + ":");
+                        }
+                    }
+
+                    // Now call the Heap/type drop (e.g., mem_free)
+                    std::string dfk = mangled + "_drop";
+                    auto dit = functions_.find(dfk);
+                    std::string dfn;
+                    if (dit != functions_.end()) {
+                        dfn = dit->second.llvm_name;
+                    } else {
+                        dfn = "@tml_" + mangled + "_drop";
+                        functions_[dfk] = FuncInfo{dfn, "void (ptr)", "void", {"ptr"}};
+                    }
+
+                    std::string flln = "tml_" + mangled + "_drop";
+                    if (generated_impl_methods_.find(flln) == generated_impl_methods_.end()) {
+                        std::string bn = mangled;
+                        auto sp = mangled.find("__");
+                        if (sp != std::string::npos)
+                            bn = mangled.substr(0, sp);
+                        std::unordered_map<std::string, types::TypePtr> es;
+                        pending_impl_method_instantiations_.push_back(
+                            PendingImplMethod{mangled, "drop", es, bn, "",
+                                              /*is_library_type=*/true});
+                        generated_impl_methods_.insert(flln);
+                    }
+
+                    e("  call void " + dfn + "(ptr " + field_ptr + ")");
+                } else {
+                    // For non-Drop inner types, we need field-level drops.
+                    // These need to go through the main output_ since emit_field_level_drops
+                    // uses emit_line. Skip here — the Heap::drop (mem_free) handles cleanup.
+                    // TODO: Support non-Drop field-level drops in enum drop functions
+                }
+            }
+        }
+
+        e("  br label %" + end_label);
+    }
+
+    e(default_label + ":");
+    e("  br label %" + end_label);
+    e(end_label + ":");
+    e("  ret void");
+    e("}");
+
+    // Sync counters back
+    temp_counter_ = lc;
+
+    // Append to deferred output
+    enum_drop_output_ << fn.str();
 }
 
 void LLVMIRGen::emit_scope_drops() {

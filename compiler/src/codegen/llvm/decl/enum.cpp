@@ -140,7 +140,7 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
 
         // Helper lambda to calculate size of an LLVM type (same as gen_enum_instantiation)
         std::function<size_t(const std::string&)> calc_type_size;
-        calc_type_size = [this, &calc_type_size](const std::string& ty) -> size_t {
+        calc_type_size = [this, &calc_type_size, &e](const std::string& ty) -> size_t {
             if (ty == "{}" || ty == "void")
                 return 0; // Unit type has zero size
             if (ty == "i8")
@@ -184,6 +184,11 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             // Check if it's a struct type
             if (ty.starts_with("%struct.")) {
                 std::string struct_name = ty.substr(8); // Remove "%struct."
+                // Guard: if this is the enum being defined, avoid infinite recursion.
+                // This can happen with recursive enums (e.g., enum Expr with Heap[Expr]).
+                if (struct_name == e.name) {
+                    return 8; // Self-reference — should be behind Heap (ptr = 8 bytes)
+                }
                 auto it = struct_fields_.find(struct_name);
                 if (it != struct_fields_.end()) {
                     size_t struct_size = 0;
@@ -351,7 +356,7 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
 
         // Helper lambda to calculate size of an LLVM type
         std::function<size_t(const std::string&)> calc_type_size;
-        calc_type_size = [this, &calc_type_size, &decl](const std::string& ty) -> size_t {
+        calc_type_size = [this, &calc_type_size, &decl, &mangled](const std::string& ty) -> size_t {
             if (ty == "{}" || ty == "void")
                 return 0; // Unit type has zero size
             if (ty == "i8")
@@ -395,6 +400,11 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
             // Check if it's a struct type
             if (ty.starts_with("%struct.")) {
                 std::string struct_name = ty.substr(8); // Remove "%struct."
+                // Guard: if this is the enum being instantiated, avoid infinite recursion.
+                // This can happen with recursive enums (e.g., Tree[T] with Heap[Tree[T]]).
+                if (struct_name == mangled || struct_name == decl.name) {
+                    return 8; // Self-reference — should be behind Heap (ptr = 8 bytes)
+                }
                 auto it = struct_fields_.find(struct_name);
                 if (it != struct_fields_.end()) {
                     size_t struct_size = 0;

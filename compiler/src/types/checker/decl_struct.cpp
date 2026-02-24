@@ -524,6 +524,64 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         variants.emplace_back(variant.name, std::move(types));
     }
 
+    // Check for infinite-size recursive enum (direct self-reference without indirection).
+    // Types like Heap[Self], *Self, ref Self, Shared[Self], Sync[Self], List[Self]
+    // provide pointer indirection and are allowed.
+    static const std::set<std::string> indirection_types = {"Heap", "Shared", "Sync",
+                                                            "List", "Vec",    "ArrayList"};
+    // Helper: checks if a resolved type directly contains the enum being defined
+    // without going through pointer indirection. Returns the variant name if found.
+    std::function<bool(const TypePtr&)> contains_direct_self_ref;
+    contains_direct_self_ref = [&](const TypePtr& type) -> bool {
+        if (!type)
+            return false;
+        return std::visit(
+            [&](const auto& t) -> bool {
+                using T = std::decay_t<decltype(t)>;
+                if constexpr (std::is_same_v<T, NamedType>) {
+                    // Direct self-reference: the type IS the enum being defined
+                    if (t.name == decl.name && t.type_args.empty()) {
+                        return true;
+                    }
+                    // Wrapped in indirection type: allowed (Heap[Self], List[Self], etc.)
+                    if (indirection_types.count(t.name) > 0) {
+                        return false; // Pointer indirection breaks the cycle
+                    }
+                    // Other named types: check type args (e.g., Pair[Self, I32] is direct)
+                    for (const auto& arg : t.type_args) {
+                        if (contains_direct_self_ref(arg))
+                            return true;
+                    }
+                    return false;
+                } else if constexpr (std::is_same_v<T, RefType> || std::is_same_v<T, PtrType>) {
+                    return false; // Pointer/reference indirection is safe
+                } else if constexpr (std::is_same_v<T, TupleType>) {
+                    for (const auto& elem : t.elements) {
+                        if (contains_direct_self_ref(elem))
+                            return true;
+                    }
+                    return false;
+                } else if constexpr (std::is_same_v<T, ArrayType>) {
+                    return contains_direct_self_ref(t.element);
+                } else {
+                    return false;
+                }
+            },
+            type->kind);
+    };
+
+    for (const auto& [vname, vtypes] : variants) {
+        for (const auto& vtype : vtypes) {
+            if (contains_direct_self_ref(vtype)) {
+                error("enum '" + decl.name + "' has infinite size because variant '" + vname +
+                          "' contains '" + decl.name + "' directly; consider wrapping it in Heap[" +
+                          decl.name + "]",
+                      decl.span, "T085");
+                return;
+            }
+        }
+    }
+
     std::vector<std::string> type_params;
     for (const auto& param : decl.generics) {
         if (!param.is_const) {

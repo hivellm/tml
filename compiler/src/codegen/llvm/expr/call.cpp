@@ -663,14 +663,81 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             // Inside inline closure evaluation: use the closure's return type
                             enum_type = closure_return_type_;
                         } else {
-                            // Infer type from arguments
+                            // Infer type args by matching variant field types
+                            // against inferred argument types. Uses the full
+                            // infer_expr_type result from the argument expression.
                             std::vector<types::TypePtr> inferred_type_args;
-                            if (has_payload && !call.args.empty()) {
-                                types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-                                inferred_type_args.push_back(arg_type);
-                            } else {
-                                // No payload to infer from - default to I32
-                                inferred_type_args.push_back(types::make_i32());
+                            // First, get inferred types for all args
+                            std::vector<types::TypePtr> arg_types;
+                            for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                                arg_types.push_back(infer_expr_type(*call.args[ai]));
+                            }
+                            for (size_t g = 0; g < gen_enum_decl.generics.size(); ++g) {
+                                const std::string& gname = gen_enum_decl.generics[g].name;
+                                types::TypePtr inferred = nullptr;
+                                if (has_payload && variant.tuple_fields.has_value()) {
+                                    for (size_t fi = 0;
+                                         fi < variant.tuple_fields->size() && fi < call.args.size();
+                                         ++fi) {
+                                        const auto& ftype = (*variant.tuple_fields)[fi];
+                                        // Try direct extraction from inferred type
+                                        auto extracted =
+                                            extract_generic_from_type(ftype, gname, arg_types[fi]);
+                                        if (extracted) {
+                                            inferred = extracted;
+                                            break;
+                                        }
+                                        // Fallback: unwrap constructor calls.
+                                        // For Heap::new(X), look at X's type to
+                                        // match field's inner generic args.
+                                        if (ftype && ftype->is<parser::NamedType>() &&
+                                            call.args[fi]->is<parser::CallExpr>()) {
+                                            const auto& fn = ftype->as<parser::NamedType>();
+                                            if (fn.generics.has_value()) {
+                                                const auto& inner_call =
+                                                    call.args[fi]->as<parser::CallExpr>();
+                                                if (inner_call.callee &&
+                                                    inner_call.callee->is<parser::PathExpr>()) {
+                                                    const auto& ip =
+                                                        inner_call.callee->as<parser::PathExpr>();
+                                                    if (ip.path.segments.size() == 2 &&
+                                                        !fn.path.segments.empty() &&
+                                                        fn.path.segments.back() ==
+                                                            ip.path.segments[0]) {
+                                                        // Match: field is Foo[...] and
+                                                        // arg is Foo::method(...)
+                                                        const auto& gas = fn.generics->args;
+                                                        for (size_t gi = 0;
+                                                             gi < gas.size() &&
+                                                             gi < inner_call.args.size();
+                                                             ++gi) {
+                                                            if (gas[gi].is_type()) {
+                                                                const auto& inf =
+                                                                    std::get<parser::TypePtr>(
+                                                                        gas[gi].value);
+                                                                auto inner_t = infer_expr_type(
+                                                                    *inner_call.args[gi]);
+                                                                extracted =
+                                                                    extract_generic_from_type(
+                                                                        inf, gname, inner_t);
+                                                                if (extracted)
+                                                                    break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (extracted) {
+                                                inferred = extracted;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!inferred) {
+                                    inferred = types::make_i32();
+                                }
+                                inferred_type_args.push_back(inferred);
                             }
                             std::string mangled_name =
                                 require_enum_instantiation(enum_name, inferred_type_args);
@@ -708,19 +775,50 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                         // Set payload if present
                         if (has_payload && !call.args.empty()) {
-                            std::string payload = gen_expr(*call.args[0]);
+                            if (call.args.size() == 1) {
+                                // Single-arg variant
+                                std::string payload = gen_expr(*call.args[0]);
 
-                            // Skip store for Unit payload - "{}" is zero-sized
-                            if (last_expr_type_ != "{}") {
+                                // Skip store for Unit payload - "{}" is zero-sized
+                                if (last_expr_type_ != "{}") {
+                                    std::string payload_ptr = fresh_reg();
+                                    emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                              enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                                    std::string payload_typed_ptr = fresh_reg();
+                                    emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                              payload_ptr + " to ptr");
+                                    emit_line("  store " + last_expr_type_ + " " + payload +
+                                              ", ptr " + payload_typed_ptr);
+                                }
+                            } else {
+                                // Multi-arg variant: store each field into a tuple in the payload
+                                std::vector<std::string> arg_vals;
+                                std::vector<std::string> arg_types;
+                                for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                                    arg_vals.push_back(gen_expr(*call.args[ai]));
+                                    arg_types.push_back(last_expr_type_);
+                                }
+                                // Build tuple type string: { type0, type1, ... }
+                                std::string tuple_type = "{ ";
+                                for (size_t ai = 0; ai < arg_types.size(); ++ai) {
+                                    if (ai > 0)
+                                        tuple_type += ", ";
+                                    tuple_type += arg_types[ai];
+                                }
+                                tuple_type += " }";
+                                // GEP to payload area, store each field
                                 std::string payload_ptr = fresh_reg();
                                 emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                           enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
-
-                                std::string payload_typed_ptr = fresh_reg();
-                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
-                                          payload_ptr + " to ptr");
-                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                          payload_typed_ptr);
+                                for (size_t ai = 0; ai < arg_vals.size(); ++ai) {
+                                    std::string field_ptr = fresh_reg();
+                                    emit_line("  " + field_ptr + " = getelementptr inbounds " +
+                                              tuple_type + ", ptr " + payload_ptr +
+                                              ", i32 0, i32 " + std::to_string(ai));
+                                    emit_line("  store " + arg_types[ai] + " " + arg_vals[ai] +
+                                              ", ptr " + field_ptr);
+                                }
                             }
                         }
 
@@ -754,19 +852,48 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                   tag_ptr);
 
                         if (!payload_types.empty() && !call.args.empty()) {
-                            std::string payload = gen_expr(*call.args[0]);
+                            if (call.args.size() == 1) {
+                                // Single-arg variant
+                                std::string payload = gen_expr(*call.args[0]);
 
-                            // Skip store for Unit payload - "{}" is zero-sized
-                            if (last_expr_type_ != "{}") {
+                                // Skip store for Unit payload - "{}" is zero-sized
+                                if (last_expr_type_ != "{}") {
+                                    std::string payload_ptr = fresh_reg();
+                                    emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                              enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                                    std::string payload_typed_ptr = fresh_reg();
+                                    emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                              payload_ptr + " to ptr");
+                                    emit_line("  store " + last_expr_type_ + " " + payload +
+                                              ", ptr " + payload_typed_ptr);
+                                }
+                            } else {
+                                // Multi-arg variant: store each field
+                                std::vector<std::string> arg_vals;
+                                std::vector<std::string> arg_types;
+                                for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                                    arg_vals.push_back(gen_expr(*call.args[ai]));
+                                    arg_types.push_back(last_expr_type_);
+                                }
+                                std::string tuple_type = "{ ";
+                                for (size_t ai = 0; ai < arg_types.size(); ++ai) {
+                                    if (ai > 0)
+                                        tuple_type += ", ";
+                                    tuple_type += arg_types[ai];
+                                }
+                                tuple_type += " }";
                                 std::string payload_ptr = fresh_reg();
                                 emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                           enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
-
-                                std::string payload_typed_ptr = fresh_reg();
-                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
-                                          payload_ptr + " to ptr");
-                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                          payload_typed_ptr);
+                                for (size_t ai = 0; ai < arg_vals.size(); ++ai) {
+                                    std::string field_ptr = fresh_reg();
+                                    emit_line("  " + field_ptr + " = getelementptr inbounds " +
+                                              tuple_type + ", ptr " + payload_ptr +
+                                              ", i32 0, i32 " + std::to_string(ai));
+                                    emit_line("  store " + arg_types[ai] + " " + arg_vals[ai] +
+                                              ", ptr " + field_ptr);
+                                }
                             }
                         }
 
@@ -841,14 +968,71 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         // use the closure's return type to resolve the full generic enum type
                         enum_type = closure_return_type_;
                     } else {
-                        // Infer type from arguments
+                        // Infer type args by matching variant field types
                         std::vector<types::TypePtr> inferred_type_args;
-                        if (has_payload && !call.args.empty()) {
-                            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-                            inferred_type_args.push_back(arg_type);
-                        } else {
-                            // No payload to infer from - default to I32
-                            inferred_type_args.push_back(types::make_i32());
+                        std::vector<types::TypePtr> arg_types;
+                        for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                            arg_types.push_back(infer_expr_type(*call.args[ai]));
+                        }
+                        for (size_t g = 0; g < gen_enum_decl->generics.size(); ++g) {
+                            const std::string& gname = gen_enum_decl->generics[g].name;
+                            types::TypePtr inferred = nullptr;
+                            if (has_payload && variant.tuple_fields.has_value()) {
+                                for (size_t fi = 0;
+                                     fi < variant.tuple_fields->size() && fi < call.args.size();
+                                     ++fi) {
+                                    const auto& ftype = (*variant.tuple_fields)[fi];
+                                    auto extracted =
+                                        extract_generic_from_type(ftype, gname, arg_types[fi]);
+                                    if (extracted) {
+                                        inferred = extracted;
+                                        break;
+                                    }
+                                    // Fallback: unwrap constructor calls
+                                    if (ftype && ftype->is<parser::NamedType>() &&
+                                        call.args[fi]->is<parser::CallExpr>()) {
+                                        const auto& fn = ftype->as<parser::NamedType>();
+                                        if (fn.generics.has_value()) {
+                                            const auto& inner_call =
+                                                call.args[fi]->as<parser::CallExpr>();
+                                            if (inner_call.callee &&
+                                                inner_call.callee->is<parser::PathExpr>()) {
+                                                const auto& ip =
+                                                    inner_call.callee->as<parser::PathExpr>();
+                                                if (ip.path.segments.size() == 2 &&
+                                                    !fn.path.segments.empty() &&
+                                                    fn.path.segments.back() ==
+                                                        ip.path.segments[0]) {
+                                                    const auto& gas = fn.generics->args;
+                                                    for (size_t gi = 0; gi < gas.size() &&
+                                                                        gi < inner_call.args.size();
+                                                         ++gi) {
+                                                        if (gas[gi].is_type()) {
+                                                            const auto& inf =
+                                                                std::get<parser::TypePtr>(
+                                                                    gas[gi].value);
+                                                            auto inner_t = infer_expr_type(
+                                                                *inner_call.args[gi]);
+                                                            extracted = extract_generic_from_type(
+                                                                inf, gname, inner_t);
+                                                            if (extracted)
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (extracted) {
+                                            inferred = extracted;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!inferred) {
+                                inferred = types::make_i32();
+                            }
+                            inferred_type_args.push_back(inferred);
                         }
                         std::string mangled_name =
                             require_enum_instantiation(gen_enum_name, inferred_type_args);
@@ -909,22 +1093,51 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             }
                         }
 
-                        std::string payload = gen_expr(*call.args[0]);
-                        expected_enum_type_ = saved_expected;
+                        if (call.args.size() == 1) {
+                            // Single-arg variant
+                            std::string payload = gen_expr(*call.args[0]);
+                            expected_enum_type_ = saved_expected;
 
-                        // Skip store for Unit payload - "{}" is zero-sized
-                        if (last_expr_type_ != "{}") {
-                            // Get pointer to payload field ([N x i8])
+                            // Skip store for Unit payload - "{}" is zero-sized
+                            if (last_expr_type_ != "{}") {
+                                std::string payload_ptr = fresh_reg();
+                                emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                          enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                                std::string payload_typed_ptr = fresh_reg();
+                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                          payload_ptr + " to ptr");
+                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                          payload_typed_ptr);
+                            }
+                        } else {
+                            // Multi-arg variant: store each field
+                            std::vector<std::string> arg_vals;
+                            std::vector<std::string> arg_types;
+                            for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                                arg_vals.push_back(gen_expr(*call.args[ai]));
+                                arg_types.push_back(last_expr_type_);
+                            }
+                            expected_enum_type_ = saved_expected;
+
+                            std::string tuple_type = "{ ";
+                            for (size_t ai = 0; ai < arg_types.size(); ++ai) {
+                                if (ai > 0)
+                                    tuple_type += ", ";
+                                tuple_type += arg_types[ai];
+                            }
+                            tuple_type += " }";
                             std::string payload_ptr = fresh_reg();
                             emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                       enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
-
-                            // Cast payload to bytes and store
-                            std::string payload_typed_ptr = fresh_reg();
-                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                      " to ptr");
-                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                      payload_typed_ptr);
+                            for (size_t ai = 0; ai < arg_vals.size(); ++ai) {
+                                std::string field_ptr = fresh_reg();
+                                emit_line("  " + field_ptr + " = getelementptr inbounds " +
+                                          tuple_type + ", ptr " + payload_ptr + ", i32 0, i32 " +
+                                          std::to_string(ai));
+                                emit_line("  store " + arg_types[ai] + " " + arg_vals[ai] +
+                                          ", ptr " + field_ptr);
+                            }
                         }
                     }
 
@@ -961,21 +1174,48 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Set payload if present (stored in field 1, the [N x i8] array)
                     if (!payload_types.empty() && !call.args.empty()) {
-                        std::string payload = gen_expr(*call.args[0]);
+                        if (call.args.size() == 1) {
+                            // Single-arg variant
+                            std::string payload = gen_expr(*call.args[0]);
 
-                        // Skip store for Unit payload - "{}" is zero-sized
-                        if (last_expr_type_ != "{}") {
-                            // Get pointer to payload field ([N x i8])
+                            // Skip store for Unit payload - "{}" is zero-sized
+                            if (last_expr_type_ != "{}") {
+                                std::string payload_ptr = fresh_reg();
+                                emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                          enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                                std::string payload_typed_ptr = fresh_reg();
+                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                          payload_ptr + " to ptr");
+                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                          payload_typed_ptr);
+                            }
+                        } else {
+                            // Multi-arg variant: store each field
+                            std::vector<std::string> arg_vals;
+                            std::vector<std::string> arg_types;
+                            for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                                arg_vals.push_back(gen_expr(*call.args[ai]));
+                                arg_types.push_back(last_expr_type_);
+                            }
+                            std::string tuple_type = "{ ";
+                            for (size_t ai = 0; ai < arg_types.size(); ++ai) {
+                                if (ai > 0)
+                                    tuple_type += ", ";
+                                tuple_type += arg_types[ai];
+                            }
+                            tuple_type += " }";
                             std::string payload_ptr = fresh_reg();
                             emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                       enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
-
-                            // Cast payload to bytes and store
-                            std::string payload_typed_ptr = fresh_reg();
-                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                      " to ptr");
-                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                      payload_typed_ptr);
+                            for (size_t ai = 0; ai < arg_vals.size(); ++ai) {
+                                std::string field_ptr = fresh_reg();
+                                emit_line("  " + field_ptr + " = getelementptr inbounds " +
+                                          tuple_type + ", ptr " + payload_ptr + ", i32 0, i32 " +
+                                          std::to_string(ai));
+                                emit_line("  store " + arg_types[ai] + " " + arg_vals[ai] +
+                                          ", ptr " + field_ptr);
+                            }
                         }
                     }
 

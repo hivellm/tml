@@ -1,0 +1,38 @@
+// Tests for std::http::error
+use test::{assert, assert_eq}
+use std::http::error::{HttpError, HttpErrorKind}
+
+@test
+func test_error_kind_values() -> I32 {
+    assert_eq(HttpErrorKind::InvalidUrl().raw(), 1, "InvalidUrl")
+    assert_eq(HttpErrorKind::DnsFailure().raw(), 2, "DnsFailure")
+    assert_eq(HttpErrorKind::ConnectionFailed().raw(), 3, "ConnectionFailed")
+    assert_eq(HttpErrorKind::TlsError().raw(), 4, "TlsError")
+    assert_eq(HttpErrorKind::Timeout().raw(), 5, "Timeout")
+    assert_eq(HttpErrorKind::InvalidResponse().raw(), 6, "InvalidResponse")
+    assert_eq(HttpErrorKind::TooManyRedirects().raw(), 7, "TooManyRedirects")
+    return 0
+}
+
+@test
+func test_error_constructors() -> I32 {
+    let e = HttpError::invalid_url("bad url")
+    assert_eq(e.kind().raw(), 1, "kind is InvalidUrl")
+    assert_eq(e.msg(), "bad url", "message")
+
+    let e2 = HttpError::timeout("10s elapsed")
+    assert_eq(e2.kind().raw(), 5, "kind is Timeout")
+    assert_eq(e2.msg(), "10s elapsed", "timeout msg")
+    return 0
+}
+
+@test
+func test_error_in_outcome() -> I32 {
+    let ok_result: Outcome[I32, HttpError] = Ok(42)
+    let err_result: Outcome[I32, HttpError] = Err(HttpError::dns_failure("no host"))
+
+    assert(ok_result.is_ok(), "ok is ok")
+    assert(err_result.is_err(), "err is err")
+    assert_eq(ok_result.unwrap(), 42, "unwrap ok")
+    return 0
+}

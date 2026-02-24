@@ -1,0 +1,93 @@
+//! Multipart/form-data builder.
+//!
+//! Constructs multipart request bodies for file uploads
+//! and form submissions per RFC 2046.
+
+use core::str
+use std::collections::List
+
+/// A single part in a multipart body.
+pub type MultipartPart {
+    name: Str,
+    filename: Str,
+    content_type: Str,
+    data: Str,
+}
+
+/// Builds multipart/form-data request bodies.
+pub type MultipartBuilder {
+    boundary: Str,
+    parts: List[MultipartPart],
+}
+
+impl MultipartBuilder {
+    /// Creates a new multipart builder with a default boundary.
+    pub func new() -> MultipartBuilder {
+        MultipartBuilder {
+            boundary: "----TMLBoundary7ma4d9abcdef",
+            parts: List[MultipartPart]::new(8),
+        }
+    }
+
+    /// Creates a builder with a custom boundary string.
+    pub func with_boundary(boundary: Str) -> MultipartBuilder {
+        MultipartBuilder {
+            boundary: boundary,
+            parts: List[MultipartPart]::new(8),
+        }
+    }
+
+    /// Adds a text field.
+    pub func add_field(this, name: Str, value: Str) {
+        this.parts.push(MultipartPart {
+            name: name,
+            filename: "",
+            content_type: "",
+            data: value,
+        })
+    }
+
+    /// Adds a file part.
+    pub func add_file(this, name: Str, filename: Str, content_type: Str, data: Str) {
+        this.parts.push(MultipartPart {
+            name: name,
+            filename: filename,
+            content_type: content_type,
+            data: data,
+        })
+    }
+
+    /// Returns the Content-Type header value including boundary.
+    pub func content_type(this) -> Str {
+        return "multipart/form-data; boundary={this.boundary}"
+    }
+
+    /// Builds the serialized multipart body.
+    pub func build(this) -> Str {
+        var result: Str = ""
+        var i: I64 = 0
+        let n: I64 = this.parts.len()
+        loop (i < n) {
+            let part: MultipartPart = this.parts.get(i)
+            result = "{result}--{this.boundary}\r\n"
+            if str::len(part.filename) > 0 {
+                result = "{result}Content-Disposition: form-data; name=\"{part.name}\"; filename=\"{part.filename}\"\r\n"
+                if str::len(part.content_type) > 0 {
+                    result = "{result}Content-Type: {part.content_type}\r\n"
+                }
+            } else {
+                result = "{result}Content-Disposition: form-data; name=\"{part.name}\"\r\n"
+            }
+            result = "{result}\r\n"
+            result = "{result}{part.data}\r\n"
+            i = i + 1
+        }
+        result = "{result}--{this.boundary}--\r\n"
+        return result
+    }
+
+    /// Frees internal storage.
+    pub func destroy(this) {
+        this.parts.destroy()
+    }
+}

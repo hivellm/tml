@@ -1,0 +1,31 @@
+use test
+use core::alloc::heap::Heap
+
+// Simple enum: only one Heap field per variant (avoids multi-arg constructor issue)
+enum SimpleList {
+    Node(Heap[SimpleList]),
+    End,
+}
+
+@test
+func test_enum_drop_end() -> I32 {
+    // End variant has no Heap - drop is a no-op
+    let list = SimpleList::End
+    return 0
+}
+
+@test
+func test_enum_drop_single_node() -> I32 {
+    // Single Node: Heap[SimpleList::End] should be freed
+    let list = SimpleList::Node(Heap::new(SimpleList::End))
+    return 0
+}
+
+@test
+func test_enum_drop_chain() -> I32 {
+    // Chain: Node(Heap[Node(Heap[End])]) - all Heap nodes freed
+    let list = SimpleList::Node(
+        Heap::new(SimpleList::Node(
+            Heap::new(SimpleList::End))))
+    return 0
+}

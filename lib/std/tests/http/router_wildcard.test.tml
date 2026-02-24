@@ -1,0 +1,71 @@
+// Tests for std::http::router — wildcard routes
+use test::{assert, assert_eq}
+use std::http::router::{Router, RouteMatch}
+
+@test
+func test_wildcard_catch_all() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/files/*filepath", 1)
+    let m = router.find("GET", "/files/docs/readme.txt")
+    assert(m.found, "should find wildcard route")
+    assert_eq(m.handler_id, 1, "handler_id should be 1")
+    assert_eq(m.param_count(), 1 as I64, "should have 1 param")
+    assert_eq(m.get_param("filepath"), "docs/readme.txt", "filepath should capture rest")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_wildcard_single_segment() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/files/*filepath", 1)
+    let m = router.find("GET", "/files/readme.txt")
+    assert(m.found, "should find single segment")
+    assert_eq(m.handler_id, 1, "handler_id")
+    assert_eq(m.get_param("filepath"), "readme.txt", "single segment capture")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_wildcard_no_match_different_prefix() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/files/*filepath", 1)
+    let m = router.find("GET", "/other/readme.txt")
+    assert(not m.found, "should not match different prefix")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_static_over_wildcard() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/files/*filepath", 1)
+    router.on("GET", "/files/special", 2)
+    let m1 = router.find("GET", "/files/special")
+    assert(m1.found, "should find static")
+    assert_eq(m1.handler_id, 2, "static should win over wildcard")
+    let m2 = router.find("GET", "/files/other.txt")
+    assert(m2.found, "should find wildcard")
+    assert_eq(m2.handler_id, 1, "wildcard handler")
+    assert_eq(m2.get_param("filepath"), "other.txt", "wildcard capture")
+    router.destroy()
+    return 0
+}
+
+@test
+func test_param_and_wildcard_coexist() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/api/:resource", 1)
+    router.on("GET", "/api/*rest", 2)
+    let m1 = router.find("GET", "/api/users")
+    assert(m1.found, "should find param route")
+    // Parametric has higher priority than wildcard
+    assert_eq(m1.handler_id, 1, "param should win over wildcard")
+    assert_eq(m1.get_param("resource"), "users", "resource param")
+    let m2 = router.find("GET", "/api/users/deep/path")
+    assert(m2.found, "should find wildcard for deep path")
+    assert_eq(m2.handler_id, 2, "wildcard handler for deep path")
+    router.destroy()
+    return 0
+}

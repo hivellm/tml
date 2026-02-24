@@ -448,6 +448,7 @@ impl Uuid {
     /// Format as standard string: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     ///
     /// The 36-character canonical form with lowercase hex and hyphens.
+    @allocates
     pub func to_string(this) -> Str {
         // Output: 8-4-4-4-12 = 36 chars + null
         let buf: *Unit = lowlevel { mem_alloc(37 as I64) }

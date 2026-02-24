@@ -1,0 +1,60 @@
+// Tests for std::http::method
+use test::{assert, assert_eq}
+use std::http::method::Method
+
+@test
+func test_method_to_string() -> I32 {
+    assert_eq(Method::GET().to_string(), "GET", "GET")
+    assert_eq(Method::POST().to_string(), "POST", "POST")
+    assert_eq(Method::PUT().to_string(), "PUT", "PUT")
+    assert_eq(Method::DELETE().to_string(), "DELETE", "DELETE")
+    assert_eq(Method::PATCH().to_string(), "PATCH", "PATCH")
+    assert_eq(Method::HEAD().to_string(), "HEAD", "HEAD")
+    assert_eq(Method::OPTIONS().to_string(), "OPTIONS", "OPTIONS")
+    assert_eq(Method::TRACE().to_string(), "TRACE", "TRACE")
+    assert_eq(Method::CONNECT().to_string(), "CONNECT", "CONNECT")
+    return 0
+}
+
+@test
+func test_method_from_string() -> I32 {
+    assert_eq(Method::from_string("GET").to_string(), "GET", "parse GET")
+    assert_eq(Method::from_string("POST").to_string(), "POST", "parse POST")
+    assert_eq(Method::from_string("DELETE").to_string(), "DELETE", "parse DELETE")
+    // Unknown defaults to GET
+    assert_eq(Method::from_string("INVALID").to_string(), "GET", "unknown -> GET")
+    return 0
+}
+
+@test
+func test_method_has_body() -> I32 {
+    assert(Method::POST().has_body(), "POST has body")
+    assert(Method::PUT().has_body(), "PUT has body")
+    assert(Method::PATCH().has_body(), "PATCH has body")
+    assert(not Method::GET().has_body(), "GET no body")
+    assert(not Method::HEAD().has_body(), "HEAD no body")
+    assert(not Method::DELETE().has_body(), "DELETE no body")
+    return 0
+}
+
+@test
+func test_method_is_safe() -> I32 {
+    assert(Method::GET().is_safe(), "GET is safe")
+    assert(Method::HEAD().is_safe(), "HEAD is safe")
+    assert(Method::OPTIONS().is_safe(), "OPTIONS is safe")
+    assert(not Method::POST().is_safe(), "POST not safe")
+    assert(not Method::PUT().is_safe(), "PUT not safe")
+    assert(not Method::DELETE().is_safe(), "DELETE not safe")
+    return 0
+}
+
+@test
+func test_method_is_idempotent() -> I32 {
+    assert(Method::GET().is_idempotent(), "GET idempotent")
+    assert(Method::PUT().is_idempotent(), "PUT idempotent")
+    assert(Method::DELETE().is_idempotent(), "DELETE idempotent")
+    assert(Method::HEAD().is_idempotent(), "HEAD idempotent")
+    assert(not Method::POST().is_idempotent(), "POST not idempotent")
+    assert(not Method::PATCH().is_idempotent(), "PATCH not idempotent")
+    return 0
+}

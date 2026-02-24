@@ -1,0 +1,172 @@
+//! HTTP header map with case-insensitive keys.
+//!
+//! Keys are stored lowercase internally via HashMap[Str, Str].
+//! Multi-value headers use comma-separated format per RFC 7230.
+
+use core::str
+use std::collections::{HashMap, HashMapIter}
+
+/// A collection of HTTP headers with case-insensitive key lookup.
+pub type Headers {
+    map: HashMap[Str, Str],
+}
+
+impl Headers {
+    /// Creates an empty header map.
+    pub func new() -> Headers {
+        Headers { map: HashMap[Str, Str]::new(16) }
+    }
+
+    /// Sets a header value, replacing any existing value for that key.
+    pub func set(this, key: Str, value: Str) {
+        let lower: Str = str::to_lowercase(key)
+        this.map.set(lower, value)
+    }
+
+    /// Gets the value for a header key, or "" if not present.
+    pub func get(this, key: Str) -> Str {
+        let lower: Str = str::to_lowercase(key)
+        if this.map.has(lower) {
+            return this.map.get(lower)
+        }
+        return ""
+    }
+
+    /// Returns true if the header exists.
+    pub func has(this, key: Str) -> Bool {
+        let lower: Str = str::to_lowercase(key)
+        return this.map.has(lower)
+    }
+
+    /// Removes a header by key.
+    pub func remove(this, key: Str) {
+        let lower: Str = str::to_lowercase(key)
+        this.map.remove(lower)
+    }
+
+    /// Appends a value to an existing header, comma-separated per RFC 7230.
+    /// If the header doesn't exist yet, behaves like set().
+    pub func append(this, key: Str, value: Str) {
+        let lower: Str = str::to_lowercase(key)
+        if this.map.has(lower) {
+            let existing: Str = this.map.get(lower)
+            this.map.set(lower, "{existing}, {value}")
+        } else {
+            this.map.set(lower, value)
+        }
+    }
+
+    /// Returns an iterator over all header key-value pairs.
+    /// Keys are lowercase. Use has_next(), key(), value(), next().
+    pub func iter(this) -> HashMapIter[Str, Str] {
+        return this.map.iter()
+    }
+
+    /// Serializes all headers to HTTP/1.1 wire format.
+    /// Each header becomes "Key: Value\r\n".
+    pub func serialize(this) -> Str {
+        var result: Str = ""
+        let it: HashMapIter[Str, Str] = this.map.iter()
+        loop (it.has_next()) {
+            let k: Str = it.key()
+            let v: Str = it.value()
+            result = "{result}{k}: {v}\r\n"
+            it.next()
+        }
+        it.destroy()
+        return result
+    }
+
+    // ── Convenience accessors ───────────────────────────────
+
+    /// Returns the Content-Length as I64, or -1 if not set or invalid.
+    pub func content_length(this) -> I64 {
+        let val: Str = this.get("content-length")
+        if str::len(val) == 0 {
+            return -1 as I64
+        }
+        let parsed: Maybe[I64] = str::parse_i64(val)
+        when parsed {
+            Just(n) => return n,
+            Nothing => return -1 as I64,
+        }
+    }
+
+    /// Returns the Content-Type header value, or "".
+    pub func content_type(this) -> Str {
+        return this.get("content-type")
+    }
+
+    /// Returns the Content-Encoding header value, or "".
+    pub func content_encoding(this) -> Str {
+        return this.get("content-encoding")
+    }
+
+    /// Returns the Transfer-Encoding header value, or "".
+    pub func transfer_encoding(this) -> Str {
+        return this.get("transfer-encoding")
+    }
+
+    /// Returns true if Transfer-Encoding contains "chunked".
+    pub func is_chunked(this) -> Bool {
+        let te: Str = this.get("transfer-encoding")
+        return str::contains(te, "chunked")
+    }
+
+    /// Returns the Host header value, or "".
+    pub func host(this) -> Str {
+        return this.get("host")
+    }
+
+    /// Returns the Connection header value, or "".
+    pub func connection(this) -> Str {
+        return this.get("connection")
+    }
+
+    /// Returns true if Connection: keep-alive.
+    pub func is_keep_alive(this) -> Bool {
+        let conn: Str = this.get("connection")
+        return str::contains(str::to_lowercase(conn), "keep-alive")
+    }
+
+    /// Returns true if Connection: close.
+    pub func is_close(this) -> Bool {
+        let conn: Str = this.get("connection")
+        return str::contains(str::to_lowercase(conn), "close")
+    }
+
+    /// Returns the Accept header value, or "".
+    pub func accept(this) -> Str {
+        return this.get("accept")
+    }
+
+    /// Returns the Accept-Encoding header value, or "".
+    pub func accept_encoding(this) -> Str {
+        return this.get("accept-encoding")
+    }
+
+    /// Returns the Authorization header value, or "".
+    pub func authorization(this) -> Str {
+        return this.get("authorization")
+    }
+
+    /// Returns the Location header value, or "".
+    pub func location(this) -> Str {
+        return this.get("location")
+    }
+
+    /// Returns the number of headers.
+    pub func len(this) -> I64 {
+        return this.map.len()
+    }
+
+    /// Returns true if no headers are set.
+    pub func is_empty(this) -> Bool {
+        return this.map.len() == 0
+    }
+
+    /// Frees internal storage.
+    pub func destroy(this) {
+        this.map.destroy()
+    }
+}

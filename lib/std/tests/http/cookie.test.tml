@@ -1,0 +1,44 @@
+// Tests for std::http::cookie
+use test::{assert, assert_eq}
+use std::http::cookie::{Cookie, parse_cookie}
+
+@test
+func test_cookie_basic() -> I32 {
+    let c = Cookie::new("session", "abc123")
+    assert_eq(c.name, "session", "name")
+    assert_eq(c.value, "abc123", "value")
+    assert_eq(c.path, "/", "default path")
+    return 0
+}
+
+@test
+func test_cookie_set_cookie_simple() -> I32 {
+    let c = Cookie::new("id", "42")
+    let header: Str = c.to_set_cookie()
+    assert_eq(header, "id=42; Path=/", "simple set-cookie")
+    return 0
+}
+
+@test
+func test_cookie_set_cookie_full() -> I32 {
+    let c = Cookie::new("token", "xyz")
+        .with_path("/api")
+        .with_domain("example.com")
+        .with_max_age(3600)
+        .with_http_only()
+        .with_secure()
+        .with_same_site("Strict")
+    let header: Str = c.to_set_cookie()
+    assert_eq(header, "token=xyz; Path=/api; Domain=example.com; Max-Age=3600; HttpOnly; Secure; SameSite=Strict", "full set-cookie")
+    return 0
+}
+
+@test
+func test_parse_cookie() -> I32 {
+    let header: Str = "session=abc123; theme=dark; lang=en"
+    assert_eq(parse_cookie(header, "session"), "abc123", "session")
+    assert_eq(parse_cookie(header, "theme"), "dark", "theme")
+    assert_eq(parse_cookie(header, "lang"), "en", "lang")
+    assert_eq(parse_cookie(header, "missing"), "", "missing")
+    return 0
+}

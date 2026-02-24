@@ -1,0 +1,58 @@
+// Tests for std::http::router — combined static, param, and wildcard
+use test::{assert, assert_eq}
+use std::http::router::{Router, RouteMatch}
+
+@test
+func test_full_api_router() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/", 1)
+    router.on("GET", "/api/health", 2)
+    router.on("GET", "/api/:resource", 3)
+    router.on("GET", "/api/:resource/:id", 4)
+    router.on("POST", "/api/:resource", 5)
+    router.on("GET", "/files/*filepath", 6)
+
+    // Root
+    let m0 = router.find("GET", "/")
+    assert(m0.found, "should find root")
+    assert_eq(m0.handler_id, 1, "root handler")
+
+    // Static
+    let m1 = router.find("GET", "/api/health")
+    assert(m1.found, "should find health")
+    assert_eq(m1.handler_id, 2, "health handler")
+
+    // Param
+    let m2 = router.find("GET", "/api/users")
+    assert(m2.found, "should find users")
+    assert_eq(m2.handler_id, 3, "resource handler")
+    assert_eq(m2.get_param("resource"), "users", "resource param")
+
+    // Nested params
+    let m3 = router.find("GET", "/api/users/42")
+    assert(m3.found, "should find users/42")
+    assert_eq(m3.handler_id, 4, "resource/id handler")
+    assert_eq(m3.get_param("resource"), "users", "resource")
+    assert_eq(m3.get_param("id"), "42", "id")
+
+    // Method isolation
+    let m4 = router.find("POST", "/api/items")
+    assert(m4.found, "should find POST")
+    assert_eq(m4.handler_id, 5, "POST handler")
+
+    // Wildcard
+    let m5 = router.find("GET", "/files/a/b/c.txt")
+    assert(m5.found, "should find wildcard")
+    assert_eq(m5.handler_id, 6, "wildcard handler")
+    assert_eq(m5.get_param("filepath"), "a/b/c.txt", "wildcard capture")
+
+    // Not found
+    let m6 = router.find("GET", "/unknown")
+    assert(not m6.found, "should not find unknown")
+
+    let m7 = router.find("DELETE", "/api/health")
+    assert(not m7.found, "DELETE not registered")
+
+    router.destroy()
+    return 0
+}
