@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Entry-Block Alloca Hoisting** (2026-02-24) — Loop-body allocas are now hoisted to the function entry block, enabling LLVM's `mem2reg` to promote them to SSA registers
+  - New `emit_hoisted_alloca()` method collects allocas and splices them into the entry block via marker-based string replacement with `rfind` for O(1) lookup
+  - Removed `stacksave`/`stackrestore` from all 3 loop types (`gen_loop`, `gen_while`, `gen_for`)
+  - Closure codegen saves/restores hoisting state since closures are independent functions
+  - `gen_let_stmt` allocas converted to use hoisted path
+  - Verified: SSE2 SIMD probe runs at **4 ns/op** (down from 16-18 ns with dynamic allocas), matching Rust-quality IR
+
+- **Native SSE2 Intrinsics** (2026-02-24) — Hardware SIMD support for x86_64 targets
+  - `sse2_cmpeq_epi8[T]` — PCMPEQB: byte-wise equality comparison → `<16 x i8>` mask
+  - `sse2_movemask_epi8[T]` — PMOVMSKB: extract high bits → `i32` bitmask
+  - `simd_splat[VecT, ElemT]` — broadcast scalar to all vector lanes via `insertelement` + `shufflevector`
+  - `simd_load_ptr[T]` — unaligned vector load from pointer (`align 1`)
+  - `cttz[T]` — count trailing zeros (`llvm.cttz`)
+  - Guarded with `#if X86_64` preprocessor directives for cross-platform safety
+  - Note: SIMD intrinsics work in non-generic functions; generic instantiation has codegen bugs (tracked for future fix)
+
+- **Stream Module** (2026-02-24) — `std::stream` with 5 source files
+  - `readable.tml` — `Readable` behavior for byte stream sources
+  - `writable.tml` — `Writable` behavior for byte stream sinks
+  - `buffered.tml` — `BufferedReader`/`BufferedWriter` with configurable buffer sizes
+  - `pipe.tml` — `pipe()` function connecting readable to writable
+  - `byte_stream.tml` — In-memory `ByteStream` implementing both Readable and Writable
+  - 5 test files: readable, writable, buffered, pipe, copy
+
+### Fixed
+- **HTTP Headers string comparison** (2026-02-24) — Rewrote `Headers` from `HashMap[Str, Str]` (broken: pointer equality) to linear arrays with string content comparison. Fixes all 6 `headers.test.tml` assertions. HTTP headers are typically <30 entries so linear scan is efficient.
+
+- **HashMap overflow panic with Str keys** (2026-02-24) — `hash_key()` used checked multiplication (`smul.with.overflow`) which panics when large pointer values (Str addresses) overflow I64. Changed to `wrapping_mul()` which generates plain LLVM `mul` — overflow is intentional for FNV-1a hash mixing.
+
 - **Recursive Enum Support** (2026-02-24) — Enums can now contain variants with `Heap[Self]` for tree/AST data structures
   - Cycle detection in `type_needs_drop` prevents stack overflow on recursive types (`env_lookups.cpp`)
   - Infinite-size detection (error T085) rejects `enum Bad { Loop(Bad) }` with suggestion to wrap in `Heap[T]` (`decl_struct.cpp`)
