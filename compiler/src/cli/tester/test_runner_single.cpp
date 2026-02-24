@@ -105,6 +105,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = test_file;
     options.llvm_source_coverage = CompilerOptions::coverage_source; // LLVM instrprof
+    options.lazy_library_defs = true;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -327,6 +328,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = fuzz_file;
+    options.lazy_library_defs = true;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -525,6 +527,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = test_file;
     options.llvm_source_coverage = CompilerOptions::coverage_source; // LLVM instrprof
+    options.lazy_library_defs = true;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);

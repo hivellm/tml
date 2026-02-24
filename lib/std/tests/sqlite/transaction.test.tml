@@ -1,0 +1,69 @@
+// Tests for transactions and connection properties
+use test::{assert, assert_eq}
+use std::sqlite::database::Database
+
+@test
+func test_autocommit_default() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    assert(db.is_autocommit(), "should be in autocommit mode by default")
+    db.close()
+    return 0
+}
+
+@test
+func test_begin_disables_autocommit() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.begin().unwrap()
+    assert(not db.is_autocommit(), "should not be in autocommit during transaction")
+    assert(db.is_transaction(), "should be in transaction")
+    let _: I32 = db.commit().unwrap()
+    assert(db.is_autocommit(), "should be back in autocommit after commit")
+    db.close()
+    return 0
+}
+
+@test
+func test_rollback() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (val INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (1)").unwrap()
+
+    let _: I32 = db.begin().unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (2)").unwrap()
+    let _: I32 = db.rollback().unwrap()
+
+    // Only the first row should exist
+    let stmt = db.prepare("SELECT count(*) FROM t").unwrap()
+    assert(stmt.step(), "should have result")
+    assert_eq(stmt.column_i64(0), 1, "should have only 1 row after rollback")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_enable_foreign_keys() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let result = db.enable_foreign_keys(true)
+    assert(result.is_ok(), "enabling foreign keys should succeed")
+    db.close()
+    return 0
+}
+
+@test
+func test_enable_wal() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let result = db.enable_wal()
+    assert(result.is_ok(), "enabling WAL should succeed")
+    db.close()
+    return 0
+}
+
+@test
+func test_set_busy_timeout() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let result = db.set_busy_timeout(5000)
+    assert(result.is_ok(), "setting busy timeout should succeed")
+    db.close()
+    return 0
+}

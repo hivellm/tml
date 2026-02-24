@@ -1,0 +1,68 @@
+// Tests for Database::exec and basic SQL operations
+use test::{assert, assert_eq}
+use std::sqlite::database::Database
+
+@test
+func test_exec_create_table() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let result = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    assert(result.is_ok(), "CREATE TABLE should succeed")
+    db.close()
+    return 0
+}
+
+@test
+func test_exec_insert_returns_changes() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").unwrap()
+    let changes: I32 = db.exec("INSERT INTO t (name) VALUES ('Alice')").unwrap()
+    assert_eq(changes, 1, "INSERT should change 1 row")
+    db.close()
+    return 0
+}
+
+@test
+func test_exec_invalid_sql_returns_error() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let result = db.exec("NOT VALID SQL")
+    assert(result.is_err(), "invalid SQL should return error")
+    db.close()
+    return 0
+}
+
+@test
+func test_last_insert_rowid() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (name) VALUES ('Alice')").unwrap()
+    assert_eq(db.last_insert_rowid(), 1, "first insert rowid should be 1")
+    let _: I32 = db.exec("INSERT INTO t (name) VALUES ('Bob')").unwrap()
+    assert_eq(db.last_insert_rowid(), 2, "second insert rowid should be 2")
+    db.close()
+    return 0
+}
+
+@test
+func test_changes() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, val INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (val) VALUES (1)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (val) VALUES (2)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (val) VALUES (3)").unwrap()
+    let _: I32 = db.exec("UPDATE t SET val = val + 10").unwrap()
+    assert_eq(db.changes(), 3, "UPDATE should change 3 rows")
+    db.close()
+    return 0
+}
+
+@test
+func test_total_changes() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, val INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (val) VALUES (1)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (val) VALUES (2)").unwrap()
+    let total: I32 = db.total_changes()
+    assert(total >= 2, "total changes should be >= 2")
+    db.close()
+    return 0
+}

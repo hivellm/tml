@@ -129,6 +129,15 @@ OpenSSLPaths find_openssl();
 // Check if a module registry uses any crypto modules
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry);
 
+// SQLite3 path info for linking
+struct SQLite3Paths {
+    bool found = false;
+    fs::path lib_path; // Full path to sqlite3.lib or libsqlite3.a
+};
+
+// Find SQLite3 installation (checks vcpkg_installed, then system paths)
+SQLite3Paths find_sqlite3();
+
 // ============================================================================
 // Diagnostic Helpers
 // ============================================================================

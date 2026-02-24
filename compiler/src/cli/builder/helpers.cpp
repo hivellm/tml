@@ -278,6 +278,55 @@ OpenSSLPaths find_openssl() {
     return result;
 }
 
+SQLite3Paths find_sqlite3() {
+    SQLite3Paths result;
+
+#ifdef _WIN32
+    // Check vcpkg_installed (project-local)
+    std::vector<fs::path> search_dirs = {
+        "vcpkg_installed/x64-windows/lib",
+        "../vcpkg_installed/x64-windows/lib",
+        "F:/Node/hivellm/tml/vcpkg_installed/x64-windows/lib",
+        "src/x64-windows/lib",
+        "../src/x64-windows/lib",
+    };
+    for (const auto& dir : search_dirs) {
+        fs::path lib = dir / "sqlite3.lib";
+        if (fs::exists(lib)) {
+            result.found = true;
+            result.lib_path = fs::absolute(lib);
+            return result;
+        }
+    }
+#else
+    // Unix: check vcpkg_installed, then system paths
+    std::vector<fs::path> search_dirs = {
+        "vcpkg_installed/x64-linux/lib",
+        "../vcpkg_installed/x64-linux/lib",
+        "/usr/lib",
+        "/usr/local/lib",
+        "/usr/lib/x86_64-linux-gnu",
+    };
+    for (const auto& dir : search_dirs) {
+        fs::path lib = dir / "libsqlite3.a";
+        if (fs::exists(lib)) {
+            result.found = true;
+            result.lib_path = fs::absolute(lib);
+            return result;
+        }
+        // Also check .so
+        fs::path so = dir / "libsqlite3.so";
+        if (fs::exists(so)) {
+            result.found = true;
+            result.lib_path = fs::absolute(so);
+            return result;
+        }
+    }
+#endif
+
+    return result;
+}
+
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
     if (!registry)
         return false;
@@ -1247,6 +1296,22 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
         } else {
             TML_LOG_WARN("build", "std::search imported but tml_search_runtime library not found");
+        }
+    }
+
+    // Link sqlite3 library if std::sqlite is imported
+    if (registry &&
+        (registry->has_module("std::sqlite") || registry->has_module("std::sqlite::database") ||
+         registry->has_module("std::sqlite::statement") ||
+         registry->has_module("std::sqlite::row") || registry->has_module("std::sqlite::ffi") ||
+         registry->has_module("std::sqlite::constants") ||
+         registry->has_module("std::sqlite::value"))) {
+        auto sqlite = find_sqlite3();
+        if (sqlite.found) {
+            objects.push_back(sqlite.lib_path);
+            TML_LOG_DEBUG("build", "Including sqlite3 library: " << sqlite.lib_path.string());
+        } else {
+            TML_LOG_WARN("build", "std::sqlite imported but sqlite3 library not found");
         }
     }
 

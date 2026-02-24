@@ -440,6 +440,7 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                             lib_options.coverage_enabled = CompilerOptions::coverage;
                             lib_options.coverage_quiet = CompilerOptions::coverage;
                             lib_options.llvm_source_coverage = CompilerOptions::coverage_source;
+                            lib_options.lazy_library_defs = true;
                             codegen::LLVMIRGen lib_gen(env, lib_options);
 
                             auto lib_result = lib_gen.generate(module);
@@ -666,6 +667,7 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                         options.coverage_quiet = CompilerOptions::coverage;
                         options.coverage_output_file = CompilerOptions::coverage_output;
                         options.llvm_source_coverage = CompilerOptions::coverage_source;
+                        options.lazy_library_defs = true;
                         // Pass pre-computed codegen state to skip emit_module_pure_tml_functions()
                         options.cached_library_state = shared_codegen_state;
                         codegen::LLVMIRGen llvm_gen(env, options);
@@ -931,6 +933,7 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                                 fb_options.coverage_quiet = CompilerOptions::coverage;
                                 fb_options.coverage_output_file = CompilerOptions::coverage_output;
                                 fb_options.llvm_source_coverage = CompilerOptions::coverage_source;
+                                fb_options.lazy_library_defs = true;
                                 codegen::LLVMIRGen llvm_gen(env, fb_options);
                                 auto gen_result = llvm_gen.generate(module);
 

@@ -1,0 +1,268 @@
+//! SQLite prepared statement.
+//!
+//! The [`Statement`] type represents a compiled SQL statement.
+//! It supports parameter binding, stepping through results,
+//! and reading column values.
+
+use std::sqlite::ffi
+use std::sqlite::constants::{
+    SQLITE_OK, SQLITE_ROW, SQLITE_DONE,
+    SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
+}
+use std::sqlite::value::Value
+use std::sqlite::row::Row
+
+/// A compiled prepared SQL statement.
+///
+/// # Lifecycle
+///
+/// 1. Create with `Database::prepare(sql)`
+/// 2. Bind parameters with `bind_*` methods (1-based index)
+/// 3. Execute with `step()` (returns true while rows available) or `run()`
+/// 4. Read columns with `column_*` methods (0-based index)
+/// 5. Call `reset()` to re-execute with new parameters
+/// 6. Call `finalize()` when done
+///
+/// # Examples
+///
+/// ```tml
+/// let stmt = db.prepare("SELECT * FROM users WHERE age > ?").unwrap()
+/// stmt.bind_i64(1, 25)
+/// loop (stmt.step()) {
+///     print("{}\n", stmt.column_str(1))
+/// }
+/// stmt.finalize()
+/// ```
+pub type Statement {
+    handle: *Unit,
+    db: *Unit,
+    column_count: I32,
+    has_row: Bool
+}
+
+/// Returns the SQLITE_TRANSIENT destructor value (inttoptr -1).
+/// This tells SQLite to make its own copy of bound text/blob data.
+@allocates
+func sqlite_transient() -> *Unit {
+    let neg_one: I64 = 0 - 1
+    let ptr: *Unit = lowlevel { neg_one as *Unit }
+    return ptr
+}
+
+impl Statement {
+    // ========================================================================
+    // Execution
+    // ========================================================================
+
+    /// Steps to the next row.
+    /// Returns `true` if a row is available, `false` when done or on error.
+    pub func step(mut this) -> Bool {
+        let rc: I32 = ffi::sqlite3_step(this.handle)
+        this.has_row = rc == SQLITE_ROW
+        return this.has_row
+    }
+
+    /// Executes the statement (for INSERT/UPDATE/DELETE).
+    /// Returns the number of rows changed on success.
+    pub func run(this) -> Outcome[I32, Str] {
+        let rc: I32 = ffi::sqlite3_step(this.handle)
+        if rc != SQLITE_DONE and rc != SQLITE_ROW {
+            let msg: Str = ffi::sqlite3_errmsg(this.db)
+            return Err(msg)
+        }
+        return Ok(ffi::sqlite3_changes(this.db))
+    }
+
+    /// Resets the statement for re-execution with new bindings.
+    pub func reset(mut this) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_reset(this.handle)
+        this.has_row = false
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    /// Clears all parameter bindings, setting them to NULL.
+    pub func clear_bindings(this) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_clear_bindings(this.handle)
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    // ========================================================================
+    // Parameter Binding (1-based index)
+    // ========================================================================
+
+    /// Binds an I64 value to parameter at 1-based index.
+    pub func bind_i64(this, idx: I32, value: I64) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_bind_int64(this.handle, idx, value)
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    /// Binds an I32 value to parameter at 1-based index.
+    pub func bind_i32(this, idx: I32, value: I32) -> Outcome[Unit, Str] {
+        return this.bind_i64(idx, value as I64)
+    }
+
+    /// Binds an F64 value to parameter at 1-based index.
+    pub func bind_f64(this, idx: I32, value: F64) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_bind_double(this.handle, idx, value)
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    /// Binds a string value to parameter at 1-based index.
+    /// SQLite makes its own copy of the string (SQLITE_TRANSIENT).
+    pub func bind_str(this, idx: I32, value: Str) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_bind_text(this.handle, idx, value, -1, sqlite_transient())
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    /// Binds NULL to parameter at 1-based index.
+    pub func bind_null(this, idx: I32) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_bind_null(this.handle, idx)
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.db))
+        }
+        return Ok(())
+    }
+
+    /// Binds a [`Value`] to parameter at 1-based index.
+    pub func bind_value(this, idx: I32, val: Value) -> Outcome[Unit, Str] {
+        when val {
+            Value::Integer(v) => return this.bind_i64(idx, v),
+            Value::Float(v) => return this.bind_f64(idx, v),
+            Value::Text(v) => return this.bind_str(idx, v),
+            Value::Null => return this.bind_null(idx)
+        }
+    }
+
+    /// Returns the number of bind parameters in this statement.
+    pub func bind_parameter_count(this) -> I32 {
+        return ffi::sqlite3_bind_parameter_count(this.handle)
+    }
+
+    /// Returns the name of a bind parameter at 1-based index (e.g. ":name", "@name", "$name").
+    pub func bind_parameter_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_bind_parameter_name(this.handle, idx)
+    }
+
+    /// Returns the 1-based index of a named bind parameter.
+    /// Returns 0 if no parameter with that name exists.
+    pub func bind_parameter_index(this, name: Str) -> I32 {
+        return ffi::sqlite3_bind_parameter_index(this.handle, name)
+    }
+
+    // ========================================================================
+    // Column Access (0-based index)
+    // ========================================================================
+
+    /// Returns the number of columns in the result set.
+    pub func columns(this) -> I32 {
+        return this.column_count
+    }
+
+    /// Returns the column type at the given 0-based index.
+    /// Returns one of: SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL.
+    pub func column_type(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_type(this.handle, idx)
+    }
+
+    /// Returns the column name at the given 0-based index.
+    pub func column_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_name(this.handle, idx)
+    }
+
+    /// Returns the declared type of the column at the given 0-based index.
+    pub func column_decltype(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_decltype(this.handle, idx)
+    }
+
+    /// Returns the I64 value at the given 0-based column index.
+    pub func column_i64(this, idx: I32) -> I64 {
+        return ffi::sqlite3_column_int64(this.handle, idx)
+    }
+
+    /// Returns the I32 value at the given 0-based column index.
+    pub func column_i32(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_int64(this.handle, idx) as I32
+    }
+
+    /// Returns the F64 value at the given 0-based column index.
+    pub func column_f64(this, idx: I32) -> F64 {
+        return ffi::sqlite3_column_double(this.handle, idx)
+    }
+
+    /// Returns the string value at the given 0-based column index.
+    pub func column_str(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_text(this.handle, idx)
+    }
+
+    /// Returns the byte count of the value at the given 0-based column index.
+    pub func column_bytes(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_bytes(this.handle, idx)
+    }
+
+    /// Returns true if the column value is NULL at the given 0-based index.
+    pub func column_is_null(this, idx: I32) -> Bool {
+        return ffi::sqlite3_column_type(this.handle, idx) == SQLITE_NULL
+    }
+
+    /// Returns a [`Value`] for the column at the given 0-based index.
+    pub func column_value(this, idx: I32) -> Value {
+        let col_type: I32 = ffi::sqlite3_column_type(this.handle, idx)
+        when col_type {
+            SQLITE_INTEGER => return Value::Integer(ffi::sqlite3_column_int64(this.handle, idx)),
+            SQLITE_FLOAT => return Value::Float(ffi::sqlite3_column_double(this.handle, idx)),
+            SQLITE_TEXT => return Value::Text(ffi::sqlite3_column_text(this.handle, idx)),
+            SQLITE_NULL => return Value::Null,
+            _ => return Value::Null
+        }
+    }
+
+    /// Returns the current row as a [`Row`] object.
+    pub func get_row(this) -> Row {
+        return Row { stmt_handle: this.handle, num_columns: this.column_count }
+    }
+
+    // ========================================================================
+    // Metadata
+    // ========================================================================
+
+    /// Returns the original SQL text of this statement.
+    pub func source_sql(this) -> Str {
+        return ffi::sqlite3_sql(this.handle)
+    }
+
+    /// Returns the number of data values available in the current row.
+    pub func data_count(this) -> I32 {
+        return ffi::sqlite3_data_count(this.handle)
+    }
+
+    // ========================================================================
+    // Lifecycle
+    // ========================================================================
+
+    /// Finalizes the statement, releasing resources.
+    pub func finalize(this) {
+        if this.handle != (0 as *Unit) {
+            ffi::sqlite3_finalize(this.handle)
+        }
+    }
+
+    /// Returns the raw statement handle for advanced FFI usage.
+    pub func raw_handle(this) -> *Unit {
+        return this.handle
+    }
+}

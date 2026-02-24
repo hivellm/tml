@@ -1,0 +1,61 @@
+//! SQLite3 constants.
+//!
+//! Result codes, column types, open flags, and other SQLite constants.
+
+// ============================================================================
+// Result Codes
+// ============================================================================
+
+pub const SQLITE_OK: I32 = 0
+pub const SQLITE_ERROR: I32 = 1
+pub const SQLITE_INTERNAL: I32 = 2
+pub const SQLITE_PERM: I32 = 3
+pub const SQLITE_ABORT: I32 = 4
+pub const SQLITE_BUSY: I32 = 5
+pub const SQLITE_LOCKED: I32 = 6
+pub const SQLITE_NOMEM: I32 = 7
+pub const SQLITE_READONLY: I32 = 8
+pub const SQLITE_INTERRUPT: I32 = 9
+pub const SQLITE_IOERR: I32 = 10
+pub const SQLITE_CORRUPT: I32 = 11
+pub const SQLITE_NOTFOUND: I32 = 12
+pub const SQLITE_FULL: I32 = 13
+pub const SQLITE_CANTOPEN: I32 = 14
+pub const SQLITE_PROTOCOL: I32 = 15
+pub const SQLITE_EMPTY: I32 = 16
+pub const SQLITE_SCHEMA: I32 = 17
+pub const SQLITE_TOOBIG: I32 = 18
+pub const SQLITE_CONSTRAINT: I32 = 19
+pub const SQLITE_MISMATCH: I32 = 20
+pub const SQLITE_MISUSE: I32 = 21
+pub const SQLITE_NOLFS: I32 = 22
+pub const SQLITE_AUTH: I32 = 23
+pub const SQLITE_RANGE: I32 = 25
+pub const SQLITE_NOTADB: I32 = 26
+pub const SQLITE_ROW: I32 = 100
+pub const SQLITE_DONE: I32 = 101
+
+// ============================================================================
+// Column Types
+// ============================================================================
+
+pub const SQLITE_INTEGER: I32 = 1
+pub const SQLITE_FLOAT: I32 = 2
+pub const SQLITE_TEXT: I32 = 3
+pub const SQLITE_BLOB: I32 = 4
+pub const SQLITE_NULL: I32 = 5
+
+// ============================================================================
+// Open Flags (for sqlite3_open_v2)
+// ============================================================================
+
+pub const SQLITE_OPEN_READONLY: I32 = 1
+pub const SQLITE_OPEN_READWRITE: I32 = 2
+pub const SQLITE_OPEN_CREATE: I32 = 4
+pub const SQLITE_OPEN_URI: I32 = 64
+pub const SQLITE_OPEN_MEMORY: I32 = 128
+pub const SQLITE_OPEN_NOMUTEX: I32 = 32768
+pub const SQLITE_OPEN_FULLMUTEX: I32 = 65536
+pub const SQLITE_OPEN_SHAREDCACHE: I32 = 131072
+pub const SQLITE_OPEN_PRIVATECACHE: I32 = 262144
+pub const SQLITE_OPEN_NOFOLLOW: I32 = 16777216

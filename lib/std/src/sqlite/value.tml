@@ -1,0 +1,98 @@
+//! Dynamic SQLite value type.
+//!
+//! Represents a value that can be any SQLite column type:
+//! integer, float, text, blob, or null.
+
+use std::sqlite::constants::{SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL}
+
+/// A dynamically-typed SQLite value.
+pub enum Value {
+    /// A 64-bit signed integer.
+    Integer(I64),
+    /// A 64-bit IEEE 754 float.
+    Float(F64),
+    /// A UTF-8 text string.
+    Text(Str),
+    /// A NULL value.
+    Null
+}
+
+impl Value {
+    /// Returns true if this value is NULL.
+    pub func is_null(this) -> Bool {
+        when this {
+            Value::Null => true,
+            _ => false
+        }
+    }
+
+    /// Returns true if this value is an integer.
+    pub func is_integer(this) -> Bool {
+        when this {
+            Value::Integer(_) => true,
+            _ => false
+        }
+    }
+
+    /// Returns true if this value is a float.
+    pub func is_float(this) -> Bool {
+        when this {
+            Value::Float(_) => true,
+            _ => false
+        }
+    }
+
+    /// Returns true if this value is text.
+    pub func is_text(this) -> Bool {
+        when this {
+            Value::Text(_) => true,
+            _ => false
+        }
+    }
+
+    /// Returns the integer value, or 0 if not an integer.
+    pub func as_i64(this) -> I64 {
+        when this {
+            Value::Integer(v) => v,
+            Value::Float(v) => v as I64,
+            _ => 0
+        }
+    }
+
+    /// Returns the float value, or 0.0 if not a float.
+    pub func as_f64(this) -> F64 {
+        when this {
+            Value::Float(v) => v,
+            Value::Integer(v) => v as F64,
+            _ => 0.0
+        }
+    }
+
+    /// Returns the text value, or empty string if not text.
+    pub func as_str(this) -> Str {
+        when this {
+            Value::Text(v) => v,
+            _ => ""
+        }
+    }
+
+    /// Returns the SQLite type code for this value.
+    pub func type_code(this) -> I32 {
+        when this {
+            Value::Integer(_) => SQLITE_INTEGER,
+            Value::Float(_) => SQLITE_FLOAT,
+            Value::Text(_) => SQLITE_TEXT,
+            Value::Null => SQLITE_NULL
+        }
+    }
+
+    /// Returns a human-readable type name.
+    pub func type_name(this) -> Str {
+        when this {
+            Value::Integer(_) => "INTEGER",
+            Value::Float(_) => "REAL",
+            Value::Text(_) => "TEXT",
+            Value::Null => "NULL"
+        }
+    }
+}

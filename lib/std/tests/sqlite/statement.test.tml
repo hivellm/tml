@@ -1,0 +1,69 @@
+// Tests for std::sqlite::statement
+use test::{assert, assert_eq}
+use std::sqlite::database::Database
+use std::sqlite::statement::Statement
+
+@test
+func test_prepare_and_step() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (name) VALUES ('Alice')").unwrap()
+    let _: I32 = db.exec("INSERT INTO t (name) VALUES ('Bob')").unwrap()
+
+    let stmt: Statement = db.prepare("SELECT id, name FROM t ORDER BY id").unwrap()
+    assert_eq(stmt.columns(), 2, "should have 2 columns")
+
+    // First row
+    assert(stmt.step(), "should have first row")
+    let id1: I64 = stmt.column_i64(0)
+    let name1: Str = stmt.column_str(1)
+    assert_eq(id1, 1, "first row id")
+    assert_eq(name1, "Alice", "first row name")
+
+    // Second row
+    assert(stmt.step(), "should have second row")
+    let id2: I64 = stmt.column_i64(0)
+    let name2: Str = stmt.column_str(1)
+    assert_eq(id2, 2, "second row id")
+    assert_eq(name2, "Bob", "second row name")
+
+    // No more rows
+    assert(not stmt.step(), "should have no more rows")
+
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_column_count() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (a INTEGER, b TEXT, c REAL)").unwrap()
+    let stmt: Statement = db.prepare("SELECT a, b, c FROM t").unwrap()
+    assert_eq(stmt.columns(), 3, "should have 3 columns")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_column_types() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE t (i INTEGER, f REAL, s TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO t VALUES (42, 3.14, 'hello')").unwrap()
+
+    let stmt: Statement = db.prepare("SELECT i, f, s FROM t").unwrap()
+    assert(stmt.step(), "should have a row")
+
+    let i: I64 = stmt.column_i64(0)
+    let f: F64 = stmt.column_f64(1)
+    let s: Str = stmt.column_str(2)
+
+    assert_eq(i, 42, "integer column")
+    assert(f > 3.13 and f < 3.15, "float column")
+    assert_eq(s, "hello", "text column")
+
+    stmt.finalize()
+    db.close()
+    return 0
+}

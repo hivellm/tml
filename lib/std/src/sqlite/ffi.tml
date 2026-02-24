@@ -1,0 +1,166 @@
+//! Raw FFI bindings to the sqlite3 C API.
+//!
+//! These are low-level bindings. Prefer using [`Database`] and [`Statement`]
+//! from the parent module for safe, ergonomic access.
+
+// ============================================================================
+// Core Database Operations
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_open(filename: Str, ppDb: *(*Unit)) -> I32
+
+@extern("c")
+pub func sqlite3_open_v2(filename: Str, ppDb: *(*Unit), flags: I32, vfs: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_close(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_close_v2(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_exec(db: *Unit, sql: Str, callback: *Unit, arg: *Unit, errmsg: *(*Unit)) -> I32
+
+@extern("c")
+pub func sqlite3_errmsg(db: *Unit) -> Str
+
+@extern("c")
+pub func sqlite3_errcode(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_free(ptr: *Unit)
+
+@extern("c")
+pub func sqlite3_changes(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_total_changes(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_last_insert_rowid(db: *Unit) -> I64
+
+@extern("c")
+pub func sqlite3_busy_timeout(db: *Unit, ms: I32) -> I32
+
+@extern("c")
+pub func sqlite3_get_autocommit(db: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_db_filename(db: *Unit, name: Str) -> Str
+
+@extern("c")
+pub func sqlite3_db_readonly(db: *Unit, name: Str) -> I32
+
+// ============================================================================
+// Prepared Statements
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_prepare_v2(db: *Unit, sql: Str, nByte: I32, ppStmt: *(*Unit), pzTail: *(*Unit)) -> I32
+
+@extern("c")
+pub func sqlite3_step(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_finalize(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_reset(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_clear_bindings(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_sql(stmt: *Unit) -> Str
+
+@extern("c")
+pub func sqlite3_expanded_sql(stmt: *Unit) -> Str
+
+@extern("c")
+pub func sqlite3_bind_parameter_count(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_bind_parameter_name(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_bind_parameter_index(stmt: *Unit, name: Str) -> I32
+
+// ============================================================================
+// Parameter Binding
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_bind_int64(stmt: *Unit, idx: I32, value: I64) -> I32
+
+@extern("c")
+pub func sqlite3_bind_double(stmt: *Unit, idx: I32, value: F64) -> I32
+
+@extern("c")
+pub func sqlite3_bind_text(stmt: *Unit, idx: I32, text: Str, n: I32, destructor: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_bind_blob(stmt: *Unit, idx: I32, data: *Unit, n: I32, destructor: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_bind_null(stmt: *Unit, idx: I32) -> I32
+
+@extern("c")
+pub func sqlite3_bind_zeroblob(stmt: *Unit, idx: I32, n: I32) -> I32
+
+// ============================================================================
+// Column Access
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_column_count(stmt: *Unit) -> I32
+
+@extern("c")
+pub func sqlite3_column_type(stmt: *Unit, idx: I32) -> I32
+
+@extern("c")
+pub func sqlite3_column_name(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_column_int64(stmt: *Unit, idx: I32) -> I64
+
+@extern("c")
+pub func sqlite3_column_double(stmt: *Unit, idx: I32) -> F64
+
+@extern("c")
+pub func sqlite3_column_text(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_column_blob(stmt: *Unit, idx: I32) -> *Unit
+
+@extern("c")
+pub func sqlite3_column_bytes(stmt: *Unit, idx: I32) -> I32
+
+@extern("c")
+pub func sqlite3_column_decltype(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_data_count(stmt: *Unit) -> I32
+
+// ============================================================================
+// Table Metadata
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_column_database_name(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_column_table_name(stmt: *Unit, idx: I32) -> Str
+
+@extern("c")
+pub func sqlite3_column_origin_name(stmt: *Unit, idx: I32) -> Str
+
+// ============================================================================
+// Version Info
+// ============================================================================
+
+@extern("c")
+pub func sqlite3_libversion() -> Str
+
+@extern("c")
+pub func sqlite3_libversion_number() -> I32

@@ -1,0 +1,63 @@
+//! SQLite3 embedded database module.
+//!
+//! Provides a safe TML interface to SQLite3, inspired by the Node.js `node:sqlite` API.
+//!
+//! # Architecture
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Database`] | Connection to an SQLite database file or in-memory DB |
+//! | [`Statement`] | Compiled prepared statement with bind/step/column |
+//! | [`Row`] | A single result row with typed column access |
+//! | [`Value`] | Dynamic SQLite value (integer, float, text, null) |
+//!
+//! # Examples
+//!
+//! ## Quick Start
+//!
+//! ```tml
+//! use std::sqlite::{Database, Statement}
+//!
+//! let db = Database::open_in_memory().unwrap()
+//! db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
+//! db.exec("INSERT INTO users (name, age) VALUES ('Alice', 30)")
+//! db.exec("INSERT INTO users (name, age) VALUES ('Bob', 25)")
+//!
+//! let stmt = db.prepare("SELECT id, name, age FROM users ORDER BY id").unwrap()
+//! loop (stmt.step()) {
+//!     print("{}: {} (age {})\n", stmt.column_i64(0), stmt.column_str(1), stmt.column_i64(2))
+//! }
+//! stmt.finalize()
+//! db.close()
+//! ```
+//!
+//! ## Prepared Statements with Parameters
+//!
+//! ```tml
+//! let insert = db.prepare("INSERT INTO users (name, age) VALUES (?, ?)").unwrap()
+//! insert.bind_str(1, "Charlie")
+//! insert.bind_i64(2, 35)
+//! insert.execute()
+//!
+//! insert.reset()
+//! insert.bind_str(1, "Diana")
+//! insert.bind_i64(2, 28)
+//! insert.execute()
+//! insert.finalize()
+//! ```
+//!
+//! ## Transactions
+//!
+//! ```tml
+//! db.begin()
+//! db.exec("INSERT INTO users (name, age) VALUES ('Eve', 22)")
+//! db.exec("INSERT INTO users (name, age) VALUES ('Frank', 40)")
+//! db.commit()
+//! ```
+
+pub mod ffi
+pub mod constants
+pub mod value
+pub mod database
+pub mod statement
+pub mod row

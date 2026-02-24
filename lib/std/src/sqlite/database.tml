@@ -1,0 +1,276 @@
+//! SQLite database connection.
+//!
+//! The [`Database`] type represents a connection to an SQLite database.
+//! It supports opening files, in-memory databases, executing SQL,
+//! preparing statements, and managing transactions.
+
+use std::sqlite::ffi
+use std::sqlite::constants::{
+    SQLITE_OK, SQLITE_ROW, SQLITE_DONE,
+    SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE, SQLITE_OPEN_READONLY,
+    SQLITE_OPEN_MEMORY, SQLITE_OPEN_URI
+}
+use std::sqlite::statement::Statement
+
+/// A connection to an SQLite database.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sqlite::database::Database
+///
+/// let db = Database::open_in_memory().unwrap()
+/// db.exec("CREATE TABLE t (id INTEGER)")
+/// db.exec("INSERT INTO t VALUES (1)")
+/// let count = db.changes()
+/// db.close()
+/// ```
+pub type Database {
+    handle: *Unit,
+    is_open: Bool
+}
+
+impl Database {
+    /// Opens a database file in read-write mode.
+    /// Creates the file if it does not exist.
+    pub func open(path: Str) -> Outcome[Database, Str] {
+        var db_ptr: *Unit = 0 as *Unit
+        let rc: I32 = ffi::sqlite3_open(path, (&db_ptr) as *(*Unit))
+        if rc != SQLITE_OK {
+            let msg: Str = if db_ptr != (0 as *Unit) {
+                let err: Str = ffi::sqlite3_errmsg(db_ptr)
+                ffi::sqlite3_close(db_ptr)
+                err
+            } else {
+                "Failed to allocate database handle"
+            }
+            return Err(msg)
+        }
+        return Ok(Database { handle: db_ptr, is_open: true })
+    }
+
+    /// Opens a database with explicit flags.
+    ///
+    /// Use constants from `std::sqlite::constants`:
+    /// - `SQLITE_OPEN_READONLY` — open in read-only mode
+    /// - `SQLITE_OPEN_READWRITE` — open in read-write mode
+    /// - `SQLITE_OPEN_CREATE` — create if not exists (combine with READWRITE)
+    /// - `SQLITE_OPEN_MEMORY` — open as in-memory database
+    /// - `SQLITE_OPEN_URI` — interpret path as URI
+    pub func open_with_flags(path: Str, flags: I32) -> Outcome[Database, Str] {
+        var db_ptr: *Unit = 0 as *Unit
+        let rc: I32 = ffi::sqlite3_open_v2(path, (&db_ptr) as *(*Unit), flags, 0 as *Unit)
+        if rc != SQLITE_OK {
+            let msg: Str = if db_ptr != (0 as *Unit) {
+                let err: Str = ffi::sqlite3_errmsg(db_ptr)
+                ffi::sqlite3_close(db_ptr)
+                err
+            } else {
+                "Failed to allocate database handle"
+            }
+            return Err(msg)
+        }
+        return Ok(Database { handle: db_ptr, is_open: true })
+    }
+
+    /// Opens a read-only database.
+    pub func open_readonly(path: Str) -> Outcome[Database, Str] {
+        return Database::open_with_flags(path, SQLITE_OPEN_READONLY)
+    }
+
+    /// Opens an in-memory database.
+    pub func open_in_memory() -> Outcome[Database, Str] {
+        return Database::open(":memory:")
+    }
+
+    /// Executes one or more SQL statements that do not return rows.
+    ///
+    /// This is the equivalent of Node.js `db.exec(sql)`.
+    /// Returns the number of rows changed by the last statement.
+    pub func exec(this, sql: Str) -> Outcome[I32, Str] {
+        var errmsg_ptr: *Unit = 0 as *Unit
+        let rc: I32 = ffi::sqlite3_exec(this.handle, sql, 0 as *Unit, 0 as *Unit, (&errmsg_ptr) as *(*Unit))
+        if rc != SQLITE_OK {
+            let msg: Str = if errmsg_ptr != (0 as *Unit) {
+                let err: Str = errmsg_ptr as Str
+                ffi::sqlite3_free(errmsg_ptr)
+                err
+            } else {
+                "SQL execution failed"
+            }
+            return Err(msg)
+        }
+        return Ok(ffi::sqlite3_changes(this.handle))
+    }
+
+    /// Prepares an SQL statement for execution.
+    ///
+    /// This is the equivalent of Node.js `db.prepare(sql)`.
+    /// Returns a compiled [`Statement`] that can be executed multiple times.
+    pub func prepare(this, sql: Str) -> Outcome[Statement, Str] {
+        var stmt_ptr: *Unit = 0 as *Unit
+        let rc: I32 = ffi::sqlite3_prepare_v2(this.handle, sql, -1, (&stmt_ptr) as *(*Unit), 0 as *(*Unit))
+        if rc != SQLITE_OK {
+            let msg: Str = ffi::sqlite3_errmsg(this.handle)
+            return Err(msg)
+        }
+        let col_count: I32 = ffi::sqlite3_column_count(stmt_ptr)
+        return Ok(Statement {
+            handle: stmt_ptr,
+            db: this.handle,
+            column_count: col_count,
+            has_row: false
+        })
+    }
+
+    /// Returns the number of rows changed by the last INSERT, UPDATE, or DELETE.
+    pub func changes(this) -> I32 {
+        return ffi::sqlite3_changes(this.handle)
+    }
+
+    /// Returns the total number of rows changed since the connection was opened.
+    pub func total_changes(this) -> I32 {
+        return ffi::sqlite3_total_changes(this.handle)
+    }
+
+    /// Returns the row ID of the last successful INSERT.
+    pub func last_insert_rowid(this) -> I64 {
+        return ffi::sqlite3_last_insert_rowid(this.handle)
+    }
+
+    /// Returns the last error message from this connection.
+    pub func error_message(this) -> Str {
+        return ffi::sqlite3_errmsg(this.handle)
+    }
+
+    /// Returns the last error code from this connection.
+    pub func error_code(this) -> I32 {
+        return ffi::sqlite3_errcode(this.handle)
+    }
+
+    /// Returns whether the database is in autocommit mode (no active transaction).
+    pub func is_autocommit(this) -> Bool {
+        return ffi::sqlite3_get_autocommit(this.handle) != 0
+    }
+
+    /// Returns whether the connection is currently open.
+    pub func is_open(this) -> Bool {
+        return this.is_open
+    }
+
+    /// Returns whether a transaction is currently active.
+    pub func is_transaction(this) -> Bool {
+        return ffi::sqlite3_get_autocommit(this.handle) == 0
+    }
+
+    /// Returns the filename of the database (null for in-memory).
+    pub func filename(this) -> Str {
+        return ffi::sqlite3_db_filename(this.handle, "main")
+    }
+
+    /// Returns whether the database is read-only.
+    /// Returns -1 if the database name is not found.
+    pub func is_readonly(this) -> Bool {
+        return ffi::sqlite3_db_readonly(this.handle, "main") == 1
+    }
+
+    /// Sets the busy timeout in milliseconds.
+    /// When a table is locked, SQLite will retry for up to this many milliseconds.
+    pub func set_busy_timeout(this, ms: I32) -> Outcome[Unit, Str] {
+        let rc: I32 = ffi::sqlite3_busy_timeout(this.handle, ms)
+        if rc != SQLITE_OK {
+            return Err(ffi::sqlite3_errmsg(this.handle))
+        }
+        return Ok(())
+    }
+
+    // ========================================================================
+    // Transactions
+    // ========================================================================
+
+    /// Begins a deferred transaction (default).
+    pub func begin(this) -> Outcome[I32, Str] {
+        return this.exec("BEGIN")
+    }
+
+    /// Begins an immediate transaction (acquires RESERVED lock immediately).
+    pub func begin_immediate(this) -> Outcome[I32, Str] {
+        return this.exec("BEGIN IMMEDIATE")
+    }
+
+    /// Begins an exclusive transaction (acquires EXCLUSIVE lock immediately).
+    pub func begin_exclusive(this) -> Outcome[I32, Str] {
+        return this.exec("BEGIN EXCLUSIVE")
+    }
+
+    /// Commits the current transaction.
+    pub func commit(this) -> Outcome[I32, Str] {
+        return this.exec("COMMIT")
+    }
+
+    /// Rolls back the current transaction.
+    pub func rollback(this) -> Outcome[I32, Str] {
+        return this.exec("ROLLBACK")
+    }
+
+    /// Creates a named savepoint.
+    pub func savepoint(this, name: Str) -> Outcome[I32, Str] {
+        return this.exec("SAVEPOINT " + name)
+    }
+
+    /// Releases (commits) a named savepoint.
+    pub func release(this, name: Str) -> Outcome[I32, Str] {
+        return this.exec("RELEASE " + name)
+    }
+
+    /// Rolls back to a named savepoint.
+    pub func rollback_to(this, name: Str) -> Outcome[I32, Str] {
+        return this.exec("ROLLBACK TO " + name)
+    }
+
+    // ========================================================================
+    // Pragmas
+    // ========================================================================
+
+    /// Enables or disables foreign key constraints.
+    pub func enable_foreign_keys(this, enable: Bool) -> Outcome[I32, Str] {
+        if enable {
+            return this.exec("PRAGMA foreign_keys = ON")
+        }
+        return this.exec("PRAGMA foreign_keys = OFF")
+    }
+
+    /// Enables or disables WAL (Write-Ahead Logging) journal mode.
+    /// WAL mode allows concurrent reads and writes.
+    pub func enable_wal(this) -> Outcome[I32, Str] {
+        return this.exec("PRAGMA journal_mode = WAL")
+    }
+
+    /// Returns the SQLite library version string.
+    pub func sqlite_version() -> Str {
+        return ffi::sqlite3_libversion()
+    }
+
+    /// Returns the SQLite library version number.
+    pub func sqlite_version_number() -> I32 {
+        return ffi::sqlite3_libversion_number()
+    }
+
+    // ========================================================================
+    // Connection Lifecycle
+    // ========================================================================
+
+    /// Closes the database connection.
+    pub func close(mut this) {
+        if this.is_open and this.handle != (0 as *Unit) {
+            ffi::sqlite3_close_v2(this.handle)
+            this.handle = 0 as *Unit
+            this.is_open = false
+        }
+    }
+
+    /// Returns the raw database handle for advanced FFI usage.
+    pub func raw_handle(this) -> *Unit {
+        return this.handle
+    }
+}

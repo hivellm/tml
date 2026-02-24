@@ -228,6 +228,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         options.dll_export = false;
         options.force_internal_linkage = false; // Allow linking
         options.emit_debug_info = false;
+        options.lazy_library_defs = true;
         codegen::LLVMIRGen llvm_gen(env, options);
 
         auto gen_result = llvm_gen.generate(module);
@@ -584,6 +585,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                 lib_options.emit_debug_info = false;
                                 lib_options.coverage_enabled = CompilerOptions::coverage;
                                 lib_options.coverage_quiet = CompilerOptions::coverage;
+                                lib_options.lazy_library_defs = true;
                                 codegen::LLVMIRGen lib_gen(env, lib_options);
 
                                 auto gen_result = lib_gen.generate(module);

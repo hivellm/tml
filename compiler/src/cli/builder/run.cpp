@@ -43,14 +43,18 @@ namespace {
 static void ensure_runtime_dlls(const fs::path& target_dir) {
 #ifdef _WIN32
     // vcpkg DLLs that may be needed by tml_zlib_runtime
-    static const std::vector<std::string> dll_names = {"zlib1.dll", "zstd.dll", "brotlicommon.dll",
-                                                       "brotlidec.dll", "brotlienc.dll"};
+    static const std::vector<std::string> dll_names = {"zlib1.dll",        "zstd.dll",
+                                                       "brotlicommon.dll", "brotlidec.dll",
+                                                       "brotlienc.dll",    "sqlite3.dll"};
 
     // Search for DLLs in known locations
     std::vector<fs::path> search_dirs = {
         "src/x64-windows/bin",
         "../src/x64-windows/bin",
         "F:/Node/hivellm/tml/src/x64-windows/bin",
+        "vcpkg_installed/x64-windows/bin",
+        "../vcpkg_installed/x64-windows/bin",
+        "F:/Node/hivellm/tml/vcpkg_installed/x64-windows/bin",
     };
 
     for (const auto& dll_name : dll_names) {
@@ -178,6 +182,7 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
         qctx.cache().lookup<query::ParseModuleResult>(query::ParseModuleKey{path, module_name});
 
     result.success = true;
+
     result.llvm_ir = codegen_result.llvm_ir;
     result.object_file = codegen_result.object_file;
     result.link_libs = codegen_result.link_libs;
@@ -229,38 +234,12 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    fs::path obj_output;
-
-    if (!compile.object_file.empty()) {
-        // Cranelift path: object file already produced by the backend
-        obj_output = compile.object_file;
-        TML_LOG_DEBUG("build", "Using Cranelift object: " << obj_output);
-    } else {
-        // LLVM path: compile IR text to object file
-        std::string content_hash = generate_content_hash(llvm_ir);
-        obj_output = cache_dir / (content_hash + get_object_extension());
-
-        bool use_cached_obj = fs::exists(obj_output);
-
-        if (use_cached_obj) {
-            TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
-        } else {
-            ObjectCompileOptions obj_options;
-            obj_options.optimization_level = tml::CompilerOptions::optimization_level;
-            obj_options.debug_info = tml::CompilerOptions::debug_info;
-            obj_options.verbose = verbose;
-            obj_options.target_triple = tml::CompilerOptions::target_triple;
-            obj_options.sysroot = tml::CompilerOptions::sysroot;
-
-            auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
-            if (!obj_result.success) {
-                TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
-                return 1;
-            }
-
-            TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
-        }
-    }
+    ObjectCompileOptions obj_options;
+    obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+    obj_options.debug_info = tml::CompilerOptions::debug_info;
+    obj_options.verbose = verbose;
+    obj_options.target_triple = tml::CompilerOptions::target_triple;
+    obj_options.sysroot = tml::CompilerOptions::sysroot;
 
     fs::path exe_output = cache_dir / module_name;
 #ifdef _WIN32
@@ -269,7 +248,28 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     // Collect all object files to link
     std::vector<fs::path> object_files;
-    object_files.push_back(obj_output);
+
+    if (!compile.object_file.empty()) {
+        // Cranelift path: object file already produced by the backend
+        object_files.push_back(compile.object_file);
+        TML_LOG_DEBUG("build", "Using Cranelift object: " << compile.object_file);
+    } else {
+        // Monolithic LLVM path: compile IR text to object file
+        std::string content_hash = generate_content_hash(llvm_ir);
+        fs::path obj_output = cache_dir / (content_hash + get_object_extension());
+
+        if (fs::exists(obj_output)) {
+            TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
+        } else {
+            auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
+            if (!obj_result.success) {
+                TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
+                return 1;
+            }
+            TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
+        }
+        object_files.push_back(obj_output);
+    }
 
     // Add runtime object files (registry detects which runtimes are needed)
     {
@@ -281,8 +281,9 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     }
 
     // Generate hash for executable caching (source + all object files)
-    std::string content_hash_str = !compile.object_file.empty() ? obj_output.filename().string()
-                                                                : generate_content_hash(llvm_ir);
+    std::string content_hash_str = !compile.object_file.empty()
+                                       ? compile.object_file.filename().string()
+                                       : generate_content_hash(llvm_ir);
     std::string exe_hash = generate_exe_hash(content_hash_str, object_files);
     fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 

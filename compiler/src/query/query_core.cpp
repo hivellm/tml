@@ -572,6 +572,7 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         llvm_gen_options.emit_comments = ctx.options().verbose;
         llvm_gen_options.emit_debug_info = ck.debug_info;
         llvm_gen_options.coverage_enabled = ctx.options().coverage;
+        llvm_gen_options.lazy_library_defs = true; // Only emit library defs actually used
         if (!ctx.options().target_triple.empty()) {
             llvm_gen_options.target_triple = ctx.options().target_triple;
         }

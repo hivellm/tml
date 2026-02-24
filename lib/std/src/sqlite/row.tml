@@ -1,0 +1,96 @@
+//! SQLite result row.
+//!
+//! The [`Row`] type provides convenient read-only access to a single
+//! result row from a query, wrapping the raw column access functions.
+
+use std::sqlite::ffi
+use std::sqlite::constants::{SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL}
+use std::sqlite::value::Value
+
+/// A single result row from a query.
+///
+/// Row is a lightweight view over the current row of a [`Statement`].
+/// It becomes invalid after the next call to `step()` or `finalize()`.
+pub type Row {
+    stmt_handle: *Unit,
+    num_columns: I32
+}
+
+impl Row {
+    /// Returns the number of columns in this row.
+    pub func columns(this) -> I32 {
+        return this.num_columns
+    }
+
+    /// Returns the column name at the given 0-based index.
+    pub func column_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_name(this.stmt_handle, idx)
+    }
+
+    /// Returns the column type at the given 0-based index.
+    pub func column_type(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_type(this.stmt_handle, idx)
+    }
+
+    /// Returns the I64 value at the given 0-based column index.
+    pub func get_i64(this, idx: I32) -> I64 {
+        return ffi::sqlite3_column_int64(this.stmt_handle, idx)
+    }
+
+    /// Returns the I32 value at the given 0-based column index.
+    pub func get_i32(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_int64(this.stmt_handle, idx) as I32
+    }
+
+    /// Returns the F64 value at the given 0-based column index.
+    pub func get_f64(this, idx: I32) -> F64 {
+        return ffi::sqlite3_column_double(this.stmt_handle, idx)
+    }
+
+    /// Returns the string value at the given 0-based column index.
+    pub func get_str(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_text(this.stmt_handle, idx)
+    }
+
+    /// Returns true if the column value is NULL at the given 0-based index.
+    pub func is_null(this, idx: I32) -> Bool {
+        return ffi::sqlite3_column_type(this.stmt_handle, idx) == SQLITE_NULL
+    }
+
+    /// Returns a [`Value`] for the column at the given 0-based index.
+    pub func get_value(this, idx: I32) -> Value {
+        let col_type: I32 = ffi::sqlite3_column_type(this.stmt_handle, idx)
+        when col_type {
+            SQLITE_INTEGER => return Value::Integer(ffi::sqlite3_column_int64(this.stmt_handle, idx)),
+            SQLITE_FLOAT => return Value::Float(ffi::sqlite3_column_double(this.stmt_handle, idx)),
+            SQLITE_TEXT => return Value::Text(ffi::sqlite3_column_text(this.stmt_handle, idx)),
+            SQLITE_NULL => return Value::Null,
+            _ => return Value::Null
+        }
+    }
+
+    /// Returns the byte count of the value at the given 0-based column index.
+    pub func get_bytes(this, idx: I32) -> I32 {
+        return ffi::sqlite3_column_bytes(this.stmt_handle, idx)
+    }
+
+    /// Returns the declared type of the column (e.g., "INTEGER", "TEXT").
+    pub func decltype(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_decltype(this.stmt_handle, idx)
+    }
+
+    /// Returns the origin table name for the column.
+    pub func table_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_table_name(this.stmt_handle, idx)
+    }
+
+    /// Returns the origin column name for the column.
+    pub func origin_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_origin_name(this.stmt_handle, idx)
+    }
+
+    /// Returns the origin database name for the column.
+    pub func database_name(this, idx: I32) -> Str {
+        return ffi::sqlite3_column_database_name(this.stmt_handle, idx)
+    }
+}

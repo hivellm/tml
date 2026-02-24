@@ -827,9 +827,17 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     if (is_simd_type(type_name)) {
         const auto& info = simd_types_.at(type_name);
         std::string vec_type = simd_vec_type_str(info);
-        // Load the full vector
-        std::string vec_val = fresh_reg();
-        emit_line("  " + vec_val + " = load " + vec_type + ", ptr " + struct_ptr);
+        std::string vec_val;
+        if (is_ssa_struct_value) {
+            // SSA value (direct param passed by value): the SIMD struct type IS the
+            // vector type itself (e.g. %struct.F32x4 = type <4 x float>), so the
+            // SSA value is already the vector — use it directly.
+            vec_val = struct_ptr;
+        } else {
+            // Pointer: load the full vector from memory
+            vec_val = fresh_reg();
+            emit_line("  " + vec_val + " = load " + vec_type + ", ptr " + struct_ptr);
+        }
         // Extract the element
         std::string result = fresh_reg();
         emit_line("  " + result + " = extractelement " + vec_type + " " + vec_val + ", i32 " +

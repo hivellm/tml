@@ -49,6 +49,7 @@ static LLVMGenOptions to_llvm_gen_opts(const CodegenOptions& opts) {
     llvm_opts.dll_export = opts.dll_export;
     llvm_opts.coverage_enabled = opts.coverage_enabled;
     llvm_opts.emit_debug_info = opts.debug_info;
+    llvm_opts.lazy_library_defs = true;
     if (!opts.target_triple.empty()) {
         llvm_opts.target_triple = opts.target_triple;
     }
