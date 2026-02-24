@@ -96,7 +96,7 @@ StructBody = '{' (Field (',' Field)* ','?)? '}'
 Field      = Ident ':' Type
 
 EnumBody = '{' Variant (',' Variant)* ','? '}'
-Variant  = Ident VariantData?
+Variant  = Ident VariantData? ('=' IntLiteral)?
 VariantData = '(' Type (',' Type)* ')'
             | '{' Field (',' Field)* '}'
 

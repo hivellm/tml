@@ -951,7 +951,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         auto flags_it = flags_enums_.find(receiver_type_name);
         if (flags_it != flags_enums_.end() &&
             (method == "has" || method == "is_empty" || method == "bits" || method == "add" ||
-             method == "remove" || method == "toggle")) {
+             method == "remove" || method == "toggle" || method == "to_string" ||
+             method == "debug_string")) {
             std::string struct_type = "%struct." + receiver_type_name;
             std::string suite_prefix;
             if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
@@ -980,6 +981,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 emit_line("  " + result + " = call " + flags_it->second.underlying_llvm_type + " " +
                           fn_prefix + "bits(ptr " + self_ptr + ")");
                 last_expr_type_ = flags_it->second.underlying_llvm_type;
+                return result;
+            }
+            if (method == "to_string") {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call ptr " + fn_prefix + "to_string(ptr " + self_ptr +
+                          ")");
+                last_expr_type_ = "ptr";
+                return result;
+            }
+            if (method == "debug_string") {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call ptr " + fn_prefix + "debug_string(ptr " +
+                          self_ptr + ")");
+                last_expr_type_ = "ptr";
                 return result;
             }
             // Methods that take a flag argument: has, add, remove, toggle

@@ -588,11 +588,9 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     // Check for pre-compiled runtime library first (self-contained mode)
     // Disable precompiled runtime when coverage or leak checking is enabled,
     // because those require linking additional runtime components (coverage.c, mem_track.c)
-    // Also disable when crypto modules are used, since the precompiled lib doesn't have OpenSSL
     std::string runtime_lib = find_runtime_library();
-    bool needs_crypto = has_crypto_modules(registry);
-    bool use_precompiled = !runtime_lib.empty() && !CompilerOptions::check_leaks &&
-                           !CompilerOptions::coverage && !needs_crypto;
+    bool use_precompiled =
+        !runtime_lib.empty() && !CompilerOptions::check_leaks && !CompilerOptions::coverage;
 
     if (use_precompiled) {
         // Use pre-compiled runtime library (no clang needed)
@@ -713,10 +711,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             // thread.c removed — replaced by sync.c (Phase 30)
 
             // crypto/ - crypto.c, crypto_key.c, crypto_x509.c, etc.
-            // Only include crypto runtime objects when the program actually uses
-            // crypto modules. These objects require OpenSSL at link time, so
-            // including them unconditionally causes link failures for non-crypto code.
-            if (needs_crypto) {
+            // Only include crypto runtime objects when crypto modules are actually used
+            if (has_crypto_modules(registry)) {
                 std::string crypto_extra_flags;
                 {
                     auto openssl = find_openssl();

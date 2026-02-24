@@ -299,6 +299,8 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@must_use` | Func/Type | Warn if result unused |
 | `@must_use(msg)` | Func/Type | Custom unused warning |
 | `@derive(...)` | Type | Auto-implement behaviors (see Section 9) |
+| `@flags` | Enum | Transform enum into bitflag set (see 04-TYPES.md 3.2.1) |
+| `@flags(U8\|U16\|U32\|U64)` | Enum | Bitflag set with explicit underlying type |
 | `@simd` | Func | Enable SIMD vector operations on arrays |
 | `@should_panic` | Func | Expect test to panic |
 | `@should_panic(message)` | Func | Expect panic with specific message |

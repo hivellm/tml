@@ -1,0 +1,76 @@
+use test
+
+@flags
+type Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+@flags
+type Status {
+    Active,
+    Paused,
+    Error,
+    Complete,
+}
+
+// ── Display (to_string) ──
+
+@test
+func test_flags_display_single() -> I32 {
+    let r = Perms::Read
+    assert_eq(r.to_string(), "Read", "single flag")
+    return 0
+}
+
+@test
+func test_flags_display_two() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    assert_eq(rw.to_string(), "Read | Write", "two flags")
+    return 0
+}
+
+@test
+func test_flags_display_all() -> I32 {
+    let all = Perms::all()
+    assert_eq(all.to_string(), "Read | Write | Execute", "all flags")
+    return 0
+}
+
+@test
+func test_flags_display_empty() -> I32 {
+    let empty = Perms::none()
+    assert_eq(empty.to_string(), "(empty)", "no flags")
+    return 0
+}
+
+@test
+func test_flags_display_four_variants() -> I32 {
+    let s = Status::Active | Status::Error
+    assert_eq(s.to_string(), "Active | Error", "non-adjacent flags")
+    return 0
+}
+
+// ── Debug (debug_string) ──
+
+@test
+func test_flags_debug_combined() -> I32 {
+    let rw = Perms::Read | Perms::Write
+    assert_eq(rw.debug_string(), "Perms(Read | Write)", "debug combined")
+    return 0
+}
+
+@test
+func test_flags_debug_empty() -> I32 {
+    let empty = Perms::none()
+    assert_eq(empty.debug_string(), "Perms((empty))", "debug empty")
+    return 0
+}
+
+@test
+func test_flags_debug_single() -> I32 {
+    let x = Perms::Execute
+    assert_eq(x.debug_string(), "Perms(Execute)", "debug single")
+    return 0
+}

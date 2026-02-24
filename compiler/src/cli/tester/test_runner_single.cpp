@@ -174,7 +174,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     }
 
 #ifdef _WIN32
-    // Add OpenSSL libraries for crypto modules
+    // Link OpenSSL libraries only when crypto modules are actually used
     if (build::has_crypto_modules(registry)) {
         auto openssl = build::find_openssl();
         if (openssl.found) {
@@ -186,6 +186,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
             link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
         }
     }
+    link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);
@@ -395,7 +396,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     }
 
 #ifdef _WIN32
-    // Add OpenSSL libraries for crypto modules
+    // Link OpenSSL libraries only when crypto modules are actually used
     if (build::has_crypto_modules(registry)) {
         auto openssl = build::find_openssl();
         if (openssl.found) {
@@ -407,6 +408,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
             link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
         }
     }
+    link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);

@@ -1,0 +1,75 @@
+//! Bitflag enum behavior.
+//!
+//! The `Flags` behavior defines methods automatically implemented for
+//! `@flags` enum types. It provides type-safe bitflag operations including
+//! combining, checking, removing, and toggling individual flags.
+//!
+//! # Examples
+//!
+//! ```tml
+//! @flags
+//! type Perms {
+//!     Read,
+//!     Write,
+//!     Execute,
+//! }
+//!
+//! let rw = Perms::Read | Perms::Write
+//! assert(rw.has(Perms::Read))
+//! assert(rw.bits() == 3)
+//! ```
+
+/// Behavior for `@flags` enum types.
+///
+/// Automatically implemented for any enum decorated with `@flags`.
+/// Provides methods for bitflag manipulation on a typed integer
+/// representation.
+///
+/// # Built-in operators
+///
+/// `@flags` enums also support `|`, `&`, `^`, `~` operators directly.
+///
+/// # Examples
+///
+/// ```tml
+/// @flags
+/// type EntityStates {
+///     Stunned,
+///     Dead,
+///     Ally,
+///     Enemy,
+/// }
+///
+/// let state = EntityStates::Stunned | EntityStates::Enemy
+/// assert(state.has(EntityStates::Stunned))
+/// let cleared = state.remove(EntityStates::Stunned)
+/// assert(not cleared.has(EntityStates::Stunned))
+/// ```
+pub behavior Flags {
+    /// Returns `true` if the given flag bit(s) are set.
+    func has(this, flag: Self) -> Bool
+
+    /// Returns a new value with the given flag bit(s) added (bitwise OR).
+    func add(this, flag: Self) -> Self
+
+    /// Returns a new value with the given flag bit(s) removed (bitwise AND NOT).
+    func remove(this, flag: Self) -> Self
+
+    /// Returns a new value with the given flag bit(s) toggled (bitwise XOR).
+    func toggle(this, flag: Self) -> Self
+
+    /// Returns `true` if no flags are set (value is zero).
+    func is_empty(this) -> Bool
+
+    /// Returns the raw integer value of the flags.
+    func bits(this) -> I64
+
+    /// Creates a flags value from a raw integer.
+    func from_bits(value: I64) -> Self
+
+    /// Returns a flags value with no bits set.
+    func none() -> Self
+
+    /// Returns a flags value with all valid bits set.
+    func all() -> Self
+}

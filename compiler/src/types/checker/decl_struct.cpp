@@ -750,11 +750,29 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
                                  .is_async = false,
                                  .span = decl.span});
 
-        // Auto-register PartialEq
+        // Auto-register PartialEq and Flags
         env_.register_impl(decl.name, "PartialEq");
+        env_.register_impl(decl.name, "Flags");
         env_.define_func(FuncSig{.name = decl.name + "::eq",
                                  .params = {ref_self, ref_self},
                                  .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Auto-register Display and Debug for @flags enums
+        auto str_type = types::make_str();
+        env_.register_impl(decl.name, "Display");
+        env_.define_func(FuncSig{.name = decl.name + "::to_string",
+                                 .params = {ref_self},
+                                 .return_type = str_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+        env_.register_impl(decl.name, "Debug");
+        env_.define_func(FuncSig{.name = decl.name + "::debug_string",
+                                 .params = {ref_self},
+                                 .return_type = str_type,
                                  .type_params = {},
                                  .is_async = false,
                                  .span = decl.span});

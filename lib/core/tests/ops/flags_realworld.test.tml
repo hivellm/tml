@@ -1,0 +1,99 @@
+// Real-world @flags scenarios: MMORPG entity states, file permissions
+use test
+
+// MMORPG entity states
+@flags
+type EntityStates {
+    Stunned,
+    Dead,
+    Ally,
+    Enemy,
+    Burning,
+    Bleeding,
+    Poisoned,
+    Stealth,
+}
+
+@test
+func test_entity_combat_states() -> I32 {
+    let state = EntityStates::Enemy | EntityStates::Burning | EntityStates::Bleeding
+    assert(state.has(EntityStates::Enemy), "should be enemy")
+    assert(state.has(EntityStates::Burning), "should be burning")
+    assert(state.has(EntityStates::Bleeding), "should be bleeding")
+    assert(not state.has(EntityStates::Ally), "should not be ally")
+    assert(not state.has(EntityStates::Dead), "should not be dead")
+    return 0
+}
+
+@test
+func test_entity_state_transitions() -> I32 {
+    let mut state = EntityStates::Ally | EntityStates::Stealth
+    // Remove stealth, add burning
+    state = state.remove(EntityStates::Stealth)
+    state = state.add(EntityStates::Burning)
+    assert(state.has(EntityStates::Ally), "still ally")
+    assert(not state.has(EntityStates::Stealth), "stealth removed")
+    assert(state.has(EntityStates::Burning), "now burning")
+    return 0
+}
+
+@test
+func test_entity_death_clears_buffs() -> I32 {
+    let state = EntityStates::Enemy | EntityStates::Burning | EntityStates::Poisoned
+    // On death: clear all status effects, set Dead
+    let debuff_mask = EntityStates::Burning | EntityStates::Bleeding | EntityStates::Poisoned
+    let cleared = state.remove(debuff_mask)
+    let dead = cleared.add(EntityStates::Dead)
+    assert(dead.has(EntityStates::Dead), "should be dead")
+    assert(dead.has(EntityStates::Enemy), "still enemy")
+    assert(not dead.has(EntityStates::Burning), "burning cleared")
+    assert(not dead.has(EntityStates::Poisoned), "poisoned cleared")
+    return 0
+}
+
+// File permission flags (Unix-style)
+@flags
+type FilePerms {
+    OwnerRead,
+    OwnerWrite,
+    OwnerExec,
+    GroupRead,
+    GroupWrite,
+    GroupExec,
+    OtherRead,
+    OtherWrite,
+    OtherExec,
+}
+
+@test
+func test_file_perms_755() -> I32 {
+    // 755 = rwxr-xr-x
+    let perms = FilePerms::OwnerRead | FilePerms::OwnerWrite | FilePerms::OwnerExec
+              | FilePerms::GroupRead | FilePerms::GroupExec
+              | FilePerms::OtherRead | FilePerms::OtherExec
+    assert(perms.has(FilePerms::OwnerWrite), "owner can write")
+    assert(not perms.has(FilePerms::GroupWrite), "group cannot write")
+    assert(not perms.has(FilePerms::OtherWrite), "other cannot write")
+    assert(perms.has(FilePerms::OtherExec), "other can execute")
+    return 0
+}
+
+@test
+func test_file_perms_toggle_write() -> I32 {
+    let perms = FilePerms::OwnerRead | FilePerms::OwnerWrite
+    let readonly = perms.remove(FilePerms::OwnerWrite)
+    assert(readonly.has(FilePerms::OwnerRead), "still readable")
+    assert(not readonly.has(FilePerms::OwnerWrite), "write removed")
+    return 0
+}
+
+@test
+func test_file_perms_from_bits() -> I32 {
+    // from_bits(7) = OwnerRead | OwnerWrite | OwnerExec (bits 1|2|4)
+    let perms = FilePerms::from_bits(7)
+    assert(perms.has(FilePerms::OwnerRead), "has OwnerRead")
+    assert(perms.has(FilePerms::OwnerWrite), "has OwnerWrite")
+    assert(perms.has(FilePerms::OwnerExec), "has OwnerExec")
+    assert(not perms.has(FilePerms::GroupRead), "no GroupRead")
+    return 0
+}

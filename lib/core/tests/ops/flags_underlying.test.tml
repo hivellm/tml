@@ -1,0 +1,72 @@
+// @flags enum with different underlying types: U8, U64
+use test
+
+@flags(U8)
+type SmallFlags {
+    A,
+    B,
+    C,
+    D,
+}
+
+@test
+func test_u8_variant_values() -> I32 {
+    assert_eq(SmallFlags::A.bits(), 1, "A should be 1")
+    assert_eq(SmallFlags::B.bits(), 2, "B should be 2")
+    assert_eq(SmallFlags::C.bits(), 4, "C should be 4")
+    assert_eq(SmallFlags::D.bits(), 8, "D should be 8")
+    return 0
+}
+
+@test
+func test_u8_bitor() -> I32 {
+    let ab = SmallFlags::A | SmallFlags::B
+    assert_eq(ab.bits(), 3, "A | B should be 3")
+    assert(ab.has(SmallFlags::A), "should have A")
+    assert(ab.has(SmallFlags::B), "should have B")
+    return 0
+}
+
+@test
+func test_u8_all() -> I32 {
+    let all = SmallFlags::all()
+    assert_eq(all.bits(), 15, "all() should be 15")
+    assert(all.has(SmallFlags::A), "all should have A")
+    assert(all.has(SmallFlags::D), "all should have D")
+    return 0
+}
+
+@flags(U64)
+type LargeFlags {
+    Alpha,
+    Beta,
+    Gamma,
+}
+
+@test
+func test_u64_variant_values() -> I32 {
+    assert_eq(LargeFlags::Alpha.bits(), 1, "Alpha should be 1")
+    assert_eq(LargeFlags::Beta.bits(), 2, "Beta should be 2")
+    assert_eq(LargeFlags::Gamma.bits(), 4, "Gamma should be 4")
+    return 0
+}
+
+@test
+func test_u64_bitor() -> I32 {
+    let ab = LargeFlags::Alpha | LargeFlags::Beta
+    assert_eq(ab.bits(), 3, "Alpha | Beta should be 3")
+    assert(ab.has(LargeFlags::Alpha), "should have Alpha")
+    assert(ab.has(LargeFlags::Beta), "should have Beta")
+    return 0
+}
+
+@test
+func test_u64_complement() -> I32 {
+    let a = LargeFlags::Alpha
+    let complement = ~a
+    assert(not complement.has(LargeFlags::Alpha), "complement should not have Alpha")
+    assert(complement.has(LargeFlags::Beta), "complement should have Beta")
+    assert(complement.has(LargeFlags::Gamma), "complement should have Gamma")
+    assert_eq(complement.bits(), 6, "~Alpha should be Beta|Gamma = 6")
+    return 0
+}

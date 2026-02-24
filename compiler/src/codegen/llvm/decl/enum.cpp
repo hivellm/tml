@@ -684,6 +684,144 @@ void LLVMIRGen::gen_flags_enum_methods(const parser::EnumDecl& e, const FlagsEnu
             type_defs_buffer_ << "}\n\n";
         }
     }
+
+    // ── to_string(self) -> Str  (Display) ──
+    // Returns pipe-separated variant names, e.g. "Read | Write"
+    // Returns "(empty)" if no bits are set
+    // Uses alloca to avoid complex phi nodes
+    {
+        std::string fn = "@" + prefix + "to_string";
+        if (should_emit(fn)) {
+            // Emit string constants for variant names and separators
+            std::string const_prefix = "@.flags_" + suite_prefix + type_name;
+            type_defs_buffer_ << "; @flags Display string constants for " << type_name << "\n";
+            for (const auto& [vname, vval] : info.variant_values) {
+                type_defs_buffer_ << const_prefix << "_v_" << vname << " = private constant ["
+                                  << (vname.size() + 1) << " x i8] c\"" << vname << "\\00\"\n";
+            }
+            type_defs_buffer_ << const_prefix << "_sep = private constant [4 x i8] c\" | \\00\"\n";
+            type_defs_buffer_ << const_prefix
+                              << "_empty = private constant [8 x i8] c\"(empty)\\00\"\n";
+            type_defs_buffer_ << "\n";
+
+            tc = 0;
+            type_defs_buffer_ << "; @flags Display for " << type_name << "\n";
+            type_defs_buffer_ << "define internal ptr " << fn << "(ptr %self) {\n";
+            type_defs_buffer_ << "entry:\n";
+
+            // Load the raw value
+            auto sp = t(), sv = t();
+            type_defs_buffer_ << "  " << sp << " = getelementptr " << struct_type
+                              << ", ptr %self, i32 0, i32 0\n";
+            type_defs_buffer_ << "  " << sv << " = load " << iN << ", ptr " << sp << "\n";
+
+            // Check if empty
+            auto is_empty_r = t();
+            type_defs_buffer_ << "  " << is_empty_r << " = icmp eq " << iN << " " << sv << ", 0\n";
+            type_defs_buffer_ << "  br i1 " << is_empty_r << ", label %empty, label %build\n\n";
+
+            // Empty case
+            type_defs_buffer_ << "empty:\n";
+            type_defs_buffer_ << "  ret ptr " << const_prefix << "_empty\n\n";
+
+            // Build string using alloca to accumulate result
+            type_defs_buffer_ << "build:\n";
+            auto acc = t();
+            type_defs_buffer_ << "  " << acc << " = alloca ptr\n";
+            type_defs_buffer_ << "  store ptr null, ptr " << acc << "\n";
+
+            // For each variant, check if its bit is set and concat
+            for (size_t i = 0; i < info.variant_values.size(); ++i) {
+                const auto& [vname, vval] = info.variant_values[i];
+                std::string check_label = "check_v" + std::to_string(i);
+                std::string set_label = "set_v" + std::to_string(i);
+                std::string next_label = (i + 1 < info.variant_values.size())
+                                             ? "check_v" + std::to_string(i + 1)
+                                             : "done";
+
+                type_defs_buffer_ << "  br label %" << check_label << "\n\n";
+                type_defs_buffer_ << check_label << ":\n";
+
+                // Check if this variant's bit is set
+                auto masked = t(), has_bit = t();
+                type_defs_buffer_ << "  " << masked << " = and " << iN << " " << sv << ", " << vval
+                                  << "\n";
+                type_defs_buffer_ << "  " << has_bit << " = icmp ne " << iN << " " << masked
+                                  << ", 0\n";
+                type_defs_buffer_ << "  br i1 " << has_bit << ", label %" << set_label
+                                  << ", label %" << next_label << "\n\n";
+
+                type_defs_buffer_ << set_label << ":\n";
+                // Load current accumulated string
+                auto cur = t();
+                type_defs_buffer_ << "  " << cur << " = load ptr, ptr " << acc << "\n";
+                // If current string is null, just use variant name; otherwise concat " | " + name
+                auto is_first = t();
+                type_defs_buffer_ << "  " << is_first << " = icmp eq ptr " << cur << ", null\n";
+                auto with_sep = t();
+                type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << cur
+                                  << ", ptr " << const_prefix << "_sep)\n";
+                auto base = t();
+                type_defs_buffer_ << "  " << base << " = select i1 " << is_first
+                                  << ", ptr null, ptr " << with_sep << "\n";
+                auto result = t();
+                type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << base
+                                  << ", ptr " << const_prefix << "_v_" << vname << ")\n";
+                // Store updated string
+                type_defs_buffer_ << "  store ptr " << result << ", ptr " << acc << "\n";
+                type_defs_buffer_ << "  br label %" << next_label << "\n\n";
+            }
+
+            // Done - return accumulated string
+            type_defs_buffer_ << "done:\n";
+            auto final_val = t();
+            type_defs_buffer_ << "  " << final_val << " = load ptr, ptr " << acc << "\n";
+            type_defs_buffer_ << "  ret ptr " << final_val << "\n";
+            type_defs_buffer_ << "}\n\n";
+
+            allocating_functions_.insert("to_string");
+        }
+    }
+
+    // ── debug_string(self) -> Str  (Debug) ──
+    // Returns "TypeName(Read | Write)" format
+    {
+        std::string fn = "@" + prefix + "debug_string";
+        if (should_emit(fn)) {
+            // Emit type name constant
+            std::string const_prefix = "@.flags_" + suite_prefix + type_name;
+            std::string debug_prefix_str = type_name + "(";
+            std::string debug_suffix_str = ")";
+            type_defs_buffer_ << const_prefix << "_dbg_prefix = private constant ["
+                              << (debug_prefix_str.size() + 1) << " x i8] c\"" << debug_prefix_str
+                              << "\\00\"\n";
+            type_defs_buffer_ << const_prefix << "_dbg_suffix = private constant ["
+                              << (debug_suffix_str.size() + 1) << " x i8] c\"" << debug_suffix_str
+                              << "\\00\"\n\n";
+
+            tc = 0;
+            type_defs_buffer_ << "; @flags Debug for " << type_name << "\n";
+            type_defs_buffer_ << "define internal ptr " << fn << "(ptr %self) {\n";
+            type_defs_buffer_ << "entry:\n";
+
+            // Call to_string first to get the display representation
+            auto display = t();
+            type_defs_buffer_ << "  " << display << " = call ptr @" << prefix
+                              << "to_string(ptr %self)\n";
+
+            // Wrap with "TypeName(" ... ")"
+            auto with_prefix = t();
+            type_defs_buffer_ << "  " << with_prefix << " = call ptr @str_concat_opt(ptr "
+                              << const_prefix << "_dbg_prefix, ptr " << display << ")\n";
+            auto result = t();
+            type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << with_prefix
+                              << ", ptr " << const_prefix << "_dbg_suffix)\n";
+            type_defs_buffer_ << "  ret ptr " << result << "\n";
+            type_defs_buffer_ << "}\n\n";
+
+            allocating_functions_.insert("debug_string");
+        }
+    }
 }
 
 } // namespace tml::codegen

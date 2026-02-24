@@ -1,0 +1,21 @@
+// Diagnostic test: @flags(U8) with too many variants
+// U8 supports at most 8 flags, this has 9.
+
+// @expect-error T083
+
+@flags(U8)
+type TooManyFlags {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+}
+
+func main() -> I32 {
+    return 0
+}

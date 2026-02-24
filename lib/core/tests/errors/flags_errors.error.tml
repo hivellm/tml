@@ -1,0 +1,14 @@
+// Diagnostic test: @flags enum validation errors
+// Tests that @flags enums with data fields are rejected.
+
+// @expect-error T082
+
+@flags
+type BadFlags {
+    Ok,
+    HasData(I32),
+}
+
+func main() -> I32 {
+    return 0
+}

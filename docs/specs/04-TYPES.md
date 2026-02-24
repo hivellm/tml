@@ -263,6 +263,71 @@ let opt: Maybe[I32] = Just(42)
 let msg: Message = Text { content: "hi", sender: "alice" }
 ```
 
+### 3.2.1 Bitflag Enums (`@flags`)
+
+The `@flags` decorator transforms an enum into a type-safe bitflag set. Variants are automatically assigned power-of-2 values (1, 2, 4, 8, ...).
+
+```tml
+@flags
+type Perms {
+    Read,       // = 1
+    Write,      // = 2
+    Execute,    // = 4
+}
+
+// Combine flags with bitwise OR
+let rw: Perms = Perms::Read | Perms::Write
+
+// Check flags
+rw.has(Perms::Read)       // true
+rw.has(Perms::Execute)    // false
+
+// Modify flags
+let rwx = rw.add(Perms::Execute)
+let r = rwx.remove(Perms::Write)
+let toggled = rw.toggle(Perms::Execute)
+```
+
+**Explicit discriminant values** allow composite flags:
+
+```tml
+@flags
+type Style {
+    Bold = 1,
+    Italic = 2,
+    Underline = 4,
+    BoldItalic = 3,   // Bold | Italic
+}
+```
+
+**Underlying type** defaults to `U32`, configurable via `@flags(U8)`, `@flags(U16)`, `@flags(U64)`:
+
+```tml
+@flags(U8)
+type SmallFlags { A, B, C, D, E, F, G, H }  // max 8 flags
+```
+
+**Built-in methods:**
+
+| Method | Description |
+|--------|-------------|
+| `.has(flag)` | Returns `Bool`: true if flag bit(s) are set |
+| `.add(flag)` | Returns `Self`: bitwise OR |
+| `.remove(flag)` | Returns `Self`: bitwise AND NOT |
+| `.toggle(flag)` | Returns `Self`: bitwise XOR |
+| `.is_empty()` | Returns `Bool`: true if zero |
+| `.bits()` | Returns underlying integer value |
+| `::from_bits(n)` | Creates flags from raw integer |
+| `::none()` | Returns zero value |
+| `::all()` | Returns all valid bits set |
+
+**Bitwise operators:** `|`, `&`, `^`, `~` return the flags type. `~` masks to valid bits only.
+
+**Restrictions:**
+- Variants must be unit variants (no data fields)
+- Variant count must not exceed the bit width of the underlying type
+- No generic parameters allowed
+
 ### 3.3 Unions (C-style)
 
 C-style unions where all fields share the same memory location. Only one field can meaningfully hold a value at a time.

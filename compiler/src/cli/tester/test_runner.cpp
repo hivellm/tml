@@ -1658,7 +1658,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 link_options.link_flags.push_back("-ladvapi32");
                 link_options.link_flags.push_back("-luserenv");
             }
-            // Add OpenSSL libraries for crypto modules
+            // Link OpenSSL libraries only when crypto modules are actually used
             if (build::has_crypto_modules(shared_registry)) {
                 auto openssl = build::find_openssl();
                 if (openssl.found) {
@@ -1670,6 +1670,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
                 }
             }
+            link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
             TML_LOG_INFO("test", "  Starting link...");
