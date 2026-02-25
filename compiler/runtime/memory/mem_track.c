@@ -334,95 +334,29 @@ int32_t tml_mem_check_leaks(void) {
     }
 
     if (leak_count > 0) {
-        fprintf(out, "[MEMORY LEAKS] %d unfreed allocation(s) totaling %llu bytes\n", leak_count,
+        // Compact single-line-per-leak format
+        RT_WARN("memory", "%d leak(s), %llu bytes lost", leak_count,
                 (unsigned long long)leak_bytes);
 
         int shown = 0;
-        for (int i = 0; i < HASH_BUCKETS && shown < 20; i++) {
+        for (int i = 0; i < HASH_BUCKETS && shown < 10; i++) {
             AllocBucket* bucket = g_track.buckets[i];
-            while (bucket && shown < 20) {
-                fprintf(out, "  #%d: %p (%llu bytes, id=%llu, tag=%s, test=%s, file=%s)\n",
-                        shown + 1, bucket->record.ptr, (unsigned long long)bucket->record.size,
+            while (bucket && shown < 10) {
+                // Extract just test name from full path for brevity
+                const char* test_name =
+                    bucket->record.test_name[0] ? bucket->record.test_name : "unknown";
+                RT_WARN("memory", "  #%d: %p (%llu bytes, id=%llu, tag=%s, test=%s)", shown + 1,
+                        bucket->record.ptr, (unsigned long long)bucket->record.size,
                         (unsigned long long)bucket->record.alloc_id,
-                        bucket->record.tag ? bucket->record.tag : "none",
-                        bucket->record.test_name[0] ? bucket->record.test_name : "unknown",
-                        bucket->record.test_file[0] ? bucket->record.test_file : "?");
+                        bucket->record.tag ? bucket->record.tag : "none", test_name);
                 shown++;
                 bucket = bucket->next;
             }
         }
 
-        if (leak_count > 20) {
-            fprintf(out, "  ... and %d more leaks not shown\n", leak_count - 20);
+        if (leak_count > 10) {
+            RT_WARN("memory", "  ... and %d more leaks", leak_count - 10);
         }
-
-        // Print per-test summary (group leaks by test name)
-        // Use a simple O(n^2) scan — leak counts are small (max 50 shown)
-        {
-#define MAX_TEST_GROUPS 64
-            struct {
-                const char* name;
-                const char* file;
-                int count;
-                uint64_t bytes;
-            } groups[MAX_TEST_GROUPS];
-            int num_groups = 0;
-            int unknown_count = 0;
-            uint64_t unknown_bytes = 0;
-
-            for (int i = 0; i < HASH_BUCKETS; i++) {
-                AllocBucket* b = g_track.buckets[i];
-                while (b) {
-                    if (b->record.test_name[0]) {
-                        // Find existing group
-                        int found = 0;
-                        for (int g = 0; g < num_groups; g++) {
-                            if (strcmp(groups[g].name, b->record.test_name) == 0) {
-                                groups[g].count++;
-                                groups[g].bytes += b->record.size;
-                                found = 1;
-                                break;
-                            }
-                        }
-                        if (!found && num_groups < MAX_TEST_GROUPS) {
-                            groups[num_groups].name = b->record.test_name;
-                            groups[num_groups].file = b->record.test_file;
-                            groups[num_groups].count = 1;
-                            groups[num_groups].bytes = b->record.size;
-                            num_groups++;
-                        }
-                    } else {
-                        unknown_count++;
-                        unknown_bytes += b->record.size;
-                    }
-                    b = b->next;
-                }
-            }
-
-            if (num_groups > 0 || unknown_count > 0) {
-                fprintf(out, "\n  Leaks by test:\n");
-                for (int g = 0; g < num_groups; g++) {
-                    fprintf(out, "    %-30s %3d leak(s), %llu bytes  [%s]\n", groups[g].name,
-                            groups[g].count, (unsigned long long)groups[g].bytes,
-                            groups[g].file ? groups[g].file : "?");
-                }
-                if (unknown_count > 0) {
-                    fprintf(out, "    %-30s %3d leak(s), %llu bytes\n", "(no test context)",
-                            unknown_count, (unsigned long long)unknown_bytes);
-                }
-                fprintf(out, "\n");
-            }
-#undef MAX_TEST_GROUPS
-        }
-
-        fprintf(
-            out,
-            "================================================================================\n");
-        fprintf(out, "Summary: %d leak(s), %llu bytes lost\n", leak_count,
-                (unsigned long long)leak_bytes);
-        fprintf(
-            out,
-            "================================================================================\n");
     }
 
     TML_MUTEX_UNLOCK(g_track.mutex);

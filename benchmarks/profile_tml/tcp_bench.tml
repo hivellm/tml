@@ -1,0 +1,112 @@
+// TCP Benchmark: Sync vs Async bind performance
+// Uses direct SocketAddr construction to avoid parse() codegen bug
+
+use std::net::tcp::TcpListener
+use std::net::async_tcp::AsyncTcpListener
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::time::Instant
+
+func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  TCP Benchmarks: Sync vs Async (Socket Bind)\n")
+    print("================================================================\n\n")
+
+    // Create address once (direct construction, no parse)
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+
+    // ========================================================================
+    // Sync TCP: Listener bind overhead
+    // ========================================================================
+    print("=== SYNC TCP (TcpListener) ===\n")
+    print("  Binding to 127.0.0.1:0 (50 iterations)\n\n")
+
+    let N: I64 = 50
+    var i: I64 = 0
+
+    let t_sync_bind: Instant = Instant::now()
+    var success_sync: I64 = 0
+    i = 0
+    loop (i < N) {
+        when TcpListener::bind(addr) {
+            Ok(_listener) => {
+                success_sync = success_sync + 1
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    let ns_sync_bind: I64 = t_sync_bind.elapsed().as_nanos()
+
+    print("    Iterations: {N}\n")
+    let ms_sync_bind: I64 = ns_sync_bind / 1000000
+    print("    Total time: {ms_sync_bind} ms\n")
+    let ns_per_op_sync: I64 = if ns_sync_bind > 0 { ns_sync_bind / N } else { 0 }
+    print("    Per op:     {ns_per_op_sync} ns\n")
+    let ops_per_sec_sync: I64 = if ns_sync_bind > 0 { (N * 1000000000) / ns_sync_bind } else { 0 }
+    print("    Ops/sec:    {ops_per_sec_sync}\n")
+    print("    Successful: {success_sync}/{N}\n\n")
+
+    // ========================================================================
+    // Async TCP: Listener bind overhead
+    // ========================================================================
+    print("=== ASYNC TCP (AsyncTcpListener) ===\n")
+    print("  Binding to 127.0.0.1:0 (50 iterations)\n\n")
+
+    let t_async_bind: Instant = Instant::now()
+    var success_async: I64 = 0
+    i = 0
+    loop (i < N) {
+        when AsyncTcpListener::bind(addr) {
+            Ok(_listener) => {
+                success_async = success_async + 1
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    let ns_async_bind: I64 = t_async_bind.elapsed().as_nanos()
+
+    print("    Iterations: {N}\n")
+    let ms_async_bind: I64 = ns_async_bind / 1000000
+    print("    Total time: {ms_async_bind} ms\n")
+    let ns_per_op_async: I64 = if ns_async_bind > 0 { ns_async_bind / N } else { 0 }
+    print("    Per op:     {ns_per_op_async} ns\n")
+    let ops_per_sec_async: I64 = if ns_async_bind > 0 { (N * 1000000000) / ns_async_bind } else { 0 }
+    print("    Ops/sec:    {ops_per_sec_async}\n")
+    print("    Successful: {success_async}/{N}\n\n")
+
+    // ========================================================================
+    // Comparison
+    // ========================================================================
+    print("=== COMPARISON ===\n\n")
+
+    if ns_sync_bind > 0 and ns_async_bind > 0 {
+        let ratio_pct: I64 = (ns_async_bind * 100) / ns_sync_bind
+        print("  Async/Sync Time Ratio: {ratio_pct}%\n\n")
+
+        if ns_async_bind < ns_sync_bind {
+            let improvement: I64 = ((ns_sync_bind - ns_async_bind) * 100) / ns_sync_bind
+            print("  ✓ Async is {improvement}% FASTER for bind operations\n")
+        } else if ns_async_bind > ns_sync_bind {
+            let overhead: I64 = ((ns_async_bind - ns_sync_bind) * 100) / ns_sync_bind
+            print("  ✓ Sync is {overhead}% FASTER for bind operations\n")
+        } else {
+            print("  ≈ Same performance\n")
+        }
+    }
+
+    print("\n")
+    print("================================================================\n")
+    print("  Notes:\n")
+    print("  - Both bind to 127.0.0.1:0 (OS assigns available port)\n")
+    print("  - Sync TCP: Blocking socket with synchronous bind()\n")
+    print("  - Async TCP: Non-blocking socket with EventLoop support\n")
+    print("  - For high concurrency, async model would handle many\n")
+    print("    connections more efficiently (see async event loop)\n")
+    print("  - Bind overhead alone is minimal; real difference shows\n")
+    print("    with accept() and multi-client scenarios\n")
+    print("================================================================\n\n")
+
+    return 0
+}
