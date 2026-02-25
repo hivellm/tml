@@ -18,10 +18,13 @@ pub type Headers {
 
 // Internal layout at handle:
 //   offset 0:  keys pointer (*Str array) — 8 bytes
-//   offset 8:  values pointer (*Str array) — 8 bytes
+//   offset 8:  values pointer (array of {ptr: I64, len: I64} pairs) — 8 bytes
 //   offset 16: len (I64) — 8 bytes
 //   offset 24: cap (I64) — 8 bytes
 // Total header: 32 bytes
+//
+// Note: values array stores {pointer, length} pairs (16 bytes per entry)
+// Keys are stored as Str directly in the keys array (8 bytes per entry)
 
 impl Headers {
     /// Creates an empty header map.
@@ -29,7 +32,7 @@ impl Headers {
         let cap: I64 = 16
         let hdr: I64 = lowlevel { mem_alloc(32) } as I64
         let keys: I64 = lowlevel { mem_alloc(cap * 8) } as I64
-        let vals: I64 = lowlevel { mem_alloc(cap * 8) } as I64
+        let vals: I64 = lowlevel { mem_alloc(cap * 16) } as I64  // 16 bytes per entry (ptr + len)
         lowlevel { ptr_write[I64](hdr as *I64, keys) }
         lowlevel { ptr_write[I64]((hdr + 8) as *I64, vals) }
         lowlevel { ptr_write[I64]((hdr + 16) as *I64, 0 as I64) }
@@ -44,6 +47,12 @@ impl Headers {
         // and store it in the keys array — it will be freed in destroy().
         let lower_i64: I64 = str::to_lowercase(key) as I64
         let lower: Str = lower_i64 as Str
+
+        // Allocate copy of value since input is temporary and will be freed
+        let val_len: I64 = value.len() as I64
+        let val_copy: I64 = lowlevel { mem_alloc(val_len) } as I64
+        lowlevel { copy_nonoverlapping(value as *Unit, val_copy as *Unit, val_len) }
+
         let hdr: I64 = this.handle as I64
         let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
@@ -56,7 +65,13 @@ impl Headers {
             if existing_key == lower {
                 // Overwrite value — free the duplicate key since we don't need it
                 lowlevel { mem_free(lower_i64 as *Unit) }
-                lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, value as I64) }
+                // Free old value pointer and store new one with length
+                let old_val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+                if old_val_ptr != 0 {
+                    lowlevel { mem_free(old_val_ptr as *Unit) }
+                }
+                lowlevel { ptr_write[I64]((vals_addr + i * 16) as *I64, val_copy) }
+                lowlevel { ptr_write[I64]((vals_addr + i * 16 + 8) as *I64, val_len) }
                 return
             }
             i = i + 1
@@ -68,9 +83,9 @@ impl Headers {
             // Grow arrays 2x
             let new_cap: I64 = cur_cap * 2
             let new_keys: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
-            let new_vals: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
+            let new_vals: I64 = lowlevel { mem_alloc(new_cap * 16) } as I64  // 16 bytes per entry
             lowlevel { copy_nonoverlapping(keys_addr as *Unit, new_keys as *Unit, cur_cap * 8) }
-            lowlevel { copy_nonoverlapping(vals_addr as *Unit, new_vals as *Unit, cur_cap * 8) }
+            lowlevel { copy_nonoverlapping(vals_addr as *Unit, new_vals as *Unit, cur_cap * 16) }
             lowlevel { mem_free(keys_addr as *Unit) }
             lowlevel { mem_free(vals_addr as *Unit) }
             lowlevel { ptr_write[I64](hdr as *I64, new_keys) }
@@ -78,10 +93,12 @@ impl Headers {
             lowlevel { ptr_write[I64]((hdr + 24) as *I64, new_cap) }
 
             lowlevel { ptr_write[I64]((new_keys + cur_len * 8) as *I64, lower_i64) }
-            lowlevel { ptr_write[I64]((new_vals + cur_len * 8) as *I64, value as I64) }
+            lowlevel { ptr_write[I64]((new_vals + cur_len * 16) as *I64, val_copy) }
+            lowlevel { ptr_write[I64]((new_vals + cur_len * 16 + 8) as *I64, val_len) }
         } else {
             lowlevel { ptr_write[I64]((keys_addr + cur_len * 8) as *I64, lower_i64) }
-            lowlevel { ptr_write[I64]((vals_addr + cur_len * 8) as *I64, value as I64) }
+            lowlevel { ptr_write[I64]((vals_addr + cur_len * 16) as *I64, val_copy) }
+            lowlevel { ptr_write[I64]((vals_addr + cur_len * 16 + 8) as *I64, val_len) }
         }
         lowlevel { ptr_write[I64]((hdr + 16) as *I64, cur_len + 1) }
     }
@@ -98,7 +115,11 @@ impl Headers {
         loop (i < cur_len) {
             let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
             if existing_key == lower {
-                return lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
+                // Read pointer and length from value pair
+                let val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+                let val_len: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16 + 8) as *I64) }
+                // Reconstruct Str from pointer and length
+                return lowlevel { ptr_read[Str](val_ptr as *Str) }
             }
             i = i + 1
         }
@@ -135,13 +156,26 @@ impl Headers {
         loop (i < cur_len) {
             let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
             if existing_key == lower {
+                // Free the value pointer
+                let val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+                if val_ptr != 0 {
+                    lowlevel { mem_free(val_ptr as *Unit) }
+                }
+                // Free the key
+                let key_i64: I64 = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) }
+                if key_i64 != 0 {
+                    lowlevel { mem_free(key_i64 as *Unit) }
+                }
+
                 // Swap with last element
                 let last: I64 = cur_len - 1
                 if i != last {
                     let last_key: I64 = lowlevel { ptr_read[I64]((keys_addr + last * 8) as *I64) }
-                    let last_val: I64 = lowlevel { ptr_read[I64]((vals_addr + last * 8) as *I64) }
+                    let last_val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + last * 16) as *I64) }
+                    let last_val_len: I64 = lowlevel { ptr_read[I64]((vals_addr + last * 16 + 8) as *I64) }
                     lowlevel { ptr_write[I64]((keys_addr + i * 8) as *I64, last_key) }
-                    lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, last_val) }
+                    lowlevel { ptr_write[I64]((vals_addr + i * 16) as *I64, last_val_ptr) }
+                    lowlevel { ptr_write[I64]((vals_addr + i * 16 + 8) as *I64, last_val_len) }
                 }
                 lowlevel { ptr_write[I64]((hdr + 16) as *I64, last) }
                 return
@@ -163,8 +197,25 @@ impl Headers {
         loop (i < cur_len) {
             let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
             if existing_key == lower {
-                let existing: Str = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
-                lowlevel { ptr_write[I64]((vals_addr + i * 8) as *I64, "{existing}, {value}" as I64) }
+                // Read existing value
+                let existing_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+                let existing_len: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16 + 8) as *I64) }
+                let existing: Str = lowlevel { ptr_read[Str](existing_ptr as *Str) }
+
+                // Create new appended value
+                let appended: Str = "{existing}, {value}"
+                let appended_len: I64 = appended.len() as I64
+                let appended_copy: I64 = lowlevel { mem_alloc(appended_len) } as I64
+                lowlevel { copy_nonoverlapping(appended as *Unit, appended_copy as *Unit, appended_len) }
+
+                // Free old value
+                if existing_ptr != 0 {
+                    lowlevel { mem_free(existing_ptr as *Unit) }
+                }
+
+                // Store new value
+                lowlevel { ptr_write[I64]((vals_addr + i * 16) as *I64, appended_copy) }
+                lowlevel { ptr_write[I64]((vals_addr + i * 16 + 8) as *I64, appended_len) }
                 return
             }
             i = i + 1
@@ -185,7 +236,8 @@ impl Headers {
         var i: I64 = 0
         loop (i < cur_len) {
             let k: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
-            let v: Str = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) } as Str
+            let v_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+            let v: Str = lowlevel { ptr_read[Str](v_ptr as *Str) }
             result = "{result}{k}: {v}\r\n"
             i = i + 1
         }
@@ -292,18 +344,22 @@ impl Headers {
         var i: I64 = 0
         loop (i < cur_len) {
             let key_i64: I64 = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) }
-            let val_i64: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) }
+            let val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
             if key_i64 != 0 {
                 lowlevel { mem_free(key_i64 as *Unit) }
             }
-            if val_i64 != 0 {
-                lowlevel { mem_free(val_i64 as *Unit) }
+            if val_ptr != 0 {
+                lowlevel { mem_free(val_ptr as *Unit) }
             }
             i = i + 1
         }
 
-        lowlevel { mem_free(keys_addr as *Unit) }
-        lowlevel { mem_free(vals_addr as *Unit) }
+        if keys_addr != 0 {
+            lowlevel { mem_free(keys_addr as *Unit) }
+        }
+        if vals_addr != 0 {
+            lowlevel { mem_free(vals_addr as *Unit) }
+        }
         lowlevel { mem_free(hdr as *Unit) }
     }
 }
