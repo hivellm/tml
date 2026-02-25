@@ -1,8 +1,7 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(./build/debug/16-oop-benchmark.exe)"
-    ]
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "enabledMcpjsonServers": ["tml", "claude-mem"]
+  "permissions": {},
+  "enabledMcpjsonServers": ["tml"]
 }

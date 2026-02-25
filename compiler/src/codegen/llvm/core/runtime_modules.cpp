@@ -1333,6 +1333,21 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     continue;
                 }
 
+                // For enum drop functions in suite mode, auto-declare as external
+                // Pattern: @tml_s<N>_<TypeName>_drop (e.g., @tml_s0_IntList_drop)
+                // This handles the case where a type is defined in one test file
+                // but dropped in another test file within the same suite.
+                bool is_enum_drop = (ref.find("_drop") != std::string::npos &&
+                                     name_no_at.find("_s") != std::string::npos);
+                if (is_enum_drop) {
+                    TML_LOG_DEBUG(
+                        "codegen",
+                        "[LAZY_LIB] Auto-declaring unreferenced enum drop function: " << ref);
+                    // Add it to the declarations that will be emitted at the top of the IR
+                    deferred_runtime_decls_ += "declare void " + ref + "(ptr) #0\n";
+                    continue;
+                }
+
                 // Check if it's in pending but wasn't resolved
                 bool in_pending = pending_library_methods_.count(ref) > 0 ||
                                   pending_library_funcs_.count(ref) > 0;

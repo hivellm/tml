@@ -1836,6 +1836,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Append any deferred enum drop functions generated during codegen
     if (!enum_drop_output_.str().empty()) {
         output_ << enum_drop_output_.str();
+        // Scan enum drop functions for their own runtime references
+        // (e.g., @tml_str_free called within drop functions)
+        scan_for_runtime_refs(enum_drop_output_.str());
     }
 
     // Finalize runtime declarations and splice into output
