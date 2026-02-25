@@ -276,12 +276,14 @@ impl[T] ManuallyDrop[T] {
 }
 
 impl[T: Debug] Debug for ManuallyDrop[T] {
+    @allocates
     pub func debug_string(this) -> Str {
         return "ManuallyDrop(" + this.value.debug_string() + ")"
     }
 }
 
 impl[T: Display] Display for ManuallyDrop[T] {
+    @allocates
     pub func to_string(this) -> Str {
         return this.value.to_string()
     }
