@@ -228,8 +228,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         types::preload_all_meta_caches();
 
         // Group test files into suites
+        // Individual mode: 1 test per DLL for easier debugging
+        // Suite mode: up to 8 tests per DLL for parallelization
         auto phase_start = Clock::now();
-        auto suites = group_tests_into_suites(test_files);
+        size_t max_per_suite = opts.suite_mode ? 8 : 1;
+        auto suites = group_tests_into_suites(test_files, max_per_suite);
         if (opts.profile) {
             collector.profile_stats.add(
                 "group_suites",
@@ -800,7 +803,17 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             // use shared_mutex, LLVM target init uses std::once_flag,
             // meta preload uses std::call_once, TypeEnv/ModuleRegistry are
             // per-thread.
-            unsigned int num_compile_threads = 3;
+            unsigned int num_compile_threads;
+            if (opts.test_threads > 0) {
+                num_compile_threads = static_cast<unsigned int>(opts.test_threads);
+            } else {
+                unsigned int hw = std::thread::hardware_concurrency();
+                if (hw == 0)
+                    hw = 8;
+                // Suite mode: keep conservative to allow per-suite Phase 1 parallelism
+                // Individual mode: use half the cores for DLL-level parallelism
+                num_compile_threads = opts.suite_mode ? 3u : std::max(4u, hw / 2);
+            }
 
             struct CompileJob {
                 size_t index;

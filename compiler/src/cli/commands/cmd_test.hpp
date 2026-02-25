@@ -166,7 +166,7 @@ struct TestOptions {
     std::string coverage_source_dir;   // Directory to write coverage reports
     bool profile = false;              // Show detailed phase timings
     std::string log_path;              // Custom log file path (--log=<path>)
-    bool suite_mode = true;            // Suite mode: compile multiple tests per DLL
+    bool suite_mode = false;           // Individual mode: one DLL per test file (default)
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
     bool check_leaks = true;           // Memory leak detection (enabled by default)

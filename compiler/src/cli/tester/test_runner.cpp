@@ -79,14 +79,14 @@ static std::string suite_key_to_group(const std::string& key) {
     return key;
 }
 
-std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files) {
+std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files,
+                                               size_t max_per_suite) {
     // Maximum tests per suite - balance between fewer DLLs and parallel compilation
     // Lower = more suites that compile faster in parallel
     // Higher = fewer DLLs but sequential within each suite
-    // CRITICAL: Lowered from 15 → 8 to prevent O(n²) codegen slowdown
-    // Cannot go lower than 8 without breaking atomic function dependencies
-    // TODO: Fix codegen context accumulation bug (lowlevel_misc: 2.2s alone vs 98s in suite)
-    constexpr size_t MAX_TESTS_PER_SUITE = 8;
+    // CRITICAL: Suite mode uses 8 to prevent O(n²) codegen slowdown
+    // Individual mode (max_per_suite=1) compiles each test to its own DLL
+    const size_t MAX_TESTS_PER_SUITE = max_per_suite;
 
     // Group files by suite key
     std::map<std::string, std::vector<std::string>> groups;

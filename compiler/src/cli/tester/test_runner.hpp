@@ -194,7 +194,9 @@ struct SuiteTestResult {
 
 // Group test files into suites based on directory structure
 // Returns suites grouped by: compiler/tests/X, lib/X/tests
-std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files);
+// max_per_suite: Maximum tests per suite (default 8 for suite mode, 1 for individual mode)
+std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files,
+                                               size_t max_per_suite = 8);
 
 // Compile a suite of test files into a single DLL with a test registry
 // Each test file becomes a separate entry function: tml_test_<index>()
