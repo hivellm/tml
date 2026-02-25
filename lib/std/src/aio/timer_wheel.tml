@@ -1,0 +1,443 @@
+//! Hashed timer wheel for efficient timeout management.
+//!
+//! Two-level timer wheel with O(1) insert, cancel, and fire.
+//! Level 0: 64 slots × 1ms = 0-63ms (fine-grained)
+//! Level 1: 64 slots × 64ms = 64ms-4095ms (coarse-grained)
+//! Timers >4096ms go into an overflow list, re-inserted on advance.
+//!
+//! Inspired by tokio's timer wheel and Varghese & Lauck's paper.
+
+use core::mem::{mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+
+// ── Timer ID ────────────────────────────────────────────────────────────
+
+/// Opaque handle to a scheduled timer.
+pub type TimerId {
+    value: I64,
+}
+
+impl TimerId {
+    /// Returns an invalid timer ID (for initialization).
+    pub func invalid() -> TimerId {
+        TimerId { value: -1 }
+    }
+
+    /// Returns true if this is a valid timer ID.
+    pub func is_valid(this) -> Bool {
+        this.value >= 0
+    }
+}
+
+// ── Timer Entry (internal) ──────────────────────────────────────────────
+
+/// Internal timer entry stored in wheel slots.
+/// Layout: { deadline_ms: I64, callback: I64, user_data: I64, next: I64 }
+/// Each entry is 32 bytes. `next` is the index of the next entry in the
+/// linked list (-1 = end), or -1 if free.
+const ENTRY_SIZE: I64 = 32
+
+// ── Constants ───────────────────────────────────────────────────────────
+
+/// Number of slots per level.
+const SLOTS: I64 = 64
+
+/// Level 0 tick resolution in ms.
+const TICK_MS: I64 = 1
+
+/// Level 1 tick resolution in ms (SLOTS * TICK_MS).
+const L1_TICK_MS: I64 = 64
+
+/// Maximum delay for level 1 (SLOTS * L1_TICK_MS).
+const MAX_L1_MS: I64 = 4096
+
+/// Initial capacity for timer entries.
+const INIT_CAPACITY: I64 = 64
+
+/// Sentinel value for empty linked list (must be I64 to avoid ptr_write i32 bug).
+const EMPTY: I64 = -1
+
+// ── TimerWheel ──────────────────────────────────────────────────────────
+
+/// A hashed timer wheel with two levels and overflow.
+///
+/// Provides O(1) insert, cancel, and advance for most timer operations.
+pub type TimerWheel {
+    /// Level 0 slots: pointer stored as I64 for codegen compat.
+    level0: I64,
+    /// Level 1 slots: pointer stored as I64 for codegen compat.
+    level1: I64,
+    /// Overflow list head index.
+    overflow_head: I64,
+    /// Timer entry pool: pointer stored as I64 for codegen compat.
+    entries: I64,
+    /// Number of allocated entries.
+    capacity: I64,
+    /// Free list head index (-1 if none).
+    free_head: I64,
+    /// Next timer ID to assign.
+    next_id: I64,
+    /// Current wheel time in ms.
+    current_ms: I64,
+    /// Number of active (non-cancelled) timers.
+    active_count: I64,
+}
+
+impl TimerWheel {
+    /// Creates a new timer wheel. `now_ms` is the current monotonic time in ms.
+    pub func new(now_ms: I64) -> TimerWheel {
+        // Allocate slot arrays (SLOTS * 8 bytes each, holding I64 head indices)
+        let slot_bytes: I64 = SLOTS * 8
+        let l0: I64 = mem_alloc(slot_bytes) as I64
+        let l1: I64 = mem_alloc(slot_bytes) as I64
+
+        // Initialize all slots to -1 (empty)
+        var i: I64 = 0
+        loop (i < SLOTS) {
+            let offset: I64 = i * 8
+            let l0_ptr: *I64 = (l0 + offset) as *I64
+            let l1_ptr: *I64 = (l1 + offset) as *I64
+            lowlevel { ptr_write[I64](l0_ptr, EMPTY) }
+            lowlevel { ptr_write[I64](l1_ptr, EMPTY) }
+            i = i + 1
+        }
+
+        // Allocate entry pool
+        let entry_bytes: I64 = INIT_CAPACITY * ENTRY_SIZE
+        let entries: I64 = mem_alloc(entry_bytes) as I64
+
+        // Build free list: each entry's `next` field (offset 24) points to next index
+        var j: I64 = 0
+        loop (j < INIT_CAPACITY) {
+            let next_val: I64 = if j + 1 < INIT_CAPACITY { j + 1 } else { -1 }
+            let next_ptr: *I64 = (entries + j * ENTRY_SIZE + 24) as *I64
+            lowlevel { ptr_write[I64](next_ptr, next_val) }
+            j = j + 1
+        }
+
+        TimerWheel {
+            level0: l0,
+            level1: l1,
+            overflow_head: -1,
+            entries: entries,
+            capacity: INIT_CAPACITY,
+            free_head: 0,
+            next_id: 0,
+            current_ms: now_ms,
+            active_count: 0,
+        }
+    }
+
+    /// Schedules a timer to fire after `delay_ms` milliseconds.
+    /// `callback` and `user_data` are opaque I64 values passed back on fire.
+    /// Returns a TimerId that can be used to cancel.
+    pub func schedule(this, delay_ms: I64, callback: I64, user_data: I64) -> TimerId {
+        let deadline: I64 = this.current_ms + delay_ms
+
+        // Allocate an entry
+        let idx: I64 = this.alloc_entry()
+        let entry_addr: I64 = this.entries + idx * ENTRY_SIZE
+
+        // Write entry fields: deadline, callback, user_data, next=-1
+        let deadline_ptr: *I64 = entry_addr as *I64
+        let callback_ptr: *I64 = (entry_addr + 8) as *I64
+        let userdata_ptr: *I64 = (entry_addr + 16) as *I64
+        let next_ptr: *I64 = (entry_addr + 24) as *I64
+        lowlevel { ptr_write[I64](deadline_ptr, deadline) }
+        lowlevel { ptr_write[I64](callback_ptr, callback) }
+        lowlevel { ptr_write[I64](userdata_ptr, user_data) }
+        lowlevel { ptr_write[I64](next_ptr, EMPTY) }
+
+        // Insert into appropriate slot
+        this.insert_entry(idx, deadline)
+        this.active_count = this.active_count + 1
+
+        TimerId { value: idx }
+    }
+
+    /// Cancels a timer. The callback will not be called.
+    /// Safe to call with an invalid or already-fired timer ID.
+    pub func cancel(this, id: TimerId) {
+        if not id.is_valid() { return }
+        let idx: I64 = id.value
+        if idx < 0 or idx >= this.capacity { return }
+
+        // Mark as cancelled by setting callback to 0
+        let callback_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 8) as *I64
+        let cb: I64 = lowlevel { ptr_read[I64](callback_ptr) }
+        if cb != 0 {
+            lowlevel { ptr_write[I64](callback_ptr, 0) }
+            this.active_count = this.active_count - 1
+        }
+    }
+
+    /// Advances the wheel to `now_ms`, firing all expired timers.
+    /// Returns the number of timers fired.
+    /// For each fired timer, calls the callback as: callback(user_data).
+    pub func advance(this, now_ms: I64) -> I64 {
+        var fired: I64 = 0
+
+        // Process all ticks from current_ms to now_ms
+        loop (this.current_ms < now_ms) {
+            this.current_ms = this.current_ms + 1
+
+            // Level 1: cascade BEFORE firing L0, so cascaded timers
+            // with deadlines at this tick are available in L0.
+            if this.current_ms % L1_TICK_MS == 0 {
+                let l1_slot: I64 = (this.current_ms / L1_TICK_MS) % SLOTS
+                this.cascade_level1(l1_slot)
+            }
+
+            // Level 0: check slot for current_ms
+            let l0_slot: I64 = this.current_ms % SLOTS
+            fired = fired + this.fire_slot_level0(l0_slot, now_ms)
+        }
+
+        // Process overflow list: re-insert or fire expired overflow timers
+        fired = fired + this.process_overflow()
+
+        return fired
+    }
+
+    /// Returns ms until the next timer deadline, or -1 if no timers.
+    pub func next_deadline_ms(this) -> I64 {
+        if this.active_count == 0 {
+            return -1
+        }
+
+        var min_deadline: I64 = 9223372036854775807 // I64 max
+
+        // Scan level 0
+        var i: I64 = 0
+        loop (i < SLOTS) {
+            let head_ptr: *I64 = (this.level0 + i * 8) as *I64
+            var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            loop (idx >= 0) {
+                let ea: I64 = this.entries + idx * ENTRY_SIZE
+                let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+                let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+                if cb != 0 and deadline < min_deadline {
+                    min_deadline = deadline
+                }
+                idx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            }
+            i = i + 1
+        }
+
+        // Scan level 1
+        i = 0
+        loop (i < SLOTS) {
+            let head_ptr: *I64 = (this.level1 + i * 8) as *I64
+            var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            loop (idx >= 0) {
+                let ea: I64 = this.entries + idx * ENTRY_SIZE
+                let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+                let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+                if cb != 0 and deadline < min_deadline {
+                    min_deadline = deadline
+                }
+                idx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            }
+            i = i + 1
+        }
+
+        // Scan overflow
+        var oidx: I64 = this.overflow_head
+        loop (oidx >= 0) {
+            let ea: I64 = this.entries + oidx * ENTRY_SIZE
+            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+            let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+            if cb != 0 and deadline < min_deadline {
+                min_deadline = deadline
+            }
+            oidx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+        }
+
+        if min_deadline == 9223372036854775807 {
+            return -1
+        }
+
+        let diff: I64 = min_deadline - this.current_ms
+        if diff < 0 { return 0 }
+        return diff
+    }
+
+    /// Returns the number of active timers.
+    pub func len(this) -> I64 {
+        this.active_count
+    }
+
+    /// Destroys the timer wheel and frees all memory.
+    pub func destroy(this) {
+        mem_free(this.level0 as *Unit)
+        mem_free(this.level1 as *Unit)
+        mem_free(this.entries as *Unit)
+    }
+
+    // ── Internal helpers ────────────────────────────────────────────────
+
+    /// Allocates an entry from the free list, growing if needed.
+    pub func alloc_entry(this) -> I64 {
+        if this.free_head < 0 {
+            this.grow_entries()
+        }
+        let idx: I64 = this.free_head
+        let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
+        this.free_head = lowlevel { ptr_read[I64](next_ptr) }
+        return idx
+    }
+
+    /// Returns an entry to the free list.
+    pub func free_entry(this, idx: I64) {
+        let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
+        lowlevel { ptr_write[I64](next_ptr, this.free_head) }
+        // Zero out callback to mark as free
+        let cb_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 8) as *I64
+        lowlevel { ptr_write[I64](cb_ptr, 0) }
+        this.free_head = idx
+    }
+
+    /// Doubles the entry pool capacity.
+    pub func grow_entries(this) {
+        let new_cap: I64 = this.capacity * 2
+        let new_bytes: I64 = new_cap * ENTRY_SIZE
+        let new_entries: I64 = mem_alloc(new_bytes) as I64
+
+        // Copy old entries
+        let old_bytes: I64 = this.capacity * ENTRY_SIZE
+        lowlevel {
+            copy_nonoverlapping(this.entries as *U8, new_entries as *U8, old_bytes)
+        }
+
+        // Build free list for new entries
+        var i: I64 = this.capacity
+        loop (i < new_cap) {
+            let next_val: I64 = if i + 1 < new_cap { i + 1 } else { -1 }
+            let next_ptr: *I64 = (new_entries + i * ENTRY_SIZE + 24) as *I64
+            lowlevel { ptr_write[I64](next_ptr, next_val) }
+            i = i + 1
+        }
+
+        this.free_head = this.capacity
+        mem_free(this.entries as *Unit)
+        this.entries = new_entries
+        this.capacity = new_cap
+    }
+
+    /// Inserts an entry into the correct slot based on deadline.
+    pub func insert_entry(this, idx: I64, deadline: I64) {
+        let delay: I64 = deadline - this.current_ms
+
+        if delay < SLOTS {
+            // Level 0
+            let slot: I64 = deadline % SLOTS
+            let head_ptr: *I64 = (this.level0 + slot * 8) as *I64
+            let old_head: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
+            lowlevel { ptr_write[I64](next_ptr, old_head) }
+            lowlevel { ptr_write[I64](head_ptr, idx) }
+        } else if delay < MAX_L1_MS {
+            // Level 1
+            let slot: I64 = (deadline / L1_TICK_MS) % SLOTS
+            let head_ptr: *I64 = (this.level1 + slot * 8) as *I64
+            let old_head: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
+            lowlevel { ptr_write[I64](next_ptr, old_head) }
+            lowlevel { ptr_write[I64](head_ptr, idx) }
+        } else {
+            // Overflow
+            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
+            lowlevel { ptr_write[I64](next_ptr, this.overflow_head) }
+            this.overflow_head = idx
+        }
+    }
+
+    /// Fires all expired timers in a level-0 slot.
+    pub func fire_slot_level0(this, slot: I64, now_ms: I64) -> I64 {
+        var fired: I64 = 0
+        let head_ptr: *I64 = (this.level0 + slot * 8) as *I64
+        var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+
+        // Clear the slot head
+        lowlevel { ptr_write[I64](head_ptr, EMPTY) }
+
+        loop (idx >= 0) {
+            let ea: I64 = this.entries + idx * ENTRY_SIZE
+            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+            let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
+
+            if callback != 0 and deadline <= now_ms {
+                // Fire the timer
+                fired = fired + 1
+                this.active_count = this.active_count - 1
+            } else if callback != 0 {
+                // Not yet expired, re-insert
+                this.insert_entry(idx, deadline)
+                idx = next
+                continue
+            }
+
+            this.free_entry(idx)
+            idx = next
+        }
+
+        return fired
+    }
+
+    /// Cascades a level-1 slot down to level 0.
+    pub func cascade_level1(this, slot: I64) {
+        let head_ptr: *I64 = (this.level1 + slot * 8) as *I64
+        var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+
+        // Clear the L1 slot
+        lowlevel { ptr_write[I64](head_ptr, EMPTY) }
+
+        loop (idx >= 0) {
+            let ea: I64 = this.entries + idx * ENTRY_SIZE
+            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+
+            if callback != 0 {
+                // Re-insert into level 0 (now within 64ms range)
+                this.insert_entry(idx, deadline)
+            } else {
+                this.free_entry(idx)
+            }
+
+            idx = next
+        }
+    }
+
+    /// Re-inserts overflow timers that now fit into L0/L1.
+    /// Fires any that are already expired. Returns number fired.
+    pub func process_overflow(this) -> I64 {
+        var idx: I64 = this.overflow_head
+        this.overflow_head = -1
+        var fired: I64 = 0
+
+        loop (idx >= 0) {
+            let ea: I64 = this.entries + idx * ENTRY_SIZE
+            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
+            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+
+            if callback != 0 and deadline <= this.current_ms {
+                // Already expired — fire it
+                fired = fired + 1
+                this.active_count = this.active_count - 1
+                this.free_entry(idx)
+            } else if callback != 0 {
+                this.insert_entry(idx, deadline)
+            } else {
+                this.free_entry(idx)
+            }
+
+            idx = next
+        }
+
+        return fired
+    }
+}

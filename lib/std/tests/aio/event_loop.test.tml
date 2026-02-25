@@ -1,0 +1,157 @@
+use test::{assert, assert_eq}
+use std::aio::event_loop::EventLoop
+use std::aio::timer_wheel::TimerId
+
+@test
+func test_event_loop_create_destroy() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_register_sources() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Register doesn't require actual sockets for this test
+    // We just verify the token allocation works
+    // In real usage, you'd register actual socket handles
+
+    assert_eq(el.sources_count, 0 as I64, "should start with 0 sources")
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_timer_scheduling() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Schedule timers
+    let t1: TimerId = el.set_timeout(50, 0, 100)
+    let t2: TimerId = el.set_timeout(100, 0, 200)
+    let t3: TimerId = el.set_timeout(150, 0, 300)
+
+    // Verify timers are scheduled
+    assert(t1.is_valid(), "t1 should be valid")
+    assert(t2.is_valid(), "t2 should be valid")
+    assert(t3.is_valid(), "t3 should be valid")
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_timer_cancel() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    let t1: TimerId = el.set_timeout(50, 0, 100)
+    let t2: TimerId = el.set_timeout(100, 0, 200)
+
+    el.clear_timer(t1)
+    el.clear_timer(t2)
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_get_time_ms() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    let t1: I64 = el.get_time_ms()
+    let t2: I64 = el.get_time_ms()
+
+    // Time should be monotonically increasing
+    assert(t2 >= t1, "t2 should be >= t1")
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_source_lookup() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Test find_source_by_token with non-existent token
+    let idx: I64 = el.find_source_by_token(999)
+    assert_eq(idx, -1 as I64, "should not find non-existent token")
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_grow_sources() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    assert_eq(el.sources_capacity, 64 as I64, "initial capacity should be 64")
+
+    // Manually trigger growth (this is an internal method but should be testable)
+    el.grow_sources()
+
+    assert_eq(el.sources_capacity, 128 as I64, "capacity should double to 128")
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_poll_once_no_events() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Poll once with 10ms timeout and no I/O sources
+    // Should just timeout with no events
+    el.poll_once(10)
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_set_user_data() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // For user_data, we just verify the method exists
+    // and doesn't crash on non-existent token
+    el.set_user_data(999, 12345)
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_on_callbacks() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Test that callback methods work without crashing
+    // (actual callbacks would need real sockets)
+    el.on_readable(999, 0)
+    el.on_writable(999, 0)
+    el.on_error(999, 0)
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_modify_interests() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Test modify on non-existent token (should be no-op)
+    el.modify(999, 3)
+
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_deregister() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+
+    // Test deregister on non-existent token (should be no-op)
+    el.deregister(999)
+
+    el.destroy()
+    return 0
+}

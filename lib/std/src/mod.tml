@@ -74,5 +74,6 @@ pub mod url        // URL parsing and building per RFC 3986
 pub mod mime       // MIME type parsing and extension lookup
 pub mod cli        // CLI argument parsing framework
 pub mod runtime    // Async runtime (executor, timer, yield, channel)
+pub mod aio        // Async I/O (poller, timer wheel, event loop)
 pub mod sqlite     // SQLite3 embedded database
 pub mod http       // HTTP router (radix tree), client, server

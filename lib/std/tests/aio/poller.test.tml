@@ -1,0 +1,94 @@
+use test::{assert, assert_eq}
+use std::aio::poller::{Poller, PollEvent, READABLE, WRITABLE, READWRITE, ERROR, HUP}
+
+@test
+func test_poller_create_destroy() -> I32 {
+    let poller: Poller = Poller::new()
+    poller.destroy()
+    return 0
+}
+
+@test
+func test_poller_wait_timeout() -> I32 {
+    let poller: Poller = Poller::new()
+
+    // Wait with timeout on empty poller (should timeout immediately)
+    let num_events: I32 = poller.wait(1)
+    assert_eq(num_events, 0, "should have 0 events on timeout")
+
+    poller.destroy()
+    return 0
+}
+
+@test
+func test_poller_wait_nonblocking() -> I32 {
+    let poller: Poller = Poller::new()
+
+    // Non-blocking wait (timeout=0) on empty poller
+    let num_events: I32 = poller.wait(0)
+    assert_eq(num_events, 0, "non-blocking should return immediately with 0 events")
+
+    poller.destroy()
+    return 0
+}
+
+@test
+func test_poll_event_flags() -> I32 {
+    // Create a PollEvent and test flag methods
+    let ev: PollEvent = PollEvent { token: 1, flags: READABLE }
+
+    assert(ev.is_readable(), "should be readable")
+    assert(not ev.is_writable(), "should not be writable")
+    assert(not ev.is_error(), "should not have error")
+    assert(not ev.is_hup(), "should not have hup")
+
+    return 0
+}
+
+@test
+func test_poll_event_flags_combined() -> I32 {
+    // Test combined flags
+    let ev: PollEvent = PollEvent { token: 1, flags: READWRITE }
+
+    assert(ev.is_readable(), "should be readable")
+    assert(ev.is_writable(), "should be writable")
+    assert(not ev.is_error(), "should not have error")
+
+    return 0
+}
+
+@test
+func test_poll_event_flags_error() -> I32 {
+    let ev: PollEvent = PollEvent { token: 1, flags: ERROR }
+
+    assert(not ev.is_readable(), "should not be readable")
+    assert(not ev.is_writable(), "should not be writable")
+    assert(ev.is_error(), "should have error")
+    assert(not ev.is_hup(), "should not have hup")
+
+    return 0
+}
+
+@test
+func test_poll_event_flags_hup() -> I32 {
+    let ev: PollEvent = PollEvent { token: 1, flags: HUP }
+
+    assert(not ev.is_readable(), "should not be readable")
+    assert(not ev.is_writable(), "should not be writable")
+    assert(not ev.is_error(), "should not have error")
+    assert(ev.is_hup(), "should have hup")
+
+    return 0
+}
+
+@test
+func test_poll_event_token_storage() -> I32 {
+    // Test that token is stored correctly
+    let ev1: PollEvent = PollEvent { token: 42, flags: READABLE }
+    assert_eq(ev1.token, 42 as U32, "token should be 42")
+
+    let ev2: PollEvent = PollEvent { token: 999, flags: WRITABLE }
+    assert_eq(ev2.token, 999 as U32, "token should be 999")
+
+    return 0
+}

@@ -740,6 +740,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including dns runtime: " << dns_obj);
             }
 
+            // net/ - poll.c (I/O event polling: epoll/WSAPoll)
+            fs::path poll_c = runtime_dir / "net" / "poll.c";
+            if (fs::exists(poll_c)) {
+                std::string poll_obj = ensure_c_compiled(to_forward_slashes(poll_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(poll_obj));
+                TML_LOG_DEBUG("build", "Including poll runtime: " << poll_obj);
+            }
+
             // collections/ - collections.c (buffer FFI for crypto/zlib)
             fs::path collections_c = runtime_dir / "collections" / "collections.c";
             if (fs::exists(collections_c)) {

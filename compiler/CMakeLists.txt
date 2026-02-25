@@ -221,6 +221,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/tls.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/poll.c
     # os/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
     # crypto/

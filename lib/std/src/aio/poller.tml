@@ -1,0 +1,161 @@
+//! I/O event poller.
+//!
+//! Cross-platform abstraction over OS I/O multiplexing:
+//! epoll on Linux, WSAPoll on Windows.
+//!
+//! This is the lowest TML layer of the async I/O stack.
+//! Higher layers (EventLoop, TcpServer) build on top of this.
+
+use core::intrinsics::{mem_alloc, mem_free, ptr_read}
+
+// ── FFI to poll.c ────────────────────────────────────────────────────────
+
+@extern("tml_poll_create")
+func poll_create() -> I64
+
+@extern("tml_poll_destroy")
+func poll_destroy(poller: I64)
+
+@extern("tml_poll_add")
+func poll_add(poller: I64, socket: I64, token: U32, interests: U32) -> I32
+
+@extern("tml_poll_modify")
+func poll_modify(poller: I64, socket: I64, token: U32, interests: U32) -> I32
+
+@extern("tml_poll_remove")
+func poll_remove(poller: I64, socket: I64) -> I32
+
+@extern("tml_poll_wait")
+func poll_wait(poller: I64, events_out: *Unit, max_events: I32, timeout_ms: I32) -> I32
+
+// ── Interest flags ───────────────────────────────────────────────────────
+
+/// Socket is ready to read.
+pub const READABLE: U32 = 1
+
+/// Socket is ready to write.
+pub const WRITABLE: U32 = 2
+
+/// Both readable and writable.
+pub const READWRITE: U32 = 3
+
+/// Error condition on socket.
+pub const ERROR: U32 = 4
+
+/// Hang-up (peer closed connection).
+pub const HUP: U32 = 8
+
+// ── PollEvent ────────────────────────────────────────────────────────────
+
+/// An I/O event returned by Poller::wait().
+///
+/// Layout matches C struct PollEvent { uint32_t token; uint32_t flags; }
+pub type PollEvent {
+    /// User-assigned token identifying the I/O source.
+    token: U32,
+    /// Readiness flags (READABLE, WRITABLE, ERROR, HUP).
+    flags: U32,
+}
+
+impl PollEvent {
+    /// Returns true if the socket is ready to read.
+    pub func is_readable(this) -> Bool {
+        (this.flags as I32) & (READABLE as I32) != 0
+    }
+
+    /// Returns true if the socket is ready to write.
+    pub func is_writable(this) -> Bool {
+        (this.flags as I32) & (WRITABLE as I32) != 0
+    }
+
+    /// Returns true if there's an error on the socket.
+    pub func is_error(this) -> Bool {
+        (this.flags as I32) & (ERROR as I32) != 0
+    }
+
+    /// Returns true if the peer closed the connection.
+    pub func is_hup(this) -> Bool {
+        (this.flags as I32) & (HUP as I32) != 0
+    }
+}
+
+// ── Poller ───────────────────────────────────────────────────────────────
+
+/// Maximum events per wait call.
+const MAX_EVENTS: I32 = 256
+
+/// Cross-platform I/O event poller.
+///
+/// Wraps epoll (Linux) or WSAPoll (Windows) behind a uniform API.
+/// Each registered socket gets a U32 token for O(1) event dispatch.
+pub type Poller {
+    /// OS poller handle (epoll fd on Linux, WinPoller* on Windows).
+    handle: I64,
+    /// Pre-allocated event buffer for wait() results.
+    events_buf: *Unit,
+}
+
+impl Poller {
+    /// Creates a new poller.
+    pub func new() -> Poller {
+        let h: I64 = poll_create()
+        // Allocate event buffer: MAX_EVENTS * 8 bytes (sizeof PollEvent)
+        let buf_size: I64 = (MAX_EVENTS as I64) * 8
+        let buf: *Unit = lowlevel { mem_alloc(buf_size) }
+        Poller {
+            handle: h,
+            events_buf: buf,
+        }
+    }
+
+    /// Registers a socket for event monitoring.
+    ///
+    /// - `socket_handle`: Raw OS socket handle (from RawSocket.handle)
+    /// - `token`: User-assigned identifier (returned with events)
+    /// - `interests`: READABLE, WRITABLE, or READWRITE
+    ///
+    /// Returns 0 on success, negative on error.
+    pub func add(this, socket_handle: I64, token: U32, interests: U32) -> I32 {
+        return poll_add(this.handle, socket_handle, token, interests)
+    }
+
+    /// Updates the registered interests for a socket.
+    pub func modify(this, socket_handle: I64, token: U32, interests: U32) -> I32 {
+        return poll_modify(this.handle, socket_handle, token, interests)
+    }
+
+    /// Removes a socket from the poller.
+    pub func remove(this, socket_handle: I64) -> I32 {
+        return poll_remove(this.handle, socket_handle)
+    }
+
+    /// Waits for I/O events.
+    ///
+    /// - `timeout_ms`: -1 = block forever, 0 = non-blocking, >0 = timeout in ms
+    ///
+    /// Returns the number of ready events (0 on timeout, negative on error).
+    /// Use `event_at(i)` to access individual events.
+    pub func wait(this, timeout_ms: I32) -> I32 {
+        return poll_wait(this.handle, this.events_buf, MAX_EVENTS, timeout_ms)
+    }
+
+    /// Returns the event at index `i` from the last wait() call.
+    ///
+    /// Each event is 8 bytes: { token: U32, flags: U32 }.
+    pub func event_at(this, i: I32) -> PollEvent {
+        let offset: I64 = (i as I64) * 8
+        let ptr: I64 = (this.events_buf as I64) + offset
+        // Read token (first 4 bytes) and flags (next 4 bytes)
+        let token_ptr: *U32 = ptr as *U32
+        let flags_ptr: *U32 = (ptr + 4) as *U32
+        let tok: U32 = lowlevel { ptr_read[U32](token_ptr) }
+        let flg: U32 = lowlevel { ptr_read[U32](flags_ptr) }
+        PollEvent { token: tok, flags: flg }
+    }
+
+    /// Destroys the poller and frees resources.
+    pub func destroy(this) {
+        poll_destroy(this.handle)
+        lowlevel { mem_free(this.events_buf) }
+    }
+}

@@ -1,0 +1,14 @@
+//! Asynchronous I/O module.
+//!
+//! Provides:
+//! - `Poller`: Cross-platform I/O multiplexing (epoll/WSAPoll)
+//! - `TimerWheel`: Efficient timer management
+//! - `EventLoop`: Single-threaded event loop combining I/O + timers + callbacks
+
+pub mod poller
+pub mod timer_wheel
+pub mod event_loop
+
+pub use poller::{Poller, PollEvent, READABLE, WRITABLE, READWRITE, ERROR, HUP}
+pub use timer_wheel::{TimerWheel, TimerId}
+pub use event_loop::EventLoop

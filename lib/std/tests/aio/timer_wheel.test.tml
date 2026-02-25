@@ -1,0 +1,166 @@
+use test::{assert, assert_eq}
+use std::aio::timer_wheel::{TimerWheel, TimerId}
+
+@test
+func test_timer_wheel_create_destroy() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_schedule_and_advance() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    // Schedule 3 timers
+    let t1: TimerId = tw.schedule(10, 42, 100)
+    let t2: TimerId = tw.schedule(5, 43, 200)
+    let t3: TimerId = tw.schedule(20, 44, 300)
+
+    assert_eq(tw.active_count, 3 as I64, "should have 3 active timers")
+
+    // Advance and fire
+    let f1: I64 = tw.advance(5)
+    assert_eq(f1, 1 as I64, "first advance should fire 1 timer")
+    assert_eq(tw.active_count, 2 as I64, "should have 2 active after first fire")
+
+    let f2: I64 = tw.advance(10)
+    assert_eq(f2, 1 as I64, "second advance should fire 1 timer")
+    assert_eq(tw.active_count, 1 as I64, "should have 1 active after second fire")
+
+    let f3: I64 = tw.advance(20)
+    assert_eq(f3, 1 as I64, "third advance should fire 1 timer")
+    assert_eq(tw.active_count, 0 as I64, "should have 0 active after all fired")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_cancel() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    let t1: TimerId = tw.schedule(50, 45, 400)
+    let t2: TimerId = tw.schedule(60, 46, 500)
+
+    assert_eq(tw.active_count, 2 as I64, "should have 2 timers")
+
+    tw.cancel(t1)
+    assert_eq(tw.active_count, 1 as I64, "should have 1 after cancel")
+
+    let f1: I64 = tw.advance(80)
+    assert_eq(f1, 1 as I64, "should fire only t2")
+    assert_eq(tw.active_count, 0 as I64, "should have 0 active")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_pool_growth() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    // Schedule 100 timers (exceeds initial capacity of 64)
+    var i: I64 = 0
+    loop (i < 100) {
+        tw.schedule(200 + i, 99, i)
+        i = i + 1
+    }
+
+    assert_eq(tw.active_count, 100 as I64, "should have 100 timers")
+
+    let f1: I64 = tw.advance(500)
+    assert_eq(f1, 100 as I64, "should fire all 100 timers")
+    assert_eq(tw.active_count, 0 as I64, "should have 0 active")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_l1_timers() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    // Schedule L1 timers (64-4095ms delay)
+    let t1: TimerId = tw.schedule(200, 1, 10)
+    let t2: TimerId = tw.schedule(1000, 2, 20)
+    let t3: TimerId = tw.schedule(3000, 3, 30)
+
+    assert_eq(tw.active_count, 3 as I64, "should have 3 L1 timers")
+
+    let f1: I64 = tw.advance(200)
+    assert_eq(f1, 1 as I64, "should fire first L1 timer")
+
+    let f2: I64 = tw.advance(1000)
+    assert_eq(f2, 1 as I64, "should fire second L1 timer")
+
+    let f3: I64 = tw.advance(3000)
+    assert_eq(f3, 1 as I64, "should fire third L1 timer")
+
+    assert_eq(tw.active_count, 0 as I64, "all should be fired")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_overflow_timers() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    // Schedule overflow timers (>4096ms)
+    let t1: TimerId = tw.schedule(5000, 4, 40)
+    let t2: TimerId = tw.schedule(10000, 5, 50)
+
+    assert_eq(tw.active_count, 2 as I64, "should have 2 overflow timers")
+
+    let f1: I64 = tw.advance(8000)
+    assert_eq(f1, 1 as I64, "should fire first overflow timer")
+
+    let f2: I64 = tw.advance(14000)
+    assert_eq(f2, 1 as I64, "should fire second overflow timer")
+
+    assert_eq(tw.active_count, 0 as I64, "all should be fired")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_next_deadline() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    let nd1: I64 = tw.next_deadline_ms()
+    assert_eq(nd1, -1 as I64, "should be -1 with no timers")
+
+    let t1: TimerId = tw.schedule(100, 1, 10)
+    let t2: TimerId = tw.schedule(50, 2, 20)
+
+    let nd2: I64 = tw.next_deadline_ms()
+    assert_eq(nd2, 50 as I64, "next deadline should be 50")
+
+    tw.cancel(t2)
+    let nd3: I64 = tw.next_deadline_ms()
+    assert_eq(nd3, 100 as I64, "next deadline should be 100 after cancel")
+
+    tw.destroy()
+    return 0
+}
+
+@test
+func test_timer_wheel_len() -> I32 {
+    let tw: TimerWheel = TimerWheel::new(0)
+
+    assert_eq(tw.len(), 0 as I64, "should have 0 timers initially")
+
+    let t1: TimerId = tw.schedule(50, 1, 10)
+    assert_eq(tw.len(), 1 as I64, "should have 1 timer")
+
+    let t2: TimerId = tw.schedule(100, 2, 20)
+    assert_eq(tw.len(), 2 as I64, "should have 2 timers")
+
+    tw.cancel(t1)
+    assert_eq(tw.len(), 1 as I64, "should have 1 timer after cancel")
+
+    tw.destroy()
+    return 0
+}

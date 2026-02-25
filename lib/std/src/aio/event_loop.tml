@@ -1,0 +1,377 @@
+//! Single-threaded event loop for async I/O.
+//!
+//! Integrates I/O polling (Poller) + timers (TimerWheel) + callbacks.
+//! Node.js-style architecture: one event loop per thread.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::aio::event_loop::EventLoop
+//! use std::time::Instant
+//!
+//! let mut loop: EventLoop = EventLoop::new()
+//! let token: U32 = loop.register(socket_handle, READABLE)
+//! loop.on_readable(token, callback_fn as I64)
+//! loop.run()
+//! loop.destroy()
+//! ```
+
+use core::mem::{mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use std::aio::poller::{Poller, PollEvent, READABLE, WRITABLE, ERROR, HUP}
+use std::aio::timer_wheel::{TimerWheel, TimerId}
+use std::time::Instant
+
+// ── Helper macros ────────────────────────────────────────────────────────
+
+func rd(addr: I64) -> I64 {
+    lowlevel { ptr_read[I64](addr as *I64) }
+}
+
+func wr(addr: I64, val: I64) {
+    lowlevel { ptr_write[I64](addr as *I64, val) }
+}
+
+// ── IoSource (internal) ──────────────────────────────────────────────────
+
+/// Internal I/O source entry.
+/// Layout: { socket: I64, token: U32, _pad: U32, on_readable: I64, on_writable: I64, on_error: I64, user_data: I64 }
+/// Total: 48 bytes
+const IO_SOURCE_SIZE: I64 = 48
+const IO_SOURCE_SOCKET: I64 = 0
+const IO_SOURCE_TOKEN: I64 = 8
+const IO_SOURCE_ON_READABLE: I64 = 16
+const IO_SOURCE_ON_WRITABLE: I64 = 24
+const IO_SOURCE_ON_ERROR: I64 = 32
+const IO_SOURCE_USER_DATA: I64 = 40
+
+// ── EventLoop ────────────────────────────────────────────────────────────
+
+/// Single-threaded event loop combining I/O polling and timers.
+///
+/// Processes I/O events and timer firings in a single main loop.
+/// All callbacks are stored as I64 opaque values (function pointers).
+pub type EventLoop {
+    /// Poller for I/O multiplexing.
+    poller: Poller,
+    /// Timer wheel for timeout management.
+    timers: TimerWheel,
+    /// I/O sources array: pointer (as I64).
+    sources: I64,
+    /// Capacity of sources array.
+    sources_capacity: I64,
+    /// Number of registered sources.
+    sources_count: I64,
+    /// Next available token (increments).
+    next_token: U32,
+    /// Is the loop running?
+    running: Bool,
+    /// Start time of the loop (for monotonic timer references).
+    start_time_ms: I64,
+}
+
+impl EventLoop {
+    /// Creates a new event loop.
+    pub func new() -> EventLoop {
+        let poller: Poller = Poller::new()
+        let timers: TimerWheel = TimerWheel::new(0)
+
+        // Allocate sources array (initial capacity: 64 sources)
+        let sources_cap: I64 = 64
+        let sources_bytes: I64 = sources_cap * IO_SOURCE_SIZE
+        let sources: I64 = mem_alloc(sources_bytes) as I64
+
+        EventLoop {
+            poller: poller,
+            timers: timers,
+            sources: sources,
+            sources_capacity: sources_cap,
+            sources_count: 0,
+            next_token: 0,
+            running: false,
+            start_time_ms: 0,
+        }
+    }
+
+    /// Registers a socket with the event loop.
+    /// Returns a token (U32) that identifies this I/O source.
+    pub func register(mut this, socket_handle: I64, interests: U32) -> U32 {
+        // Grow sources array if needed
+        if this.sources_count >= this.sources_capacity {
+            this.grow_sources()
+        }
+
+        let idx: I64 = this.sources_count
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+
+        // Initialize source entry
+        wr(source_addr + IO_SOURCE_SOCKET, socket_handle)
+        let token: U32 = this.next_token
+        wr(source_addr + IO_SOURCE_TOKEN, token as I64)
+        wr(source_addr + IO_SOURCE_ON_READABLE, 0)
+        wr(source_addr + IO_SOURCE_ON_WRITABLE, 0)
+        wr(source_addr + IO_SOURCE_ON_ERROR, 0)
+        wr(source_addr + IO_SOURCE_USER_DATA, 0)
+
+        // Register with poller
+        this.poller.add(socket_handle, token, interests)
+
+        this.sources_count = this.sources_count + 1
+        this.next_token = this.next_token + 1
+
+        return token
+    }
+
+    /// Updates interests for a registered socket.
+    pub func modify(mut this, token: U32, interests: U32) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        let socket_handle: I64 = rd(source_addr + IO_SOURCE_SOCKET)
+        this.poller.modify(socket_handle, token, interests)
+    }
+
+    /// Unregisters a socket from the event loop.
+    pub func deregister(mut this, token: U32) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        let socket_handle: I64 = rd(source_addr + IO_SOURCE_SOCKET)
+        this.poller.remove(socket_handle)
+
+        // Swap with last element and shrink
+        let last_idx: I64 = this.sources_count - 1
+        if idx != last_idx {
+            let last_addr: I64 = this.sources + last_idx * IO_SOURCE_SIZE
+            let source_addr_dst: I64 = this.sources + idx * IO_SOURCE_SIZE
+
+            // Copy last element to idx position
+            lowlevel {
+                copy_nonoverlapping(last_addr as *U8, source_addr_dst as *U8, IO_SOURCE_SIZE)
+            }
+        }
+        this.sources_count = this.sources_count - 1
+    }
+
+    /// Sets a readable callback for a token.
+    /// Callback signature: func(user_data: I64)
+    pub func on_readable(mut this, token: U32, callback: I64) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        wr(source_addr + IO_SOURCE_ON_READABLE, callback)
+    }
+
+    /// Sets a writable callback for a token.
+    pub func on_writable(mut this, token: U32, callback: I64) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        wr(source_addr + IO_SOURCE_ON_WRITABLE, callback)
+    }
+
+    /// Sets an error callback for a token.
+    pub func on_error(mut this, token: U32, callback: I64) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        wr(source_addr + IO_SOURCE_ON_ERROR, callback)
+    }
+
+    /// Sets user data for a token (passed to callbacks).
+    pub func set_user_data(mut this, token: U32, user_data: I64) {
+        let idx: I64 = this.find_source_by_token(token)
+        if idx < 0 { return }
+
+        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+        wr(source_addr + IO_SOURCE_USER_DATA, user_data)
+    }
+
+    /// Schedules a timer callback.
+    /// Callback signature: func(user_data: I64)
+    pub func set_timeout(mut this, delay_ms: I64, callback: I64, user_data: I64) -> TimerId {
+        return this.timers.schedule(delay_ms, callback, user_data)
+    }
+
+    /// Cancels a timer.
+    pub func clear_timer(mut this, id: TimerId) {
+        this.timers.cancel(id)
+    }
+
+    /// Runs the event loop until stopped or no sources remain.
+    pub func run(mut this) {
+        this.running = true
+        this.start_time_ms = this.get_time_ms()
+        let base_time: I64 = this.start_time_ms
+
+        loop (this.running and (this.sources_count > 0 or this.timers.len() > 0)) {
+            // Calculate poll timeout from next timer deadline
+            let next_deadline: I64 = this.timers.next_deadline_ms()
+            let now_ms: I64 = this.get_time_ms() - base_time
+
+            var timeout_ms: I32 = -1  // Block forever by default
+            if next_deadline >= 0 {
+                let wait_ms: I64 = next_deadline - now_ms
+                if wait_ms > 0 {
+                    timeout_ms = if wait_ms > 2147483647 { 2147483647 } else { wait_ms as I32 }
+                } else {
+                    timeout_ms = 0  // Timer already expired, non-blocking
+                }
+            }
+
+            // Wait for I/O events
+            let num_events: I32 = this.poller.wait(timeout_ms)
+
+            // Get current time for timers
+            let current_time: I64 = this.get_time_ms() - base_time
+
+            // Advance timers to current time
+            this.timers.advance(current_time)
+
+            // Process I/O events
+            if num_events > 0 {
+                var i: I32 = 0
+                loop (i < num_events) {
+                    let ev: PollEvent = this.poller.event_at(i)
+                    let idx: I64 = this.find_source_by_token(ev.token)
+
+                    if idx >= 0 {
+                        let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+                        let user_data: I64 = rd(source_addr + IO_SOURCE_USER_DATA)
+
+                        if ev.is_readable() {
+                            let cb: I64 = rd(source_addr + IO_SOURCE_ON_READABLE)
+                            if cb != 0 {
+                                let f: func(I64) = cb as func(I64)
+                                f(user_data)
+                            }
+                        }
+
+                        if ev.is_writable() {
+                            let cb: I64 = rd(source_addr + IO_SOURCE_ON_WRITABLE)
+                            if cb != 0 {
+                                let f: func(I64) = cb as func(I64)
+                                f(user_data)
+                            }
+                        }
+
+                        if ev.is_error() {
+                            let cb: I64 = rd(source_addr + IO_SOURCE_ON_ERROR)
+                            if cb != 0 {
+                                let f: func(I64) = cb as func(I64)
+                                f(user_data)
+                            }
+                        }
+                    }
+
+                    i = i + 1
+                }
+            }
+        }
+
+        this.running = false
+    }
+
+    /// Runs one iteration of the event loop.
+    pub func poll_once(mut this, timeout_ms: I32) {
+        let num_events: I32 = this.poller.wait(timeout_ms)
+        let current_time: I64 = this.get_time_ms() - this.start_time_ms
+        this.timers.advance(current_time)
+
+        if num_events > 0 {
+            var i: I32 = 0
+            loop (i < num_events) {
+                let ev: PollEvent = this.poller.event_at(i)
+                let idx: I64 = this.find_source_by_token(ev.token)
+
+                if idx >= 0 {
+                    let source_addr: I64 = this.sources + idx * IO_SOURCE_SIZE
+                    let user_data: I64 = rd(source_addr + IO_SOURCE_USER_DATA)
+
+                    if ev.is_readable() {
+                        let cb: I64 = rd(source_addr + IO_SOURCE_ON_READABLE)
+                        if cb != 0 {
+                            let f: func(I64) = cb as func(I64)
+                            f(user_data)
+                        }
+                    }
+
+                    if ev.is_writable() {
+                        let cb: I64 = rd(source_addr + IO_SOURCE_ON_WRITABLE)
+                        if cb != 0 {
+                            let f: func(I64) = cb as func(I64)
+                            f(user_data)
+                        }
+                    }
+
+                    if ev.is_error() {
+                        let cb: I64 = rd(source_addr + IO_SOURCE_ON_ERROR)
+                        if cb != 0 {
+                            let f: func(I64) = cb as func(I64)
+                            f(user_data)
+                        }
+                    }
+                }
+
+                i = i + 1
+            }
+        }
+    }
+
+    /// Stops the event loop.
+    pub func stop(mut this) {
+        this.running = false
+    }
+
+    /// Destroys the event loop and frees all resources.
+    pub func destroy(mut this) {
+        this.poller.destroy()
+        this.timers.destroy()
+        mem_free(this.sources as *Unit)
+    }
+
+    // ── Internal helpers ────────────────────────────────────────────────────
+
+    /// Finds a source by token. Returns index or -1 if not found.
+    pub func find_source_by_token(this, token: U32) -> I64 {
+        var i: I64 = 0
+        loop (i < this.sources_count) {
+            let source_addr: I64 = this.sources + i * IO_SOURCE_SIZE
+            let tok: I64 = rd(source_addr + IO_SOURCE_TOKEN)
+            if tok == (token as I64) {
+                return i
+            }
+            i = i + 1
+        }
+        return -1
+    }
+
+    /// Doubles the sources array capacity.
+    pub func grow_sources(mut this) {
+        let new_cap: I64 = this.sources_capacity * 2
+        let new_bytes: I64 = new_cap * IO_SOURCE_SIZE
+        let new_sources: I64 = mem_alloc(new_bytes) as I64
+
+        // Copy old sources
+        let old_bytes: I64 = this.sources_capacity * IO_SOURCE_SIZE
+        lowlevel {
+            copy_nonoverlapping(this.sources as *U8, new_sources as *U8, old_bytes)
+        }
+
+        mem_free(this.sources as *Unit)
+        this.sources = new_sources
+        this.sources_capacity = new_cap
+    }
+
+    /// Gets current time in milliseconds (monotonic).
+    pub func get_time_ms(this) -> I64 {
+        let instant: Instant = Instant::now()
+        let nanos: I64 = instant.as_nanos()
+        return nanos / 1000000
+    }
+}
