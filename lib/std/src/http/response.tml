@@ -184,5 +184,11 @@ impl Response {
     /// Frees internal storage.
     pub func destroy(this) {
         this.headers.destroy()
+        // Free the body data string
+        if str::len(this.body_data) > 0 {
+            lowlevel {
+                mem_free(this.body_data as I64 as *Unit)
+            }
+        }
     }
 }

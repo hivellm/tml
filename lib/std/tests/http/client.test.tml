@@ -2,6 +2,7 @@
 use test::{assert, assert_eq}
 use std::http::client::HttpClient
 use std::http::response::Response
+use core::intrinsics::mem_free
 
 @test
 func test_client_get_https() -> I32 {
@@ -22,6 +23,8 @@ func test_client_get_https() -> I32 {
             let body_len: I64 = body.len()
             print("  Body length: {body_len}\n")
             assert(body_len > 0, "body should not be empty")
+            lowlevel { mem_free(body as I64 as *Unit) }
+            resp.destroy()
             return 0
         },
     }

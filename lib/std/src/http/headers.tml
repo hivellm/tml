@@ -286,6 +286,22 @@ impl Headers {
         let hdr: I64 = this.handle as I64
         let keys_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+
+        // Free individual key and value strings
+        var i: I64 = 0
+        loop (i < cur_len) {
+            let key_i64: I64 = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) }
+            let val_i64: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 8) as *I64) }
+            if key_i64 != 0 {
+                lowlevel { mem_free(key_i64 as *Unit) }
+            }
+            if val_i64 != 0 {
+                lowlevel { mem_free(val_i64 as *Unit) }
+            }
+            i = i + 1
+        }
+
         lowlevel { mem_free(keys_addr as *Unit) }
         lowlevel { mem_free(vals_addr as *Unit) }
         lowlevel { mem_free(hdr as *Unit) }
