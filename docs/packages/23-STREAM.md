@@ -18,6 +18,10 @@ use std::stream::{Readable, Writable, ByteStream, BufferedReader, BufferedWriter
 | `writable.tml` | `Writable` behavior — byte sink interface |
 | `byte_stream.tml` | `ByteStream` — in-memory read/write stream + utility functions |
 | `buffered.tml` | `BufferedReader` / `BufferedWriter` — buffered wrappers |
+| `duplex.tml` | `DuplexStream` — combined readable+writable stream with separate buffers |
+| `passthrough.tml` | `PassThroughStream` — identity stream with optional transform callback |
+| `pipeline.tml` | `PipelineStream` — chain multiple streams with backpressure |
+| `transform.tml` | `TransformStream` — stateful transformations (filter, map, compress patterns) |
 | `pipe.tml` | `pipe()` / `copy_bytes()` — stream piping utilities |
 
 ## 3. Core Behaviors
@@ -235,9 +239,135 @@ let resp = client.get("https://example.com")!
 // Response body is parsed from the raw TCP byte stream
 ```
 
+### 4.4 DuplexStream (NEW — 2026-02-25)
+
+Combined readable and writable stream with separate internal read and write buffers. Ideal for bidirectional communication patterns.
+
+```tml
+pub type DuplexStream {
+    handle: *Unit
+}
+
+impl DuplexStream {
+    /// Create a new duplex stream with separate read/write buffers.
+    pub func new() -> DuplexStream
+
+    /// Create with specific capacities for read and write buffers.
+    pub func with_capacity(read_cap: I64, write_cap: I64) -> DuplexStream
+
+    /// Get bytes written to the write side.
+    pub func written(this) -> Str
+
+    /// Reset the read position (read side advances independently).
+    pub func reset_read(mut this)
+
+    /// Reset the write position (write side advances independently).
+    pub func reset_write(mut this)
+
+    /// Free all allocated memory.
+    pub func destroy(mut this)
+}
+
+impl Readable for DuplexStream { ... }
+impl Writable for DuplexStream { ... }
+```
+
+**Example:**
+```tml
+use std::stream::{DuplexStream, Readable, Writable}
+
+var duplex = DuplexStream::new()
+duplex.write("Hello")!           // Write to write side
+var buf: [U8; 5] = [0 as U8; 5]
+duplex.read(mut ref buf)!         // Read from read side
+assert_eq(String::from_utf8(buf), "Hello")
+duplex.destroy()
+```
+
+### 4.5 PassThroughStream (NEW — 2026-02-25)
+
+Identity stream with optional transformation callback. Useful for monitoring, logging, or light transformations on stream data.
+
+```tml
+pub type PassThroughStream {
+    handle: *Unit
+}
+
+impl PassThroughStream {
+    /// Create a pass-through stream with no transformation.
+    pub func new() -> PassThroughStream
+
+    /// Create with a transformation callback: func(buf: ref [U8]) -> Outcome[Unit, Str]
+    pub func with_transform(transform: I64) -> PassThroughStream
+
+    /// Set or update the transformation callback.
+    pub func set_transform(mut this, transform: I64)
+
+    /// Get all data that passed through.
+    pub func buffered(this) -> Str
+
+    /// Free resources.
+    pub func destroy(mut this)
+}
+
+impl Readable for PassThroughStream { ... }
+impl Writable for PassThroughStream { ... }
+```
+
+### 4.6 PipelineStream (NEW — 2026-02-25)
+
+Chain multiple streams together with backpressure and error propagation. Enable composable stream topologies.
+
+```tml
+pub type PipelineStream {
+    handle: *Unit
+}
+
+impl PipelineStream {
+    /// Create a pipeline from a readable source.
+    pub func from(source: mut ref ByteStream) -> PipelineStream
+
+    /// Add a transformation stage to the pipeline.
+    pub func pipe(mut this, stage: I64) -> PipelineStream  // stage: I64 opaque callback
+
+    /// Complete the pipeline, writing to the final destination.
+    pub func to(mut this, dest: mut ref ByteStream) -> Outcome[I64, IoError]
+
+    /// Free resources.
+    pub func destroy(mut this)
+}
+```
+
+### 4.7 TransformStream (NEW — 2026-02-25)
+
+Stateful stream transformation supporting patterns like filtering, mapping, and compression.
+
+```tml
+pub type TransformStream {
+    handle: *Unit
+}
+
+impl TransformStream {
+    /// Create a transform stream with a state machine callback.
+    pub func new(transform: I64) -> TransformStream  // transform: func(state: ref Unit, buf: ref [U8]) -> Outcome[[U8], Str]
+
+    /// Update internal state.
+    pub func set_state(mut this, state: I64)
+
+    /// Get the current transform state.
+    pub func state(this) -> I64
+
+    /// Free resources.
+    pub func destroy(mut this)
+}
+
+impl Readable for TransformStream { ... }
+impl Writable for TransformStream { ... }
+```
+
 ## 7. Test Coverage
 
-6 test files in `lib/std/tests/stream/`:
+11 test files in `lib/std/tests/stream/`:
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -247,3 +377,8 @@ let resp = client.get("https://example.com")!
 | `buffered.test.tml` | 20+ | BufferedReader line reading, BufferedWriter batching |
 | `pipe.test.tml` | 3+ | Pipe and copy operations |
 | `copy.test.tml` | 3+ | copy_bytes with limits |
+| `duplex.test.tml` | 8+ | DuplexStream read/write independence, bidirectional I/O |
+| `passthrough.test.tml` | 6+ | PassThroughStream identity, transformation callbacks |
+| `pipeline.test.tml` | 5+ | Pipeline chaining, backpressure propagation |
+| `transform.test.tml` | 7+ | TransformStream state management, filter/map patterns |
+| (NEW) Stream integration tests | 5+ | End-to-end pipeline tests with HTTP upgrade patterns |

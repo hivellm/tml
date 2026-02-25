@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Async I/O Event Loop (Phase 3)** (2026-02-25) — `std::aio` module with single-threaded event loop combining I/O polling + timer management
+  - `Poller` (Layer 2) — TML wrapper around platform I/O polling (epoll on Linux, WSAPoll on Windows)
+    - Register sockets with token-based dispatch (U32 tokens)
+    - Methods: `add()`, `modify()`, `remove()`, `wait()`, `event_at()`
+    - Event flags: `READABLE`, `WRITABLE`, `READWRITE`, `ERROR`, `HUP`
+  - `TimerWheel` (Layer 2) — Hashed 2-level timer wheel for efficient timeout management (O(1) schedule/cancel/fire)
+    - Level 0: 64 slots × 1ms (0-63ms), Level 1: 64 slots × 64ms (64-4095ms)
+    - Overflow list for timers >4096ms with automatic cascading
+    - Methods: `schedule()`, `cancel()`, `advance()`, `next_deadline_ms()`, `len()`
+    - 8 tests covering basic scheduling, multi-delay ranges (L0/L1/overflow), pool growth to 100+ timers
+  - `EventLoop` (Layer 3) — Single-threaded event loop orchestrating Poller + TimerWheel + callback dispatch
+    - Node.js/libuv-style architecture: one loop per thread
+    - I/O source management: `register()`, `modify()`, `deregister()` with automatic token allocation
+    - Callback registration: `on_readable()`, `on_writable()`, `on_error()` with opaque I64 function pointers
+    - Timer integration: `set_timeout()`, `clear_timer()` with monotonic clock synchronization
+    - Main loop: `run()` integrates poller.wait() + timer.advance() + callback dispatch
+    - Single-iteration mode: `poll_once(timeout_ms)` for external loop integration
+    - 12 tests covering create/destroy, source/timer management, callback chain, internal helpers
+  - Platform FFI layer: `compiler/runtime/net/poll.c` (~200 lines) with cross-platform abstractions
+    - Linux: epoll-based implementation (epoll_create1, epoll_ctl, epoll_wait)
+    - Windows: WSAPoll-based implementation with dynamic poll array management
+    - 6 core functions: sys_poll_create/destroy/add/modify/remove/wait
+    - PollEvent output: {token: U32, flags: U32} portable 8-byte format
+  - 3 test files: `poller.test.tml`, `timer_wheel.test.tml`, `event_loop.test.tml` — 28 tests total, all passing
+  - Module exports via `std::aio::mod` — public API for high-level async TCP/UDP (Phase 4)
+
+- **Stream Module Enhancements** (2026-02-25) — Extended `std::stream` with composable transformation and pipeline streams
+  - `DuplexStream` — Combined readable+writable stream (separate read/write buffers)
+  - `PassThroughStream` — Identity stream with optional transformation callback per byte/chunk
+  - `PipelineStream` — Chain multiple streams with proper backpressure and error propagation
+  - `TransformStream` — Apply stateful transformations during streaming (filter, map, compress patterns)
+  - `pipe()` overload — Fluent API for `reader.pipe(transform).pipe(writer)`
+  - 5 new test files validating duplex I/O, throughput with pipes, transform chains, backpressure
+  - All tests passing; enables HTTP/WebSocket upgrade patterns requiring duplex streams
+
 - **HTTP Client** (2026-02-24) — `std::http::client::HttpClient` sends real HTTP requests over TCP/TLS
   - `HttpClient::new()`, `with_user_agent()` — create client instances
   - Convenience methods: `get(url)`, `post(url, body)`, `put(url, body)`, `delete(url)`

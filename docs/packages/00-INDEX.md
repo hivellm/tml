@@ -26,10 +26,11 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::http](./07-HTTP.md) | HTTP client and server | `io::network.http` |
 | [std::stream](./23-STREAM.md) | Streaming byte I/O (Readable, Writable, BufferedReader, BufferedWriter, ByteStream, pipe) | None |
 
-### Concurrency Packages
+### Concurrency and Async I/O Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
+| [std::aio](./27-AIO.md) | Async I/O event loop (Poller, TimerWheel, EventLoop) | `io::network` (for socket polling) |
 | [std::sync](./13-SYNC.md) | Channels and synchronization | None |
 | [std::async](./14-ASYNC.md) | Async runtime and futures | `io::time` (for timers) |
 | [std::events](./25-EVENTS.md) | Publish/subscribe event emitter (Node.js-style) | None |
@@ -99,17 +100,18 @@ This directory contains specifications for TML's standard library packages. Thes
         ┌─────────────────────────────────────┼─────────────────────────────────────┐
         │                                     │                                     │
         ▼                                     ▼                                     ▼
-┌───────────────────┐               ┌───────────────────┐               ┌───────────────────┐
-│   I/O Packages    │               │ Concurrency       │               │  Data Packages    │
-│                   │               │                   │               │                   │
-│ std::http          │               │ std::async         │               │ std::json          │
-│   ├── std::tls     │               │   └── std::sync    │               │   └── std::encoding│
-│   │     └── crypto│               │                   │               │                   │
-│   └── std::net     │               │                   │               │ std::compress      │
-│         └── buffer│               │                   │               │   └── std::buffer  │
-│               │   │               │                   │               │                   │
-│           std::fs  │               │                   │               │ std::regex         │
-└───────────────────┘               └───────────────────┘               └───────────────────┘
+┌───────────────────┐               ┌────────────────────────┐           ┌───────────────────┐
+│   I/O Packages    │               │ Concurrency & Async    │           │  Data Packages    │
+│                   │               │                        │           │                   │
+│ std::http          │               │ std::aio              │           │ std::json          │
+│   ├── std::tls     │               │   ├── Poller (epoll)  │           │   └── std::encoding│
+│   │     └── crypto│               │   ├── TimerWheel      │           │                   │
+│   └── std::net     │               │   └── EventLoop       │           │ std::compress      │
+│         └── buffer│               │                        │           │   └── std::buffer  │
+│         └── stream │               │ std::async             │           │                   │
+│               │   │               │   └── std::sync        │           │ std::regex         │
+│           std::fs  │               │                        │           │                   │
+└───────────────────┘               └────────────────────────┘           └───────────────────┘
         │                                     │
         └─────────────────┬───────────────────┘
                           │
@@ -192,8 +194,12 @@ use std::fmt::{format, Display}
 | `HttpClient` | std::http | HTTP client for making requests |
 | `Database` | std::sqlite | SQLite database connection |
 | `ByteStream` | std::stream | In-memory byte stream |
+| `DuplexStream` | std::stream | Bidirectional stream (read + write) |
 | `Router` | std::http | HTTP request router |
 | `EventEmitter` | std::events | Publish/subscribe event emitter |
+| `EventLoop` | std::aio | Single-threaded I/O event loop |
+| `Poller` | std::aio | Cross-platform I/O polling (epoll/WSAPoll) |
+| `TimerWheel` | std::aio | Efficient 2-level hashed timer wheel |
 
 ### Most Used Functions
 
