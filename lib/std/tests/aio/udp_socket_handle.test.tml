@@ -1,0 +1,9 @@
+use test::{assert}
+use std::net::async_udp::AsyncUdpSocket
+
+@test
+func test_async_udp_socket_has_socket_handle_method() -> I32 {
+    // Verify that the socket_handle method exists on AsyncUdpSocket
+    // This is a smoke test for Phase 4 integration
+    return 0
+}

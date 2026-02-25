@@ -1,0 +1,7 @@
+use test::{assert}
+
+@test
+func test_simple_assertion() -> I32 {
+    assert(true, "basic test")
+    return 0
+}

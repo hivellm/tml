@@ -91,6 +91,22 @@ func la_remove_pair(h: I64, idx: I64) {
     la_pop(h)
 }
 
+func la_prepend_pair(h: I64, fn_ptr: I64, is_once: I64) {
+    // First push two dummy values to ensure capacity and extend length
+    la_push(h, 0)
+    la_push(h, 0)
+    // Now shift all existing elements right by 2
+    let len: I64 = la_len(h)
+    var i: I64 = len - 1
+    loop (i >= 2) {
+        la_set(h, i, la_get(h, i - 2))
+        i = i - 1
+    }
+    // Write new pair at front
+    la_set(h, 0, fn_ptr)
+    la_set(h, 1, is_once)
+}
+
 pub type EventEmitter {
     events: HashMap[Str, I64],
     max_listeners: I64,

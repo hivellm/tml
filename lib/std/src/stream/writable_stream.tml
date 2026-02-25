@@ -172,15 +172,16 @@ func wbuf_clear(h: I64) {
 // WritableStream state layout
 // ============================================================================
 
-// Handle layout (56 bytes) — emitter is a struct field:
+// Handle layout (72 bytes) — emitter is a struct field:
 //   offset 0:  buffer (I64)           — pointer to internal wbuf
-//   offset 8:  state (I64)            — WS_WRITABLE / ENDING / ENDED / FINISHED
+//   offset 8:  state (I64)            — WS_WRITABLE / ENDING / FINISHED
 //   offset 16: high_water_mark (I64)  — backpressure threshold
 //   offset 24: write_fn (I64)         — user _write callback
 //   offset 32: corked (I64)           — cork counter (0 = uncorked)
 //   offset 40: destroyed (I64)        — 1 if destroyed
 //   offset 48: errored (I64)          — 1 if error emitted
 //   offset 56: needs_drain (I64)      — 1 if write returned false (drain pending)
+//   offset 64: error_ptr (I64)        — pointer to error Str (0 if none)
 
 const WS_OFF_BUFFER: I64 = 0
 const WS_OFF_STATE: I64 = 8
@@ -190,7 +191,8 @@ const WS_OFF_CORKED: I64 = 32
 const WS_OFF_DESTROYED: I64 = 40
 const WS_OFF_ERRORED: I64 = 48
 const WS_OFF_NEEDS_DRAIN: I64 = 56
-const WS_HANDLE_SIZE: I64 = 64
+const WS_OFF_ERROR_PTR: I64 = 64
+const WS_HANDLE_SIZE: I64 = 72
 
 /// Stream is open for writing.
 pub const WS_WRITABLE: I64 = 0
@@ -236,6 +238,7 @@ impl WritableStream {
         ws_wr(addr + WS_OFF_DESTROYED, 0)
         ws_wr(addr + WS_OFF_ERRORED, 0)
         ws_wr(addr + WS_OFF_NEEDS_DRAIN, 0)
+        ws_wr(addr + WS_OFF_ERROR_PTR, 0)
 
         WritableStream {
             emitter: EventEmitter::new(),
@@ -299,17 +302,22 @@ impl WritableStream {
         ws_wr(this.handle as I64 + WS_OFF_NEEDS_DRAIN, val)
     }
 
+    pub func get_error_ptr(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_ERROR_PTR)
+    }
+
+    pub func set_error_ptr(mut this, ptr: I64) {
+        ws_wr(this.handle as I64 + WS_OFF_ERROR_PTR, ptr)
+    }
+
     // ---- Internal: process buffered data through _write ----
 
     pub func do_write(mut this, data: Str) {
         let write_fn: I64 = this.get_write_fn()
         if write_fn != 0 {
-            // Call _write(data_ptr, callback_ptr)
-            // For now, callback is a noop — synchronous completion
             let f: func(I64, I64) = write_fn as func(I64, I64)
             f(data as I64, 0)
         }
-        // If no write_fn, data is silently consumed (useful for testing)
     }
 
     pub func flush_buffer(mut this) {
@@ -320,7 +328,6 @@ impl WritableStream {
         let data: Str = wbuf_drain(buf)
         this.do_write(data)
 
-        // Check if we should emit drain
         if this.get_needs_drain() {
             this.set_needs_drain(0)
             this.emitter.emit("drain", 0)
@@ -354,6 +361,11 @@ impl WritableStream {
         this.emitter.emit(event, data)
     }
 
+    /// Returns the number of listeners for a given event.
+    pub func listener_count(this, event: Str) -> I64 {
+        this.emitter.listener_count(event)
+    }
+
     // ================================================================
     // Public API: Write data
     // ================================================================
@@ -381,11 +393,9 @@ impl WritableStream {
 
         let corked: I64 = this.get_corked()
         if corked > 0 {
-            // Corked — buffer the data
             let buf: I64 = this.get_buf()
             wbuf_append_str(buf, data)
         } else {
-            // Not corked — write directly via _write
             this.do_write(data)
         }
 
@@ -409,7 +419,6 @@ impl WritableStream {
         let blen: I64 = data.len() as I64
         if blen == 0 { return true }
 
-        // Get the raw data pointer from the slice
         let bytes_header: I64 = (ref data) as I64
         let bytes_ptr: I64 = lowlevel { ptr_read[I64](bytes_header as *I64) }
         let src_data: I64 = lowlevel { ptr_read[I64](bytes_ptr as *I64) }
@@ -419,7 +428,6 @@ impl WritableStream {
             let buf: I64 = this.get_buf()
             wbuf_append_bytes(buf, src_data, blen)
         } else {
-            // Create a temp string from bytes and write
             let str_buf: *Unit = ws_alloc(blen + 1)
             var i: I64 = 0
             loop (i < blen) {
@@ -514,10 +522,41 @@ impl WritableStream {
         this.get_state() == WS_FINISHED
     }
 
+    /// Returns true if end() has been called (may not yet be finished).
+    pub func writable_ended(this) -> Bool {
+        if this.handle == (0 as *Unit) { return true }
+        let s: I64 = this.get_state()
+        s == WS_ENDING or s == WS_FINISHED
+    }
+
     /// Returns true if the stream is corked.
     pub func writable_corked(this) -> Bool {
         if this.handle == (0 as *Unit) { return false }
         this.get_corked() > 0
+    }
+
+    /// Returns the cork nesting count.
+    pub func writable_corked_count(this) -> I64 {
+        if this.handle == (0 as *Unit) { return 0 as I64 }
+        this.get_corked()
+    }
+
+    /// Returns the highWaterMark value.
+    pub func writable_high_water_mark(this) -> I64 {
+        if this.handle == (0 as *Unit) { return 0 as I64 }
+        this.get_hwm()
+    }
+
+    /// Returns true if the buffer is full and "drain" is pending.
+    pub func writable_needs_drain(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.get_needs_drain()
+    }
+
+    /// Returns true if the stream was destroyed before "finish" was emitted.
+    pub func writable_aborted(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.is_destroyed_internal() and this.get_state() != WS_FINISHED
     }
 
     /// Returns true if the stream has been destroyed.
@@ -525,10 +564,24 @@ impl WritableStream {
         this.is_destroyed_internal()
     }
 
+    /// Returns true if the stream has been destroyed.
+    pub func destroyed(this) -> Bool {
+        this.is_destroyed_internal()
+    }
+
     /// Returns true if an error was emitted.
     pub func errored(this) -> Bool {
         if this.handle == (0 as *Unit) { return false }
         this.is_errored_internal()
+    }
+
+    /// Returns the error string, or "" if no error.
+    @allocates
+    pub func error_message(this) -> Str {
+        if this.handle == (0 as *Unit) { return "" }
+        let ptr: I64 = this.get_error_ptr()
+        if ptr == 0 { return "" }
+        ptr as Str
     }
 
     // ================================================================
@@ -551,6 +604,7 @@ impl WritableStream {
     pub func destroy_with_error(mut this, err: Str) {
         if this.is_destroyed_internal() { return }
         this.set_errored_flag()
+        this.set_error_ptr(err as I64)
         this.emitter.emit("error", err as I64)
         this.destroy()
     }
