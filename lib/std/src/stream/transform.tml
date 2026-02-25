@@ -1,0 +1,177 @@
+//! Transform stream — reads input, transforms it, pushes to output.
+//!
+//! A `TransformStream` wraps a `DuplexStream`. Data written to the writable
+//! side is passed through a user-provided `_transform` callback, which pushes
+//! results to the readable side.
+//!
+//! This is the base for compression, encryption, parsing, and other
+//! data-transforming pipelines.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::transform::TransformStream
+//!
+//! // A transform that uppercases (simplified — just passes through)
+//! func my_transform(data: I64, push_fn: I64) {
+//!     let chunk: Str = data as Str
+//!     let push: func(I64) = push_fn as func(I64)
+//!     push(chunk as I64)
+//! }
+//!
+//! var ts = TransformStream::new()
+//! ts.set_transform(my_transform as I64)
+//! ts.write("hello")
+//! let out: Str = ts.read(5)
+//! ts.destroy()
+//! ```
+
+use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
+use std::stream::duplex::DuplexStream
+
+/// A stream that transforms data written to its writable side
+/// and pushes results to its readable side.
+pub type TransformStream {
+    duplex: DuplexStream,
+    transform_fn: I64,
+    flush_fn: I64
+}
+
+impl TransformStream {
+    /// Creates a new TransformStream with default highWaterMark.
+    pub func new() -> TransformStream {
+        TransformStream {
+            duplex: DuplexStream::new(),
+            transform_fn: 0,
+            flush_fn: 0
+        }
+    }
+
+    /// Creates a new TransformStream with custom highWaterMarks.
+    pub func with_options(read_hwm: I64, write_hwm: I64) -> TransformStream {
+        TransformStream {
+            duplex: DuplexStream::with_options(read_hwm, write_hwm),
+            transform_fn: 0,
+            flush_fn: 0
+        }
+    }
+
+    /// Set the transform callback.
+    ///
+    /// Signature: `func(data: I64, push_fn: I64)`.
+    /// `data` is a Str pointer. `push_fn` is a func(I64) that pushes
+    /// data to the readable side (call with Str pointer).
+    pub func set_transform(mut this, f: I64) {
+        this.transform_fn = f
+    }
+
+    /// Set the flush callback, called when the writable side ends.
+    ///
+    /// Signature: `func(push_fn: I64)`.
+    /// Allows pushing final data before the readable side ends.
+    pub func set_flush(mut this, f: I64) {
+        this.flush_fn = f
+    }
+
+    // ---- Readable side (delegates to duplex.reader) ----
+
+    /// Pull data from the readable side.
+    @allocates
+    pub func read(mut this, size: I64) -> Str {
+        this.duplex.read(size)
+    }
+
+    /// Pull all buffered data from the readable side.
+    @allocates
+    pub func read_all(mut this) -> Str {
+        this.duplex.read_all()
+    }
+
+    /// Check if readable side has data.
+    pub func readable(this) -> Bool {
+        this.duplex.readable()
+    }
+
+    /// Bytes buffered on the readable side.
+    pub func readable_length(this) -> I64 {
+        this.duplex.readable_length()
+    }
+
+    /// Pause the readable side.
+    pub func pause(mut this) {
+        this.duplex.pause()
+    }
+
+    /// Resume the readable side.
+    pub func resume(mut this) {
+        this.duplex.resume()
+    }
+
+    // ---- Writable side (intercepts write, delegates rest) ----
+
+    /// Write data to the transform.
+    ///
+    /// If a transform function is set, data is passed through it and the
+    /// result is pushed to the readable side. Otherwise, data passes through
+    /// unchanged (like PassThrough).
+    pub func write(mut this, data: Str) -> Bool {
+        if this.transform_fn != 0 {
+            // Call _transform(data, push_fn)
+            // We need to push to the readable side — use a helper approach:
+            // Push the data to the readable side of the duplex after transform
+            let f: func(I64, I64) = this.transform_fn as func(I64, I64)
+            // We pass the data and a way to push to readable side
+            // Since we can't capture `this`, we use a simpler approach:
+            // The transform function pushes directly, and we pass a ptr to our duplex
+            f(data as I64, (mut ref this.duplex) as I64)
+            return true
+        }
+        // No transform — pass through to readable side directly
+        this.duplex.push(data)
+    }
+
+    /// Check if writable side accepts writes.
+    pub func writable(this) -> Bool {
+        this.duplex.writable()
+    }
+
+    /// Bytes buffered on the writable side.
+    pub func writable_length(this) -> I64 {
+        this.duplex.writable_length()
+    }
+
+    /// Cork the writable side.
+    pub func cork(mut this) {
+        this.duplex.cork()
+    }
+
+    /// Uncork the writable side.
+    pub func uncork(mut this) {
+        this.duplex.uncork()
+    }
+
+    /// End the writable side.
+    ///
+    /// If a flush callback is set, it's called before ending the readable side.
+    pub func end(mut this) {
+        if this.flush_fn != 0 {
+            let f: func(I64) = this.flush_fn as func(I64)
+            f((mut ref this.duplex) as I64)
+        }
+        this.duplex.push_eof()
+        this.duplex.end()
+    }
+
+    // ---- Shared ----
+
+    /// Register an event listener.
+    pub func on(mut this, event: Str, listener: I64) {
+        this.duplex.on(event, listener)
+    }
+
+    /// Destroy both sides.
+    pub func destroy(mut this) {
+        this.duplex.destroy()
+    }
+}

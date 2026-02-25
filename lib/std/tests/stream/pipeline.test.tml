@@ -1,0 +1,72 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
+use std::stream::pipeline::{pipeline, from_string}
+use core::intrinsics::{ptr_read, ptr_write}
+
+// Callback that stores the status code at a known address
+func store_status(data: I64) {
+    // data is the status code (0 = success)
+    // We don't have a way to verify in-test easily, just ensure no crash
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test func test_from_string_empty() -> I32 {
+    var rs: ReadableStream = from_string("")
+    assert_true(rs.readable_ended(), "ended immediately")
+    assert_eq(rs.readable_length(), 0 as I64, "empty")
+    rs.destroy()
+    return 0
+}
+
+@test func test_from_string_data() -> I32 {
+    var rs: ReadableStream = from_string("hello world")
+    assert_eq(rs.readable_length(), 11 as I64, "11 bytes")
+    assert_true(rs.readable_ended(), "ended")
+    let data: Str = rs.read_all()
+    assert_eq(data, "hello world", "correct data")
+    rs.destroy()
+    return 0
+}
+
+@test func test_pipeline_basic() -> I32 {
+    var src: ReadableStream = ReadableStream::new()
+    src.push("pipeline data")
+    var dest: WritableStream = WritableStream::new()
+
+    pipeline(mut ref src, mut ref dest, store_status as I64)
+
+    // dest should be finished after pipeline
+    assert_true(dest.writable_finished(), "dest finished")
+    src.destroy()
+    dest.destroy()
+    return 0
+}
+
+@test func test_pipeline_no_callback() -> I32 {
+    var src: ReadableStream = ReadableStream::new()
+    src.push("test")
+    var dest: WritableStream = WritableStream::new()
+
+    // callback = 0 should not crash
+    pipeline(mut ref src, mut ref dest, 0)
+
+    assert_true(dest.writable_finished(), "dest finished")
+    src.destroy()
+    dest.destroy()
+    return 0
+}
+
+@test func test_from_string_partial_read() -> I32 {
+    var rs: ReadableStream = from_string("abcdef")
+    let chunk1: Str = rs.read(3)
+    assert_eq(chunk1, "abc", "first 3")
+    let chunk2: Str = rs.read(3)
+    assert_eq(chunk2, "def", "next 3")
+    assert_eq(rs.readable_length(), 0 as I64, "empty")
+    rs.destroy()
+    return 0
+}

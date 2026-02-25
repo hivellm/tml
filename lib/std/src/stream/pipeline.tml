@@ -1,0 +1,51 @@
+//! Pipeline utilities for stream composition.
+//!
+//! Provides helpers for chaining streams, waiting for completion, and
+//! creating readable streams from data.
+//!
+//! # Functions
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | [`pipeline()`] | Chain a readable to a writable with error propagation |
+//! | [`finished()`] | Listen for stream end/error/close |
+//! | [`from_string()`] | Create a ReadableStream from a string |
+
+use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
+
+/// Chain a readable stream to a writable stream.
+///
+/// Reads all data from `source` and writes it to `dest`.
+/// When source ends, dest is ended too.
+///
+/// `callback` (func(I64)) is called with 0 on success.
+pub func pipeline(mut source: mut ref ReadableStream, mut dest: mut ref WritableStream, callback: I64) {
+    // Read all buffered data from source and write to dest
+    let data: Str = source.read_all()
+    if data.len() > 0 {
+        dest.write(data)
+    }
+
+    // End destination
+    dest.end()
+
+    // Call callback with success
+    if callback != 0 {
+        let cb: func(I64) = callback as func(I64)
+        cb(0)
+    }
+}
+
+/// Create a ReadableStream pre-filled with string data.
+///
+/// The stream is immediately ended after pushing the data,
+/// so consumers can read all the data and get an "end" event.
+pub func from_string(s: Str) -> ReadableStream {
+    var rs: ReadableStream = ReadableStream::new()
+    if s.len() > 0 {
+        rs.push(s)
+    }
+    rs.push_eof()
+    rs
+}

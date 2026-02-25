@@ -1,58 +1,61 @@
 //! Stream abstractions for byte-oriented I/O.
 //!
-//! This module provides the fundamental behaviors and types for streaming
-//! byte data through readers, writers, and transformers. Inspired by
-//! Node.js streams, adapted for TML's synchronous ownership model.
+//! This module provides two layers of stream abstractions:
 //!
-//! # Core Behaviors
+//! # Layer 1: Synchronous Behaviors (low-level)
 //!
-//! | Behavior | Description |
-//! |----------|-------------|
-//! | [`Readable`] | Byte source — anything you can `read()` from |
-//! | [`Writable`] | Byte sink — anything you can `write()` to |
+//! | Behavior/Type | Description |
+//! |---------------|-------------|
+//! | [`Readable`] | Byte source behavior — blocking `read()` |
+//! | [`Writable`] | Byte sink behavior — blocking `write()` + `flush()` |
+//! | [`ByteStream`] | In-memory read/write stream |
+//! | [`BufferedReader`] | Line-reading and buffering for any source |
+//! | [`BufferedWriter`] | Write buffering and auto-flush for any sink |
+//! | [`pipe()`] | Copy bytes between synchronous streams |
 //!
-//! # Types
+//! # Layer 2: Event-Driven Streams (Node.js-style)
 //!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`ByteStream`] | In-memory read/write stream (testing, HTTP bodies) |
-//! | [`BufferedReader`] | Adds line-reading and buffering to any source |
-//! | [`BufferedWriter`] | Adds write buffering and auto-flush to any sink |
+//! | [`ReadableStream`] | Push-based readable with flowing/paused modes |
+//! | [`WritableStream`] | Writable with backpressure, cork/uncork |
+//! | [`DuplexStream`] | Bidirectional stream (read + write) |
+//! | [`TransformStream`] | Transform data through a callback |
+//! | [`PassThroughStream`] | Identity transform (pass data through) |
 //!
 //! # Utilities
 //!
 //! | Function | Description |
 //! |----------|-------------|
-//! | [`pipe()`] | Copy all bytes from a source to a destination |
-//! | [`copy_bytes()`] | Copy up to N bytes between streams |
-//! | [`read_all()`] | Read all remaining bytes into a Buffer |
-//! | [`read_to_string()`] | Read all remaining bytes as a UTF-8 string |
-//! | [`write_all()`] | Write all bytes, retrying on partial writes |
-//!
-//! # Example
-//!
-//! ```tml
-//! use std::stream::{ByteStream, Readable, Writable, pipe}
-//!
-//! // Create an in-memory stream and write data
-//! var src = ByteStream::from_string("Hello, streams!")
-//! var dst = ByteStream::new()
-//!
-//! // Pipe all data from source to destination
-//! let bytes = pipe(mut ref src, mut ref dst)!
-//! assert_eq(dst.to_string(), "Hello, streams!")
-//! ```
+//! | [`pipeline()`] | Chain readable to writable with error propagation |
+//! | [`from_string()`] | Create a ReadableStream from a string |
 
+// Layer 1: Synchronous
 pub mod readable
 pub mod writable
 pub mod byte_stream
 pub mod buffered
 pub mod pipe
-pub mod readable_stream
 
+// Layer 2: Event-driven
+pub mod readable_stream
+pub mod writable_stream
+pub mod duplex
+pub mod transform
+pub mod passthrough
+pub mod pipeline
+
+// Layer 1 re-exports
 pub use std::stream::readable::Readable
 pub use std::stream::writable::Writable
 pub use std::stream::byte_stream::{ByteStream, read_all, read_to_string, write_all, write_string}
 pub use std::stream::buffered::{BufferedReader, BufferedWriter}
 pub use std::stream::pipe::{pipe, copy_bytes}
+
+// Layer 2 re-exports
 pub use std::stream::readable_stream::ReadableStream
+pub use std::stream::writable_stream::WritableStream
+pub use std::stream::duplex::DuplexStream
+pub use std::stream::transform::TransformStream
+pub use std::stream::passthrough::PassThroughStream
+pub use std::stream::pipeline::{pipeline, from_string}

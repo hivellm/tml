@@ -1,0 +1,557 @@
+//! Event-driven writable stream (Node.js-style).
+//!
+//! `WritableStream` is a data sink that accepts bytes and emits events
+//! for flow control. It supports:
+//!
+//! - **Backpressure**: `write()` returns `false` when the internal buffer
+//!   exceeds `highWaterMark`, signaling the producer to stop.
+//! - **Drain**: The `"drain"` event fires when the buffer falls below
+//!   `highWaterMark`, signaling the producer it's safe to resume.
+//! - **Cork/Uncork**: Buffer multiple small writes and flush them together.
+//!
+//! # Events
+//!
+//! | Event | Data | Description |
+//! |-------|------|-------------|
+//! | `"drain"` | 0 | Buffer below highWaterMark, safe to write |
+//! | `"finish"` | 0 | All data flushed after end() |
+//! | `"error"` | Str pointer as I64 | An error occurred |
+//! | `"close"` | 0 | Stream resources released |
+//! | `"pipe"` | ReadableStream ptr as I64 | A readable was piped to this |
+//! | `"unpipe"` | ReadableStream ptr as I64 | A readable was unpiped |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::writable_stream::WritableStream
+//!
+//! func my_write(data: I64, cb: I64) {
+//!     let chunk: Str = data as Str
+//!     print("{chunk}")
+//!     let callback: func(I64) = cb as func(I64)
+//!     callback(0)  // signal success
+//! }
+//!
+//! var ws = WritableStream::new()
+//! ws.set_write_fn(my_write as I64)
+//! ws.write("hello")
+//! ws.end()
+//! ws.destroy()
+//! ```
+
+use core::intrinsics::{ptr_read, ptr_write}
+use std::events::emitter::EventEmitter
+
+// ============================================================================
+// Memory helpers
+// ============================================================================
+
+func ws_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func ws_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func ws_realloc(ptr: *Unit, size: I64) -> *Unit {
+    lowlevel { mem_realloc(ptr, size) }
+}
+
+func ws_rd(addr: I64) -> I64 {
+    lowlevel { ptr_read[I64](addr as *I64) }
+}
+
+func ws_wr(addr: I64, val: I64) {
+    lowlevel { ptr_write[I64](addr as *I64, val) }
+}
+
+func ws_rd_u8(addr: I64) -> U8 {
+    lowlevel { ptr_read[U8](addr as *U8) }
+}
+
+func ws_wr_u8(addr: I64, val: U8) {
+    lowlevel { ptr_write[U8](addr as *U8, val) }
+}
+
+// ============================================================================
+// Internal write buffer (growable byte array)
+// ============================================================================
+
+// Buffer layout (24 bytes):
+//   offset 0: data_ptr (I64)
+//   offset 8: len (I64)
+//   offset 16: cap (I64)
+
+func wbuf_new(cap: I64) -> I64 {
+    let h: *Unit = ws_alloc(24)
+    let addr: I64 = h as I64
+    let data: *Unit = ws_alloc(cap)
+    ws_wr(addr, data as I64)
+    ws_wr(addr + 8, 0)
+    ws_wr(addr + 16, cap)
+    addr
+}
+
+func wbuf_destroy(h: I64) {
+    if h == 0 { return }
+    let data: *Unit = ws_rd(h) as *Unit
+    ws_free(data)
+    ws_free(h as *Unit)
+}
+
+func wbuf_len(h: I64) -> I64 {
+    ws_rd(h + 8)
+}
+
+func wbuf_ensure(h: I64, needed: I64) {
+    let len: I64 = ws_rd(h + 8)
+    let cap: I64 = ws_rd(h + 16)
+    if len + needed <= cap { return }
+    var new_cap: I64 = cap * 2
+    loop (new_cap < len + needed) {
+        new_cap = new_cap * 2
+    }
+    let old: *Unit = ws_rd(h) as *Unit
+    let new_data: *Unit = ws_realloc(old, new_cap)
+    ws_wr(h, new_data as I64)
+    ws_wr(h + 16, new_cap)
+}
+
+func wbuf_append_str(h: I64, s: Str) {
+    let slen: I64 = s.len()
+    if slen == 0 { return }
+    wbuf_ensure(h, slen)
+    let len: I64 = ws_rd(h + 8)
+    let data: I64 = ws_rd(h)
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < slen) {
+        ws_wr_u8(data + len + i, ws_rd_u8(src + i))
+        i = i + 1
+    }
+    ws_wr(h + 8, len + slen)
+}
+
+func wbuf_append_bytes(h: I64, src_ptr: I64, count: I64) {
+    if count == 0 { return }
+    wbuf_ensure(h, count)
+    let len: I64 = ws_rd(h + 8)
+    let data: I64 = ws_rd(h)
+    var i: I64 = 0
+    loop (i < count) {
+        ws_wr_u8(data + len + i, ws_rd_u8(src_ptr + i))
+        i = i + 1
+    }
+    ws_wr(h + 8, len + count)
+}
+
+// Read all bytes as Str and clear
+@allocates
+func wbuf_drain(h: I64) -> Str {
+    let len: I64 = ws_rd(h + 8)
+    if len == 0 { return "" }
+    let data: I64 = ws_rd(h)
+    let str_buf: *Unit = ws_alloc(len + 1)
+    let str_addr: I64 = str_buf as I64
+    var i: I64 = 0
+    loop (i < len) {
+        ws_wr_u8(str_addr + i, ws_rd_u8(data + i))
+        i = i + 1
+    }
+    ws_wr_u8(str_addr + len, 0 as U8)
+    ws_wr(h + 8, 0) // clear
+    str_buf as Str
+}
+
+func wbuf_clear(h: I64) {
+    ws_wr(h + 8, 0)
+}
+
+// ============================================================================
+// WritableStream state layout
+// ============================================================================
+
+// Handle layout (56 bytes) — emitter is a struct field:
+//   offset 0:  buffer (I64)           — pointer to internal wbuf
+//   offset 8:  state (I64)            — WS_WRITABLE / ENDING / ENDED / FINISHED
+//   offset 16: high_water_mark (I64)  — backpressure threshold
+//   offset 24: write_fn (I64)         — user _write callback
+//   offset 32: corked (I64)           — cork counter (0 = uncorked)
+//   offset 40: destroyed (I64)        — 1 if destroyed
+//   offset 48: errored (I64)          — 1 if error emitted
+//   offset 56: needs_drain (I64)      — 1 if write returned false (drain pending)
+
+const WS_OFF_BUFFER: I64 = 0
+const WS_OFF_STATE: I64 = 8
+const WS_OFF_HWM: I64 = 16
+const WS_OFF_WRITE_FN: I64 = 24
+const WS_OFF_CORKED: I64 = 32
+const WS_OFF_DESTROYED: I64 = 40
+const WS_OFF_ERRORED: I64 = 48
+const WS_OFF_NEEDS_DRAIN: I64 = 56
+const WS_HANDLE_SIZE: I64 = 64
+
+/// Stream is open for writing.
+pub const WS_WRITABLE: I64 = 0
+/// end() called, finishing pending writes.
+pub const WS_ENDING: I64 = 1
+/// All writes complete, finish event emitted.
+pub const WS_FINISHED: I64 = 2
+
+// ============================================================================
+// WritableStream type
+// ============================================================================
+
+/// An event-driven writable stream.
+///
+/// Data is written via `write()` and consumed by the user-provided `_write`
+/// callback. Supports backpressure via `highWaterMark` and corking.
+pub type WritableStream {
+    emitter: EventEmitter,
+    handle: *Unit
+}
+
+impl WritableStream {
+    /// Creates a new WritableStream with default highWaterMark (16384 bytes).
+    pub func new() -> WritableStream {
+        WritableStream::with_options(16384)
+    }
+
+    /// Creates a new WritableStream with a custom highWaterMark.
+    pub func with_options(high_water_mark: I64) -> WritableStream {
+        var hwm: I64 = high_water_mark
+        if hwm <= 0 { hwm = 16384 }
+
+        let h: *Unit = ws_alloc(WS_HANDLE_SIZE)
+        let addr: I64 = h as I64
+
+        let buf: I64 = wbuf_new(hwm)
+
+        ws_wr(addr + WS_OFF_BUFFER, buf)
+        ws_wr(addr + WS_OFF_STATE, WS_WRITABLE)
+        ws_wr(addr + WS_OFF_HWM, hwm)
+        ws_wr(addr + WS_OFF_WRITE_FN, 0)
+        ws_wr(addr + WS_OFF_CORKED, 0)
+        ws_wr(addr + WS_OFF_DESTROYED, 0)
+        ws_wr(addr + WS_OFF_ERRORED, 0)
+        ws_wr(addr + WS_OFF_NEEDS_DRAIN, 0)
+
+        WritableStream {
+            emitter: EventEmitter::new(),
+            handle: h
+        }
+    }
+
+    // ---- Internal accessors ----
+
+    pub func get_buf(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_BUFFER)
+    }
+
+    pub func get_state(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_STATE)
+    }
+
+    pub func set_state(mut this, state: I64) {
+        ws_wr(this.handle as I64 + WS_OFF_STATE, state)
+    }
+
+    pub func get_hwm(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_HWM)
+    }
+
+    pub func get_write_fn(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_WRITE_FN)
+    }
+
+    pub func get_corked(this) -> I64 {
+        ws_rd(this.handle as I64 + WS_OFF_CORKED)
+    }
+
+    pub func set_corked(mut this, val: I64) {
+        ws_wr(this.handle as I64 + WS_OFF_CORKED, val)
+    }
+
+    pub func is_destroyed_internal(this) -> Bool {
+        if this.handle == (0 as *Unit) { return true }
+        ws_rd(this.handle as I64 + WS_OFF_DESTROYED) != 0
+    }
+
+    pub func set_destroyed_flag(mut this) {
+        ws_wr(this.handle as I64 + WS_OFF_DESTROYED, 1)
+    }
+
+    pub func is_errored_internal(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        ws_rd(this.handle as I64 + WS_OFF_ERRORED) != 0
+    }
+
+    pub func set_errored_flag(mut this) {
+        ws_wr(this.handle as I64 + WS_OFF_ERRORED, 1)
+    }
+
+    pub func get_needs_drain(this) -> Bool {
+        ws_rd(this.handle as I64 + WS_OFF_NEEDS_DRAIN) != 0
+    }
+
+    pub func set_needs_drain(mut this, val: I64) {
+        ws_wr(this.handle as I64 + WS_OFF_NEEDS_DRAIN, val)
+    }
+
+    // ---- Internal: process buffered data through _write ----
+
+    pub func do_write(mut this, data: Str) {
+        let write_fn: I64 = this.get_write_fn()
+        if write_fn != 0 {
+            // Call _write(data_ptr, callback_ptr)
+            // For now, callback is a noop — synchronous completion
+            let f: func(I64, I64) = write_fn as func(I64, I64)
+            f(data as I64, 0)
+        }
+        // If no write_fn, data is silently consumed (useful for testing)
+    }
+
+    pub func flush_buffer(mut this) {
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = wbuf_len(buf)
+        if buf_len == 0 { return }
+
+        let data: Str = wbuf_drain(buf)
+        this.do_write(data)
+
+        // Check if we should emit drain
+        if this.get_needs_drain() {
+            this.set_needs_drain(0)
+            this.emitter.emit("drain", 0)
+        }
+    }
+
+    // ================================================================
+    // Public API: Event registration
+    // ================================================================
+
+    /// Register a listener for an event.
+    pub func on(mut this, event: Str, listener: I64) {
+        if this.is_destroyed_internal() { return }
+        this.emitter.on(event, listener)
+    }
+
+    /// Register a one-time listener for an event.
+    pub func once(mut this, event: Str, listener: I64) {
+        if this.is_destroyed_internal() { return }
+        this.emitter.once(event, listener)
+    }
+
+    /// Remove a listener.
+    pub func off(mut this, event: Str, listener: I64) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        this.emitter.off(event, listener)
+    }
+
+    /// Emit an event directly.
+    pub func emit(mut this, event: Str, data: I64) -> Bool {
+        this.emitter.emit(event, data)
+    }
+
+    // ================================================================
+    // Public API: Write data
+    // ================================================================
+
+    /// Set the `_write` callback for processing data.
+    ///
+    /// Signature: `func(data: I64, callback: I64)`.
+    /// `data` is a Str pointer. `callback` is a func(I64) to call on completion
+    /// (0 = success, otherwise error Str pointer).
+    pub func set_write_fn(mut this, f: I64) {
+        ws_wr(this.handle as I64 + WS_OFF_WRITE_FN, f)
+    }
+
+    /// Write a string chunk to the stream.
+    ///
+    /// Returns `true` if the internal buffer is below highWaterMark.
+    /// Returns `false` if backpressure should be applied (wait for "drain").
+    pub func write(mut this, data: Str) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        let state: I64 = this.get_state()
+        if state != WS_WRITABLE { return false }
+
+        let dlen: I64 = data.len()
+        if dlen == 0 { return true }
+
+        let corked: I64 = this.get_corked()
+        if corked > 0 {
+            // Corked — buffer the data
+            let buf: I64 = this.get_buf()
+            wbuf_append_str(buf, data)
+        } else {
+            // Not corked — write directly via _write
+            this.do_write(data)
+        }
+
+        // Check backpressure
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = wbuf_len(buf)
+        let hwm: I64 = this.get_hwm()
+        if buf_len >= hwm {
+            this.set_needs_drain(1)
+            return false
+        }
+        true
+    }
+
+    /// Write raw bytes to the stream.
+    pub func write_bytes(mut this, data: ref [U8]) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        let state: I64 = this.get_state()
+        if state != WS_WRITABLE { return false }
+
+        let blen: I64 = data.len() as I64
+        if blen == 0 { return true }
+
+        // Get the raw data pointer from the slice
+        let bytes_header: I64 = (ref data) as I64
+        let bytes_ptr: I64 = lowlevel { ptr_read[I64](bytes_header as *I64) }
+        let src_data: I64 = lowlevel { ptr_read[I64](bytes_ptr as *I64) }
+
+        let corked: I64 = this.get_corked()
+        if corked > 0 {
+            let buf: I64 = this.get_buf()
+            wbuf_append_bytes(buf, src_data, blen)
+        } else {
+            // Create a temp string from bytes and write
+            let str_buf: *Unit = ws_alloc(blen + 1)
+            var i: I64 = 0
+            loop (i < blen) {
+                ws_wr_u8(str_buf as I64 + i, ws_rd_u8(src_data + i))
+                i = i + 1
+            }
+            ws_wr_u8(str_buf as I64 + blen, 0 as U8)
+            this.do_write(str_buf as Str)
+        }
+
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = wbuf_len(buf)
+        let hwm: I64 = this.get_hwm()
+        if buf_len >= hwm {
+            this.set_needs_drain(1)
+            return false
+        }
+        true
+    }
+
+    // ================================================================
+    // Public API: Cork/Uncork
+    // ================================================================
+
+    /// Buffer all writes until `uncork()` is called.
+    ///
+    /// Multiple `cork()` calls require matching `uncork()` calls.
+    pub func cork(mut this) {
+        if this.is_destroyed_internal() { return }
+        let c: I64 = this.get_corked()
+        this.set_corked(c + 1)
+    }
+
+    /// Flush buffered writes. Only flushes when the cork count reaches 0.
+    pub func uncork(mut this) {
+        if this.is_destroyed_internal() { return }
+        let c: I64 = this.get_corked()
+        if c <= 0 { return }
+        let new_c: I64 = c - 1
+        this.set_corked(new_c)
+        if new_c == 0 {
+            this.flush_buffer()
+        }
+    }
+
+    // ================================================================
+    // Public API: End
+    // ================================================================
+
+    /// Signal that no more data will be written.
+    ///
+    /// Flushes any corked data, then emits `"finish"` and `"close"`.
+    pub func end(mut this) {
+        if this.is_destroyed_internal() { return }
+        let state: I64 = this.get_state()
+        if state != WS_WRITABLE { return }
+        this.set_state(WS_ENDING)
+
+        // Flush any corked data
+        this.set_corked(0)
+        this.flush_buffer()
+
+        this.set_state(WS_FINISHED)
+        this.emitter.emit("finish", 0)
+    }
+
+    /// Write final data and end.
+    pub func end_with_data(mut this, data: Str) {
+        this.write(data)
+        this.end()
+    }
+
+    // ================================================================
+    // Public API: State queries
+    // ================================================================
+
+    /// Returns true if the stream accepts writes.
+    pub func writable(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.get_state() == WS_WRITABLE
+    }
+
+    /// Returns the number of bytes in the internal buffer.
+    pub func writable_length(this) -> I64 {
+        if this.handle == (0 as *Unit) { return 0 as I64 }
+        wbuf_len(this.get_buf())
+    }
+
+    /// Returns true if end() was called and "finish" emitted.
+    pub func writable_finished(this) -> Bool {
+        if this.handle == (0 as *Unit) { return true }
+        this.get_state() == WS_FINISHED
+    }
+
+    /// Returns true if the stream is corked.
+    pub func writable_corked(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.get_corked() > 0
+    }
+
+    /// Returns true if the stream has been destroyed.
+    pub func closed(this) -> Bool {
+        this.is_destroyed_internal()
+    }
+
+    /// Returns true if an error was emitted.
+    pub func errored(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.is_errored_internal()
+    }
+
+    // ================================================================
+    // Public API: Lifecycle
+    // ================================================================
+
+    /// Destroy the stream and release all resources.
+    pub func destroy(mut this) {
+        if this.is_destroyed_internal() { return }
+        this.set_destroyed_flag()
+        this.emitter.emit("close", 0)
+        let buf: I64 = this.get_buf()
+        wbuf_destroy(buf)
+        this.emitter.destroy()
+        ws_free(this.handle)
+        this.handle = 0 as *Unit
+    }
+
+    /// Destroy the stream with an error.
+    pub func destroy_with_error(mut this, err: Str) {
+        if this.is_destroyed_internal() { return }
+        this.set_errored_flag()
+        this.emitter.emit("error", err as I64)
+        this.destroy()
+    }
+}

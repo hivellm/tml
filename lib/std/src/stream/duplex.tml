@@ -1,0 +1,141 @@
+//! Duplex stream — both readable and writable (Node.js-style).
+//!
+//! A `DuplexStream` combines a `ReadableStream` and a `WritableStream` into
+//! a single bidirectional stream. Data written to the writable side is
+//! independent of data pushed to the readable side.
+//!
+//! This is the base for TCP sockets, WebSocket connections, and other
+//! bidirectional channels.
+
+use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
+
+/// A bidirectional stream combining readable and writable sides.
+pub type DuplexStream {
+    reader: ReadableStream,
+    writer: WritableStream
+}
+
+impl DuplexStream {
+    /// Creates a new DuplexStream with default highWaterMark (16384 bytes).
+    pub func new() -> DuplexStream {
+        DuplexStream {
+            reader: ReadableStream::new(),
+            writer: WritableStream::new()
+        }
+    }
+
+    /// Creates a new DuplexStream with custom highWaterMarks.
+    pub func with_options(read_hwm: I64, write_hwm: I64) -> DuplexStream {
+        DuplexStream {
+            reader: ReadableStream::with_options(read_hwm),
+            writer: WritableStream::with_options(write_hwm)
+        }
+    }
+
+    // ---- Readable side ----
+
+    /// Push data to the readable side.
+    pub func push(mut this, data: Str) -> Bool {
+        this.reader.push(data)
+    }
+
+    /// Signal end of readable data.
+    pub func push_eof(mut this) {
+        this.reader.push_eof()
+    }
+
+    /// Pull data from the readable buffer (paused mode).
+    @allocates
+    pub func read(mut this, size: I64) -> Str {
+        this.reader.read(size)
+    }
+
+    /// Pull all buffered readable data.
+    @allocates
+    pub func read_all(mut this) -> Str {
+        this.reader.read_all()
+    }
+
+    /// Pause the readable side.
+    pub func pause(mut this) {
+        this.reader.pause()
+    }
+
+    /// Resume the readable side.
+    pub func resume(mut this) {
+        this.reader.resume()
+    }
+
+    /// Check if readable side has data or hasn't ended.
+    pub func readable(this) -> Bool {
+        this.reader.readable()
+    }
+
+    /// Bytes buffered on the readable side.
+    pub func readable_length(this) -> I64 {
+        this.reader.readable_length()
+    }
+
+    // ---- Writable side ----
+
+    /// Write data to the writable side.
+    pub func write(mut this, data: Str) -> Bool {
+        this.writer.write(data)
+    }
+
+    /// Set the _write callback.
+    pub func set_write_fn(mut this, f: I64) {
+        this.writer.set_write_fn(f)
+    }
+
+    /// End the writable side.
+    pub func end(mut this) {
+        this.writer.end()
+    }
+
+    /// Cork the writable side.
+    pub func cork(mut this) {
+        this.writer.cork()
+    }
+
+    /// Uncork the writable side.
+    pub func uncork(mut this) {
+        this.writer.uncork()
+    }
+
+    /// Check if writable side accepts writes.
+    pub func writable(this) -> Bool {
+        this.writer.writable()
+    }
+
+    /// Bytes buffered on the writable side.
+    pub func writable_length(this) -> I64 {
+        this.writer.writable_length()
+    }
+
+    // ---- Shared ----
+
+    /// Register a listener on both sides.
+    /// Readable events: "data", "end", "readable"
+    /// Writable events: "drain", "finish", "pipe", "unpipe"
+    /// Shared events: "error", "close"
+    pub func on(mut this, event: Str, listener: I64) {
+        // Route to appropriate side based on event name
+        if event == "data" or event == "end" or event == "readable" {
+            this.reader.on(event, listener)
+        } else if event == "drain" or event == "finish" or event == "pipe" or event == "unpipe" {
+            this.writer.on(event, listener)
+        } else {
+            // "error", "close", and custom events go to both
+            this.reader.on(event, listener)
+            this.writer.on(event, listener)
+        }
+    }
+
+    /// Destroy both sides.
+    pub func destroy(mut this) {
+        this.reader.destroy()
+        this.writer.destroy()
+    }
+}

@@ -1,0 +1,127 @@
+//! PassThrough stream — identity transform.
+//!
+//! A `PassThroughStream` passes all data written to its writable side
+//! directly to its readable side without any transformation. Useful for
+//! stream composition, testing, and as a simple buffer between producers
+//! and consumers.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::passthrough::PassThroughStream
+//!
+//! var pt = PassThroughStream::new()
+//! pt.write("hello")
+//! let data: Str = pt.read(5)
+//! assert_eq(data, "hello")
+//! pt.destroy()
+//! ```
+
+use std::stream::duplex::DuplexStream
+
+/// A stream that passes data through unchanged.
+pub type PassThroughStream {
+    duplex: DuplexStream
+}
+
+impl PassThroughStream {
+    /// Creates a new PassThroughStream with default highWaterMark.
+    pub func new() -> PassThroughStream {
+        PassThroughStream {
+            duplex: DuplexStream::new()
+        }
+    }
+
+    /// Creates a new PassThroughStream with custom highWaterMarks.
+    pub func with_options(read_hwm: I64, write_hwm: I64) -> PassThroughStream {
+        PassThroughStream {
+            duplex: DuplexStream::with_options(read_hwm, write_hwm)
+        }
+    }
+
+    // ---- Writable side ----
+
+    /// Write data — passes directly to the readable side.
+    pub func write(mut this, data: Str) -> Bool {
+        this.duplex.push(data)
+    }
+
+    /// End the stream.
+    pub func end(mut this) {
+        this.duplex.push_eof()
+        this.duplex.end()
+    }
+
+    /// End with final data.
+    pub func end_with_data(mut this, data: Str) {
+        this.duplex.push(data)
+        this.duplex.push_eof()
+        this.duplex.end()
+    }
+
+    /// Cork the writable side.
+    pub func cork(mut this) {
+        this.duplex.cork()
+    }
+
+    /// Uncork the writable side.
+    pub func uncork(mut this) {
+        this.duplex.uncork()
+    }
+
+    /// Check if writable side accepts writes.
+    pub func writable(this) -> Bool {
+        this.duplex.writable()
+    }
+
+    /// Bytes buffered on the writable side.
+    pub func writable_length(this) -> I64 {
+        this.duplex.writable_length()
+    }
+
+    // ---- Readable side ----
+
+    /// Pull data from the readable side.
+    @allocates
+    pub func read(mut this, size: I64) -> Str {
+        this.duplex.read(size)
+    }
+
+    /// Pull all buffered data.
+    @allocates
+    pub func read_all(mut this) -> Str {
+        this.duplex.read_all()
+    }
+
+    /// Check if readable side has data.
+    pub func readable(this) -> Bool {
+        this.duplex.readable()
+    }
+
+    /// Bytes buffered on the readable side.
+    pub func readable_length(this) -> I64 {
+        this.duplex.readable_length()
+    }
+
+    /// Pause the readable side.
+    pub func pause(mut this) {
+        this.duplex.pause()
+    }
+
+    /// Resume the readable side.
+    pub func resume(mut this) {
+        this.duplex.resume()
+    }
+
+    // ---- Shared ----
+
+    /// Register an event listener.
+    pub func on(mut this, event: Str, listener: I64) {
+        this.duplex.on(event, listener)
+    }
+
+    /// Destroy both sides.
+    pub func destroy(mut this) {
+        this.duplex.destroy()
+    }
+}

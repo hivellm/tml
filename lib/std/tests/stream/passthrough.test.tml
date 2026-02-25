@@ -1,0 +1,60 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::passthrough::PassThroughStream
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test func test_passthrough_new() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_true(pt.readable(), "readable")
+    assert_true(pt.writable(), "writable")
+    assert_eq(pt.readable_length(), 0 as I64, "empty")
+    pt.destroy()
+    return 0
+}
+
+@test func test_passthrough_write_read() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.write("hello")
+    assert_eq(pt.readable_length(), 5 as I64, "5 bytes")
+    let data: Str = pt.read(5)
+    assert_eq(data, "hello", "read correct")
+    assert_eq(pt.readable_length(), 0 as I64, "empty after read")
+    pt.destroy()
+    return 0
+}
+
+@test func test_passthrough_multiple_writes() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.write("abc")
+    pt.write("def")
+    pt.write("ghi")
+    assert_eq(pt.readable_length(), 9 as I64, "9 bytes")
+    let all: Str = pt.read_all()
+    assert_eq(all, "abcdefghi", "all data concatenated")
+    pt.destroy()
+    return 0
+}
+
+@test func test_passthrough_end_with_data() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.write("before")
+    pt.end_with_data("after")
+    let all: Str = pt.read_all()
+    assert_eq(all, "beforeafter", "all data including final")
+    pt.destroy()
+    return 0
+}
+
+@test func test_passthrough_partial_read() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.write("hello world")
+    let chunk1: Str = pt.read(5)
+    assert_eq(chunk1, "hello", "first 5 bytes")
+    let chunk2: Str = pt.read(6)
+    assert_eq(chunk2, " world", "remaining 6 bytes")
+    assert_eq(pt.readable_length(), 0 as I64, "empty")
+    pt.destroy()
+    return 0
+}

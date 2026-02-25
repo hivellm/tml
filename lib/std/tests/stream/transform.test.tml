@@ -1,0 +1,93 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::transform::TransformStream
+use std::stream::duplex::DuplexStream
+
+// Transform: pass data through unchanged to readable side
+func pass_transform(data: I64, duplex_ptr: I64) {
+    let chunk: Str = data as Str
+    let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+    ds.push(chunk)
+}
+
+// Transform: uppercase first byte (simplified — just prepends "U:")
+func prefix_transform(data: I64, duplex_ptr: I64) {
+    let chunk: Str = data as Str
+    let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+    ds.push("U:")
+    ds.push(chunk)
+}
+
+// Flush: push final marker
+func flush_marker(duplex_ptr: I64) {
+    let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+    ds.push("[END]")
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test func test_transform_new() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_true(ts.readable(), "readable")
+    assert_true(ts.writable(), "writable")
+    assert_eq(ts.readable_length(), 0 as I64, "empty")
+    ts.destroy()
+    return 0
+}
+
+@test func test_transform_passthrough() -> I32 {
+    // Without a transform function, data passes through
+    var ts: TransformStream = TransformStream::new()
+    ts.write("hello")
+    assert_eq(ts.readable_length(), 5 as I64, "5 bytes on readable side")
+    let data: Str = ts.read(5)
+    assert_eq(data, "hello", "passthrough correct")
+    ts.destroy()
+    return 0
+}
+
+@test func test_transform_with_callback() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(pass_transform as I64)
+    ts.write("abc")
+    assert_eq(ts.readable_length(), 3 as I64, "3 bytes")
+    let data: Str = ts.read_all()
+    assert_eq(data, "abc", "transform passed through")
+    ts.destroy()
+    return 0
+}
+
+@test func test_transform_modifying() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(prefix_transform as I64)
+    ts.write("hello")
+    let data: Str = ts.read_all()
+    assert_eq(data, "U:hello", "prefixed correctly")
+    ts.destroy()
+    return 0
+}
+
+@test func test_transform_flush() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(pass_transform as I64)
+    ts.set_flush(flush_marker as I64)
+    ts.write("data")
+    ts.end()
+    let all: Str = ts.read_all()
+    assert_eq(all, "data[END]", "flush marker appended")
+    ts.destroy()
+    return 0
+}
+
+@test func test_transform_multiple_writes() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(pass_transform as I64)
+    ts.write("foo")
+    ts.write("bar")
+    ts.write("baz")
+    let data: Str = ts.read_all()
+    assert_eq(data, "foobarbaz", "all writes concatenated")
+    ts.destroy()
+    return 0
+}

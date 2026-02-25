@@ -1,0 +1,141 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::writable_stream::WritableStream
+use core::intrinsics::{ptr_read, ptr_write}
+
+// ============================================================================
+// Listener/callback helpers
+// ============================================================================
+
+func counting_listener(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func noop_listener(data: I64) {}
+
+// _write callback: appends chunk length to a counter at state addr
+func len_write(data: I64, cb: I64) {
+    // data is Str pointer — we just consume it silently for testing
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test func test_writable_stream_new() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_true(ws.writable(), "writable initially")
+    assert_eq(ws.writable_length(), 0 as I64, "empty buffer")
+    assert_false(ws.writable_finished(), "not finished")
+    assert_false(ws.writable_corked(), "not corked")
+    assert_false(ws.closed(), "not closed")
+    assert_false(ws.errored(), "not errored")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_write() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+    let ok: Bool = ws.write("hello")
+    assert_true(ok, "write returns true (below hwm)")
+    // Not corked, so data is written directly (not buffered)
+    assert_eq(ws.writable_length(), 0 as I64, "not buffered when uncorked")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_cork_uncork() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+
+    ws.cork()
+    assert_true(ws.writable_corked(), "corked")
+    ws.write("abc")
+    ws.write("def")
+    assert_eq(ws.writable_length(), 6 as I64, "6 bytes buffered")
+
+    ws.uncork()
+    assert_false(ws.writable_corked(), "uncorked")
+    assert_eq(ws.writable_length(), 0 as I64, "flushed on uncork")
+
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_nested_cork() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+
+    ws.cork()
+    ws.cork()
+    ws.write("data")
+    assert_eq(ws.writable_length(), 4 as I64, "4 bytes buffered")
+
+    ws.uncork() // cork count = 1 → still corked
+    assert_true(ws.writable_corked(), "still corked")
+    assert_eq(ws.writable_length(), 4 as I64, "still buffered")
+
+    ws.uncork() // cork count = 0 → flush
+    assert_false(ws.writable_corked(), "uncorked")
+    assert_eq(ws.writable_length(), 0 as I64, "flushed")
+
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_end() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+
+    ws.write("data")
+    assert_true(ws.writable(), "writable before end")
+
+    ws.end()
+    assert_false(ws.writable(), "not writable after end")
+    assert_true(ws.writable_finished(), "finished")
+
+    // Write after end should be rejected
+    let ok: Bool = ws.write("more")
+    assert_false(ok, "write after end returns false")
+
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_end_with_data() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+
+    ws.end_with_data("final")
+    assert_true(ws.writable_finished(), "finished")
+
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_backpressure() -> I32 {
+    // Tiny hwm to trigger backpressure
+    var ws: WritableStream = WritableStream::with_options(4)
+    // No write_fn → data is silently consumed when uncorked
+    // But with cork, data buffers
+
+    ws.cork()
+    let ok1: Bool = ws.write("ab")
+    assert_true(ok1, "below hwm")
+    let ok2: Bool = ws.write("cd")
+    assert_false(ok2, "at hwm → backpressure")
+
+    ws.uncork()
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_destroy() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    assert_false(ws.closed(), "not closed")
+    ws.destroy()
+    assert_true(ws.closed(), "closed after destroy")
+    assert_false(ws.writable(), "not writable after destroy")
+    return 0
+}

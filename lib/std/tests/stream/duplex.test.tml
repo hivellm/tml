@@ -1,0 +1,76 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::duplex::DuplexStream
+
+func noop_listener(data: I64) {}
+
+// ============================================================================
+// Tests: Construction and state
+// ============================================================================
+
+@test func test_duplex_new() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_true(ds.readable(), "readable")
+    assert_true(ds.writable(), "writable")
+    assert_eq(ds.readable_length(), 0 as I64, "no readable data")
+    assert_eq(ds.writable_length(), 0 as I64, "no writable data")
+    ds.destroy()
+    return 0
+}
+
+@test func test_duplex_push_read() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.push("hello")
+    assert_eq(ds.readable_length(), 5 as I64, "5 bytes pushed")
+    let data: Str = ds.read(5)
+    assert_eq(data, "hello", "read correct data")
+    assert_eq(ds.readable_length(), 0 as I64, "empty after read")
+    ds.destroy()
+    return 0
+}
+
+@test func test_duplex_write() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    let ok: Bool = ds.write("world")
+    assert_true(ok, "write returns true")
+    // writable_length is 0 because data was written directly (not corked)
+    assert_eq(ds.writable_length(), 0 as I64, "direct write, no buffer")
+    ds.destroy()
+    return 0
+}
+
+@test func test_duplex_bidirectional() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    // Push to readable
+    ds.push("read-side")
+    // Write to writable
+    ds.write("write-side")
+    // They're independent
+    assert_eq(ds.readable_length(), 9 as I64, "readable has 9 bytes")
+    let data: Str = ds.read_all()
+    assert_eq(data, "read-side", "readable data correct")
+    ds.destroy()
+    return 0
+}
+
+@test func test_duplex_event_routing() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    // "data" goes to reader
+    ds.on("data", noop_listener as I64)
+    // "drain" goes to writer
+    ds.on("drain", noop_listener as I64)
+    // "error" goes to both
+    ds.on("error", noop_listener as I64)
+    ds.destroy()
+    return 0
+}
+
+@test func test_duplex_end() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.push("abc")
+    ds.push_eof()
+    ds.end()
+    let data: Str = ds.read_all()
+    assert_eq(data, "abc", "data before end")
+    ds.destroy()
+    return 0
+}
