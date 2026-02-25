@@ -3,9 +3,9 @@
 
 mod async_example
 
-use std::async { spawn, sleep, select }
-use std::net.http { get, post, Response }
-use std::time { Duration }
+use std::thread::{spawn, sleep, select}
+use std::http::{get, post, Response}
+use std::time::Duration
 
 // ============================================
 // ASYNC FUNCTIONS
@@ -75,7 +75,7 @@ async func fetch_with_timeout(id: U64) -> Outcome[User, Error] {
 
 // Select with multiple branches
 async func handle_events() {
-    loop (true) {
+    loop {
         select {
             msg = channel.recv() -> {
                 process_message(msg)
@@ -95,7 +95,7 @@ async func handle_events() {
 // CHANNELS
 // ============================================
 
-use std::sync { channel, Sender, Receiver }
+use std::sync::{channel, Sender, Receiver}
 
 async func producer_consumer_example() {
     // Create a channel
@@ -111,7 +111,7 @@ async func producer_consumer_example() {
     }
 
     // Consumer
-    loop (true) {
+    loop {
         when rx.recv() {
             Just(value) -> println("Received: " + value.to_string()),
             Nothing -> break,  // Channel closed
@@ -213,15 +213,15 @@ async func main() {
 
 type User {
     id: U64,
-    name: String,
+    name: Str,
 }
 
 type Profile {
-    bio: String,
+    bio: Str,
 }
 
 type Settings {
-    theme: String,
+    theme: Str,
 }
 
 type UserData {
@@ -231,7 +231,7 @@ type UserData {
 }
 
 type HttpError = Timeout | NetworkError | ParseError
-type Error = Timeout | MaxRetries(HttpError) | Other(String)
+type Error = Timeout | MaxRetries(HttpError) | Other(Str)
 
 async func fetch_profile(id: U64) -> Outcome[Profile, Error] {
     return Ok(Profile { bio: "" })

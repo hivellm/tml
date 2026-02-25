@@ -165,7 +165,7 @@ Watchpoint 1 hit: total changed from 0 to 1
 ### 4.1 Log Functions
 
 ```tml
-import std.log.*
+use std::log::*
 
 func process() {
     log_trace("entering process")
@@ -315,7 +315,7 @@ tml profile flamegraph target/profile/cpu.json
 ### 6.4 Inline Profiling
 
 ```tml
-import std.time.Instant
+use std::time::Instant
 
 func benchmark_operation() {
     let start: Instant = Instant.now()
@@ -371,7 +371,7 @@ panic("invalid state: " + state.to_string())
 ### 8.2 Panic Hook
 
 ```tml
-import std.panic
+use std::panic
 
 func main() {
     panic.set_hook(do(info) {
@@ -385,7 +385,7 @@ func main() {
 ### 8.3 Catch Panic (Low-Level)
 
 ```tml
-import std.panic
+use std::panic
 
 let result: Outcome[T, PanicInfo] = panic.catch(do() {
     risky_operation()
@@ -423,7 +423,7 @@ stack backtrace:
 ### 10.1 Type Info
 
 ```tml
-import std.debug
+use std::debug
 
 let x: I32 = get_value()
 print(debug.type_name(x))  // "Maybe[I32]"

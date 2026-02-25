@@ -15,9 +15,9 @@ type Point {
 
 // Struct with visibility
 type User {
-    public name: String,
-    public email: String,
-    private password_hash: String,
+    pub name: Str,
+    pub email: Str,
+    password_hash: Str,
 }
 
 // Struct with generic
@@ -39,7 +39,7 @@ type Entry[K, V] {
 // Simple enum (no data)
 type Direction = North | South | East | West
 
-// Enum with data (like Rust)
+// Enum with data
 type Shape =
     | Circle(F64)                    // radius
     | Rectangle(F64, F64)            // width, height
@@ -47,9 +47,9 @@ type Shape =
 
 // Enum with named fields
 type Message =
-    | Text { content: String, sender: String }
-    | Image { url: String, width: U32, height: U32 }
-    | File { path: String, size: U64 }
+    | Text { content: Str, sender: Str }
+    | Image { url: Str, width: U32, height: U32 }
+    | File { path: Str, size: U64 }
 
 // Generic enum (Maybe and Outcome are built-in)
 type MyOutcome[T, E] = Ok(T) | Err(E)
@@ -59,9 +59,9 @@ type MyOutcome[T, E] = Ok(T) | Err(E)
 // ============================================
 
 type UserId = U64
-type Email = String
+type Email = Str
 type Callback = func(I32) -> Bool
-type StringMap[V] = Map[String, V]
+type StrMap[V] = HashMap[Str, V]
 
 // ============================================
 // USAGE
@@ -108,5 +108,5 @@ pub func main() {
 
     // Type alias usage
     let user_id: UserId = 12345
-    let contacts: StringMap[Email] = Map.new()
+    let contacts: StrMap[Email] = HashMap.new(16)
 }

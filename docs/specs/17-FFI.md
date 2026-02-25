@@ -418,7 +418,7 @@ let bytes: *const U8 = b"binary data\x00\xFF"
 ### 7.2 CString Type
 
 ```tml
-import std.ffi.CString
+use std::ffi::CString
 
 func use_c_string() {
     // Create from TML String
@@ -443,7 +443,7 @@ lowlevel func from_c(ptr: *const U8) -> String {
 ### 7.3 CStr (borrowed)
 
 ```tml
-import std.ffi.CStr
+use std::ffi::CStr
 
 lowlevel func process_c_string(ptr: *const U8) {
     // Borrow without taking ownership
@@ -488,7 +488,7 @@ lowlevel func process_c_string(ptr: *const U8) {
 ### 8.2 Platform-Specific Types
 
 ```tml
-import std.ffi.c.*
+use std::ffi::c::*
 
 // Platform-dependent sizes
 type c_int = I32      // usually
@@ -815,7 +815,7 @@ public behavior Platform {
 extern "C" func dangerous_alloc(size: U64) -> *mut U8
 
 // Safe wrapper
-public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
+pub func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
     if size == 0 {
         return Err(AllocError.ZeroSize)
     }
@@ -838,12 +838,12 @@ public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
 extern "C" func fopen(path: *const U8, mode: *const U8) -> *mut FILE
 extern "C" func fclose(file: *mut FILE) -> I32
 
-public type SafeFile {
+pub type SafeFile {
     handle: *mut FILE,
 }
 
 extend SafeFile {
-    public func open(path: String, mode: String) -> Outcome[This, IoError] {
+    pub func open(path: String, mode: String) -> Outcome[This, IoError] {
         let c_path: CString = CString.new(path)!
         let c_mode: CString = CString.new(mode)!
 

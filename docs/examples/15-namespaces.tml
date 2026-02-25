@@ -81,8 +81,8 @@ namespace MyApp.Services {
         func get_display_name(this, id: I64) -> Str {
             let user_opt = this.repo.find_by_id(id)
             when user_opt {
-                Just(user) => return user.display_name()
-                Nothing => return "Unknown"
+                Just(user) -> return user.display_name(),
+                Nothing -> return "Unknown",
             }
         }
     }

@@ -9,14 +9,14 @@ mod memory
 
 func ownership_demo() {
     // Each value has one owner
-    let s1 = String.from("hello")
+    let s1 = "hello"
 
     // Move: ownership transfers (s1 is no longer valid)
     let s2 = s1
     // println(s1)  // ERROR: s1 moved to s2
 
     // Duplicate: create a deep copy (both valid)
-    let s3 = String.from("world")
+    let s3 = "world"
     let s4 = s3.duplicate()
     println(s3)  // OK: s3 still valid
     println(s4)  // OK: s4 is a copy
@@ -33,7 +33,7 @@ func ownership_demo() {
 // ============================================
 
 func borrowing_demo() {
-    let s = String.from("hello")
+    let s = "hello"
 
     // Immutable borrow with ref
     let len = calculate_length(ref s)
@@ -45,16 +45,16 @@ func borrowing_demo() {
     println(r1 + " " + r2)  // OK
 
     // Mutable borrow with mut ref
-    var text = String.from("hello")
+    var text = "hello"
     append_world(mut ref text)
     println(text)  // "hello world"
 }
 
-func calculate_length(s: ref String) -> U64 {
+func calculate_length(s: ref Str) -> U64 {
     return s.len()
 }
 
-func append_world(s: mut ref String) {
+func append_world(s: mut ref Str) {
     s.push(" world")
 }
 
@@ -63,7 +63,7 @@ func append_world(s: mut ref String) {
 // ============================================
 
 func borrow_rules_demo() {
-    var s = String.from("hello")
+    var s = "hello"
 
     // Rule 1: Only ONE mutable borrow at a time
     let r1 = mut ref s
@@ -89,13 +89,13 @@ func borrow_rules_demo() {
 // TML infers lifetimes - no explicit annotations needed
 
 // Returns a reference to the longer string
-func longest(a: ref String, b: ref String) -> ref String {
+func longest(a: ref Str, b: ref Str) -> ref Str {
     if a.len() > b.len() then a else b
 }
 
 func lifetime_demo() {
-    let s1 = String.from("hello")
-    let s2 = String.from("world!")
+    let s1 = "hello"
+    let s2 = "world!"
 
     let result = longest(ref s1, ref s2)
     println("Longest: " + result)
@@ -108,9 +108,9 @@ func lifetime_demo() {
 // SMART POINTERS
 // ============================================
 
-use std::shared { Shared }
-use std::cell { RefCell }
-use std::sync { Sync, Mutex }
+use std::shared::Shared
+use std::cell::RefCell
+use std::sync::{Sync, Mutex}
 
 func smart_pointer_demo() {
     // Heap: heap allocation with single owner
@@ -118,7 +118,7 @@ func smart_pointer_demo() {
     println(boxed.to_string())
 
     // Shared: reference counting (single-threaded)
-    let shared: Shared[String] = Shared.new("shared data")
+    let shared: Shared[Str] = Shared.new("shared data")
     let copy1 = shared.duplicate()  // Increments reference count
     let copy2 = shared.duplicate()
     println("Ref count: " + Shared.strong_count(ref shared).to_string())
@@ -143,7 +143,7 @@ func smart_pointer_demo() {
 
 async func thread_safe_demo() {
     // Sync: atomic reference counting (thread-safe Shared)
-    let data: Sync[String] = Sync.new("shared across threads")
+    let data: Sync[Str] = Sync.new("shared across threads")
 
     let handles = List.new()
     loop i in 0 to 5 {
@@ -184,7 +184,7 @@ async func thread_safe_demo() {
 // ============================================
 
 type FileHandle {
-    path: String,
+    path: Str,
     handle: RawHandle,
 }
 
@@ -210,29 +210,29 @@ func drop_demo() {
 // MOVE SEMANTICS IN FUNCTIONS
 // ============================================
 
-func takes_ownership(s: String) {
+func takes_ownership(s: Str) {
     println(s)
     // s is dropped when function ends
 }
 
-func gives_ownership() -> String {
-    let s = String.from("hello")
+func gives_ownership() -> Str {
+    let s = "hello"
     return s  // ownership transferred to caller
 }
 
-func takes_and_gives_back(s: String) -> String {
+func takes_and_gives_back(s: Str) -> Str {
     s + " world"  // return ownership with modification
 }
 
 func move_demo() {
-    let s1 = String.from("hello")
+    let s1 = "hello"
     takes_ownership(s1)
     // s1 no longer valid here
 
     let s2 = gives_ownership()
     println(s2)  // s2 valid
 
-    let s3 = String.from("hello")
+    let s3 = "hello"
     let s4 = takes_and_gives_back(s3)
     // s3 invalid, s4 valid
     println(s4)
@@ -240,7 +240,7 @@ func move_demo() {
 
 // Placeholder types and functions
 type RawHandle = U64
-func open_raw(path: String) -> RawHandle { return 0 }
+func open_raw(path: Str) -> RawHandle { return 0 }
 func close_raw_handle(h: RawHandle) {}
 
 pub func main() {

@@ -5,7 +5,7 @@
 ```tml
 module hello
 
-public func main() {
+pub func main() {
     println("Hello, TML!")
 }
 ```
@@ -15,8 +15,8 @@ public func main() {
 ```tml
 module greeting
 
-public func main() {
-    let name: String = "World"
+pub func main() {
+    let name: Str = "World"
     let count: I32 = 42
 
     // Variable interpolation
@@ -44,13 +44,13 @@ public func main() {
 ```tml
 module fibonacci
 
-public func fib(n: U64) -> U64 {
+pub func fib(n: U64) -> U64 {
     if n <= 1 then return n
     return fib(n - 1) + fib(n - 2)
 }
 
 // Iterative version (more efficient)
-public func fib_iter(n: U64) -> U64 {
+pub func fib_iter(n: U64) -> U64 {
     if n <= 1 then return n
 
     var a: U64 = 0
@@ -79,22 +79,22 @@ func test_fib() {
 ```tml
 module linked_list
 
-public type Node[T] {
+pub type Node[T] {
     value: T,
     next: Maybe[Heap[Node[T]]],
 }
 
-public type LinkedList[T] {
+pub type LinkedList[T] {
     head: Maybe[Heap[Node[T]]],
     len: U64,
 }
 
 extend LinkedList[T] {
-    public func new() -> This {
+    pub func new() -> This {
         return This { head: Nothing, len: 0 }
     }
 
-    public func push_front(this, value: T) {
+    pub func push_front(this, value: T) {
         let new_node: Heap[Node[T]] = Heap.new(Node {
             value: value,
             next: this.head.take(),
@@ -103,7 +103,7 @@ extend LinkedList[T] {
         this.len += 1
     }
 
-    public func pop_front(this) -> Maybe[T] {
+    pub func pop_front(this) -> Maybe[T] {
         when this.head.take() {
             Just(node) -> {
                 this.head = node.next
@@ -114,11 +114,11 @@ extend LinkedList[T] {
         }
     }
 
-    public func len(this) -> U64 {
+    pub func len(this) -> U64 {
         return this.len
     }
 
-    public func is_empty(this) -> Bool {
+    pub func is_empty(this) -> Bool {
         return this.len == 0
     }
 }
@@ -144,7 +144,7 @@ func test_linked_list() {
 ```tml
 module bst
 
-public type Tree[T: Ordered] {
+pub type Tree[T: Ordered] {
     root: Maybe[Heap[TreeNode[T]]],
 }
 
@@ -155,11 +155,11 @@ type TreeNode[T] {
 }
 
 extend Tree[T: Ordered] {
-    public func new() -> This {
+    pub func new() -> This {
         return This { root: Nothing }
     }
 
-    public func insert(this, value: T) {
+    pub func insert(this, value: T) {
         this.root = This.insert_node(this.root.take(), value)
     }
 
@@ -181,7 +181,7 @@ extend Tree[T: Ordered] {
         }
     }
 
-    public func contains(this, value: ref T) -> Bool {
+    pub func contains(this, value: ref T) -> Bool {
         return This.search_node(ref this.root, value)
     }
 
@@ -219,30 +219,30 @@ func test_bst() {
 ```tml
 module http_client
 
-import std.io.http.{Request, Response, Client}
-import std.json.Json
+use std::http::{Request, Response, HttpClient}
+use std::json::Json
 
-public type ApiClient {
-    base_url: String,
-    client: Client,
+pub type ApiClient {
+    base_url: Str,
+    client: HttpClient,
 }
 
-public type User {
+pub type User {
     id: U64,
-    name: String,
-    email: String,
+    name: Str,
+    email: Str,
 }
 
 extend ApiClient {
-    public func new(base_url: String) -> This {
+    pub func new(base_url: Str) -> This {
         return This {
             base_url: base_url,
-            client: Client.new(),
+            client: HttpClient::new(),
         }
     }
 
-    public func get_user(this, id: U64) -> Outcome[User, Error] {
-        let url: String = this.base_url + "/users/" + id.to_string()
+    pub func get_user(this, id: U64) -> Outcome[User, Error] {
+        let url: Str = this.base_url + "/users/" + id.to_string()
         let response: Response = this.client.get(url)!
 
         if response.status != 200 {
@@ -255,9 +255,9 @@ extend ApiClient {
         return Ok(user)
     }
 
-    public func create_user(this, name: String, email: String) -> Outcome[User, Error] {
-        let url: String = this.base_url + "/users"
-        let body: String = Json.object()
+    pub func create_user(this, name: Str, email: Str) -> Outcome[User, Error] {
+        let url: Str = this.base_url + "/users"
+        let body: Str = Json.object()
             .set("name", name)
             .set("email", email)
             .to_string()
@@ -277,8 +277,8 @@ extend User {
     func from_json(json: Json) -> Outcome[This, Error] {
         return Ok(This {
             id: json.get("id").as_u64()!,
-            name: json.get("name").as_string()!,
-            email: json.get("email").as_string()!,
+            name: json.get("name").as_str()!,
+            email: json.get("email").as_str()!,
         })
     }
 }
@@ -289,38 +289,38 @@ extend User {
 ```tml
 module counter
 
-import std.sync.{Sync, Mutex}
-import std.thread
+use std::sync::{Sync, Mutex}
+use std::thread
 
-public type Counter {
+pub type Counter {
     value: Sync[Mutex[I64]],
 }
 
 extend Counter {
-    public func new() -> This {
+    pub func new() -> This {
         return This {
             value: Sync.new(Mutex.new(0)),
         }
     }
 
-    public func increment(this) {
-        let guard: Mutex[I64].Guard = this.value.lock()
-        *guard += 1
+    pub func increment(this) {
+        var guard = this.value.lock()
+        guard.set(guard.get() + 1)
     }
 
-    public func get(this) -> I64 {
-        let guard: Mutex[I64].Guard = this.value.lock()
-        return *guard
+    pub func get(this) -> I64 {
+        let guard = this.value.lock()
+        return guard.get()
     }
 }
 
-public func parallel_count(n: I32) -> I64 {
+pub func parallel_count(n: I32) -> I64 {
     let counter: Counter = Counter.new()
-    var handles: List[thread.Handle] = List.new()
+    var handles: List[thread::JoinHandle] = List.new()
 
     loop _ in 0 to n {
         let c: Counter = counter.duplicate()
-        let handle: thread.Handle = thread.spawn(do() {
+        let handle: thread::JoinHandle = thread::spawn(do() {
             loop _ in 0 to 1000 {
                 c.increment()
             }
@@ -347,26 +347,26 @@ func test_parallel_count() {
 ```tml
 module json_parser
 
-public type JsonValue =
+pub type JsonValue =
     | Null
     | Bool(Bool)
     | Number(F64)
-    | Str(String)
+    | Text(Str)
     | Array(List[JsonValue])
-    | Object(Map[String, JsonValue])
+    | Object(HashMap[Str, JsonValue])
 
-public type ParseError {
-    message: String,
+pub type ParseError {
+    message: Str,
     position: U64,
 }
 
 type Parser {
-    input: String,
+    input: Str,
     pos: U64,
 }
 
 extend Parser {
-    func new(input: String) -> This {
+    func new(input: Str) -> This {
         return This { input: input, pos: 0 }
     }
 
@@ -422,11 +422,11 @@ extend Parser {
 
     func parse_string(this) -> Outcome[JsonValue, ParseError] {
         this.expect("\"")!
-        var result: String = String.new()
+        var result: Str = ""
 
         loop {
             when this.next() {
-                Just('"') -> return Ok(Str(result)),
+                Just('"') -> return Ok(Text(result)),
                 Just('\\') -> {
                     let escaped: Char = this.parse_escape()!
                     result.push(escaped)
@@ -455,7 +455,7 @@ extend Parser {
             }
         }
 
-        let num_str: String = this.input.slice(start, this.pos)
+        let num_str: Str = this.input.slice(start, this.pos)
         when num_str.parse[F64]() {
             Ok(n) -> return Ok(Number(n)),
             Err(_) -> return Err(this.error("invalid number")),
@@ -497,7 +497,7 @@ extend Parser {
         this.expect("{")!
         this.skip_whitespace()
 
-        var entries: Map[String, JsonValue] = Map.new()
+        var entries: HashMap[Str, JsonValue] = HashMap.new(16)
 
         if this.peek() == Just('}') {
             this.pos += 1
@@ -505,8 +505,8 @@ extend Parser {
         }
 
         loop {
-            let key: String = when this.parse_string()! {
-                Str(s) -> s,
+            let key: Str = when this.parse_string()! {
+                Text(s) -> s,
                 _ -> return Err(this.error("expected string key")),
             }
 
@@ -552,7 +552,7 @@ extend Parser {
         }
     }
 
-    func expect(this, s: String) -> Outcome[Unit, ParseError] {
+    func expect(this, s: Str) -> Outcome[Unit, ParseError] {
         loop c in s.chars() {
             if this.next() != Just(c) {
                 return Err(this.error("expected '" + s + "'"))
@@ -561,12 +561,12 @@ extend Parser {
         return Ok(unit)
     }
 
-    func error(this, message: String) -> ParseError {
+    func error(this, message: Str) -> ParseError {
         return ParseError { message: message, position: this.pos }
     }
 }
 
-public func parse(input: String) -> Outcome[JsonValue, ParseError] {
+pub func parse(input: Str) -> Outcome[JsonValue, ParseError] {
     var parser: Parser = Parser.new(input)
     return parser.parse()
 }
@@ -576,7 +576,7 @@ func test_parse_primitives() {
     assert_eq(parse("null"), Ok(Null))
     assert_eq(parse("true"), Ok(Bool(true)))
     assert_eq(parse("42"), Ok(Number(42.0)))
-    assert_eq(parse("\"hello\""), Ok(Str("hello")))
+    assert_eq(parse("\"hello\""), Ok(Text("hello")))
 }
 
 @test
@@ -602,7 +602,7 @@ This section demonstrates recently implemented TML features.
 module pattern_matching
 
 // If-let for Maybe unwrapping
-func get_user_name(user_id: U64) -> String {
+func get_user_name(user_id: U64) -> Str {
     let maybe_user: Maybe[User] = find_user(user_id)
 
     if let Just(user) = maybe_user {
@@ -624,7 +624,7 @@ func load_config() -> Config {
 }
 
 // Nested if-let
-func process_nested(data: Maybe[Outcome[String, Error]]) -> String {
+func process_nested(data: Maybe[Outcome[Str, Error]]) -> Str {
     if let Just(result) = data {
         if let Ok(value) = result {
             return value
@@ -645,7 +645,7 @@ func abs(x: I32) -> I32 {
 }
 
 // Multi-line expression form
-func sign(x: I32) -> String {
+func sign(x: I32) -> Str {
     return if x < 0 then
         "negative"
     else if x > 0 then
@@ -676,7 +676,7 @@ func max(a: I32, b: I32) -> I32 {
 module generic_constraints
 
 // Simple where clause
-public func find_max[T](items: List[T]) -> Maybe[T]
+pub func find_max[T](items: List[T]) -> Maybe[T]
 where T: Ordered
 {
     if items.is_empty() {
@@ -693,7 +693,7 @@ where T: Ordered
 }
 
 // Multiple trait bounds
-public func sort_and_display[T](items: mut ref List[T])
+pub func sort_and_display[T](items: mut ref List[T])
 where T: Ordered + Display
 {
     items.sort()
@@ -703,10 +703,10 @@ where T: Ordered + Display
 }
 
 // Multiple type parameters with constraints
-public func merge_sorted[T, U](left: List[T], right: List[U]) -> List[String]
+pub func merge_sorted[T, U](left: List[T], right: List[U]) -> List[Str]
 where T: Ordered + Display, U: Ordered + Display
 {
-    var result: List[String] = List.new()
+    var result: List[Str] = List.new()
     // ... merge logic
     return result
 }
@@ -718,19 +718,19 @@ where T: Ordered + Display, U: Ordered + Display
 module function_types
 
 // Function type aliases
-public type Predicate[T] = func(T) -> Bool
-public type Mapper[T, U] = func(T) -> U
-public type Comparator[T] = func(T, T) -> I32
+pub type Predicate[T] = func(T) -> Bool
+pub type Mapper[T, U] = func(T) -> U
+pub type Comparator[T] = func(T, T) -> I32
 
 // Using function types in structs
-public type EventHandler {
+pub type EventHandler {
     on_click: func(I32, I32) -> (),
     on_hover: func(I32, I32) -> (),
     on_exit: func() -> (),
 }
 
 // Functions accepting function types
-public func filter[T](items: List[T], pred: Predicate[T]) -> List[T] {
+pub func filter[T](items: List[T], pred: Predicate[T]) -> List[T] {
     var result: List[T] = List.new()
     loop item in items {
         if pred(item) {
@@ -740,7 +740,7 @@ public func filter[T](items: List[T], pred: Predicate[T]) -> List[T] {
     return result
 }
 
-public func map[T, U](items: List[T], mapper: Mapper[T, U]) -> List[U] {
+pub func map[T, U](items: List[T], mapper: Mapper[T, U]) -> List[U] {
     var result: List[U] = List.new()
     loop item in items {
         result.push(mapper(item))
@@ -820,8 +820,8 @@ module pointer_basics
 
 // Swap two values using pointers
 func swap_values() -> (I32, I32) {
-    let mut a: I32 = 10
-    let mut b: I32 = 20
+    var a: I32 = 10
+    var b: I32 = 20
 
     lowlevel {
         let pa: *I32 = &a
@@ -853,12 +853,12 @@ module pointer_arithmetic
 
 // Sum an array using pointer arithmetic
 func sum_array() -> I32 {
-    let mut arr: [I32; 5] = [1, 2, 3, 4, 5]
-    let mut total: I32 = 0
+    var arr: [I32; 5] = [1, 2, 3, 4, 5]
+    var total: I32 = 0
 
     lowlevel {
         let base: *I32 = &arr[0]
-        let mut i: I64 = 0
+        var i: I64 = 0
 
         loop {
             if i >= 5 then break
@@ -885,11 +885,11 @@ module memory_ops
 
 // Zero out a buffer using pointers
 func zero_buffer(size: I32) {
-    let mut buffer: [U8; 256] = [0xFF; 256]
+    var buffer: [U8; 256] = [0xFF; 256]
 
     lowlevel {
         let ptr: *U8 = &buffer[0]
-        let mut i: I64 = 0
+        var i: I64 = 0
 
         loop {
             if i >= size as I64 then break
@@ -951,24 +951,24 @@ func process_with_c_lib(input: ref [U8; 1024]) -> Outcome[I32, Error] {
 ```tml
 module cli
 
-import std.env
-import std.fs.{File, read_to_string}
+use std::os::env
+use std::file::File
 
 type Args {
-    input: String,
-    output: Maybe[String],
+    input: Str,
+    output: Maybe[Str],
     verbose: Bool,
 }
 
-public func main() -> Outcome[Unit, Error] {
+pub func main() -> Outcome[Unit, Error] {
     let args: Args = parse_args()!
 
     if args.verbose {
         println("Reading from: " + args.input)
     }
 
-    let content: String = read_to_string(args.input)!
-    let processed: String = process(content)
+    let content: Str = File.read_to_string(args.input)!
+    let processed: Str = process(content)
 
     when args.output {
         Just(path) -> {
@@ -984,21 +984,21 @@ public func main() -> Outcome[Unit, Error] {
 }
 
 func parse_args() -> Outcome[Args, Error] {
-    let argv: List[String] = env.args()
+    let argv: List[Str] = env::args()
 
     if argv.len() < 2 {
         return Err(Error.new("Usage: program <input> [-o output] [-v]"))
     }
 
-    var input: Maybe[String] = Nothing
-    var output: Maybe[String] = Nothing
+    var input: Maybe[Str] = Nothing
+    var output: Maybe[Str] = Nothing
     var verbose: Bool = false
 
     var i: U64 = 1
     loop while i < argv.len() {
-        let arg: String = argv[i]
+        let arg: Str = argv[i]
 
-        when arg.as_str() {
+        when arg {
             "-o" -> {
                 i += 1
                 if i >= argv.len() {
@@ -1024,7 +1024,7 @@ func parse_args() -> Outcome[Args, Error] {
     }
 }
 
-func process(content: String) -> String {
+func process(content: Str) -> Str {
     return content.to_uppercase()
 }
 ```
@@ -1084,7 +1084,7 @@ func fast_hash(data: ref [U8]) -> U64 {
 }
 #endif
 
-public func main() {
+pub func main() {
     print("Path separator: {get_path_separator()}\n")
     print("Home directory: {get_home_dir()}\n")
 }
@@ -1129,7 +1129,7 @@ func dump_state(state: ref AppState) {
 }
 #endif
 
-public func main() {
+pub func main() {
     log_debug("Application starting...")
 
     #ifdef DEBUG
@@ -1147,28 +1147,36 @@ module features
 
 // Custom feature flags (passed via -D)
 #ifdef FEATURE_ASYNC
-use std::async::{spawn, join}
+use std::thread::{spawn, JoinHandle}
 
-pub func process_async(items: List[Item]) -> List[Result] {
-    let tasks: List[Task[Result]] = items
-        .iter()
-        .map(do(item: Item) spawn(do() process_item(item)))
-        .collect()
+pub func process_async(items: List[Item]) -> List[Outcome[Unit, Error]] {
+    var handles: List[JoinHandle] = List.new()
+    loop item in items {
+        handles.push(spawn(do() process_item(item)))
+    }
 
-    return join(tasks)
+    var results: List[Outcome[Unit, Error]] = List.new()
+    loop h in handles {
+        results.push(h.join())
+    }
+    return results
 }
 #else
-pub func process_async(items: List[Item]) -> List[Result] {
+pub func process_async(items: List[Item]) -> List[Outcome[Unit, Error]] {
     // Synchronous fallback
-    return items.iter().map(do(item: Item) process_item(item)).collect()
+    var results: List[Outcome[Unit, Error]] = List.new()
+    loop item in items {
+        results.push(Ok(process_item(item)))
+    }
+    return results
 }
 #endif
 
 #ifdef FEATURE_LOGGING
-use std::log::{Logger, Level}
+use std::log
 
 pub func init_logging() {
-    Logger::init(Level::Info)
+    log::info("app", "Logging initialized")
 }
 #else
 pub func init_logging() { }
@@ -1196,12 +1204,12 @@ type Socket {
     handle: SOCKET,  // Windows SOCKET type
 }
 
-impl Socket {
+extend Socket {
     pub func new() -> Outcome[This, Error] {
         lowlevel {
             let h: SOCKET = socket(AF_INET, SOCK_STREAM, 0)
             if h == INVALID_SOCKET {
-                return Err(Error::new("Failed to create socket"))
+                return Err(Error.new("Failed to create socket"))
             }
             return Ok(This { handle: h })
         }
@@ -1218,12 +1226,12 @@ type Socket {
     fd: I32,  // File descriptor on Unix
 }
 
-impl Socket {
+extend Socket {
     pub func new() -> Outcome[This, Error] {
         lowlevel {
             let fd: I32 = socket(AF_INET, SOCK_STREAM, 0)
             if fd < 0 {
-                return Err(Error::new("Failed to create socket"))
+                return Err(Error.new("Failed to create socket"))
             }
             return Ok(This { fd: fd })
         }
@@ -1298,7 +1306,7 @@ func use_simd_optimizations() -> Bool {
 }
 #endif
 
-public func main() {
+pub func main() {
     print("Platform: {get_arch_info()}\n")
     print("SIMD enabled: {use_simd_optimizations()}\n")
 }

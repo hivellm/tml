@@ -31,7 +31,7 @@ pub func main() {
 
     // Inference works in expressions
     let sum = x + count    // I32
-    let msg = name + "!"   // String
+    let msg = name + "!"   // Str
 
     println("counter = " + counter.to_string())
 }

@@ -152,7 +152,7 @@ type Tree[T] = Leaf(T) | Node(Heap[Tree[T]], Heap[Tree[T]])
 ### 5.2 Shared[T] — Reference Counting
 
 ```tml
-import std.shared.Shared
+use std::shared::Shared
 
 let a: Shared[List[I32]] = Shared.new(List.of(1, 2, 3))
 let b: Shared[List[I32]] = a.duplicate()  // increments counter, doesn't copy data
@@ -164,7 +164,7 @@ let b: Shared[List[I32]] = a.duplicate()  // increments counter, doesn't copy da
 ### 5.3 Sync[T] — Atomic Reference Counting
 
 ```tml
-import std.sync.Sync
+use std::sync::Sync
 
 let shared: Sync[T] = Sync.new(data)
 
@@ -178,7 +178,7 @@ spawn(do() {
 ### 5.4 Weak[T] — Weak Reference
 
 ```tml
-import std.shared.{Shared, Weak}
+use std::shared::{Shared, Weak}
 
 let strong: Shared[Node] = Shared.new(Node { value: 42 })
 let weak: Weak[Node] = Shared.downgrade(ref strong)
@@ -209,7 +209,7 @@ safe because the type itself guarantees correct access.
 ### 6.1 Cell[T] — For Copy Types
 
 ```tml
-import std.cell.Cell
+use std::cell::Cell
 
 type Counter {
     value: Cell[I32],
@@ -226,7 +226,7 @@ extend Counter {
 ### 6.2 RefCell[T] — With Runtime Borrow Checking
 
 ```tml
-import std.cell.RefCell
+use std::cell::RefCell
 
 let data: RefCell[List[I32]] = RefCell.new(List.of(1, 2, 3))
 
@@ -339,7 +339,7 @@ func example() {
 For bulk allocation:
 
 ```tml
-import std.arena.Arena
+use std::arena::Arena
 
 func process_batch(items: List[Data]) {
     let arena: Arena = Arena.new()
@@ -360,7 +360,7 @@ The `lowlevel` keyword creates a block where raw pointer operations are allowed:
 
 ```tml
 func raw_pointer_example() {
-    let mut x: I32 = 42
+    var x: I32 = 42
 
     lowlevel {
         // Inside lowlevel, & returns a pointer (*T) instead of a reference (ref T)
@@ -383,10 +383,10 @@ The pointer type `*T` represents a raw pointer to a value of type `T`:
 
 ```tml
 lowlevel {
-    let mut value: I32 = 42
+    var value: I32 = 42
     let p: *I32 = &value    // Pointer to I32
 
-    let mut flag: Bool = true
+    var flag: Bool = true
     let q: *Bool = &flag    // Pointer to Bool
 }
 ```
@@ -406,8 +406,8 @@ Example:
 
 ```tml
 func pointer_operations() {
-    let mut a: I32 = 100
-    let mut b: I32 = 200
+    var a: I32 = 100
+    var b: I32 = 200
 
     lowlevel {
         let pa: *I32 = &a
@@ -786,7 +786,7 @@ extend Document {
 }
 
 // SOLUTION 2: Use Pin for async/generator contexts
-import std.pin.Pin
+use std::pin::Pin
 
 type Generator {
     // Pin allows controlled self-reference for async

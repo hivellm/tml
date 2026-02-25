@@ -3,7 +3,7 @@
 
 mod collections
 
-use std::collections { HashMap, HashSet, VecDeque }
+use std::collections::{HashMap, HashSet, VecDeque}
 
 pub func main() {
     // ============================================
@@ -30,7 +30,7 @@ pub func main() {
     // ============================================
 
     // Create empty list
-    var list: List[String] = List.new()
+    var list: List[Str] = List.new()
 
     // Create with initial values
     var numbers = List.from([1, 2, 3])
@@ -42,13 +42,13 @@ pub func main() {
 
     // Access
     let item = list[0]                    // "hello"
-    let maybe = list.get(10)              // Maybe[String] -> Nothing
+    let maybe = list.get(10)              // Maybe[Str] -> Nothing
 
     // Length
     let len = list.len()
 
     // Remove
-    let removed = list.pop()              // Maybe[String]
+    let removed = list.pop()              // Maybe[Str]
     list.remove(0)                        // Remove at index
 
     // Check contents
@@ -79,10 +79,10 @@ pub func main() {
     // ============================================
 
     // Create empty map
-    var scores: Map[String, I32] = Map.new()
+    var scores: HashMap[Str, I32] = HashMap::new(16)
 
     // Create with initial pairs
-    var ages = Map.from([
+    var ages = HashMap::from([
         ("Alice", 30),
         ("Bob", 25),
         ("Carol", 35),
@@ -125,10 +125,10 @@ pub func main() {
     // ============================================
 
     // Create empty set
-    var tags: Set[String] = Set.new()
+    var tags: HashSet[Str] = HashSet::new()
 
     // Create with initial values
-    var primes = Set.from([2, 3, 5, 7, 11])
+    var primes = HashSet::from([2, 3, 5, 7, 11])
 
     // Add
     tags.insert("rust")
@@ -142,8 +142,8 @@ pub func main() {
     tags.remove("rust")
 
     // Set operations
-    let a = Set.from([1, 2, 3, 4])
-    let b = Set.from([3, 4, 5, 6])
+    let a = HashSet::from([1, 2, 3, 4])
+    let b = HashSet::from([3, 4, 5, 6])
 
     let union = a.union(b)                 // {1, 2, 3, 4, 5, 6}
     let intersection = a.intersection(b)  // {3, 4}
@@ -151,7 +151,7 @@ pub func main() {
     let symmetric = a.symmetric_diff(b)    // {1, 2, 5, 6}
 
     // Subset/superset
-    let is_subset = a.is_subset(Set.from([1, 2, 3, 4, 5]))
+    let is_subset = a.is_subset(HashSet::from([1, 2, 3, 4, 5]))
 
     // Iterate
     loop tag in tags {

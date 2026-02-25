@@ -266,7 +266,7 @@ tml target add aarch64-unknown-linux-gnu
 module platform
 
 @when(target_os = "linux")
-public func get_home_dir() -> Maybe[PathBuf] {
+pub func get_home_dir() -> Maybe[PathBuf] {
     when env.var("HOME") {
         Ok(val) -> Just(PathBuf.from(val)),
         Err(_) -> Nothing,
@@ -274,7 +274,7 @@ public func get_home_dir() -> Maybe[PathBuf] {
 }
 
 @when(target_os = "windows")
-public func get_home_dir() -> Maybe[PathBuf] {
+pub func get_home_dir() -> Maybe[PathBuf] {
     when env.var("USERPROFILE") {
         Ok(val) -> Just(PathBuf.from(val)),
         Err(_) -> Nothing,
@@ -282,7 +282,7 @@ public func get_home_dir() -> Maybe[PathBuf] {
 }
 
 @when(target_os = "macos")
-public func get_home_dir() -> Maybe[PathBuf] {
+pub func get_home_dir() -> Maybe[PathBuf] {
     when env.var("HOME") {
         Ok(val) -> Just(PathBuf.from(val)),
         Err(_) -> Nothing,
@@ -290,7 +290,7 @@ public func get_home_dir() -> Maybe[PathBuf] {
 }
 
 @when(target_arch = "x86_64")
-public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
+pub func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use AVX if available
     if cpu_has_avx() {
         avx_memcpy(dst, src, len)
@@ -300,7 +300,7 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
 }
 
 @when(target_arch = "aarch64")
-public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
+pub func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use NEON
     neon_memcpy(dst, src, len)
 }
@@ -359,9 +359,9 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
 ### 7.2 Runtime Detection
 
 ```tml
-import std.arch
+use std::arch
 
-public func optimal_algorithm() {
+pub func optimal_algorithm() {
     if arch.is_x86_feature_detected("avx2") {
         avx2_impl()
     } else if arch.is_x86_feature_detected("sse4.2") {
@@ -492,7 +492,7 @@ module wasm_app
 @no_std
 
 @export("add")
-public func add(a: I32, b: I32) -> I32 {
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
@@ -500,7 +500,7 @@ public func add(a: I32, b: I32) -> I32 {
 module wasi_app
 caps: [io.file, io.process.env]
 
-public func main() {
+pub func main() {
     println("Hello from WASI!")
 }
 ```

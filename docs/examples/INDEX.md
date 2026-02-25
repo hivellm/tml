@@ -14,7 +14,7 @@ This directory contains example TML code files demonstrating the language syntax
 | [06-error-handling.tml](06-error-handling.tml) | `!` operator, `else` recovery, `catch` blocks, `Outcome` |
 | [07-traits.tml](07-traits.tml) | Behavior definitions, `extend X with T` syntax, behavior bounds |
 | [08-closures.tml](08-closures.tml) | `do()` closure syntax, captures, higher-order functions |
-| [09-modules.tml](09-modules.tml) | Module system, `import`, visibility (`public`/`private`) |
+| [09-modules.tml](09-modules.tml) | Module system, `use`, visibility (`pub`/default private) |
 | [10-collections.tml](10-collections.tml) | Arrays, List, Map, Set, iterators, ranges |
 | [11-async.tml](11-async.tml) | `async`/`await`, channels, concurrent execution |
 | [12-memory.tml](12-memory.tml) | Ownership, borrowing, smart pointers (`Heap`, `Shared`, `Sync`) |
@@ -36,7 +36,7 @@ This directory contains example TML code files demonstrating the language syntax
 | Conditionals | `if cond { }` | `if cond then { }` |
 | Self reference | `self`, `Self` | `this`, `This` |
 | Trait impl | `impl T for X` | `extend X with T` |
-| Modules | `mod`, `use` | `module`, `import` |
+| Modules | `mod`, `use` | `mod`, `use` |
 | Mutable binding | `let mut` | `var` |
 
 ## Quick Start

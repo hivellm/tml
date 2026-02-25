@@ -151,7 +151,7 @@ public behavior Allocator {
 var GLOBAL: SystemAllocator = SystemAllocator.new()
 
 // Arena allocator example
-public type Arena {
+pub type Arena {
     buffer: *mut U8,
     capacity: U64,
     offset: U64,
@@ -352,10 +352,10 @@ struct TmlException {
 ### 5.3 Panic Hook
 
 ```tml
-import std.panic
+use std::panic
 
 // Set custom panic handler
-public func main() {
+pub func main() {
     panic.set_hook(do(info) {
         // Log to file
         log_error("PANIC: " + info.message())

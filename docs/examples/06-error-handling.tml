@@ -8,7 +8,7 @@ mod error_handling
 // ============================================
 
 // Every ! marks a potential exit point - highly visible
-func read_config(path: String) -> Outcome[Config, Error] {
+func read_config(path: Str) -> Outcome[Config, Error] {
     let content = File.read(path)!       // propagate on error
     let config = parse_json(content)!    // propagate on error
     return Ok(config)
@@ -57,13 +57,13 @@ func find_user(id: U64) -> Maybe[User] {
     else Nothing
 }
 
-func get_user_email(id: U64) -> Outcome[String, Error] {
+func get_user_email(id: U64) -> Outcome[Str, Error] {
     // Nothing becomes Err automatically
     let user = find_user(id)!
     return Ok(user.email)
 }
 
-func get_user_email_custom(id: U64) -> Outcome[String, Error] {
+func get_user_email_custom(id: U64) -> Outcome[Str, Error] {
     // Custom error for Nothing
     let user = find_user(id)! else {
         return Err(Error.NotFound("User " + id.to_string()))
@@ -109,7 +109,7 @@ func robust_load() -> Data {
 // ============================================
 
 func demo_outcome_methods() {
-    let result: Outcome[I32, String] = Ok(42)
+    let result: Outcome[I32, Str] = Ok(42)
 
     // Check state
     if result.is_Ok() then println("Success!")
@@ -138,13 +138,13 @@ func demo_outcome_methods() {
 // Simple enum errors
 type ParseError =
     | InvalidFormat
-    | UnexpectedToken { found: String, expected: String }
+    | UnexpectedToken { found: Str, expected: Str }
     | EndOfInput
 
 // Rich error with context
 type AppError {
     kind: ErrorKind,
-    message: String,
+    message: Str,
     source: Maybe[Heap[dyn Error]],
 }
 
@@ -174,7 +174,7 @@ extend ServiceError with From[ParseError] {
 }
 
 // Now ! automatically converts error types
-func process_request(path: String) -> Outcome[Response, ServiceError] {
+func process_request(path: Str) -> Outcome[Response, ServiceError] {
     let content = File.read(path)!       // IoError -> ServiceError
     let data = parse_json(content)!      // ParseError -> ServiceError
     let result = http.post(API_URL, data)!  // HttpError -> ServiceError
@@ -218,7 +218,7 @@ func demo_assertions() {
 // PANIC FOR UNRECOVERABLE ERRORS
 // ============================================
 
-func get_required_env(name: String) -> String {
+func get_required_env(name: Str) -> Str {
     env.get(name)! else {
         panic("Required environment variable not set: " + name)
     }
@@ -275,7 +275,7 @@ func handle_create_user(request: Request) -> Outcome[Response, ApiError] {
 // TYPES FOR EXAMPLES
 // ============================================
 
-type User { name: String, email: String }
+type User { name: Str, email: Str }
 type UserData { user: User, preferences: Preferences }
 type Preferences {}
 type Config {}
@@ -286,11 +286,11 @@ type State = Ready | Running | Done | Invalid
 type Action = Start | Continue | Finish
 type Request {}
 type Response {}
-type CreateUserRequest { email: String, password: String }
-type ApiError = BadRequest(String) | Validation(String) | Conflict(String) | Internal
+type CreateUserRequest { email: Str, password: Str }
+type ApiError = BadRequest(Str) | Validation(Str) | Conflict(Str) | Internal
 type IoError = NotFound | PermissionDenied
 type HttpError = Timeout | NetworkError
-type Error = NotFound(String) | Io(IoError) | Parse(ParseError)
+type Error = NotFound(Str) | Io(IoError) | Parse(ParseError)
 type SyncError {}
 
 extend UserData {
@@ -318,7 +318,7 @@ extend Response {
     func created(user: User) -> Response { Response {} }
 }
 
-func parse_json[T](s: String) -> Outcome[T, ParseError] { Ok(default()) }
+func parse_json[T](s: Str) -> Outcome[T, ParseError] { Ok(default()) }
 func load_local() -> Outcome[Data, Error] { Ok(Data {}) }
 func fetch_remote() -> Outcome[Data, Error] { Ok(Data {}) }
 func fetch_from_api() -> Outcome[Data, Error] { Ok(Data {}) }
@@ -328,8 +328,8 @@ func merge(a: Data, b: Data) -> Outcome[Data, Error] { Ok(Data {}) }
 func save(d: Data) -> Outcome[Unit, Error] { Ok(()) }
 func compute_default() -> I32 { 0 }
 func expensive_check() -> Bool { true }
-func validate_email(e: String) -> Outcome[Unit, String] { Ok(()) }
-func hash_password(p: String) -> Outcome[String, Error] { Ok("hashed") }
+func validate_email(e: Str) -> Outcome[Unit, Str] { Ok(()) }
+func hash_password(p: Str) -> Outcome[Str, Error] { Ok("hashed") }
 func now() -> U64 { 0 }
 func default[T]() -> T { panic("not implemented") }
 

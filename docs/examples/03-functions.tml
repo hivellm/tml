@@ -4,12 +4,12 @@
 mod functions
 
 // Simple function
-func greet(name: String) -> String {
+func greet(name: Str) -> Str {
     return "Hello, " + name + "!"
 }
 
 // Function without return (implicit Unit)
-func log(message: String) {
+func log(message: Str) {
     println("[LOG] " + message)
 }
 
@@ -44,12 +44,12 @@ func swap[T, U](pair: (T, U)) -> (U, T) {
 }
 
 // Function with immutable reference
-func length(s: ref String) -> U64 {
+func length(s: ref Str) -> U64 {
     return s.len()
 }
 
 // Function with mutable reference
-func append(s: mut ref String, suffix: String) {
+func append(s: mut ref Str, suffix: Str) {
     s.push(suffix)
 }
 
@@ -74,7 +74,7 @@ pub func main() {
     let text = "Hello"
     let len = length(ref text)
 
-    var buffer = String.new()
+    var buffer: Str = ""
     append(mut ref buffer, "Hello")
     append(mut ref buffer, " World")
     println(buffer)

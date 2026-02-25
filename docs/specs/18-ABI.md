@@ -28,8 +28,8 @@ Components:
 // Source
 module mylib.utils
 
-public func parse(s: String) -> I32
-public func parse(s: String, radix: I32) -> I32
+pub func parse(s: String) -> I32
+pub func parse(s: String, radix: I32) -> I32
 type Parser { ... }
 ```
 
@@ -59,7 +59,7 @@ extern "C" func my_c_function() -> I32
 // Symbol: my_c_function
 
 @export_name("custom_name")
-public func exported() -> I32
+pub func exported() -> I32
 // Symbol: custom_name
 ```
 
@@ -415,7 +415,7 @@ func increment() {
 ### 8.2 Atomic Operations
 
 ```tml
-import std.sync.atomic.AtomicI32
+use std::sync::atomic::AtomicI32
 
 var counter: AtomicI32 = AtomicI32.new(0)
 

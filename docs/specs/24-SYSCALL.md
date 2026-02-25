@@ -336,7 +336,7 @@ public const FUTEX_PRIVATE_FLAG: I32 = 128
 public const FUTEX_WAIT_PRIVATE: I32 = FUTEX_WAIT | FUTEX_PRIVATE_FLAG
 public const FUTEX_WAKE_PRIVATE: I32 = FUTEX_WAKE | FUTEX_PRIVATE_FLAG
 
-public type Timespec {
+pub type Timespec {
     tv_sec: I64,
     tv_nsec: I64,
 }
@@ -473,7 +473,7 @@ extern "system" from "kernel32" {
     func SetLastError(dwErrCode: U32)
 }
 
-public type Handle = *mut Void
+pub type Handle = *mut Void
 public const INVALID_HANDLE_VALUE: Handle = -1 as Handle
 
 // Standard handles
@@ -576,12 +576,12 @@ extern "C" from "libSystem" {
     func arc4random_buf(buf: *mut Void, nbytes: U64)
 }
 
-public type pthread_t = U64
-public type pthread_attr_t = [U8; 64]
-public type pthread_mutex_t = [U8; 64]
-public type pthread_mutexattr_t = [U8; 16]
+pub type pthread_t = U64
+pub type pthread_attr_t = [U8; 64]
+pub type pthread_mutex_t = [U8; 64]
+pub type pthread_mutexattr_t = [U8; 16]
 
-public type mach_timebase_info_t {
+pub type mach_timebase_info_t {
     numer: U32,
     denom: U32,
 }
@@ -596,13 +596,13 @@ public type mach_timebase_info_t {
 module sys.errno
 
 /// Get errno value
-public func errno() -> I32 {
-    unsafe { *__errno_location() }
+pub func errno() -> I32 {
+    lowlevel { *__errno_location() }
 }
 
 /// Set errno value
-public func set_errno(val: I32) {
-    unsafe { *__errno_location() = val }
+pub func set_errno(val: I32) {
+    lowlevel { *__errno_location() = val }
 }
 
 extern "C" {
@@ -660,7 +660,7 @@ public const ETIMEDOUT: I32 = 110
 module sys.result
 
 /// Check syscall result and convert to Outcome
-public func check(result: I64) -> Outcome[U64, Errno] {
+pub func check(result: I64) -> Outcome[U64, Errno] {
     if result < 0 {
         return Err(Errno(-result as I32))
     }
@@ -668,19 +668,19 @@ public func check(result: I64) -> Outcome[U64, Errno] {
 }
 
 /// Check syscall result for I32 return
-public func check_i32(result: I32) -> Outcome[I32, Errno] {
+pub func check_i32(result: I32) -> Outcome[I32, Errno] {
     if result < 0 {
         return Err(Errno(errno.errno()))
     }
     return Ok(result)
 }
 
-public type Errno(I32)
+pub type Errno(I32)
 
 extend Errno {
-    public func code(this) -> I32 { this.0 }
+    pub func code(this) -> I32 { this.0 }
 
-    public func message(this) -> ref static str {
+    pub func message(this) -> ref static str {
         when this.0 {
             EPERM -> "Operation not permitted",
             ENOENT -> "No such file or directory",
@@ -705,7 +705,7 @@ module example.file
 use sys.linux.io.*
 use sys.result.*
 
-public func read_file(path: ref str) -> Outcome[List[U8], Errno] {
+pub func read_file(path: ref str) -> Outcome[List[U8], Errno] {
     lowlevel {
         // Open file
         let fd: I32 = check_i32(open(

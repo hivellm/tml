@@ -17,15 +17,15 @@ use std::io
 use std::collections
 
 // use specific items
-use std::fs { read_file, write_file }
-use std::math { sin, cos, PI }
+use std::file::{read_file, write_file}
+use std::math::{sin, cos, PI}
 
 // use with alias
-use std::collections.HashMap as Map
-use std::time as t
+use std::collections::HashMap
+use std::time
 
 // use all public items (use sparingly)
-use std::string.*
+use std::str::*
 
 // Relative imports (within same package)
 use .utils           // sibling module
@@ -41,20 +41,20 @@ func helper() -> I32 {
 }
 
 // Public - accessible from other modules
-pub func process() -> String {
+pub func process() -> Str {
     return "processed"
 }
 
 // pub type
 pub type Config {
-    public name: String,        // public field
-    private secret: String,     // private field
-    public max_size: U64,
+    pub name: Str,              // public field
+    secret: Str,                // private field
+    pub max_size: U64,
 }
 
 // pub behavior
 pub behavior Processor {
-    func process(this, data: String) -> String
+    func process(this, data: Str) -> Str
 }
 
 // ============================================
@@ -64,8 +64,8 @@ pub behavior Processor {
 // File: src/lib.tml (root module)
 mod mylib
 
-public use .math      // re-export submodule
-public use .utils
+pub use .math      // re-export submodule
+pub use .utils
 
 // File: src/math.tml
 mod mylib.math
@@ -86,7 +86,7 @@ func validate(n: I32) -> Bool {
 // File: src/utils.tml
 mod mylib.utils
 
-pub func format_number(n: I32) -> String {
+pub func format_number(n: I32) -> Str {
     return n.to_string()
 }
 
@@ -110,23 +110,23 @@ pub func format_number(n: I32) -> String {
 
 // Platform-specific code
 @when(platform = "windows")
-func get_home() -> String {
+func get_home() -> Str {
     return env("USERPROFILE")
 }
 
 @when(platform = "linux")
-func get_home() -> String {
+func get_home() -> Str {
     return env("HOME")
 }
 
 // Feature flags
 @when(feature = "logging")
-func log(msg: String) {
+func log(msg: Str) {
     println("[LOG] " + msg)
 }
 
 @when(not(feature = "logging"))
-func log(msg: String) {
+func log(msg: Str) {
     // No-op when logging disabled
 }
 
@@ -138,11 +138,11 @@ func log(msg: String) {
 mod my_app.database
 
 pub type Connection {
-    host: String,
+    host: Str,
     port: U16,
 }
 
-pub func connect(host: String, port: U16) -> Outcome[Connection, String] {
+pub func connect(host: Str, port: U16) -> Outcome[Connection, Str] {
     return Ok(Connection { host, port })
 }
 
@@ -150,13 +150,13 @@ mod my_app.database.queries
 
 use ..Connection
 
-pub func execute(conn: ref Connection, sql: String) -> Outcome[List[Row], String] {
+pub func execute(conn: ref Connection, sql: Str) -> Outcome[List[Row], Str] {
     // ...
     return Ok([])
 }
 
 pub type Row {
-    data: Map[String, String],
+    data: HashMap[Str, Str],
 }
 
 // ============================================
@@ -165,8 +165,8 @@ pub type Row {
 
 mod main
 
-use my_app.database { connect }
-use my_app.database.queries { execute }
+use my_app::database::{connect}
+use my_app::database::queries::{execute}
 
 pub func main() {
     // Using imported items
@@ -181,10 +181,10 @@ pub func main() {
     }
 
     // Fully qualified access
-    let pi = std.math.PI
-    let map = std.collections.HashMap.new()
+    let pi = std::math::PI
+    let map = HashMap::new(16)
 
-    // Using aliased imports
-    let now = t.now()
-    let cache: Map[String, I32] = Map.new()
+    // Using module imports
+    let now = time::now()
+    let cache: HashMap[Str, I32] = HashMap::new(16)
 }

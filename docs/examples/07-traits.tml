@@ -14,15 +14,15 @@ behavior Printable {
 
 // Behavior with return type
 behavior Describable {
-    func describe(this) -> String
+    func describe(this) -> Str
 }
 
 // Behavior with default implementation
 behavior Greetable {
-    func name(this) -> String
+    func name(this) -> Str
 
     // Default implementation (can be overridden)
-    func greet(this) -> String {
+    func greet(this) -> Str {
         return "Hello, " + this.name() + "!"
     }
 }
@@ -45,7 +45,7 @@ behavior Mappable[T] {
 // ============================================
 
 type Person {
-    name: String,
+    name: Str,
     age: U32,
 }
 
@@ -71,14 +71,14 @@ extend Person with Printable {
 
 // Extend Person with Describable
 extend Person with Describable {
-    func describe(this) -> String {
+    func describe(this) -> Str {
         return this.name + " is " + this.age.to_string() + " years old"
     }
 }
 
 // Extend Person with Greetable
 extend Person with Greetable {
-    func name(this) -> String {
+    func name(this) -> Str {
         return this.name
     }
     // greet() uses default implementation
@@ -141,14 +141,14 @@ func total_area[S: Shape](shapes: List[S]) -> F64 {
 // EXTENDING BUILT-IN TYPES
 // ============================================
 
-// Add custom methods to String
-extend String {
+// Add custom methods to Str
+extend Str {
     func is_blank(this) -> Bool {
         return this.trim().is_empty()
     }
 
-    func repeat(this, n: U32) -> String {
-        var result = String.new()
+    func repeat(this, n: U32) -> Str {
+        var result: Str = ""
         loop _ in 0 to n {
             result.push(this)
         }
