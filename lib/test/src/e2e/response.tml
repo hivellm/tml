@@ -7,17 +7,17 @@
 ///
 /// Contains timing information, byte count, and success/failure status.
 /// Received data is checked inline during the test run, not stored here.
-pub type TestResult {
+pub type E2eResult {
     success: Bool,
     error: Str,
     bytes_received: I64,
     elapsed_ms: I64,
 }
 
-impl TestResult {
+impl E2eResult {
     /// Create a passing result with byte count and timing.
-    pub func pass(n: I64, ms: I64) -> TestResult {
-        TestResult {
+    pub func pass(n: I64, ms: I64) -> E2eResult {
+        E2eResult {
             success: true,
             error: "",
             bytes_received: n,
@@ -26,8 +26,8 @@ impl TestResult {
     }
 
     /// Create a failing result with an error message.
-    pub func fail(msg: Str) -> TestResult {
-        TestResult {
+    pub func fail(msg: Str) -> E2eResult {
+        E2eResult {
             success: false,
             error: msg,
             bytes_received: 0,

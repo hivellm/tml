@@ -5,10 +5,10 @@
 //! ```tml
 //! use test::e2e::server::TcpTestServer
 //! use test::e2e::client::TcpTestClient
-//! use test::e2e::response::TestResult
+//! use test::e2e::response::E2eResult
 //!
 //! let server = TcpTestServer::new().unwrap()
-//! let result: TestResult = TcpTestClient::new(server.addr())
+//! let result: E2eResult = TcpTestClient::new(server.addr())
 //!     .timeout(5000)
 //!     .send_byte(72).send_byte(73)     // "HI"
 //!     .expect_n(2)
@@ -22,7 +22,7 @@ use std::net::tcp::{TcpListener, TcpStream}
 use std::net::udp::UdpSocket
 use core::time::Duration
 use std::time::Instant
-use test::e2e::response::TestResult
+use test::e2e::response::E2eResult
 use test::e2e::server::{TcpTestServer, UdpTestServer}
 
 // ============================================================================
@@ -112,16 +112,16 @@ impl TcpTestClient {
     /// following the pattern proven in tcp_echo.test.tml.
     /// Uses listener.accept() directly to avoid handle invalidation through
     /// intermediate Outcome returns.
-    pub func run(this, server: ref TcpTestServer) -> TestResult {
+    pub func run(this, server: ref TcpTestServer) -> E2eResult {
         let start: Instant = Instant::now()
 
         // 1. Connect (succeeds via TCP backlog without accept)
         when TcpStream::connect(this.target) {
-            Err(_) => return TestResult::fail("connect failed")
+            Err(_) => return E2eResult::fail("connect failed")
             Ok(client) => {
                 // 2. Server accepts — direct listener.accept() keeps handle valid
                 when server.listener.accept() {
-                    Err(_) => return TestResult::fail("accept failed")
+                    Err(_) => return E2eResult::fail("accept failed")
                     Ok(result) => {
                         let peer: TcpStream = result.0
 
@@ -130,7 +130,7 @@ impl TcpTestClient {
                         loop (si < this.send_len) {
                             let byte_buf: [U8; 1] = [this.send_buf[si]]
                             when client.write(ref byte_buf) {
-                                Err(_) => return TestResult::fail("client write failed")
+                                Err(_) => return E2eResult::fail("client write failed")
                                 Ok(_) => {}
                             }
                             si = si + 1
@@ -141,11 +141,11 @@ impl TcpTestClient {
                         loop (total_read < this.send_len) {
                             var one: [U8; 1] = [0 as U8]
                             when peer.read(mut ref one) {
-                                Err(_) => return TestResult::fail("server read failed")
+                                Err(_) => return E2eResult::fail("server read failed")
                                 Ok(n) => {
                                     if n > 0 {
                                         when peer.write(ref one) {
-                                            Err(_) => return TestResult::fail("server echo failed")
+                                            Err(_) => return E2eResult::fail("server echo failed")
                                             Ok(_) => {}
                                         }
                                         total_read = total_read + n
@@ -160,18 +160,18 @@ impl TcpTestClient {
                             loop (received < this.expect_len) {
                                 var one: [U8; 1] = [0 as U8]
                                 when client.read(mut ref one) {
-                                    Err(_) => return TestResult::fail("client read failed")
+                                    Err(_) => return E2eResult::fail("client read failed")
                                     Ok(n) => {
                                         received = received + n
                                     }
                                 }
                             }
                             let ms: I64 = start.elapsed().as_millis()
-                            return TestResult::pass(received, ms)
+                            return E2eResult::pass(received, ms)
                         }
 
                         let ms: I64 = start.elapsed().as_millis()
-                        return TestResult::pass(0, ms)
+                        return E2eResult::pass(0, ms)
                     }
                 }
             }
@@ -246,14 +246,14 @@ impl UdpTestClient {
     ///
     /// UDP is connectionless — send_to works without accept.
     /// Each byte is sent as an individual datagram and echoed individually.
-    pub func run(this, server: ref UdpTestServer) -> TestResult {
+    pub func run(this, server: ref UdpTestServer) -> E2eResult {
         let start: Instant = Instant::now()
 
         // 1. Bind client socket
         let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
         let client_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
         when UdpSocket::bind(client_addr) {
-            Err(_) => return TestResult::fail("client bind failed")
+            Err(_) => return E2eResult::fail("client bind failed")
             Ok(client) => {
                 // 2. Send each byte as its own datagram, server echoes each
                 var si: I64 = 0
@@ -261,18 +261,18 @@ impl UdpTestClient {
                     // Client sends 1-byte datagram
                     let byte_buf: [U8; 1] = [this.send_buf[si]]
                     when client.send_to(ref byte_buf, this.target) {
-                        Err(_) => return TestResult::fail("client send_to failed")
+                        Err(_) => return E2eResult::fail("client send_to failed")
                         Ok(_) => {}
                     }
 
                     // Server receives + echoes the 1-byte datagram
                     var srv_buf: [U8; 1] = [0 as U8]
                     when server.socket.recv_from(mut ref srv_buf) {
-                        Err(_) => return TestResult::fail("server recv_from failed")
+                        Err(_) => return E2eResult::fail("server recv_from failed")
                         Ok(recv_result) => {
                             let sender: SocketAddr = recv_result.1
                             when server.socket.send_to(ref srv_buf, sender) {
-                                Err(_) => return TestResult::fail("server echo send_to failed")
+                                Err(_) => return E2eResult::fail("server echo send_to failed")
                                 Ok(_) => {}
                             }
                         }
@@ -287,18 +287,18 @@ impl UdpTestClient {
                     loop (received < this.expect_len) {
                         var one: [U8; 1] = [0 as U8]
                         when client.recv_from(mut ref one) {
-                            Err(_) => return TestResult::fail("client recv_from failed")
+                            Err(_) => return E2eResult::fail("client recv_from failed")
                             Ok(result) => {
                                 received = received + result.0
                             }
                         }
                     }
                     let ms: I64 = start.elapsed().as_millis()
-                    return TestResult::pass(received, ms)
+                    return E2eResult::pass(received, ms)
                 }
 
                 let ms: I64 = start.elapsed().as_millis()
-                return TestResult::pass(0, ms)
+                return E2eResult::pass(0, ms)
             }
         }
     }

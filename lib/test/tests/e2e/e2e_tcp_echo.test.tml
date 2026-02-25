@@ -2,7 +2,7 @@
 use test::{assert, assert_eq}
 use test::e2e::server::TcpTestServer
 use test::e2e::client::TcpTestClient
-use test::e2e::response::TestResult
+use test::e2e::response::E2eResult
 
 @test
 func test_tcp_echo_basic() -> I32 {
@@ -11,7 +11,7 @@ func test_tcp_echo_basic() -> I32 {
     let c2: TcpTestClient = c.send_byte(72)
     let c3: TcpTestClient = c2.send_byte(73)
     let c4: TcpTestClient = c3.expect_n(2)
-    let result: TestResult = c4.run(ref server)
+    let result: E2eResult = c4.run(ref server)
     assert(result.ok(), result.error_msg())
     assert_eq(result.received_len(), 2 as I64)
     0
@@ -27,7 +27,7 @@ func test_tcp_echo_five_bytes() -> I32 {
     let c5: TcpTestClient = c4.send_byte(68)
     let c6: TcpTestClient = c5.send_byte(69)
     let c7: TcpTestClient = c6.expect_n(5)
-    let result: TestResult = c7.run(ref server)
+    let result: E2eResult = c7.run(ref server)
     assert(result.ok(), result.error_msg())
     assert_eq(result.received_len(), 5 as I64)
     assert(result.elapsed() >= 0, "elapsed should be non-negative")

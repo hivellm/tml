@@ -1,14 +1,14 @@
 // Test struct field access
 use test
 
-type TestStats {
+type MyStats {
     pub count: I64,
     pub total: I64,
 }
 
-impl TestStats {
-    pub func new() -> TestStats {
-        return TestStats {
+impl MyStats {
+    pub func new() -> MyStats {
+        return MyStats {
             count: 0,
             total: 0,
         }
@@ -26,7 +26,7 @@ impl TestStats {
 
 @test
 func test_stats_basic() -> I32 {
-    var stats: TestStats = TestStats::new()
+    var stats: MyStats = MyStats::new()
     stats.count = 50
     stats.total = 100
 

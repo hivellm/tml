@@ -12,10 +12,10 @@ func test_timer_wheel_create_destroy() -> I32 {
 func test_timer_wheel_schedule_and_advance() -> I32 {
     let tw: TimerWheel = TimerWheel::new(0)
 
-    // Schedule 3 timers
-    let t1: TimerId = tw.schedule(10, 42, 100)
-    let t2: TimerId = tw.schedule(5, 43, 200)
-    let t3: TimerId = tw.schedule(20, 44, 300)
+    // Schedule 3 timers (callback=0 means no-op, just count)
+    let t1: TimerId = tw.schedule(10, 0, 100)
+    let t2: TimerId = tw.schedule(5, 0, 200)
+    let t3: TimerId = tw.schedule(20, 0, 300)
 
     assert_eq(tw.active_count, 3 as I64, "should have 3 active timers")
 
@@ -40,8 +40,8 @@ func test_timer_wheel_schedule_and_advance() -> I32 {
 func test_timer_wheel_cancel() -> I32 {
     let tw: TimerWheel = TimerWheel::new(0)
 
-    let t1: TimerId = tw.schedule(50, 45, 400)
-    let t2: TimerId = tw.schedule(60, 46, 500)
+    let t1: TimerId = tw.schedule(50, 0, 400)
+    let t2: TimerId = tw.schedule(60, 0, 500)
 
     assert_eq(tw.active_count, 2 as I64, "should have 2 timers")
 
@@ -63,7 +63,7 @@ func test_timer_wheel_pool_growth() -> I32 {
     // Schedule 100 timers (exceeds initial capacity of 64)
     var i: I64 = 0
     loop (i < 100) {
-        tw.schedule(200 + i, 99, i)
+        tw.schedule(200 + i, 0, i)
         i = i + 1
     }
 
@@ -82,9 +82,9 @@ func test_timer_wheel_l1_timers() -> I32 {
     let tw: TimerWheel = TimerWheel::new(0)
 
     // Schedule L1 timers (64-4095ms delay)
-    let t1: TimerId = tw.schedule(200, 1, 10)
-    let t2: TimerId = tw.schedule(1000, 2, 20)
-    let t3: TimerId = tw.schedule(3000, 3, 30)
+    let t1: TimerId = tw.schedule(200, 0, 10)
+    let t2: TimerId = tw.schedule(1000, 0, 20)
+    let t3: TimerId = tw.schedule(3000, 0, 30)
 
     assert_eq(tw.active_count, 3 as I64, "should have 3 L1 timers")
 
@@ -108,8 +108,8 @@ func test_timer_wheel_overflow_timers() -> I32 {
     let tw: TimerWheel = TimerWheel::new(0)
 
     // Schedule overflow timers (>4096ms)
-    let t1: TimerId = tw.schedule(5000, 4, 40)
-    let t2: TimerId = tw.schedule(10000, 5, 50)
+    let t1: TimerId = tw.schedule(5000, 0, 40)
+    let t2: TimerId = tw.schedule(10000, 0, 50)
 
     assert_eq(tw.active_count, 2 as I64, "should have 2 overflow timers")
 
@@ -132,8 +132,8 @@ func test_timer_wheel_next_deadline() -> I32 {
     let nd1: I64 = tw.next_deadline_ms()
     assert_eq(nd1, -1 as I64, "should be -1 with no timers")
 
-    let t1: TimerId = tw.schedule(100, 1, 10)
-    let t2: TimerId = tw.schedule(50, 2, 20)
+    let t1: TimerId = tw.schedule(100, 0, 10)
+    let t2: TimerId = tw.schedule(50, 0, 20)
 
     let nd2: I64 = tw.next_deadline_ms()
     assert_eq(nd2, 50 as I64, "next deadline should be 50")

@@ -3,7 +3,7 @@
 //! because in --coverage mode, the compiler instruments all function
 //! calls with tml_cover_func, so counts may be non-zero after reset.
 
-use test
+use test::{assert, assert_eq, assert_true, assert_false, assert_gte}
 use test::coverage
 
 @test

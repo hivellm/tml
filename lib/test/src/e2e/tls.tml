@@ -19,7 +19,7 @@ use std::net::tls::{TlsContext, TlsStream, TlsVerifyMode}
 use std::os::subprocess::{Command, Stdio}
 use core::time::Duration
 use std::time::Instant
-use test::e2e::response::TestResult
+use test::e2e::response::E2eResult
 
 // ============================================================================
 // TestCerts — self-signed certificate pair
@@ -234,20 +234,20 @@ impl TlsTestClient {
     }
 
     /// Execute the TLS test: connect, handshake, send, echo, verify.
-    pub func run(this, server: ref TlsTestServer) -> TestResult {
+    pub func run(this, server: ref TlsTestServer) -> E2eResult {
         let start: Instant = Instant::now()
 
         // 1. Create TLS client context (no peer verification for testing)
         let ctx_result = TlsContext::client()
         when ctx_result {
-            Err(_) => return TestResult::fail("TLS client context creation failed")
+            Err(_) => return E2eResult::fail("TLS client context creation failed")
             Ok(ctx) => {
                 ctx.set_verify_mode(TlsVerifyMode::None())
 
                 // 2. TCP connect
                 let tcp_result = TcpStream::connect(this.target)
                 when tcp_result {
-                    Err(_) => return TestResult::fail("TCP connect failed")
+                    Err(_) => return E2eResult::fail("TCP connect failed")
                     Ok(tcp) => {
                         // Set timeout
                         let dur: Duration = Duration::from_millis(this.timeout_ms)
@@ -260,20 +260,20 @@ impl TlsTestClient {
                         when tls_result {
                             Err(_) => {
                                 // Server needs to accept first for handshake
-                                return TestResult::fail("TLS handshake failed")
+                                return E2eResult::fail("TLS handshake failed")
                             }
                             Ok(tls_client) => {
                                 // 4. Send data
                                 if this.send_len > 0 {
                                     when tls_client.write(ref this.send_buf) {
-                                        Err(_) => return TestResult::fail("TLS write failed")
+                                        Err(_) => return E2eResult::fail("TLS write failed")
                                         Ok(_) => {}
                                     }
                                 }
 
                                 // 5. Server accepts TLS + echoes
                                 when server.echo_one() {
-                                    Err(e) => return TestResult::fail(e)
+                                    Err(e) => return E2eResult::fail(e)
                                     Ok(_) => {}
                                 }
 
@@ -281,21 +281,21 @@ impl TlsTestClient {
                                 if this.expect_len > 0 {
                                     var recv_buf: [U8; 32] = [0 as U8; 32]
                                     when tls_client.read(mut ref recv_buf) {
-                                        Err(_) => return TestResult::fail("TLS read failed")
+                                        Err(_) => return E2eResult::fail("TLS read failed")
                                         Ok(n) => {
                                             let ms: I64 = start.elapsed().as_millis()
                                             tls_client.shutdown()
                                             if n != this.expect_len {
-                                                return TestResult::fail("expected " + this.expect_len.to_string() + " bytes, got " + n.to_string())
+                                                return E2eResult::fail("expected " + this.expect_len.to_string() + " bytes, got " + n.to_string())
                                             }
-                                            return TestResult::pass(n, ms)
+                                            return E2eResult::pass(n, ms)
                                         }
                                     }
                                 }
 
                                 let ms: I64 = start.elapsed().as_millis()
                                 tls_client.shutdown()
-                                return TestResult::pass(0, ms)
+                                return E2eResult::pass(0, ms)
                             }
                         }
                     }
