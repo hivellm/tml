@@ -1,0 +1,56 @@
+use test::{assert_eq, assert_true}
+use std::events::EventEmitter
+
+func noop(data: I64) {}
+func other(data: I64) {}
+
+@test
+func test_listeners_of_returns_fn_ptrs() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    let lst = emitter.listeners_of("data")
+    assert_eq(lst.len(), 1 as I64, "1 listener")
+    assert_eq(lst.get(0), noop as I64, "fn ptr matches")
+    lst.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_listeners_of_multiple() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    emitter.on("data", other as I64)
+    let lst = emitter.listeners_of("data")
+    assert_eq(lst.len(), 2 as I64, "2 listeners")
+    assert_eq(lst.get(0), noop as I64, "first is noop")
+    assert_eq(lst.get(1), other as I64, "second is other")
+    lst.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_listeners_of_unknown_event() -> I32 {
+    var emitter = EventEmitter::new()
+    let lst = emitter.listeners_of("unknown")
+    assert_eq(lst.len(), 0 as I64, "empty list for unknown event")
+    lst.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_listeners_of_after_off() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    emitter.on("data", other as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 before off")
+    emitter.off("data", noop as I64)
+    let lst = emitter.listeners_of("data")
+    assert_eq(lst.len(), 1 as I64, "1 after off")
+    assert_eq(lst.get(0), other as I64, "remaining is other")
+    lst.destroy()
+    emitter.destroy()
+    return 0
+}
