@@ -37,7 +37,9 @@ func test_tls_force_13_cloudflare() -> I32 {
     let verify_code: I32 = stream.verify_result()
     let verified: Bool = stream.peer_verified()
     if verified {
+        assert(true, "peer is verified")
     } else {
+        assert(false, "peer should be verified")
     }
 
     stream.shutdown()
