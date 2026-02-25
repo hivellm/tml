@@ -1,16 +1,21 @@
 //! Non-blocking UDP networking primitives.
 //!
 //! This module provides non-blocking versions of UDP socket types for
-//! event-driven I/O operations.
+//! event-driven I/O operations, including integration with the EventLoop.
 //!
 //! # Types
 //!
 //! - [`AsyncUdpSocket`] - Non-blocking UDP socket for datagrams
+//! - [`UdpHandle`] - High-level async UDP handle integrated with EventLoop
 
 use std::net::{SocketAddr, Ipv4Addr, Ipv6Addr}
 use std::net::error::{NetError, NetErrorKind}
 use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily}
 use std::net::udp::UdpSocket
+use std::aio::event_loop::EventLoop
+use std::aio::poller::READABLE
+use core::mem::{mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write}
 
 // ============================================================================
 // AsyncUdpSocket
@@ -235,5 +240,115 @@ impl AsyncUdpSocket {
     /// Get the raw socket handle for use with an event loop.
     pub func socket_handle(this) -> I64 {
         return this.socket.handle
+    }
+}
+
+// ============================================================================
+// UdpHandle - High-level async UDP with EventLoop integration
+// ============================================================================
+
+/// A UDP socket integrated with the event loop.
+///
+/// Provides callback-based async UDP operations via the EventLoop for
+/// handling multiple datagram sources efficiently.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::aio::EventLoop
+/// use std::net::UdpHandle
+/// use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+///
+/// let mut loop: EventLoop = EventLoop::new()
+/// let ip: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+/// let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 8000))
+/// let mut handle: UdpHandle = UdpHandle::bind(loop as I64, addr)!
+/// handle.set_on_message(on_message_fn as I64)
+/// handle.register(ref loop)
+/// loop.run()
+/// handle.close(ref loop)
+/// loop.destroy()
+/// ```
+pub type UdpHandle {
+    /// The underlying async UDP socket.
+    socket: AsyncUdpSocket,
+    /// Reference to the event loop (stored as I64 for callback passing).
+    loop_ptr: I64,
+    /// Token assigned by the event loop.
+    token: U32,
+    /// Callback invoked when data is available: func(handle_ptr: I64, data_ptr: I64, len: I64, addr_ptr: I64)
+    on_message: I64,
+    /// Callback invoked on error: func(handle_ptr: I64, error_code: I64)
+    on_error: I64,
+}
+
+impl UdpHandle {
+    /// Creates a new UDP handle bound to the given address on the event loop.
+    pub func bind(loop_ptr: I64, addr: SocketAddr) -> Outcome[UdpHandle, I64] {
+        let socket: AsyncUdpSocket = AsyncUdpSocket::bind(ref addr)!
+
+        let token: U32 = 0
+        let handle: UdpHandle = UdpHandle {
+            socket: socket,
+            loop_ptr: loop_ptr,
+            token: token,
+            on_message: 0,
+            on_error: 0,
+        }
+
+        Ok(handle)
+    }
+
+    /// Registers this UDP handle with the event loop.
+    /// Called after construction to activate I/O monitoring.
+    pub func register(mut this, loop_ref: ref EventLoop) -> U32 {
+        let socket_handle: I64 = this.socket.socket.as_raw() as I64
+        let token: U32 = loop_ref.register(socket_handle, READABLE)
+        this.token = token
+
+        let state: *Unit = mem_alloc(16)
+        let state_i64: I64 = state as I64
+        lowlevel { ptr_write[I64](state_i64 as *I64, this as I64) }
+        lowlevel { ptr_write[I64]((state_i64 + 8) as *I64, this.loop_ptr) }
+
+        loop_ref.set_user_data(token, state_i64)
+
+        token
+    }
+
+    /// Sets the message callback (called when data arrives).
+    pub func set_on_message(mut this, callback: I64) {
+        this.on_message = callback
+    }
+
+    /// Sets the error callback (called on I/O errors).
+    pub func set_on_error(mut this, callback: I64) {
+        this.on_error = callback
+    }
+
+    /// Sends data to the specified address without blocking.
+    /// Returns true if sent, false if it would block.
+    pub func send_to(this, data: ref [U8], addr: SocketAddr) -> Bool {
+        let result = this.socket.try_send_to(data, addr)
+        when result {
+            Ok(sent) => {
+                when sent {
+                    Just(_) => true
+                    Nothing => false
+                }
+            }
+            Err(_) => false
+        }
+    }
+
+    /// Closes the UDP handle and deregisters from the event loop.
+    pub func close(mut this, loop_ref: ref EventLoop) {
+        loop_ref.deregister(this.token)
+        this.socket.close()
+    }
+
+    /// Closes and deallocates the UDP handle.
+    pub func destroy(mut this) {
+        this.socket.close()
     }
 }

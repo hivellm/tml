@@ -120,8 +120,7 @@
 //! - [`sys`] - Platform abstraction layer for sockets
 //! - [`tls`] - TLS/SSL encrypted connections
 //! - [`async_tcp`] - Async TCP (non-blocking I/O)
-//! - [`async_udp`] - Async UDP (non-blocking I/O)
-//! - [`udp_handle`] - High-level async UDP with EventLoop callbacks
+//! - [`async_udp`] - Async UDP (non-blocking I/O with EventLoop integration)
 pub mod ip
 pub mod socket
 pub mod error
@@ -132,7 +131,6 @@ pub mod tls
 pub mod parser
 pub mod async_tcp
 pub mod async_udp
-pub mod udp_handle
 
 // Re-export main types
 pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
@@ -144,5 +142,4 @@ pub use udp::{UdpSocket, UdpBuilder}
 pub use tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
 pub use parser::{AddrParseError, AddrParseErrorKind}
 pub use async_tcp::{AsyncTcpListener, AsyncTcpStream}
-pub use async_udp::AsyncUdpSocket
-pub use udp_handle::UdpHandle
+pub use async_udp::{AsyncUdpSocket, UdpHandle}
