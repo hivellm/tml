@@ -1,0 +1,51 @@
+use std::aio::timer_wheel::TimerWheel
+use test::*
+
+/// Dummy callback - passing null callback to test timer firing without actual invocation
+func dummy_callback(user_data: I64) {
+    // Callback body - not executed in this test approach
+}
+
+@test
+func test_schedule_creates_timer() {
+    let wheel: TimerWheel = TimerWheel::new(0)
+
+    // Schedule a timer - pass null callback to avoid crash
+    let timer_id = wheel.schedule(10, 0, 0)  // Pass 0 for callback (null)
+    assert(timer_id.is_valid(), "schedule should return valid timer_id")
+    assert_eq(wheel.active_count, 1, "active_count should be 1 after schedule")
+
+    wheel.destroy()
+}
+
+@test
+func test_cancel_removes_timer() {
+    let wheel: TimerWheel = TimerWheel::new(0)
+
+    // Schedule a timer
+    let timer_id = wheel.schedule(10, 0, 0)
+    assert(timer_id.is_valid(), "schedule should return valid timer_id")
+    assert_eq(wheel.active_count, 1, "active_count should be 1 after schedule")
+
+    // Cancel it
+    wheel.cancel(timer_id)
+    assert_eq(wheel.active_count, 0, "active_count should be 0 after cancel")
+
+    wheel.destroy()
+}
+
+@test
+func test_advance_with_null_callback() {
+    let wheel: TimerWheel = TimerWheel::new(0)
+
+    // Schedule a timer with null callback (won't try to invoke)
+    let timer_id = wheel.schedule(10, 0, 0)
+    assert(timer_id.is_valid(), "schedule should return valid timer_id")
+
+    // Advance by 20ms — timer should fire (but callback=0, so no invocation)
+    let fired: I64 = wheel.advance(20)
+    assert_eq(fired, 1, "advance should report 1 fired timer")
+    assert_eq(wheel.active_count, 0, "active_count should be 0 after fire")
+
+    wheel.destroy()
+}

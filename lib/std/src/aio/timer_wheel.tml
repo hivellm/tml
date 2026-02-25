@@ -370,6 +370,8 @@ impl TimerWheel {
 
             if callback != 0 and deadline <= now_ms {
                 // Fire the timer
+                let f: func(I64) = callback as func(I64)
+                f(user_data)
                 fired = fired + 1
                 this.active_count = this.active_count - 1
             } else if callback != 0 {
@@ -426,6 +428,9 @@ impl TimerWheel {
 
             if callback != 0 and deadline <= this.current_ms {
                 // Already expired — fire it
+                let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
+                let f: func(I64) = callback as func(I64)
+                f(user_data)
                 fired = fired + 1
                 this.active_count = this.active_count - 1
                 this.free_entry(idx)
