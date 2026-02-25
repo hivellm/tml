@@ -1,29 +1,60 @@
 //! Event emitter for publish/subscribe patterns (Node.js-style).
+//!
+//! Provides an event-driven pub/sub mechanism compatible with Node.js's EventEmitter API.
+//! Internal implementation uses low-level arrays for memory efficiency.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::events::EventEmitter
+//!
+//! func my_handler(data: I64) { /* process event */ }
+//!
+//! var emitter = EventEmitter::new()
+//! emitter.on("data", my_handler as I64)
+//! emitter.emit("data", 42)
+//! emitter.destroy()
+//! ```
 
 use core::intrinsics::{ptr_read, ptr_write}
 use std::collections::hashmap::HashMap
 use std::collections::List
 
+// ── Low-level memory allocation helpers ───────────────────────────────────
+
+/// Allocate memory for internal use.
 func ev_alloc(size: I64) -> *Unit {
     lowlevel { mem_alloc(size) }
 }
 
+/// Free memory allocated by ev_alloc.
 func ev_free(ptr: *Unit) {
     lowlevel { mem_free(ptr) }
 }
 
+/// Reallocate memory to a new size.
 func ev_realloc(ptr: *Unit, size: I64) -> *Unit {
     lowlevel { mem_realloc(ptr, size) }
 }
 
+// ── Memory read/write helpers ─────────────────────────────────────────────
+
+/// Read a single I64 value from memory address.
 func rd(addr: I64) -> I64 {
     lowlevel { ptr_read[I64](addr as *I64) }
 }
 
+/// Write a single I64 value to memory address.
 func wr(addr: I64, val: I64) {
     lowlevel { ptr_write[I64](addr as *I64, val) }
 }
 
+// ── la_* helpers for low-level listener arrays ────────────────────────────
+//!
+//! Listener arrays store pairs: (callback_fn_ptr: I64, is_once: I64)
+//! Layout: [0]=data_ptr, [8]=length, [16]=capacity (all as I64)
+
+/// Create a new listener array with initial capacity.
 func la_new() -> I64 {
     let header: *Unit = ev_alloc(24)
     let h: I64 = header as I64
@@ -34,6 +65,7 @@ func la_new() -> I64 {
     h
 }
 
+/// Append a single I64 value to listener array.
 func la_push(h: I64, val: I64) {
     let len: I64 = rd(h + 8)
     let cap: I64 = rd(h + 16)
@@ -49,20 +81,24 @@ func la_push(h: I64, val: I64) {
     wr(h + 8, len + 1)
 }
 
+/// Get value at index in listener array.
 func la_get(h: I64, idx: I64) -> I64 {
     let data: I64 = rd(h)
     rd(data + idx * 8)
 }
 
+/// Set value at index in listener array.
 func la_set(h: I64, idx: I64, val: I64) {
     let data: I64 = rd(h)
     wr(data + idx * 8, val)
 }
 
+/// Get current length of listener array.
 func la_len(h: I64) -> I64 {
     rd(h + 8)
 }
 
+/// Pop and return last element from listener array.
 func la_pop(h: I64) -> I64 {
     let len: I64 = rd(h + 8)
     let new_len: I64 = len - 1
@@ -71,16 +107,19 @@ func la_pop(h: I64) -> I64 {
     rd(data + new_len * 8)
 }
 
+/// Clear all elements without deallocating.
 func la_clear(h: I64) {
     wr(h + 8, 0)
 }
 
+/// Free all memory used by listener array.
 func la_destroy(h: I64) {
     let data: *Unit = rd(h) as *Unit
     ev_free(data)
     ev_free(h as *Unit)
 }
 
+/// Remove a pair (callback + is_once) at index, shifting remaining elements left.
 func la_remove_pair(h: I64, idx: I64) {
     let len: I64 = la_len(h)
     var i: I64 = idx
@@ -92,6 +131,7 @@ func la_remove_pair(h: I64, idx: I64) {
     la_pop(h)
 }
 
+/// Insert a pair (callback + is_once) at front, shifting all elements right.
 func la_prepend_pair(h: I64, fn_ptr: I64, is_once: I64) {
     // First push two dummy values to ensure capacity and extend length
     la_push(h, 0)
@@ -108,13 +148,21 @@ func la_prepend_pair(h: I64, fn_ptr: I64, is_once: I64) {
     la_set(h, 1, is_once)
 }
 
+/// Event emitter for pub/sub patterns.
+///
+/// Manages listeners for named events. Each event name maps to an array of listener pairs.
+/// Listeners are invoked synchronously when the event is emitted.
 pub type EventEmitter {
+    /// HashMap from event name to listener array handle.
     events: HashMap[Str, I64],
+    /// Maximum allowed listeners per event (warning threshold).
     max_listeners: I64,
+    /// Total number of active listeners across all events.
     total_count: I64
 }
 
 impl EventEmitter {
+    /// Create a new EventEmitter.
     pub func new() -> EventEmitter {
         EventEmitter {
             events: HashMap[Str, I64]::new(16),
@@ -123,6 +171,8 @@ impl EventEmitter {
         }
     }
 
+    /// Register a listener for an event.
+    /// Listener will be called on each emit. Function pointer must be cast as I64.
     pub func on(mut this, event: Str, listener: I64) {
         var arr: I64 = 0
         if this.events.has(event) {
@@ -136,6 +186,8 @@ impl EventEmitter {
         this.total_count = this.total_count + 1
     }
 
+    /// Register a one-time listener for an event.
+    /// Listener is automatically removed after first emit.
     pub func once(mut this, event: Str, listener: I64) {
         var arr: I64 = 0
         if this.events.has(event) {
@@ -149,6 +201,8 @@ impl EventEmitter {
         this.total_count = this.total_count + 1
     }
 
+    /// Remove a listener from an event.
+    /// Returns true if listener was found and removed.
     pub func off(mut this, event: Str, listener: I64) -> Bool {
         if not this.events.has(event) {
             return false
@@ -167,6 +221,8 @@ impl EventEmitter {
         return false
     }
 
+    /// Emit an event, synchronously calling all registered listeners.
+    /// Returns true if event had listeners, false otherwise.
     pub func emit(mut this, event: Str, data: I64) -> Bool {
         if not this.events.has(event) {
             return false
@@ -212,6 +268,8 @@ impl EventEmitter {
         return true
     }
 
+    /// Remove all listeners for an event.
+    /// Returns the number of listeners that were removed.
     pub func remove_all(mut this, event: Str) -> I64 {
         if not this.events.has(event) {
             return 0
@@ -224,6 +282,7 @@ impl EventEmitter {
         return count
     }
 
+    /// Get the number of listeners for a specific event.
     pub func listener_count(this, event: Str) -> I64 {
         if not this.events.has(event) {
             return 0
@@ -231,22 +290,28 @@ impl EventEmitter {
         la_len(this.events.get(event)) / 2
     }
 
+    /// Get the total number of listeners across all events.
     pub func total_listeners(this) -> I64 {
         this.total_count
     }
 
+    /// Set the max listener threshold (for warnings).
     pub func set_max_listeners(mut this, n: I64) {
         this.max_listeners = n
     }
 
+    /// Get the current max listener threshold.
     pub func get_max_listeners(this) -> I64 {
         this.max_listeners
     }
 
+    /// Check if an event has any listeners.
     pub func has_listeners(this, event: Str) -> Bool {
         this.listener_count(event) > 0
     }
 
+    /// Register a listener to be called first (prepend).
+    /// Prepended listeners execute before appended ones.
     pub func prepend_listener(mut this, event: Str, listener: I64) {
         var arr: I64 = 0
         if this.events.has(event) {
@@ -259,6 +324,8 @@ impl EventEmitter {
         this.total_count = this.total_count + 1
     }
 
+    /// Register a one-time listener to be called first (prepend).
+    /// Prepended once-listener removes itself after first emit.
     pub func prepend_once_listener(mut this, event: Str, listener: I64) {
         var arr: I64 = 0
         if this.events.has(event) {
@@ -271,6 +338,8 @@ impl EventEmitter {
         this.total_count = this.total_count + 1
     }
 
+    /// Get a snapshot copy of all listeners for an event.
+    /// Caller must call destroy() on the returned List.
     pub func listeners_of(this, event: Str) -> List[I64] {
         let result: List[I64] = List[I64]::new(4)
         if not this.events.has(event) {
@@ -286,6 +355,8 @@ impl EventEmitter {
         return result
     }
 
+    /// Get all event names that have active listeners.
+    /// Caller must call destroy() on the returned List.
     pub func event_names(this) -> List[Str] {
         let result: List[Str] = List[Str]::new(4)
         let hdr: I64 = this.events.handle as I64
@@ -312,6 +383,8 @@ impl EventEmitter {
         return result
     }
 
+    /// Free all resources held by this emitter.
+    /// Must be called when done with the emitter.
     pub func destroy(mut this) {
         // Manually iterate HashMap buckets to free all listener arrays.
         // We read the internal layout directly because HashMapIter causes
