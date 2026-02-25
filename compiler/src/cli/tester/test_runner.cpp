@@ -700,9 +700,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     auto& task = tasks[task_idx];
                     auto task_start = Clock::now();
 
-                    TML_LOG_INFO("test", "  Processing test " << (task_idx + 1) << "/"
-                                                              << tasks.size() << ": "
-                                                              << task.file_path);
+                    TML_LOG_DEBUG("test", "  Processing test " << (task_idx + 1) << "/"
+                                                               << tasks.size() << ": "
+                                                               << task.file_path);
 
                     // Sub-phase timing for detailed profiling
                     int64_t lex_us = 0, parse_us = 0, typecheck_us = 0, borrow_us = 0,
@@ -1363,8 +1363,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            TML_LOG_INFO("test", "  Generating " << tasks.size() << " LLVM IR files with "
-                                                 << num_threads << " threads...");
+            TML_LOG_DEBUG("test", "  Generating " << tasks.size() << " LLVM IR files with "
+                                                  << num_threads << " threads...");
 
             // Launch worker threads
             std::vector<std::thread> threads;
@@ -1382,43 +1382,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 return result;
             }
 
-            // Print Phase 1 timing summary if verbose
-            if (verbose && !task_timings.empty()) {
-                // Sort by duration (slowest first)
-                std::sort(task_timings.begin(), task_timings.end(),
-                          [](const TaskTiming& a, const TaskTiming& b) {
-                              return a.duration_us > b.duration_us;
-                          });
-
-                // Print aggregate sub-phase breakdown (single line)
-                int64_t total_us = total_task_time_us.load();
-                if (total_us > 0) {
-                    TML_LOG_INFO("test",
-                                 "Phase 1 sub-phases:"
-                                     << " lex=" << (total_lex_us.load() / 1000) << "ms"
-                                     << " parse=" << (total_parse_us.load() / 1000) << "ms"
-                                     << " typecheck=" << (total_typecheck_us.load() / 1000) << "ms"
-                                     << " borrow=" << (total_borrow_us.load() / 1000) << "ms"
-                                     << " codegen=" << (total_codegen_us.load() / 1000) << "ms"
-                                     << " total=" << (total_us / 1000) << "ms");
-                }
-
-                {
-                    // Log each file as a separate single-line entry (all files, sorted slowest
-                    // first)
-                    for (size_t i = 0; i < task_timings.size(); ++i) {
-                        const auto& t = task_timings[i];
-                        TML_LOG_INFO("test",
-                                     "Phase 1 slow #"
-                                         << i << ": " << fs::path(t.file_path).filename().string()
-                                         << " " << (t.duration_us / 1000) << "ms"
-                                         << " [lex=" << (t.lex_us / 1000) << " parse="
-                                         << (t.parse_us / 1000) << " tc=" << (t.typecheck_us / 1000)
-                                         << " borrow=" << (t.borrow_us / 1000)
-                                         << " cg=" << (t.codegen_us / 1000) << "]");
-                    }
-                }
-            }
+            // Phase 1 timing summary suppressed - users only want final stats via --profile
         }
 
         phase1_time_us =
@@ -1521,8 +1485,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            TML_LOG_INFO("test", "  Compiling " << pending_compiles.size() << " objects with "
-                                                << num_threads << " threads...");
+            TML_LOG_DEBUG("test", "  Compiling " << pending_compiles.size() << " objects with "
+                                                 << num_threads << " threads...");
 
             std::vector<std::thread> threads;
             for (unsigned int t = 0;
@@ -1533,21 +1497,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 t.join();
             }
 
-            // Print Phase 2 timing summary if verbose
-            if (verbose && !obj_timings.empty()) {
-                std::sort(obj_timings.begin(), obj_timings.end(),
-                          [](const ObjTiming& a, const ObjTiming& b) {
-                              return a.duration_us > b.duration_us;
-                          });
-
-                for (size_t i = 0; i < std::min(size_t(5), obj_timings.size()); ++i) {
-                    const auto& t = obj_timings[i];
-                    TML_LOG_INFO("test", "Phase 2 slow #"
-                                             << i << ": "
-                                             << fs::path(t.test_path).filename().string() << " "
-                                             << (t.duration_us / 1000) << "ms");
-                }
-            }
+            // Phase 2 timing summary suppressed - users only want final stats via --profile
 
             if (compile_error.load()) {
                 result.error_message = error_message;
@@ -1601,13 +1551,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-        TML_LOG_INFO("test", "  Getting runtime objects...");
+        TML_LOG_DEBUG("test", "  Getting runtime objects...");
         // Note: Pass verbose=false to avoid repeated "Including runtime:" messages
         // when compiling multiple suites in parallel. The runtime objects are the
         // same for all suites and would spam the output.
         auto runtime_objects =
             get_runtime_objects(shared_registry, module, deps_cache, clang, false);
-        TML_LOG_INFO("test", "  Got " << runtime_objects.size() << " runtime objects");
+        TML_LOG_DEBUG("test", "  Got " << runtime_objects.size() << " runtime objects");
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
         // Add shared library object if we generated one
@@ -1675,9 +1625,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
-            TML_LOG_INFO("test", "  Starting link...");
+            TML_LOG_DEBUG("test", "  Starting link...");
             auto link_result = link_objects(object_files, cached_dll, clang, link_options);
-            TML_LOG_INFO("test", "  Link complete");
+            TML_LOG_DEBUG("test", "  Link complete");
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
                 if (!suite.tests.empty()) {
@@ -1721,13 +1671,20 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // Print timing summary if verbose (single line for clean log output)
         if (verbose) {
             int64_t total_us = result.compile_time_us;
-            TML_LOG_INFO("test", "Suite " << suite.name << " timing: preprocess="
-                                          << (preprocess_time_us / 1000) << "ms"
-                                          << " phase1=" << (phase1_time_us / 1000) << "ms"
-                                          << " phase2=" << (phase2_time_us / 1000) << "ms"
-                                          << " runtime=" << (runtime_time_us / 1000) << "ms"
-                                          << " link=" << (link_time_us / 1000) << "ms"
-                                          << " total=" << (total_us / 1000) << "ms");
+            // Show test file names instead of generic suite name
+            std::string test_names;
+            for (size_t i = 0; i < suite.tests.size(); ++i) {
+                if (i > 0)
+                    test_names += ", ";
+                test_names += fs::path(suite.tests[i].file_path).filename().string();
+            }
+            TML_LOG_INFO("test", "Compiled: " << test_names << " timing: preprocess="
+                                              << (preprocess_time_us / 1000) << "ms"
+                                              << " phase1=" << (phase1_time_us / 1000) << "ms"
+                                              << " phase2=" << (phase2_time_us / 1000) << "ms"
+                                              << " runtime=" << (runtime_time_us / 1000) << "ms"
+                                              << " link=" << (link_time_us / 1000) << "ms"
+                                              << " total=" << (total_us / 1000) << "ms");
         }
 
         return result;

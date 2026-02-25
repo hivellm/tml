@@ -1176,14 +1176,21 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
         if (verbose) {
-            TML_LOG_INFO("test", "[exe] Suite " << suite.name << " timing: preprocess="
-                                                << (preprocess_time_us / 1000) << "ms"
-                                                << " phase1=" << (phase1_time_us / 1000) << "ms"
-                                                << " phase2=" << (phase2_time_us / 1000) << "ms"
-                                                << " runtime=" << (runtime_time_us / 1000) << "ms"
-                                                << " link=" << (link_time_us / 1000) << "ms"
-                                                << " total=" << (result.compile_time_us / 1000)
-                                                << "ms");
+            // Show test file names instead of generic suite name
+            std::string test_names;
+            for (size_t i = 0; i < suite.tests.size(); ++i) {
+                if (i > 0)
+                    test_names += ", ";
+                test_names += fs::path(suite.tests[i].file_path).filename().string();
+            }
+            TML_LOG_INFO("test", "[exe] Compiled: "
+                                     << test_names << " timing: preprocess="
+                                     << (preprocess_time_us / 1000) << "ms"
+                                     << " phase1=" << (phase1_time_us / 1000) << "ms"
+                                     << " phase2=" << (phase2_time_us / 1000) << "ms"
+                                     << " runtime=" << (runtime_time_us / 1000) << "ms"
+                                     << " link=" << (link_time_us / 1000) << "ms"
+                                     << " total=" << (result.compile_time_us / 1000) << "ms");
         }
 
         return result;

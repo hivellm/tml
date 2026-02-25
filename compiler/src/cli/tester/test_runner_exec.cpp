@@ -572,7 +572,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Get the indexed test function
     std::string func_name = "tml_test_" + std::to_string(test_index);
-    TML_LOG_INFO("test", "  Looking up symbol: " << func_name);
+    TML_LOG_DEBUG("test", "  Looking up symbol: " << func_name);
     auto test_func = lib.get_function<TestMainFunc>(func_name.c_str());
     if (!test_func) {
         result.error = "Failed to find " + func_name + " in suite DLL";
@@ -582,7 +582,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
-    TML_LOG_INFO("test", "  tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND"));
+    TML_LOG_DEBUG("test",
+                  "  tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND"));
 
     // Get panic message and backtrace functions
     auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
@@ -603,7 +604,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using TmlSetOutputSuppressed = void (*)(int32_t);
     auto set_output_suppressed =
         lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
-    TML_LOG_INFO(
+    TML_LOG_DEBUG(
         "test", "  tml_set_output_suppressed: " << (set_output_suppressed ? "found" : "NOT FOUND"));
 
     // Suppress output when not in verbose mode
@@ -647,7 +648,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    TML_LOG_INFO("test", "  Executing test function...");
+    TML_LOG_DEBUG("test", "  Executing test function...");
 
     // Ensure output is flushed before test execution in case of crash
     std::cout << std::flush;
@@ -729,7 +730,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Execute test with crash protection
     if (run_with_catch) {
-        TML_LOG_INFO("test", "  Calling tml_run_test_with_catch wrapper...");
+        TML_LOG_DEBUG("test", "  Calling tml_run_test_with_catch wrapper...");
 #ifdef _WIN32
         // VEH handler in essential.c catches hardware exceptions (ACCESS_VIOLATION, etc.)
         // via longjmp BEFORE SEH unwinding occurs (stack is still intact).
@@ -782,10 +783,10 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         } else {
             result.success = (result.exit_code == 0);
         }
-        TML_LOG_INFO("test", "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code);
+        TML_LOG_DEBUG("test", "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code);
     } else {
 #ifdef _WIN32
-        TML_LOG_INFO("test", "  Calling test function with SEH protection...");
+        TML_LOG_DEBUG("test", "  Calling test function with SEH protection...");
         result.exit_code = call_test_with_seh(test_func);
         if (g_crash_occurred) {
             result.success = false;
@@ -797,7 +798,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
 #endif
-        TML_LOG_INFO("test", "  Test returned: " << result.exit_code);
+        TML_LOG_DEBUG("test", "  Test returned: " << result.exit_code);
     }
 
     // Signal watchdog that test completed
@@ -808,7 +809,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         watchdog_thread.join();
     }
 
-    TML_LOG_INFO("test", "  Test execution complete, exit_code=" << result.exit_code);
+    TML_LOG_DEBUG("test", "  Test execution complete, exit_code=" << result.exit_code);
 
     auto end = Clock::now();
     result.duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();

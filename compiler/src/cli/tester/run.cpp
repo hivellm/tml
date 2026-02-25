@@ -646,7 +646,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.no_cache) {
         fs::path run_cache_dir = build::get_run_cache_dir();
         if (fs::exists(run_cache_dir)) {
-            TML_LOG_INFO("test", "Cleaning .run-cache directory...");
+            TML_LOG_DEBUG("test", "Cleaning .run-cache directory...");
             std::error_code ec;
             size_t removed = 0;
             for (const auto& entry : fs::directory_iterator(run_cache_dir, ec)) {
@@ -657,7 +657,7 @@ int run_test(int argc, char* argv[], bool verbose) {
                 }
             }
             if (removed > 0) {
-                TML_LOG_INFO("test", "Removed " << removed << " cached files from .run-cache");
+                TML_LOG_DEBUG("test", "Removed " << removed << " cached files from .run-cache");
             }
         }
     }

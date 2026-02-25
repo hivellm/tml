@@ -118,6 +118,12 @@ int tml_main(int argc, char* argv[]) {
     if (verbose && log_config.level > tml::log::LogLevel::Info) {
         log_config.level = tml::log::LogLevel::Info;
     }
+
+    // For test command: suppress metadata module logging unless explicitly verbose
+    if (command == "test" && !verbose && log_config.filter_spec.empty()) {
+        log_config.filter_spec = "meta=off";
+    }
+
     tml::log::Logger::init(log_config);
 
     if (command == "--help" || command == "-h") {

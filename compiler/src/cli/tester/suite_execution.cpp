@@ -431,7 +431,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 auto& suite = compiled.suite;
-                size_t exec_idx = suites_executed.fetch_add(1);
+                suites_executed.fetch_add(1);
 
                 // Load DLL just-in-time for this suite
                 set_crash_context("loading_dll", suite.name.c_str(), nullptr,
@@ -461,10 +461,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     continue;
                 }
 
-                TML_LOG_INFO("test", "Running suite: " << suite.name << " (" << suite.tests.size()
-                                                       << " test files, " << (exec_idx + 1) << "/"
-                                                       << total_suites_to_run << ")");
-                tml::log::Logger::instance().flush();
+                // Suite info suppressed - only show per-test results
 
                 for (size_t i = 0; i < suite.tests.size(); ++i) {
                     if (fail_fast_triggered.load())
@@ -502,9 +499,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         }
                     }
 
-                    TML_LOG_INFO("test", "  Test " << (i + 1) << "/" << suite.tests.size() << ": "
-                                                   << test_info.test_name);
-                    tml::log::Logger::instance().flush();
+                    TML_LOG_DEBUG("test", "  Test " << (i + 1) << "/" << suite.tests.size() << ": "
+                                                    << test_info.test_name);
 
                     // Write crash marker to disk — survives process death from fatal
                     // crashes (HEAP_CORRUPTION, etc.) that kill before SEH can run.
