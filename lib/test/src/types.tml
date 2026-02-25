@@ -1,5 +1,48 @@
-// Test Framework Core Types
-// Shared types used across the test framework
+//! Test Framework Core Type Definitions
+//!
+//! This module defines the fundamental types shared across the TML test
+//! framework, used by test execution, reporting, and statistics collection.
+//!
+//! # Test Results
+//!
+//! - [`TestResult`] — Enum representing test outcome (Passed, Failed, Panicked, Ignored)
+//! - [`TestStatus`] — Current execution state (Running, Completed)
+//!
+//! # Test Metadata
+//!
+//! - [`TestMetadata`] — Per-test information (name, module, file, line, panic flags)
+//! - [`TestContext`] — Live test execution context (metadata, timing, captured output)
+//! - [`TestEntry`] — Registered test entry point (metadata + function pointer)
+//!
+//! # Configuration and Statistics
+//!
+//! - [`TestConfig`] — Test suite configuration options (parallel, threads, verbose, filter)
+//! - [`TestStats`] — Aggregated results (total, passed, failed, ignored, duration)
+//!
+//! # Example Usage
+//!
+//! ```tml
+//! use test::types::*
+//!
+//! let metadata = TestMetadata {
+//!     name: "test_add",
+//!     module: "math",
+//!     file: "math.test.tml",
+//!     line: 42,
+//!     should_panic: false,
+//!     panic_message: Nothing,
+//!     ignored: false,
+//! }
+//!
+//! let config = TestConfig {
+//!     parallel: true,
+//!     threads: 4,
+//!     nocapture: false,
+//!     verbose: false,
+//!     quiet: false,
+//!     filter: Nothing,
+//! }
+//! ```
 
 /// Result of a test execution
 pub type TestResult {

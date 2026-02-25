@@ -1,10 +1,45 @@
-// Test Framework Assertions
-// All assertions are polymorphic - work with any comparable type
-//
-// NOTE: assert_eq, assert_ne, and assert are compiler builtins.
-// This module provides additional test assertions.
-
-// ============ Comparison Assertions ============
+//! Test Framework Assertions
+//!
+//! This module provides polymorphic assertion functions for comparing values,
+//! checking boolean conditions, and validating string properties during testing.
+//!
+//! All assertions are generic and work with any comparable type implementing
+//! the `PartialOrd` behavior (for comparison assertions).
+//!
+//! **Note:** The core assertions `assert`, `assert_eq`, and `assert_ne` are
+//! built-in compiler functions. This module provides additional convenience
+//! assertions for more specific testing needs.
+//!
+//! # Comparison Assertions
+//!
+//! - [`assert_gt`] — Assert left > right (greater than)
+//! - [`assert_gte`] — Assert left >= right (greater than or equal)
+//! - [`assert_lt`] — Assert left < right (less than)
+//! - [`assert_lte`] — Assert left <= right (less than or equal)
+//! - [`assert_in_range`] — Assert value is within [min, max]
+//!
+//! # Boolean Assertions
+//!
+//! - [`assert_true`] — Assert condition is true
+//! - [`assert_false`] — Assert condition is false
+//!
+//! # String Assertions
+//!
+//! - [`assert_str_len`] — Assert string length matches expected value
+//! - [`assert_str_empty`] — Assert string is empty
+//! - [`assert_str_not_empty`] — Assert string is not empty
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::assertions::*
+//!
+//! assert_gt(10, 5, "10 should be greater than 5")
+//! assert_lt("apple", "zebra", "apple sorts before zebra")
+//! assert_in_range(50, 0, 100, "50 should be in [0, 100]")
+//! assert_true(value > 0, "value must be positive")
+//! assert_str_len("hello", 5, "hello has 5 characters")
+//! ```
 
 /// Assert left > right
 pub func assert_gt[T](left: T, right: T, message: Str) {

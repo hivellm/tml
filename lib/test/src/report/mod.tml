@@ -1,5 +1,74 @@
-// Report Module
-// Test result formatting and reporting
+//! Test Result Formatting and Reporting
+//!
+//! This module provides formatting and output utilities for displaying test
+//! and benchmark results in various formats (pretty, quiet, verbose) with
+//! color coding and progress indicators.
+//!
+//! # Output Formats
+//!
+//! - **Pretty** — Standard human-readable format with colors (default)
+//! - **Quiet** — Minimal output, only final result summary
+//! - **Verbose** — Detailed per-test timing and progress
+//!
+//! # Test Result Output
+//!
+//! - [`print_test_header`] — Print "running N tests" header
+//! - [`print_test_ok`] — Print "test name ... ok" result
+//! - [`print_test_failed`] — Print "test name ... FAILED" result
+//! - [`print_test_ignored`] — Print "test name ... ignored" result
+//! - [`print_test_progress`] — Print progress indicator [current/total]
+//! - [`print_test_result`] — Print test result with status
+//!
+//! # Test Summaries
+//!
+//! - [`print_test_summary`] — Print complete test summary with pass/fail counts
+//! - [`print_summary_header`] — Print "test result:" header
+//! - [`print_final_result`] — Print "ok" or "FAILED" final status
+//! - [`print_stats_line`] — Print statistics line (passed/failed/ignored/time)
+//! - [`print_quiet_summary`] — Quiet mode summary (minimal output)
+//!
+//! # Benchmark Output
+//!
+//! - [`print_bench_header`] — Print "running N benchmarks" header
+//! - [`print_bench_summary`] — Print benchmark completion summary
+//!
+//! # Detailed Failure Output
+//!
+//! - [`print_failure_detail`] — Print detailed failure reason
+//! - [`print_test_start_verbose`] — Verbose mode: test starting
+//! - [`print_test_end_verbose`] — Verbose mode: test completed with timing
+//!
+//! # Formatting and Styling
+//!
+//! - [`format_duration_us`] — Convert microseconds to unit string (us/ms/s)
+//! - [`convert_duration_us`] — Convert to appropriate unit value
+//! - [`print_section_header`] — Print section title with separator
+//! - [`print_separator`] — Print horizontal line separator
+//! - [`print_progress_bar`] — ASCII progress bar display [=====    ] N/total
+//!
+//! # Color Output
+//!
+//! - [`print_colored`] — Print text in green (pass) or red (fail)
+//! - [`print_green`] — Print text in green
+//! - [`print_red`] — Print text in red
+//! - [`print_yellow`] — Print text in yellow (warnings)
+//! - [`print_bold`] — Print text in bold
+//!
+//! # Constants
+//!
+//! ANSI color codes: `ANSI_RESET`, `ANSI_GREEN`, `ANSI_RED`, `ANSI_YELLOW`, `ANSI_BOLD`
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::report::*
+//!
+//! print_test_header(42)
+//! print_test_ok("test_add")
+//! print_test_failed("test_mul")
+//! print_separator()
+//! print_test_summary(stats)
+//! ```
 
 use types
 use bench

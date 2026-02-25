@@ -1,7 +1,24 @@
-// Backtrace - Stack trace capture and formatting
-//
-// Provides the main Backtrace type for capturing and formatting stack traces.
-// This module is inspired by Rust's backtrace-rs library.
+//! Stack Trace Capture and Formatting
+//!
+//! Provides the main `Backtrace` type for capturing and formatting complete
+//! stack traces at runtime. This module is inspired by Rust's `backtrace-rs` library.
+//!
+//! # Core Type
+//!
+//! - [`Backtrace`] — Represents a captured stack trace with multiple frames
+//!
+//! # Typical Workflow
+//!
+//! 1. Call [`Backtrace::capture()`] to capture the current stack
+//! 2. Call [`resolve()`] to resolve symbols (function names, files, lines)
+//! 3. Call [`to_string()`] or iterate frames to display the trace
+//! 4. Drop the backtrace when done (automatically frees resources)
+//!
+//! # FFI Integration
+//!
+//! This module uses FFI declarations to interface with platform-specific
+//! backtrace capture and symbol resolution libraries (Windows DbgHelp,
+//! Linux execinfo/libbacktrace, macOS similar).
 
 use super::frame::BacktraceFrame
 use super::symbol::BacktraceSymbol

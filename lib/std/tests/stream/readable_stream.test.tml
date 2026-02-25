@@ -1,5 +1,6 @@
 use test::{assert, assert_eq, assert_true, assert_false}
 use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
 use core::intrinsics::{ptr_read, ptr_write}
 
 // ============================================================================
@@ -165,6 +166,128 @@ func data_listener(data: I64) {
     // Can still push more, just returns false
     rs.push("more")
     assert_eq(rs.readable_length(), 12 as I64, "12 bytes total")
+    rs.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: Pipe
+// ============================================================================
+
+// Helper: write callback that stores data at a counter address
+func pipe_write_cb(data: I64, cb: I64) {
+    // Just a no-op write fn — data is consumed
+}
+
+@test func test_readable_stream_pipe_basic() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    var ws: WritableStream = WritableStream::new()
+    ws.set_write_fn(pipe_write_cb as I64)
+
+    rs.pipe(mut ref ws)
+    assert_true(rs.readable_flowing(), "flowing after pipe")
+
+    rs.push("hello")
+    rs.push(" world")
+    rs.push_eof()
+
+    assert_true(ws.writable_finished(), "ws finished after eof")
+    rs.destroy()
+    ws.destroy()
+    return 0
+}
+
+@test func test_readable_stream_pipe_ends_dest() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    var ws: WritableStream = WritableStream::new()
+
+    rs.pipe(mut ref ws)
+    assert_false(ws.writable_ended(), "ws not ended yet")
+    rs.push_eof()
+    assert_true(ws.writable_finished(), "ws finished after eof")
+
+    rs.destroy()
+    ws.destroy()
+    return 0
+}
+
+@test func test_readable_stream_unpipe() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    var ws: WritableStream = WritableStream::new()
+
+    rs.pipe(mut ref ws)
+    assert_true(rs.readable_flowing(), "flowing after pipe")
+
+    rs.unpipe(mut ref ws)
+    // After unpipe, push_eof should NOT end ws
+    rs.push_eof()
+    assert_false(ws.writable_finished(), "ws NOT finished after unpipe+eof")
+
+    rs.destroy()
+    ws.destroy()
+    return 0
+}
+
+@test func test_readable_stream_unpipe_all() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    var ws: WritableStream = WritableStream::new()
+
+    rs.pipe(mut ref ws)
+    rs.unpipe_all()
+
+    rs.push_eof()
+    assert_false(ws.writable_finished(), "ws NOT finished")
+
+    rs.destroy()
+    ws.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: New properties
+// ============================================================================
+
+@test func test_readable_stream_properties() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_eq(rs.readable_high_water_mark(), 16384 as I64, "default hwm")
+    assert_false(rs.readable_did_read(), "no read yet")
+    assert_false(rs.readable_aborted(), "not aborted")
+    assert_false(rs.destroyed(), "not destroyed")
+    assert_eq(rs.error_message(), "", "no error")
+
+    rs.destroy()
+    assert_true(rs.destroyed(), "destroyed after destroy")
+    return 0
+}
+
+@test func test_readable_stream_did_read() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_false(rs.readable_did_read(), "no read yet")
+
+    // Attach data listener and push — did_read should become true
+    rs.on("data", noop_listener as I64)
+    rs.push("test")
+    assert_true(rs.readable_did_read(), "did_read after data event")
+
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_pause_resume_events() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+
+    // Start in null state, attach listener to enter flowing
+    rs.on("data", noop_listener as I64)
+    assert_true(rs.readable_flowing(), "flowing")
+
+    // Pause emits "pause"
+    rs.pause()
+    assert_true(rs.is_paused(), "paused")
+
+    // Resume emits "resume"
+    rs.resume()
+    assert_true(rs.readable_flowing(), "flowing again")
+
     rs.destroy()
     return 0
 }

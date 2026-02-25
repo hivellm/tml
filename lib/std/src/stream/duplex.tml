@@ -6,6 +6,9 @@
 //!
 //! This is the base for TCP sockets, WebSocket connections, and other
 //! bidirectional channels.
+//!
+//! When `allow_half_open` is false (default), ending the writable side
+//! also ends the readable side, and vice versa.
 
 use std::stream::readable_stream::ReadableStream
 use std::stream::writable_stream::WritableStream
@@ -13,7 +16,8 @@ use std::stream::writable_stream::WritableStream
 /// A bidirectional stream combining readable and writable sides.
 pub type DuplexStream {
     reader: ReadableStream,
-    writer: WritableStream
+    writer: WritableStream,
+    allow_half_open: Bool
 }
 
 impl DuplexStream {
@@ -21,7 +25,8 @@ impl DuplexStream {
     pub func new() -> DuplexStream {
         DuplexStream {
             reader: ReadableStream::new(),
-            writer: WritableStream::new()
+            writer: WritableStream::new(),
+            allow_half_open: false
         }
     }
 
@@ -29,11 +34,23 @@ impl DuplexStream {
     pub func with_options(read_hwm: I64, write_hwm: I64) -> DuplexStream {
         DuplexStream {
             reader: ReadableStream::with_options(read_hwm),
-            writer: WritableStream::with_options(write_hwm)
+            writer: WritableStream::with_options(write_hwm),
+            allow_half_open: false
         }
     }
 
-    // ---- Readable side ----
+    /// Creates a new DuplexStream with allowHalfOpen option.
+    pub func with_half_open(read_hwm: I64, write_hwm: I64, half_open: Bool) -> DuplexStream {
+        DuplexStream {
+            reader: ReadableStream::with_options(read_hwm),
+            writer: WritableStream::with_options(write_hwm),
+            allow_half_open: half_open
+        }
+    }
+
+    // ================================================================
+    // Readable side
+    // ================================================================
 
     /// Push data to the readable side.
     pub func push(mut this, data: Str) -> Bool {
@@ -43,6 +60,9 @@ impl DuplexStream {
     /// Signal end of readable data.
     pub func push_eof(mut this) {
         this.reader.push_eof()
+        if not this.allow_half_open {
+            this.writer.end()
+        }
     }
 
     /// Pull data from the readable buffer (paused mode).
@@ -77,11 +97,73 @@ impl DuplexStream {
         this.reader.readable_length()
     }
 
-    // ---- Writable side ----
+    /// Returns true if the readable side is in flowing mode.
+    pub func readable_flowing(this) -> Bool {
+        this.reader.readable_flowing()
+    }
+
+    /// Returns true if push_eof() has been called on the readable side.
+    pub func readable_ended(this) -> Bool {
+        this.reader.readable_ended()
+    }
+
+    /// Returns the readable side's highWaterMark.
+    pub func readable_high_water_mark(this) -> I64 {
+        this.reader.readable_high_water_mark()
+    }
+
+    /// Returns true if a "data" event has been emitted at least once.
+    pub func readable_did_read(this) -> Bool {
+        this.reader.readable_did_read()
+    }
+
+    /// Returns true if readable was destroyed before "end".
+    pub func readable_aborted(this) -> Bool {
+        this.reader.readable_aborted()
+    }
+
+    /// Returns true if the readable side is paused.
+    pub func is_paused(this) -> Bool {
+        this.reader.is_paused()
+    }
+
+    /// Push data back to the front of the readable buffer.
+    pub func unshift(mut this, data: Str) {
+        this.reader.unshift(data)
+    }
+
+    /// Set the _read callback.
+    pub func set_read_fn(mut this, f: I64) {
+        this.reader.set_read_fn(f)
+    }
+
+    /// Pipe readable side to a writable destination.
+    pub func pipe(mut this, dest: mut ref WritableStream) {
+        this.reader.pipe(mut ref dest)
+    }
+
+    /// Remove pipe from readable side.
+    pub func unpipe(mut this, dest: mut ref WritableStream) {
+        this.reader.unpipe(mut ref dest)
+    }
+
+    /// Remove all pipes from readable side.
+    pub func unpipe_all(mut this) {
+        this.reader.unpipe_all()
+    }
+
+    // ================================================================
+    // Writable side
+    // ================================================================
 
     /// Write data to the writable side.
     pub func write(mut this, data: Str) -> Bool {
         this.writer.write(data)
+    }
+
+    /// Write raw bytes to the writable side.
+    pub func write_bytes(mut this, data: ref [U8]) -> Bool {
+        this.writer.write_bytes(ref data)
     }
 
     /// Set the _write callback.
@@ -92,6 +174,17 @@ impl DuplexStream {
     /// End the writable side.
     pub func end(mut this) {
         this.writer.end()
+        if not this.allow_half_open {
+            this.reader.push_eof()
+        }
+    }
+
+    /// Write final data and end.
+    pub func end_with_data(mut this, data: Str) {
+        this.writer.end_with_data(data)
+        if not this.allow_half_open {
+            this.reader.push_eof()
+        }
     }
 
     /// Cork the writable side.
@@ -114,28 +207,141 @@ impl DuplexStream {
         this.writer.writable_length()
     }
 
-    // ---- Shared ----
+    /// Returns true if end() was called and "finish" emitted.
+    pub func writable_finished(this) -> Bool {
+        this.writer.writable_finished()
+    }
 
-    /// Register a listener on both sides.
-    /// Readable events: "data", "end", "readable"
+    /// Returns true if end() has been called.
+    pub func writable_ended(this) -> Bool {
+        this.writer.writable_ended()
+    }
+
+    /// Returns true if the writable side is corked.
+    pub func writable_corked(this) -> Bool {
+        this.writer.writable_corked()
+    }
+
+    /// Returns the cork nesting count.
+    pub func writable_corked_count(this) -> I64 {
+        this.writer.writable_corked_count()
+    }
+
+    /// Returns the writable side's highWaterMark.
+    pub func writable_high_water_mark(this) -> I64 {
+        this.writer.writable_high_water_mark()
+    }
+
+    /// Returns true if writable buffer is full and "drain" is pending.
+    pub func writable_needs_drain(this) -> Bool {
+        this.writer.writable_needs_drain()
+    }
+
+    /// Returns true if writable was destroyed before "finish".
+    pub func writable_aborted(this) -> Bool {
+        this.writer.writable_aborted()
+    }
+
+    // ================================================================
+    // Shared: Events
+    // ================================================================
+
+    /// Register a listener on the appropriate side.
+    /// Readable events: "data", "end", "readable", "pause", "resume"
     /// Writable events: "drain", "finish", "pipe", "unpipe"
     /// Shared events: "error", "close"
     pub func on(mut this, event: Str, listener: I64) {
-        // Route to appropriate side based on event name
-        if event == "data" or event == "end" or event == "readable" {
+        if event == "data" or event == "end" or event == "readable" or event == "pause" or event == "resume" {
             this.reader.on(event, listener)
         } else if event == "drain" or event == "finish" or event == "pipe" or event == "unpipe" {
             this.writer.on(event, listener)
         } else {
-            // "error", "close", and custom events go to both
             this.reader.on(event, listener)
             this.writer.on(event, listener)
         }
     }
 
+    /// Register a one-time listener.
+    pub func once(mut this, event: Str, listener: I64) {
+        if event == "data" or event == "end" or event == "readable" or event == "pause" or event == "resume" {
+            this.reader.once(event, listener)
+        } else if event == "drain" or event == "finish" or event == "pipe" or event == "unpipe" {
+            this.writer.once(event, listener)
+        } else {
+            this.reader.once(event, listener)
+            this.writer.once(event, listener)
+        }
+    }
+
+    /// Remove a listener.
+    pub func off(mut this, event: Str, listener: I64) -> Bool {
+        if event == "data" or event == "end" or event == "readable" or event == "pause" or event == "resume" {
+            return this.reader.off(event, listener)
+        } else if event == "drain" or event == "finish" or event == "pipe" or event == "unpipe" {
+            return this.writer.off(event, listener)
+        }
+        let a: Bool = this.reader.off(event, listener)
+        let b: Bool = this.writer.off(event, listener)
+        a or b
+    }
+
+    /// Emit an event directly.
+    pub func emit(mut this, event: Str, data: I64) -> Bool {
+        if event == "data" or event == "end" or event == "readable" or event == "pause" or event == "resume" {
+            return this.reader.emit(event, data)
+        } else if event == "drain" or event == "finish" or event == "pipe" or event == "unpipe" {
+            return this.writer.emit(event, data)
+        }
+        let a: Bool = this.reader.emit(event, data)
+        let b: Bool = this.writer.emit(event, data)
+        a or b
+    }
+
+    // ================================================================
+    // Shared: State
+    // ================================================================
+
+    /// Returns true if both sides have been destroyed.
+    pub func closed(this) -> Bool {
+        this.reader.closed() and this.writer.closed()
+    }
+
+    /// Returns true if both sides have been destroyed.
+    pub func destroyed(this) -> Bool {
+        this.reader.destroyed() and this.writer.destroyed()
+    }
+
+    /// Returns true if an error was emitted on either side.
+    pub func errored(this) -> Bool {
+        this.reader.errored() or this.writer.errored()
+    }
+
+    /// Returns the error string, or "" if no error.
+    @allocates
+    pub func error_message(this) -> Str {
+        let rm: Str = this.reader.error_message()
+        if rm.len() > 0 { return rm }
+        this.writer.error_message()
+    }
+
+    /// Returns the allowHalfOpen setting.
+    pub func allow_half_open_enabled(this) -> Bool {
+        this.allow_half_open
+    }
+
+    // ================================================================
+    // Shared: Lifecycle
+    // ================================================================
+
     /// Destroy both sides.
     pub func destroy(mut this) {
         this.reader.destroy()
         this.writer.destroy()
+    }
+
+    /// Destroy both sides with an error.
+    pub func destroy_with_error(mut this, err: Str) {
+        this.reader.destroy_with_error(err)
+        this.writer.destroy_with_error(err)
     }
 }

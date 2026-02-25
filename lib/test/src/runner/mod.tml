@@ -1,5 +1,59 @@
-// Test Runner Module
-// Core test execution functionality
+//! Test Execution and Management
+//!
+//! This module contains core utilities for test discovery, configuration,
+//! statistics tracking, and result aggregation during test suite execution.
+//!
+//! # Test Configuration
+//!
+//! - [`TestConfig`] — Test suite configuration (parallel, threads, verbose, filter)
+//! - [`default_config`] — Create default test configuration
+//!
+//! # Test Statistics
+//!
+//! - [`TestStats`] — Aggregated test results (passed/failed/ignored counts, duration)
+//! - [`empty_stats`] — Create empty statistics structure
+//! - [`stats_add_passed`] — Increment passed test count
+//! - [`stats_add_failed`] — Increment failed test count
+//! - [`stats_add_ignored`] — Increment ignored test count
+//! - [`stats_set_duration`] — Set total test duration
+//!
+//! # Test Metadata
+//!
+//! - [`TestMetadata`] — Per-test metadata (name, module, file, line, should_panic, ignored)
+//! - [`make_metadata`] — Create test metadata structure
+//!
+//! # Output Utilities
+//!
+//! - [`print_test_result`] — Print single test result (ok/FAILED)
+//! - [`print_test_summary`] — Print full test summary with statistics
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::runner::*
+//!
+//! let config = default_config()
+//! let mut stats = empty_stats()
+//!
+//! stats_add_passed(&mut stats)
+//! stats_add_passed(&mut stats)
+//! stats_add_failed(&mut stats)
+//! stats_set_duration(&mut stats, 125000)  // 125ms in microseconds
+//!
+//! print_test_summary(stats)
+//! // Output:
+//! // test result: FAILED
+//! // 2 passed; 1 failed; 0 ignored; 125 ms
+//! ```
+//!
+//! # Integration with Test Framework
+//!
+//! The test runner is the core of the TML testing infrastructure. It:
+//! - Discovers test functions from compiled test DLLs
+//! - Applies filters to select which tests to run
+//! - Executes tests (serially or in parallel based on config)
+//! - Collects statistics (pass/fail/ignore counts, timing)
+//! - Produces formatted output via the report module
 
 use types
 

@@ -1,53 +1,61 @@
-// TML Backtrace Library
-// Runtime stack trace capture and symbol resolution for debugging
-//
-// This module provides a complete backtrace API inspired by Rust's backtrace-rs:
-// - backtrace: Stack trace capture and formatting
-// - frame: Stack frame type with symbol information
-// - symbol: Resolved symbol information (name, file, line, address)
-//
-// ## Usage
-//
-// ```tml
-// use backtrace::Backtrace
-//
-// func example() {
-//     let mut bt = Backtrace::capture()
-//     bt.resolve()
-//     print(bt.to_string())
-// }
-// ```
-//
-// ## Accessing Individual Frames
-//
-// ```tml
-// use backtrace::{Backtrace, BacktraceFrame}
-//
-// let bt = Backtrace::capture()
-// let count = bt.frame_count()
-// for i in 0 to count {
-//     let frame = bt.frame(i)
-//     // process frame...
-// }
-// ```
-//
-// ## Platform Support
-//
-// ### Windows
-// - Capture: RtlCaptureStackBackTrace (kernel32)
-// - Resolution: DbgHelp (SymFromAddr, SymGetLineFromAddr64)
-// - Symbols: Requires PDB files or DWARF debug info
-// - Initialization: SymInitialize called automatically on first capture
-// - Thread safety: Symbol operations protected by critical section
-//
-// ### Linux/macOS (planned)
-// - Capture: backtrace() from execinfo.h
-// - Resolution: dladdr for basic symbols, libbacktrace for full info
-// - Symbols: DWARF debug info (.debug_info sections)
-//
-// ## Symbol Resolution Notes
-//
-// - Debug builds (-g): Full symbol names, file paths, and line numbers
+//! Runtime Stack Trace Capture and Symbol Resolution
+//!
+//! This library provides a complete backtrace API for capturing and analyzing
+//! stack traces at runtime, inspired by Rust's `backtrace-rs` library.
+//!
+//! # Core Types
+//!
+//! - [`Backtrace`] — Complete stack trace with frame information
+//! - [`BacktraceFrame`] — Single stack frame with instruction pointer
+//! - [`BacktraceSymbol`] — Resolved symbol information (function name, file, line)
+//!
+//! # Basic Usage
+//!
+//! ```tml
+//! use backtrace::Backtrace
+//!
+//! func example() {
+//!     let mut bt = Backtrace::capture()
+//!     bt.resolve()
+//!     print(bt.to_string())
+//! }
+//! ```
+//!
+//! # Accessing Individual Frames
+//!
+//! ```tml
+//! use backtrace::{Backtrace, BacktraceFrame}
+//!
+//! let bt = Backtrace::capture()
+//! let count = bt.frame_count()
+//! for i in 0 to count {
+//!     let frame = bt.frame(i)
+//!     // process frame...
+//! }
+//! ```
+//!
+//! # Platform Support
+//!
+//! ## Windows
+//!
+//! - **Capture**: `RtlCaptureStackBackTrace` (kernel32)
+//! - **Resolution**: DbgHelp API (`SymFromAddr`, `SymGetLineFromAddr64`)
+//! - **Symbols**: Requires PDB files (or embedded DWARF debug info)
+//! - **Initialization**: `SymInitialize` called automatically on first capture
+//! - **Thread safety**: Symbol operations protected by critical section
+//!
+//! ## Linux/macOS (planned)
+//!
+//! - **Capture**: `backtrace()` from `execinfo.h`
+//! - **Resolution**: `dladdr` for basic symbols, `libbacktrace` for full info
+//! - **Symbols**: DWARF debug info (`.debug_info` sections)
+//!
+//! # Symbol Resolution Notes
+//!
+//! - **Debug builds** (`-g`): Full symbol names, file paths, and line numbers
+//! - **Release builds** (default `-O3`): Minimal symbols unless debug info is kept
+//! - **Symbol availability**: Depends on debug information in the binary
+//! - **Demangling**: C++ name demangling supported on all platforms
 // - Release builds: Function names only (if not stripped)
 // - Inline functions: May show multiple symbols per frame address
 // - Optimized code: Line numbers may be approximate due to instruction reordering

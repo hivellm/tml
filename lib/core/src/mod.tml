@@ -1,43 +1,103 @@
-// TML Core Library
-// Fundamental behaviors and types for the TML language
-//
-// This module provides the core building blocks that other libraries depend on:
-// - clone: Duplicate and Copy behaviors
-// - cmp: Comparison behaviors (PartialEq, Eq, PartialOrd, Ord) and Ordering type
-// - ops: Operator overloading behaviors (Add, Sub, Mul, Div, etc.)
-// - default: Default behavior for default values
-// - fmt: Display and Debug behaviors for formatting
-// - convert: From, Into, TryFrom, TryInto, AsRef, AsMut for type conversions
-// - hash: Hash behavior for hashable types
-// - marker: Send, Sync, Sized marker behaviors
-// - pin: Pin type and Unpin marker behavior for pinned memory
-// - task: Poll, Context, Waker for async task primitives
-// - future: Future behavior and combinators
-// - async_iter: AsyncIterator for async streams
-// - mem: Memory utilities (size_of, swap, replace, forget)
-// - cell: Interior mutability (Cell, RefCell)
-// - str: String manipulation utilities
-// - bstr: Byte string types (ByteStr for non-UTF-8 data)
-// - char: Unicode scalar value (Char) type and operations
-// - ascii: ASCII character operations
-// - unicode: Unicode character classification and properties
-// - iter: Iterator, IntoIterator, FromIterator, and adapters
-// - option: Maybe[T] enhanced methods
-// - result: Outcome[T, E] enhanced methods
-// - borrow: Borrow, BorrowMut, ToOwned, Cow
-// - slice: Slice operations (sort, binary_search, etc.)
-// - array: Fixed-size array utilities (map, zip, from_fn, etc.)
-// - ptr: Raw pointer operations, NonNull
-// - error: Error behavior and common error types (IoError, ParseError)
-// - alloc: Memory allocation (Layout, Allocator, GlobalAlloc)
-// - pool: Object pooling (also available via std::alloc::pool)
-// - arena: Arena allocator (also available via std::alloc::arena)
-// - soo: Small object optimization (also available via std::alloc::soo)
-// - cache: Cache-friendly layout utilities (also available via std::alloc::cache)
-// - collections: Behavior impls for List, HashMap (re-exports std::collections::behaviors)
-// - any: TypeId, Any for runtime type identification
-// - reflect: TypeInfo, FieldInfo, Reflect behavior for runtime reflection
-// - sync: Raw atomic operations, fences (see std::sync for ergonomic wrappers)
+//! TML Core Library
+//!
+//! Fundamental behaviors and types that form the foundation of the TML language.
+//!
+//! This library provides the core building blocks that the standard library and
+//! user code depends on. It includes behaviors for comparison, formatting, memory
+//! management, iteration, and async programming.
+//!
+//! # Core Behaviors
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`clone`] | `Duplicate`, `Copy` behaviors for cloning and copying values |
+//! | [`cmp`] | `Ordering`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` for comparing values |
+//! | [`ops`] | Operator overloading: `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not`, `Index`, etc. |
+//! | [`default`] | `Default` behavior for types with default values |
+//! | [`fmt`] | `Display`, `Debug` behaviors for formatting and debugging |
+//!
+//! # Type Conversions
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`convert`] | `From`, `Into`, `TryFrom`, `TryInto`, `AsRef`, `AsMut` for conversions |
+//! | [`hash`] | `Hash` behavior for hashable types and `Hasher` trait |
+//!
+//! # Markers and Safety
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`marker`] | `Send`, `Sync`, `Sized`, `Unpin` marker behaviors |
+//! | [`pin`] | `Pin` type and `Unpin` behavior for pinned memory locations |
+//!
+//! # Memory and Allocation
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`mem`] | `size_of`, `swap`, `replace`, `forget`, `ManuallyDrop` utilities |
+//! | [`cell`] | Interior mutability: `Cell`, `RefCell`, `OnceCell`, `LazyCell` |
+//! | [`ptr`] | Raw pointer operations, `NonNull`, pointer arithmetic |
+//! | [`alloc`] | Memory allocation: `Layout`, `Allocator`, `GlobalAlloc` |
+//! | [`arena`] | `Arena` allocator for fast bump-pointer allocation |
+//! | [`pool`] | `Pool[T]` for object pooling with lock-free free lists |
+//! | [`soo`] | Small Object Optimization: `SmallVec`, `SmallString`, `SmallBox` |
+//! | [`cache`] | Cache-friendly layouts: `CacheAligned`, `Padded`, `SoaVec` |
+//!
+//! # Collections and Iteration
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`iter`] | `Iterator`, `IntoIterator`, `FromIterator`, and 30+ adapters |
+//! | [`slice`] | Slice operations: `sort`, `binary_search`, `split`, `windows`, etc. |
+//! | [`array`] | Fixed-size array utilities: `from_fn`, `repeat`, `zip`, `map` |
+//! | [`collections`] | Behavior impls for `List`, `HashMap`, `Vec` (re-exports std) |
+//!
+//! # String and Character Handling
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`str`] | String manipulation and operations |
+//! | [`bstr`] | `ByteStr` for non-UTF-8 byte strings |
+//! | [`char`] | `Char` (Unicode scalar value), `from_u32`, `DecodeUtf16` |
+//! | [`ascii`] | `AsciiChar`, ASCII character classification and escaping |
+//! | [`unicode`] | Unicode 15.1.0 classification, case conversion, properties |
+//! | [`encoding`] | Base64, hex, percent-encoding, base32, base85 |
+//!
+//! # Optional and Error Handling
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`option`] | `Maybe[T]` enhanced methods and combinators |
+//! | [`result`] | `Outcome[T, E]` enhanced methods and combinators |
+//! | [`error`] | `Error` behavior, `SimpleError`, `IoError`, `ParseError` |
+//!
+//! # Ownership and Borrowing
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`borrow`] | `Borrow`, `BorrowMut`, `ToOwned`, `Cow` for flexible borrowing |
+//! | [`sync`] | Raw atomic operations, memory fences, spinlocks |
+//!
+//! # Async Programming
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`task`] | `Poll`, `Context`, `Waker` — async task primitives |
+//! | [`future`] | `Future` behavior and combinators |
+//! | [`async_iter`] | `AsyncIterator` for async streams |
+//!
+//! # Utility Types
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`range`] | `Range`, `RangeInclusive`, `RangeFrom`, `RangeTo`, `RangeFull` |
+//! | [`num`] | `Zero`, `One`, `Bounded`, `Saturating`, `Wrapping`, `NonZero` |
+//! | [`time`] | `Duration` type for time measurements |
+//! | [`tuple`] | Tuple implementations: `Clone`, `PartialEq`, `Ord`, etc. |
+//! | [`any`] | `TypeId`, `Any` for runtime type identification |
+//! | [`reflect`] | `TypeInfo`, `FieldInfo`, `Reflect` behavior for reflection |
+//! | [`simd`] | Portable SIMD: `I32x4`, `F32x4`, `I64x2`, etc. |
+//! | [`intrinsics`] | Compiler intrinsics for type metadata and operations |
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord

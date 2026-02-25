@@ -1,6 +1,4 @@
-// TML Core Library - Comparison Module
-//
-//! Utilities for comparing and ordering values.
+//! Utilities for Comparing and Ordering Values
 //!
 //! This module contains various tools for comparing and ordering values. In
 //! summary:

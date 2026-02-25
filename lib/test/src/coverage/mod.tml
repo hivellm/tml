@@ -1,5 +1,65 @@
-// Code Coverage Module
-// Tracks test coverage for TML projects
+//! Code Coverage Tracking Framework
+//!
+//! This module provides instrumentation for tracking which functions, lines,
+//! and branches of code are executed during test runs, enabling comprehensive
+//! coverage analysis and reporting.
+//!
+//! # Coverage Types
+//!
+//! Three levels of coverage can be tracked:
+//!
+//! - **Function Coverage** — Records which functions have been called
+//! - **Line Coverage** — Records which source lines have executed
+//! - **Branch Coverage** — Records which conditional branches have been taken
+//!
+//! # Tracking Functions
+//!
+//! These functions are called by the test runner during code execution:
+//!
+//! - [`cover_func`] — Mark a function as covered
+//! - [`cover_line`] — Mark a source line as covered
+//! - [`cover_branch`] — Mark a conditional branch as covered
+//!
+//! # Coverage Queries
+//!
+//! - [`get_covered_func_count`] — Count of functions covered
+//! - [`get_covered_line_count`] — Count of lines covered
+//! - [`get_covered_branch_count`] — Count of branches covered
+//! - [`get_coverage_percent`] — Overall coverage percentage (0-100)
+//! - [`is_func_covered`] — Check if specific function was covered
+//!
+//! # Coverage Management
+//!
+//! - [`print_coverage_report`] — Print full coverage report to stdout
+//! - [`reset_coverage`] — Clear all coverage data for fresh run
+//!
+//! # Coverage Assertions
+//!
+//! - [`assert_func_covered`] — Assert specific function was covered
+//! - [`assert_coverage_percent`] — Assert minimum coverage threshold met
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::coverage::*
+//!
+//! // During test execution, coverage is tracked automatically
+//! // After tests complete, query the results:
+//!
+//! let total_coverage = get_coverage_percent()
+//! assert_coverage_percent(80, "Must achieve at least 80% coverage")
+//!
+//! assert_func_covered("my_function", "my_function must be tested")
+//!
+//! // Print complete report
+//! print_coverage_report()
+//! ```
+//!
+//! # Implementation Notes
+//!
+//! Coverage tracking is implemented via external FFI functions that communicate
+//! with the TML test runner runtime. The runner collects coverage events during
+//! code execution and aggregates them for reporting.
 
 // ============ Coverage Tracking ============
 

@@ -1,7 +1,8 @@
-// BacktraceFrame - A single stack frame
-//
-// Represents one frame in a stack backtrace, containing the instruction
-// pointer and optionally resolved symbol information.
+//! Single Stack Frame Representation
+//!
+//! Represents one frame in a stack backtrace with instruction pointer (return
+//! address) and optionally resolved symbol information including function name,
+//! source file, and line number.
 
 use super::symbol::BacktraceSymbol
 

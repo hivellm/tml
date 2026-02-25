@@ -444,17 +444,12 @@ impl ReadableStream {
             this.set_did_read()
             this.emitter_emit("data", data as I64)
 
-            // If piped, write to destination
+            // Forward to pipe destination if set
             let pipe_dest: I64 = this.get_pipe_dest()
             if pipe_dest != 0 {
                 let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
-                let ok: Bool = ws.write(data)
-                if not ok {
-                    // Backpressure from dest — pause ourselves
-                    this.pause()
-                }
+                ws.write(data)
             }
-
             return true
         }
 
@@ -484,15 +479,16 @@ impl ReadableStream {
         let buf: I64 = this.get_buf()
         let buf_len: I64 = rbuf_len(buf)
 
+        // End pipe destination if set
+        let pipe_dest: I64 = this.get_pipe_dest()
+        if pipe_dest != 0 {
+            let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
+            ws.end()
+        }
+
         // If buffer is empty, emit end immediately
         if buf_len == 0 {
             this.emitter_emit("end", 0)
-            // If piped, end the destination too
-            let pipe_dest: I64 = this.get_pipe_dest()
-            if pipe_dest != 0 {
-                let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
-                ws.end()
-            }
         }
         // Otherwise end will be emitted when buffer is drained via read()
     }
@@ -636,11 +632,12 @@ impl ReadableStream {
     pub func pipe(mut this, dest: mut ref WritableStream) {
         if this.is_destroyed_internal() { return }
 
-        // Store pipe destination
-        this.set_pipe_dest((mut ref dest) as I64)
+        // Store pipe destination — dest is already mut ref, use `dest as I64`
+        // (NOT `(mut ref dest) as I64` which gives the parameter slot address)
+        this.set_pipe_dest(dest as I64)
 
         // Emit "pipe" on destination
-        dest.emit("pipe", (mut ref this) as I64)
+        dest.emit("pipe", 0)
 
         // Switch to flowing mode — this will flush buffered data
         if this.get_state() != RS_STATE_FLOWING {
@@ -656,10 +653,10 @@ impl ReadableStream {
         let pipe_dest: I64 = this.get_pipe_dest()
         if pipe_dest == 0 { return }
 
-        // Only unpipe if it matches
-        if pipe_dest == (mut ref dest) as I64 {
+        // Only unpipe if it matches — dest is already mut ref, use `dest as I64`
+        if pipe_dest == dest as I64 {
             this.set_pipe_dest(0)
-            dest.emit("unpipe", (mut ref this) as I64)
+            dest.emit("unpipe", 0)
         }
     }
 
@@ -669,7 +666,7 @@ impl ReadableStream {
         let pipe_dest: I64 = this.get_pipe_dest()
         if pipe_dest == 0 { return }
         let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
-        ws.emit("unpipe", (mut ref this) as I64)
+        ws.emit("unpipe", 0)
         this.set_pipe_dest(0)
     }
 
@@ -759,7 +756,7 @@ impl ReadableStream {
         let pipe_dest: I64 = this.get_pipe_dest()
         if pipe_dest != 0 {
             let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
-            ws.emit("unpipe", (mut ref this) as I64)
+            ws.emit("unpipe", 0)
             this.set_pipe_dest(0)
         }
 

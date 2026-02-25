@@ -11,12 +11,12 @@
 //!
 //! ```tml
 //! use std::stream::transform::TransformStream
+//! use std::stream::duplex::DuplexStream
 //!
-//! // A transform that uppercases (simplified — just passes through)
-//! func my_transform(data: I64, push_fn: I64) {
+//! func my_transform(data: I64, duplex_ptr: I64) {
 //!     let chunk: Str = data as Str
-//!     let push: func(I64) = push_fn as func(I64)
-//!     push(chunk as I64)
+//!     let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+//!     ds.push(chunk)
 //! }
 //!
 //! var ts = TransformStream::new()
@@ -59,56 +59,90 @@ impl TransformStream {
 
     /// Set the transform callback.
     ///
-    /// Signature: `func(data: I64, push_fn: I64)`.
-    /// `data` is a Str pointer. `push_fn` is a func(I64) that pushes
-    /// data to the readable side (call with Str pointer).
+    /// Signature: `func(data: I64, duplex_ptr: I64)`.
+    /// `data` is a Str pointer. `duplex_ptr` is a `mut ref DuplexStream`
+    /// pointer — call `ds.push(chunk)` to push transformed data.
     pub func set_transform(mut this, f: I64) {
         this.transform_fn = f
     }
 
     /// Set the flush callback, called when the writable side ends.
     ///
-    /// Signature: `func(push_fn: I64)`.
+    /// Signature: `func(duplex_ptr: I64)`.
     /// Allows pushing final data before the readable side ends.
     pub func set_flush(mut this, f: I64) {
         this.flush_fn = f
     }
 
-    // ---- Readable side (delegates to duplex.reader) ----
+    // ================================================================
+    // Readable side
+    // ================================================================
 
-    /// Pull data from the readable side.
     @allocates
     pub func read(mut this, size: I64) -> Str {
         this.duplex.read(size)
     }
 
-    /// Pull all buffered data from the readable side.
     @allocates
     pub func read_all(mut this) -> Str {
         this.duplex.read_all()
     }
 
-    /// Check if readable side has data.
     pub func readable(this) -> Bool {
         this.duplex.readable()
     }
 
-    /// Bytes buffered on the readable side.
     pub func readable_length(this) -> I64 {
         this.duplex.readable_length()
     }
 
-    /// Pause the readable side.
+    pub func readable_flowing(this) -> Bool {
+        this.duplex.readable_flowing()
+    }
+
+    pub func readable_ended(this) -> Bool {
+        this.duplex.readable_ended()
+    }
+
+    pub func readable_high_water_mark(this) -> I64 {
+        this.duplex.readable_high_water_mark()
+    }
+
+    pub func readable_did_read(this) -> Bool {
+        this.duplex.readable_did_read()
+    }
+
+    pub func is_paused(this) -> Bool {
+        this.duplex.is_paused()
+    }
+
     pub func pause(mut this) {
         this.duplex.pause()
     }
 
-    /// Resume the readable side.
     pub func resume(mut this) {
         this.duplex.resume()
     }
 
-    // ---- Writable side (intercepts write, delegates rest) ----
+    pub func unshift(mut this, data: Str) {
+        this.duplex.unshift(data)
+    }
+
+    pub func pipe(mut this, dest: mut ref WritableStream) {
+        this.duplex.pipe(mut ref dest)
+    }
+
+    pub func unpipe(mut this, dest: mut ref WritableStream) {
+        this.duplex.unpipe(mut ref dest)
+    }
+
+    pub func unpipe_all(mut this) {
+        this.duplex.unpipe_all()
+    }
+
+    // ================================================================
+    // Writable side (intercepts write, delegates rest)
+    // ================================================================
 
     /// Write data to the transform.
     ///
@@ -117,13 +151,7 @@ impl TransformStream {
     /// unchanged (like PassThrough).
     pub func write(mut this, data: Str) -> Bool {
         if this.transform_fn != 0 {
-            // Call _transform(data, push_fn)
-            // We need to push to the readable side — use a helper approach:
-            // Push the data to the readable side of the duplex after transform
             let f: func(I64, I64) = this.transform_fn as func(I64, I64)
-            // We pass the data and a way to push to readable side
-            // Since we can't capture `this`, we use a simpler approach:
-            // The transform function pushes directly, and we pass a ptr to our duplex
             f(data as I64, (mut ref this.duplex) as I64)
             return true
         }
@@ -131,22 +159,42 @@ impl TransformStream {
         this.duplex.push(data)
     }
 
-    /// Check if writable side accepts writes.
     pub func writable(this) -> Bool {
         this.duplex.writable()
     }
 
-    /// Bytes buffered on the writable side.
     pub func writable_length(this) -> I64 {
         this.duplex.writable_length()
     }
 
-    /// Cork the writable side.
+    pub func writable_finished(this) -> Bool {
+        this.duplex.writable_finished()
+    }
+
+    pub func writable_ended(this) -> Bool {
+        this.duplex.writable_ended()
+    }
+
+    pub func writable_corked(this) -> Bool {
+        this.duplex.writable_corked()
+    }
+
+    pub func writable_corked_count(this) -> I64 {
+        this.duplex.writable_corked_count()
+    }
+
+    pub func writable_high_water_mark(this) -> I64 {
+        this.duplex.writable_high_water_mark()
+    }
+
+    pub func writable_needs_drain(this) -> Bool {
+        this.duplex.writable_needs_drain()
+    }
+
     pub func cork(mut this) {
         this.duplex.cork()
     }
 
-    /// Uncork the writable side.
     pub func uncork(mut this) {
         this.duplex.uncork()
     }
@@ -163,15 +211,54 @@ impl TransformStream {
         this.duplex.end()
     }
 
-    // ---- Shared ----
+    /// Write final data, then end.
+    pub func end_with_data(mut this, data: Str) {
+        this.write(data)
+        this.end()
+    }
 
-    /// Register an event listener.
+    // ================================================================
+    // Shared
+    // ================================================================
+
     pub func on(mut this, event: Str, listener: I64) {
         this.duplex.on(event, listener)
     }
 
-    /// Destroy both sides.
+    pub func once(mut this, event: Str, listener: I64) {
+        this.duplex.once(event, listener)
+    }
+
+    pub func off(mut this, event: Str, listener: I64) -> Bool {
+        this.duplex.off(event, listener)
+    }
+
+    pub func emit(mut this, event: Str, data: I64) -> Bool {
+        this.duplex.emit(event, data)
+    }
+
+    pub func closed(this) -> Bool {
+        this.duplex.closed()
+    }
+
+    pub func destroyed(this) -> Bool {
+        this.duplex.destroyed()
+    }
+
+    pub func errored(this) -> Bool {
+        this.duplex.errored()
+    }
+
+    @allocates
+    pub func error_message(this) -> Str {
+        this.duplex.error_message()
+    }
+
     pub func destroy(mut this) {
         this.duplex.destroy()
+    }
+
+    pub func destroy_with_error(mut this, err: Str) {
+        this.duplex.destroy_with_error(err)
     }
 }

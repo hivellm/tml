@@ -1,7 +1,7 @@
-// BacktraceSymbol - Resolved symbol information for a stack frame
-//
-// Contains the function name, source file path, and line/column numbers
-// when debug information is available.
+//! Resolved Symbol Information for a Stack Frame
+//!
+//! Contains demangled function name, source file path, and line/column numbers
+//! extracted from debug symbols (PDB on Windows, DWARF on Unix platforms).
 
 @extern("tml_str_free")
 func str_free(s: Str)

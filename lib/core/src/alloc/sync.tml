@@ -1,17 +1,47 @@
-// Sync[T] - Atomic reference-counted pointer for thread-safe shared ownership
-//
-// Sync[T] provides thread-safe shared ownership of heap-allocated data using
-// atomic reference counting. Similar to Rust's Arc[T].
-//
-// ## Examples
-//
-// ```tml
-// let sync1 = Sync::new(42)
-// let sync2 = sync1.duplicate()  // Atomically increments ref count
-// print(sync1.strong_count())  // 2
-// print(sync2.get())  // 42
-// // Can be safely shared across threads
-// ```
+//! Atomic Reference-Counted Pointer for Thread-Safe Shared Ownership
+//!
+//! The `Sync[T]` type provides thread-safe shared ownership of heap-allocated data
+//! using atomic reference counting. Similar to Rust's `Arc[T]`.
+//!
+//! # Thread-Safe Multiple Ownership
+//!
+//! `Sync[T]` allows multiple owners of the same value across threads:
+//! - Each `duplicate()` call atomically increments the reference count
+//! - When an owner is dropped, the count is atomically decremented
+//! - Memory is freed when the reference count reaches zero
+//! - All operations are thread-safe and atomic
+//!
+//! # Atomic Operations
+//!
+//! `Sync[T]` uses atomic operations for reference counting, making it safe
+//! to share across threads. The reference count is managed with atomic
+//! fetch-and-add, fetch-and-subtract, and load operations.
+//!
+//! # Examples
+//!
+//! ```tml
+//! let sync1 = Sync::new(42)
+//! let sync2 = sync1.duplicate()  // Atomically increments ref count
+//! print(sync1.strong_count())  // 2
+//! print(sync2.get())  // 42
+//! // Can be safely shared across threads
+//! // Memory freed when all owners are dropped
+//! ```
+//!
+//! # Performance Considerations
+//!
+//! - Use `Sync[T]` when sharing across threads
+//! - Use `Shared[T]` for single-threaded sharing (faster, no atomic overhead)
+//! - Atomic operations have a small performance cost compared to non-atomic operations
+//!
+//! # Comparison with Shared[T]
+//!
+//! | Feature | Shared[T] | Sync[T] |
+//! |---------|-----------|--------|
+//! | Thread-safe | ❌ No | ✅ Yes |
+//! | Ref counting | Non-atomic | Atomic |
+//! | Performance | Faster | Slightly slower |
+//! | Use case | Single-threaded | Multi-threaded |
 
 use core::mem::{mem_alloc, mem_free, size_of}
 use core::ops::Deref

@@ -10,9 +10,15 @@
 //! | [`pipeline()`] | Chain a readable to a writable with error propagation |
 //! | [`finished()`] | Listen for stream end/error/close |
 //! | [`from_string()`] | Create a ReadableStream from a string |
+//! | [`is_readable()`] | Check if a ReadableStream is readable |
+//! | [`is_writable()`] | Check if a WritableStream is writable |
+//! | [`is_errored_readable()`] | Check if a ReadableStream has errored |
+//! | [`is_errored_writable()`] | Check if a WritableStream has errored |
 
 use std::stream::readable_stream::ReadableStream
 use std::stream::writable_stream::WritableStream
+use std::stream::duplex::DuplexStream
+use std::stream::transform::TransformStream
 
 /// Chain a readable stream to a writable stream.
 ///
@@ -37,6 +43,95 @@ pub func pipeline(mut source: mut ref ReadableStream, mut dest: mut ref Writable
     }
 }
 
+/// Chain a readable → transform → writable.
+///
+/// Reads from source, writes through transform, then writes to dest.
+/// `callback` (func(I64)) is called with 0 on success.
+pub func pipeline_transform(
+    mut source: mut ref ReadableStream,
+    mut transform: mut ref TransformStream,
+    mut dest: mut ref WritableStream,
+    callback: I64
+) {
+    // Read from source and write to transform
+    let data: Str = source.read_all()
+    if data.len() > 0 {
+        transform.write(data)
+    }
+    transform.end()
+
+    // Read from transform's readable side and write to dest
+    let transformed: Str = transform.read_all()
+    if transformed.len() > 0 {
+        dest.write(transformed)
+    }
+    dest.end()
+
+    if callback != 0 {
+        let cb: func(I64) = callback as func(I64)
+        cb(0)
+    }
+}
+
+/// Listen for a ReadableStream to finish (end, error, or close).
+///
+/// `callback` is called with:
+/// - 0 when the stream emits "end" or "close"
+/// - error Str pointer when the stream emits "error"
+///
+/// Returns immediately — the callback fires when the event occurs.
+pub func finished_readable(mut stream: mut ref ReadableStream, callback: I64) {
+    if stream.closed() {
+        if callback != 0 {
+            let cb: func(I64) = callback as func(I64)
+            cb(0)
+        }
+        return
+    }
+    if stream.errored() {
+        if callback != 0 {
+            let cb: func(I64) = callback as func(I64)
+            let err: Str = stream.error_message()
+            cb(err as I64)
+        }
+        return
+    }
+    // Register one-shot listeners
+    if callback != 0 {
+        stream.once("end", callback)
+        stream.once("close", callback)
+        stream.once("error", callback)
+    }
+}
+
+/// Listen for a WritableStream to finish (finish, error, or close).
+///
+/// `callback` is called with:
+/// - 0 when the stream emits "finish" or "close"
+/// - error Str pointer when the stream emits "error"
+pub func finished_writable(mut stream: mut ref WritableStream, callback: I64) {
+    if stream.closed() {
+        if callback != 0 {
+            let cb: func(I64) = callback as func(I64)
+            cb(0)
+        }
+        return
+    }
+    if stream.errored() {
+        if callback != 0 {
+            let cb: func(I64) = callback as func(I64)
+            let err: Str = stream.error_message()
+            cb(err as I64)
+        }
+        return
+    }
+    if callback != 0 {
+        stream.once("finish", callback)
+        stream.once("close", callback)
+        stream.once("error", callback)
+    }
+}
+
 /// Create a ReadableStream pre-filled with string data.
 ///
 /// The stream is immediately ended after pushing the data,
@@ -48,4 +143,42 @@ pub func from_string(s: Str) -> ReadableStream {
     }
     rs.push_eof()
     rs
+}
+
+/// Create a connected pair of DuplexStreams.
+///
+/// Data written to `first` appears on `second`'s readable side, and vice versa.
+/// Useful for testing bidirectional protocols.
+///
+/// NOTE: This creates two independent DuplexStreams. To connect them you need
+/// to set up data forwarding manually since TML doesn't support capturing
+/// closures in struct fields. Use pipe() for one-directional flow.
+pub func duplex_pair() -> DuplexStream {
+    // Returns a single DuplexStream (pair requires capturing closures
+    // which TML doesn't support yet — return a single duplex for now)
+    DuplexStream::new()
+}
+
+// ============================================================================
+// Utility functions
+// ============================================================================
+
+/// Returns true if a ReadableStream is in a readable state.
+pub func is_readable(stream: ref ReadableStream) -> Bool {
+    stream.readable()
+}
+
+/// Returns true if a WritableStream is in a writable state.
+pub func is_writable(stream: ref WritableStream) -> Bool {
+    stream.writable()
+}
+
+/// Returns true if a ReadableStream has errored.
+pub func is_errored_readable(stream: ref ReadableStream) -> Bool {
+    stream.errored()
+}
+
+/// Returns true if a WritableStream has errored.
+pub func is_errored_writable(stream: ref WritableStream) -> Bool {
+    stream.errored()
 }

@@ -28,7 +28,12 @@
 //! | Function | Description |
 //! |----------|-------------|
 //! | [`pipeline()`] | Chain readable to writable with error propagation |
+//! | [`pipeline_transform()`] | Chain readable → transform → writable |
+//! | [`finished_readable()`] | Wait for readable end/error/close |
+//! | [`finished_writable()`] | Wait for writable finish/error/close |
 //! | [`from_string()`] | Create a ReadableStream from a string |
+//! | [`is_readable()`] | Check if a ReadableStream is readable |
+//! | [`is_writable()`] | Check if a WritableStream is writable |
 
 // Layer 1: Synchronous
 pub mod readable
@@ -58,4 +63,4 @@ pub use std::stream::writable_stream::WritableStream
 pub use std::stream::duplex::DuplexStream
 pub use std::stream::transform::TransformStream
 pub use std::stream::passthrough::PassThroughStream
-pub use std::stream::pipeline::{pipeline, from_string}
+pub use std::stream::pipeline::{pipeline, pipeline_transform, finished_readable, finished_writable, from_string, is_readable, is_writable, is_errored_readable, is_errored_writable}

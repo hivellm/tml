@@ -1,44 +1,66 @@
-// ============================================================================
-// std::profiler - TML Native Profiler Module
-// ============================================================================
-//
-// Provides profiling capabilities that export to .cpuprofile format,
-// compatible with Chrome DevTools and VS Code.
-//
-// Usage:
-//
-//   use std::profiler
-//
-//   func main() -> I32 {
-//       // Initialize and start profiling
-//       profiler::init("my_program.cpuprofile")
-//       profiler::start()
-//
-//       // Your code here...
-//       do_work()
-//
-//       // Stop and write profile
-//       profiler::stop()
-//       return 0
-//   }
-//
-//   func do_work() {
-//       // Manual function entry/exit (optional - automatic with --profile flag)
-//       profiler::enter("do_work", "main.tml", 15)
-//
-//       // ... work ...
-//
-//       profiler::exit()
-//   }
-//
-// Or use the @profile directive (planned):
-//
-//   @profile
-//   func heavy_computation() {
-//       // Automatically profiled
-//   }
-//
-// ============================================================================
+//! TML Native Profiler Module
+//!
+//! Provides CPU profiling capabilities with output to `.cpuprofile` format,
+//! compatible with Chrome DevTools, VS Code, and other profiling tools.
+//!
+//! # Features
+//!
+//! - **Manual profiling**: Control profiling start/stop and function tracking
+//! - **Automatic instrumentation**: Use `--profile` compiler flag for automatic tracking
+//! - **Chrome DevTools support**: Export format compatible with Chrome DevTools
+//! - **Lightweight**: Minimal overhead when profiling is enabled
+//!
+//! # Basic Usage
+//!
+//! ```tml
+//! use std::profiler
+//!
+//! func main() -> I32 {
+//!     // Initialize and start profiling
+//!     profiler::init("my_program.cpuprofile")
+//!     profiler::start()
+//!
+//!     // Your code here...
+//!     do_work()
+//!
+//!     // Stop and write profile
+//!     profiler::stop()
+//!     return 0
+//! }
+//! ```
+//!
+//! # Manual Function Tracking
+//!
+//! For fine-grained control over which functions are profiled:
+//!
+//! ```tml
+//! func do_work() {
+//!     // Manual function entry/exit (optional - automatic with --profile flag)
+//!     profiler::enter("do_work", "main.tml", 15)
+//!
+//!     // ... work ...
+//!
+//!     profiler::exit()
+//! }
+//! ```
+//!
+//! # Compiler Integration
+//!
+//! Build with the `--profile` flag for automatic instrumentation:
+//!
+//! ```bash
+//! tml build main.tml --profile
+//! ```
+//!
+//! This automatically inserts profiling instrumentation into all functions.
+//!
+//! # Output Format
+//!
+//! The profiler generates CPU profile data in the `.cpuprofile` JSON format,
+//! viewable in:
+//! - Chrome DevTools (chrome://devtools)
+//! - VS Code (using appropriate extension)
+//! - Other tools supporting .cpuprofile format
 
 // ============================================================================
 // Initialization and Control

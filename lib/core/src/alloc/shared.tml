@@ -1,16 +1,35 @@
-// Shared[T] - Reference-counted pointer for shared ownership
-//
-// Shared[T] provides shared ownership of heap-allocated data using
-// reference counting. Similar to Rust's Rc[T].
-//
-// ## Examples
-//
-// ```tml
-// let shared1 = Shared::new(42)
-// let shared2 = shared1.duplicate()  // Increments ref count
-// print(shared1.strong_count())  // 2
-// print(shared2.get())  // 42
-// ```
+//! Reference-Counted Pointer for Shared Ownership
+//!
+//! The `Shared[T]` type provides shared ownership of heap-allocated data using
+//! non-atomic reference counting. Similar to Rust's `Rc[T]`.
+//!
+//! # Multiple Ownership
+//!
+//! `Shared[T]` allows multiple owners of the same value:
+//! - Each `duplicate()` call increments the reference count
+//! - When an owner is dropped, the count is decremented
+//! - Memory is freed when the reference count reaches zero
+//!
+//! # Non-Thread-Safe
+//!
+//! `Shared[T]` uses non-atomic reference counting and is **NOT thread-safe**.
+//! For thread-safe reference counting across threads, use `Sync[T]` instead (which
+//! uses atomic operations).
+//!
+//! # Examples
+//!
+//! ```tml
+//! let shared1 = Shared::new(42)
+//! let shared2 = shared1.duplicate()  // Increments ref count
+//! print(shared1.strong_count())  // 2
+//! print(shared2.get())  // 42
+//! // When both shared1 and shared2 are dropped, memory is freed
+//! ```
+//!
+//! # Performance
+//!
+//! Because `Shared[T]` uses non-atomic operations, it is faster than `Sync[T]`
+//! when sharing is only needed within a single thread.
 
 use core::mem::{mem_alloc, mem_free, size_of}
 use core::intrinsics::ptr_write

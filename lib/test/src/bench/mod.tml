@@ -1,5 +1,52 @@
-// Benchmark Module
-// Performance benchmarking utilities
+//! Performance Benchmarking Framework
+//!
+//! This module provides utilities for measuring and analyzing the performance
+//! of TML code through timed benchmarks with statistical analysis.
+//!
+//! # Core Types
+//!
+//! - [`BenchResult`] — Stores benchmark timing statistics (min, max, avg)
+//!
+//! # Benchmark Execution
+//!
+//! - [`simple_bench`] — Run a benchmark with specified iteration count
+//! - [`bench_iterations`] — Calculate per-iteration timing
+//! - [`measure_once`] — Measure a single operation
+//! - [`calculate_iterations`] — Automatically calculate iterations for ~1 second runtime
+//!
+//! # Statistics
+//!
+//! - [`find_min`] — Find minimum timing value across measurements
+//! - [`find_max`] — Find maximum timing value across measurements
+//!
+//! # Output Formatting
+//!
+//! - [`format_time_ns`] — Convert nanoseconds to human-readable format (ns/µs/ms/s)
+//! - [`print_bench_result`] — Print complete benchmark result with statistics
+//!
+//! # Helper Types
+//!
+//! - [`empty_bench_result`] — Create an empty result structure
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::bench::*
+//!
+//! let iterations: I32 = 10000
+//! let result = simple_bench("my_algorithm", iterations)
+//!
+//! print("Average time per iteration: ")
+//! print(result.avg_ns)
+//! println(" ns")
+//!
+//! print_bench_result(result)
+//! ```
+//!
+//! # Timing Units
+//!
+//! All timings are measured in nanoseconds (I64), with automatic conversion
+//! to appropriate units (microseconds, milliseconds, seconds) for display.
 
 use std::time::time_ns
 

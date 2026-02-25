@@ -1,16 +1,30 @@
-// Heap[T] - Unique pointer to heap-allocated data
-//
-// Heap[T] provides unique ownership of heap-allocated memory,
-// similar to Rust's Box[T]. When Heap[T] goes out of scope,
-// the memory is automatically deallocated.
-//
-// ## Examples
-//
-// ```tml
-// let boxed = Heap::new(42)
-// print(boxed.get())  // 42
-// // Memory automatically freed when boxed goes out of scope
-// ```
+//! Unique Pointer to Heap-Allocated Data
+//!
+//! The `Heap[T]` type provides unique ownership of heap-allocated memory,
+//! similar to Rust's `Box[T]`. When `Heap[T]` goes out of scope,
+//! the memory is automatically deallocated.
+//!
+//! # Memory Safety
+//!
+//! `Heap[T]` ensures that:
+//! - Only one owner can access the heap-allocated data at a time
+//! - Memory is automatically freed when the last owner is dropped
+//! - Dangling pointers are impossible (the compiler enforces this)
+//!
+//! # Examples
+//!
+//! ```tml
+//! let boxed = Heap::new(42)
+//! print(boxed.get())  // 42
+//! // Memory automatically freed when boxed goes out of scope
+//! ```
+//!
+//! # Comparison with Rust's Box[T]
+//!
+//! TML's `Heap[T]` is equivalent to Rust's `Box[T]`:
+//! - Both provide unique, move-only ownership
+//! - Both automatically deallocate when dropped
+//! - Both can be dereferenced to access the underlying value
 
 use core::mem::{mem_alloc, mem_free, size_of}
 use core::ops::{Deref, DerefMut}
