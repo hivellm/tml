@@ -818,6 +818,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
         param_types += param_type;
     }
 
+    // DEBUG: trace final params for into_inner
     // Function signature - only use suite prefix for test-local types
     // Library types (from imported modules) don't use suite prefix since they're shared
     std::string suite_prefix = "";
