@@ -1,0 +1,54 @@
+use test::{assert_eq, assert_true}
+use std::events::EventEmitter
+
+func noop(data: I64) {}
+func other(data: I64) {}
+
+@test
+func test_event_names_empty() -> I32 {
+    var emitter = EventEmitter::new()
+    let names = emitter.event_names()
+    assert_eq(names.len(), 0 as I64, "empty emitter has no events")
+    names.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_event_names_single_event() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    let names = emitter.event_names()
+    assert_eq(names.len(), 1 as I64, "1 event registered")
+    assert_eq(names.get(0), "data", "event name is data")
+    names.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_event_names_multiple_events() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    emitter.on("error", other as I64)
+    let names = emitter.event_names()
+    assert_eq(names.len(), 2 as I64, "2 events registered")
+    // Note: order may vary based on HashMap bucket layout
+    names.destroy()
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_event_names_removed_event() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    emitter.on("error", other as I64)
+    emitter.remove_all("data")
+    let names = emitter.event_names()
+    assert_eq(names.len(), 1 as I64, "1 event after remove_all")
+    assert_eq(names.get(0), "error", "remaining event is error")
+    names.destroy()
+    emitter.destroy()
+    return 0
+}

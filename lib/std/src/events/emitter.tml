@@ -2,6 +2,7 @@
 
 use core::intrinsics::{ptr_read, ptr_write}
 use std::collections::hashmap::HashMap
+use std::collections::List
 
 func ev_alloc(size: I64) -> *Unit {
     lowlevel { mem_alloc(size) }
@@ -268,6 +269,47 @@ impl EventEmitter {
         }
         la_prepend_pair(arr, listener, 1)
         this.total_count = this.total_count + 1
+    }
+
+    pub func listeners_of(this, event: Str) -> List[I64] {
+        let result: List[I64] = List[I64]::new(4)
+        if not this.events.has(event) {
+            return result
+        }
+        let arr: I64 = this.events.get(event)
+        let len: I64 = la_len(arr)
+        var i: I64 = 0
+        loop (i < len) {
+            result.push(la_get(arr, i))
+            i = i + 2
+        }
+        return result
+    }
+
+    pub func event_names(this) -> List[Str] {
+        let result: List[Str] = List[Str]::new(4)
+        let hdr: I64 = this.events.handle as I64
+        if hdr == 0 {
+            return result
+        }
+        let entries_addr: I64 = rd(hdr)
+        let ctrl_addr: I64 = rd(hdr + 8)
+        let cap: I64 = rd(hdr + 24)
+        var i: I64 = 0
+        loop (i < cap) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+            if c >= (0 as I8) {
+                // Occupied slot — key is at offset 0, value is at offset 8
+                let key: I64 = rd(entries_addr + i * 16)
+                let val: I64 = rd(entries_addr + i * 16 + 8)
+                // Only include events with active listeners
+                if la_len(val) > 0 {
+                    result.push(key as Str)
+                }
+            }
+            i = i + 1
+        }
+        return result
     }
 
     pub func destroy(mut this) {
