@@ -29,5 +29,4 @@ func test_gat_parsing() {
     let wrapper: VecWrapper = VecWrapper { data: 42 }
     let value: I32 = wrapper.get(0)
     assert_eq(value, 42)
-    println("GAT parsing test passed!")
 }

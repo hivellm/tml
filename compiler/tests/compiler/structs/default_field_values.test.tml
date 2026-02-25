@@ -48,5 +48,4 @@ func main() {
     test_all_fields_explicit()
     test_omit_fields_with_defaults()
     test_partial_defaults()
-    print("Default field values tests passed!\n")
 }

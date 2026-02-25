@@ -61,6 +61,7 @@ struct CodegenOptions {
     bool coverage_enabled = false;
     bool emit_comments = true;
     bool dll_export = false;
+    bool generate_exe_main = false; ///< Emit @main(argc,argv) C entry wrapper for executables.
     std::string target_triple;
 };
 

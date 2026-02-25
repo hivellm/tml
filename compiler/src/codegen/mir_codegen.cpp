@@ -152,6 +152,13 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         emit_function(func);
     }
 
+    // Emit C entry point wrapper when building an executable.
+    // The user's `main` function is emitted as `tml_main` (see emit_function),
+    // and this wrapper provides the @main(i32, ptr) symbol expected by the C runtime.
+    if (options_.generate_exe_main) {
+        emit_main_wrapper(module);
+    }
+
     // Module identification metadata
     emitln();
     emitln("!llvm.ident = !{!0}");
@@ -256,6 +263,20 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         }
     }
 
+    // Emit C entry point wrapper only in the CGU that contains the `main` function.
+    if (options_.generate_exe_main) {
+        bool this_cgu_has_main = false;
+        for (size_t idx : function_indices) {
+            if (module.functions[idx].name == "main") {
+                this_cgu_has_main = true;
+                break;
+            }
+        }
+        if (this_cgu_has_main) {
+            emit_main_wrapper(module);
+        }
+    }
+
     // Module identification metadata
     emitln();
     emitln("!llvm.ident = !{!0}");
@@ -266,7 +287,10 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
 
 void MirCodegen::emit_function_declaration(const mir::Function& func) {
     std::string ret_type = mir_type_to_llvm(func.return_type);
-    emit("declare " + ret_type + " @" + func.name + "(");
+    // When generating exe entry, user `main` is renamed to `tml_main` across all CGUs.
+    std::string decl_name =
+        (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
+    emit("declare " + ret_type + " @" + decl_name + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {
@@ -282,6 +306,37 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
     }
 
     emitln(")");
+    emitln();
+}
+
+void MirCodegen::emit_main_wrapper(const mir::Module& module) {
+    // Find the `main` function to determine its return type.
+    const mir::Function* main_func = nullptr;
+    for (const auto& func : module.functions) {
+        if (func.name == "main") {
+            main_func = &func;
+            break;
+        }
+    }
+    if (!main_func) {
+        return; // No main function in this module.
+    }
+
+    // Determine if user's main returns void or i32.
+    std::string main_ret = mir_type_to_llvm(main_func->return_type);
+    bool returns_void = (main_ret == "void");
+
+    emitln("; C entry point — calls tml_main() generated from user's `main` function");
+    emitln("define dso_local i32 @main(i32 %argc, ptr %argv) noinline {");
+    emitln("entry:");
+    if (returns_void) {
+        emitln("  call void @tml_main()");
+        emitln("  ret i32 0");
+    } else {
+        emitln("  %ret = call i32 @tml_main()");
+        emitln("  ret i32 %ret");
+    }
+    emitln("}");
     emitln();
 }
 
@@ -625,7 +680,11 @@ void MirCodegen::emit_function(const mir::Function& func) {
     }
 
     std::string ret_type = mir_type_to_llvm(func.return_type);
-    emit(linkage + " " + ret_type + " @" + func.name + "(");
+    // When emitting an executable entry point, rename user `main` → `tml_main` so
+    // the C wrapper @main(argc, argv) can call it without a symbol collision.
+    std::string emit_name =
+        (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
+    emit(linkage + " " + ret_type + " @" + emit_name + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {

@@ -1063,9 +1063,10 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         TML_LOG_INFO("build", "Using Cranelift object: " << codegen_result.object_file);
     }
 
-    // Try CGU partitioning if MIR is available from query cache
-    bool use_cgu = !codegen_result.has_object_file();
-    if (use_cgu && !options.no_cache) {
+    // Try CGU partitioning if MIR is available from query cache.
+    // Start as false; set to true only when CGU partitioning actually produces objects.
+    bool use_cgu = false;
+    if (!codegen_result.has_object_file() && !options.no_cache) {
         auto mir =
             qctx.cache().lookup<query::MirBuildResult>(query::MirBuildKey{path, module_name});
         if (mir && mir->success && mir->mir_module && mir->mir_module->functions.size() >= 2) {
@@ -1075,6 +1076,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
             codegen::PartitionOptions part_opts;
             part_opts.num_cgus = is_release ? 4 : 16;
             part_opts.codegen_opts.emit_comments = verbose;
+            part_opts.codegen_opts.generate_exe_main = (output_type == BuildOutputType::Executable);
 #ifdef _WIN32
             part_opts.codegen_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
             part_opts.codegen_opts.target_triple = "x86_64-pc-windows-msvc";

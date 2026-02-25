@@ -53,6 +53,8 @@ struct MirCodegenOptions {
     bool emit_comments = true;                            ///< Include source comments in IR.
     bool dll_export = false;                              ///< Add dllexport for Windows DLLs.
     bool coverage_enabled = false;                        ///< Disable inlining for coverage builds.
+    bool generate_exe_main = false;                       ///< Emit @main(argc,argv) C entry point
+                                                          ///< (renames user `main` to `tml_main`).
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
 };
 
@@ -131,6 +133,7 @@ private:
     void emit_enum_def(const mir::EnumDef& e);
     void emit_function(const mir::Function& func);
     void emit_function_declaration(const mir::Function& func);
+    void emit_main_wrapper(const mir::Module& module);
     void emit_block(const mir::BasicBlock& block);
     void emit_instruction(const mir::InstructionData& inst);
     void emit_terminator(const mir::Terminator& term);

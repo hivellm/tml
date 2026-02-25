@@ -47,8 +47,6 @@ func test_try_operator_valid_usage() {
         Just(v) => assert_eq(v, 42),
         Nothing => assert(false)
     }
-
-    println("Try operator valid usage tests passed!")
 }
 
 // Test that ! properly propagates errors
@@ -68,7 +66,6 @@ func test_try_propagates_error() {
         Ok(_) => assert(false),
         Err(msg) => assert_eq(msg, "failed")
     }
-    println("Try operator error propagation test passed!")
 }
 
 // Test that ! properly propagates Nothing
@@ -88,7 +85,6 @@ func test_try_propagates_nothing() {
         Just(_) => assert(false),
         Nothing => assert(true)
     }
-    println("Try operator Nothing propagation test passed!")
 }
 
 // Error message documentation:

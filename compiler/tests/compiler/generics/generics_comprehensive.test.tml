@@ -130,6 +130,5 @@ func main() -> I32 {
     test_generic_enum()
     test_nested_generics()
     test_generic_constraints()
-    print("PASS: All tests passed!")
     return 0
 }

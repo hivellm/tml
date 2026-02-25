@@ -71,5 +71,4 @@ func main() {
     test_variable_implicit_return()
     test_complex_expression_implicit_return()
     test_chained_if_implicit_return()
-    print("Implicit returns tests passed!\n")
 }

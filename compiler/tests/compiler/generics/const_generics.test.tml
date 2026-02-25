@@ -12,7 +12,6 @@ func test_const_generics() {
     // The struct definition above proves parsing is working
     let size: I32 = 10
     assert_eq(size, 10)
-    println("Const generics parsing test passed!")
 }
 
 @test

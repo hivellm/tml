@@ -30,6 +30,4 @@ func test_pub_crate_visibility() {
     let container: Container = Container { value: 1, internal: 2, secret: 3 }
     assert_eq(container.value, 1)
     assert_eq(container.internal, 2)
-
-    println("pub(crate) visibility test passed!")
 }

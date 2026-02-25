@@ -578,6 +578,10 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         codegen::CodegenOptions codegen_opts;
         codegen_opts.emit_comments = ctx.options().verbose;
         codegen_opts.coverage_enabled = ctx.options().coverage;
+        // Always generate the C entry point (@main wrapper) so the query-built IR
+        // can be linked into a standalone executable by `tml build`.
+        // tml run also benefits (it links an EXE too, not a DLL).
+        codegen_opts.generate_exe_main = true;
 #ifdef _WIN32
         codegen_opts.target_triple = "x86_64-pc-windows-msvc";
 #else
