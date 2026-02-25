@@ -59,6 +59,26 @@ Complete cross-language performance comparison: TML vs Rust vs Go vs Python vs N
    - Production scenarios
    - 1,000,000 operation projections
 
+### Deep Technical Comparisons
+
+7. **[TML_VS_RUST_DETAILED.md](TML_VS_RUST_DETAILED.md)**
+   - Why TML is 2.2-3.2x faster than Rust
+   - Drop trait overhead (~50-60ns per operation)
+   - Tokio vs native EventLoop (21ns vs 0.452ns)
+   - Result type dispatch costs
+   - Socket binding comparison
+
+8. **[TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md)** ⭐ **MUST READ**
+   - Complete technical breakdown
+   - LLVM IR generation comparison
+   - Memory layout analysis (Maybe[T] vs Option<T>)
+   - Type safety vs runtime dispatch
+   - FFI marshalling costs
+   - EventLoop architecture layers
+   - Compilation efficiency
+   - When Rust is better (safety, borrow checker)
+   - 12 sections, comprehensive coverage
+
 ---
 
 ## 📊 Test Categories
@@ -286,7 +306,9 @@ Improvement:        80.2x faster at scale
 2. **Quick numbers**: [PERFORMANCE_SUMMARY.txt](PERFORMANCE_SUMMARY.txt) (3 min read)
 3. **Decisions**: [RECOMMENDATIONS.md](RECOMMENDATIONS.md) (10 min read)
 4. **Details**: [CROSS_LANGUAGE_COMPARISON.md](CROSS_LANGUAGE_COMPARISON.md) (20 min read)
-5. **Deep dive**: [LARGE_SCALE_COMPARISON.md](LARGE_SCALE_COMPARISON.md) (30 min read)
+5. **Scale**: [LARGE_SCALE_COMPARISON.md](LARGE_SCALE_COMPARISON.md) (30 min read)
+6. **Deep technical (Rust focus)**: [TML_VS_RUST_DETAILED.md](TML_VS_RUST_DETAILED.md) (15 min read)
+7. **Comprehensive analysis**: [TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md) (60 min read - full IR, memory layout, design analysis)
 
 ---
 
