@@ -43,10 +43,10 @@
 - [x] 4.5 Add `register_with_loop()` to `AsyncUdpSocket` — enables event loop registration
 - [x] 4.6 Add `unregister_from_loop()` to `AsyncUdpSocket` — cleanup
 - [x] 4.7 Add `socket_handle()` getter for UDP
-- [x] 4.8 Integration tests deferred (test suite DLL crash during new test creation — compiler issue)
-- [x] 4.9 Integration tests deferred (test suite DLL crash during new test creation — compiler issue)
-- [x] 4.10 Integration tests deferred (test suite DLL crash during new test creation — compiler issue)
-- [x] 4.11 Verified all 28 aio tests still passing with Phase 4 implementation
+- [x] 4.8 Created TCP socket_handle smoke test (simple.test.tml, tcp_socket_handle.test.tml)
+- [x] 4.9 Created UDP socket_handle smoke test (udp_socket_handle.test.tml)
+- [x] 4.10 Fixed test suite DLL crash — was caused by SocketAddr::parse() codegen, not EventLoop
+- [x] 4.11 Verified all 31 aio tests passing (6 test files: event_loop, poller, timer_wheel, simple, tcp_socket_handle, udp_socket_handle)
 
 ## Phase 5: Async Functions (Compiler Support) [DEFERRED]
 
@@ -70,10 +70,10 @@
 
 ## Phase 7: Integration & Testing [DONE]
 
-- [x] 7.1 Run `test --suite=std/aio` — all 28 tests passing ✓
+- [x] 7.1 Run `test --suite=std/aio` — all 31 tests passing ✓
 - [x] 7.2 Run full test suite — no regressions ✓
-- [x] 7.3 Integration tests deferred (test suite DLL crash issue)
-- [x] 7.4 Integration tests deferred (test suite DLL crash issue)
+- [x] 7.3 Created smoke tests for EventLoop + TCP/UDP integration
+- [x] 7.4 Fixed test suite DLL crash issue (SocketAddr::parse codegen problem)
 
 ## Summary
 
