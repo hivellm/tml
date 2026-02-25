@@ -19,6 +19,7 @@
 use core::intrinsics::{ptr_read, ptr_write}
 use std::collections::hashmap::HashMap
 use std::collections::List
+use std::aio::EventLoop
 
 // ── Low-level memory allocation helpers ───────────────────────────────────
 
@@ -381,6 +382,106 @@ impl EventEmitter {
             i = i + 1
         }
         return result
+    }
+
+    /// Schedule event emission to pending queue (after I/O, setImmediate semantics).
+    /// Callbacks are executed when drain_pending() is called.
+    pub func emit_async(mut this, event: Str, data: I64, mut el: EventLoop) -> Bool {
+        if not this.events.has(event) {
+            return false
+        }
+        let arr: I64 = this.events.get(event)
+        let len: I64 = la_len(arr)
+        if len == 0 {
+            return false
+        }
+
+        // Snapshot listeners and identify once-listeners
+        let snapshot: I64 = la_new()
+        let once_list: I64 = la_new()
+
+        var i: I64 = 0
+        loop (i < len) {
+            la_push(snapshot, la_get(arr, i))
+            if la_get(arr, i + 1) == 1 {
+                la_push(once_list, i)
+            }
+            i = i + 2
+        }
+
+        // Remove once-listeners
+        let once_count: I64 = la_len(once_list)
+        if once_count > 0 {
+            var j: I64 = once_count - 1
+            loop (j >= 0) {
+                la_remove_pair(arr, la_get(once_list, j))
+                this.total_count = this.total_count - 1
+                j = j - 1
+            }
+        }
+        la_destroy(once_list)
+
+        // Post each callback to the pending queue
+        let num_calls: I64 = la_len(snapshot)
+        var k: I64 = 0
+        loop (k < num_calls) {
+            let f: I64 = la_get(snapshot, k)
+            el.post(f, data)
+            k = k + 1
+        }
+
+        la_destroy(snapshot)
+        return true
+    }
+
+    /// Schedule event emission to next_tick queue (before I/O, process.nextTick semantics).
+    /// Callbacks are executed when drain_next_tick() is called.
+    pub func emit_next_tick(mut this, event: Str, data: I64, mut el: EventLoop) -> Bool {
+        if not this.events.has(event) {
+            return false
+        }
+        let arr: I64 = this.events.get(event)
+        let len: I64 = la_len(arr)
+        if len == 0 {
+            return false
+        }
+
+        // Snapshot listeners and identify once-listeners
+        let snapshot: I64 = la_new()
+        let once_list: I64 = la_new()
+
+        var i: I64 = 0
+        loop (i < len) {
+            la_push(snapshot, la_get(arr, i))
+            if la_get(arr, i + 1) == 1 {
+                la_push(once_list, i)
+            }
+            i = i + 2
+        }
+
+        // Remove once-listeners
+        let once_count: I64 = la_len(once_list)
+        if once_count > 0 {
+            var j: I64 = once_count - 1
+            loop (j >= 0) {
+                la_remove_pair(arr, la_get(once_list, j))
+                this.total_count = this.total_count - 1
+                j = j - 1
+            }
+        }
+        la_destroy(once_list)
+
+        // Post each callback to the next_tick queue
+        let num_calls: I64 = la_len(snapshot)
+        var k: I64 = 0
+        loop (k < num_calls) {
+            let f: I64 = la_get(snapshot, k)
+            el.post_next_tick(f, data)
+            k = k + 1
+        }
+
+        la_destroy(snapshot)
+        return true
     }
 
     /// Free all resources held by this emitter.

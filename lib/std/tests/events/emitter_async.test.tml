@@ -1,0 +1,181 @@
+use test::{assert_eq, assert_true}
+use std::events::EventEmitter
+use std::aio::EventLoop
+use core::intrinsics::{ptr_read, ptr_write}
+use core::mem::{mem_alloc, mem_free}
+
+// Callback that increments a counter
+func increment(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, lowlevel { ptr_read[I64](data as *I64) } + 1) }
+}
+
+// Callback that writes a specific value
+func write_42(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 42 as I64) }
+}
+
+@test
+func test_emit_async_defers_execution() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    emitter.on("data", increment as I64)
+    let result = emitter.emit_async("data", state as I64, event_loop)
+
+    assert_eq(result, true, "emit_async returns true")
+
+    // Immediately after emit_async, callback should NOT have been called yet
+    let val_before: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_before, 0 as I64, "callback not yet executed")
+
+    // Drain the pending queue
+    event_loop.drain_pending()
+
+    // Now the callback should have executed
+    let val_after: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_after, 1 as I64, "callback executed after drain")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_next_tick_defers_to_next_tick_queue() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    emitter.on("data", increment as I64)
+    let result = emitter.emit_next_tick("data", state as I64, event_loop)
+
+    assert_eq(result, true, "emit_next_tick returns true")
+
+    // Immediately after emit_next_tick, callback should NOT have been called yet
+    let val_before: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_before, 0 as I64, "callback not yet executed")
+
+    // Drain the next_tick queue
+    event_loop.drain_next_tick()
+
+    // Now the callback should have executed
+    let val_after: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_after, 1 as I64, "callback executed after drain_next_tick")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_async_no_listeners() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    let result = emitter.emit_async("unknown_event", state as I64, event_loop)
+
+    assert_eq(result, false, "emit_async returns false for unknown event")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_async_removes_once_listeners() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    emitter.once("data", increment as I64)
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 listener before emit_async")
+
+    emitter.emit_async("data", state as I64, event_loop)
+
+    // Once-listener should be removed immediately
+    assert_eq(emitter.listener_count("data"), 0 as I64, "listener removed after emit_async")
+
+    // Drain and verify execution
+    event_loop.drain_pending()
+    let val: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val, 1 as I64, "callback executed via drain")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_async_with_multiple_listeners() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    emitter.on("data", increment as I64)
+    emitter.on("data", increment as I64)
+
+    emitter.emit_async("data", state as I64, event_loop)
+
+    // Before drain, nothing should be incremented
+    let val_before: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_before, 0 as I64, "no execution before drain")
+
+    // Drain pending queue
+    event_loop.drain_pending()
+
+    // Both callbacks should have executed (incremented twice)
+    let val_after: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_after, 2 as I64, "both callbacks executed")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_next_tick_vs_emit_async_order() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    var event_loop = EventLoop::new()
+
+    // Post one to next_tick, one to pending
+    emitter.once("tick", write_42 as I64)
+    emitter.once("pending", increment as I64)
+
+    emitter.emit_next_tick("tick", state as I64, event_loop)
+    emitter.emit_async("pending", state as I64, event_loop)
+
+    // Drain next_tick first (next_tick has priority)
+    event_loop.drain_next_tick()
+    let val_after_tick: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_after_tick, 42 as I64, "next_tick callback executed first")
+
+    // Then drain pending
+    event_loop.drain_pending()
+    let val_final: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val_final, 43 as I64, "pending callback incremented from 42")
+
+    emitter.destroy()
+    event_loop.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
