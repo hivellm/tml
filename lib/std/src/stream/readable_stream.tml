@@ -574,16 +574,19 @@ impl ReadableStream {
 
     /// Returns the number of bytes in the internal buffer.
     pub func readable_length(this) -> I64 {
+        if this.handle == (0 as *Unit) { return 0 as I64 }
         rbuf_len(this.get_buf())
     }
 
     /// Returns true if the stream is in flowing mode.
     pub func readable_flowing(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
         this.get_state() == RS_STATE_FLOWING
     }
 
     /// Returns true if push_eof() has been called.
     pub func readable_ended(this) -> Bool {
+        if this.handle == (0 as *Unit) { return true }
         this.is_ended()
     }
 
@@ -594,6 +597,7 @@ impl ReadableStream {
 
     /// Returns true if an error was emitted.
     pub func errored(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
         this.is_errored_internal()
     }
 
