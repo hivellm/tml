@@ -385,10 +385,10 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
                 // Then, infer remaining type params from function arguments
                 // Check arguments and match against parameter types
-                // Note: func->params[0] is 'this', so we offset by 1
-                for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                // Note: func->params does not include 'this' (implicit receiver)
+                for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
                     TypePtr arg_type = check_expr(*call.args[i]);
-                    TypePtr param_type = func->params[i + 1]; // Skip 'this' parameter
+                    TypePtr param_type = func->params[i];
                     extract_type_params(param_type, arg_type, func->type_params, subs);
                 }
 
@@ -406,9 +406,9 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                      ++i) {
                     subs[func_sig.type_params[i]] = named.type_args[i];
                 }
-                for (size_t i = 0; i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
+                for (size_t i = 0; i < call.args.size() && i < func_sig.params.size(); ++i) {
                     TypePtr arg_type = check_expr(*call.args[i]);
-                    TypePtr param_type = func_sig.params[i + 1];
+                    TypePtr param_type = func_sig.params[i];
                     extract_type_params(param_type, arg_type, func_sig.type_params, subs);
                 }
                 return substitute_type(func_sig.return_type, subs);

@@ -356,8 +356,9 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
     for (const auto& method : decl.methods) {
         std::vector<TypePtr> params;
-        for (const auto& p : method.params) {
-            params.push_back(resolve_type(*p.type));
+        // Skip the first parameter ('this') - it's implicit in the FuncSig
+        for (size_t i = 1; i < method.params.size(); ++i) {
+            params.push_back(resolve_type(*method.params[i].type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
 
@@ -976,8 +977,9 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     for (const auto& method : impl.methods) {
         std::string qualified_name = type_name + "::" + method.name;
         std::vector<TypePtr> params;
-        for (const auto& p : method.params) {
-            params.push_back(resolve_type(*p.type));
+        // Skip the first parameter ('this') - it's implicit in the FuncSig
+        for (size_t i = 1; i < method.params.size(); ++i) {
+            params.push_back(resolve_type(*method.params[i].type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
 

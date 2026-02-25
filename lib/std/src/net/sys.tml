@@ -377,6 +377,15 @@ impl RawSocket {
         Ok(result)
     }
 
+    /// Sends exactly `n` bytes from the buffer on a connected socket.
+    pub func send_n(this, buf: ref [U8], n: I64) -> Outcome[I64, NetError] {
+        let result: I64 = lowlevel { sys_send(this.handle, buf, n) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
     /// Sends a string on a connected socket.
     pub func send_str(this, s: Str) -> Outcome[I64, NetError] {
         let len: I64 = s.len() as I64

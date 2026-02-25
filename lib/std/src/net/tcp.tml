@@ -316,6 +316,14 @@ impl TcpStream {
         this.socket.send(buf)
     }
 
+    /// Writes exactly `n` bytes from the buffer to the socket.
+    ///
+    /// This allows sending a subset of the buffer without padding.
+    /// Returns the number of bytes written.
+    pub func write_n(this, buf: ref [U8], n: I64) -> Outcome[I64, NetError] {
+        this.socket.send_n(buf, n)
+    }
+
     /// Writes a string to the socket.
     ///
     /// Returns the number of bytes written.
