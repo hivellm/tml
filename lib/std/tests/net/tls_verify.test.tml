@@ -27,20 +27,16 @@ func test_tls_force_12_google() -> I32 {
     let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
 
     let ver: Str = stream.version()
-    print("  [google TLS 1.2] version: " + ver + "\n")
     assert_eq(ver, "TLSv1.2", "should negotiate exactly TLSv1.2")
 
     let cipher: Str = stream.cipher()
-    print("  [google TLS 1.2] cipher: " + cipher + "\n")
     assert(cipher.len() > 0, "cipher should not be empty")
 
     // verify_result + peer_verified with None verify mode
     let verify_code: I32 = stream.verify_result()
     let verified: Bool = stream.peer_verified()
     if verified {
-        print("  [google TLS 1.2] peer verified: true\n")
     } else {
-        print("  [google TLS 1.2] peer verified: false (expected with None verify)\n")
     }
 
     stream.shutdown()

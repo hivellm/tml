@@ -27,22 +27,17 @@ func test_tls_force_13_cloudflare() -> I32 {
     let stream: TlsStream = TlsStream::connect(ctx, fd, "cloudflare.com").unwrap()
 
     let ver: Str = stream.version()
-    print("  [cloudflare TLS 1.3] version: " + ver + "\n")
     assert_eq(ver, "TLSv1.3", "should negotiate exactly TLSv1.3")
 
     let cipher: Str = stream.cipher()
-    print("  [cloudflare TLS 1.3] cipher: " + cipher + "\n")
     assert(cipher.len() > 0, "cipher should not be empty")
 
     let cn: Str = stream.peer_cn()
-    print("  [cloudflare TLS 1.3] peer CN: " + cn + "\n")
 
     let verify_code: I32 = stream.verify_result()
     let verified: Bool = stream.peer_verified()
     if verified {
-        print("  [cloudflare TLS 1.3] peer verified: true\n")
     } else {
-        print("  [cloudflare TLS 1.3] peer verified: false (expected with None verify)\n")
     }
 
     stream.shutdown()

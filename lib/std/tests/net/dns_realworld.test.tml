@@ -133,7 +133,6 @@ func test_dns_reverse_google() -> I32 {
     if rev.is_ok() {
         let hostname: Str = rev.unwrap()
         assert(hostname.len() > 0, "reverse hostname should be non-empty")
-        print("  reverse(" + addr.octet0().to_string() + "." + addr.octet1().to_string() + "." + addr.octet2().to_string() + "." + addr.octet3().to_string() + ") = " + hostname + "\n")
     }
     0
 }

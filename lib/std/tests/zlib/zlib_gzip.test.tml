@@ -25,7 +25,6 @@ func test_gzip_compress_basic() -> I32 {
     let result: Outcome[Buffer, ZlibError] = gzip(original)
 
     if result.is_err() {
-        print("gzip failed\n")
         return 1
     }
 
@@ -33,14 +32,12 @@ func test_gzip_compress_basic() -> I32 {
 
     // Compressed data should exist
     if compressed.len() == 0 {
-        print("compressed data is empty\n")
         return 1
     }
 
     // Now decompress
     let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
     if decompress_result.is_err() {
-        print("gunzip failed\n")
         return 1
     }
 
@@ -78,14 +75,12 @@ func test_gzip_with_options() -> I32 {
     let result: Outcome[Buffer, ZlibError] = gzip_with_options(original, options)
 
     if result.is_err() {
-        print("gzip_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
     if decompress_result.is_err() {
-        print("gunzip after gzip_with_options failed\n")
         return 1
     }
 
@@ -107,7 +102,6 @@ func test_gunzip_with_options() -> I32 {
     let options: ZlibOptions = ZlibOptions::gzip()
     let decompress_result: Outcome[Str, ZlibError] = gunzip_with_options(ref compressed, options)
     if decompress_result.is_err() {
-        print("gunzip_with_options failed\n")
         return 1
     }
 
@@ -127,7 +121,6 @@ func test_gzip_buffer() -> I32 {
     let original: Str = "Data to test gzip_buffer function"
     let deflate_result: Outcome[Buffer, ZlibError] = deflate(original)
     if deflate_result.is_err() {
-        print("deflate failed\n")
         return 1
     }
 
@@ -136,13 +129,11 @@ func test_gzip_buffer() -> I32 {
     // Now compress the buffer with gzip
     let result: Outcome[Buffer, ZlibError] = gzip_buffer(ref input_buf)
     if result.is_err() {
-        print("gzip_buffer failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     if compressed.len() == 0 {
-        print("gzip_buffer returned empty buffer\n")
         return 1
     }
 
@@ -162,13 +153,11 @@ func test_gunzip_to_buffer() -> I32 {
     // Decompress to buffer instead of string
     let decompress_result: Outcome[Buffer, ZlibError] = gunzip_to_buffer(ref compressed)
     if decompress_result.is_err() {
-        print("gunzip_to_buffer failed\n")
         return 1
     }
 
     var decompressed_buf: Buffer = decompress_result.unwrap()
     if decompressed_buf.len() == 0 {
-        print("gunzip_to_buffer returned empty buffer\n")
         return 1
     }
 
@@ -185,14 +174,12 @@ func test_gzip_sync() -> I32 {
     let result: Outcome[Buffer, ZlibError] = gzip_sync(original)
 
     if result.is_err() {
-        print("gzip_sync failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let decompress_result: Outcome[Str, ZlibError] = gunzip_sync(ref compressed)
     if decompress_result.is_err() {
-        print("gunzip_sync failed\n")
         return 1
     }
 
@@ -209,13 +196,11 @@ func test_gzip_sync_with_options() -> I32 {
     let result: Outcome[Buffer, ZlibError] = gzip_sync_with_options(original, opts)
 
     if result.is_err() {
-        print("gzip_sync_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     if compressed.len() == 0 {
-        print("gzip_sync_with_options returned empty buffer\n")
         return 1
     }
 
@@ -234,7 +219,6 @@ func test_gunzip_sync_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::gzip()
     let decompress_result: Outcome[Str, ZlibError] = gunzip_sync_with_options(ref compressed, opts)
     if decompress_result.is_err() {
-        print("gunzip_sync_with_options failed\n")
         return 1
     }
 

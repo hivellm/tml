@@ -5,9 +5,6 @@ func test_file_macro() -> I32 {
     let f: Str = __FILE__
     assert(f.len() > 0, "__FILE__ should not be empty")
     assert(f.contains("compile_macros"), "__FILE__ should contain the test filename")
-    print("__FILE__: ")
-    print(f)
-    print("\n")
     return 0
 }
 
@@ -16,9 +13,6 @@ func test_dirname_macro() -> I32 {
     let d: Str = __DIRNAME__
     assert(d.len() > 0, "__DIRNAME__ should not be empty")
     assert(d.contains("os"), "__DIRNAME__ should contain the directory name")
-    print("__DIRNAME__: ")
-    print(d)
-    print("\n")
     return 0
 }
 

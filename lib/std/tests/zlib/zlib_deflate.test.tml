@@ -33,20 +33,17 @@ func test_deflate_basic() -> I32 {
     let result: Outcome[Buffer, ZlibError] = deflate(original)
 
     if result.is_err() {
-        print("deflate failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
 
     if compressed.len() == 0 {
-        print("compressed data is empty\n")
         return 1
     }
 
     let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
     if inflate_result.is_err() {
-        print("inflate failed\n")
         return 1
     }
 
@@ -83,14 +80,12 @@ func test_deflate_with_options_best_compression() -> I32 {
 
     let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
     if result.is_err() {
-        print("deflate_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
     if inflate_result.is_err() {
-        print("inflate after best compression failed\n")
         return 1
     }
 
@@ -105,14 +100,12 @@ func test_deflate_with_options_best_speed() -> I32 {
 
     let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
     if result.is_err() {
-        print("deflate_with_options best speed failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
     if inflate_result.is_err() {
-        print("inflate after best speed failed\n")
         return 1
     }
 
@@ -126,20 +119,17 @@ func test_deflate_raw_basic() -> I32 {
     let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
 
     if result.is_err() {
-        print("deflate_raw failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
 
     if compressed.len() == 0 {
-        print("raw compressed data is empty\n")
         return 1
     }
 
     let inflate_result: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
     if inflate_result.is_err() {
-        print("inflate_raw failed\n")
         return 1
     }
 
@@ -156,14 +146,12 @@ func test_deflate_raw_with_options() -> I32 {
 
     let result: Outcome[Buffer, ZlibError] = deflate_raw_with_options(original, opts)
     if result.is_err() {
-        print("deflate_raw_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let inflate_result: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
     if inflate_result.is_err() {
-        print("inflate_raw after options failed\n")
         return 1
     }
 
@@ -182,13 +170,11 @@ func test_inflate_to_buffer() -> I32 {
     var compressed: Buffer = compress_result.unwrap()
     let result: Outcome[Buffer, ZlibError] = inflate_to_buffer(ref compressed)
     if result.is_err() {
-        print("inflate_to_buffer failed\n")
         return 1
     }
 
     let decompressed: Buffer = result.unwrap()
     if decompressed.len() == 0 {
-        print("inflate_to_buffer returned empty\n")
         return 1
     }
 
@@ -207,7 +193,6 @@ func test_inflate_to_buffer_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::default()
     let result: Outcome[Buffer, ZlibError] = inflate_to_buffer_with_options(ref compressed, opts)
     if result.is_err() {
-        print("inflate_to_buffer_with_options failed\n")
         return 1
     }
 
@@ -224,7 +209,6 @@ func test_deflate_buffer() -> I32 {
     let original: Str = "Test data for deflate buffer compression"
     let result: Outcome[Buffer, ZlibError] = deflate(original)
     if result.is_err() {
-        print("deflate failed\n")
         return 1
     }
 
@@ -233,13 +217,11 @@ func test_deflate_buffer() -> I32 {
     // Now compress the buffer again
     let result2: Outcome[Buffer, ZlibError] = deflate_buffer(ref input_buf)
     if result2.is_err() {
-        print("deflate_buffer failed\n")
         return 1
     }
 
     var compressed: Buffer = result2.unwrap()
     if compressed.len() == 0 {
-        print("deflate_buffer returned empty buffer\n")
         return 1
     }
 
@@ -259,13 +241,11 @@ func test_deflate_buffer_with_options() -> I32 {
 
     let result2: Outcome[Buffer, ZlibError] = deflate_buffer_with_options(ref input_buf, opts)
     if result2.is_err() {
-        print("deflate_buffer_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result2.unwrap()
     if compressed.len() == 0 {
-        print("deflate_buffer_with_options returned empty\n")
         return 1
     }
 
@@ -282,7 +262,6 @@ func test_deflate_raw_buffer() -> I32 {
     let original: Str = "Test data for raw deflate buffer"
     let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
     if result.is_err() {
-        print("deflate_raw failed\n")
         return 1
     }
 
@@ -291,13 +270,11 @@ func test_deflate_raw_buffer() -> I32 {
     // Now compress the buffer again
     let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer(ref input_buf)
     if result2.is_err() {
-        print("deflate_raw_buffer failed\n")
         return 1
     }
 
     var compressed: Buffer = result2.unwrap()
     if compressed.len() == 0 {
-        print("deflate_raw_buffer returned empty buffer\n")
         return 1
     }
 
@@ -317,13 +294,11 @@ func test_deflate_raw_buffer_with_options() -> I32 {
 
     let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer_with_options(ref input_buf, opts)
     if result2.is_err() {
-        print("deflate_raw_buffer_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result2.unwrap()
     if compressed.len() == 0 {
-        print("deflate_raw_buffer_with_options empty\n")
         return 1
     }
 
@@ -341,12 +316,10 @@ func test_inflate_raw_to_buffer() -> I32 {
     var compressed: Buffer = compress_result.unwrap()
     let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer(ref compressed)
     if result.is_err() {
-        print("inflate_raw_to_buffer failed\n")
         return 1
     }
 
     if result.unwrap().len() == 0 {
-        print("inflate_raw_to_buffer returned empty\n")
         return 1
     }
 
@@ -365,7 +338,6 @@ func test_inflate_raw_to_buffer_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::deflate_raw()
     let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer_with_options(ref compressed, opts)
     if result.is_err() {
-        print("inflate_raw_to_buffer_with_options failed\n")
         return 1
     }
 
@@ -381,14 +353,12 @@ func test_deflate_sync() -> I32 {
     let original: Str = "Test data for deflate_sync"
     let result: Outcome[Buffer, ZlibError] = deflate_sync(original)
     if result.is_err() {
-        print("deflate_sync failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let inflate_result: Outcome[Str, ZlibError] = inflate_sync(ref compressed)
     if inflate_result.is_err() {
-        print("inflate_sync failed\n")
         return 1
     }
 
@@ -402,7 +372,6 @@ func test_deflate_sync_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::default().with_level(6)
     let result: Outcome[Buffer, ZlibError] = deflate_sync_with_options(original, opts)
     if result.is_err() {
-        print("deflate_sync_with_options failed\n")
         return 1
     }
 
@@ -410,7 +379,6 @@ func test_deflate_sync_with_options() -> I32 {
     let opts2: ZlibOptions = ZlibOptions::default()
     let inflate_result: Outcome[Str, ZlibError] = inflate_sync_with_options(ref compressed, opts2)
     if inflate_result.is_err() {
-        print("inflate_sync_with_options failed\n")
         return 1
     }
 
@@ -423,14 +391,12 @@ func test_deflate_raw_sync() -> I32 {
     let original: Str = "Test data for deflate_raw_sync"
     let result: Outcome[Buffer, ZlibError] = deflate_raw_sync(original)
     if result.is_err() {
-        print("deflate_raw_sync failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
     let inflate_result: Outcome[Str, ZlibError] = inflate_raw_sync(ref compressed)
     if inflate_result.is_err() {
-        print("inflate_raw_sync failed\n")
         return 1
     }
 
@@ -444,7 +410,6 @@ func test_deflate_raw_sync_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
     let result: Outcome[Buffer, ZlibError] = deflate_raw_sync_with_options(original, opts)
     if result.is_err() {
-        print("deflate_raw_sync_with_options failed\n")
         return 1
     }
 
@@ -452,7 +417,6 @@ func test_deflate_raw_sync_with_options() -> I32 {
     let opts2: ZlibOptions = ZlibOptions::deflate_raw()
     let inflate_result: Outcome[Str, ZlibError] = inflate_raw_sync_with_options(ref compressed, opts2)
     if inflate_result.is_err() {
-        print("inflate_raw_sync_with_options failed\n")
         return 1
     }
 
@@ -898,43 +862,25 @@ func debug_last_error() -> I32
 func test_simple_deflate() -> I32 {
     let original: Str = "Hello"
 
-    print("1. Calling deflate...\n")
     let result: Outcome[Buffer, ZlibError] = deflate(original)
 
     if result.is_err() {
-        print("deflate failed!\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
-    print("2. Deflate succeeded, compressed len: ")
-    print(compressed.len())
-    print("\n")
 
-    print("3. Error code after deflate: ")
     let code1: I32 = debug_last_error()
-    print(code1)
-    print("\n")
 
-    print("4. Calling inflate...\n")
     let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
 
-    print("5. Error code after inflate: ")
     let code2: I32 = debug_last_error()
-    print(code2)
-    print("\n")
 
     if inflate_result.is_err() {
-        print("inflate failed! Error code: ")
-        print(code2)
-        print("\n")
         return 1
     }
 
     let decompressed: Str = inflate_result.unwrap()
-    print("6. Inflate succeeded: ")
-    print(decompressed)
-    print("\n")
 
     return 0
 }
@@ -954,7 +900,6 @@ func test_unzip_zlib_format() -> I32 {
     var compressed: Buffer = compress_result.unwrap()
     let result: Outcome[Str, ZlibError] = unzip(ref compressed)
     if result.is_err() {
-        print("unzip failed on zlib format\n")
         return 1
     }
 
@@ -974,7 +919,6 @@ func test_unzip_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::auto_detect()
     let result: Outcome[Str, ZlibError] = unzip_with_options(ref compressed, opts)
     if result.is_err() {
-        print("unzip_with_options failed\n")
         return 1
     }
 
@@ -993,12 +937,10 @@ func test_unzip_to_buffer() -> I32 {
     var compressed: Buffer = compress_result.unwrap()
     let result: Outcome[Buffer, ZlibError] = unzip_to_buffer(ref compressed)
     if result.is_err() {
-        print("unzip_to_buffer failed\n")
         return 1
     }
 
     if result.unwrap().len() == 0 {
-        print("unzip_to_buffer returned empty\n")
         return 1
     }
 
@@ -1017,7 +959,6 @@ func test_unzip_to_buffer_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::auto_detect()
     let result: Outcome[Buffer, ZlibError] = unzip_to_buffer_with_options(ref compressed, opts)
     if result.is_err() {
-        print("unzip_to_buffer_with_options failed\n")
         return 1
     }
 
@@ -1035,7 +976,6 @@ func test_unzip_sync() -> I32 {
     var compressed: Buffer = compress_result.unwrap()
     let result: Outcome[Str, ZlibError] = unzip_sync(ref compressed)
     if result.is_err() {
-        print("unzip_sync failed\n")
         return 1
     }
 
@@ -1055,7 +995,6 @@ func test_unzip_sync_with_options() -> I32 {
     let opts: ZlibOptions = ZlibOptions::auto_detect()
     let result: Outcome[Str, ZlibError] = unzip_sync_with_options(ref compressed, opts)
     if result.is_err() {
-        print("unzip_sync_with_options failed\n")
         return 1
     }
 

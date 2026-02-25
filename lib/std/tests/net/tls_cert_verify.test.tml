@@ -31,23 +31,19 @@ func test_tls_cert_verify_google() -> I32 {
     // verify_result should be 0 (X509_V_OK) with real CA validation
     let verify_code: I32 = stream.verify_result()
     assert_eq(verify_code, 0, "verify_result should be 0 (X509_V_OK)")
-    print("  [cert verify] verify_result: 0 (X509_V_OK)\n")
 
     // peer_verified should be true
     let verified: Bool = stream.peer_verified()
     assert(verified, "peer should be verified with Peer() mode")
-    print("  [cert verify] peer_verified: true\n")
 
     // CN should be present
     let cn: Str = stream.peer_cn()
-    print("  [cert verify] peer CN: " + cn + "\n")
     assert(cn.len() > 0, "peer CN should not be empty")
 
     // PEM should be valid
     let pem: Str = stream.peer_cert_pem()
     assert(pem.len() > 100, "cert PEM should be substantial")
     assert(pem.contains("BEGIN CERTIFICATE"), "PEM should contain BEGIN CERTIFICATE")
-    print("  [cert verify] cert PEM: valid\n")
 
     stream.shutdown()
     0

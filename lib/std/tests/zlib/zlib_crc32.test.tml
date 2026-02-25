@@ -70,7 +70,6 @@ func test_adler32_basic() -> I32 {
 
     // Adler-32 should return a non-zero value for non-empty strings
     if checksum == 0 {
-        print("adler32 returned 0 for non-empty string\n")
         return 1
     }
 
@@ -108,12 +107,10 @@ func test_crc32_different_inputs() -> I32 {
     let crc3: I64 = crc32("Hello")  // Different case
 
     if crc1 == crc2 {
-        print("crc32 collision between 'hello' and 'world'\n")
         return 1
     }
 
     if crc1 == crc3 {
-        print("crc32 collision between 'hello' and 'Hello'\n")
         return 1
     }
 
@@ -129,7 +126,6 @@ func test_crc32_buffer() -> I32 {
     // Create a buffer with compressed data, then check CRC of the compressed bytes
     let result: Outcome[Buffer, ZlibError] = deflate(data)
     if result.is_err() {
-        print("deflate failed\n")
         return 1
     }
 
@@ -138,7 +134,6 @@ func test_crc32_buffer() -> I32 {
 
     // Buffer CRC should be non-zero (compressed data)
     if buf_crc == 0 {
-        print("crc32_buffer returned 0\n")
         return 1
     }
 
@@ -181,7 +176,6 @@ func test_adler32_buffer() -> I32 {
 
     // Adler-32 should be non-zero for non-empty buffer
     if buf_adler == 0 {
-        print("adler32_buffer returned 0\n")
         return 1
     }
 

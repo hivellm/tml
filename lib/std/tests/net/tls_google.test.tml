@@ -25,19 +25,15 @@ func test_tls_google_connect() -> I32 {
     let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
 
     let ver: Str = stream.version()
-    print("  TLS version: " + ver + "\n")
     assert(ver == "TLSv1.3" or ver == "TLSv1.2", "should negotiate TLS 1.2+")
 
     let cipher: Str = stream.cipher()
-    print("  Cipher: " + cipher + "\n")
     assert(cipher.len() > 0, "cipher should not be empty")
 
     let cn: Str = stream.peer_cn()
-    print("  Peer CN: " + cn + "\n")
     assert(cn.len() > 0, "peer CN should not be empty")
 
     let alpn: Str = stream.alpn()
-    print("  ALPN: '" + alpn + "'\n")
 
     stream.shutdown()
     0

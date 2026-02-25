@@ -4,9 +4,6 @@ use std::os
 @test
 func test_print_cwd() -> I32 {
     let cwd: Str = os::current_dir()
-    print("CWD: ")
-    print(cwd)
-    print("\n")
     assert(cwd.len() > 0, "cwd should not be empty")
     return 0
 }
