@@ -140,7 +140,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 fn_name += "::";
             fn_name += path.segments[i];
         }
-    } else if (call.callee->is<parser::FieldExpr>()) {
+    }
+    if (!call.callee->is<parser::IdentExpr>() && !call.callee->is<parser::PathExpr>() &&
+        !call.callee->is<parser::FieldExpr>()) {
+        report_error("Complex callee not supported", call.span, "C002");
+        return "0";
+    }
+
+    if (call.callee->is<parser::FieldExpr>()) {
         // Handle calling function pointers stored in struct fields: cb.action(21)
         // Function pointer fields are stored as fat pointers { fn_ptr, env_ptr }
         // to support both plain function pointers (env=null) and capturing closures
@@ -263,9 +270,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
 
         report_error("Cannot call non-function field", call.span, "C024");
-        return "0";
-    } else {
-        report_error("Complex callee not supported", call.span, "C002");
         return "0";
     }
 
@@ -1537,6 +1541,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // Check if this is a generic function call
     auto pending_func_it = pending_generic_funcs_.find(fn_name);
+    // Arity check on direct match: if the generic function's param count doesn't match
+    // the call's arg count, this is a name collision (e.g., bare "replace" matching
+    // mem::replace[T](2 params) when the caller wants str::replace(3 params)).
+    if (pending_func_it != pending_generic_funcs_.end()) {
+        size_t gen_param_count = pending_func_it->second->params.size();
+        if (call.args.size() != gen_param_count) {
+            pending_func_it = pending_generic_funcs_.end();
+        }
+    }
     // For module-qualified calls like "mem::forget", also try the bare name "forget"
     // since module functions are registered by bare name during gen_func_decl
     // BUT: skip this for Type::method patterns (e.g., RawMutPtr::from_addr)
@@ -1552,7 +1565,24 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         bool is_type_static_method =
             !prefix.empty() && std::isupper(prefix[0]) && prefix.find("::") == std::string::npos;
         if (!is_type_static_method) {
-            pending_func_it = pending_generic_funcs_.find(bare_name);
+            auto candidate = pending_generic_funcs_.find(bare_name);
+            if (candidate != pending_generic_funcs_.end()) {
+                // Arity check: the generic function's param count must match the call's arg count.
+                // This prevents e.g. str::replace(s, pat, rep) [3 args] from matching
+                // mem::replace[T](dest, src) [2 params] just because the bare name is "replace".
+                size_t gen_param_count = candidate->second->params.size();
+                // Account for possible 'this' receiver in first param position
+                size_t effective_params = gen_param_count;
+                if (!candidate->second->params.empty() && candidate->second->params[0].pattern &&
+                    candidate->second->params[0].pattern->is<parser::IdentPattern>() &&
+                    candidate->second->params[0].pattern->as<parser::IdentPattern>().name ==
+                        "this") {
+                    effective_params = gen_param_count - 1;
+                }
+                if (call.args.size() == effective_params || call.args.size() == gen_param_count) {
+                    pending_func_it = candidate;
+                }
+            }
         }
     }
     if (pending_func_it != pending_generic_funcs_.end()) {

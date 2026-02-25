@@ -1805,9 +1805,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
     emit_line("");
     emit_line("; Function attributes for optimization");
     if (options_.coverage_enabled) {
-        emit_line("attributes #0 = { nounwind mustprogress willreturn noinline }");
+        emit_line("attributes #0 = { nounwind noinline }");
     } else {
-        emit_line("attributes #0 = { nounwind mustprogress willreturn }");
+        emit_line("attributes #0 = { nounwind }");
     }
 
     // Emit loop metadata at the end
