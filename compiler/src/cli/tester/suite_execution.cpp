@@ -800,7 +800,16 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             // meta preload uses std::call_once, TypeEnv/ModuleRegistry are
             // per-thread.
             unsigned int num_compile_threads;
-            if (opts.test_threads > 0) {
+
+            // NOTE: Coverage mode uses LLVM profiling which has thread-safety issues
+            // with concurrent test compilation. Force single-threaded compilation during
+            // coverage to avoid race conditions and deadlocks.
+            if (opts.coverage) {
+                num_compile_threads = 1;
+                if (!opts.quiet) {
+                    TML_LOG_INFO("test", "Coverage mode: using single-threaded compilation");
+                }
+            } else if (opts.test_threads > 0) {
                 num_compile_threads = static_cast<unsigned int>(opts.test_threads);
             } else {
                 unsigned int hw = std::thread::hardware_concurrency();
