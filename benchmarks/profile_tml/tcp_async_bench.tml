@@ -1,0 +1,52 @@
+// TML TCP Async Benchmark
+// Async non-blocking socket bind only
+
+use std::net::async_tcp::AsyncTcpListener
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::time::Instant
+
+func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  TML TCP Benchmarks: Async (AsyncTcpListener)\n")
+    print("================================================================\n\n")
+
+    // Create address once (direct construction)
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+
+    // ========================================================================
+    // Async TCP: Listener bind overhead (non-blocking)
+    // ========================================================================
+    print("=== ASYNC TCP (AsyncTcpListener) ===\n")
+    print("  Binding to 127.0.0.1:0 (50 iterations)\n\n")
+
+    let N: I64 = 50
+    var i: I64 = 0
+
+    let t_async_bind: Instant = Instant::now()
+    var success_async: I64 = 0
+    i = 0
+    loop (i < N) {
+        when AsyncTcpListener::bind(addr) {
+            Ok(_listener) => {
+                success_async = success_async + 1
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    let ns_async_bind: I64 = t_async_bind.elapsed().as_nanos()
+
+    print("    Iterations: {N}\n")
+    let ms_async_bind: I64 = ns_async_bind / 1000000
+    print("    Total time: {ms_async_bind} ms\n")
+    let ns_per_op_async: I64 = if ns_async_bind > 0 { ns_async_bind / N } else { 0 }
+    print("    Per op:     {ns_per_op_async} ns\n")
+    let ops_per_sec_async: I64 = if ns_async_bind > 0 { (N * 1000000000) / ns_async_bind } else { 0 }
+    print("    Ops/sec:    {ops_per_sec_async}\n")
+    print("    Successful: {success_async}/{N}\n\n")
+
+    print("================================================================\n\n")
+
+    return 0
+}

@@ -30,5 +30,4 @@ func test_impl_behavior_parsing() {
     let counter: SimpleCounter = SimpleCounter { value: 42 }
     let value: I32 = counter.count()
     assert_eq(value, 42)
-    println("impl Behavior parsing test passed!")
 }

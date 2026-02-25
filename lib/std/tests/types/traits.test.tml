@@ -13,14 +13,12 @@ use core::hash
 func test_maybe_is_just() {
     let m: Maybe[I32] = Just(42)
     assert(m.is_just(), "Just(42) should be Just")
-    println("Maybe is_just test passed!")
 }
 
 @test
 func test_maybe_is_nothing() {
     let m: Maybe[I32] = Nothing
     assert(m.is_nothing(), "Nothing should be Nothing")
-    println("Maybe is_nothing test passed!")
 }
 
 @test
@@ -28,7 +26,6 @@ func test_maybe_unwrap_or_just() {
     let m: Maybe[I32] = Just(42)
     let val: I32 = m.unwrap_or(0)
     assert_eq(val, 42)
-    println("Maybe unwrap_or Just test passed!")
 }
 
 @test
@@ -36,7 +33,6 @@ func test_maybe_unwrap_or_nothing() {
     let m: Maybe[I32] = Nothing
     let val: I32 = m.unwrap_or(99)
     assert_eq(val, 99)
-    println("Maybe unwrap_or Nothing test passed!")
 }
 
 @test
@@ -45,7 +41,6 @@ func test_maybe_extract_value() {
     when m {
         Just(val) => {
             assert_eq(val, 123)
-            println("Maybe extract value test passed!")
         },
         Nothing => {
             assert(false, "Should be Just, not Nothing")
@@ -61,14 +56,12 @@ func test_maybe_extract_value() {
 func test_outcome_is_ok() {
     let o: Outcome[I32, Str] = Ok(100)
     assert(o.is_ok(), "Ok(100) should be Ok")
-    println("Outcome is_ok test passed!")
 }
 
 @test
 func test_outcome_is_err() {
     let o: Outcome[I32, Str] = Err("error")
     assert(o.is_err(), "Err should be Err")
-    println("Outcome is_err test passed!")
 }
 
 @test
@@ -76,7 +69,6 @@ func test_outcome_unwrap_or_ok() {
     let o: Outcome[I32, Str] = Ok(42)
     let val: I32 = o.unwrap_or(0)
     assert_eq(val, 42)
-    println("Outcome unwrap_or Ok test passed!")
 }
 
 @test
@@ -84,7 +76,6 @@ func test_outcome_unwrap_or_err() {
     let o: Outcome[I32, Str] = Err("error")
     let val: I32 = o.unwrap_or(99)
     assert_eq(val, 99)
-    println("Outcome unwrap_or Err test passed!")
 }
 
 @test
@@ -93,7 +84,6 @@ func test_outcome_extract_ok_value() {
     when o {
         Ok(val) => {
             assert_eq(val, 456)
-            println("Outcome extract Ok value test passed!")
         },
         Err(_) => {
             assert(false, "Should be Ok, not Err")
@@ -110,7 +100,6 @@ func test_outcome_extract_err_value() {
         },
         Err(e) => {
             assert_eq(e, 999)
-            println("Outcome extract Err value test passed!")
         }
     }
 }
@@ -126,7 +115,6 @@ func test_hash_consistency() {
     let h1: I64 = s1.hash()
     let h2: I64 = s2.hash()
     assert(h1 == h2, "Same strings should have same hash")
-    println("Hash consistency test passed!")
 }
 
 @test
@@ -136,7 +124,6 @@ func test_hash_difference() {
     let h1: I64 = s1.hash()
     let h2: I64 = s2.hash()
     assert(h1 != h2, "Different strings should have different hashes")
-    println("Hash difference test passed!")
 }
 
 // ============================================================================
@@ -147,14 +134,12 @@ func test_hash_difference() {
 func test_default_i32() {
     let x: I32 = 0  // Default value for I32
     assert_eq(x, 0)
-    println("Default I32 test passed!")
 }
 
 @test
 func test_default_bool() {
     let b: Bool = false  // Default value for Bool
     assert(b == false, "Default Bool should be false")
-    println("Default Bool test passed!")
 }
 
 // ============================================================================
@@ -166,7 +151,6 @@ func test_compare_less() {
     let a: I32 = 5
     let b: I32 = 10
     assert(a < b, "5 should be less than 10")
-    println("Compare less test passed!")
 }
 
 @test
@@ -174,7 +158,6 @@ func test_compare_equal() {
     let a: I32 = 7
     let b: I32 = 7
     assert(a == b, "7 should equal 7")
-    println("Compare equal test passed!")
 }
 
 @test
@@ -182,7 +165,6 @@ func test_compare_greater() {
     let a: I32 = 20
     let b: I32 = 10
     assert(a > b, "20 should be greater than 10")
-    println("Compare greater test passed!")
 }
 
 // ============================================================================
@@ -196,7 +178,6 @@ func test_maybe_eq_both_just_same_value() {
     let a_val: I32 = a.unwrap_or(-1)
     let b_val: I32 = b.unwrap_or(-1)
     assert(a_val == b_val, "Both Just(42) should have same value")
-    println("Maybe eq both Just same value test passed!")
 }
 
 @test
@@ -205,5 +186,4 @@ func test_maybe_eq_both_nothing() {
     let b: Maybe[I32] = Nothing
     assert(a.is_nothing(), "a should be Nothing")
     assert(b.is_nothing(), "b should be Nothing")
-    println("Maybe eq both Nothing test passed!")
 }

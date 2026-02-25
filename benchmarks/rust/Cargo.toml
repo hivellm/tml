@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 criterion = "0.5"
+tokio = { version = "1", features = ["full"] }
 
 [[bench]]
 name = "algorithms"
@@ -13,3 +14,7 @@ harness = false
 [[bench]]
 name = "http_server_bench"
 harness = false
+
+[[bin]]
+name = "tcp_async_bench"
+path = "main.rs"

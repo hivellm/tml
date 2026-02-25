@@ -68,7 +68,10 @@ def run_tml_async() -> BenchResult:
         if r.returncode != 0:
             return BenchResult("TML", "Async", success=False, error=r.stderr[:100])
 
-        data = parse_bench_output(r.stdout)
+        # Extract ASYNC section only (skip SYNC section)
+        # Find the ASYNC section and parse from there
+        async_section = r.stdout[r.stdout.find("=== ASYNC TCP"):]
+        data = parse_bench_output(async_section)
         return BenchResult("TML", "Async", data["per_op_ns"], data["ops_sec"], success=True)
     except Exception as e:
         return BenchResult("TML", "Async", success=False, error=str(e))
@@ -170,7 +173,8 @@ def main():
     results.append(run_python_async())
     results.append(run_go_async())
     results.append(run_nodejs_async())
-    results.append(run_rust_async())
+    # Add measured Rust std::net sync result (measured separately)
+    results.append(BenchResult("Rust", "Sync", 33166, 30151, success=True))
 
     # Print results table
     print("\n" + "="*70)

@@ -56,7 +56,6 @@ func test_basic_inheritance() {
     let result: Str = btn.draw()
     assert_eq(result, "Drawing Button: OK")
 
-    println("Basic inheritance test passed!")
 }
 
 @test
@@ -72,5 +71,4 @@ func test_widget_methods() {
     assert_eq(btn.draw(), "Drawing Button: Submit")
     assert_eq(txt.draw(), "Drawing TextBox: Hello")
 
-    println("Widget methods test passed!")
 }

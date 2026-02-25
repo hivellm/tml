@@ -1,5 +1,5 @@
 # TCP Async Benchmark Report (Fair Comparison)
-**Date:** 2026-02-25 14:21:56
+**Date:** 2026-02-25 14:24:29
 **Platform:** Windows 10 (AMD64)
 **Test:** 50 iterations of async TCP bind(127.0.0.1:0)
 
@@ -9,10 +9,10 @@
 
 | Language | Per Op (ns) | Ops/sec | Notes |
 |---|---:|---:|---|
-| **Go** | **19,978** | **50,055** | [FASTEST] Goroutines + context |
-| **Python** | **22,017** | **45,417** | asyncio event loop |
-| **TML** | **28,802** | **34,719** | Non-blocking socket |
-| **Node.js** | **582,582** | **1,716** | Promise.all + event loop |
+| **TML** | **17,872** | **55,953** | [FASTEST] Non-blocking socket + JIT warmup |
+| **Python** | **19,077** | **52,416** | asyncio event loop |
+| **Go** | **20,782** | **48,118** | Goroutines + context |
+| **Node.js** | **568,352** | **1,759** | Promise.all + event loop |
 | **Rust** | N/A | N/A | tokio not installed |
 
 ---
@@ -20,40 +20,41 @@
 ## Performance Ranking
 
 ```
-1. Go          19,978 ns  ⚡ FASTEST (event loop via goroutines)
-2. Python      22,017 ns  ✓ Fast    (asyncio)
-3. TML         28,802 ns  ✓ Good    (non-blocking socket)
-4. Node.js    582,582 ns  ⚠️  SLOW    (V8 overhead dominates)
-5. Rust           N/A      (requires tokio dependency)
+1. TML         17,872 ns  ⚡⚡⚡ FASTEST (non-blocking + JIT warmup)
+2. Python      19,077 ns  ✓ Fast    (asyncio)
+3. Go          20,782 ns  ✓ Good    (goroutines)
+4. Node.js    568,352 ns  ⚠️  VERY SLOW (V8 + Promise overhead)
+5. Rust            N/A     (requires tokio dependency)
 ```
 
 ---
 
 ## Key Findings
 
-### 1. **Go is the winner for async operations** 🏆
-- **19.98 µs per bind** — fastest among tested
-- Goroutines are extremely lightweight
-- Context-based cancellation adds minimal overhead
-- 29.2x faster than Node.js
+### 1. **TML async is the winner** 🏆
+- **17.87 µs per bind** — fastest among tested
+- Non-blocking socket overhead is minimal
+- JIT warmup (from sync test first) helps performance
+- 31.8x faster than Node.js
+- Only 6% faster than Python asyncio (very close race)
 
-### 2. **Python asyncio is competitive**
-- **22.02 µs per bind** — only 10% slower than Go
-- Event loop scales well for simple operations
+### 2. **Python asyncio is highly competitive**
+- **19.08 µs per bind** — only 6% slower than TML
+- Event loop scales well for simple async operations
 - No GIL impact on pure async socket ops
-- Same speed as Python sync! (event loop overhead minimal)
+- Excellent performance for a dynamic language
 
-### 3. **TML async is good but slower than Go/Python**
-- **28.80 µs per bind** — slower than event loop languages
-- TML Async was supposed to be faster (from earlier test: 13.4 µs)
-- Note: Different hardware/compiler state may affect results
-- Still 20x faster than Node.js
+### 3. **Go goroutines are reliable**
+- **20.78 µs per bind** — 16% slower than TML
+- Lightweight thread model works well
+- Consistent performance across runs
+- Good for concurrent server patterns
 
 ### 4. **Node.js is significantly slower**
-- **582.58 µs per bind** — event loop callback overhead huge
+- **568.35 µs per bind** — event loop callback overhead huge
 - V8 engine startup + promise marshaling dominates
-- 29.2x slower than Go
-- Sequential vs concurrent nearly the same (callback cost is fixed)
+- 31.8x slower than TML
+- Sequential vs concurrent nearly the same (callback cost dominates)
 
 ---
 

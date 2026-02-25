@@ -11,7 +11,6 @@ use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard}
 func test_mutex_new() {
     let mutex: Mutex[I32] = Mutex::new(42)
     assert(not mutex.is_locked())
-    println("Mutex new test passed!")
 }
 
 @test
@@ -23,7 +22,6 @@ func test_mutex_lock_and_read() {
         assert_eq(*guard.get(), 100)
     }  // guard dropped here, lock released
 
-    println("Mutex lock and read test passed!")
 }
 
 @test
@@ -41,7 +39,6 @@ func test_mutex_lock_and_write() {
         assert_eq(*guard.get(), 42)
     }
 
-    println("Mutex lock and write test passed!")
 }
 
 @test
@@ -54,7 +51,6 @@ func test_mutex_try_lock_success() {
         },
         Nothing => panic("try_lock should succeed when mutex is unlocked")
     }
-    println("Mutex try_lock success test passed!")
 }
 
 @test
@@ -70,7 +66,6 @@ func test_mutex_is_locked() {
     }
 
     assert(not mutex.is_locked())
-    println("Mutex is_locked test passed!")
 }
 
 @test
@@ -86,7 +81,6 @@ func test_mutex_into_inner() {
     // Consume mutex and get inner value
     let value: I32 = mutex.into_inner()
     assert_eq(value, 123)
-    println("Mutex into_inner test passed!")
 }
 
 @test
@@ -98,7 +92,6 @@ func test_mutex_get_mut() {
 
     let guard: MutexGuard[I32] = mutex.lock()
     assert_eq(*guard.get(), 75)
-    println("Mutex get_mut test passed!")
 }
 
 // ============================================================================
@@ -108,7 +101,6 @@ func test_mutex_get_mut() {
 @test
 func test_rwlock_new() {
     let rwlock: RwLock[I32] = RwLock::new(42)
-    println("RwLock new test passed!")
 }
 
 @test
@@ -120,7 +112,6 @@ func test_rwlock_read() {
         assert_eq(*guard.get(), 100)
     }
 
-    println("RwLock read test passed!")
 }
 
 @test
@@ -136,7 +127,6 @@ func test_rwlock_multiple_readers() {
         assert_eq(*r2.get(), 55)
     }
 
-    println("RwLock multiple readers test passed!")
 }
 
 @test
@@ -154,7 +144,6 @@ func test_rwlock_write() {
         assert_eq(*guard.get(), 42)
     }
 
-    println("RwLock write test passed!")
 }
 
 @test
@@ -168,7 +157,6 @@ func test_rwlock_try_read_success() {
         Nothing => panic("try_read should succeed")
     }
 
-    println("RwLock try_read success test passed!")
 }
 
 @test
@@ -184,7 +172,6 @@ func test_rwlock_try_write_success() {
 
     let r: RwLockReadGuard[I32] = rwlock.read()
     assert_eq(*r.get(), 88)
-    println("RwLock try_write success test passed!")
 }
 
 @test
@@ -198,7 +185,6 @@ func test_rwlock_into_inner() {
 
     let value: I32 = rwlock.into_inner()
     assert_eq(value, 456)
-    println("RwLock into_inner test passed!")
 }
 
 // ============================================================================
@@ -222,7 +208,6 @@ func test_mutex_guard_drop_releases_lock() {
         // if we get here, lock was released
     }
 
-    println("MutexGuard drop releases lock test passed!")
 }
 
 @test
@@ -240,7 +225,6 @@ func test_rwlock_read_guard_drop() {
         *w.get_mut() = 1
     }
 
-    println("RwLockReadGuard drop test passed!")
 }
 
 @test
@@ -259,5 +243,4 @@ func test_rwlock_write_guard_drop() {
         assert_eq(*r.get(), 42)
     }
 
-    println("RwLockWriteGuard drop test passed!")
 }
