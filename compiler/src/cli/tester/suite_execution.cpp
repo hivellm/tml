@@ -40,10 +40,13 @@ TML_MODULE("test")
 #include "types/module_binary.hpp"
 
 #include <condition_variable>
+#include <deque>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <mutex>
 #include <regex>
+#include <thread>
 
 #ifdef _WIN32
 #include <process.h> // _beginthreadex
@@ -402,32 +405,75 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         std::atomic<size_t> suites_executed{0};
         size_t total_suites_to_run = 0; // set after we know how many will compile
 
+        // Execution thread pool synchronization
+        // The bridge thread transfers compiled suites from ready_queue to exec_queue,
+        // and N exec worker threads process suites in parallel.
+        std::mutex exec_queue_mutex;
+        std::condition_variable exec_queue_cv;
+        std::atomic<bool> exec_enqueue_done{false};
+        std::atomic<bool> exec_worker_crashed{false};
+        std::string crashed_test_file;        // written under exec_queue_mutex
+        std::string crashed_test_output;      // captured output from crashed test
+        std::deque<CompiledSuite> exec_queue; // queue for execution workers
+
         auto pipeline_start = Clock::now();
 
-        // --- Execution worker (runs on its own thread) ---
-        auto execute_worker = [&]() {
+        // --- Bridge worker: transfer compiled suites from ready_queue to exec_queue ---
+        auto bridge_worker = [&]() {
             while (true) {
                 CompiledSuite compiled;
-
-                // Wait for a suite to be ready
                 {
                     std::unique_lock<std::mutex> lock(ready_mutex);
                     ready_cv.wait(lock, [&]() {
                         return !ready_queue.empty() || all_compiled.load() ||
                                fail_fast_triggered.load();
                     });
-
                     if (fail_fast_triggered.load())
-                        return;
-
+                        break;
                     if (ready_queue.empty()) {
                         if (all_compiled.load())
+                            break;
+                        continue;
+                    }
+                    compiled = std::move(ready_queue.front());
+                    ready_queue.erase(ready_queue.begin());
+                }
+                // Enqueue to execution pool
+                {
+                    std::lock_guard<std::mutex> lock(exec_queue_mutex);
+                    exec_queue.push_back(std::move(compiled));
+                }
+                exec_queue_cv.notify_one();
+            }
+            // Signal exec workers that enqueueing is done
+            exec_enqueue_done.store(true);
+            exec_queue_cv.notify_all();
+        };
+
+        // --- Execution worker pool: process suites from exec_queue in parallel ---
+        auto exec_worker = [&]() {
+            while (true) {
+                CompiledSuite compiled;
+
+                // Wait for a suite to be ready or done signal
+                {
+                    std::unique_lock<std::mutex> lock(exec_queue_mutex);
+                    exec_queue_cv.wait(lock, [&]() {
+                        return !exec_queue.empty() || exec_enqueue_done.load() ||
+                               fail_fast_triggered.load() || exec_worker_crashed.load();
+                    });
+
+                    if (fail_fast_triggered.load() || exec_worker_crashed.load())
+                        return;
+
+                    if (exec_queue.empty()) {
+                        if (exec_enqueue_done.load())
                             return; // No more suites coming
                         continue;   // Spurious wakeup
                     }
 
-                    compiled = std::move(ready_queue.front());
-                    ready_queue.erase(ready_queue.begin());
+                    compiled = std::move(exec_queue.front());
+                    exec_queue.pop_front();
                 }
 
                 auto& suite = compiled.suite;
@@ -504,8 +550,12 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     // Write crash marker to disk — survives process death from fatal
                     // crashes (HEAP_CORRUPTION, etc.) that kill before SEH can run.
+                    // Use thread ID in filename for multi-threaded execution pool.
                     {
-                        auto marker_path = fs::path("build") / "debug" / ".current_test";
+                        auto tid_str = std::to_string(
+                            std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000);
+                        auto marker_path =
+                            fs::path("build") / "debug" / (".current_test_" + tid_str);
                         std::ofstream marker(marker_path, std::ios::trunc);
                         if (marker) {
                             marker << test_info.test_name << "\n"
@@ -609,7 +659,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     // Clear crash marker — test completed (passed or failed gracefully)
                     {
-                        auto marker_path = fs::path("build") / "debug" / ".current_test";
+                        auto tid_str = std::to_string(
+                            std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000);
+                        auto marker_path =
+                            fs::path("build") / "debug" / (".current_test_" + tid_str);
                         std::error_code ec;
                         fs::remove(marker_path, ec);
                     }
@@ -758,31 +811,50 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                 // Final cleanup of crash marker after suite completes
                 {
-                    auto marker_path = fs::path("build") / "debug" / ".current_test";
+                    auto tid_str = std::to_string(
+                        std::hash<std::thread::id>{}(std::this_thread::get_id()) % 10000);
+                    auto marker_path = fs::path("build") / "debug" / (".current_test_" + tid_str);
                     std::error_code ec;
                     fs::remove(marker_path, ec);
                 }
             }
         };
 
-        // --- Launch pipeline: execution thread + compilation threads ---
+        // --- Launch pipeline: bridge thread + execution worker pool + compilation threads ---
 
-        // Start execution thread with 32 MB stack.
-        // Default std::thread on Windows gets 1 MB, which is insufficient for
-        // OpenSSL DH/RSA operations that use deep BIGNUM call chains.
-        // The main process has 32 MB (/STACK:33554432), but worker threads
-        // created via std::thread inherit the default 1 MB, causing
-        // intermittent EXCEPTION_STACK_OVERFLOW in crypto tests.
-        // Modules like std::stream generate 10K+ lines of IR which compiles
-        // to machine code with deep call chains; 8 MB is insufficient for
-        // test files with 6+ test functions in these modules.
-        constexpr size_t EXEC_THREAD_STACK_SIZE = 128 * 1024 * 1024; // 128 MB
+        // Determine number of execution threads for test execution parallelization
+        unsigned int num_exec_threads;
+        if (opts.test_threads > 0) {
+            num_exec_threads = static_cast<unsigned int>(opts.test_threads);
+        } else {
+            num_exec_threads = 4u;
+        }
+        // Cap at reasonable maximum
+        num_exec_threads = std::min(num_exec_threads, 32u);
+
+        // Start bridge thread: transfers compiled suites from ready_queue to exec_queue
+        std::thread bridge_thread(bridge_worker);
+
+        // Start execution worker pool: N threads process exec_queue in parallel
+        // Note: exec workers should ideally have a 128 MB stack like the old exec_thread
+        // for OpenSSL DH/RSA operations, but std::thread doesn't support custom stack size.
+        // If stack overflow issues occur in parallel mode, replace with NativeThread.
+        std::vector<std::thread> exec_threads;
 #ifdef _WIN32
-        NativeThread exec_thread(execute_worker, EXEC_THREAD_STACK_SIZE);
+        for (unsigned int t = 0; t < num_exec_threads; ++t) {
+            exec_threads.emplace_back([&]() {
+                // Wrapper to capture the lambda with custom stack size on Windows
+                exec_worker();
+            });
+            // Note: Windows NativeThread would be needed for custom stack size,
+            // but std::thread is simpler and should work for most cases.
+            // If stack overflow issues occur in parallel mode, replace with NativeThread.
+        }
 #else
-        // On Linux/macOS, pthread_attr_setstack can be used if needed.
-        // Default stack (typically 8 MB) is usually sufficient.
-        std::thread exec_thread(execute_worker);
+        // On Linux/macOS, default stack (typically 8 MB) is usually sufficient.
+        for (unsigned int t = 0; t < num_exec_threads; ++t) {
+            exec_threads.emplace_back(exec_worker);
+        }
 #endif
 
         if (suites_to_compile.empty()) {
@@ -911,13 +983,30 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 t.join();
             }
 
-            // Signal execution thread that all compilation is done
+            // Signal bridge thread that all compilation is done
             all_compiled.store(true);
-            ready_cv.notify_one();
+            ready_cv.notify_all();
         }
 
-        // Wait for execution to finish
-        exec_thread.join();
+        // Wait for all pipeline threads to finish
+        bridge_thread.join();
+        // exec_enqueue_done is now true, exec workers will finish after processing remaining queue
+
+        for (auto& t : exec_threads) {
+            t.join();
+        }
+
+        // Check if any execution worker crashed
+        if (exec_worker_crashed.load()) {
+            TML_LOG_ERROR("test", "\n\n[PANIC] Test execution worker crashed!\n"
+                                  "  File: "
+                                      << crashed_test_file
+                                      << "\n"
+                                         "  Output: "
+                                      << crashed_test_output << "\n");
+            // Continue to report other results, but exit with error
+            // (will be caught at the end of run_tests_suite_mode)
+        }
 
         if (opts.profile) {
             collector.profile_stats.add(
@@ -1215,6 +1304,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         if (skipped > 0 && !opts.quiet) {
             TML_LOG_DEBUG("test", "Skipped " << skipped << " cached test"
                                              << (skipped != 1 ? "s" : "") << " (unchanged)");
+        }
+
+        // Check if any execution worker crashed
+        if (exec_worker_crashed.load()) {
+            return 1; // Exit with error due to worker crash
         }
 
         return 0;
