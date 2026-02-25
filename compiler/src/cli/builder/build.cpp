@@ -1170,9 +1170,12 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         object_files.push_back(obj_result.object_file);
     }
 
-    if (output_type == BuildOutputType::Executable && parsed && parsed->success) {
-        auto runtime_objects =
-            get_runtime_objects(registry, *parsed->module, deps_cache, clang, verbose);
+    // For executables, ensure runtime objects are added (provides main entry point)
+    // This is critical for symbols like main() to be available to the linker
+    if (output_type == BuildOutputType::Executable) {
+        parser::Module empty_module;
+        const auto& mod = parsed && parsed->success ? *parsed->module : empty_module;
+        auto runtime_objects = get_runtime_objects(registry, mod, deps_cache, clang, verbose);
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
     }
 
@@ -1182,6 +1185,13 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     link_options.verbose = verbose;
     link_options.target_triple = tml::CompilerOptions::target_triple;
     link_options.sysroot = tml::CompilerOptions::sysroot;
+
+    // CRITICAL: Must use absolute paths for object files to avoid linker resolution issues
+    for (auto& obj_file : object_files) {
+        if (!obj_file.is_absolute()) {
+            obj_file = fs::absolute(obj_file);
+        }
+    }
 
     for (const auto& lib : link_libs) {
         if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
