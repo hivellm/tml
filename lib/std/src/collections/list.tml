@@ -17,7 +17,8 @@
 //! nums.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::intrinsics::{ptr_read, ptr_write, mem_free}
+use core::mem::size_of
 
 /// A dynamic array that grows automatically.
 ///
@@ -227,11 +228,27 @@ impl[T] List[T] {
         }
         let hdr: I64 = this.handle as I64
 
+        // Free individual Str elements before freeing buffer (for List[Str])
+        if size_of[T]() == 16 {
+            // Elements are 16 bytes (Str type)
+            let p_len: *I64 = (hdr + 8) as *I64
+            let len: I64 = lowlevel { ptr_read[I64](p_len) }
+            let p_data: *I64 = hdr as *I64
+            let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+            var i: I64 = 0
+            loop (i < len) {
+                let elem_addr: I64 = data_addr + i * 16
+                let elem_ptr: I64 = lowlevel { ptr_read[I64](elem_addr as *I64) }
+                lowlevel { mem_free(elem_ptr as *Unit) }
+                i = i + 1
+            }
+        }
+
         // Free data buffer
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
-        let data: *Unit = data_addr as *Unit
-        lowlevel { mem_free(data) }
+        lowlevel { mem_free(data_addr as *Unit) }
 
         // Free header
         lowlevel { mem_free(this.handle) }
