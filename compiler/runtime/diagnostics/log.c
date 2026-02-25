@@ -15,6 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/time.h>
+#endif
 
 /* Global state */
 static int g_rt_log_level = RT_LOG_WARN; /* Default: only warnings and above */
@@ -116,6 +123,30 @@ static int rt_log_check_module(int level, const char* module) {
     return level >= g_rt_log_level;
 }
 
+/* Internal: get current time in HH:MM:SS.mmm format */
+static void rt_get_timestamp(char* buf, size_t buf_size) {
+    time_t now = time(NULL);
+    struct tm* tm_info = localtime(&now);
+
+    if (tm_info) {
+#ifdef _WIN32
+        SYSTEMTIME st;
+        GetSystemTime(&st);
+        int ms = st.wMilliseconds;
+        snprintf(buf, buf_size, "%02d:%02d:%02d.%03d", tm_info->tm_hour, tm_info->tm_min,
+                 tm_info->tm_sec, ms);
+#else
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        int ms = (int)(tv.tv_usec / 1000);
+        snprintf(buf, buf_size, "%02d:%02d:%02d.%03d", tm_info->tm_hour, tm_info->tm_min,
+                 tm_info->tm_sec, ms);
+#endif
+    } else {
+        snprintf(buf, buf_size, "??:??:??.???");
+    }
+}
+
 /* Internal: write a formatted line to a FILE* in the current format */
 static void rt_log_write_to(FILE* f, int level, const char* module, const char* message,
                             const char* fields) {
@@ -123,10 +154,13 @@ static void rt_log_write_to(FILE* f, int level, const char* module, const char* 
     const char* msg = message ? message : "";
     const char* lvl = (level >= 0 && level <= 5) ? g_level_names[level] : "???";
     const char* lvl_short = (level >= 0 && level <= 5) ? g_level_short[level] : "??";
+    char timestamp[32];
+    rt_get_timestamp(timestamp, sizeof(timestamp));
 
     if (g_rt_log_format == 1) {
         /* JSON format */
-        fprintf(f, "{\"level\":\"%s\",\"module\":\"%s\",\"msg\":\"", lvl, mod);
+        fprintf(f, "{\"ts\":\"%s\",\"level\":\"%s\",\"module\":\"%s\",\"msg\":\"", timestamp, lvl,
+                mod);
         /* Escape JSON special chars in message */
         for (const char* p = msg; *p; p++) {
             switch (*p) {
@@ -170,15 +204,15 @@ static void rt_log_write_to(FILE* f, int level, const char* module, const char* 
         }
         fprintf(f, "}\n");
     } else if (g_rt_log_format == 2) {
-        /* Compact format */
-        fprintf(f, "%s [%s] %s", lvl_short, mod, msg);
+        /* Compact format with timestamp */
+        fprintf(f, "%s %s [%s] %s", timestamp, lvl_short, mod, msg);
         if (fields && fields[0]) {
             fprintf(f, " {%s}", fields);
         }
         fprintf(f, "\n");
     } else {
-        /* Text format (default) */
-        fprintf(f, "%s [%s] %s", lvl, mod, msg);
+        /* Text format (default) with timestamp */
+        fprintf(f, "%s %s [%s] %s", timestamp, lvl, mod, msg);
         if (fields && fields[0]) {
             fprintf(f, " | %s", fields);
         }
