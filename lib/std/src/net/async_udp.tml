@@ -208,3 +208,32 @@ impl UdpSocket {
         }
     }
 }
+
+// ============================================================================
+// EventLoop Integration (Phase 4)
+// ============================================================================
+
+impl AsyncUdpSocket {
+    /// Register this UDP socket with an event loop for async message events.
+    ///
+    /// Returns the token used to identify this socket's events.
+    ///
+    /// # Arguments
+    /// * `el` — the event loop to register with
+    /// * `interests` — bitmask of interests (1=READABLE, 2=WRITABLE, 3=BOTH)
+    pub func register_with_loop(this, el: mut ref EventLoop, interests: U32) -> Outcome[U32, Str] {
+        let socket_handle: I64 = this.socket.handle
+        let token: U32 = el.register(socket_handle, interests)
+        return Ok(token)
+    }
+
+    /// Unregister this UDP socket from the event loop.
+    pub func unregister_from_loop(this, el: mut ref EventLoop, token: U32) {
+        el.deregister(token)
+    }
+
+    /// Get the raw socket handle for use with an event loop.
+    pub func socket_handle(this) -> I64 {
+        return this.socket.handle
+    }
+}

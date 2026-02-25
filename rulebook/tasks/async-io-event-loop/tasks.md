@@ -34,16 +34,18 @@
 - [x] 3.12 Updated CHANGELOG.md with aio + stream enhancements
 - [x] 3.13 Updated ROADMAP.md with Phase 5 progress
 
-## Phase 4: High-Level Async TCP/UDP APIs [PENDING]
+## Phase 4: EventLoop Integration with std::net [IN PROGRESS]
 
-- [ ] 4.1 Create `lib/std/src/aio/tcp.tml` (TcpServer + TcpClient)
-- [ ] 4.2 Implement on_connection callback for TcpServer
-- [ ] 4.3 Implement on_data/on_end/on_error callbacks for TcpClient
-- [ ] 4.4 Echo server test: server accepts, echoes, client verifies
-- [ ] 4.5 Multi-client test: 10 concurrent connections via event loop
-- [ ] 4.6 Create `lib/std/src/aio/udp.tml` (UdpHandle)
-- [ ] 4.7 Implement on_message callback for UDP recv
-- [ ] 4.8 Ping-pong test: two UDP sockets exchange messages
+- [x] 4.1 Add `register_with_loop()` to `AsyncTcpListener` — enables event loop registration
+- [x] 4.2 Add `register_with_loop()` to `AsyncTcpStream` — enables event loop registration
+- [x] 4.3 Add `unregister_from_loop()` to `AsyncTcpStream` — cleanup
+- [x] 4.4 Add `socket_handle()` getter for both TCP types
+- [x] 4.5 Add `register_with_loop()` to `AsyncUdpSocket` — enables event loop registration
+- [x] 4.6 Add `unregister_from_loop()` to `AsyncUdpSocket` — cleanup
+- [x] 4.7 Add `socket_handle()` getter for UDP
+- [ ] 4.8 Create integration test: TCP echo server via EventLoop
+- [ ] 4.9 Create integration test: UDP ping-pong via EventLoop
+- [ ] 4.10 Create integration test: 10 concurrent TCP clients + timers
 
 ## Phase 5: Async Functions (Compiler Support) [DEFERRED]
 
