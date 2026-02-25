@@ -270,8 +270,16 @@ impl EventLoop {
         this.start_time_ms = this.get_time_ms()
         let base_time: I64 = this.start_time_ms
 
-        loop (this.running and (this.sources_count > 0 or this.timers.len() > 0)) {
-            // Calculate poll timeout from next timer deadline
+        loop (this.running and (
+            this.sources_count > 0 or
+            this.timers.len() > 0 or
+            el_la_len(this.next_tick_queue) > 0 or
+            el_la_len(this.pending_queue) > 0
+        )) {
+            // Phase 1: drain next_tick (highest priority — before I/O)
+            this.drain_next_tick()
+
+            // Phase 2: calculate poll timeout from next timer deadline
             let next_deadline: I64 = this.timers.next_deadline_ms()
             let now_ms: I64 = this.get_time_ms() - base_time
 
@@ -285,7 +293,12 @@ impl EventLoop {
                 }
             }
 
-            // Wait for I/O events
+            // If pending callbacks exist, don't block I/O — use 0 timeout
+            if el_la_len(this.pending_queue) > 0 {
+                timeout_ms = 0
+            }
+
+            // Phase 3: wait for I/O events
             let num_events: I32 = this.poller.wait(timeout_ms)
 
             // Get current time for timers
@@ -294,7 +307,7 @@ impl EventLoop {
             // Advance timers to current time
             this.timers.advance(current_time)
 
-            // Process I/O events
+            // Phase 4: process I/O events
             if num_events > 0 {
                 var i: I32 = 0
                 loop (i < num_events) {
@@ -333,6 +346,9 @@ impl EventLoop {
                     i = i + 1
                 }
             }
+
+            // Phase 5: drain pending (setImmediate — after I/O)
+            this.drain_pending()
         }
 
         this.running = false
@@ -340,6 +356,9 @@ impl EventLoop {
 
     /// Runs one iteration of the event loop.
     pub func poll_once(mut this, timeout_ms: I32) {
+        // Drain next_tick first (highest priority)
+        this.drain_next_tick()
+
         let num_events: I32 = this.poller.wait(timeout_ms)
         let current_time: I64 = this.get_time_ms() - this.start_time_ms
         this.timers.advance(current_time)
@@ -382,6 +401,9 @@ impl EventLoop {
                 i = i + 1
             }
         }
+
+        // Drain pending (setImmediate — after I/O)
+        this.drain_pending()
     }
 
     /// Posts a callback to the pending queue (setImmediate semantics).
