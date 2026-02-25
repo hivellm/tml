@@ -1,18 +1,40 @@
-//! Event emitter for publish/subscribe patterns (Node.js-style).
+//! Event-driven programming primitives.
 //!
-//! Provides an event-driven pub/sub mechanism compatible with Node.js's EventEmitter API.
-//! Internal implementation uses low-level arrays for memory efficiency.
+//! This module provides an `EventEmitter` type for publish/subscribe
+//! patterns, inspired by Node.js's `events` module.
 //!
-//! # Examples
+//! # Core Type
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`EventEmitter`] | Named-event dispatcher with ordered listeners |
+//!
+//! Listeners are `func(I64)` function pointers passed as I64.
+//!
+//! # Features
+//!
+//! - **on** — Register a listener
+//! - **once** — Register a one-time listener
+//! - **off** — Remove a listener
+//! - **emit** — Synchronously call all listeners
+//! - **emit_async** — Defer listeners to EventLoop pending queue
+//! - **emit_next_tick** — Defer listeners to EventLoop next-tick queue
+//! - **prepend_listener** — Register listener to be called first
+//! - **listeners_of** — Get all listeners for an event
+//! - **event_names** — Get all registered event names
+//!
+//! # Example
 //!
 //! ```tml
 //! use std::events::EventEmitter
 //!
-//! func my_handler(data: I64) { /* process event */ }
+//! func on_click(data: I64) {
+//!     print("clicked!\n")
+//! }
 //!
 //! var emitter = EventEmitter::new()
-//! emitter.on("data", my_handler as I64)
-//! emitter.emit("data", 42)
+//! emitter.on("click", on_click as I64)
+//! emitter.emit("click", 0)
 //! emitter.destroy()
 //! ```
 
@@ -148,6 +170,8 @@ func la_prepend_pair(h: I64, fn_ptr: I64, is_once: I64) {
     la_set(h, 0, fn_ptr)
     la_set(h, 1, is_once)
 }
+
+// ── EventEmitter pub/sub type ──────────────────────────────────────────────
 
 /// Event emitter for pub/sub patterns.
 ///
