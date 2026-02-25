@@ -1,6 +1,6 @@
 # Tasks: Async I/O Event Loop (std::aio)
 
-**Status**: Phase 4 Complete — EventLoop integration with std::net (100%)
+**Status**: Phase 5 Complete — High-Level Async UDP (100%)
 
 ## Phase 1: Platform Poller (C FFI) [DONE]
 
@@ -48,15 +48,18 @@
 - [x] 4.10 Fixed test suite DLL crash — was caused by SocketAddr::parse() codegen, not EventLoop
 - [x] 4.11 Verified all 31 aio tests passing (6 test files: event_loop, poller, timer_wheel, simple, tcp_socket_handle, udp_socket_handle)
 
-## Phase 5: Async Functions (Compiler Support) [DEFERRED]
+## Phase 5: High-Level Async UDP [DONE]
 
-- [ ] 5.1 Add `async` keyword to lexer
-- [ ] 5.2 Parse `async func` declarations
-- [ ] 5.3 Type-check: async func returns Promise[T] or Task[T]
-- [ ] 5.4 Codegen: transform async func into state machine
-- [ ] 5.5 Add `await` expression parsing + codegen
-- [ ] 5.6 Test: async func + await in TML code
-- **Note**: Deferred to Phase 6. Callbacks work today; async/await is syntactic sugar for future enhancement.
+- [x] 5.1 Create `lib/std/src/aio/udp.tml` (UdpHandle type) — 150+ lines
+- [x] 5.2 Implement UdpHandle::bind() — create and bind UDP socket
+- [x] 5.3 Implement UdpHandle::register() — register with EventLoop
+- [x] 5.4 Implement UdpHandle::set_on_message() — set message callback
+- [x] 5.5 Implement UdpHandle::set_on_error() — set error callback
+- [x] 5.6 Implement UdpHandle::send_to() — send datagram without blocking
+- [x] 5.7 Implement UdpHandle::close() / destroy() — cleanup
+- [x] 5.8 Add tests for UdpHandle creation and callbacks
+- [x] 5.9 Update `lib/std/src/aio/mod.tml` to export UdpHandle
+- [x] 5.10 All UDP tests passing
 
 ## Phase 6: Stream Module Enhancements [DONE]
 
@@ -77,13 +80,14 @@
 
 ## Summary
 
-**Async I/O Event Loop (std::aio)** is now fully integrated with **std::net** async types.
+**Async I/O Event Loop (std::aio)** is now fully integrated with **std::net** async types, plus high-level **UdpHandle** for callback-based UDP I/O.
 
 **Deliverables:**
 - Layer 1: Platform Poller (epoll/WSAPoll) — C FFI in poll.c
 - Layer 2: TML wrappers (Poller, TimerWheel, EventLoop) — 1,200+ lines of pure TML
 - Layer 3: EventLoop integration with AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket
-- Test coverage: 28/28 tests passing (100%)
+- Layer 4: High-level async handles (UdpHandle) — 150+ lines of pure TML
+- Test coverage: 35+ tests passing
 - Documentation: docs/packages/27-AIO.md (comprehensive guide)
 
 **API Ready:**
@@ -97,5 +101,6 @@ pub func socket_handle(this) -> I64
 Users can now build event-driven TCP/UDP servers with the EventLoop, handling multiple concurrent connections efficiently via OS-level I/O polling.
 
 **Future Phases:**
-- Phase 5: async/await syntax (compiler support, deferred)
-- Phase 6 onwards: Higher-level async frameworks (async/await sugar, async iterators, async streams)
+- Phase 6: High-Level Async TCP (TcpServer + TcpClient)
+- Phase 7: async/await syntax (compiler support)
+- Phase 8 onwards: Higher-level async frameworks (async iterators, async streams)
