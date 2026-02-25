@@ -334,8 +334,7 @@ int32_t tml_mem_check_leaks(void) {
     }
 
     if (leak_count > 0) {
-        fprintf(out, "\n");
-        fprintf(out, "[MEMORY LEAKS] %d unfreed allocation(s) totaling %llu bytes:\n", leak_count,
+        fprintf(out, "[MEMORY LEAKS] %d unfreed allocation(s) totaling %llu bytes\n", leak_count,
                 (unsigned long long)leak_bytes);
 
         int shown = 0;

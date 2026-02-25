@@ -1099,7 +1099,7 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
 
         GlobalModuleCache::instance().put(module_path, std::move(module));
         ++loaded;
-        TML_LOG_INFO("meta", "  [LOADED] " << module_path);
+        TML_LOG_DEBUG("meta", "  [LOADED] " << module_path);
     }
 
     // Regenerate stale modules from source
