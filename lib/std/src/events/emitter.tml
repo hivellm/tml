@@ -246,6 +246,30 @@ impl EventEmitter {
         this.listener_count(event) > 0
     }
 
+    pub func prepend_listener(mut this, event: Str, listener: I64) {
+        var arr: I64 = 0
+        if this.events.has(event) {
+            arr = this.events.get(event)
+        } else {
+            arr = la_new()
+            this.events.set(event, arr)
+        }
+        la_prepend_pair(arr, listener, 0)
+        this.total_count = this.total_count + 1
+    }
+
+    pub func prepend_once_listener(mut this, event: Str, listener: I64) {
+        var arr: I64 = 0
+        if this.events.has(event) {
+            arr = this.events.get(event)
+        } else {
+            arr = la_new()
+            this.events.set(event, arr)
+        }
+        la_prepend_pair(arr, listener, 1)
+        this.total_count = this.total_count + 1
+    }
+
     pub func destroy(mut this) {
         // Manually iterate HashMap buckets to free all listener arrays.
         // We read the internal layout directly because HashMapIter causes

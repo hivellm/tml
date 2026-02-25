@@ -1,0 +1,68 @@
+use test::{assert_eq, assert_true}
+use std::events::EventEmitter
+use core::intrinsics::{ptr_read, ptr_write}
+use core::mem::{mem_alloc, mem_free}
+
+// Writes its own unique value to the counter (so we can verify order)
+func write_1(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 1 as I64) }
+}
+
+func write_2(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 2 as I64) }
+}
+
+func write_3(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 3 as I64) }
+}
+
+@test
+func test_prepend_fires_first() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", write_2 as I64)
+    emitter.prepend_listener("data", write_1 as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 listeners after prepend")
+    emitter.emit("data", state as I64)
+    let val: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val, 2 as I64, "write_2 (second) fired last, so value is 2")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_prepend_once_fires_and_removes() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", write_2 as I64)
+    emitter.prepend_once_listener("data", write_1 as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 listeners before emit")
+    emitter.emit("data", state as I64)
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 listener after emit (once removed)")
+    emitter.emit("data", state as I64)
+    let val: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val, 2 as I64, "second emit only calls write_2")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_multiple_prepends_order() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", write_3 as I64)       // registered first, fires last
+    emitter.prepend_listener("data", write_2 as I64)  // prepended second
+    emitter.prepend_listener("data", write_1 as I64)  // prepended first, fires first
+    assert_eq(emitter.listener_count("data"), 3 as I64, "3 listeners")
+    emitter.emit("data", state as I64)
+    let val: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(val, 3 as I64, "write_3 fires last")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
