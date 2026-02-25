@@ -1,66 +1,59 @@
-// DISABLED: This test file causes a compiler crash (null pointer) in suite mode
-// The crash occurs during test execution in lib_core_tests_2/lib_core_tests_42 suites
-// Likely a compiler bug in test harness or runtime linking
-//
-// Individual tests pass when run in isolation, but suite compilation fails
-// TODO: Investigate compiler issue in test suite linking/runtime setup
-//
-// use test::{assert, assert_eq}
-// use core::ops::drop::ManuallyDrop
-//
-// @test
-// func test_manually_drop_new_and_into_inner() -> I32 {
-//     let md: ManuallyDrop[I64] = ManuallyDrop::new(42 as I64)
-//     let val: I64 = ManuallyDrop::into_inner(md)
-//     assert_eq(val, 42 as I64, "into_inner should return wrapped value")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_get() -> I32 {
-//     let md: ManuallyDrop[I64] = ManuallyDrop::new(99 as I64)
-//     let r: ref I64 = md.get()
-//     assert_eq(*r, 99 as I64, "get should return ref to value")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_get_mut() -> I32 {
-//     var md: ManuallyDrop[I64] = ManuallyDrop::new(10 as I64)
-//     let r: mut ref I64 = md.get_mut()
-//     *r = 20 as I64
-//     assert_eq(*md.get(), 20 as I64, "get_mut should allow mutation")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_duplicate() -> I32 {
-//     let md: ManuallyDrop[I64] = ManuallyDrop::new(77 as I64)
-//     let md2: ManuallyDrop[I64] = md.duplicate()
-//     assert_eq(ManuallyDrop::into_inner(md2), 77 as I64, "duplicate should copy value")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_to_string() -> I32 {
-//     let md: ManuallyDrop[I64] = ManuallyDrop::new(55 as I64)
-//     let s: Str = md.to_string()
-//     assert(s.len() > 0, "to_string should produce non-empty string")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_debug_string() -> I32 {
-//     let md: ManuallyDrop[I64] = ManuallyDrop::new(33 as I64)
-//     let dbg: Str = md.debug_string()
-//     assert(dbg.len() > 0, "debug_string should produce non-empty string")
-//     return 0
-// }
-//
-// @test
-// func test_manually_drop_default() -> I32 {
-//     let md: ManuallyDrop[I32] = ManuallyDrop::default()
-//     let val: ref I32 = md.get()
-//     assert_eq(*val, 0, "default ManuallyDrop[I32] should contain 0")
-//     0
-// }
+use test::{assert, assert_eq}
+use core::ops::drop::ManuallyDrop
+
+@test
+func test_manually_drop_new_value() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(42 as I64)
+    let r: ref I64 = md.get()
+    assert_eq(*r, 42 as I64, "new should wrap value correctly")
+    return 0
+}
+
+@test
+func test_manually_drop_get() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(99 as I64)
+    let r: ref I64 = md.get()
+    assert_eq(*r, 99 as I64, "get should return ref to value")
+    return 0
+}
+
+@test
+func test_manually_drop_get_mut() -> I32 {
+    var md: ManuallyDrop[I64] = ManuallyDrop::new(10 as I64)
+    let r: mut ref I64 = md.get_mut()
+    *r = 20 as I64
+    assert_eq(*md.get(), 20 as I64, "get_mut should allow mutation")
+    return 0
+}
+
+@test
+func test_manually_drop_duplicate() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(77 as I64)
+    let md2: ManuallyDrop[I64] = md.duplicate()
+    assert_eq(*md2.get(), 77 as I64, "duplicate should copy value")
+    return 0
+}
+
+@test
+func test_manually_drop_to_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(55 as I64)
+    let s: Str = md.to_string()
+    assert(s.len() > 0, "to_string should produce non-empty string")
+    return 0
+}
+
+@test
+func test_manually_drop_debug_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(33 as I64)
+    let dbg: Str = md.debug_string()
+    assert(dbg.len() > 0, "debug_string should produce non-empty string")
+    return 0
+}
+
+@test
+func test_manually_drop_default() -> I32 {
+    let md: ManuallyDrop[I32] = ManuallyDrop::default()
+    let val: ref I32 = md.get()
+    assert_eq(*val, 0, "default ManuallyDrop[I32] should contain 0")
+    0
+}
