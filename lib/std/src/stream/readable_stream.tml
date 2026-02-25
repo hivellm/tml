@@ -15,6 +15,8 @@
 //! | `"error"` | Str pointer as I64 | An error occurred |
 //! | `"close"` | 0 | Stream resources released |
 //! | `"readable"` | 0 | Data available to pull (paused mode) |
+//! | `"pause"` | 0 | Stream paused |
+//! | `"resume"` | 0 | Stream resumed |
 //!
 //! # Example
 //!
@@ -205,9 +207,7 @@ func rbuf_clear(h: I64) {
 // ReadableStream state layout
 // ============================================================================
 
-// ReadableStream state layout (see handle offsets below)
-
-// Handle layout (56 bytes) — emitter is a struct field, not in handle:
+// Handle layout (80 bytes) — emitter is a struct field, not in handle:
 //   offset 0:  buffer (I64)          — pointer to internal rbuf
 //   offset 8:  state (I64)           — RS_STATE_NULL / FLOWING / PAUSED
 //   offset 16: high_water_mark (I64) — backpressure threshold
@@ -216,6 +216,8 @@ func rbuf_clear(h: I64) {
 //   offset 40: destroyed (I64)       — 1 if destroyed
 //   offset 48: errored (I64)         — 1 if error emitted
 //   offset 56: pipe_dest (I64)       — pointer to piped WritableStream
+//   offset 64: error_ptr (I64)       — pointer to error Str (0 if none)
+//   offset 72: did_read (I64)        — 1 if "data" event was ever emitted
 
 const OFFSET_BUFFER: I64 = 0
 const OFFSET_STATE: I64 = 8
@@ -225,7 +227,9 @@ const OFFSET_ENDED: I64 = 32
 const OFFSET_DESTROYED: I64 = 40
 const OFFSET_ERRORED: I64 = 48
 const OFFSET_PIPE_DEST: I64 = 56
-const RS_HANDLE_SIZE: I64 = 64
+const OFFSET_ERROR_PTR: I64 = 64
+const OFFSET_DID_READ: I64 = 72
+const RS_HANDLE_SIZE: I64 = 80
 
 // ============================================================================
 // ReadableStream type
@@ -251,7 +255,6 @@ impl ReadableStream {
         var hwm: I64 = high_water_mark
         if hwm <= 0 { hwm = 16384 }
 
-        // Handle stores: buffer, state, hwm, read_fn, ended, destroyed, errored, pipe_dest
         let h: *Unit = rs_alloc(RS_HANDLE_SIZE)
         let addr: I64 = h as I64
 
@@ -265,6 +268,8 @@ impl ReadableStream {
         rs_wr(addr + OFFSET_DESTROYED, 0)
         rs_wr(addr + OFFSET_ERRORED, 0)
         rs_wr(addr + OFFSET_PIPE_DEST, 0)
+        rs_wr(addr + OFFSET_ERROR_PTR, 0)
+        rs_wr(addr + OFFSET_DID_READ, 0)
 
         ReadableStream {
             emitter: EventEmitter::new(),
@@ -325,6 +330,22 @@ impl ReadableStream {
 
     pub func set_pipe_dest(mut this, dest: I64) {
         rs_wr(this.handle as I64 + OFFSET_PIPE_DEST, dest)
+    }
+
+    pub func get_error_ptr(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_ERROR_PTR)
+    }
+
+    pub func set_error_ptr(mut this, ptr: I64) {
+        rs_wr(this.handle as I64 + OFFSET_ERROR_PTR, ptr)
+    }
+
+    pub func get_did_read(this) -> Bool {
+        rs_rd(this.handle as I64 + OFFSET_DID_READ) != 0
+    }
+
+    pub func set_did_read(mut this) {
+        rs_wr(this.handle as I64 + OFFSET_DID_READ, 1)
     }
 
     // ---- Internal emitter helpers ----
@@ -393,6 +414,11 @@ impl ReadableStream {
         this.emitter_emit(event, data)
     }
 
+    /// Returns the number of listeners for a given event.
+    pub func listener_count(this, event: Str) -> I64 {
+        this.emitter.listener_count(event)
+    }
+
     // ================================================================
     // Public API: Push data into the stream (producer side)
     // ================================================================
@@ -414,8 +440,21 @@ impl ReadableStream {
         let state: I64 = this.get_state()
 
         if state == RS_STATE_FLOWING {
-            // Emit data event immediately
+            // Emit data event immediately — mark did_read
+            this.set_did_read()
             this.emitter_emit("data", data as I64)
+
+            // If piped, write to destination
+            let pipe_dest: I64 = this.get_pipe_dest()
+            if pipe_dest != 0 {
+                let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
+                let ok: Bool = ws.write(data)
+                if not ok {
+                    // Backpressure from dest — pause ourselves
+                    this.pause()
+                }
+            }
+
             return true
         }
 
@@ -448,6 +487,12 @@ impl ReadableStream {
         // If buffer is empty, emit end immediately
         if buf_len == 0 {
             this.emitter_emit("end", 0)
+            // If piped, end the destination too
+            let pipe_dest: I64 = this.get_pipe_dest()
+            if pipe_dest != 0 {
+                let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
+                ws.end()
+            }
         }
         // Otherwise end will be emitted when buffer is drained via read()
     }
@@ -475,6 +520,7 @@ impl ReadableStream {
         }
 
         let result: Str = rbuf_read(buf, size)
+        this.set_did_read()
 
         // Check if we should emit "end" after draining
         let remaining: I64 = rbuf_len(buf)
@@ -505,6 +551,7 @@ impl ReadableStream {
             return ""
         }
         let result: Str = rbuf_read_all(buf)
+        this.set_did_read()
         if this.is_ended() {
             this.emitter_emit("end", 0)
         }
@@ -525,22 +572,35 @@ impl ReadableStream {
     // ================================================================
 
     /// Switch to paused mode. Data will accumulate in the buffer.
+    ///
+    /// Emits `"pause"` event.
     pub func pause(mut this) {
         if this.is_destroyed_internal() { return }
+        let was: I64 = this.get_state()
         this.set_state(RS_STATE_PAUSED)
+        if was != RS_STATE_PAUSED {
+            this.emitter_emit("pause", 0)
+        }
     }
 
     /// Switch to flowing mode. Buffered data is emitted via `"data"` events.
+    ///
+    /// Emits `"resume"` event.
     pub func resume(mut this) {
         if this.is_destroyed_internal() { return }
         let was: I64 = this.get_state()
         this.set_state(RS_STATE_FLOWING)
+
+        if was != RS_STATE_FLOWING {
+            this.emitter_emit("resume", 0)
+        }
 
         // Flush any buffered data as "data" events
         let buf: I64 = this.get_buf()
         let buf_len: I64 = rbuf_len(buf)
         if buf_len > 0 {
             let data: Str = rbuf_read_all(buf)
+            this.set_did_read()
             this.emitter_emit("data", data as I64)
         }
 
@@ -560,6 +620,57 @@ impl ReadableStream {
         if this.is_destroyed_internal() { return }
         let buf: I64 = this.get_buf()
         rbuf_prepend_str(buf, data)
+    }
+
+    // ================================================================
+    // Public API: Pipe
+    // ================================================================
+
+    /// Pipe all data from this readable to a writable destination.
+    ///
+    /// Returns the destination for chaining.
+    /// Emits `"pipe"` on the destination and `"resume"` on this stream.
+    /// When this stream ends, the destination is ended too.
+    /// Backpressure is handled: if dest returns false from write(),
+    /// this stream pauses until dest emits "drain".
+    pub func pipe(mut this, dest: mut ref WritableStream) {
+        if this.is_destroyed_internal() { return }
+
+        // Store pipe destination
+        this.set_pipe_dest((mut ref dest) as I64)
+
+        // Emit "pipe" on destination
+        dest.emit("pipe", (mut ref this) as I64)
+
+        // Switch to flowing mode — this will flush buffered data
+        if this.get_state() != RS_STATE_FLOWING {
+            this.resume()
+        }
+    }
+
+    /// Remove the pipe to a writable destination.
+    ///
+    /// Emits `"unpipe"` on the destination.
+    pub func unpipe(mut this, dest: mut ref WritableStream) {
+        if this.is_destroyed_internal() { return }
+        let pipe_dest: I64 = this.get_pipe_dest()
+        if pipe_dest == 0 { return }
+
+        // Only unpipe if it matches
+        if pipe_dest == (mut ref dest) as I64 {
+            this.set_pipe_dest(0)
+            dest.emit("unpipe", (mut ref this) as I64)
+        }
+    }
+
+    /// Remove all pipes.
+    pub func unpipe_all(mut this) {
+        if this.is_destroyed_internal() { return }
+        let pipe_dest: I64 = this.get_pipe_dest()
+        if pipe_dest == 0 { return }
+        let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
+        ws.emit("unpipe", (mut ref this) as I64)
+        this.set_pipe_dest(0)
     }
 
     // ================================================================
@@ -590,8 +701,31 @@ impl ReadableStream {
         this.is_ended()
     }
 
+    /// Returns the highWaterMark value.
+    pub func readable_high_water_mark(this) -> I64 {
+        if this.handle == (0 as *Unit) { return 0 as I64 }
+        this.get_hwm()
+    }
+
+    /// Returns true if a "data" event has been emitted at least once.
+    pub func readable_did_read(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.get_did_read()
+    }
+
+    /// Returns true if the stream was destroyed before "end" was emitted.
+    pub func readable_aborted(this) -> Bool {
+        if this.handle == (0 as *Unit) { return false }
+        this.is_destroyed_internal() and not this.is_ended()
+    }
+
     /// Returns true if the stream has been destroyed.
     pub func closed(this) -> Bool {
+        this.is_destroyed_internal()
+    }
+
+    /// Returns true if the stream has been destroyed.
+    pub func destroyed(this) -> Bool {
         this.is_destroyed_internal()
     }
 
@@ -599,6 +733,15 @@ impl ReadableStream {
     pub func errored(this) -> Bool {
         if this.handle == (0 as *Unit) { return false }
         this.is_errored_internal()
+    }
+
+    /// Returns the error string, or "" if no error.
+    @allocates
+    pub func error_message(this) -> Str {
+        if this.handle == (0 as *Unit) { return "" }
+        let ptr: I64 = this.get_error_ptr()
+        if ptr == 0 { return "" }
+        ptr as Str
     }
 
     // ================================================================
@@ -611,6 +754,15 @@ impl ReadableStream {
     pub func destroy(mut this) {
         if this.is_destroyed_internal() { return }
         this.set_destroyed_flag()
+
+        // Unpipe if piped
+        let pipe_dest: I64 = this.get_pipe_dest()
+        if pipe_dest != 0 {
+            let ws: mut ref WritableStream = pipe_dest as mut ref WritableStream
+            ws.emit("unpipe", (mut ref this) as I64)
+            this.set_pipe_dest(0)
+        }
+
         this.emitter_emit("close", 0)
         // Free internal buffer
         let buf: I64 = this.get_buf()
@@ -628,7 +780,11 @@ impl ReadableStream {
     pub func destroy_with_error(mut this, err: Str) {
         if this.is_destroyed_internal() { return }
         this.set_errored_flag()
+        this.set_error_ptr(err as I64)
         this.emitter_emit("error", err as I64)
         this.destroy()
     }
 }
+
+// Forward declaration reference — WritableStream is used in pipe()
+use std::stream::writable_stream::WritableStream
