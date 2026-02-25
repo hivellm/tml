@@ -32,6 +32,61 @@ func wr(addr: I64, val: I64) {
     lowlevel { ptr_write[I64](addr as *I64, val) }
 }
 
+// ── el_la_* helpers for pending callback queues ──────────────────────────
+
+/// Creates a new low-level array for callback pairs (callback + user_data).
+func el_la_new() -> I64 {
+    let header: *Unit = mem_alloc(24)
+    let h: I64 = header as I64
+    let data: *Unit = mem_alloc(64)
+    wr(h, data as I64)
+    wr(h + 8, 0)
+    wr(h + 16, 8)
+    h
+}
+
+/// Appends a single I64 value to a low-level array.
+func el_la_push(h: I64, val: I64) {
+    let len: I64 = rd(h + 8)
+    let cap: I64 = rd(h + 16)
+    if len >= cap {
+        let new_cap: I64 = cap * 2
+        let old_data: *Unit = rd(h) as *Unit
+        let new_data: *Unit = mem_alloc(new_cap * 8)
+        let old_bytes: I64 = cap * 8
+        lowlevel { copy_nonoverlapping(old_data as *U8, new_data as *U8, old_bytes) }
+        mem_free(old_data)
+        wr(h, new_data as I64)
+        wr(h + 16, new_cap)
+    }
+    let data: I64 = rd(h)
+    wr(data + len * 8, val)
+    wr(h + 8, len + 1)
+}
+
+/// Reads an I64 value at the given index.
+func el_la_get(h: I64, idx: I64) -> I64 {
+    let data: I64 = rd(h)
+    rd(data + idx * 8)
+}
+
+/// Returns the current length of the array.
+func el_la_len(h: I64) -> I64 {
+    rd(h + 8)
+}
+
+/// Clears the array without freeing memory (sets length to 0).
+func el_la_clear(h: I64) {
+    wr(h + 8, 0)
+}
+
+/// Destroys the array and frees all memory.
+func el_la_destroy(h: I64) {
+    let data: *Unit = rd(h) as *Unit
+    mem_free(data)
+    mem_free(h as *Unit)
+}
+
 // ── IoSource (internal) ──────────────────────────────────────────────────
 
 /// Internal I/O source entry.
@@ -68,6 +123,10 @@ pub type EventLoop {
     running: Bool,
     /// Start time of the loop (for monotonic timer references).
     start_time_ms: I64,
+    /// Pending callbacks queue (drained after I/O, setImmediate semantics).
+    pending_queue: I64,
+    /// Next-tick callbacks queue (drained before I/O, process.nextTick semantics).
+    next_tick_queue: I64,
 }
 
 impl EventLoop {
@@ -90,6 +149,8 @@ impl EventLoop {
             next_token: 0,
             running: false,
             start_time_ms: 0,
+            pending_queue: el_la_new(),
+            next_tick_queue: el_la_new(),
         }
     }
 
@@ -323,6 +384,72 @@ impl EventLoop {
         }
     }
 
+    /// Posts a callback to the pending queue (setImmediate semantics).
+    /// Fires after the current I/O poll, before the next poll.
+    pub func post(mut this, callback: I64, user_data: I64) {
+        el_la_push(this.pending_queue, callback)
+        el_la_push(this.pending_queue, user_data)
+    }
+
+    /// Posts a callback to the next-tick queue (process.nextTick semantics).
+    /// Fires before the next I/O poll — highest priority deferred execution.
+    pub func post_next_tick(mut this, callback: I64, user_data: I64) {
+        el_la_push(this.next_tick_queue, callback)
+        el_la_push(this.next_tick_queue, user_data)
+    }
+
+    /// Drains the next_tick_queue synchronously (all callbacks in FIFO order).
+    pub func drain_next_tick(mut this) {
+        let len: I64 = el_la_len(this.next_tick_queue)
+        var i: I64 = 0
+        loop (i < len) {
+            let cb: I64 = el_la_get(this.next_tick_queue, i)
+            let ud: I64 = el_la_get(this.next_tick_queue, i + 1)
+            if cb != 0 {
+                let f: func(I64) = cb as func(I64)
+                f(ud)
+            }
+            i = i + 2
+        }
+        el_la_clear(this.next_tick_queue)
+    }
+
+    /// Drains the pending_queue synchronously (all callbacks in FIFO order).
+    pub func drain_pending(mut this) {
+        let len: I64 = el_la_len(this.pending_queue)
+        var i: I64 = 0
+        loop (i < len) {
+            let cb: I64 = el_la_get(this.pending_queue, i)
+            let ud: I64 = el_la_get(this.pending_queue, i + 1)
+            if cb != 0 {
+                let f: func(I64) = cb as func(I64)
+                f(ud)
+            }
+            i = i + 2
+        }
+        el_la_clear(this.pending_queue)
+    }
+
+    /// Schedules a callback to fire after the next I/O poll (setImmediate semantics).
+    /// Returns an opaque immediate ID (use with clear_immediate).
+    pub func set_immediate(mut this, callback: I64, user_data: I64) -> I64 {
+        let idx: I64 = el_la_len(this.pending_queue)
+        el_la_push(this.pending_queue, callback)
+        el_la_push(this.pending_queue, user_data)
+        return idx
+    }
+
+    /// Cancels a pending immediate by zeroing its callback slot.
+    /// Safe to call with an invalid ID (out of range = no-op).
+    pub func clear_immediate(mut this, id: I64) {
+        let len: I64 = el_la_len(this.pending_queue)
+        if id < 0 or id >= len {
+            return
+        }
+        let data: I64 = rd(this.pending_queue)
+        wr(data + id * 8, 0)
+    }
+
     /// Stops the event loop.
     pub func stop(mut this) {
         this.running = false
@@ -333,6 +460,8 @@ impl EventLoop {
         this.poller.destroy()
         this.timers.destroy()
         mem_free(this.sources as *Unit)
+        el_la_destroy(this.pending_queue)
+        el_la_destroy(this.next_tick_queue)
     }
 
     // ── Internal helpers ────────────────────────────────────────────────────
