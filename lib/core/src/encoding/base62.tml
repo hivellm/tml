@@ -71,6 +71,7 @@ pub func encode(input: Str) -> Str {
 /// Decode base62 back to original bytes (2 chars -> 1 byte).
 ///
 /// Input length must be even.
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

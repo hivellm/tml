@@ -113,6 +113,7 @@ pub func encode(input: Str) -> Str {
 /// Decode a Base45 string back to original bytes.
 ///
 /// Input length must satisfy: len % 3 == 0 or len % 3 == 2.
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

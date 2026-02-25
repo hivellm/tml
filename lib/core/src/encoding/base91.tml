@@ -115,6 +115,7 @@ pub func encode(input: Str) -> Str {
 }
 
 /// Decode a Base91 string back to original bytes.
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(input)
     if in_len == 0 {

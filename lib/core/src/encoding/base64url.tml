@@ -16,16 +16,19 @@ use core::str
 use core::encoding::base64
 
 /// Encode a string using URL-safe Base64 alphabet (- and _ instead of + and /).
+@allocates
 pub func encode(input: Str) -> Str {
     return base64::encode_url(input)
 }
 
 /// Decode a URL-safe Base64 string.
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     return base64::decode_url(input)
 }
 
 /// Encode without padding (no trailing '=').
+@allocates
 pub func encode_nopad(input: Str) -> Str {
     let encoded: Str = base64::encode_url(input)
     // Strip trailing '=' characters

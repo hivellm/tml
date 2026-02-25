@@ -197,6 +197,7 @@ func decode_val(c: I32) -> I64 {
 /// Decode a Base58 string back to original bytes.
 ///
 /// Leading '1' characters in the input become zero bytes.
+@allocates
 pub func decode(b58: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(b58)
     if in_len == 0 {

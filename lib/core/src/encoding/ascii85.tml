@@ -126,6 +126,7 @@ pub func encode(input: Str) -> Str {
 }
 
 /// Decode an Ascii85 string (with `<~` `~>` delimiters) back to bytes.
+@allocates
 pub func decode(a85: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(a85)
     if in_len < 4 {

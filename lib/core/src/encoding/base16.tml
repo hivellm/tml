@@ -28,6 +28,7 @@ pub func encode_upper(input: Str) -> Str {
 }
 
 /// Decode a base16 (hexadecimal) string back to original bytes.
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     return hex::decode(input)
 }

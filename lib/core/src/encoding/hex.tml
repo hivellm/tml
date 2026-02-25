@@ -121,6 +121,7 @@ pub func encode_upper(input: Str) -> Str {
 /// assert(decode("48656c6c6f") == Ok("Hello"))
 /// assert(decode("zz").is_err())
 /// ```
+@allocates
 pub func decode(hex_str: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(hex_str)
     if in_len == 0 {

@@ -140,11 +140,13 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
 /// assert(decode("Zm9vYmFy") == Ok("foobar"))
 /// assert(decode("Zg==") == Ok("f"))
 /// ```
+@allocates
 pub func decode(b64: Str) -> Outcome[Str, Str] {
     return decode_impl(b64)
 }
 
 /// Decode URL-safe Base64 (same decoder handles both alphabets).
+@allocates
 pub func decode_url(b64: Str) -> Outcome[Str, Str] {
     return decode_impl(b64)
 }

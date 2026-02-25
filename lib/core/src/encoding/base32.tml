@@ -136,6 +136,7 @@ pub func encode(input: Str) -> Str {
 /// Decode a Base32 string back to original bytes.
 ///
 /// Case insensitive. Padding is required.
+@allocates
 pub func decode(b32: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(b32)
     if in_len == 0 {
