@@ -95,7 +95,7 @@
 ```tml
 module hello
 
-public func main() {
+pub func main() {
     print("Hello, TML!")
 }
 ```
@@ -103,11 +103,11 @@ public func main() {
 ```tml
 module math
 
-public func add[T: Numeric](a: T, b: T) -> T {
+pub func add[T: Numeric](a: T, b: T) -> T {
     return a + b
 }
 
-public func factorial(n: U64) -> U64 {
+pub func factorial(n: U64) -> U64 {
     if n <= 1 then return 1
     return n * factorial(n - 1)
 }
@@ -368,7 +368,7 @@ Capture stack traces programmatically:
 use backtrace::Backtrace
 
 func debug_point() {
-    let mut bt: Backtrace = Backtrace::capture()
+    var bt: Backtrace = Backtrace::capture()
     bt.resolve()
     print("Stack trace:\n{bt.to_string()}")
 }

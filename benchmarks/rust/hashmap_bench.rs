@@ -3,8 +3,8 @@
 // Compile: rustc -O hashmap_bench.rs -o hashmap_bench.exe
 // Run: ./hashmap_bench.exe
 //
-// Matches TML's hashmap_bench.tml and C++ collections_bench.cpp
-// for direct performance comparison.
+// All benchmarks use 1M operations for accurate ns/op measurement.
+// black_box() prevents dead code elimination.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -25,38 +25,47 @@ fn run_and_print(name: &str, iterations: i64, total_ns: i64) {
     println!();
 }
 
-// HashMap insert (i64 -> i64)
-fn bench_hashmap_insert(iterations: i64) -> i64 {
+// HashMap insert (i64 -> i64), grow from small capacity
+fn bench_hashmap_insert(n: i64) -> i64 {
     let mut map = HashMap::with_capacity(16);
-    for i in 0..iterations {
+    for i in 0..n {
         map.insert(i, i * 2);
     }
     black_box(map.len() as i64)
 }
 
-// HashMap lookup
-fn bench_hashmap_lookup(iterations: i64) -> i64 {
+// HashMap insert with pre-reserved capacity
+fn bench_hashmap_insert_reserved(n: i64) -> i64 {
+    let mut map: HashMap<i64, i64> = HashMap::with_capacity(n as usize);
+    for i in 0..n {
+        map.insert(i, i * 2);
+    }
+    black_box(map.len() as i64)
+}
+
+// HashMap lookup (1M lookups in 10K-entry map)
+fn bench_hashmap_lookup(n: i64) -> i64 {
     let mut map = HashMap::with_capacity(10000);
     for i in 0..10000i64 {
         map.insert(i, i * 2);
     }
 
     let mut sum: i64 = 0;
-    for i in 0..iterations {
+    for i in 0..n {
         sum += map.get(&(i % 10000)).copied().unwrap_or(0);
     }
     black_box(sum)
 }
 
-// HashMap contains_key
-fn bench_hashmap_contains(iterations: i64) -> i64 {
+// HashMap contains_key (half hit, half miss)
+fn bench_hashmap_contains(n: i64) -> i64 {
     let mut map = HashMap::with_capacity(10000);
     for i in 0..10000i64 {
         map.insert(i, i);
     }
 
     let mut found: i64 = 0;
-    for i in 0..iterations {
+    for i in 0..n {
         if map.contains_key(&(i % 20000)) {
             found += 1;
         }
@@ -64,15 +73,15 @@ fn bench_hashmap_contains(iterations: i64) -> i64 {
     black_box(found)
 }
 
-// HashMap remove
-fn bench_hashmap_remove(iterations: i64) -> i64 {
-    let mut map = HashMap::with_capacity(iterations as usize);
-    for i in 0..iterations {
+// HashMap remove (insert N then remove N)
+fn bench_hashmap_remove(n: i64) -> i64 {
+    let mut map = HashMap::with_capacity(n as usize);
+    for i in 0..n {
         map.insert(i, i);
     }
 
     let mut removed: i64 = 0;
-    for i in 0..iterations {
+    for i in 0..n {
         if map.remove(&i).is_some() {
             removed += 1;
         }
@@ -81,31 +90,20 @@ fn bench_hashmap_remove(iterations: i64) -> i64 {
 }
 
 // HashMap string key insert + lookup
-fn bench_hashmap_string_key(iterations: i64) -> i64 {
-    let mut map = HashMap::with_capacity(iterations as usize);
+fn bench_hashmap_string_key(n: i64) -> i64 {
+    let mut map = HashMap::with_capacity(n as usize);
 
-    // Insert
-    for i in 0..iterations {
+    for i in 0..n {
         map.insert(format!("key{}", i), i);
     }
 
-    // Lookup
     let mut sum: i64 = 0;
-    for i in 0..iterations {
+    for i in 0..n {
         if let Some(&v) = map.get(&format!("key{}", i)) {
             sum += v;
         }
     }
     black_box(sum)
-}
-
-// HashMap insert with reserve
-fn bench_hashmap_insert_reserved(iterations: i64) -> i64 {
-    let mut map: HashMap<i64, i64> = HashMap::with_capacity(iterations as usize);
-    for i in 0..iterations {
-        map.insert(i, i * 2);
-    }
-    black_box(map.len() as i64)
 }
 
 fn main() {
@@ -115,39 +113,38 @@ fn main() {
     println!("================================================================");
     println!();
 
-    let map_iter: i64 = 100_000;
-    let lookup_iter: i64 = 1_000_000;
+    let n: i64 = 1_000_000;
 
     // Warmup
     {
         let mut warmup = HashMap::new();
-        for i in 0..100i64 {
+        for i in 0..1000i64 {
             warmup.insert(i, i);
         }
         black_box(&warmup);
     }
 
     let start = Instant::now();
-    let _ = bench_hashmap_insert(map_iter);
-    run_and_print("HashMap Insert", map_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_insert(n);
+    run_and_print("HashMap Insert", n, start.elapsed().as_nanos() as i64);
 
     let start = Instant::now();
-    let _ = bench_hashmap_insert_reserved(map_iter);
-    run_and_print("HashMap Insert (reserved)", map_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_insert_reserved(n);
+    run_and_print("HashMap Insert (reserved)", n, start.elapsed().as_nanos() as i64);
 
     let start = Instant::now();
-    let _ = bench_hashmap_lookup(lookup_iter);
-    run_and_print("HashMap Lookup", lookup_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_lookup(n);
+    run_and_print("HashMap Lookup", n, start.elapsed().as_nanos() as i64);
 
     let start = Instant::now();
-    let _ = bench_hashmap_contains(lookup_iter);
-    run_and_print("HashMap Contains", lookup_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_contains(n);
+    run_and_print("HashMap Contains", n, start.elapsed().as_nanos() as i64);
 
     let start = Instant::now();
-    let _ = bench_hashmap_remove(map_iter);
-    run_and_print("HashMap Remove", map_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_remove(n);
+    run_and_print("HashMap Remove", n, start.elapsed().as_nanos() as i64);
 
     let start = Instant::now();
-    let _ = bench_hashmap_string_key(map_iter);
-    run_and_print("HashMap String Key", map_iter, start.elapsed().as_nanos() as i64);
+    let _ = bench_hashmap_string_key(n);
+    run_and_print("HashMap String Key", n, start.elapsed().as_nanos() as i64);
 }

@@ -24,6 +24,7 @@ add_executable(closure_bench closure_bench.cpp)
 add_executable(function_bench function_bench.cpp)
 add_executable(collections_bench collections_bench.cpp)
 add_executable(hashmap_bench hashmap_bench.cpp)
+add_executable(list_bench list_bench.cpp)
 add_executable(memory_bench memory_bench.cpp)
 add_executable(text_bench text_bench.cpp)
 add_executable(oop_bench oop_bench.cpp)
@@ -44,7 +45,7 @@ endif()
 # All targets list (without crypto/json - added conditionally)
 set(ALL_BENCHMARKS
     math_bench string_bench control_flow_bench closure_bench function_bench
-    collections_bench hashmap_bench memory_bench text_bench oop_bench encoding_bench type_bench
+    collections_bench hashmap_bench list_bench memory_bench text_bench oop_bench encoding_bench type_bench
     ${JSON_BENCH_TARGET}
 )
 

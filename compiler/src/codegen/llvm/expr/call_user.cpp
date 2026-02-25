@@ -606,6 +606,50 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             }
         }
 
+        // Array-to-slice coercion: when parameter expects ref [T] (slice) but argument
+        // is a ref to a fixed-size array [T; N], create a fat pointer { ptr, i64 }
+        // containing the array data pointer and the array length.
+        // This handles cases like: Type::method(ref array) where the argument is a
+        // RefExpr that gen_expr produces as a thin pointer to the array data.
+        if (actual_type == "ptr" && expected_type == "ptr" && func_sig.has_value() &&
+            i < func_sig->params.size()) {
+            auto resolved_param = func_sig->params[i];
+            if (!free_func_type_subs.empty()) {
+                resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
+            }
+            if (resolved_param && resolved_param->is<types::RefType>()) {
+                const auto& ref_type = resolved_param->as<types::RefType>();
+                if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+                    auto arg_semantic = infer_expr_type(*call.args[i]);
+                    size_t array_size = 0;
+                    if (arg_semantic && arg_semantic->is<types::ArrayType>()) {
+                        array_size = arg_semantic->as<types::ArrayType>().size;
+                    } else if (arg_semantic && arg_semantic->is<types::RefType>()) {
+                        const auto& arg_ref = arg_semantic->as<types::RefType>();
+                        if (arg_ref.inner && arg_ref.inner->is<types::ArrayType>()) {
+                            array_size = arg_ref.inner->as<types::ArrayType>().size;
+                        }
+                    }
+                    if (array_size > 0) {
+                        std::string fat_alloca = fresh_reg();
+                        emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+                        std::string data_field = fresh_reg();
+                        emit_line("  " + data_field +
+                                  " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                                  ", i32 0, i32 0");
+                        emit_line("  store ptr " + val + ", ptr " + data_field);
+                        std::string len_field = fresh_reg();
+                        emit_line("  " + len_field +
+                                  " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                                  ", i32 0, i32 1");
+                        emit_line("  store i64 " + std::to_string(array_size) + ", ptr " +
+                                  len_field);
+                        val = fat_alloca;
+                    }
+                }
+            }
+        }
+
         arg_vals.push_back({val, expected_type});
 
         // Mark variable/field as consumed if passed by value (ownership transfer)

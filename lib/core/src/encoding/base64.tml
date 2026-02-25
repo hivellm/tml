@@ -60,6 +60,7 @@ pub func encode_url(input: Str) -> Str {
 }
 
 /// Internal encode with alphabet selection.
+/// Inlines the lookup table pointer to avoid per-character function call overhead.
 @allocates
 func encode_with(input: Str, url_safe: Bool) -> Str {
     let in_len: I64 = str::len(input)
@@ -74,34 +75,31 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
         out_len = out_len + 4
     }
 
+    // Select table once, outside the loop
+    let table: Str = if url_safe {
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    } else {
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    }
+    let t: I64 = table as I64
+
     let buf: *Unit = lowlevel { mem_alloc(out_len + 1) }
     let src: I64 = input as I64
     let dst: I64 = buf as I64
     var si: I64 = 0   // source index
     var di: I64 = 0   // destination index
 
-    // Process full 3-byte groups
+    // Process full 3-byte groups — pack 3 bytes into a u32 triple, then shift-extract
     loop (si + 3 <= in_len) {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
         let b1: I32 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) } as I32
         let b2: I32 = lowlevel { ptr_read[U8]((src + si + 2) as *U8) } as I32
+        let triple: I32 = (b0 << 16) | (b1 << 8) | b2
 
-        let c0: I32 = (b0 >> 2) & 63                           // bits 7-2 of b0
-        let c1: I32 = ((b0 & 3) << 4) | ((b1 >> 4) & 15)     // bits 1-0 of b0 + bits 7-4 of b1
-        let c2: I32 = ((b1 & 15) << 2) | ((b2 >> 6) & 3)     // bits 3-0 of b1 + bits 7-6 of b2
-        let c3: I32 = b2 & 63                                  // bits 5-0 of b2
-
-        if url_safe {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char_url(c2)) }
-            lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char_url(c3)) }
-        } else {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char(c2)) }
-            lowlevel { ptr_write[U8]((dst + di + 3) as *U8, encode_char(c3)) }
-        }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, ptr_read[U8]((t + ((triple >> 18) & 63) as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, ptr_read[U8]((t + ((triple >> 12) & 63) as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, ptr_read[U8]((t + ((triple >> 6) & 63) as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 3) as *U8, ptr_read[U8]((t + (triple & 63) as I64) as *U8)) }
         si = si + 3
         di = di + 4
     }
@@ -111,13 +109,8 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
         let b0: I32 = lowlevel { ptr_read[U8]((src + si) as *U8) } as I32
         let c0: I32 = (b0 >> 2) & 63
         let c1: I32 = (b0 & 3) << 4
-        if url_safe {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
-        } else {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
-        }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, ptr_read[U8]((t + c0 as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, ptr_read[U8]((t + c1 as I64) as *U8)) }
         lowlevel { ptr_write[U8]((dst + di + 2) as *U8, 61 as U8) }  // '='
         lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }  // '='
         di = di + 4
@@ -128,15 +121,9 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
         let c0: I32 = (b0 >> 2) & 63
         let c1: I32 = ((b0 & 3) << 4) | ((b1 >> 4) & 15)
         let c2: I32 = (b1 & 15) << 2
-        if url_safe {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char_url(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char_url(c1)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char_url(c2)) }
-        } else {
-            lowlevel { ptr_write[U8]((dst + di) as *U8, encode_char(c0)) }
-            lowlevel { ptr_write[U8]((dst + di + 1) as *U8, encode_char(c1)) }
-            lowlevel { ptr_write[U8]((dst + di + 2) as *U8, encode_char(c2)) }
-        }
+        lowlevel { ptr_write[U8]((dst + di) as *U8, ptr_read[U8]((t + c0 as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 1) as *U8, ptr_read[U8]((t + c1 as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dst + di + 2) as *U8, ptr_read[U8]((t + c2 as I64) as *U8)) }
         lowlevel { ptr_write[U8]((dst + di + 3) as *U8, 61 as U8) }  // '='
         di = di + 4
     }

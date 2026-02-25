@@ -42,9 +42,51 @@
 
 use std::crypto::error::CryptoError
 use std::collections::Buffer
+use core::str
 
 // ============================================================================
-// FFI Function Declarations
+// Direct OpenSSL EVP — zero-allocation one-shot hash
+// ============================================================================
+
+@extern("EVP_sha256")
+func evp_sha256_md() -> *Unit
+
+@extern("EVP_sha512")
+func evp_sha512_md() -> *Unit
+
+@extern("EVP_md5")
+func evp_md5_md() -> *Unit
+
+@extern("EVP_sha384")
+func evp_sha384_md() -> *Unit
+
+@extern("EVP_sha1")
+func evp_sha1_md() -> *Unit
+
+// int EVP_Digest(data, count, md_out, size_out, type, engine)
+@extern("EVP_Digest")
+func evp_digest_oneshot(data: *Unit, count: I64, md: *Unit, size: *Unit, md_type: *Unit, engine: *Unit) -> I32
+
+/// Call EVP_Digest and package result directly into inline TmlBuffer.
+/// Single allocation: 32-byte header + digest_size bytes.
+/// EVP_Digest writes directly into the inline data area — zero copy.
+func make_evp_digest(data: *Unit, data_len: I64, md_type: *Unit, digest_size: I64) -> *Unit {
+    let total: I64 = 32 + digest_size
+    let buf: *Unit = lowlevel { mem_alloc(total) }
+    let bp: I64 = buf as I64
+    let data_area: I64 = bp + 32
+    // Hash directly into inline data area
+    evp_digest_oneshot(data, data_len, data_area as *Unit, 0 as *Unit, md_type, 0 as *Unit)
+    // Set TmlBuffer header fields
+    lowlevel { ptr_write[I64](bp as *I64, data_area) }          // data pointer
+    lowlevel { ptr_write[I64]((bp + 8) as *I64, digest_size) }  // length
+    lowlevel { ptr_write[I64]((bp + 16) as *I64, digest_size) } // capacity
+    lowlevel { ptr_write[I64]((bp + 24) as *I64, 0 as I64) }   // read_pos
+    return buf
+}
+
+// ============================================================================
+// FFI Function Declarations (for streaming and fallback)
 // ============================================================================
 
 @extern("crypto_md5")
@@ -187,7 +229,26 @@ impl Digest {
     /// Returns the digest as a hexadecimal string.
     @allocates
     pub func to_hex(this) -> Str {
-        return ffi_crypto_bytes_to_hex(this.data.handle)
+        // Inline hex encoding — avoids FFI overhead of ffi_crypto_bytes_to_hex
+        let h: I64 = this.data.handle as I64
+        let data_ptr: I64 = lowlevel { ptr_read[I64](h as *I64) }
+        let data_len: I64 = lowlevel { ptr_read[I64]((h + 8) as *I64) }
+        let out_len: I64 = data_len * 2
+        let hex_table: Str = "0123456789abcdef"
+        let ht: I64 = hex_table as I64
+        let out: *Unit = lowlevel { mem_alloc(out_len + 1) }
+        var sp: I64 = data_ptr
+        var dp: I64 = out as I64
+        let end: I64 = sp + data_len
+        loop (sp < end) {
+            let b: I32 = lowlevel { ptr_read[U8](sp as *U8) } as I32
+            lowlevel { ptr_write[U8](dp as *U8, ptr_read[U8]((ht + ((b >> 4) & 15) as I64) as *U8)) }
+            lowlevel { ptr_write[U8]((dp + 1) as *U8, ptr_read[U8]((ht + (b & 15) as I64) as *U8)) }
+            sp = sp + 1
+            dp = dp + 2
+        }
+        lowlevel { ptr_write[U8](dp as *U8, 0 as U8) }
+        return out as Str
     }
 
     /// Returns the digest as a base64 string.
@@ -281,7 +342,8 @@ impl Hash {
 ///
 /// **Warning**: MD5 is cryptographically broken. Use only for legacy compatibility.
 pub func md5(data: Str) -> Digest {
-    let handle: *Unit = ffi_crypto_md5(data)
+    let data_len: I64 = str::len(data)
+    let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_md5_md(), 16)
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }
@@ -297,7 +359,8 @@ pub func md5_bytes(data: ref Buffer) -> Digest {
 ///
 /// **Warning**: SHA-1 is deprecated for security use. Prefer SHA-256 or better.
 pub func sha1(data: Str) -> Digest {
-    let handle: *Unit = ffi_crypto_sha1(data)
+    let data_len: I64 = str::len(data)
+    let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha1_md(), 20)
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }
@@ -313,7 +376,8 @@ pub func sha1_bytes(data: ref Buffer) -> Digest {
 ///
 /// This is the recommended hash function for most applications.
 pub func sha256(data: Str) -> Digest {
-    let handle: *Unit = ffi_crypto_sha256(data)
+    let data_len: I64 = str::len(data)
+    let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha256_md(), 32)
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }
@@ -327,7 +391,8 @@ pub func sha256_bytes(data: ref Buffer) -> Digest {
 
 /// Computes the SHA-384 hash of the input string.
 pub func sha384(data: Str) -> Digest {
-    let handle: *Unit = ffi_crypto_sha384(data)
+    let data_len: I64 = str::len(data)
+    let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha384_md(), 48)
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }
@@ -341,7 +406,8 @@ pub func sha384_bytes(data: ref Buffer) -> Digest {
 
 /// Computes the SHA-512 hash of the input string.
 pub func sha512(data: Str) -> Digest {
-    let handle: *Unit = ffi_crypto_sha512(data)
+    let data_len: I64 = str::len(data)
+    let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha512_md(), 64)
     let buffer: Buffer = Buffer { handle: handle }
     return Digest { data: buffer }
 }

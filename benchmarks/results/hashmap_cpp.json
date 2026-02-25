@@ -1,0 +1,48 @@
+{
+  "category": "HashMap",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "HashMap Insert",
+      "iterations": 100000,
+      "total_ns": 13051100,
+      "per_op_ns": 130,
+      "ops_per_sec": 7662189
+    },
+    {
+      "name": "HashMap Insert (reserved)",
+      "iterations": 100000,
+      "total_ns": 9837500,
+      "per_op_ns": 98,
+      "ops_per_sec": 10165184
+    },
+    {
+      "name": "HashMap Lookup",
+      "iterations": 1000000,
+      "total_ns": 5802600,
+      "per_op_ns": 5,
+      "ops_per_sec": 172336538
+    },
+    {
+      "name": "HashMap Contains",
+      "iterations": 1000000,
+      "total_ns": 4852800,
+      "per_op_ns": 4,
+      "ops_per_sec": 206066600
+    },
+    {
+      "name": "HashMap Remove",
+      "iterations": 100000,
+      "total_ns": 9807400,
+      "per_op_ns": 98,
+      "ops_per_sec": 10196382
+    },
+    {
+      "name": "HashMap String Key",
+      "iterations": 100000,
+      "total_ns": 15334900,
+      "per_op_ns": 153,
+      "ops_per_sec": 6521072
+    }
+  ]
+}

@@ -2,9 +2,11 @@
 
 > `std::collections` — Data structures for storing and organizing data.
 
+> **Implementation Status (2026-02-24)**: `List[T]`, `HashMap[K,V]`, `HashSet[T]`, `Buffer`, `BTreeMap[K,V]`, `BTreeSet[T]`, `Deque[T]`, `Vec[T]` (alias for List), `ArrayList[T]`, `RingBuf[T]`, `BitSet` are all implemented in **pure TML** (no C runtime dependency). HashMap uses FNV-1a hashing with **content-based comparison** for Str keys (deep copy on insert, byte-by-byte equality). Validated with 10K+ entry scale tests.
+
 ## Overview
 
-The collections package provides efficient, generic data structures for common programming patterns. All collections implement standard traits for iteration, comparison, and serialization.
+The collections package provides efficient, generic data structures for common programming patterns. All collections are implemented in pure TML using `core::intrinsics` (ptr_read, ptr_write, mem_alloc, mem_free).
 
 ## Import
 
@@ -107,7 +109,7 @@ extend Vec[T] {
 }
 
 /// Index operator
-implement Index[U64] for Vec[T] {
+extend Vec[T] with Index[U64] {
     type Output = T
 
     func index(this, idx: U64) -> ref T {
@@ -115,7 +117,7 @@ implement Index[U64] for Vec[T] {
     }
 }
 
-implement IndexMut[U64] for Vec[T] {
+extend Vec[T] with IndexMut[U64] {
     func index_mut(mut this, idx: U64) -> mut ref T {
         this.get_mut(idx).expect("index out of bounds")
     }
@@ -136,7 +138,7 @@ extend Vec[T] {
     pub func into_iter(this) -> VecIntoIter[T]
 }
 
-implement IntoIterator for Vec[T] {
+extend Vec[T] with IntoIterator {
     type Item = T
     type Iter = VecIntoIter[T]
 
@@ -650,12 +652,12 @@ extend BinaryHeap[T] where T: Ord {
 
 ```tml
 /// Trait for types that can be hashed
-pub behaviorHash {
+pub behavior Hash {
     func hash(this, hasher: mut ref Hasher)
 }
 
 /// Standard hasher interface
-pub behaviorHasher {
+pub behavior Hasher {
     func write(mut this, bytes: ref [U8])
     func finish(this) -> U64
 }
@@ -665,7 +667,7 @@ pub type DefaultHasher {
     // SipHash state
 }
 
-implement Hasher for DefaultHasher {
+extend DefaultHasher with Hasher {
     func write(mut this, bytes: ref [U8]) { ... }
     func finish(this) -> U64 { ... }
 }
@@ -675,12 +677,12 @@ implement Hasher for DefaultHasher {
 
 ```tml
 /// Trait for creating a collection from an iterator
-pub behaviorFromIterator[A] {
+pub behavior FromIterator[A] {
     func from_iter[I](iter: I) -> This
         where I: IntoIterator[Item = A]
 }
 
-implement FromIterator[T] for Vec[T] {
+extend Vec[T] with FromIterator[T] {
     func from_iter[I](iter: I) -> Vec[T]
         where I: IntoIterator[Item = T]
     {
@@ -697,12 +699,12 @@ implement FromIterator[T] for Vec[T] {
 
 ```tml
 /// Trait for extending a collection with an iterator
-pub behaviorExtend[A] {
+pub behavior Extend[A] {
     func extend[I](mut this, iter: I)
         where I: IntoIterator[Item = A]
 }
 
-implement Extend[T] for Vec[T] {
+extend Vec[T] with Extend[T] {
     func extend[I](mut this, iter: I)
         where I: IntoIterator[Item = T]
     {
@@ -756,28 +758,35 @@ func example_vec() {
 use std::collections.HashMap
 
 func example_hashmap() {
-    var scores: HashMap[String, I32] = HashMap.new()
+    var scores = HashMap[Str, I32].new(16)
 
-    // Insert
-    scores.insert("Alice", 100)
-    scores.insert("Bob", 85)
-    scores.insert("Charlie", 92)
+    // Insert key-value pairs
+    scores.set("Alice", 100)
+    scores.set("Bob", 85)
+    scores.set("Charlie", 92)
 
-    // Access
-    when scores.get(ref "Alice") {
-        Just(score) -> print("Alice: " + score.to_string()),
-        Nothing -> print("Alice not found"),
+    // Access (get returns V directly, zero value if missing)
+    let alice_score = scores.get("Alice")
+    print("Alice: " + alice_score.to_string())
+
+    // Check existence
+    if scores.has("Bob") {
+        print("Bob is in the map")
     }
 
-    // Entry API
-    scores.entry("Dave")
-        .or_insert(0)
-        .add_assign(10)
+    // Remove
+    scores.remove("Charlie")
 
-    // Iterate
-    loop (name, score) in scores.iter() {
-        print(name + ": " + score.to_string())
+    // Iterate using iterator
+    var it = scores.iter()
+    loop it.has_next() {
+        print(it.key() as Str + ": " + (it.value() as I32).to_string())
+        it.next()
     }
+    it.destroy()
+
+    // Cleanup
+    scores.destroy()
 }
 ```
 
@@ -787,7 +796,7 @@ func example_hashmap() {
 use std::collections.BTreeMap
 
 func example_btreemap() {
-    var events: BTreeMap[DateTime, String] = BTreeMap.new()
+    var events: BTreeMap[DateTime, Str] = BTreeMap.new()
 
     events.insert(DateTime.parse("2024-01-01"), "New Year")
     events.insert(DateTime.parse("2024-07-04"), "Independence Day")

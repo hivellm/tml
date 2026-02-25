@@ -312,7 +312,7 @@ impl Readable for ByteStream {
         let available: I64 = len - rp
 
         if available <= 0 {
-            return Ok(0)  // EOF
+            return Ok(0 as I64)  // EOF
         }
 
         let buf_len: I64 = buf.len() as I64
@@ -358,7 +358,7 @@ impl Writable for ByteStream {
     pub func write(mut this, buf: ref [U8]) -> Outcome[I64, IoError] {
         let buf_len: I64 = buf.len() as I64
         if buf_len == 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
 
         let h: I64 = this.handle as I64
@@ -446,7 +446,7 @@ pub func write_all(dest: mut ref ByteStream, buf: ref [U8]) -> Outcome[Unit, IoE
 pub func write_string(dest: mut ref ByteStream, s: Str) -> Outcome[I64, IoError] {
     let slen: I64 = s.len()
     if slen == 0 {
-        return Ok(0)
+        return Ok(0 as I64)
     }
     let h: I64 = dest.handle as I64
     bs_ensure_capacity(h, slen)

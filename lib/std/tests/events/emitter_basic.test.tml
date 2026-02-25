@@ -1,0 +1,65 @@
+use test::{assert_eq, assert_true, assert_false}
+use std::events::EventEmitter
+
+func listener_a(data: I64) {}
+func listener_b(data: I64) {}
+func listener_c(data: I64) {}
+
+@test
+func test_new_emitter() -> I32 {
+    var emitter = EventEmitter::new()
+    assert_eq(emitter.total_listeners(), 0 as I64, "no listeners initially")
+    assert_eq(emitter.get_max_listeners(), 10 as I64, "default max is 10")
+    assert_eq(emitter.listener_count("anything"), 0 as I64, "unknown event has 0")
+    assert_false(emitter.has_listeners("anything"), "no listeners for unknown event")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_on_single() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", listener_a as I64)
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 listener after on")
+    assert_eq(emitter.total_listeners(), 1 as I64, "total is 1")
+    assert_true(emitter.has_listeners("data"), "has listeners for data")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_on_multiple_same_event() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", listener_a as I64)
+    emitter.on("data", listener_b as I64)
+    emitter.on("data", listener_c as I64)
+    assert_eq(emitter.listener_count("data"), 3 as I64, "3 listeners")
+    assert_eq(emitter.total_listeners(), 3 as I64, "total is 3")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_on_different_events() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", listener_a as I64)
+    emitter.on("error", listener_b as I64)
+    emitter.on("close", listener_c as I64)
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 data listener")
+    assert_eq(emitter.listener_count("error"), 1 as I64, "1 error listener")
+    assert_eq(emitter.listener_count("close"), 1 as I64, "1 close listener")
+    assert_eq(emitter.total_listeners(), 3 as I64, "total is 3")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_set_max_listeners() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.set_max_listeners(50)
+    assert_eq(emitter.get_max_listeners(), 50 as I64, "max set to 50")
+    emitter.set_max_listeners(0)
+    assert_eq(emitter.get_max_listeners(), 0 as I64, "max set to 0")
+    emitter.destroy()
+    return 0
+}

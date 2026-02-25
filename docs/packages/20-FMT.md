@@ -19,49 +19,49 @@ use std::fmt.{format, Display, Debug, Formatter}
 
 ```tml
 /// Formats a string with arguments
-public macro format! {
+pub macro format! {
     ($fmt:literal $(, $arg:expr)*) => {
         // Compile-time checked formatting
     }
 }
 
 /// Prints formatted string to stdout
-public macro print! {
+pub macro print! {
     ($fmt:literal $(, $arg:expr)*) => {
         io.stdout().write_all(format!($fmt $(, $arg)*).as_bytes()).unwrap()
     }
 }
 
 /// Prints formatted string with newline
-public macro println! {
+pub macro println! {
     ($fmt:literal $(, $arg:expr)*) => {
         io.stdout().write_all((format!($fmt $(, $arg)*) + "\n").as_bytes()).unwrap()
     }
 }
 
 /// Prints formatted string to stderr
-public macro eprint! {
+pub macro eprint! {
     ($fmt:literal $(, $arg:expr)*) => {
         io.stderr().write_all(format!($fmt $(, $arg)*).as_bytes()).unwrap()
     }
 }
 
 /// Prints formatted string to stderr with newline
-public macro eprintln! {
+pub macro eprintln! {
     ($fmt:literal $(, $arg:expr)*) => {
         io.stderr().write_all((format!($fmt $(, $arg)*) + "\n").as_bytes()).unwrap()
     }
 }
 
 /// Writes formatted string to a writer
-public macro write! {
+pub macro write! {
     ($dst:expr, $fmt:literal $(, $arg:expr)*) => {
         $dst.write_fmt(format_args!($fmt $(, $arg)*))
     }
 }
 
 /// Writes formatted string with newline
-public macro writeln! {
+pub macro writeln! {
     ($dst:expr, $fmt:literal $(, $arg:expr)*) => {
         $dst.write_fmt(format_args!($fmt + "\n" $(, $arg)*))
     }
@@ -139,9 +139,9 @@ pub behavior Display {
 }
 
 // Auto-implemented for primitives
-implement Display for I32 { ... }
-implement Display for String { ... }
-implement Display for Bool { ... }
+extend I32 with Display { ... }
+extend String with Display { ... }
+extend Bool with Display { ... }
 // etc.
 ```
 
@@ -349,7 +349,7 @@ extend DebugStruct {
 }
 
 // Usage in Debug implementation
-implement Debug for Point {
+extend Point with Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.debug_struct("Point")
             .field("x", ref this.x)
@@ -385,7 +385,7 @@ extend DebugTuple {
 // Usage
 type Color(U8, U8, U8)
 
-implement Debug for Color {
+extend Color with Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.debug_tuple("Color")
             .field(ref this.0)
@@ -419,7 +419,7 @@ extend DebugList {
 }
 
 // Usage
-implement Debug for Vec[T] where T: Debug {
+extend Vec[T] with Debug where T: Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.debug_list().entries(this.iter()).finish()
     }
@@ -449,7 +449,7 @@ extend DebugMap {
 }
 
 // Usage
-implement Debug for HashMap[K, V] where K: Debug, V: Debug {
+extend HashMap[K, V] with Debug where K: Debug, V: Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.debug_map().entries(this.iter()).finish()
     }
@@ -467,7 +467,7 @@ type Person {
     age: U32,
 }
 
-implement Display for Person {
+extend Person with Display {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         write!(f, "{} ({} years old)", this.name, this.age)
     }
@@ -482,7 +482,7 @@ println!("{}", person)  // Alice (30 years old)
 
 ```tml
 // Manual implementation
-implement Debug for Person {
+extend Person with Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.debug_struct("Person")
             .field("name", ref this.name)
@@ -517,7 +517,7 @@ type Currency {
     symbol: String,
 }
 
-implement Display for Currency {
+extend Currency with Display {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         let dollars = this.amount / 100
         let cents = (this.amount % 100).abs()
@@ -566,7 +566,7 @@ pub behavior Write {
     }
 }
 
-implement Write for String {
+extend String with Write {
     func write_str(mut this, s: ref String) -> FmtResult {
         this.push_str(s)
         return Ok(())

@@ -4,6 +4,7 @@
 //! status, headers, and body components.
 
 use core::str
+use core::intrinsics::mem_free
 use std::http::status::Status
 use std::http::headers::Headers
 use std::http::version::HttpVersion
@@ -39,8 +40,13 @@ impl Response {
     }
 
     /// Returns the response body as a string.
+    /// Returns a copy since the compiler frees Str values in interpolation.
+    @allocates
     pub func text(this) -> Str {
-        return this.body_data
+        let s: Str = this.body_data
+        let s_len: I64 = str::len(s)
+        if s_len == 0 { return "" }
+        return str::substring(s, 0, s_len)
     }
 
     /// Returns the HTTP version.
@@ -146,25 +152,31 @@ impl Response {
                 colon = colon + 1
             }
             if colon < hline_end {
-                let key: Str = str::substring(raw, pos, colon)
+                // Escape @allocates: headers.set() stores key/value pointers,
+                // but @allocates cleanup frees them at scope exit.
+                // Cast to I64 to prevent tracking, then cast back for set().
+                let key_i64: I64 = str::substring(raw, pos, colon) as I64
                 // Skip ": " after colon
                 var val_start: I64 = colon + 1
                 loop (val_start < hline_end and str::char_at(raw, val_start) == 32) {
                     val_start = val_start + 1
                 }
-                let val: Str = str::substring(raw, val_start, hline_end)
-                headers.set(key, val)
+                let val_i64: I64 = str::substring(raw, val_start, hline_end) as I64
+                headers.set(key_i64 as Str, val_i64 as Str)
+                // Free the original key — set() stores a lowercased copy
+                lowlevel { mem_free(key_i64 as *Unit) }
             }
             pos = hline_end + 2  // skip \r\n
         }
 
-        // Body is everything after headers
-        let body: Str = str::substring(raw, pos, raw_len)
+        // Body is everything after headers.
+        // Escape @allocates: body is stored in Response struct.
+        let body_i64: I64 = str::substring(raw, pos, raw_len) as I64
 
         return Ok(Response {
             status_code: status,
             headers: headers,
-            body_data: body,
+            body_data: body_i64 as Str,
             http_version: version,
         })
     }

@@ -237,7 +237,7 @@ Standard namespaces for name-based UUIDs.
 
 ```tml
 /// Standard UUID namespaces
-public module namespace {
+pub module namespace {
     /// DNS namespace
     pub const DNS: Uuid = Uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap()
 
@@ -302,31 +302,31 @@ extend UuidGenerator {
 ## Traits
 
 ```tml
-implement Eq for Uuid {
+extend Uuid with Eq {
     func eq(this, other: ref Uuid) -> Bool {
         this.bytes == other.bytes
     }
 }
 
-implement Ord for Uuid {
+extend Uuid with Ord {
     func cmp(this, other: ref Uuid) -> Ordering {
         this.bytes.cmp(ref other.bytes)
     }
 }
 
-implement Hash for Uuid {
+extend Uuid with Hash {
     func hash(this, hasher: mut ref Hasher) {
         hasher.write(ref this.bytes)
     }
 }
 
-implement Display for Uuid {
+extend Uuid with Display {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.write_str(ref this.to_hyphenated_lower())
     }
 }
 
-implement Debug for Uuid {
+extend Uuid with Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.write_str("Uuid(")?
         f.write_str(ref this.to_hyphenated_lower())?
@@ -334,7 +334,7 @@ implement Debug for Uuid {
     }
 }
 
-implement FromStr for Uuid {
+extend Uuid with FromStr {
     type Err = UuidError
 
     func from_str(s: ref String) -> Outcome[Uuid, UuidError] {

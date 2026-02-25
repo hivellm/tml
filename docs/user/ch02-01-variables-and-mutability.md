@@ -32,18 +32,18 @@ code easier to understand.
 
 ## Mutable Variables
 
-When you need a variable that can change, use `let mut`:
+When you need a variable that can change, use `var`:
 
 ```tml
 func main() {
-    let mut x = 5
+    var x = 5
     println(x)  // 5
     x = 6
     println(x)  // 6
 }
 ```
 
-The `mut` keyword explicitly marks the variable as mutable, making it
+The `var` keyword explicitly marks the variable as mutable, making it
 clear to anyone reading the code that this variable may change.
 
 ## Constants

@@ -1,0 +1,170 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::readable_stream::ReadableStream
+use core::intrinsics::{ptr_read, ptr_write}
+
+// ============================================================================
+// Listener helpers — all callbacks are func(I64)
+// ============================================================================
+
+func counting_listener(data: I64) {
+    // data is a pointer to I64 counter
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func noop_listener(data: I64) {}
+
+// ============================================================================
+// Tests: Construction and state
+// ============================================================================
+
+@test func test_readable_stream_new() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_true(rs.readable(), "readable before end")
+    assert_eq(rs.readable_length(), 0 as I64, "empty buffer")
+    assert_false(rs.readable_ended(), "not ended")
+    assert_false(rs.readable_flowing(), "not flowing initially")
+    assert_false(rs.is_paused(), "not paused initially")
+    assert_false(rs.closed(), "not closed")
+    assert_false(rs.errored(), "not errored")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_push_read() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+    let ok: Bool = rs.push("hello")
+    assert_true(ok, "push returns true")
+    assert_eq(rs.readable_length(), 5 as I64, "5 bytes buffered")
+    let data: Str = rs.read(5)
+    assert_eq(data, "hello", "read correct data")
+    assert_eq(rs.readable_length(), 0 as I64, "buffer empty")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_push_multiple() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+    rs.push("abc")
+    rs.push("def")
+    assert_eq(rs.readable_length(), 6 as I64, "6 bytes")
+    let all: Str = rs.read_all()
+    assert_eq(all, "abcdef", "read_all correct")
+    assert_eq(rs.readable_length(), 0 as I64, "empty")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_partial_read() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+    rs.push("hello world")
+    let chunk1: Str = rs.read(5)
+    assert_eq(chunk1, "hello", "first 5")
+    assert_eq(rs.readable_length(), 6 as I64, "6 remaining")
+    let chunk2: Str = rs.read(6)
+    assert_eq(chunk2, " world", "remaining 6")
+    assert_eq(rs.readable_length(), 0 as I64, "empty")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_end() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+    assert_false(rs.readable_ended(), "not ended yet")
+    rs.push_eof()
+    assert_true(rs.readable_ended(), "ended after push_eof")
+    let data: Str = rs.read(10)
+    assert_eq(data, "", "empty read after end")
+    rs.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: Flowing mode with events
+// ============================================================================
+
+// data_listener: stores the Str pointer at the state address
+func data_listener(data: I64) {
+    // data is the Str pointer (from push)
+    // We store it at a known location so we can verify
+    // We use a trick: the listener receives an I64 which is the Str pointer
+    // For counting purposes we use a separate noop
+}
+
+@test func test_readable_stream_flowing_mode() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+
+    // Attach "data" listener → switches to flowing
+    rs.on("data", noop_listener as I64)
+    assert_true(rs.readable_flowing(), "flowing after on(data)")
+
+    // Push in flowing mode → does NOT buffer
+    rs.push("hello")
+    assert_eq(rs.readable_length(), 0 as I64, "not buffered in flowing")
+
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_pause_resume() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+
+    // Start flowing
+    rs.on("data", noop_listener as I64)
+    assert_true(rs.readable_flowing(), "flowing")
+
+    // Pause
+    rs.pause()
+    assert_true(rs.is_paused(), "paused")
+    assert_false(rs.readable_flowing(), "not flowing")
+
+    // Push while paused → buffers
+    rs.push("buffered")
+    assert_eq(rs.readable_length(), 8 as I64, "8 bytes buffered")
+
+    // Resume → flushes buffer via "data" event
+    rs.resume()
+    assert_true(rs.readable_flowing(), "flowing again")
+    assert_eq(rs.readable_length(), 0 as I64, "buffer flushed on resume")
+
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_unshift() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+
+    rs.push("world")
+    rs.unshift("hello ")
+    assert_eq(rs.readable_length(), 11 as I64, "11 bytes")
+
+    let all: Str = rs.read_all()
+    assert_eq(all, "hello world", "unshift prepends")
+
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_destroy() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(256)
+    rs.push("data")
+    assert_false(rs.closed(), "not closed")
+    rs.destroy()
+    assert_true(rs.closed(), "closed after destroy")
+    return 0
+}
+
+@test func test_readable_stream_backpressure() -> I32 {
+    // Use tiny hwm to test backpressure signal
+    var rs: ReadableStream = ReadableStream::with_options(8)
+    let ok1: Bool = rs.push("1234")
+    assert_true(ok1, "below hwm")
+    let ok2: Bool = rs.push("5678")
+    assert_false(ok2, "at hwm → backpressure")
+    assert_eq(rs.readable_length(), 8 as I64, "8 bytes")
+    // Can still push more, just returns false
+    rs.push("more")
+    assert_eq(rs.readable_length(), 12 as I64, "12 bytes total")
+    rs.destroy()
+    return 0
+}

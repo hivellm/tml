@@ -137,7 +137,7 @@ type Binding =
 
 ```tml
 func resolve_path(scope: ref Scope, path: ref Path) -> Outcome[Binding, Error] {
-    let mut current = resolve_first_segment(scope, path.segments[0])!
+    var current = resolve_first_segment(scope, path.segments[0])!
 
     for segment in path.segments[1..] {
         current = resolve_in_binding(current, segment)!
@@ -415,7 +415,7 @@ func check_call_effects(
 
 ```tml
 func infer_func_effects(ctx: mut ref CheckCtx, func: ref FuncDef) -> EffectSet {
-    let mut effects = EffectSet.empty()
+    var effects = EffectSet.empty()
 
     // Walk body and collect effects
     for call in func.body.calls() {
@@ -443,7 +443,7 @@ func map[T, U, E](
     list: List[T],
     f: func(T) -> U with E,
 ) -> List[U] with E {
-    let mut result = List.new()
+    var result = List.new()
     for item in list {
         result.push(f(item))
     }

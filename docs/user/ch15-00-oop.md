@@ -391,7 +391,7 @@ class Temperature {
 }
 
 func main() {
-    let mut temp: Temperature = Temperature { celsius: 0.0 }
+    var temp: Temperature = Temperature { celsius: 0.0 }
     temp.value = 100.0
     println("Celsius: {temp.value}")       // 100.0
     println("Fahrenheit: {temp.fahrenheit}") // 212.0

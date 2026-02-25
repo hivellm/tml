@@ -181,7 +181,7 @@ pub type Matches {
     pos: U64,
 }
 
-implement Iterator for Matches {
+extend Matches with Iterator {
     type Item = Match
 
     func next(mut this) -> Maybe[Match] {
@@ -256,7 +256,7 @@ pub type CapturesIter {
     pos: U64,
 }
 
-implement Iterator for CapturesIter {
+extend CapturesIter with Iterator {
     type Item = Captures
 
     func next(mut this) -> Maybe[Captures] {
@@ -360,7 +360,7 @@ pub type Split {
     done: Bool,
 }
 
-implement Iterator for Split {
+extend Split with Iterator {
     type Item = String
 
     func next(mut this) -> Maybe[String] {

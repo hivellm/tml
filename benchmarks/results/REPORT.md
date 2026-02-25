@@ -1,6 +1,6 @@
 # TML Benchmark Report
 
-**Generated:** 2025-12-29T21:05:58.033988
+**Generated:** 2026-02-24T11:31:10.180479
 
 ## System Information
 
@@ -25,61 +25,27 @@
 
 | Language | Benchmark | Build (ms) | Run (ms) | Binary (KB) | Status |
 |----------|-----------|------------|----------|-------------|--------|
-| TML | algorithms | 870.5 | 32.7 | 153.5 | ✅ |
-| TML | data_structures | 861.9 | 30.9 | 152.0 | ✅ |
-| TML | fibonacci | 866.0 | 32.8 | 151.5 | ✅ |
-| TML | math | 934.6 | 32.4 | 152.5 | ✅ |
-| C++ | algorithms | 1339.7 | 154.6 | 273.0 | ✅ |
-| Go | algorithms | 0.0 | 2605.2 | 0.0 | ✅ |
-| Rust | algorithms | 287.7 | 147.0 | 165.0 | ✅ |
+| TML | algorithms | 306.7 | 0.0 | 0.0 | ❌ 11:31:10.812 ERROR [build] Und |
+| TML | data_structures | 302.6 | 0.0 | 0.0 | ❌ 11:31:11.114 ERROR [build] CGU |
+| TML | fibonacci | 760.7 | 0.0 | 0.0 | ❌ 11:31:11.665 ERROR [build] LLD |
+| TML | http_server_bench | 2053.3 | 0.0 | 0.0 | ❌ 11:31:13.928 ERROR [build] mem |
+| TML | json_bench | 505.8 | 0.0 | 0.0 | ❌ 11:31:14.433 ERROR [build] Und |
+| TML | json_bench_prebuilt | 458.1 | 0.0 | 0.0 | ❌ 11:31:14.894 ERROR [build] Und |
+| TML | json_ffi_profile | 645.3 | 0.0 | 0.0 | ❌ 11:31:15.539 ERROR [build] Und |
+| TML | json_minimal_bench | 713.5 | 0.0 | 0.0 | ❌ 11:31:16.252 ERROR [build] Und |
+| TML | math | 321.2 | 0.0 | 0.0 | ❌ 11:31:16.573 ERROR [build] CGU |
+| TML | mod | 902.3 | 0.0 | 0.0 | ❌ 11:31:17.246 ERROR [build] LLD |
+| TML | oop_bench | 324.2 | 0.0 | 0.0 | ❌ 11:31:17.799 ERROR [build] Und |
+| TML | oop_comparison | 2055.7 | 0.0 | 0.0 | ❌ 11:31:19.854 ERROR [build] mem |
+| TML | optimization_bench | 325.8 | 0.0 | 0.0 | ❌ 11:31:20.182 ERROR [build] CGU |
+| TML | overhead_test | 304.9 | 0.0 | 0.0 | ❌ 11:31:20.487 ERROR [build] Exp |
+| TML | profile_demo | 1171.3 | 0.0 | 0.0 | ❌ 11:31:21.439 ERROR [build] LLD |
+| TML | profile_overhead | 3437.1 | 0.0 | 0.0 | ❌ 11:31:25.082 ERROR [build] Ret |
+| C++ | algorithms | 2347.2 | 190.6 | 273.0 | ✅ |
+| Go | algorithms | 0.0 | 5506.1 | 0.0 | ✅ |
+| Rust | algorithms | 1036.9 | 188.9 | 160.0 | ✅ |
 
 ## Output Comparison
-
-### TML - algorithms
-```
-=== TML Algorithm Benchmarks ===
-
-Factorial(10): 3628800
-GCD(48, 18): 6
-Power(2, 10): 1024
-Primes up to 100: 25
-Sum(1..100): 5050
-Collatz steps(27): 111
-```
-
-### TML - data_structures
-```
-=== TML Data Structure Benchmarks ===
-
-Stack push/pop (1000): 667
-Binary search steps (find 500 in 0..1000): 1
-Bubble sort comparisons (100 elements): 4950
-Matrix multiply ops (10x10): 2000
-Simple hash (seed=42, n=1000): 182789914
-List traverse (1000): 1000
-```
-
-### TML - fibonacci
-```
-Fibonacci(10) recursive: 55
-Fibonacci(10) iterative: 55
-Benchmark result: 6765000
-```
-
-### TML - math
-```
-=== TML Math Benchmarks ===
-
-isqrt(144): 12
-isqrt(1000000): 1000
-mod_pow(2, 10, 1000): 24
-ackermann(3, 3): 61
-catalan(10): 16796
-pascal_row_sum(10): 1024
-binomial(10, 5): 252
-sum_divisors(100): 217
-euler_phi(100): 40
-```
 
 ### C++ - algorithms
 ```
@@ -95,19 +61,19 @@ Collatz steps(27): 111
 
 === Timing (ns per call) ===
 
-factorial_recursive(10): 0.1989 ns
-factorial_iterative(10): 0.1908 ns
-fibonacci_recursive(20): 1.41 ns
-fibonacci_iterative(20): 0.1916 ns
-gcd_recursive(48, 18): 3.4443 ns
-gcd_iterative(48, 18): 3.4398 ns
-power_naive(2, 10): 0.1909 ns
-power_fast(2, 10): 0.1909 ns
-count_primes(100): 56.183 ns
-count_primes(1000): 1644.84 ns
-collatz_steps(27): 77.8245 ns
-sum_range(1, 100): 0.1877 ns
-sum_range(1, 10000): 0.187 ns
+factorial_recursive(10): 0.1985 ns
+factorial_iterative(10): 0.1945 ns
+fibonacci_recursive(20): 1.44 ns
+fibonacci_iterative(20): 0.1967 ns
+gcd_recursive(48, 18): 3.5171 ns
+gcd_iterative(48, 18): 3.5183 ns
+power_naive(2, 10): 0.1953 ns
+power_fast(2, 10): 0.1973 ns
+count_primes(100): 57.447 ns
+count_primes(1000): 1672.44 ns
+collatz_steps(27): 80.0671 ns
+sum_range(1, 100): 0.1941 ns
+sum_range(1, 10000): 0.195 ns
 ```
 
 ### Go - algorithms
@@ -127,17 +93,17 @@ goos: windows
 goarch: amd64
 pkg: tml-benchmarks
 cpu: AMD Ryzen 9 7950X3D 16-Core Processor          
-BenchmarkFactorialRecursive10-32    	23103135	         5.178 ns/op
-BenchmarkFactorialIterative10-32    	56641177	         2.096 ns/op
-BenchmarkFibonacciRecursive20-32    	    5582	     21656 ns/op
-BenchmarkFibonacciIterative20-32    	27138883	         4.335 ns/op
-BenchmarkGCDRecursive-32            	53071513	         2.320 ns/op
-BenchmarkGCDIterative-32            	34868516	         3.429 ns/op
-BenchmarkPowerNaive2_10-32          	50184007	         2.321 ns/op
-BenchmarkPowerFast2_10-32           	31005348	         3.984 ns/op
-BenchmarkCountPrimes100-32          	 1204086	        96.82 ns/op
-BenchmarkCountPrimes1000-32         	   72555	      1709 ns/op
-BenchmarkCollatz27-32               	 2208520	
+BenchmarkFactorialRecursive10-32    	22572088	         5.341 ns/op
+BenchmarkFactorialIterative10-32    	56163998	         2.142 ns/op
+BenchmarkFibonacciRecursive20-32    	    5546	     21633 ns/op
+BenchmarkFibonacciIterative20-32    	28225332	         4.627 ns/op
+BenchmarkGCDRecursive-32            	51356671	         2.352 ns/op
+BenchmarkGCDIterative-32            	34041586	         3.506 ns/op
+BenchmarkPowerNaive2_10-32          	51433714	         2.336 ns/op
+BenchmarkPowerFast2_10-32           	30152268	         4.003 ns/op
+BenchmarkCountPrimes100-32          	 1244244	        99.18 ns/op
+BenchmarkCountPrimes1000-32         	   69763	      1707 ns/op
+BenchmarkCollatz27-32               	 2164407	
 ```
 
 ### Rust - algorithms
@@ -154,19 +120,19 @@ Collatz steps(27): 111
 
 === Timing (ns per call) ===
 
-factorial_recursive(10): 0.1970 ns/op
-factorial_iterative(10): 0.1944 ns/op
+factorial_recursive(10): 0.1937 ns/op
+factorial_iterative(10): 0.1937 ns/op
 fibonacci_recursive(20): 0.2000 ns/op
-fibonacci_iterative(20): 7.4325 ns/op
-gcd_recursive(48, 18): 2.2826 ns/op
-gcd_iterative(48, 18): 3.4274 ns/op
-power_naive(2, 10): 0.1892 ns/op
-power_fast(2, 10): 0.1882 ns/op
-count_primes(100): 58.0550 ns/op
-count_primes(1000): 1623.0300 ns/op
-collatz_steps(27): 77.4592 ns/op
-sum_range(1, 100): 0.1938 ns/op
-sum_range(1, 10000): 0.1950 ns/op
+fibonacci_iterative(20): 7.1914 ns/op
+gcd_recursive(48, 18): 2.3183 ns/op
+gcd_iterative(48, 18): 3.4749 ns/op
+power_naive(2, 10): 0.1927 ns/op
+power_fast(2, 10): 0.1938 ns/op
+count_primes(100): 59.4460 ns/op
+count_primes(1000): 1661.8200 ns/op
+collatz_steps(27): 81.5187 ns/op
+sum_range(1, 100): 0.2042 ns/op
+sum_range(1, 10000): 0.1940 ns/op
 ```
 
 
@@ -175,13 +141,11 @@ sum_range(1, 10000): 0.1950 ns/op
 ### algorithms
 
 **Build Time:**
-  C++    ██████████████████████████████ 1339.7ms
+  C++    ██████████████████████████████ 2347.2ms
   Go      0.0ms
-  Rust   ██████ 287.7ms
-  TML    ███████████████████ 870.5ms
+  Rust   █████████████ 1036.9ms
 
 **Run Time:**
-  C++    █ 154.6ms
-  Go     ██████████████████████████████ 2605.2ms
-  Rust   █ 147.0ms
-  TML     32.7ms
+  C++    █ 190.6ms
+  Go     ██████████████████████████████ 5506.1ms
+  Rust   █ 188.9ms

@@ -58,19 +58,19 @@ func pointer_examples() {
 ```tml
 extend *const T {
     /// Check if null
-    public func is_null(this) -> Bool
+    pub func is_null(this) -> Bool
 
     /// Offset by count elements
-    public func offset(this, count: I64) -> *const T
+    pub func offset(this, count: I64) -> *const T
 
     /// Add positive offset
-    public func add(this, count: U64) -> *const T
+    pub func add(this, count: U64) -> *const T
 
     /// Subtract offset
-    public func sub(this, count: U64) -> *const T
+    pub func sub(this, count: U64) -> *const T
 
     /// Distance between pointers (in elements)
-    public func offset_from(this, origin: *const T) -> I64
+    pub func offset_from(this, origin: *const T) -> I64
 
     /// Read value (lowlevel)
     public lowlevel func read(this) -> T
@@ -82,10 +82,10 @@ extend *const T {
     public lowlevel func read_unaligned(this) -> T
 
     /// Cast to different pointer type
-    public func cast[U](this) -> *const U
+    pub func cast[U](this) -> *const U
 
     /// Convert to usize
-    public func addr(this) -> U64
+    pub func addr(this) -> U64
 }
 
 extend *mut T {
@@ -168,74 +168,74 @@ a >>> n     // Logical right shift (always zero-fill)
 ```tml
 extend U64 {
     /// Count leading zeros
-    public func leading_zeros(this) -> U32
+    pub func leading_zeros(this) -> U32
 
     /// Count trailing zeros
-    public func trailing_zeros(this) -> U32
+    pub func trailing_zeros(this) -> U32
 
     /// Count ones (population count)
-    public func count_ones(this) -> U32
+    pub func count_ones(this) -> U32
 
     /// Count zeros
-    public func count_zeros(this) -> U32
+    pub func count_zeros(this) -> U32
 
     /// Rotate left
-    public func rotate_left(this, n: U32) -> U64
+    pub func rotate_left(this, n: U32) -> U64
 
     /// Rotate right
-    public func rotate_right(this, n: U32) -> U64
+    pub func rotate_right(this, n: U32) -> U64
 
     /// Reverse bits
-    public func reverse_bits(this) -> U64
+    pub func reverse_bits(this) -> U64
 
     /// Swap bytes (endianness)
-    public func swap_bytes(this) -> U64
+    pub func swap_bytes(this) -> U64
 
     /// Convert to big endian
-    public func to_be(this) -> U64
+    pub func to_be(this) -> U64
 
     /// Convert to little endian
-    public func to_le(this) -> U64
+    pub func to_le(this) -> U64
 
     /// Convert from big endian
-    public func from_be(value: U64) -> U64
+    pub func from_be(value: U64) -> U64
 
     /// Convert from little endian
-    public func from_le(value: U64) -> U64
+    pub func from_le(value: U64) -> U64
 
     /// Check if power of two
-    public func is_power_of_two(this) -> Bool
+    pub func is_power_of_two(this) -> Bool
 
     /// Next power of two
-    public func next_power_of_two(this) -> U64
+    pub func next_power_of_two(this) -> U64
 
     /// Get bit at position
-    public func bit(this, pos: U32) -> Bool {
+    pub func bit(this, pos: U32) -> Bool {
         return (this >> pos) & 1 != 0
     }
 
     /// Set bit at position
-    public func set_bit(this, pos: U32) -> U64 {
+    pub func set_bit(this, pos: U32) -> U64 {
         return this | (1 << pos)
     }
 
     /// Clear bit at position
-    public func clear_bit(this, pos: U32) -> U64 {
+    pub func clear_bit(this, pos: U32) -> U64 {
         return this & ~(1 << pos)
     }
 
     /// Toggle bit at position
-    public func toggle_bit(this, pos: U32) -> U64 {
+    pub func toggle_bit(this, pos: U32) -> U64 {
         return this ^ (1 << pos)
     }
 
     /// Extract bit field
-    public func extract_bits(this, start: U32, len: U32) -> U64 {
+    pub func extract_bits(this, start: U32, len: U32) -> U64 {
         return (this >> start) & ((1 << len) - 1)
     }
 
     /// Insert bit field
-    public func insert_bits(this, value: U64, start: U32, len: U32) -> U64 {
+    pub func insert_bits(this, value: U64, start: U32, len: U32) -> U64 {
         let mask: U64 = ((1 << len) - 1) << start
         return (this & ~mask) | ((value << start) & mask)
     }
@@ -249,22 +249,22 @@ extend U64 {
 ```tml
 extend U32 {
     /// Convert to bytes (native endian)
-    public func to_ne_bytes(this) -> [U8; 4]
+    pub func to_ne_bytes(this) -> [U8; 4]
 
     /// Convert to bytes (big endian)
-    public func to_be_bytes(this) -> [U8; 4]
+    pub func to_be_bytes(this) -> [U8; 4]
 
     /// Convert to bytes (little endian)
-    public func to_le_bytes(this) -> [U8; 4]
+    pub func to_le_bytes(this) -> [U8; 4]
 
     /// From bytes (native endian)
-    public func from_ne_bytes(bytes: [U8; 4]) -> U32
+    pub func from_ne_bytes(bytes: [U8; 4]) -> U32
 
     /// From bytes (big endian)
-    public func from_be_bytes(bytes: [U8; 4]) -> U32
+    pub func from_be_bytes(bytes: [U8; 4]) -> U32
 
     /// From bytes (little endian)
-    public func from_le_bytes(bytes: [U8; 4]) -> U32
+    pub func from_le_bytes(bytes: [U8; 4]) -> U32
 }
 
 // Similar for all integer types
@@ -298,16 +298,16 @@ func bit_cast_examples() {
 
 ```tml
 /// Size of type in bytes
-public func size_of[T]() -> U64
+pub func size_of[T]() -> U64
 
 /// Alignment of type in bytes
-public func align_of[T]() -> U64
+pub func align_of[T]() -> U64
 
 /// Size of value
-public func size_of_val[T](val: ref T) -> U64
+pub func size_of_val[T](val: ref T) -> U64
 
 /// Alignment of value
-public func align_of_val[T](val: ref T) -> U64
+pub func align_of_val[T](val: ref T) -> U64
 
 /// Minimum alignment (usually 1)
 public const MIN_ALIGN: U64 = 1
@@ -319,31 +319,31 @@ public const MAX_ALIGN: U64 = 16  // Platform-dependent
 ### 4.2 Memory Layout
 
 ```tml
-public type Layout {
+pub type Layout {
     size: U64,
     align: U64,
 }
 
 extend Layout {
     /// Create layout for type
-    public func new[T]() -> This {
+    pub func new[T]() -> This {
         return This { size: size_of[T](), align: align_of[T]() }
     }
 
     /// Create with explicit size and alignment
-    public func from_size_align(size: U64, align: U64) -> Outcome[This, LayoutError]
+    pub func from_size_align(size: U64, align: U64) -> Outcome[This, LayoutError]
 
     /// Create for array of T
-    public func array[T](n: U64) -> Outcome[This, LayoutError]
+    pub func array[T](n: U64) -> Outcome[This, LayoutError]
 
     /// Extend layout for next field
-    public func extend(this, next: Layout) -> Outcome[(This, U64), LayoutError]
+    pub func extend(this, next: Layout) -> Outcome[(This, U64), LayoutError]
 
     /// Pad to alignment
-    public func pad_to_align(this) -> This
+    pub func pad_to_align(this) -> This
 
     /// Repeat layout n times
-    public func repeat(this, n: U64) -> Outcome[(This, U64), LayoutError]
+    pub func repeat(this, n: U64) -> Outcome[(This, U64), LayoutError]
 }
 ```
 
@@ -371,66 +371,66 @@ public lowlevel func zero[T](dst: *mut T, count: U64)
 public lowlevel func swap[T](a: *mut T, b: *mut T, count: U64)
 
 /// Replace value, returning old
-public func replace[T](dest: mut ref T, value: T) -> T
+pub func replace[T](dest: mut ref T, value: T) -> T
 
 /// Take value, leaving default
-public func take[T: Default](dest: mut ref T) -> T
+pub func take[T: Default](dest: mut ref T) -> T
 
 /// Swap two values
-public func swap_refs[T](a: mut ref T, b: mut ref T)
+pub func swap_refs[T](a: mut ref T, b: mut ref T)
 
 /// Forget value (don't run destructor)
-public func forget[T](value: T)
+pub func forget[T](value: T)
 
 /// Drop value explicitly
-public func drop[T](value: T)
+pub func drop[T](value: T)
 
 /// Check if types have same layout
-public func same_layout[T, U]() -> Bool
+pub func same_layout[T, U]() -> Bool
 
 /// Align address up
-public func align_up(addr: U64, align: U64) -> U64
+pub func align_up(addr: U64, align: U64) -> U64
 
 /// Align address down
-public func align_down(addr: U64, align: U64) -> U64
+pub func align_down(addr: U64, align: U64) -> U64
 
 /// Check if address is aligned
-public func is_aligned(addr: U64, align: U64) -> Bool
+pub func is_aligned(addr: U64, align: U64) -> Bool
 ```
 
 ### 4.4 Uninitialized Memory
 
 ```tml
 /// Marker for uninitialized memory
-public type MaybeUninit[T] {
+pub type MaybeUninit[T] {
     value: T,  // May be uninitialized
 }
 
 extend MaybeUninit[T] {
     /// Create uninitialized
-    public func uninit() -> This
+    pub func uninit() -> This
 
     /// Create zeroed (all bytes zero)
-    public func zeroed() -> This
+    pub func zeroed() -> This
 
     /// Create from initialized value
-    public func new(value: T) -> This
+    pub func new(value: T) -> This
 
     /// Write value
-    public func write(this, value: T) -> mut ref T
+    pub func write(this, value: T) -> mut ref T
 
     /// Assume initialized (lowlevel)
     public lowlevel func assume_init(this) -> T
 
     /// Get pointer to value
-    public func as_ptr(this) -> *const T
+    pub func as_ptr(this) -> *const T
 
     /// Get mutable pointer to value
-    public func as_mut_ptr(this) -> *mut T
+    pub func as_mut_ptr(this) -> *mut T
 }
 
 /// Create uninitialized array
-public func uninit_array[T, const N: U64]() -> [MaybeUninit[T]; N]
+pub func uninit_array[T, const N: U64]() -> [MaybeUninit[T]; N]
 ```
 
 ## 5. Atomic Operations
@@ -438,22 +438,22 @@ public func uninit_array[T, const N: U64]() -> [MaybeUninit[T]; N]
 ### 5.1 Atomic Types
 
 ```tml
-public type AtomicBool { inner: U8 }
-public type AtomicI8 { inner: I8 }
-public type AtomicI16 { inner: I16 }
-public type AtomicI32 { inner: I32 }
-public type AtomicI64 { inner: I64 }
-public type AtomicU8 { inner: U8 }
-public type AtomicU16 { inner: U16 }
-public type AtomicU32 { inner: U32 }
-public type AtomicU64 { inner: U64 }
-public type AtomicPtr[T] { inner: *mut T }
+pub type AtomicBool { inner: U8 }
+pub type AtomicI8 { inner: I8 }
+pub type AtomicI16 { inner: I16 }
+pub type AtomicI32 { inner: I32 }
+pub type AtomicI64 { inner: I64 }
+pub type AtomicU8 { inner: U8 }
+pub type AtomicU16 { inner: U16 }
+pub type AtomicU32 { inner: U32 }
+pub type AtomicU64 { inner: U64 }
+pub type AtomicPtr[T] { inner: *mut T }
 ```
 
 ### 5.2 Memory Ordering
 
 ```tml
-public type MemoryOrdering =
+pub type MemoryOrdering =
     | Relaxed    // No synchronization
     | Acquire    // Acquire semantics (loads)
     | Release    // Release semantics (stores)
@@ -466,19 +466,19 @@ public type MemoryOrdering =
 ```tml
 extend AtomicI64 {
     /// Create new atomic
-    public func new(value: I64) -> This
+    pub func new(value: I64) -> This
 
     /// Load value
-    public func load(this, order: MemoryOrdering) -> I64
+    pub func load(this, order: MemoryOrdering) -> I64
 
     /// Store value
-    public func store(this, value: I64, order: MemoryOrdering)
+    pub func store(this, value: I64, order: MemoryOrdering)
 
     /// Swap values
-    public func swap(this, value: I64, order: MemoryOrdering) -> I64
+    pub func swap(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Compare and swap
-    public func compare_exchange(
+    pub func compare_exchange(
         this,
         current: I64,
         new: I64,
@@ -487,7 +487,7 @@ extend AtomicI64 {
     ) -> Outcome[I64, I64]
 
     /// Weak compare and swap (may fail spuriously)
-    public func compare_exchange_weak(
+    pub func compare_exchange_weak(
         this,
         current: I64,
         new: I64,
@@ -496,31 +496,31 @@ extend AtomicI64 {
     ) -> Outcome[I64, I64]
 
     /// Fetch and add
-    public func fetch_add(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_add(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and subtract
-    public func fetch_sub(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_sub(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and AND
-    public func fetch_and(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_and(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and OR
-    public func fetch_or(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_or(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and XOR
-    public func fetch_xor(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_xor(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and NAND
-    public func fetch_nand(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_nand(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch max
-    public func fetch_max(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_max(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch min
-    public func fetch_min(this, value: I64, order: MemoryOrdering) -> I64
+    pub func fetch_min(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Get mutable reference (when exclusively owned)
-    public func get_mut(this) -> mut ref I64
+    pub func get_mut(this) -> mut ref I64
 }
 ```
 
@@ -528,13 +528,13 @@ extend AtomicI64 {
 
 ```tml
 /// Memory fence
-public func fence(order: MemoryOrdering)
+pub func fence(order: MemoryOrdering)
 
 /// Compiler fence (no CPU barrier)
-public func compiler_fence(order: MemoryOrdering)
+pub func compiler_fence(order: MemoryOrdering)
 
 /// Spin-loop hint
-public func spin_loop_hint()
+pub func spin_loop_hint()
 ```
 
 ## 6. Thread Primitives
@@ -544,71 +544,71 @@ public func spin_loop_hint()
 ```tml
 module thread
 
-public type Thread {
+pub type Thread {
     handle: RawThreadHandle,
 }
 
-public type JoinHandle[T] {
+pub type JoinHandle[T] {
     thread: Thread,
     result: *mut Maybe[T],
 }
 
 /// Spawn new thread
-public func spawn[F, T](f: F) -> JoinHandle[T]
+pub func spawn[F, T](f: F) -> JoinHandle[T]
 where F: Callable[(), T] + Sendable,
       T: Sendable
 effects: [io.thread]
 
 /// Spawn with builder
-public func spawn_builder[F, T](builder: Builder, f: F) -> Outcome[JoinHandle[T], SpawnError]
+pub func spawn_builder[F, T](builder: Builder, f: F) -> Outcome[JoinHandle[T], SpawnError]
 where F: Callable[(), T] + Sendable,
       T: Sendable
 effects: [io.thread]
 
 extend JoinHandle[T] {
     /// Wait for thread to finish
-    public func join(this) -> Outcome[T, JoinError]
+    pub func join(this) -> Outcome[T, JoinError]
     effects: [io.thread]
 
     /// Check if thread finished
-    public func is_finished(this) -> Bool
+    pub func is_finished(this) -> Bool
 
     /// Get thread reference
-    public func thread(this) -> ref Thread
+    pub func thread(this) -> ref Thread
 }
 
 extend Thread {
     /// Get thread ID
-    public func id(this) -> ThreadId
+    pub func id(this) -> ThreadId
 
     /// Get thread name
-    public func name(this) -> Maybe[ref str]
+    pub func name(this) -> Maybe[ref str]
 
     /// Unpark thread
-    public func unpark(this)
+    pub func unpark(this)
 }
 
 /// Current thread operations
-public func current() -> Thread
-public func yield_now()
-public func park()
-public func park_timeout(dur: Duration)
-public func sleep(dur: Duration) effects: [io.time]
+pub func current() -> Thread
+pub func yield_now()
+pub func park()
+pub func park_timeout(dur: Duration)
+pub func sleep(dur: Duration) effects: [io.time]
 ```
 
 ### 6.2 Thread Builder
 
 ```tml
-public type Builder {
+pub type Builder {
     name: Maybe[String],
     stack_size: Maybe[U64],
 }
 
 extend Builder {
-    public func new() -> This
-    public func name(this, name: String) -> This
-    public func stack_size(this, size: U64) -> This
-    public func spawn[F, T](this, f: F) -> Outcome[JoinHandle[T], SpawnError]
+    pub func new() -> This
+    pub func name(this, name: String) -> This
+    pub func stack_size(this, size: U64) -> This
+    pub func spawn[F, T](this, f: F) -> Outcome[JoinHandle[T], SpawnError]
     where F: Callable[(), T] + Sendable,
           T: Sendable
 }
@@ -622,21 +622,21 @@ extend Builder {
 var COUNTER: I32 = 0
 
 /// Thread-local with lazy initialization
-public type ThreadLocal[T] {
+pub type ThreadLocal[T] {
     init: func() -> T,
 }
 
 extend ThreadLocal[T] {
-    public func new(init: func() -> T) -> This
+    pub func new(init: func() -> T) -> This
 
     /// Get or initialize value
-    public func get(this) -> ref T
+    pub func get(this) -> ref T
 
     /// Get mutable reference
-    public func get_mut(this) -> mut ref T
+    pub func get_mut(this) -> mut ref T
 
     /// Try get (Nothing if not initialized)
-    public func try_get(this) -> Maybe[ref T]
+    pub func try_get(this) -> Maybe[ref T]
 }
 ```
 
@@ -646,79 +646,79 @@ extend ThreadLocal[T] {
 module sync
 
 /// Mutex
-public type Mutex[T] {
+pub type Mutex[T] {
     locked: AtomicBool,
     data: LowlevelCell[T],
 }
 
 extend Mutex[T] {
-    public func new(value: T) -> This
-    public func lock(this) -> MutexGuard[T]
-    public func try_lock(this) -> Maybe[MutexGuard[T]]
-    public func is_locked(this) -> Bool
-    public func get_mut(this) -> mut ref T  // When exclusively owned
-    public func into_inner(this) -> T
+    pub func new(value: T) -> This
+    pub func lock(this) -> MutexGuard[T]
+    pub func try_lock(this) -> Maybe[MutexGuard[T]]
+    pub func is_locked(this) -> Bool
+    pub func get_mut(this) -> mut ref T  // When exclusively owned
+    pub func into_inner(this) -> T
 }
 
 /// Read-write lock
-public type RwLock[T] {
+pub type RwLock[T] {
     state: AtomicU64,
     data: LowlevelCell[T],
 }
 
 extend RwLock[T] {
-    public func new(value: T) -> This
-    public func read(this) -> RwLockReadGuard[T]
-    public func try_read(this) -> Maybe[RwLockReadGuard[T]]
-    public func write(this) -> RwLockWriteGuard[T]
-    public func try_write(this) -> Maybe[RwLockWriteGuard[T]]
+    pub func new(value: T) -> This
+    pub func read(this) -> RwLockReadGuard[T]
+    pub func try_read(this) -> Maybe[RwLockReadGuard[T]]
+    pub func write(this) -> RwLockWriteGuard[T]
+    pub func try_write(this) -> Maybe[RwLockWriteGuard[T]]
 }
 
 /// Condition variable
-public type Condvar {
+pub type Condvar {
     waiters: AtomicU64,
 }
 
 extend Condvar {
-    public func new() -> This
-    public func wait[T](this, guard: MutexGuard[T]) -> MutexGuard[T]
-    public func wait_timeout[T](this, guard: MutexGuard[T], dur: Duration) -> (MutexGuard[T], Bool)
-    public func notify_one(this)
-    public func notify_all(this)
+    pub func new() -> This
+    pub func wait[T](this, guard: MutexGuard[T]) -> MutexGuard[T]
+    pub func wait_timeout[T](this, guard: MutexGuard[T], dur: Duration) -> (MutexGuard[T], Bool)
+    pub func notify_one(this)
+    pub func notify_all(this)
 }
 
 /// Once cell (lazy initialization)
-public type Once {
+pub type Once {
     state: AtomicU8,
 }
 
 extend Once {
-    public func new() -> This
-    public func call_once(this, f: func())
-    public func is_completed(this) -> Bool
+    pub func new() -> This
+    pub func call_once(this, f: func())
+    pub func is_completed(this) -> Bool
 }
 
 /// Barrier
-public type Barrier {
+pub type Barrier {
     count: U64,
     state: AtomicU64,
 }
 
 extend Barrier {
-    public func new(count: U64) -> This
-    public func wait(this) -> BarrierWaitResult
+    pub func new(count: U64) -> This
+    pub func wait(this) -> BarrierWaitResult
 }
 
 /// Semaphore
-public type Semaphore {
+pub type Semaphore {
     permits: AtomicI64,
 }
 
 extend Semaphore {
-    public func new(permits: I64) -> This
-    public func acquire(this)
-    public func try_acquire(this) -> Bool
-    public func release(this)
+    pub func new(permits: I64) -> This
+    pub func acquire(this)
+    pub func try_acquire(this) -> Bool
+    pub func release(this)
 }
 ```
 
@@ -726,49 +726,49 @@ extend Semaphore {
 
 ```tml
 /// Interior mutability primitive
-public type LowlevelCell[T] {
+pub type LowlevelCell[T] {
     value: T,
 }
 
 extend LowlevelCell[T] {
-    public func new(value: T) -> This
+    pub func new(value: T) -> This
 
     /// Get raw pointer to inner value
-    public func get(this) -> *mut T
+    pub func get(this) -> *mut T
 
     /// Get mutable reference (when exclusively owned)
-    public func get_mut(this) -> mut ref T
+    pub func get_mut(this) -> mut ref T
 
     /// Get inner value
-    public func into_inner(this) -> T
+    pub func into_inner(this) -> T
 }
 
 /// Cell (single-threaded interior mutability)
-public type Cell[T] {
+pub type Cell[T] {
     value: LowlevelCell[T],
 }
 
 extend Cell[T: Copy] {
-    public func new(value: T) -> This
-    public func get(this) -> T
-    public func set(this, value: T)
-    public func swap(this, other: ref Cell[T])
-    public func replace(this, value: T) -> T
-    public func take(this) -> T where T: Default
+    pub func new(value: T) -> This
+    pub func get(this) -> T
+    pub func set(this, value: T)
+    pub func swap(this, other: ref Cell[T])
+    pub func replace(this, value: T) -> T
+    pub func take(this) -> T where T: Default
 }
 
 /// RefCell (runtime borrow checking)
-public type RefCell[T] {
+pub type RefCell[T] {
     borrow_state: Cell[I32],
     value: LowlevelCell[T],
 }
 
 extend RefCell[T] {
-    public func new(value: T) -> This
-    public func borrow(this) -> Ref[T]
-    public func try_borrow(this) -> Outcome[Ref[T], BorrowError]
-    public func borrow_mut(this) -> RefMut[T]
-    public func try_borrow_mut(this) -> Outcome[RefMut[T], BorrowMutError]
+    pub func new(value: T) -> This
+    pub func borrow(this) -> Ref[T]
+    pub func try_borrow(this) -> Outcome[Ref[T], BorrowError]
+    pub func borrow_mut(this) -> RefMut[T]
+    pub func try_borrow_mut(this) -> Outcome[RefMut[T], BorrowMutError]
 }
 ```
 
@@ -872,23 +872,23 @@ lowlevel func read_cycle_counter() -> U64 {
 module simd.x86
 
 // 128-bit vectors
-public type I8x16 = [I8; 16]
-public type I16x8 = [I16; 8]
-public type I32x4 = [I32; 4]
-public type I64x2 = [I64; 2]
-public type F32x4 = [F32; 4]
-public type F64x2 = [F64; 2]
+pub type I8x16 = [I8; 16]
+pub type I16x8 = [I16; 8]
+pub type I32x4 = [I32; 4]
+pub type I64x2 = [I64; 2]
+pub type F32x4 = [F32; 4]
+pub type F64x2 = [F64; 2]
 
 // 256-bit vectors (AVX)
 @when(target_feature = "avx")
-public type I8x32 = [I8; 32]
-public type F32x8 = [F32; 8]
-public type F64x4 = [F64; 4]
+pub type I8x32 = [I8; 32]
+pub type F32x8 = [F32; 8]
+pub type F64x4 = [F64; 4]
 
 // 512-bit vectors (AVX-512)
 @when(target_feature = "avx512f")
-public type F32x16 = [F32; 16]
-public type F64x8 = [F64; 8]
+pub type F32x16 = [F32; 16]
+pub type F64x8 = [F64; 8]
 ```
 
 ### 9.2 SIMD Operations
@@ -898,25 +898,25 @@ public type F64x8 = [F64; 8]
 module simd.x86.sse2
 
 /// Add packed 32-bit integers
-public func add_i32x4(a: I32x4, b: I32x4) -> I32x4
+pub func add_i32x4(a: I32x4, b: I32x4) -> I32x4
 
 /// Subtract packed 32-bit integers
-public func sub_i32x4(a: I32x4, b: I32x4) -> I32x4
+pub func sub_i32x4(a: I32x4, b: I32x4) -> I32x4
 
 /// Multiply packed 32-bit integers (low 32 bits)
-public func mul_i32x4(a: I32x4, b: I32x4) -> I32x4
+pub func mul_i32x4(a: I32x4, b: I32x4) -> I32x4
 
 /// Add packed floats
-public func add_f32x4(a: F32x4, b: F32x4) -> F32x4
+pub func add_f32x4(a: F32x4, b: F32x4) -> F32x4
 
 /// Multiply packed floats
-public func mul_f32x4(a: F32x4, b: F32x4) -> F32x4
+pub func mul_f32x4(a: F32x4, b: F32x4) -> F32x4
 
 /// Compare equal (returns mask)
-public func cmpeq_i32x4(a: I32x4, b: I32x4) -> I32x4
+pub func cmpeq_i32x4(a: I32x4, b: I32x4) -> I32x4
 
 /// Shuffle elements
-public func shuffle_f32x4[const MASK: U8](a: F32x4, b: F32x4) -> F32x4
+pub func shuffle_f32x4[const MASK: U8](a: F32x4, b: F32x4) -> F32x4
 
 /// Load aligned
 public lowlevel func load_i32x4(ptr: *const I32) -> I32x4
@@ -937,7 +937,7 @@ public lowlevel func storeu_i32x4(ptr: *mut I32, v: I32x4)
 module simd
 
 /// Portable vector types
-public type Vec4[T] {
+pub type Vec4[T] {
     data: [T; 4],
 }
 
@@ -1031,11 +1031,11 @@ type Stack[T] {
 }
 
 extend Stack[T] {
-    public func new() -> This {
+    pub func new() -> This {
         return This { head: AtomicPtr.new(null) }
     }
 
-    public func push(this, value: T) {
+    pub func push(this, value: T) {
         lowlevel {
             let node: ptr Node[T] = alloc[Node[T]]()
             node.write(Node { value: value, next: null })
@@ -1054,7 +1054,7 @@ extend Stack[T] {
         }
     }
 
-    public func pop(this) -> Maybe[T] {
+    pub func pop(this) -> Maybe[T] {
         lowlevel {
             loop {
                 let head: ptr Node[T] = this.head.load(MemoryOrdering.Acquire)
@@ -1088,7 +1088,7 @@ module fast_search
 
 import simd.x86.sse42.*
 
-public func find_char(haystack: ref [U8], needle: U8) -> Maybe[U64] {
+pub func find_char(haystack: ref [U8], needle: U8) -> Maybe[U64] {
     let len: U64 = haystack.len()
     let ptr: ptr U8 = haystack.as_ptr()
 

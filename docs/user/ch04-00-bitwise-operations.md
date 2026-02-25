@@ -62,7 +62,7 @@ Common use: Setting bits.
 
 ```tml
 func main() {
-    let mut flags = 0b1000
+    var flags = 0b1000
     let bit_to_set = 0b0010
 
     flags = flags | bit_to_set  // 0b1010
@@ -178,8 +178,8 @@ func main() {
 
 ```tml
 func main() {
-    let mut a = 5
-    let mut b = 10
+    var a = 5
+    var b = 10
 
     a = a ^ b
     b = a ^ b
@@ -198,7 +198,7 @@ const FLAG_WRITE = 0b010
 const FLAG_EXECUTE = 0b100
 
 func main() {
-    let mut permissions = 0
+    var permissions = 0
 
     // Grant read and write
     permissions = permissions | FLAG_READ | FLAG_WRITE

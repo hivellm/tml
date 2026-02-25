@@ -716,7 +716,7 @@ let ms: F64 = Duration::as_millis_f64(elapsed)
 println("Time: {:.3} ms", ms)  // e.g., "Time: 0.266 ms"
 
 // Example: Multiple runs averaging
-let mut total: I64 = 0
+var total: I64 = 0
 for _ in 0 to 10 {
     let start: I64 = Instant::now()
     some_function()

@@ -1,8 +1,10 @@
-# std::buffer — Binary Buffers and Streams
+# std::buffer — Binary Buffers
+
+> **Note**: Streaming byte I/O (Readable, Writable, BufferedReader, ByteStream, pipe) has moved to [`std::stream`](./23-STREAM.md). This module covers the `Buffer` type for raw binary data.
 
 ## 1. Overview
 
-The \x60std::buffer` package provides efficient binary data handling: buffers, byte readers/writers, and binary encoding.
+The `std::buffer` package provides the `Buffer` type for efficient binary data handling.
 
 ```tml
 use std::buffer

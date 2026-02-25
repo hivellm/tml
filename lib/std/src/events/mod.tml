@@ -1,0 +1,31 @@
+//! Event-driven programming primitives.
+//!
+//! This module provides an `EventEmitter` type for publish/subscribe
+//! patterns, inspired by Node.js's `events` module.
+//!
+//! # Core Type
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`EventEmitter`] | Named-event dispatcher with ordered listeners |
+//!
+//! Listeners are `func(I64)` function pointers passed as I64.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::events::EventEmitter
+//!
+//! func on_click(data: I64) {
+//!     print("clicked!\n")
+//! }
+//!
+//! var emitter = EventEmitter::new()
+//! emitter.on("click", on_click as I64)
+//! emitter.emit("click", 0)
+//! emitter.destroy()
+//! ```
+
+pub mod emitter
+
+pub use std::events::emitter::EventEmitter

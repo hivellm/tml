@@ -53,7 +53,7 @@ func main() {
     ptr_write[I32](ptr_offset(arr, 16), 50)
 
     // Calculate sum
-    let mut sum: I32 = 0
+    var sum: I32 = 0
     loop i in 0 to 5 {
         sum = sum + ptr_read[I32](ptr_offset(arr, i * 4))
     }
@@ -128,9 +128,9 @@ func example() {
 }
 ```
 
-### @derive(Drop)
+### Custom Cleanup
 
-You can derive `Drop` for your own types. For types that don't have a custom `Drop`, you can implement it manually:
+You can implement cleanup for your own types by adding a `destroy` method:
 
 ```tml
 type MyResource {
@@ -138,8 +138,8 @@ type MyResource {
     size: I64,
 }
 
-impl Drop for MyResource {
-    func drop(mut this) {
+impl MyResource {
+    func destroy(mut this) {
         mem_free(this.data)
     }
 }

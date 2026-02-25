@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-23
-**Current state**: Compiler functional, 76.2% library coverage, 9,045+ tests passing, full networking stack operational
+**Last updated**: 2026-02-24
+**Current state**: Compiler functional, 10,400+ tests passing, HTTP client + SQLite + Stream modules, O0 optimization pipeline complete
 
 ---
 
@@ -11,8 +11,8 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓, glob→@extern FFI✓, dead crypto list builders removed✓, dead codegen paths removed✓, primitive to_string→TML behavior dispatch✓, string interp→TML Display✓, MIR Char/Str/print fixes✓, dead time/header cleanup✓, ghost string/assert declarations removed✓, Str to_string/debug_string→TML dispatch✓; runtime: 15 compiled .c files, 0 migration candidates; inline IR: 5 functions remaining)
-Phase 5  [PARTIAL]    Sync networking DONE ✓, async runtime + HTTP pending
+Phase 4  [DONE]       Migrate C runtime → pure TML + eliminate hardcoded codegen (0 migration candidates, 5 inline IR remaining, O0 pipeline complete)
+Phase 5  [IN PROGRESS] Networking + HTTP + databases (sync net✓, async runtime✓, HTTP module✓, HTTP client✓, stream module✓, SQLite✓; HTTP server pending)
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
 
@@ -31,19 +31,17 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 
 | Metric | Value |
 |--------|-------|
-| Library function coverage | 76.2% (3,228/4,235) |
-| Tests passing | 9,045+ across 790+ files |
-| Modules at 100% coverage | 73 |
-| Modules at 0% coverage | 31 |
-| C++ compiler size | ~238,000 lines |
+| Tests passing | 10,400+ across 900+ files |
+| C++ compiler size | ~240,000 lines |
 | C runtime compiled | 15 files (15 essential FFI, 0 migration candidates) |
-| C runtime to migrate | 0 lines (collections.c cleaned Phase 43; search.c deleted Phase 35) |
-| Dead C files on disk | 0 (9 deleted in Phases 30-35: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c, math.c, search.c) |
-| Inline IR in runtime.cpp | 5 functions (~90 lines) — Phase 33: -7, Phase 34: -2, Phase 36: -1, Phase 44: -3, Phase 45: -3, Phase 46: -7; 3 black_box must stay, 2 string utils (str_eq, str_concat_opt) embedded in codegen |
-| Dead builtin handlers removed | Phase 36: 18 string handlers, Phase 38: 13 math handlers, Phase 39: 8 time registrations, Phase 41: 3 dead stubs + declarations |
-| Dead C runtime functions removed | Phase 41: 6 i64 atomics from sync.c, 4 pool exports from pool.c |
-| Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
-| TML standard library | ~137,300 lines |
+| C runtime to migrate | 0 lines |
+| Dead C files on disk | 0 (9 deleted in Phases 30-35) |
+| Inline IR in runtime.cpp | 5 functions (~90 lines) — 3 black_box must stay, 2 string utils embedded in codegen |
+| Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original) |
+| TML standard library | ~150,000+ lines |
+| New modules (Phase 5) | HTTP (14 files), Stream (5 files), SQLite (7 files), URL parser |
+| O0 optimization pipeline | Complete — SROA, Mem2Reg, EarlyCSE, Inlining, DSE, DestinationProp, strength reduction |
+| Codegen quality | insertvalue/extractvalue for structs, inbounds GEP, nullable Maybe optimization |
 
 ---
 
@@ -441,6 +439,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 ## Phase 4: Migrate C Runtime to Pure TML + Eliminate Hardcoded Codegen
 
 **Goal**: Eliminate all non-essential C/C++ runtime code, replacing with pure TML (`lowlevel` + `core::intrinsics`) or `@extern("c")` FFI wherever possible
+**Status**: DONE — 0 migration candidates remaining, O0 optimization pipeline complete
 **Priority**: MEDIUM — architectural cleanup, prerequisite for self-hosting
 **Tracking**: [migrate-runtime-to-tml/tasks.md](../rulebook/tasks/migrate-runtime-to-tml/tasks.md)
 
@@ -449,9 +448,9 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 2. **TML + @extern("c") FFI** — for libc/OS functions (snprintf, nextafterf, opendir)
 3. **Inline LLVM IR** — only when TML has no equivalent (asm sideeffect for black_box)
 
-### Progress (2026-02-20)
+### Progress (2026-02-24)
 
-**Collections migration COMPLETE**: List, HashMap, Buffer all migrated to pure TML. Eliminated ~3,300 lines of C runtime AND ~2,800 lines of hardcoded compiler dispatch.
+**Phase 4 COMPLETE**: All C runtime migration candidates eliminated. Collections (List, HashMap, Buffer), string ops, math, search — all migrated to pure TML. O0 optimization pipeline complete with SROA, Mem2Reg, EarlyCSE, Inlining, DSE, DestinationProp, strength reduction. SSA codegen quality (insertvalue/extractvalue, inbounds GEP, nullable Maybe optimization) matches Rust-quality IR.
 
 **String migration COMPLETE (99.3%)**: All C runtime string calls in `str.tml` replaced with pure TML. Only `as_bytes` remains (blocked on slice type codegen).
 
@@ -842,10 +841,11 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 
 ---
 
-## Phase 5: Async Runtime and Networking
+## Phase 5: Networking, HTTP, and Databases
 
-**Goal**: Enable servers and networked applications
-**Priority**: MEDIUM
+**Goal**: Enable servers, networked applications, and data persistence
+**Status**: IN PROGRESS — sync net ✓, async runtime (basic) ✓, HTTP client+routing ✓, streams ✓, SQLite ✓
+**Priority**: HIGH
 **Dependencies**: Phase 1 (closures must work), Phase 3 (buffered I/O)
 **Tracking**: [language-completeness-roadmap/tasks.md](../rulebook/tasks/language-completeness-roadmap/tasks.md) M3-M4
 
@@ -868,16 +868,19 @@ The synchronous networking stack is fully implemented and tested:
 
 **Implementation**: 12 TML modules (~3,500 lines) + 3 C FFI files (~1,800 lines wrapping OS system calls).
 
-### 5.2 Async Runtime (NOT STARTED)
+### 5.2 Async Runtime (BASIC DONE ✓)
 
-- [ ] 5.2.1 Event loop (epoll/IOCP/kqueue)
-- [ ] 5.2.2 `async func` — state machine codegen
-- [ ] 5.2.3 `await` expression — suspension and resumption
-- [ ] 5.2.4 `Executor` with work-stealing scheduler
-- [ ] 5.2.5 `spawn()`, `block_on()`, `sleep()`, `timeout()`
-- [ ] 5.2.6 `AsyncMutex[T]`, `AsyncChannel[T]`, `AsyncSemaphore`
-- [ ] 5.2.7 `select!`, `join!`
-- [ ] 5.2.8 Tests and benchmarks
+Cooperative multitasking primitives implemented via C runtime FFI:
+
+- [x] 5.2.1 Executor with poll-loop (`Executor::run()`, task queue, waker mechanism)
+- [x] 5.2.2 Timer polling (GetTickCount64/clock_gettime)
+- [x] 5.2.3 Yield state machine (`yield_now`)
+- [x] 5.2.4 Bounded SPSC channel (`Channel` — send/recv/close)
+- [x] 5.2.5 Tests: 12 tests across 5 files (executor, timer, yield, channel)
+- [ ] 5.2.6 Event loop (epoll/IOCP/kqueue)
+- [ ] 5.2.7 `async func` — state machine codegen
+- [ ] 5.2.8 `await` expression — suspension and resumption
+- [ ] 5.2.9 `select!`, `join!`
 
 ### 5.3 Async Networking (layer on sync)
 
@@ -887,31 +890,63 @@ The synchronous networking stack is fully implemented and tested:
 - [ ] 5.3.4 Connection pooling
 - [ ] 5.3.5 Tests: async echo server, concurrent clients
 
-### 5.4 HTTP
+### 5.4 HTTP (CLIENT + ROUTING DONE ✓)
 
 > **Prerequisites ready**: TCP ✓, TLS ✓, DNS ✓, URL ✓, zlib ✓, base64 ✓
 
-- [ ] 5.4.1 HTTP/1.1 request builder and response parser
-- [ ] 5.4.2 HTTP/1.1 client with connection pooling
-- [ ] 5.4.3 Chunked transfer encoding
-- [ ] 5.4.4 HTTP/1.1 server
-- [ ] 5.4.5 Router with path matching and method routing
-- [ ] 5.4.6 Middleware pipeline (logging, auth, CORS, compression)
-- [ ] 5.4.7 Decorator-based routing: `@Controller`, `@Get`, `@Post`
-- [ ] 5.4.8 HTTP/2 multiplexing
-- [ ] 5.4.9 WebSocket support
-- [ ] 5.4.10 HTTPS (TLS integration already done ✓)
-- [ ] 5.4.11 Tests and benchmarks
+14 source files in `std::http` (~2,800 lines), 12 test files:
 
-### 5.5 Promises and reactivity
+- [x] 5.4.1 HTTP method, status, version types (Method, Status, HttpVersion)
+- [x] 5.4.2 Headers — case-insensitive header map with content-based string comparison
+- [x] 5.4.3 Request builder — `Request::get()`, `::post()`, `::put()`, `::delete()`, fluent `header()`, `body()`
+- [x] 5.4.4 Response parser — parse HTTP/1.1 wire format (status line + headers + body)
+- [x] 5.4.5 HTTP client — `HttpClient::new()`, `get(url)`, `post(url, body)`, `send(request)`
+- [x] 5.4.6 Connection — DNS + TCP + optional TLS, wire serialization
+- [x] 5.4.7 Router with radix tree — parametric (`:id`), wildcard (`*path`), method routing
+- [x] 5.4.8 Cookies — parse and serialize (RFC 6265)
+- [x] 5.4.9 Encoding — Content-Encoding compress/decompress dispatch
+- [x] 5.4.10 Error types — HttpError, HttpErrorKind enum
+- [x] 5.4.11 Tests: router (basic, params, wildcard, mixed), headers, cookies, method, status, version, error, client
+- [ ] 5.4.12 HTTP/1.1 server
+- [ ] 5.4.13 Middleware pipeline (logging, auth, CORS, compression)
+- [ ] 5.4.14 Decorator-based routing: `@Controller`, `@Get`, `@Post`
+- [ ] 5.4.15 Chunked transfer encoding
+- [ ] 5.4.16 HTTP/2 multiplexing
+- [ ] 5.4.17 WebSocket support
 
-- [ ] 5.5.1 `Promise[T]` — then, catch, finally, map, flat_map
-- [ ] 5.5.2 `Observable[T]` — subscribe, map, filter, merge, zip
-- [ ] 5.5.3 Operators: debounce, throttle, distinct, buffer
-- [ ] 5.5.4 Pipe operator `|>` for fluent composition
-- [ ] 5.5.5 Tests
+### 5.5 Stream Module (DONE ✓)
 
-**Gate**: TCP echo server runs ✓, async/await compiles and executes, HTTP server serves routes.
+Byte-oriented I/O abstractions in `std::stream` (5 source files, 6 test files):
+
+- [x] 5.5.1 `Readable` behavior — byte stream source interface
+- [x] 5.5.2 `Writable` behavior — byte stream sink interface
+- [x] 5.5.3 `BufferedReader` / `BufferedWriter` — configurable buffers, line reading, auto-flush
+- [x] 5.5.4 `ByteStream` — in-memory read/write stream
+- [x] 5.5.5 `pipe()`, `copy_bytes()`, `read_all()`, `read_to_string()`, `write_all()`
+- [x] 5.5.6 Tests: readable, writable, buffered, pipe, copy
+
+### 5.6 Database (SQLITE DONE ✓)
+
+SQLite embedded database in `std::sqlite` (7 source files, 7 test files, 77+ tests):
+
+- [x] 5.6.1 Database — open file/in-memory, exec, prepare, begin/commit/rollback
+- [x] 5.6.2 Statement — prepared statements with typed bind/column accessors
+- [x] 5.6.3 Row — result row with typed column access and metadata
+- [x] 5.6.4 Value — dynamic SQLite value (integer, float, text, null)
+- [x] 5.6.5 FFI bindings — sqlite3 via vcpkg
+- [x] 5.6.6 Tests: database, exec, transaction, bind, statement, row, value
+- [ ] 5.6.7 Connection pooling
+- [ ] 5.6.8 Migration system
+
+### 5.7 Promises and reactivity
+
+- [ ] 5.7.1 `Promise[T]` — then, catch, finally, map, flat_map
+- [ ] 5.7.2 `Observable[T]` — subscribe, map, filter, merge, zip
+- [ ] 5.7.3 Operators: debounce, throttle, distinct, buffer
+- [ ] 5.7.4 Pipe operator `|>` for fluent composition
+- [ ] 5.7.5 Tests
+
+**Gate**: TCP echo server ✓, HTTP client sends real requests ✓, SQLite queries work ✓, streams pipe data ✓. Remaining: HTTP server, async/await codegen, WebSocket.
 
 ---
 

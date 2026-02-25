@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The \x60std::tls` package provides TLS (Transport Layer Security) for secure network communication.
+The `std::tls` package provides TLS (Transport Layer Security) for secure network communication.
 
 ```tml
 use std::tls
@@ -316,7 +316,7 @@ extend PrivateKey {
     effects: [io::file.read]
 
     /// Load from PEM file
-    pub func load_pem(path: ref Path) -> Outcome[This, KeyError>
+    pub func load_pem(path: ref Path) -> Outcome[This, KeyError]
     effects: [io::file.read]
 
     /// Load from encrypted PEM file

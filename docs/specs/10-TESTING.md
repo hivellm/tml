@@ -190,8 +190,8 @@ func bench_addition() {
 // Custom iteration count
 @bench(10000)
 func bench_loop() {
-    let mut sum: I32 = 0
-    let mut i: I32 = 0
+    var sum: I32 = 0
+    var i: I32 = 0
     loop {
         if i >= 100 { break }
         sum = sum + i
@@ -326,7 +326,7 @@ coverage-fail-under = true
 // src/math.tml
 module math
 
-public func add(a: I32, b: I32) -> I32 {
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 

@@ -58,7 +58,7 @@ To modify fields, the instance must be mutable:
 
 ```tml
 func main() {
-    let mut user = User {
+    var user = User {
         username: "charlie",
         email: "charlie@example.com",
         age: 28,

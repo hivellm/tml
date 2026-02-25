@@ -24,6 +24,7 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::buffer](./03-BUFFER.md) | Binary buffers and streams | None |
 | [std::tls](./06-TLS.md) | TLS/SSL connections | `io::network.tls` |
 | [std::http](./07-HTTP.md) | HTTP client and server | `io::network.http` |
+| [std::stream](./23-STREAM.md) | Streaming byte I/O (Readable, Writable, BufferedReader, BufferedWriter, ByteStream, pipe) | None |
 
 ### Concurrency Packages
 
@@ -31,6 +32,15 @@ This directory contains specifications for TML's standard library packages. Thes
 |---------|-------------|----------------------|
 | [std::sync](./13-SYNC.md) | Channels and synchronization | None |
 | [std::async](./14-ASYNC.md) | Async runtime and futures | `io::time` (for timers) |
+| [std::events](./25-EVENTS.md) | Publish/subscribe event emitter (Node.js-style) | None |
+| [std::thread](./31-THREAD.md) | Native threads (spawn, join, sleep, park) | `io::process` |
+| [std::runtime](./39-RUNTIME.md) | Async runtime (executor, timers, channels) | `io::time` |
+
+### Database Packages
+
+| Package | Description | Capabilities Required |
+|---------|-------------|----------------------|
+| [std::sqlite](./24-SQLITE.md) | SQLite embedded database (Database, Statement, Row, Value) | `io::file` |
 
 ### Data Packages
 
@@ -52,10 +62,10 @@ This directory contains specifications for TML's standard library packages. Thes
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| std::math | Mathematical functions (sin, cos, sqrt, pow, etc.) | None |
-| std::random | Random number generation (Xoshiro256, ThreadRng) | None |
-| std::search | Search algorithms (BM25, HNSW, cosine distance) | None |
-| std::hash | Non-cryptographic hashing (FNV-1a, SipHash) | None |
+| [std::math](./26-MATH.md) | Mathematical functions (sin, cos, sqrt, pow, etc.) | None |
+| [std::random](./27-RANDOM.md) | Random number generation (Xoshiro256, ThreadRng) | None |
+| [std::search](./29-SEARCH.md) | Search algorithms (BM25, HNSW, cosine distance) | None |
+| [std::hash](./28-HASH.md) | Non-cryptographic hashing (FNV-1a, MurmurHash2) | None |
 
 ### Utility Packages
 
@@ -65,14 +75,15 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::log](./18-LOG.md) | Logging framework | `io::file` (optional) |
 | [std::args](./19-ARGS.md) | Command-line argument parsing | `io::process.env` |
 | [std::env](./21-ENV.md) | Environment variables | `io::process.env` |
-| std::os | OS-level operations | `io::process` |
-| std::glob | File glob pattern matching | `io::file` |
-| std::url | URL parsing and manipulation | None |
-| std::uuid | UUID generation (v4, v7) | `io::random` |
-| std::semver | Semantic versioning | None |
-| std::text | Extended text operations (Text type with SSO) | None |
-| std::profiler | Runtime profiling | `io::time` |
-| std::exception | Exception handling | None |
+| [std::os](./30-OS.md) | OS-level operations (subprocess, signals, pipes) | `io::process` |
+| [std::glob](./33-GLOB.md) | File glob pattern matching | `io::file` |
+| [std::url](./34-URL.md) | URL parsing and manipulation | None |
+| [std::mime](./35-MIME.md) | MIME type detection | None |
+| [std::semver](./37-SEMVER.md) | Semantic versioning | None |
+| [std::text](./36-TEXT.md) | Extended text operations (Text type) | None |
+| [std::profiler](./38-PROFILER.md) | Runtime profiling (.cpuprofile output) | `io::time` |
+| [std::exception](./32-EXCEPTION.md) | C#-style exception hierarchy | None |
+| [std::oop](./40-OOP.md) | OOP interfaces and Object base class | None |
 | core::encoding | Binary encoding (big/little endian, base64, hex, utf8) | None |
 
 ## Dependency Graph
@@ -178,6 +189,11 @@ use std::fmt::{format, Display}
 | `Mutex[T]` | std::sync | Mutual exclusion lock |
 | `Digest` | std::crypto::hash | Cryptographic hash result |
 | `Cipher` | std::crypto::cipher | Symmetric encryption context |
+| `HttpClient` | std::http | HTTP client for making requests |
+| `Database` | std::sqlite | SQLite database connection |
+| `ByteStream` | std::stream | In-memory byte stream |
+| `Router` | std::http | HTTP request router |
+| `EventEmitter` | std::events | Publish/subscribe event emitter |
 
 ### Most Used Functions
 
@@ -195,3 +211,6 @@ use std::fmt::{format, Display}
 | `crc32()` | std::zlib::crc32 | CRC32 checksum |
 | `gzip()` | std::zlib::gzip | Gzip compression |
 | `random_bytes()` | std::crypto::random | Secure random bytes |
+| `HttpClient::get()` | std::http | Send HTTP GET request |
+| `Database::open_in_memory()` | std::sqlite | Open in-memory SQLite database |
+| `pipe()` | std::stream | Create connected read/write stream pair |

@@ -25,7 +25,7 @@ must be mutable:
 
 ```tml
 func main() {
-    let mut x = 42
+    var x = 42
     let ptr = ref x
 
     *ptr = 100  // Modify through pointer
@@ -67,7 +67,7 @@ func increment(ptr: ref I32) {
 }
 
 func main() {
-    let mut x = 5
+    var x = 5
     increment(ref x)
     println(x)  // 6
 }
@@ -83,7 +83,7 @@ TML enforces safety rules for references:
 
 ```tml
 func main() {
-    let mut x = 5
+    var x = 5
 
     let r1 = ref x  // OK: first reference
     let r2 = ref x  // OK: multiple immutable refs

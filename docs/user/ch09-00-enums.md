@@ -84,7 +84,7 @@ if color1 != color2 {
 You can change enum values using mutable variables:
 
 ```tml
-let mut status = Status::Pending
+var status = Status::Pending
 
 // Later, change the status
 status = Status::Active
@@ -111,7 +111,7 @@ type TaskState {
 }
 
 func process_task() -> I32 {
-    let mut state = TaskState::Created
+    var state = TaskState::Created
 
     // Start the task
     state = TaskState::Running
@@ -232,12 +232,109 @@ func handle_result(r: Outcome[I32, String]) -> I32 {
 }
 ```
 
+## Recursive Enums
+
+Some data structures are naturally recursive -- a linked list node contains another list, a tree node contains child trees. In TML, an enum variant cannot directly contain its own type because the compiler would need infinite memory to lay out the value. You must introduce **indirection** using `Heap[T]`, which allocates the inner value on the heap through a pointer.
+
+### Linked List
+
+A classic linked list stores a value and a pointer to the rest of the list:
+
+```tml
+use core::alloc::heap::Heap
+
+type IntList {
+    Cons(I32, Heap[IntList]),
+    Nil
+}
+```
+
+`Cons` holds an `I32` value and a heap-allocated pointer to the next node. `Nil` marks the end of the list. Without `Heap`, the compiler would reject this definition because `IntList` would contain itself directly, requiring infinite size.
+
+#### Constructing a list
+
+Build lists from the tail forward, wrapping each recursive element in `Heap::new`:
+
+```tml
+// The list [1, 2, 3]
+let list = IntList::Cons(1, Heap::new(
+    IntList::Cons(2, Heap::new(
+        IntList::Cons(3, Heap::new(IntList::Nil))
+    ))
+))
+```
+
+#### Pattern matching on a recursive enum
+
+Use `when` to destructure recursive variants:
+
+```tml
+func head(list: IntList) -> I32 {
+    return when list {
+        Cons(val, rest) => val,
+        Nil => 0
+    }
+}
+```
+
+The binding `val` receives the `I32` payload, and `rest` receives the `Heap[IntList]` tail.
+
+### Binary Tree
+
+A generic binary tree demonstrates recursive enums with type parameters:
+
+```tml
+use core::alloc::heap::Heap
+
+type Tree[T] {
+    Leaf(T),
+    Branch(Heap[Tree[T]], Heap[Tree[T]])
+}
+```
+
+Each `Branch` holds two heap-allocated child trees. `Leaf` holds a value with no children.
+
+```tml
+// Build a small tree:
+//       *
+//      / \
+//    10   20
+let tree = Tree::Branch(
+    Heap::new(Tree::Leaf(10)),
+    Heap::new(Tree::Leaf(20))
+)
+```
+
+### Why `Heap[T]` is Required
+
+An enum's size must be known at compile time. It is the size of its largest variant. If a variant directly contains the enum itself, the size equation becomes circular -- the type would need infinite memory.
+
+`Heap[T]` solves this by storing a fixed-size pointer (8 bytes on 64-bit systems) instead of the value inline. The actual data lives on the heap.
+
+**Without indirection, the compiler rejects the definition with error T085:**
+
+```tml
+// ERROR T085: recursive enum has infinite size
+type Bad {
+    Loop(Bad)
+}
+```
+
+The fix is to wrap the self-reference in `Heap[T]`:
+
+```tml
+type Good {
+    Loop(Heap[Good])
+}
+```
+
+Other pointer types also provide valid indirection: `Shared[T]`, `Sync[T]`, `List[T]`, raw pointers (`*T`), and references (`ref T`).
+
 ## Limitations
 
-Current TML simple enums (without data) are tagged enums (like C enums). They:
+TML enums support two forms:
 
-- Map directly to integer values (0, 1, 2, ...)
-- Can be compared with `==` and `!=`
-- Can be stored in variables and passed to functions
+- **Simple enums** (no associated data) are tagged integers. Variants map to values 0, 1, 2, ... and can be compared with `==` and `!=`.
+- **Algebraic data types** (variants with payloads) support full pattern matching with `when` and data extraction via bindings.
 
-Enums with associated data (ADTs like `Maybe`, `Outcome`) support full pattern matching with data extraction.
+Both forms can be stored in variables, passed to functions, and returned from functions. Recursive enum variants must use `Heap[T]` or another pointer type for indirection.

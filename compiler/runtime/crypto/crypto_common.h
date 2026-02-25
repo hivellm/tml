@@ -47,16 +47,16 @@ typedef struct {
 } TmlBuffer;
 
 static inline TmlBuffer* tml_create_buffer(int64_t capacity) {
-    TmlBuffer* buf = (TmlBuffer*)malloc(sizeof(TmlBuffer));
+    int64_t cap = capacity > 0 ? capacity : 1;
+    // Single allocation: header (32 bytes) + data (cap bytes) in one block.
+    // Buffer.destroy() in TML detects inline data (data == header + 32)
+    // and skips the separate data free.
+    TmlBuffer* buf = (TmlBuffer*)mem_alloc((int64_t)(sizeof(TmlBuffer) + cap));
     if (!buf)
         return NULL;
-    buf->data = (uint8_t*)malloc(capacity > 0 ? capacity : 1);
-    if (!buf->data) {
-        free(buf);
-        return NULL;
-    }
+    buf->data = (uint8_t*)(buf + 1); // data immediately follows header
     buf->length = 0;
-    buf->capacity = capacity > 0 ? capacity : 1;
+    buf->capacity = cap;
     buf->read_pos = 0;
     return buf;
 }
@@ -65,7 +65,7 @@ static inline TmlBuffer* tml_create_buffer_with_data(const uint8_t* data, int64_
     TmlBuffer* buf = tml_create_buffer(len);
     if (!buf)
         return NULL;
-    memcpy(buf->data, data, len);
+    memcpy(buf->data, data, (size_t)len);
     buf->length = len;
     return buf;
 }

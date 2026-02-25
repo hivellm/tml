@@ -14,7 +14,7 @@ The simplest way to hash data is with one-shot functions:
 use std::crypto::hash::{sha256, sha512, md5, sha1, Digest}
 
 func main() -> I32 {
-    let mut d: Digest = sha256("Hello, TML!")
+    var d: Digest = sha256("Hello, TML!")
     println(d.to_hex())     // hex-encoded hash
     println(d.to_base64())  // base64-encoded hash
     d.destroy()
@@ -43,10 +43,10 @@ For large data or data arriving in chunks, use the streaming interface:
 ```tml
 use std::crypto::hash::{HashStream, HashAlgorithm}
 
-let mut stream: HashStream = HashStream.new(HashAlgorithm.SHA256)
+var stream: HashStream = HashStream.new(HashAlgorithm.SHA256)
 stream.update("first chunk")
 stream.update("second chunk")
-let mut digest: Digest = stream.finalize()
+var digest: Digest = stream.finalize()
 println(digest.to_hex())
 digest.destroy()
 ```
@@ -65,15 +65,15 @@ func hash_message(msg: Str) {
     let checksum: I64 = crc32(msg)
     println("CRC32:   {checksum.to_string()}")
 
-    let mut d: Digest = md5(msg)
+    var d: Digest = md5(msg)
     println("MD5:     {d.to_hex()}")
     d.destroy()
 
-    let mut d2: Digest = sha256(msg)
+    var d2: Digest = sha256(msg)
     println("SHA-256: {d2.to_hex()}")
     d2.destroy()
 
-    let mut d3: Digest = sha512(msg)
+    var d3: Digest = sha512(msg)
     println("SHA-512: {d3.to_hex()}")
     d3.destroy()
 }
@@ -92,7 +92,7 @@ HMAC (Hash-based Message Authentication Code) verifies both data integrity and a
 ```tml
 use std::crypto::hmac::{hmac_sha256, hmac_sha512, HmacDigest}
 
-let mut mac: HmacDigest = hmac_sha256("secret-key", "message to authenticate")
+var mac: HmacDigest = hmac_sha256("secret-key", "message to authenticate")
 println(mac.to_hex())
 mac.destroy()
 ```
@@ -133,13 +133,13 @@ let key: Buffer = random_bytes(32)
 let nonce: Buffer = random_bytes(12)
 
 // Encrypt
-let mut enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
+var enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
 let ciphertext: Buffer = enc.encrypt("secret message")
 let tag: Buffer = enc.get_auth_tag()
 enc.destroy()
 
 // Decrypt
-let mut dec: Decipher = Decipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
+var dec: Decipher = Decipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
 dec.set_auth_tag(ref tag)
 let plaintext: Str = dec.decrypt(ref ciphertext)
 dec.destroy()
@@ -164,7 +164,7 @@ println(plaintext)  // "secret message"
 For large data, encrypt in chunks:
 
 ```tml
-let mut enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
+var enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, ref key, ref nonce)
 enc.update("chunk 1")
 enc.update("chunk 2")
 let ciphertext: Buffer = enc.finalize()
@@ -249,7 +249,7 @@ use std::crypto::key::{generate_key_pair, KeyPair}
 use std::crypto::sign::{sign, verify}
 
 // Generate key pair
-let mut kp: KeyPair = generate_key_pair("ed25519")
+var kp: KeyPair = generate_key_pair("ed25519")
 
 // Sign
 let signature: Buffer = sign(ref kp.private_key, "message to sign", "ed25519")
@@ -279,7 +279,7 @@ For asymmetric encryption (encrypting with a public key):
 use std::crypto::rsa::{rsa_encrypt, rsa_decrypt}
 use std::crypto::key::{generate_key_pair, KeyPair}
 
-let mut kp: KeyPair = generate_key_pair("rsa2048")
+var kp: KeyPair = generate_key_pair("rsa2048")
 
 let ciphertext: Buffer = rsa_encrypt(ref kp.public_key, "secret data", "oaep-sha256")
 let plaintext: Str = rsa_decrypt(ref kp.private_key, ref ciphertext, "oaep-sha256")
@@ -297,7 +297,7 @@ use std::crypto::error::{CryptoError}
 
 func encrypt_data(key: ref Buffer, data: Str) -> Outcome[Buffer, CryptoError] {
     let nonce: Buffer = random_bytes(12)
-    let mut enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, key, ref nonce)
+    var enc: Cipher = Cipher.new(CipherAlgorithm.AES_256_GCM, key, ref nonce)
     let result: Buffer = enc.encrypt(data)
     enc.destroy()
     Ok(result)

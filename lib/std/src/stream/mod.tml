@@ -48,9 +48,11 @@ pub mod writable
 pub mod byte_stream
 pub mod buffered
 pub mod pipe
+pub mod readable_stream
 
 pub use std::stream::readable::Readable
 pub use std::stream::writable::Writable
 pub use std::stream::byte_stream::{ByteStream, read_all, read_to_string, write_all, write_string}
 pub use std::stream::buffered::{BufferedReader, BufferedWriter}
 pub use std::stream::pipe::{pipe, copy_bytes}
+pub use std::stream::readable_stream::ReadableStream

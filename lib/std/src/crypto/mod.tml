@@ -182,6 +182,7 @@ pub mod dh
 pub mod ecdh
 pub mod rsa
 pub mod constants
+pub mod sha256_impl
 
 // Re-export error types
 pub use std::crypto::error::{CryptoError, CryptoErrorKind}

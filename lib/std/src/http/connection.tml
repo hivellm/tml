@@ -23,6 +23,7 @@ func tml_tls_stream_shutdown(ssl: *Unit) -> I32
 @extern("c")
 func tml_tls_stream_read(ssl: *Unit, buf: *Unit, len: I64) -> I64
 
+
 /// TLS/connection metadata.
 pub type ConnectionInfo {
     tls_version: Str,

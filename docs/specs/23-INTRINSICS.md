@@ -16,13 +16,13 @@ Compiler intrinsics are built-in functions that map directly to hardware instruc
 module intrinsics
 
 /// Add with overflow check
-public func add_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
+pub func add_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
 
 /// Subtract with overflow check
-public func sub_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
+pub func sub_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
 
 /// Multiply with overflow check
-public func mul_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
+pub func mul_with_overflow[T: Integer](a: T, b: T) -> (T, Bool)
 
 // Usage
 let (result, overflow) = add_with_overflow(I32.MAX, 1)
@@ -35,13 +35,13 @@ if overflow {
 
 ```tml
 /// Saturating add (clamps to MAX/MIN)
-public func saturating_add[T: Integer](a: T, b: T) -> T
+pub func saturating_add[T: Integer](a: T, b: T) -> T
 
 /// Saturating subtract
-public func saturating_sub[T: Integer](a: T, b: T) -> T
+pub func saturating_sub[T: Integer](a: T, b: T) -> T
 
 /// Saturating multiply
-public func saturating_mul[T: Integer](a: T, b: T) -> T
+pub func saturating_mul[T: Integer](a: T, b: T) -> T
 
 // Usage
 let x: U8 = saturating_add(250_u8, 10_u8)  // Returns 255
@@ -51,19 +51,19 @@ let x: U8 = saturating_add(250_u8, 10_u8)  // Returns 255
 
 ```tml
 /// Wrapping add (two's complement wrap)
-public func wrapping_add[T: Integer](a: T, b: T) -> T
+pub func wrapping_add[T: Integer](a: T, b: T) -> T
 
 /// Wrapping subtract
-public func wrapping_sub[T: Integer](a: T, b: T) -> T
+pub func wrapping_sub[T: Integer](a: T, b: T) -> T
 
 /// Wrapping multiply
-public func wrapping_mul[T: Integer](a: T, b: T) -> T
+pub func wrapping_mul[T: Integer](a: T, b: T) -> T
 
 /// Wrapping negate
-public func wrapping_neg[T: SignedInteger](a: T) -> T
+pub func wrapping_neg[T: SignedInteger](a: T) -> T
 
 /// Wrapping absolute value
-public func wrapping_abs[T: SignedInteger](a: T) -> T
+pub func wrapping_abs[T: SignedInteger](a: T) -> T
 
 // Usage
 let x: U8 = wrapping_add(255_u8, 1_u8)  // Returns 0
@@ -98,19 +98,19 @@ public lowlevel func unchecked_shr[T: Integer](a: T, b: U32) -> T
 
 ```tml
 /// Widening multiply (returns double-width result)
-public func widening_mul_u64(a: U64, b: U64) -> U128
-public func widening_mul_i64(a: I64, b: I64) -> I128
+pub func widening_mul_u64(a: U64, b: U64) -> U128
+pub func widening_mul_i64(a: I64, b: I64) -> I128
 
 /// High part of multiply
-public func mulhi_u64(a: U64, b: U64) -> U64
-public func mulhi_i64(a: I64, b: I64) -> I64
+pub func mulhi_u64(a: U64, b: U64) -> U64
+pub func mulhi_i64(a: I64, b: I64) -> I64
 
 /// Fused multiply-add
-public func fma_f32(a: F32, b: F32, c: F32) -> F32  // a * b + c
-public func fma_f64(a: F64, b: F64, c: F64) -> F64
+pub func fma_f32(a: F32, b: F32, c: F32) -> F32  // a * b + c
+pub func fma_f64(a: F64, b: F64, c: F64) -> F64
 
 /// Division with remainder
-public func divmod[T: Integer](a: T, b: T) -> (T, T)  // (quotient, remainder)
+pub func divmod[T: Integer](a: T, b: T) -> (T, T)  // (quotient, remainder)
 ```
 
 ## 3. Bit Manipulation Intrinsics
@@ -119,52 +119,52 @@ public func divmod[T: Integer](a: T, b: T) -> (T, T)  // (quotient, remainder)
 
 ```tml
 /// Count leading zeros
-public func ctlz[T: Integer](x: T) -> U32
+pub func ctlz[T: Integer](x: T) -> U32
 
 /// Count trailing zeros
-public func cttz[T: Integer](x: T) -> U32
+pub func cttz[T: Integer](x: T) -> U32
 
 /// Count ones (population count)
-public func ctpop[T: Integer](x: T) -> U32
+pub func ctpop[T: Integer](x: T) -> U32
 
 /// Check if power of two
-public func is_power_of_two[T: UnsignedInteger](x: T) -> Bool
+pub func is_power_of_two[T: UnsignedInteger](x: T) -> Bool
 ```
 
 ### 3.2 Bit Reversal and Swap
 
 ```tml
 /// Reverse bits
-public func bitreverse[T: Integer](x: T) -> T
+pub func bitreverse[T: Integer](x: T) -> T
 
 /// Byte swap
-public func bswap[T: Integer](x: T) -> T
+pub func bswap[T: Integer](x: T) -> T
 
 /// Rotate left
-public func rotate_left[T: Integer](x: T, n: U32) -> T
+pub func rotate_left[T: Integer](x: T, n: U32) -> T
 
 /// Rotate right
-public func rotate_right[T: Integer](x: T, n: U32) -> T
+pub func rotate_right[T: Integer](x: T, n: U32) -> T
 ```
 
 ### 3.3 Bit Extraction and Insertion
 
 ```tml
 /// Extract bit field (x86 BEXTR)
-public func bextr_u32(x: U32, start: U32, len: U32) -> U32
-public func bextr_u64(x: U64, start: U32, len: U32) -> U64
+pub func bextr_u32(x: U32, start: U32, len: U32) -> U32
+pub func bextr_u64(x: U64, start: U32, len: U32) -> U64
 
 /// Parallel bit deposit (x86 PDEP)
-public func pdep_u32(x: U32, mask: U32) -> U32
-public func pdep_u64(x: U64, mask: U64) -> U64
+pub func pdep_u32(x: U32, mask: U32) -> U32
+pub func pdep_u64(x: U64, mask: U64) -> U64
 
 /// Parallel bit extract (x86 PEXT)
-public func pext_u32(x: U32, mask: U32) -> U32
-public func pext_u64(x: U64, mask: U64) -> U64
+pub func pext_u32(x: U32, mask: U32) -> U32
+pub func pext_u64(x: U64, mask: U64) -> U64
 
 /// Bit zero high (BZHI)
-public func bzhi_u32(x: U32, n: U32) -> U32
-public func bzhi_u64(x: U64, n: U32) -> U64
+pub func bzhi_u32(x: U32, n: U32) -> U32
+pub func bzhi_u64(x: U64, n: U32) -> U64
 ```
 
 ## 4. Memory Intrinsics
@@ -205,12 +205,12 @@ public lowlevel func compare_bytes(
 
 ```tml
 /// Prefetch for read
-public func prefetch_read[T](ptr: *const T, locality: PrefetchLocality)
+pub func prefetch_read[T](ptr: *const T, locality: PrefetchLocality)
 
 /// Prefetch for write
-public func prefetch_write[T](ptr: *mut T, locality: PrefetchLocality)
+pub func prefetch_write[T](ptr: *mut T, locality: PrefetchLocality)
 
-public type PrefetchLocality =
+pub type PrefetchLocality =
     | None       // No temporal locality (L1 only)
     | Low        // Low temporal locality (L2)
     | Medium     // Medium temporal locality (L2+L3)
@@ -224,13 +224,13 @@ public type PrefetchLocality =
 public lowlevel func cache_flush(ptr: *const Void)
 
 /// Memory barrier (full fence)
-public func memory_barrier()
+pub func memory_barrier()
 
 /// Read barrier
-public func read_barrier()
+pub func read_barrier()
 
 /// Write barrier
-public func write_barrier()
+pub func write_barrier()
 ```
 
 ### 4.4 Volatile Access
@@ -257,57 +257,57 @@ public lowlevel func volatile_copy[T](src: *const T, dst: *mut T, count: U64)
 
 ```tml
 /// Atomic load (I32)
-public func atomic_load_i32(ptr: *Unit) -> I32
+pub func atomic_load_i32(ptr: *Unit) -> I32
 
 /// Atomic load (I64)
-public func atomic_load_i64(ptr: *Unit) -> I64
+pub func atomic_load_i64(ptr: *Unit) -> I64
 
 /// Atomic store (I32)
-public func atomic_store_i32(ptr: *Unit, value: I32)
+pub func atomic_store_i32(ptr: *Unit, value: I32)
 
 /// Atomic store (I64)
-public func atomic_store_i64(ptr: *Unit, value: I64)
+pub func atomic_store_i64(ptr: *Unit, value: I64)
 ```
 
 ### 5.2 Atomic Read-Modify-Write
 
 ```tml
 /// Atomic fetch-and-add
-public func atomic_fetch_add_i32(ptr: *Unit, value: I32) -> I32
-public func atomic_fetch_add_i64(ptr: *Unit, value: I64) -> I64
+pub func atomic_fetch_add_i32(ptr: *Unit, value: I32) -> I32
+pub func atomic_fetch_add_i64(ptr: *Unit, value: I64) -> I64
 
 /// Atomic fetch-and-subtract
-public func atomic_fetch_sub_i32(ptr: *Unit, value: I32) -> I32
-public func atomic_fetch_sub_i64(ptr: *Unit, value: I64) -> I64
+pub func atomic_fetch_sub_i32(ptr: *Unit, value: I32) -> I32
+pub func atomic_fetch_sub_i64(ptr: *Unit, value: I64) -> I64
 
 /// Atomic swap (exchange)
-public func atomic_swap_i32(ptr: *Unit, value: I32) -> I32
-public func atomic_swap_i64(ptr: *Unit, value: I64) -> I64
+pub func atomic_swap_i32(ptr: *Unit, value: I32) -> I32
+pub func atomic_swap_i64(ptr: *Unit, value: I64) -> I64
 
 /// Atomic compare-exchange (returns old value)
-public func atomic_compare_exchange_i32(ptr: *Unit, expected: I32, desired: I32) -> I32
-public func atomic_compare_exchange_i64(ptr: *Unit, expected: I64, desired: I64) -> I64
+pub func atomic_compare_exchange_i32(ptr: *Unit, expected: I32, desired: I32) -> I32
+pub func atomic_compare_exchange_i64(ptr: *Unit, expected: I64, desired: I64) -> I64
 
 /// Atomic AND
-public func atomic_and_i32(ptr: *Unit, value: I32) -> I32
-public func atomic_and_i64(ptr: *Unit, value: I64) -> I64
+pub func atomic_and_i32(ptr: *Unit, value: I32) -> I32
+pub func atomic_and_i64(ptr: *Unit, value: I64) -> I64
 
 /// Atomic OR
-public func atomic_or_i32(ptr: *Unit, value: I32) -> I32
-public func atomic_or_i64(ptr: *Unit, value: I64) -> I64
+pub func atomic_or_i32(ptr: *Unit, value: I32) -> I32
+pub func atomic_or_i64(ptr: *Unit, value: I64) -> I64
 ```
 
 ### 5.3 Fence
 
 ```tml
 /// Full memory fence (SeqCst)
-public func atomic_fence()
+pub func atomic_fence()
 
 /// Acquire fence
-public func atomic_fence_acquire()
+pub func atomic_fence_acquire()
 
 /// Release fence
-public func atomic_fence_release()
+pub func atomic_fence_release()
 ```
 
 ## 5b. SIMD Intrinsics
@@ -355,120 +355,120 @@ The compiler supports fixed-size arrays as SIMD vectors:
 
 ```tml
 /// Square root
-public func sqrt_f32(x: F32) -> F32
-public func sqrt_f64(x: F64) -> F64
+pub func sqrt_f32(x: F32) -> F32
+pub func sqrt_f64(x: F64) -> F64
 
 /// Sine
-public func sin_f32(x: F32) -> F32
-public func sin_f64(x: F64) -> F64
+pub func sin_f32(x: F32) -> F32
+pub func sin_f64(x: F64) -> F64
 
 /// Cosine
-public func cos_f32(x: F32) -> F32
-public func cos_f64(x: F64) -> F64
+pub func cos_f32(x: F32) -> F32
+pub func cos_f64(x: F64) -> F64
 
 /// Tangent
-public func tan_f32(x: F32) -> F32
-public func tan_f64(x: F64) -> F64
+pub func tan_f32(x: F32) -> F32
+pub func tan_f64(x: F64) -> F64
 
 /// Exponential (e^x)
-public func exp_f32(x: F32) -> F32
-public func exp_f64(x: F64) -> F64
+pub func exp_f32(x: F32) -> F32
+pub func exp_f64(x: F64) -> F64
 
 /// Exponential (2^x)
-public func exp2_f32(x: F32) -> F32
-public func exp2_f64(x: F64) -> F64
+pub func exp2_f32(x: F32) -> F32
+pub func exp2_f64(x: F64) -> F64
 
 /// Natural logarithm
-public func ln_f32(x: F32) -> F32
-public func ln_f64(x: F64) -> F64
+pub func ln_f32(x: F32) -> F32
+pub func ln_f64(x: F64) -> F64
 
 /// Base-2 logarithm
-public func log2_f32(x: F32) -> F32
-public func log2_f64(x: F64) -> F64
+pub func log2_f32(x: F32) -> F32
+pub func log2_f64(x: F64) -> F64
 
 /// Base-10 logarithm
-public func log10_f32(x: F32) -> F32
-public func log10_f64(x: F64) -> F64
+pub func log10_f32(x: F32) -> F32
+pub func log10_f64(x: F64) -> F64
 
 /// Power
-public func pow_f32(base: F32, exp: F32) -> F32
-public func pow_f64(base: F64, exp: F64) -> F64
+pub func pow_f32(base: F32, exp: F32) -> F32
+pub func pow_f64(base: F64, exp: F64) -> F64
 ```
 
 ### 6.2 Rounding
 
 ```tml
 /// Floor
-public func floor_f32(x: F32) -> F32
-public func floor_f64(x: F64) -> F64
+pub func floor_f32(x: F32) -> F32
+pub func floor_f64(x: F64) -> F64
 
 /// Ceiling
-public func ceil_f32(x: F32) -> F32
-public func ceil_f64(x: F64) -> F64
+pub func ceil_f32(x: F32) -> F32
+pub func ceil_f64(x: F64) -> F64
 
 /// Round to nearest
-public func round_f32(x: F32) -> F32
-public func round_f64(x: F64) -> F64
+pub func round_f32(x: F32) -> F32
+pub func round_f64(x: F64) -> F64
 
 /// Truncate toward zero
-public func trunc_f32(x: F32) -> F32
-public func trunc_f64(x: F64) -> F64
+pub func trunc_f32(x: F32) -> F32
+pub func trunc_f64(x: F64) -> F64
 
 /// Round to nearest even
-public func rint_f32(x: F32) -> F32
-public func rint_f64(x: F64) -> F64
+pub func rint_f32(x: F32) -> F32
+pub func rint_f64(x: F64) -> F64
 
 /// Round to integer
-public func nearbyint_f32(x: F32) -> F32
-public func nearbyint_f64(x: F64) -> F64
+pub func nearbyint_f32(x: F32) -> F32
+pub func nearbyint_f64(x: F64) -> F64
 ```
 
 ### 6.3 Special Operations
 
 ```tml
 /// Floating-point negation (LLVM fneg instruction)
-public func fneg_f32(x: F32) -> F32
-public func fneg_f64(x: F64) -> F64
+pub func fneg_f32(x: F32) -> F32
+pub func fneg_f64(x: F64) -> F64
 
 /// Absolute value
-public func fabs_f32(x: F32) -> F32
-public func fabs_f64(x: F64) -> F64
+pub func fabs_f32(x: F32) -> F32
+pub func fabs_f64(x: F64) -> F64
 
 /// Copy sign
-public func copysign_f32(magnitude: F32, sign: F32) -> F32
-public func copysign_f64(magnitude: F64, sign: F64) -> F64
+pub func copysign_f32(magnitude: F32, sign: F32) -> F32
+pub func copysign_f64(magnitude: F64, sign: F64) -> F64
 
 /// Minimum
-public func fmin_f32(a: F32, b: F32) -> F32
-public func fmin_f64(a: F64, b: F64) -> F64
+pub func fmin_f32(a: F32, b: F32) -> F32
+pub func fmin_f64(a: F64, b: F64) -> F64
 
 /// Maximum
-public func fmax_f32(a: F32, b: F32) -> F32
-public func fmax_f64(a: F64, b: F64) -> F64
+pub func fmax_f32(a: F32, b: F32) -> F32
+pub func fmax_f64(a: F64, b: F64) -> F64
 
 /// Fused multiply-add
-public func fma_f32(a: F32, b: F32, c: F32) -> F32
-public func fma_f64(a: F64, b: F64, c: F64) -> F64
+pub func fma_f32(a: F32, b: F32, c: F32) -> F32
+pub func fma_f64(a: F64, b: F64, c: F64) -> F64
 ```
 
 ### 6.4 Conversion
 
 ```tml
 /// Float to int (truncate toward zero)
-public func fptosi_f32_i32(x: F32) -> I32
-public func fptosi_f64_i64(x: F64) -> I64
-public func fptoui_f32_u32(x: F32) -> U32
-public func fptoui_f64_u64(x: F64) -> U64
+pub func fptosi_f32_i32(x: F32) -> I32
+pub func fptosi_f64_i64(x: F64) -> I64
+pub func fptoui_f32_u32(x: F32) -> U32
+pub func fptoui_f64_u64(x: F64) -> U64
 
 /// Int to float
-public func sitofp_i32_f32(x: I32) -> F32
-public func sitofp_i64_f64(x: I64) -> F64
-public func uitofp_u32_f32(x: U32) -> F32
-public func uitofp_u64_f64(x: U64) -> F64
+pub func sitofp_i32_f32(x: I32) -> F32
+pub func sitofp_i64_f64(x: I64) -> F64
+pub func uitofp_u32_f32(x: U32) -> F32
+pub func uitofp_u64_f64(x: U64) -> F64
 
 /// Float precision conversion
-public func fptrunc_f64_f32(x: F64) -> F32
-public func fpext_f32_f64(x: F32) -> F64
+pub func fptrunc_f64_f32(x: F64) -> F32
+pub func fpext_f32_f64(x: F32) -> F64
 ```
 
 ## 7. Type Intrinsics
@@ -477,35 +477,35 @@ public func fpext_f32_f64(x: F32) -> F64
 
 ```tml
 /// Size of type in bytes
-public func size_of[T]() -> U64
+pub func size_of[T]() -> U64
 
 /// Alignment of type in bytes
-public func align_of[T]() -> U64
+pub func align_of[T]() -> U64
 
 /// Minimum alignment
-public func min_align_of[T]() -> U64
+pub func min_align_of[T]() -> U64
 
 /// Preferred alignment
-public func pref_align_of[T]() -> U64
+pub func pref_align_of[T]() -> U64
 ```
 
 ### 7.2 Type Properties
 
 ```tml
 /// Type name as string
-public func type_name[T]() -> ref static str
+pub func type_name[T]() -> ref static str
 
 /// Type ID (unique per type)
-public func type_id[T]() -> TypeId
+pub func type_id[T]() -> TypeId
 
 /// Check if type needs drop
-public func needs_drop[T]() -> Bool
+pub func needs_drop[T]() -> Bool
 
 /// Check if type is copy
-public func is_copy[T]() -> Bool
+pub func is_copy[T]() -> Bool
 
 /// Check if type is zero-sized
-public func is_zst[T]() -> Bool
+pub func is_zst[T]() -> Bool
 ```
 
 ### 7.3 Transmutation
@@ -531,26 +531,26 @@ public lowlevel func unreachable() -> !
 public lowlevel func assume(cond: Bool)
 
 /// Likely branch hint
-public func likely(cond: Bool) -> Bool
+pub func likely(cond: Bool) -> Bool
 
 /// Unlikely branch hint
-public func unlikely(cond: Bool) -> Bool
+pub func unlikely(cond: Bool) -> Bool
 
 /// Black box (prevent optimization)
-public func black_box[T](x: T) -> T
+pub func black_box[T](x: T) -> T
 ```
 
 ### 8.2 Debug
 
 ```tml
 /// Breakpoint
-public func breakpoint()
+pub func breakpoint()
 
 /// Debug trap
-public func debug_trap()
+pub func debug_trap()
 
 /// Abort
-public func abort() -> !
+pub func abort() -> !
 ```
 
 ## 9. Platform-Specific Intrinsics
@@ -562,50 +562,50 @@ public func abort() -> !
 module intrinsics.x86
 
 /// CPUID
-public func cpuid(leaf: U32, sub_leaf: U32) -> (U32, U32, U32, U32)
+pub func cpuid(leaf: U32, sub_leaf: U32) -> (U32, U32, U32, U32)
 
 /// Read timestamp counter
-public func rdtsc() -> U64
+pub func rdtsc() -> U64
 
 /// Read timestamp counter and processor ID
-public func rdtscp() -> (U64, U32)
+pub func rdtscp() -> (U64, U32)
 
 /// Pause (spin-loop hint)
-public func pause()
+pub func pause()
 
 /// CRC32
-public func crc32_u8(crc: U32, data: U8) -> U32
-public func crc32_u16(crc: U32, data: U16) -> U32
-public func crc32_u32(crc: U32, data: U32) -> U32
-public func crc32_u64(crc: U64, data: U64) -> U64
+pub func crc32_u8(crc: U32, data: U8) -> U32
+pub func crc32_u16(crc: U32, data: U16) -> U32
+pub func crc32_u32(crc: U32, data: U32) -> U32
+pub func crc32_u64(crc: U64, data: U64) -> U64
 
 /// POPCNT
-public func popcnt_u32(x: U32) -> U32
-public func popcnt_u64(x: U64) -> U64
+pub func popcnt_u32(x: U32) -> U32
+pub func popcnt_u64(x: U64) -> U64
 
 /// LZCNT
-public func lzcnt_u32(x: U32) -> U32
-public func lzcnt_u64(x: U64) -> U64
+pub func lzcnt_u32(x: U32) -> U32
+pub func lzcnt_u64(x: U64) -> U64
 
 /// TZCNT
-public func tzcnt_u32(x: U32) -> U32
-public func tzcnt_u64(x: U64) -> U64
+pub func tzcnt_u32(x: U32) -> U32
+pub func tzcnt_u64(x: U64) -> U64
 
 /// AES
 @when(target_feature = "aes")
-public func aesenc(data: U8x16, key: U8x16) -> U8x16
-public func aesdec(data: U8x16, key: U8x16) -> U8x16
-public func aeskeygenassist(key: U8x16, imm: U8) -> U8x16
+pub func aesenc(data: U8x16, key: U8x16) -> U8x16
+pub func aesdec(data: U8x16, key: U8x16) -> U8x16
+pub func aeskeygenassist(key: U8x16, imm: U8) -> U8x16
 
 /// RDRAND (hardware random)
-public func rdrand_u16() -> Maybe[U16]
-public func rdrand_u32() -> Maybe[U32]
-public func rdrand_u64() -> Maybe[U64]
+pub func rdrand_u16() -> Maybe[U16]
+pub func rdrand_u32() -> Maybe[U32]
+pub func rdrand_u64() -> Maybe[U64]
 
 /// RDSEED
-public func rdseed_u16() -> Maybe[U16]
-public func rdseed_u32() -> Maybe[U32]
-public func rdseed_u64() -> Maybe[U64]
+pub func rdseed_u16() -> Maybe[U16]
+pub func rdseed_u32() -> Maybe[U32]
+pub func rdseed_u64() -> Maybe[U64]
 ```
 
 ### 9.2 ARM/AArch64
@@ -615,25 +615,25 @@ public func rdseed_u64() -> Maybe[U64]
 module intrinsics.aarch64
 
 /// DMB (Data Memory Barrier)
-public func dmb()
+pub func dmb()
 
 /// DSB (Data Synchronization Barrier)
-public func dsb()
+pub func dsb()
 
 /// ISB (Instruction Synchronization Barrier)
-public func isb()
+pub func isb()
 
 /// WFE (Wait For Event)
-public func wfe()
+pub func wfe()
 
 /// WFI (Wait For Interrupt)
-public func wfi()
+pub func wfi()
 
 /// SEV (Send Event)
-public func sev()
+pub func sev()
 
 /// YIELD
-public func yield_cpu()
+pub func yield_cpu()
 
 /// Read system register
 public lowlevel func read_sysreg(reg: ref str) -> U64
@@ -642,15 +642,15 @@ public lowlevel func read_sysreg(reg: ref str) -> U64
 public lowlevel func write_sysreg(reg: ref str, value: U64)
 
 /// CRC32
-public func crc32b(crc: U32, data: U8) -> U32
-public func crc32h(crc: U32, data: U16) -> U32
-public func crc32w(crc: U32, data: U32) -> U32
-public func crc32x(crc: U32, data: U64) -> U32
+pub func crc32b(crc: U32, data: U8) -> U32
+pub func crc32h(crc: U32, data: U16) -> U32
+pub func crc32w(crc: U32, data: U32) -> U32
+pub func crc32x(crc: U32, data: U64) -> U32
 
 /// AES
 @when(target_feature = "aes")
-public func aese(data: U8x16, key: U8x16) -> U8x16
-public func aesd(data: U8x16, key: U8x16) -> U8x16
+pub func aese(data: U8x16, key: U8x16) -> U8x16
+pub func aesd(data: U8x16, key: U8x16) -> U8x16
 ```
 
 ## 10. Diagnostic Intrinsics
@@ -659,32 +659,32 @@ public func aesd(data: U8x16, key: U8x16) -> U8x16
 
 ```tml
 /// Compile-time assertion
-public func static_assert(cond: Bool, msg: ref str)
+pub func static_assert(cond: Bool, msg: ref str)
 
 /// Compile-time assert equal
-public func static_assert_eq[T: Eq](a: T, b: T, msg: ref str)
+pub func static_assert_eq[T: Eq](a: T, b: T, msg: ref str)
 
 /// Compile-time type size check
-public func static_assert_size[T](expected: U64)
+pub func static_assert_size[T](expected: U64)
 ```
 
 ### 10.2 Compile Information
 
 ```tml
 /// Current file
-public func file() -> ref static str
+pub func file() -> ref static str
 
 /// Current line
-public func line() -> U32
+pub func line() -> U32
 
 /// Current column
-public func column() -> U32
+pub func column() -> U32
 
 /// Current function name
-public func function() -> ref static str
+pub func function() -> ref static str
 
 /// Current module path
-public func module_path() -> ref static str
+pub func module_path() -> ref static str
 ```
 
 ## 11. Usage Examples

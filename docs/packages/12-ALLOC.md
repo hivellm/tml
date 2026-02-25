@@ -23,13 +23,13 @@ The fundamental trait for memory allocators.
 
 ```tml
 /// Memory allocator trait
-pub behaviorAllocator {
+pub behavior Allocator {
     /// Allocates memory for the given layout
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError]
 
     /// Deallocates memory
-    /// SAFETY: ptr must have been allocated by this allocator with the given layout
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout)
+    /// LOWLEVEL: ptr must have been allocated by this allocator with the given layout
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout)
 
     /// Reallocates memory to a new size
     /// Default implementation allocates new, copies, deallocates old
@@ -40,7 +40,7 @@ pub behaviorAllocator {
         new_layout: Layout,
     ) -> Outcome[*mut U8, AllocError] {
         let new_ptr = this.allocate(new_layout)!
-        unsafe {
+        lowlevel {
             intrinsics.copy_nonoverlapping(ptr, new_ptr, old_layout.size.min(new_layout.size))
             this.deallocate(ptr, old_layout)
         }
@@ -50,7 +50,7 @@ pub behaviorAllocator {
     /// Allocates zeroed memory
     func allocate_zeroed(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         let ptr = this.allocate(layout)!
-        unsafe {
+        lowlevel {
             intrinsics.write_bytes(ptr, 0, layout.size)
         }
         return Ok(ptr)
@@ -138,14 +138,14 @@ The default allocator used by all standard collections.
 
 ```tml
 /// The global allocator
-public static GLOBAL: GlobalAlloc = GlobalAlloc {}
+pub static GLOBAL: GlobalAlloc = GlobalAlloc {}
 
 /// Global allocator type (wraps system allocator)
 pub type GlobalAlloc {}
 
-implement Allocator for GlobalAlloc {
+extend GlobalAlloc with Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
-        unsafe {
+        lowlevel {
             let ptr = libc.aligned_alloc(layout.align, layout.size)
             if ptr.is_null() then {
                 return Err(AllocError.OutOfMemory)
@@ -154,7 +154,7 @@ implement Allocator for GlobalAlloc {
         }
     }
 
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout) {
         libc.free(ptr as *mut Void)
     }
 
@@ -166,7 +166,7 @@ implement Allocator for GlobalAlloc {
     ) -> Outcome[*mut U8, AllocError] {
         // If alignment is compatible, use realloc
         if old_layout.align == new_layout.align then {
-            unsafe {
+            lowlevel {
                 let new_ptr = libc.realloc(ptr as *mut Void, new_layout.size)
                 if new_ptr.is_null() then {
                     return Err(AllocError.OutOfMemory)
@@ -194,8 +194,8 @@ pub func alloc_zeroed(layout: Layout) -> Outcome[*mut U8, AllocError] {
 }
 
 /// Deallocates memory using the global allocator
-/// SAFETY: ptr must have been allocated by the global allocator
-public unsafe func dealloc(ptr: *mut U8, layout: Layout) {
+/// LOWLEVEL: ptr must have been allocated by the global allocator
+pub lowlevel func dealloc(ptr: *mut U8, layout: Layout) {
     GLOBAL.deallocate(ptr, layout)
 }
 
@@ -251,7 +251,7 @@ extend Arena {
     pub func alloc[T](mut this) -> mut ref T {
         let layout = Layout.of[T]()
         let ptr = this.alloc_layout(layout)
-        return unsafe { mut ref *(ptr as *mut T) }
+        return lowlevel { mut ref *(ptr as *mut T) }
     }
 
     /// Allocates memory with specific layout
@@ -263,7 +263,7 @@ extend Arena {
         if this.current < this.chunks.len() then {
             let chunk = ref this.chunks[this.current]
             if aligned + layout.size <= chunk.size then {
-                let ptr = unsafe { chunk.ptr.add(aligned) }
+                let ptr = lowlevel { chunk.ptr.add(aligned) }
                 this.offset = aligned + layout.size
                 return ptr
             }
@@ -278,7 +278,7 @@ extend Arena {
     pub func alloc_slice[T](mut this, len: U64) -> mut ref [T] {
         let layout = Layout.array[T](len).unwrap()
         let ptr = this.alloc_layout(layout)
-        return unsafe { slice.from_raw_parts_mut(ptr as *mut T, len) }
+        return lowlevel { slice.from_raw_parts_mut(ptr as *mut T, len) }
     }
 
     /// Resets the arena, keeping allocated chunks
@@ -312,22 +312,22 @@ extend Arena {
     }
 }
 
-implement Disposable for Arena {
+extend Arena with Disposable {
     func drop(mut this) {
         loop chunk in this.chunks.iter() {
-            unsafe {
+            lowlevel {
                 dealloc(chunk.ptr, Layout { size: chunk.size, align: 16 })
             }
         }
     }
 }
 
-implement Allocator for Arena {
+extend Arena with Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         return Ok(this.alloc_layout(layout))
     }
 
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout) {
         // Arena doesn't deallocate individual allocations
     }
 }
@@ -377,13 +377,13 @@ extend Pool[T] {
         }
 
         let node = this.free_list
-        this.free_list = unsafe { (*node).next }
+        this.free_list = lowlevel { (*node).next }
         return node as *mut T
     }
 
     /// Returns an object to the pool
-    /// SAFETY: ptr must have been allocated from this pool
-    public unsafe func free(mut this, ptr: *mut T) {
+    /// LOWLEVEL: ptr must have been allocated from this pool
+    pub lowlevel func free(mut this, ptr: *mut T) {
         let node = ptr as *mut FreeNode
         (*node).next = this.free_list
         this.free_list = node
@@ -392,15 +392,15 @@ extend Pool[T] {
     /// Creates and initializes an object
     pub func create(mut this, value: T) -> mut ref T {
         let ptr = this.alloc()
-        unsafe {
+        lowlevel {
             ptr.write(value)
             return mut ref *ptr
         }
     }
 
     /// Destroys an object and returns it to the pool
-    /// SAFETY: ptr must have been allocated from this pool
-    public unsafe func destroy(mut this, ptr: *mut T) {
+    /// LOWLEVEL: ptr must have been allocated from this pool
+    pub lowlevel func destroy(mut this, ptr: *mut T) {
         ptr.drop_in_place()
         this.free(ptr)
     }
@@ -413,8 +413,8 @@ extend Pool[T] {
 
         // Build free list
         loop i in 0 to this.block_size {
-            let node = unsafe { ptr.add(i) as *mut FreeNode }
-            unsafe {
+            let node = lowlevel { ptr.add(i) as *mut FreeNode }
+            lowlevel {
                 (*node).next = this.free_list
             }
             this.free_list = node
@@ -422,11 +422,11 @@ extend Pool[T] {
     }
 }
 
-implement Disposable for Pool[T] {
+extend Pool[T] with Disposable {
     func drop(mut this) {
         let layout = Layout.array[T](this.block_size).unwrap()
         loop ptr in this.blocks.iter() {
-            unsafe {
+            lowlevel {
                 dealloc(*ptr as *mut U8, layout)
             }
         }
@@ -467,7 +467,7 @@ extend StackAlloc {
         if aligned + layout.size > this.size then {
             return Err(AllocError.OutOfMemory)
         }
-        let ptr = unsafe { this.buffer.add(aligned) }
+        let ptr = lowlevel { this.buffer.add(aligned) }
         this.offset = aligned + layout.size
         return Ok(ptr)
     }
@@ -520,9 +520,9 @@ pub type StackMarker {
     offset: U64,
 }
 
-implement Disposable for StackAlloc {
+extend StackAlloc with Disposable {
     func drop(mut this) {
-        unsafe {
+        lowlevel {
             dealloc(this.buffer, Layout { size: this.size, align: 16 })
         }
     }
@@ -565,7 +565,7 @@ extend Slab {
     }
 }
 
-implement Allocator for Slab {
+extend Slab with Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         let size = layout.size.max(layout.align)
 
@@ -582,7 +582,7 @@ implement Allocator for Slab {
         }
     }
 
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout) {
         let size = layout.size.max(layout.align)
 
         if size <= 64 then {
@@ -624,7 +624,7 @@ extend Fallback[P, S] where P: Allocator, S: Allocator {
     }
 }
 
-implement Allocator for Fallback[P, S] where P: Allocator, S: Allocator {
+extend Fallback[P, S] with Allocator where P: Allocator, S: Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         when this.primary.allocate(layout) {
             Ok(ptr) -> return Ok(ptr),
@@ -632,7 +632,7 @@ implement Allocator for Fallback[P, S] where P: Allocator, S: Allocator {
         }
     }
 
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout) {
         // Need to track which allocator was used
         // Simplified: try primary first
         this.primary.deallocate(ptr, layout)
@@ -686,7 +686,7 @@ pub type AllocStats {
     count: U64,
 }
 
-implement Allocator for Stats[A] where A: Allocator {
+extend Stats[A] with Allocator where A: Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         let ptr = this.inner.allocate(layout)!
 
@@ -707,7 +707,7 @@ implement Allocator for Stats[A] where A: Allocator {
         return Ok(ptr)
     }
 
-    unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
+    lowlevel func deallocate(mut this, ptr: *mut U8, layout: Layout) {
         this.inner.deallocate(ptr, layout)
         this.deallocated.fetch_add(layout.size, Ordering.Relaxed)
     }
@@ -741,7 +741,7 @@ extend Box[T, A] where A: Allocator {
     pub func new_in(value: T, alloc: A) -> Box[T, A] {
         let layout = Layout.of[T]()
         let ptr = alloc.allocate(layout).unwrap() as *mut T
-        unsafe {
+        lowlevel {
             ptr.write(value)
         }
         return Box { ptr: ptr, alloc: alloc }
@@ -749,7 +749,7 @@ extend Box[T, A] where A: Allocator {
 
     /// Returns the inner value, consuming the Box
     pub func into_inner(this) -> T {
-        unsafe {
+        lowlevel {
             let value = this.ptr.read()
             let layout = Layout.of[T]()
             this.alloc.deallocate(this.ptr as *mut U8, layout)
@@ -762,27 +762,27 @@ extend Box[T, A] where A: Allocator {
     pub func leak(this) -> &'static mut T {
         let ptr = this.ptr
         mem.forget(this)
-        return unsafe { mut ref *ptr }
+        return lowlevel { mut ref *ptr }
     }
 }
 
-implement Deref for Box[T, A] where A: Allocator {
+extend Box[T, A] with Deref where A: Allocator {
     type Target = T
 
     func deref(this) -> ref T {
-        return unsafe { ref *this.ptr }
+        return lowlevel { ref *this.ptr }
     }
 }
 
-implement DerefMut for Box[T, A] where A: Allocator {
+extend Box[T, A] with DerefMut where A: Allocator {
     func deref_mut(mut this) -> mut ref T {
-        return unsafe { mut ref *this.ptr }
+        return lowlevel { mut ref *this.ptr }
     }
 }
 
-implement Disposable for Box[T, A] where A: Allocator {
+extend Box[T, A] with Disposable where A: Allocator {
     func drop(mut this) {
-        unsafe {
+        lowlevel {
             this.ptr.drop_in_place()
             let layout = Layout.of[T]()
             this.alloc.deallocate(this.ptr as *mut U8, layout)
@@ -863,7 +863,7 @@ extend EntityManager {
 
     func despawn(mut this, id: U64) {
         when this.entities.remove(ref id) {
-            Just(ptr) -> unsafe { this.pool.destroy(ptr) },
+            Just(ptr) -> lowlevel { this.pool.destroy(ptr) },
             Nothing -> {},
         }
     }

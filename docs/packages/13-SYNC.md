@@ -86,7 +86,7 @@ extend Sender[T] {
     }
 }
 
-implement Duplicate for Sender[T] {
+extend Sender[T] with Duplicate {
     func clone(this) -> Sender[T] {
         return Sender { inner: this.inner.duplicate() }
     }
@@ -135,7 +135,7 @@ extend Receiver[T] {
     }
 }
 
-implement IntoIterator for Receiver[T] {
+extend Receiver[T] with IntoIterator {
     type Item = T
     type Iter = RecvIter[T]
 
@@ -149,7 +149,7 @@ pub type RecvIter[T] {
     receiver: Receiver[T],
 }
 
-implement Iterator for RecvIter[T] {
+extend RecvIter[T] with Iterator {
     type Item = T
 
     func next(mut this) -> Maybe[T] {
@@ -222,7 +222,7 @@ extend MpscSender[T] {
     pub func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 
     /// Creates a permit to send
-    public async func reserve(this) -> Outcome[Permit[T], SendError[Unit]]
+    pub async func reserve(this) -> Outcome[Permit[T], SendError[Unit]]
 
     /// Blocks until there's capacity
     pub func blocking_send(this, value: T) -> Outcome[Unit, SendError[T]]
@@ -238,14 +238,14 @@ extend Permit[T] {
     pub func send(this, value: T)
 }
 
-implement Duplicate for MpscSender[T] {
+extend MpscSender[T] with Duplicate {
     func clone(this) -> MpscSender[T] {
         this.inner.sender_count.fetch_add(1, Ordering.Relaxed)
         return MpscSender { inner: this.inner.duplicate() }
     }
 }
 
-implement Disposable for MpscSender[T] {
+extend MpscSender[T] with Disposable {
     func drop(mut this) {
         if this.inner.sender_count.fetch_sub(1, Ordering.AcqRel) == 1 then {
             // Last sender, notify receiver
@@ -274,7 +274,7 @@ extend MpscReceiver[T] {
     pub func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError]
 
     /// Async receive
-    public async func recv_async(this) -> Maybe[T]
+    pub async func recv_async(this) -> Maybe[T]
 
     /// Closes the channel
     pub func close(this)
@@ -305,7 +305,7 @@ extend MpmcSender[T] {
     pub func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 }
 
-implement Duplicate for MpmcSender[T] {
+extend MpmcSender[T] with Duplicate {
     func clone(this) -> MpmcSender[T] {
         return MpmcSender { inner: this.inner.duplicate() }
     }
@@ -321,7 +321,7 @@ extend MpmcReceiver[T] {
     pub func try_recv(this) -> Outcome[T, TryRecvError]
 }
 
-implement Duplicate for MpmcReceiver[T] {
+extend MpmcReceiver[T] with Duplicate {
     func clone(this) -> MpmcReceiver[T] {
         return MpmcReceiver { inner: this.inner.duplicate() }
     }
@@ -394,14 +394,14 @@ extend BroadcastReceiver[T] where T: Duplicate {
     }
 }
 
-implement Duplicate for BroadcastReceiver[T] {
+extend BroadcastReceiver[T] with Duplicate {
     func clone(this) -> BroadcastReceiver[T] {
         this.inner.receiver_count.fetch_add(1, Ordering.Relaxed)
         return BroadcastReceiver { inner: this.inner.duplicate(), pos: this.pos }
     }
 }
 
-implement Disposable for BroadcastReceiver[T] {
+extend BroadcastReceiver[T] with Disposable {
     func drop(mut this) {
         this.inner.receiver_count.fetch_sub(1, Ordering.Relaxed)
     }
@@ -472,7 +472,7 @@ extend WatchReceiver[T] where T: Duplicate {
     }
 
     /// Waits for a new value
-    public async func changed(mut this) -> Outcome[Unit, RecvError] {
+    pub async func changed(mut this) -> Outcome[Unit, RecvError] {
         this.inner.changed(mut ref this.version).await
     }
 
@@ -487,7 +487,7 @@ extend WatchReceiver[T] where T: Duplicate {
     }
 }
 
-implement Duplicate for WatchReceiver[T] {
+extend WatchReceiver[T] with Duplicate {
     func clone(this) -> WatchReceiver[T] {
         return WatchReceiver { inner: this.inner.duplicate(), version: this.version }
     }
@@ -537,7 +537,7 @@ pub type OneshotReceiver[T] {
 
 extend OneshotReceiver[T] {
     /// Waits for the value
-    public async func await(this) -> Outcome[T, RecvError] {
+    pub async func await(this) -> Outcome[T, RecvError] {
         this.inner.recv().await
     }
 
@@ -561,7 +561,7 @@ Wait on multiple channel operations.
 
 ```tml
 /// Selects from multiple channel operations
-public macro select! {
+pub macro select! {
     ($($pattern:pat = $expr:expr => $body:expr),+ $(,)?) => {
         // Implementation uses an internal select mechanism
     }
@@ -585,7 +585,7 @@ select! {
 
 ```tml
 /// Biased select (checks in order)
-public macro select_biased! {
+pub macro select_biased! {
     ($($pattern:pat = $expr:expr => $body:expr),+ $(,)?) => {
         // Checks channels in order, useful for priority
     }
@@ -733,17 +733,17 @@ extend OnceCell[T] {
     /// Gets or initializes the value
     pub func get_or_init(this, f: func() -> T) -> ref T {
         this.once.call_once(do() {
-            unsafe {
+            lowlevel {
                 *this.value.get() = Just(f())
             }
         })
-        return unsafe { (*this.value.get()).as_ref().unwrap() }
+        return lowlevel { (*this.value.get()).as_ref().unwrap() }
     }
 
     /// Gets the value if initialized
     pub func get(this) -> Maybe[ref T] {
         if this.once.is_completed() then {
-            return unsafe { (*this.value.get()).as_ref() }
+            return lowlevel { (*this.value.get()).as_ref() }
         }
         return None
     }
@@ -752,7 +752,7 @@ extend OnceCell[T] {
     pub func set(this, value: T) -> Outcome[Unit, T] {
         var stored = false
         this.once.call_once(do() {
-            unsafe {
+            lowlevel {
                 *this.value.get() = Just(value)
             }
             stored = true
@@ -762,7 +762,7 @@ extend OnceCell[T] {
 }
 
 // Thread-safe: Sync if T is Send
-implement Sync for OnceCell[T] where T: Send {}
+extend OnceCell[T] with Sync where T: Send {}
 ```
 
 ### Lazy
@@ -794,7 +794,7 @@ extend Lazy[T] {
     }
 }
 
-implement Deref for Lazy[T] {
+extend Lazy[T] with Deref {
     type Target = T
 
     func deref(this) -> ref T {
@@ -854,7 +854,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
         where V: Duplicate
     {
         let shard = this.get_shard(ref key)
-        let mut guard = shard.write()
+        var guard = shard.write()
         guard.entry(key).or_insert(value).duplicate()
     }
 
@@ -952,7 +952,7 @@ func broadcast_example() {
 
     // Spawn subscribers
     loop i in 0 to 3 {
-        let mut rx = tx.subscribe()
+        var rx = tx.subscribe()
         thread.spawn(do() {
             loop {
                 when rx.recv() {

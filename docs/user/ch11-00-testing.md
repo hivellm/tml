@@ -197,8 +197,8 @@ func bench_addition() {
 // Custom iteration count
 @bench(10000)
 func bench_loop() {
-    let mut sum: I32 = 0
-    let mut i: I32 = 0
+    var sum: I32 = 0
+    var i: I32 = 0
     loop {
         if i >= 100 { break }
         sum = sum + i
@@ -253,7 +253,7 @@ use std::time::{Instant, Duration}
 @test
 func benchmark_manual() {
     let runs: I64 = 10
-    let mut total_us: I64 = 0
+    var total_us: I64 = 0
 
     for _ in 0 to runs {
         let start: I64 = Instant::now()
@@ -509,7 +509,7 @@ func test_empty_list() {
 
 @test
 func test_single_element() {
-    let mut list = Vec::new()
+    var list = Vec::new()
     list.push(1)
     assert_eq(list.len(), 1)
 }

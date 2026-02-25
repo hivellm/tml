@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The \x60std::encoding` package provides text encoding/decoding (UTF-8, UTF-16, ASCII, Latin-1) and binary encoding (Base64, Hex).
+The `std::encoding` package provides text encoding/decoding (UTF-8, UTF-16, ASCII, Latin-1) and binary encoding (Base64, Hex).
 
 ```tml
 use std::encoding

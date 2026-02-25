@@ -68,7 +68,7 @@ extend Level {
     }
 }
 
-implement Ord for Level {
+extend Level with Ord {
     func cmp(this, other: &Level) -> Ordering {
         this.as_u8().cmp(&other.as_u8())
     }
@@ -81,42 +81,42 @@ implement Ord for Level {
 
 ```tml
 /// Log at trace level
-public macro trace! {
+pub macro trace! {
     ($msg:expr $(, $key:ident = $value:expr)*) => {
         log!(Level.Trace, $msg $(, $key = $value)*)
     }
 }
 
 /// Log at debug level
-public macro debug! {
+pub macro debug! {
     ($msg:expr $(, $key:ident = $value:expr)*) => {
         log!(Level.Debug, $msg $(, $key = $value)*)
     }
 }
 
 /// Log at info level
-public macro info! {
+pub macro info! {
     ($msg:expr $(, $key:ident = $value:expr)*) => {
         log!(Level.Info, $msg $(, $key = $value)*)
     }
 }
 
 /// Log at warn level
-public macro warn! {
+pub macro warn! {
     ($msg:expr $(, $key:ident = $value:expr)*) => {
         log!(Level.Warn, $msg $(, $key = $value)*)
     }
 }
 
 /// Log at error level
-public macro error! {
+pub macro error! {
     ($msg:expr $(, $key:ident = $value:expr)*) => {
         log!(Level.Error, $msg $(, $key = $value)*)
     }
 }
 
 /// Generic log macro
-public macro log! {
+pub macro log! {
     ($level:expr, $msg:expr $(, $key:ident = $value:expr)*) => {
         if LOGGER.is_enabled($level) then {
             LOGGER.log(Record {
@@ -140,7 +140,7 @@ public macro log! {
 
 ```tml
 /// The global logger instance
-public static LOGGER: Logger = Logger.default()
+pub static LOGGER: Logger = Logger.default()
 
 /// Sets the global logger
 pub func set_logger(logger: Logger) {
@@ -448,7 +448,7 @@ pub behavior Output {
 /// Stderr output
 pub type StderrOutput {}
 
-implement Output for StderrOutput {
+extend StderrOutput with Output {
     func write(this, line: ref String, level: Level) {
         io.stderr().write_all(line.as_bytes()).ok()
     }
@@ -461,7 +461,7 @@ implement Output for StderrOutput {
 /// Stdout output
 pub type StdoutOutput {}
 
-implement Output for StdoutOutput {
+extend StdoutOutput with Output {
     func write(this, line: ref String, level: Level) {
         io.stdout().write_all(line.as_bytes()).ok()
     }
@@ -489,7 +489,7 @@ extend FileOutput {
     }
 }
 
-implement Output for FileOutput {
+extend FileOutput with Output {
     func write(this, line: ref String, level: Level) {
         let guard = this.file.lock()
         guard.write_all(line.as_bytes()).ok()
@@ -518,7 +518,7 @@ extend RotatingFileOutput {
         caps: [io::file]
 }
 
-implement Output for RotatingFileOutput {
+extend RotatingFileOutput with Output {
     func write(this, line: ref String, level: Level) {
         let size = this.current_size.fetch_add(line.len() as U64, Ordering.Relaxed)
         if size > this.max_size then {
@@ -628,7 +628,7 @@ pub type SpanGuard {
     span: Maybe[Span],
 }
 
-implement Disposable for SpanGuard {
+extend SpanGuard with Disposable {
     func drop(mut this) {
         when this.span.take() {
             Just(span) -> span.exit(),
@@ -638,7 +638,7 @@ implement Disposable for SpanGuard {
 }
 
 /// Macro to create a span guard
-public macro span! {
+pub macro span! {
     ($name:expr $(, $key:ident = $value:expr)*) => {
         let _span_guard = SpanGuard {
             span: Just(Span.enter($name)$(.field($key.to_string(), $value))*)

@@ -17,12 +17,19 @@
 //! ```
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
 use std::http::method::Method
 use std::http::request::Request
 use std::http::response::Response
 use std::http::connection::Connection
 use std::http::error::{HttpError, HttpErrorKind}
+
+// Direct FFI for reading — avoids stack-allocated [U8] arrays
+@extern("c")
+func tml_tls_stream_read(ssl: *Unit, buf: *Unit, len: I64) -> I64
+
+@extern("c")
+func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
 
 /// Maximum response size to prevent OOM (8 MB).
 const MAX_RESPONSE_SIZE: I64 = 8388608
@@ -144,74 +151,57 @@ impl HttpClient {
     }
 }
 
-/// Converts a byte buffer slice [U8] to a Str (assumes UTF-8/ASCII).
-/// Allocates a new null-terminated string of length `n`.
-@allocates
-func bytes_to_str(buf: ref [U8], n: I64) -> Str {
-    // Allocate n+1 bytes for null-terminated string
-    let dst: *Unit = lowlevel { mem_alloc(n + 1) }
-    let dst_addr: I64 = dst as I64
-
-    // Copy n bytes from buffer
-    let src_addr: I64 = (ref buf) as I64
-    // fat pointer {data_ptr, len} — extract data_ptr
-    let data_ptr: I64 = lowlevel { ptr_read[I64](src_addr as *I64) }
-
-    lowlevel { copy_nonoverlapping(data_ptr as *Unit, dst, n) }
-
-    // Null-terminate
-    lowlevel { ptr_write[U8]((dst_addr + n) as *U8, 0 as U8) }
-
-    dst as Str
-}
-
 /// Reads all data from a connection until EOF.
 /// Returns the raw response as a string.
 func read_all(conn: Connection) -> Outcome[Str, HttpError] {
-    // Accumulate into a growing buffer using mem_alloc + copy
+    // Accumulate into a growing buffer
     var capacity: I64 = 32768
     var data: *Unit = lowlevel { mem_alloc(capacity) }
     var total: I64 = 0
 
-    var buf: [U8; 16384] = [0 as U8; 16384]
+    // Heap-allocated read buffer avoids stack arrays (which generate
+    // element-by-element IR that overflows the LLVM compilation stack).
+    let chunk_size: I64 = 8192
+    let chunk: *Unit = lowlevel { mem_alloc(chunk_size) }
+
+    // Extract connection fields for direct FFI calls
+    let ssl: *Unit = conn.ssl_ptr
+    let is_tls: Bool = conn.is_tls
+    let fd: I64 = conn.fd
 
     loop (total < MAX_RESPONSE_SIZE) {
-        let read_result = conn.read(mut ref buf)
-        when read_result {
-            Err(e) => {
-                if total > 0 {
-                    break
-                }
-                lowlevel { mem_free(data) }
-                return Err(e)
-            },
-            Ok(n) => {
-                if n <= 0 {
-                    break
-                }
-
-                // Grow buffer if needed
-                if total + n >= capacity {
-                    let new_cap: I64 = capacity * 2
-                    let new_data: *Unit = lowlevel { mem_alloc(new_cap) }
-                    lowlevel { copy_nonoverlapping(data, new_data, total) }
-                    lowlevel { mem_free(data) }
-                    data = new_data
-                    capacity = new_cap
-                }
-
-                // Copy chunk from buf into data at offset total
-                let src_addr: I64 = (ref buf) as I64
-                let buf_data: I64 = lowlevel { ptr_read[I64](src_addr as *I64) }
-                let dst_offset: I64 = (data as I64) + total
-                lowlevel { copy_nonoverlapping(buf_data as *Unit, dst_offset as *Unit, n) }
-                total = total + n
-            },
+        // Read directly via FFI — no stack array involved
+        var n: I64 = 0
+        if is_tls {
+            n = tml_tls_stream_read(ssl, chunk, chunk_size)
+        } else {
+            n = tml_sys_recv(fd, chunk, chunk_size)
         }
+
+        if n <= 0 {
+            break
+        }
+
+        // Grow accumulation buffer if needed
+        if total + n >= capacity {
+            let new_cap: I64 = capacity * 2
+            let new_data: *Unit = lowlevel { mem_alloc(new_cap) }
+            lowlevel { copy_nonoverlapping(data, new_data, total) }
+            lowlevel { mem_free(data) }
+            data = new_data
+            capacity = new_cap
+        }
+
+        // Copy chunk into accumulation buffer
+        let dst: I64 = (data as I64) + total
+        lowlevel { copy_nonoverlapping(chunk, dst as *Unit, n) }
+        total = total + n
     }
+
+    lowlevel { mem_free(chunk) }
 
     // Null-terminate and return as Str
     lowlevel { ptr_write[U8](((data as I64) + total) as *U8, 0 as U8) }
-    let result: Str = data as Str
-    return Ok(result)
+    let result_i64: I64 = data as I64
+    return Ok(result_i64 as Str)
 }

@@ -155,6 +155,133 @@ use std::stream::buffered::{BufferedReader, BufferedWriter}
     return 0
 }
 
+@test func test_buffered_reader_with_capacity() -> I32 {
+    var reader: BufferedReader = BufferedReader::with_capacity(256)
+    assert_eq(reader.get_buf_cap(), 256)
+    assert_eq(reader.buffered(), 0)
+    assert_eq(reader.get_buf_pos(), 0)
+    assert_eq(reader.get_buf_filled(), 0)
+    reader.destroy()
+    return 0
+}
+
+@test func test_buffered_reader_with_capacity_negative() -> I32 {
+    // Negative capacity should fall back to default 8192
+    var reader: BufferedReader = BufferedReader::with_capacity(0 - 1)
+    assert_eq(reader.get_buf_cap(), 8192)
+    reader.destroy()
+    return 0
+}
+
+@test func test_buffered_reader_fill_buf() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("abcdef")
+    var reader: BufferedReader = BufferedReader::with_capacity(64)
+
+    // Initially empty
+    assert_eq(reader.buffered(), 0)
+
+    // Fill buffer from source
+    when reader.fill_buf(mut ref stream) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 6 as I64, "filled 6 bytes")
+        },
+    }
+
+    assert_eq(reader.buffered(), 6 as I64, "6 bytes buffered")
+    assert_eq(reader.get_buf_filled(), 6 as I64, "filled=6")
+    assert_eq(reader.get_buf_pos(), 0 as I64, "pos=0")
+
+    // Source should be exhausted
+    assert(stream.is_eof(), "source eof")
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
+@test func test_buffered_reader_read() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("Hello!")
+    var reader: BufferedReader = BufferedReader::with_capacity(64)
+
+    var buf: [U8; 3] = [0 as U8; 3]
+    when reader.read(mut ref stream, mut ref buf) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 3 as I64, "read 3")
+        },
+    }
+
+    // Should have read "Hel"
+    assert_eq(buf[0] as I64, 72 as I64, "H")
+    assert_eq(buf[1] as I64, 101 as I64, "e")
+    assert_eq(buf[2] as I64, 108 as I64, "l")
+
+    // Read remaining 3 bytes
+    var buf2: [U8; 3] = [0 as U8; 3]
+    when reader.read(mut ref stream, mut ref buf2) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 3 as I64, "read 3 more")
+        },
+    }
+
+    assert_eq(buf2[0] as I64, 108 as I64, "l")
+    assert_eq(buf2[1] as I64, 111 as I64, "o")
+    assert_eq(buf2[2] as I64, 33 as I64, "!")
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
+@test func test_buffered_reader_read_eof() -> I32 {
+    var stream: ByteStream = ByteStream::from_string("ab")
+    var reader: BufferedReader = BufferedReader::with_capacity(64)
+
+    // Read all 2 bytes
+    var buf: [U8; 4] = [0 as U8; 4]
+    when reader.read(mut ref stream, mut ref buf) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 2 as I64, "read 2")
+        },
+    }
+
+    // Next read should return 0 (EOF)
+    var buf2: [U8; 4] = [0 as U8; 4]
+    when reader.read(mut ref stream, mut ref buf2) {
+        Err(e) => {
+            reader.destroy()
+            stream.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 0 as I64, "eof returns 0")
+        },
+    }
+
+    reader.destroy()
+    stream.destroy()
+    return 0
+}
+
 @test func test_read_line_empty_lines() -> I32 {
     var stream: ByteStream = ByteStream::from_string("\n\nfoo\n")
     var reader: BufferedReader = BufferedReader::new()
@@ -194,5 +321,109 @@ use std::stream::buffered::{BufferedReader, BufferedWriter}
 
     reader.destroy()
     stream.destroy()
+    return 0
+}
+
+@test func test_buffered_writer_with_capacity() -> I32 {
+    var writer: BufferedWriter = BufferedWriter::with_capacity(128)
+    assert_eq(writer.get_buf_cap(), 128)
+    assert_eq(writer.buffered(), 0)
+    writer.destroy()
+    return 0
+}
+
+@test func test_buffered_writer_with_capacity_negative() -> I32 {
+    // Negative capacity should fall back to default 8192
+    var writer: BufferedWriter = BufferedWriter::with_capacity(0 - 1)
+    assert_eq(writer.get_buf_cap(), 8192)
+    assert_eq(writer.buffered(), 0)
+    writer.destroy()
+    return 0
+}
+
+@test func test_buffered_writer_auto_flush() -> I32 {
+    // Use a tiny buffer so we can test auto-flush on overflow
+    var dest: ByteStream = ByteStream::new()
+    var writer: BufferedWriter = BufferedWriter::with_capacity(4)
+
+    // Write 3 bytes — fits in buffer
+    var data1: [U8; 3] = [65 as U8, 66 as U8, 67 as U8]  // "ABC"
+    when writer.write(mut ref dest, ref data1) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 3 as I64, "wrote 3")
+        },
+    }
+    assert_eq(writer.buffered(), 3 as I64, "3 buffered")
+    assert_eq(dest.len(), 0 as I64, "dest empty")
+
+    // Write 3 more — exceeds buffer capacity (3+3=6 > 4), triggers flush then buffer
+    var data2: [U8; 3] = [68 as U8, 69 as U8, 70 as U8]  // "DEF"
+    when writer.write(mut ref dest, ref data2) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 3 as I64, "wrote 3 more")
+        },
+    }
+
+    // Buffer was flushed, then new data was buffered (3 < cap=4)
+    assert_eq(writer.buffered(), 3 as I64, "3 new bytes buffered")
+    assert_eq(dest.len(), 3 as I64, "dest has 3 from flush")
+
+    // Explicit flush to write remaining
+    when writer.flush(mut ref dest) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(u) => {},
+    }
+
+    assert_eq(dest.len(), 6 as I64, "dest has all 6")
+    assert_eq(writer.buffered(), 0 as I64, "buffer empty after flush")
+
+    let s: Str = dest.to_string()
+    assert_eq(s, "ABCDEF", "correct content")
+
+    writer.destroy()
+    dest.destroy()
+    return 0
+}
+
+@test func test_buffered_writer_large_write_bypass() -> I32 {
+    // When data is larger than buffer capacity, it should bypass the buffer
+    var dest: ByteStream = ByteStream::new()
+    var writer: BufferedWriter = BufferedWriter::with_capacity(4)
+
+    // Write 5 bytes — larger than buffer capacity (4), should write directly
+    var data: [U8; 5] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8]  // "Hello"
+    when writer.write(mut ref dest, ref data) {
+        Err(e) => {
+            writer.destroy()
+            dest.destroy()
+            return 1
+        },
+        Ok(n) => {
+            assert_eq(n, 5 as I64, "wrote 5")
+        },
+    }
+
+    // Data was written directly to dest, not buffered
+    assert_eq(writer.buffered(), 0 as I64, "nothing buffered")
+    assert_eq(dest.len(), 5 as I64, "dest has 5")
+    let s: Str = dest.to_string()
+    assert_eq(s, "Hello", "correct content")
+
+    writer.destroy()
+    dest.destroy()
     return 0
 }

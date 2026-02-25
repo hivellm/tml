@@ -82,27 +82,27 @@ extend Duration {
     pub func checked_div(this, n: I64) -> Maybe[Duration]
 }
 
-implement Add for Duration {
+extend Duration with Add {
     type Output = Duration
     func add(this, other: Duration) -> Duration
 }
 
-implement Sub for Duration {
+extend Duration with Sub {
     type Output = Duration
     func sub(this, other: Duration) -> Duration
 }
 
-implement Mul[I64] for Duration {
+extend Duration with Mul[I64] {
     type Output = Duration
     func mul(this, n: I64) -> Duration
 }
 
-implement Div[I64] for Duration {
+extend Duration with Div[I64] {
     type Output = Duration
     func div(this, n: I64) -> Duration
 }
 
-implement Neg for Duration {
+extend Duration with Neg {
     type Output = Duration
     func neg(this) -> Duration
 }
@@ -150,17 +150,17 @@ extend Instant {
     pub func checked_sub(this, duration: Duration) -> Maybe[Instant]
 }
 
-implement Add[Duration] for Instant {
+extend Instant with Add[Duration] {
     type Output = Instant
     func add(this, duration: Duration) -> Instant
 }
 
-implement Sub[Duration] for Instant {
+extend Instant with Sub[Duration] {
     type Output = Instant
     func sub(this, duration: Duration) -> Instant
 }
 
-implement Sub for Instant {
+extend Instant with Sub {
     type Output = Duration
     func sub(this, other: Instant) -> Duration
 }
@@ -277,14 +277,14 @@ extend Date {
     }
 }
 
-implement Add[Duration] for Date {
+extend Date with Add[Duration] {
     type Output = Date
     func add(this, duration: Duration) -> Date {
         this.add_days(duration.as_secs() / 86400)
     }
 }
 
-implement Sub for Date {
+extend Date with Sub {
     type Output = Duration
     func sub(this, other: Date) -> Duration {
         Duration.days(this.days_until(other))
@@ -532,17 +532,17 @@ extend DateTime {
     pub func parse_rfc3339(s: ref String) -> Outcome[DateTime, ParseError]
 }
 
-implement Add[Duration] for DateTime {
+extend DateTime with Add[Duration] {
     type Output = DateTime
     func add(this, duration: Duration) -> DateTime
 }
 
-implement Sub[Duration] for DateTime {
+extend DateTime with Sub[Duration] {
     type Output = DateTime
     func sub(this, duration: Duration) -> DateTime
 }
 
-implement Sub for DateTime {
+extend DateTime with Sub {
     type Output = Duration
     func sub(this, other: DateTime) -> Duration
 }
@@ -590,7 +590,7 @@ extend UtcOffset {
     pub func format(this) -> String  // "+05:30" or "-08:00"
 }
 
-implement Neg for UtcOffset {
+extend UtcOffset with Neg {
     type Output = UtcOffset
     func neg(this) -> UtcOffset {
         UtcOffset { seconds: -this.seconds }

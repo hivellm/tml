@@ -302,7 +302,7 @@ impl Range {
 
     /// Sums all elements in the iterator.
     pub func sum(mut this) -> I32 {
-        let mut total: I32 = 0
+        var total: I32 = 0
         loop {
             when this.next() {
                 Just(value) => total = total + value,
@@ -314,7 +314,7 @@ impl Range {
 
     /// Counts the number of elements in the iterator.
     pub func count(mut this) -> I32 {
-        let mut n: I32 = 0
+        var n: I32 = 0
         loop {
             when this.next() {
                 Just(_) => n = n + 1,
@@ -351,7 +351,7 @@ use std::iter
 
 func basic_iteration() {
     // Simple range
-    let mut r: Range = range(0, 5)
+    var r: Range = range(0, 5)
     loop {
         when r.next() {
             Just(value) => println(value),
@@ -369,24 +369,24 @@ use std::iter
 
 func combinator_examples() {
     // Sum of first 10 numbers
-    let mut r1: Range = range(0, 10)
+    var r1: Range = range(0, 10)
     let sum: I32 = r1.sum()
     // sum = 45
 
     // Count elements
-    let mut r2: Range = range(0, 100)
+    var r2: Range = range(0, 100)
     let count: I32 = r2.count()
     // count = 100
 
     // Take first 5 elements
     let r3: Range = range(0, 100)
-    let mut taken: Range = r3.take(5)
+    var taken: Range = r3.take(5)
     let sum_taken: I32 = taken.sum()
     // sum_taken = 10
 
     // Skip first 5, sum rest
     let r4: Range = range(0, 10)
-    let mut skipped: Range = r4.skip(5)
+    var skipped: Range = r4.skip(5)
     let sum_skipped: I32 = skipped.sum()
     // sum_skipped = 35
 }
@@ -399,7 +399,7 @@ use std::iter
 
 func inclusive_example() {
     // Range including the end value
-    let mut r: Range = range_inclusive(1, 5)
+    var r: Range = range_inclusive(1, 5)
     let sum: I32 = r.sum()
     // sum = 15 (1+2+3+4+5)
 }
@@ -412,7 +412,7 @@ use std::iter
 
 func step_example() {
     // Every second number
-    let mut r: Range = range_step(0, 10, 2)
+    var r: Range = range_step(0, 10, 2)
     loop {
         when r.next() {
             Just(value) => println(value),
@@ -431,7 +431,7 @@ use std::iter
 func chaining_example() {
     // Skip first 10, take next 5, sum them
     let r: Range = range(0, 100)
-    let mut iter: Range = r.skip(10).take(5)
+    var iter: Range = r.skip(10).take(5)
     let result: I32 = iter.sum()
     // result = 60 (10+11+12+13+14)
 }
@@ -448,7 +448,7 @@ The current implementation compiles iterator operations to efficient loops with 
 ```tml
 // This:
 let r: Range = range(0, 100)
-let mut taken: Range = r.take(10)
+var taken: Range = r.take(10)
 let sum: I32 = taken.sum()
 
 // Compiles to roughly:

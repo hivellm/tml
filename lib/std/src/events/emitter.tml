@@ -1,0 +1,256 @@
+//! Event emitter for publish/subscribe patterns (Node.js-style).
+
+use core::intrinsics::{ptr_read, ptr_write}
+use std::collections::hashmap::HashMap
+
+func ev_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func ev_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func ev_realloc(ptr: *Unit, size: I64) -> *Unit {
+    lowlevel { mem_realloc(ptr, size) }
+}
+
+func rd(addr: I64) -> I64 {
+    lowlevel { ptr_read[I64](addr as *I64) }
+}
+
+func wr(addr: I64, val: I64) {
+    lowlevel { ptr_write[I64](addr as *I64, val) }
+}
+
+func la_new() -> I64 {
+    let header: *Unit = ev_alloc(24)
+    let h: I64 = header as I64
+    let data: *Unit = ev_alloc(64)
+    wr(h, data as I64)
+    wr(h + 8, 0)
+    wr(h + 16, 8)
+    h
+}
+
+func la_push(h: I64, val: I64) {
+    let len: I64 = rd(h + 8)
+    let cap: I64 = rd(h + 16)
+    if len >= cap {
+        let new_cap: I64 = cap * 2
+        let old_data: *Unit = rd(h) as *Unit
+        let new_data: *Unit = ev_realloc(old_data, new_cap * 8)
+        wr(h, new_data as I64)
+        wr(h + 16, new_cap)
+    }
+    let data: I64 = rd(h)
+    wr(data + len * 8, val)
+    wr(h + 8, len + 1)
+}
+
+func la_get(h: I64, idx: I64) -> I64 {
+    let data: I64 = rd(h)
+    rd(data + idx * 8)
+}
+
+func la_set(h: I64, idx: I64, val: I64) {
+    let data: I64 = rd(h)
+    wr(data + idx * 8, val)
+}
+
+func la_len(h: I64) -> I64 {
+    rd(h + 8)
+}
+
+func la_pop(h: I64) -> I64 {
+    let len: I64 = rd(h + 8)
+    let new_len: I64 = len - 1
+    wr(h + 8, new_len)
+    let data: I64 = rd(h)
+    rd(data + new_len * 8)
+}
+
+func la_clear(h: I64) {
+    wr(h + 8, 0)
+}
+
+func la_destroy(h: I64) {
+    let data: *Unit = rd(h) as *Unit
+    ev_free(data)
+    ev_free(h as *Unit)
+}
+
+func la_remove_pair(h: I64, idx: I64) {
+    let len: I64 = la_len(h)
+    var i: I64 = idx
+    loop (i + 2 < len) {
+        la_set(h, i, la_get(h, i + 2))
+        i = i + 1
+    }
+    la_pop(h)
+    la_pop(h)
+}
+
+pub type EventEmitter {
+    events: HashMap[Str, I64],
+    max_listeners: I64,
+    total_count: I64
+}
+
+impl EventEmitter {
+    pub func new() -> EventEmitter {
+        EventEmitter {
+            events: HashMap[Str, I64]::new(16),
+            max_listeners: 10,
+            total_count: 0
+        }
+    }
+
+    pub func on(mut this, event: Str, listener: I64) {
+        var arr: I64 = 0
+        if this.events.has(event) {
+            arr = this.events.get(event)
+        } else {
+            arr = la_new()
+            this.events.set(event, arr)
+        }
+        la_push(arr, listener)
+        la_push(arr, 0)
+        this.total_count = this.total_count + 1
+    }
+
+    pub func once(mut this, event: Str, listener: I64) {
+        var arr: I64 = 0
+        if this.events.has(event) {
+            arr = this.events.get(event)
+        } else {
+            arr = la_new()
+            this.events.set(event, arr)
+        }
+        la_push(arr, listener)
+        la_push(arr, 1)
+        this.total_count = this.total_count + 1
+    }
+
+    pub func off(mut this, event: Str, listener: I64) -> Bool {
+        if not this.events.has(event) {
+            return false
+        }
+        let arr: I64 = this.events.get(event)
+        let len: I64 = la_len(arr)
+        var i: I64 = 0
+        loop (i < len) {
+            if la_get(arr, i) == listener {
+                la_remove_pair(arr, i)
+                this.total_count = this.total_count - 1
+                return true
+            }
+            i = i + 2
+        }
+        return false
+    }
+
+    pub func emit(mut this, event: Str, data: I64) -> Bool {
+        if not this.events.has(event) {
+            return false
+        }
+        let arr: I64 = this.events.get(event)
+        let len: I64 = la_len(arr)
+        if len == 0 {
+            return false
+        }
+
+        let snapshot: I64 = la_new()
+        let once_list: I64 = la_new()
+
+        var i: I64 = 0
+        loop (i < len) {
+            la_push(snapshot, la_get(arr, i))
+            if la_get(arr, i + 1) == 1 {
+                la_push(once_list, i)
+            }
+            i = i + 2
+        }
+
+        let once_count: I64 = la_len(once_list)
+        if once_count > 0 {
+            var j: I64 = once_count - 1
+            loop (j >= 0) {
+                la_remove_pair(arr, la_get(once_list, j))
+                this.total_count = this.total_count - 1
+                j = j - 1
+            }
+        }
+        la_destroy(once_list)
+
+        let num_calls: I64 = la_len(snapshot)
+        var k: I64 = 0
+        loop (k < num_calls) {
+            let f: func(I64) = la_get(snapshot, k) as func(I64)
+            f(data)
+            k = k + 1
+        }
+
+        la_destroy(snapshot)
+        return true
+    }
+
+    pub func remove_all(mut this, event: Str) -> I64 {
+        if not this.events.has(event) {
+            return 0
+        }
+        let arr: I64 = this.events.get(event)
+        let count: I64 = la_len(arr) / 2
+        la_destroy(arr)
+        this.events.remove(event)
+        this.total_count = this.total_count - count
+        return count
+    }
+
+    pub func listener_count(this, event: Str) -> I64 {
+        if not this.events.has(event) {
+            return 0
+        }
+        la_len(this.events.get(event)) / 2
+    }
+
+    pub func total_listeners(this) -> I64 {
+        this.total_count
+    }
+
+    pub func set_max_listeners(mut this, n: I64) {
+        this.max_listeners = n
+    }
+
+    pub func get_max_listeners(this) -> I64 {
+        this.max_listeners
+    }
+
+    pub func has_listeners(this, event: Str) -> Bool {
+        this.listener_count(event) > 0
+    }
+
+    pub func destroy(mut this) {
+        // Manually iterate HashMap buckets to free all listener arrays.
+        // We read the internal layout directly because HashMapIter causes
+        // codegen issues in DLL/test mode.
+        let hdr: I64 = this.events.handle as I64
+        if hdr != 0 {
+            let entries_addr: I64 = rd(hdr)
+            let ctrl_addr: I64 = rd(hdr + 8)
+            let cap: I64 = rd(hdr + 24)
+            var i: I64 = 0
+            loop (i < cap) {
+                let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+                if c >= (0 as I8) {
+                    // Occupied slot — value is a la_* array handle
+                    let val: I64 = rd(entries_addr + i * 16 + 8)
+                    la_destroy(val)
+                }
+                i = i + 1
+            }
+        }
+        this.events.destroy()
+        this.total_count = 0
+    }
+}

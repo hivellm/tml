@@ -3,26 +3,6 @@
 //! Constructs HTTP/1.1 requests with method, URL, headers, body, and
 //! query parameters. Supports builder-pattern construction and
 //! serialization to wire format.
-//!
-//! # Examples
-//!
-//! ```tml
-//! use std::http::{Request, Method}
-//!
-//! // Simple GET
-//! let req = Request::get("https://api.example.com/users")
-//!
-//! // POST with JSON body
-//! let req = Request::post("https://api.example.com/users")
-//!     .header("Content-Type", "application/json")
-//!     .body("{\"name\": \"Alice\"}")
-//!
-//! // Custom request
-//! let req = Request::new(Method::PUT, "https://api.example.com/users/1")
-//!     .header("Authorization", "Bearer token123")
-//!     .header("Accept", "application/json")
-//!     .body("updated data")
-//! ```
 
 use core::str
 use core::fmt::helpers::i64_to_str
@@ -33,36 +13,73 @@ use std::http::version::HttpVersion
 use std::http::error::{HttpError, HttpErrorKind}
 
 /// An HTTP request with method, URL, headers, and body.
+///
+/// URL components are stored as I64 (escaped from @allocates tracking)
+/// to work around a compiler bug where Str fields inside structs extracted
+/// from enum variants (Maybe[Url], Outcome[Url, Str]) get freed prematurely.
 pub type Request {
-    /// The HTTP method (GET, POST, PUT, etc.).
     req_method: Method,
-    /// The full request URL string.
     req_url: Str,
-    /// The parsed URL components (Nothing if URL is invalid).
-    parsed_url: Maybe[Url],
-    /// Request headers.
+    // Parsed URL components stored as I64 to escape @allocates cleanup.
+    // 0 means "not parsed" (invalid URL).
+    url_scheme: I64,
+    url_host: I64,
+    url_port: I64,
+    url_path: I64,
+    url_query: I64,
     req_headers: Headers,
-    /// Request body as a string (empty for bodyless methods).
     req_body: Str,
-    /// HTTP version (defaults to HTTP/1.1).
     req_version: HttpVersion,
-    /// Request timeout in milliseconds (0 = no timeout).
     timeout_ms: I64,
 }
 
 impl Request {
     /// Creates a new request with the given method and URL.
     pub func new(method: Method, url: Str) -> Request {
+        var scheme_i64: I64 = 0
+        var host_i64: I64 = 0
+        var port_val: I64 = -1
+        var path_i64: I64 = 0
+        var query_i64: I64 = 0
+
         let parsed = Url::parse(url)
-        var parsed_url: Maybe[Url] = Nothing
         when parsed {
-            Ok(u) => parsed_url = Just(u),
+            Ok(u) => {
+                // Extract components as I64 to escape @allocates tracking.
+                // The Url's string fields will be freed by the compiler when
+                // the Outcome goes out of scope, so we must copy them.
+                let s: Str = u.get_scheme()
+                let s_len: I64 = str::len(s)
+                if s_len > 0 {
+                    scheme_i64 = str::substring(s, 0, s_len) as I64
+                }
+                let h: Str = u.get_host()
+                let h_len: I64 = str::len(h)
+                if h_len > 0 {
+                    host_i64 = str::substring(h, 0, h_len) as I64
+                }
+                port_val = u.get_port()
+                let p: Str = u.get_path()
+                let p_len: I64 = str::len(p)
+                if p_len > 0 {
+                    path_i64 = str::substring(p, 0, p_len) as I64
+                }
+                let q: Str = u.get_query()
+                let q_len: I64 = str::len(q)
+                if q_len > 0 {
+                    query_i64 = str::substring(q, 0, q_len) as I64
+                }
+            },
             Err(e) => {},
         }
         Request {
             req_method: method,
             req_url: url,
-            parsed_url: parsed_url,
+            url_scheme: scheme_i64,
+            url_host: host_i64,
+            url_port: port_val,
+            url_path: path_i64,
+            url_query: query_i64,
             req_headers: Headers::new(),
             req_body: "",
             req_version: HttpVersion::HTTP_1_1,
@@ -102,7 +119,6 @@ impl Request {
     }
 
     /// Sets the request body. Also auto-sets Content-Length.
-    /// Returns self for chaining.
     pub func body(this, data: Str) -> Request {
         let len: I64 = str::len(data)
         if len > 0 {
@@ -111,7 +127,11 @@ impl Request {
         Request {
             req_method: this.req_method,
             req_url: this.req_url,
-            parsed_url: this.parsed_url,
+            url_scheme: this.url_scheme,
+            url_host: this.url_host,
+            url_port: this.url_port,
+            url_path: this.url_path,
+            url_query: this.url_query,
             req_headers: this.req_headers,
             req_body: data,
             req_version: this.req_version,
@@ -136,7 +156,11 @@ impl Request {
         Request {
             req_method: this.req_method,
             req_url: this.req_url,
-            parsed_url: this.parsed_url,
+            url_scheme: this.url_scheme,
+            url_host: this.url_host,
+            url_port: this.url_port,
+            url_path: this.url_path,
+            url_query: this.url_query,
             req_headers: this.req_headers,
             req_body: this.req_body,
             req_version: v,
@@ -149,7 +173,11 @@ impl Request {
         Request {
             req_method: this.req_method,
             req_url: this.req_url,
-            parsed_url: this.parsed_url,
+            url_scheme: this.url_scheme,
+            url_host: this.url_host,
+            url_port: this.url_port,
+            url_path: this.url_path,
+            url_query: this.url_query,
             req_headers: this.req_headers,
             req_body: this.req_body,
             req_version: this.req_version,
@@ -188,54 +216,47 @@ impl Request {
 
     /// Returns true if the URL scheme is HTTPS.
     pub func is_secure(this) -> Bool {
-        when this.parsed_url {
-            Just(u) => return u.get_scheme() == "https",
-            Nothing => return false,
-        }
+        if this.url_scheme == 0 { return false }
+        return (this.url_scheme as Str) == "https"
     }
 
     /// Returns the URL scheme ("http" or "https").
+    /// Returns a copy — the compiler frees Str values used in string interpolation.
+    @allocates
     pub func scheme(this) -> Str {
-        when this.parsed_url {
-            Just(u) => return u.get_scheme(),
-            Nothing => return "",
-        }
+        if this.url_scheme == 0 { return "" }
+        let s: Str = this.url_scheme as Str
+        return str::substring(s, 0, str::len(s))
     }
 
     /// Returns the host from the URL.
+    /// Returns a copy — the compiler frees Str values used in string interpolation.
+    @allocates
     pub func host(this) -> Str {
-        when this.parsed_url {
-            Just(u) => return u.get_host(),
-            Nothing => return "",
-        }
+        if this.url_host == 0 { return "" }
+        let s: Str = this.url_host as Str
+        return str::substring(s, 0, str::len(s))
     }
 
-    /// Returns the port from the URL (0 if not specified).
-    pub func port(this) -> I64 {
-        when this.parsed_url {
-            Just(u) => return u.get_port(),
-            Nothing => return 0,
-        }
-    }
+    /// Returns the port from the URL (-1 if not specified).
+    pub func port(this) -> I64 { this.url_port }
 
     /// Returns the path from the URL (e.g. "/api/users").
+    /// Returns a copy — the compiler frees Str values used in string interpolation.
+    @allocates
     pub func path(this) -> Str {
-        when this.parsed_url {
-            Just(u) => {
-                let p: Str = u.get_path()
-                if str::len(p) == 0 { return "/" }
-                return p
-            },
-            Nothing => return "/",
-        }
+        if this.url_path == 0 { return "/" }
+        let s: Str = this.url_path as Str
+        return str::substring(s, 0, str::len(s))
     }
 
     /// Returns the query string from the URL (without leading "?").
+    /// Returns a copy — the compiler frees Str values used in string interpolation.
+    @allocates
     pub func query(this) -> Str {
-        when this.parsed_url {
-            Just(u) => return u.get_query(),
-            Nothing => return "",
-        }
+        if this.url_query == 0 { return "" }
+        let s: Str = this.url_query as Str
+        return str::substring(s, 0, str::len(s))
     }
 
     /// Returns path + query string for the request line.
@@ -252,7 +273,7 @@ impl Request {
     /// Omits the port if it's the default for the scheme.
     pub func host_header(this) -> Str {
         let h: Str = this.host()
-        let p: I64 = this.port()
+        let p: I64 = this.url_port
         if p <= 0 or (p == 80 and this.scheme() == "http") or (p == 443 and this.scheme() == "https") {
             return h
         }
@@ -272,20 +293,6 @@ impl Request {
     // ── Serialization ───────────────────────────────────────
 
     /// Serializes the request to HTTP/1.1 wire format.
-    ///
-    /// Auto-sets Host, User-Agent (if not present), and Content-Length
-    /// (if body is present and not already set).
-    ///
-    /// Format:
-    /// ```
-    /// GET /path?query HTTP/1.1\r\n
-    /// Host: example.com\r\n
-    /// User-Agent: tml/1.0\r\n
-    /// Content-Type: application/json\r\n
-    /// Content-Length: 42\r\n
-    /// \r\n
-    /// {"name": "Alice"}
-    /// ```
     pub func serialize(this) -> Str {
         let method_str: Str = this.req_method.to_string()
         let path_query: Str = this.path_and_query()

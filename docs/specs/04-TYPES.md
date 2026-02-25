@@ -610,7 +610,7 @@ Raw pointer type for low-level memory operations. Only usable inside `lowlevel` 
 
 ```tml
 lowlevel {
-    let mut x: I32 = 42
+    var x: I32 = 42
     let p: *I32 = &x           // Pointer to I32
 
     // Read value through pointer

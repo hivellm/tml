@@ -1,0 +1,110 @@
+use test::{assert_eq, assert_true, assert_false}
+use std::events::EventEmitter
+use core::intrinsics::{ptr_read, ptr_write}
+
+func counting_listener(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func noop_listener(data: I64) {}
+
+@test
+func test_remove_all() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    emitter.on("data", noop_listener as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 before remove_all")
+    assert_eq(emitter.total_listeners(), 2 as I64, "total 2")
+    let removed: I64 = emitter.remove_all("data")
+    assert_eq(removed, 2 as I64, "removed 2")
+    assert_eq(emitter.listener_count("data"), 0 as I64, "0 after remove_all")
+    assert_eq(emitter.total_listeners(), 0 as I64, "total 0")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_remove_all_nonexistent() -> I32 {
+    var emitter = EventEmitter::new()
+    let removed: I64 = emitter.remove_all("nothing")
+    assert_eq(removed, 0 as I64, "removed 0 for unknown event")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_has_listeners() -> I32 {
+    var emitter = EventEmitter::new()
+    assert_false(emitter.has_listeners("data"), "no listeners initially")
+    emitter.on("data", noop_listener as I64)
+    assert_true(emitter.has_listeners("data"), "has listeners after on")
+    emitter.off("data", noop_listener as I64)
+    assert_false(emitter.has_listeners("data"), "no listeners after off")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_multiple_events_independent() -> I32 {
+    let state_a: *Unit = lowlevel { mem_alloc(8 as I64) }
+    let state_b: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state_a as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64](state_b as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    emitter.on("a", counting_listener as I64)
+    emitter.on("b", counting_listener as I64)
+
+    emitter.emit("a", state_a as I64)
+    emitter.emit("a", state_a as I64)
+    emitter.emit("b", state_b as I64)
+
+    let count_a: I64 = lowlevel { ptr_read[I64](state_a as *I64) }
+    let count_b: I64 = lowlevel { ptr_read[I64](state_b as *I64) }
+    assert_eq(count_a, 2 as I64, "a fired twice")
+    assert_eq(count_b, 1 as I64, "b fired once")
+
+    emitter.destroy()
+    lowlevel { mem_free(state_a) }
+    lowlevel { mem_free(state_b) }
+    return 0
+}
+
+@test
+func test_once_mixed_with_on() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    emitter.once("data", counting_listener as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 listeners")
+    assert_eq(emitter.total_listeners(), 2 as I64, "total 2")
+
+    emitter.emit("data", state as I64)
+    let count1: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count1, 2 as I64, "both called first time")
+    assert_eq(emitter.listener_count("data"), 1 as I64, "once removed")
+    assert_eq(emitter.total_listeners(), 1 as I64, "total 1")
+
+    emitter.emit("data", state as I64)
+    let count2: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count2, 3 as I64, "only persistent called second time")
+
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_destroy_cleans_up() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("a", noop_listener as I64)
+    emitter.on("b", noop_listener as I64)
+    emitter.on("c", noop_listener as I64)
+    assert_eq(emitter.total_listeners(), 3 as I64, "3 total")
+    emitter.destroy()
+    assert_eq(emitter.total_listeners(), 0 as I64, "0 after destroy")
+    return 0
+}

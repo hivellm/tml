@@ -1,0 +1,345 @@
+//! Pure TML SHA-256 implementation (FIPS 180-4).
+//!
+//! Implements the SHA-256 hash algorithm entirely in TML using 32-bit
+//! integer arithmetic. No FFI, no OpenSSL.
+
+use core::str
+
+// SHA-256 round constants stored as native I32 array in a single allocation.
+// Initialized once on first use via a global flag pattern.
+// For now, inline as a string of 256 raw bytes (64 * 4 big-endian).
+// We read I32 values from this table directly via ptr_read.
+
+// Bitwise rotation right for 32-bit values using U32 to avoid sign issues
+func rotr32(x: I32, n: I32) -> I32 {
+    let xu: U32 = x as U32
+    let result: U32 = (xu >> (n as U32)) | (xu << ((32 - n) as U32))
+    return result as I32
+}
+
+// SHA-256 helper functions — all inlined by LLVM at O3
+func ch(x: I32, y: I32, z: I32) -> I32 {
+    return (x & y) ^ ((x ^ (0xffffffff as I32)) & z)
+}
+
+func maj(x: I32, y: I32, z: I32) -> I32 {
+    return (x & y) ^ (x & z) ^ (y & z)
+}
+
+func sigma0(x: I32) -> I32 {
+    return rotr32(x, 2) ^ rotr32(x, 13) ^ rotr32(x, 22)
+}
+
+func sigma1(x: I32) -> I32 {
+    return rotr32(x, 6) ^ rotr32(x, 11) ^ rotr32(x, 25)
+}
+
+func gamma0(x: I32) -> I32 {
+    let xu: U32 = x as U32
+    return (rotr32(x, 7) ^ rotr32(x, 18) ^ ((xu >> (3 as U32)) as I32))
+}
+
+func gamma1(x: I32) -> I32 {
+    let xu: U32 = x as U32
+    return (rotr32(x, 17) ^ rotr32(x, 19) ^ ((xu >> (10 as U32)) as I32))
+}
+
+// Wrapping add — maps to LLVM `add` (no overflow check)
+func wa(a: I32, b: I32) -> I32 {
+    return lowlevel { llvm_add[I32](a, b) }
+}
+
+// Read big-endian I32 from byte pointer
+func read_be32(p: I64) -> I32 {
+    let b0: I32 = lowlevel { ptr_read[U8](p as *U8) } as I32
+    let b1: I32 = lowlevel { ptr_read[U8]((p + 1) as *U8) } as I32
+    let b2: I32 = lowlevel { ptr_read[U8]((p + 2) as *U8) } as I32
+    let b3: I32 = lowlevel { ptr_read[U8]((p + 3) as *U8) } as I32
+    return ((b0 & 0xff) << 24) | ((b1 & 0xff) << 16) | ((b2 & 0xff) << 8) | (b3 & 0xff)
+}
+
+// Write big-endian I32 to byte pointer
+func write_be32(addr: I64, val: I32) {
+    let vu: U32 = val as U32
+    lowlevel { ptr_write[U8](addr as *U8, (vu >> (24 as U32)) as U8) }
+    lowlevel { ptr_write[U8]((addr + 1) as *U8, (vu >> (16 as U32)) as U8) }
+    lowlevel { ptr_write[U8]((addr + 2) as *U8, (vu >> (8 as U32)) as U8) }
+    lowlevel { ptr_write[U8]((addr + 3) as *U8, vu as U8) }
+}
+
+// Process a single 64-byte block, updating state h0..h7.
+// w is a pointer to 64*4=256 bytes of scratch space for the message schedule.
+func process_block(bp: I64, wp: I64,
+                   h0p: I64, h1p: I64, h2p: I64, h3p: I64,
+                   h4p: I64, h5p: I64, h6p: I64, h7p: I64,
+                   kp: I64) {
+    // Load current hash state
+    var ha: I32 = lowlevel { ptr_read[I32](h0p as *I32) }
+    var hb: I32 = lowlevel { ptr_read[I32](h1p as *I32) }
+    var hc: I32 = lowlevel { ptr_read[I32](h2p as *I32) }
+    var hd: I32 = lowlevel { ptr_read[I32](h3p as *I32) }
+    var he: I32 = lowlevel { ptr_read[I32](h4p as *I32) }
+    var hf: I32 = lowlevel { ptr_read[I32](h5p as *I32) }
+    var hg: I32 = lowlevel { ptr_read[I32](h6p as *I32) }
+    var hh: I32 = lowlevel { ptr_read[I32](h7p as *I32) }
+
+    // Prepare message schedule w[0..15] from block (big-endian)
+    var wi: I64 = 0
+    loop (wi < 16) {
+        let word: I32 = read_be32(bp + wi * 4)
+        lowlevel { ptr_write[I32]((wp + wi * 4) as *I32, word) }
+        wi = wi + 1
+    }
+
+    // Extend message schedule w[16..63]
+    loop (wi < 64) {
+        let w2: I32 = lowlevel { ptr_read[I32]((wp + (wi - 2) * 4) as *I32) }
+        let w7: I32 = lowlevel { ptr_read[I32]((wp + (wi - 7) * 4) as *I32) }
+        let w15: I32 = lowlevel { ptr_read[I32]((wp + (wi - 15) * 4) as *I32) }
+        let w16: I32 = lowlevel { ptr_read[I32]((wp + (wi - 16) * 4) as *I32) }
+        let val: I32 = wa(wa(wa(gamma1(w2), w7), gamma0(w15)), w16)
+        lowlevel { ptr_write[I32]((wp + wi * 4) as *I32, val) }
+        wi = wi + 1
+    }
+
+    // Initialize working variables
+    var a: I32 = ha
+    var b: I32 = hb
+    var c: I32 = hc
+    var d: I32 = hd
+    var e: I32 = he
+    var f: I32 = hf
+    var g: I32 = hg
+    var h: I32 = hh
+
+    // 64 rounds — K constants read from table
+    var ri: I64 = 0
+    loop (ri < 64) {
+        let w_ri: I32 = lowlevel { ptr_read[I32]((wp + ri * 4) as *I32) }
+        let ki: I32 = lowlevel { ptr_read[I32]((kp + ri * 4) as *I32) }
+        let t1: I32 = wa(wa(wa(wa(h, sigma1(e)), ch(e, f, g)), ki), w_ri)
+        let t2: I32 = wa(sigma0(a), maj(a, b, c))
+
+        h = g
+        g = f
+        f = e
+        e = wa(d, t1)
+        d = c
+        c = b
+        b = a
+        a = wa(t1, t2)
+
+        ri = ri + 1
+    }
+
+    // Add compressed chunk to hash values and store back
+    lowlevel { ptr_write[I32](h0p as *I32, wa(ha, a)) }
+    lowlevel { ptr_write[I32](h1p as *I32, wa(hb, b)) }
+    lowlevel { ptr_write[I32](h2p as *I32, wa(hc, c)) }
+    lowlevel { ptr_write[I32](h3p as *I32, wa(hd, d)) }
+    lowlevel { ptr_write[I32](h4p as *I32, wa(he, e)) }
+    lowlevel { ptr_write[I32](h5p as *I32, wa(hf, f)) }
+    lowlevel { ptr_write[I32](h6p as *I32, wa(hg, g)) }
+    lowlevel { ptr_write[I32](h7p as *I32, wa(hh, h)) }
+}
+
+// Initialize the K constants table (64 * 4 = 256 bytes, native endian I32)
+func init_k_table(kp: I64) {
+    lowlevel { ptr_write[I32]((kp + 0) as *I32, 0x428a2f98 as I32) }
+    lowlevel { ptr_write[I32]((kp + 4) as *I32, 0x71374491 as I32) }
+    lowlevel { ptr_write[I32]((kp + 8) as *I32, 0xb5c0fbcf as I32) }
+    lowlevel { ptr_write[I32]((kp + 12) as *I32, 0xe9b5dba5 as I32) }
+    lowlevel { ptr_write[I32]((kp + 16) as *I32, 0x3956c25b as I32) }
+    lowlevel { ptr_write[I32]((kp + 20) as *I32, 0x59f111f1 as I32) }
+    lowlevel { ptr_write[I32]((kp + 24) as *I32, 0x923f82a4 as I32) }
+    lowlevel { ptr_write[I32]((kp + 28) as *I32, 0xab1c5ed5 as I32) }
+    lowlevel { ptr_write[I32]((kp + 32) as *I32, 0xd807aa98 as I32) }
+    lowlevel { ptr_write[I32]((kp + 36) as *I32, 0x12835b01 as I32) }
+    lowlevel { ptr_write[I32]((kp + 40) as *I32, 0x243185be as I32) }
+    lowlevel { ptr_write[I32]((kp + 44) as *I32, 0x550c7dc3 as I32) }
+    lowlevel { ptr_write[I32]((kp + 48) as *I32, 0x72be5d74 as I32) }
+    lowlevel { ptr_write[I32]((kp + 52) as *I32, 0x80deb1fe as I32) }
+    lowlevel { ptr_write[I32]((kp + 56) as *I32, 0x9bdc06a7 as I32) }
+    lowlevel { ptr_write[I32]((kp + 60) as *I32, 0xc19bf174 as I32) }
+    lowlevel { ptr_write[I32]((kp + 64) as *I32, 0xe49b69c1 as I32) }
+    lowlevel { ptr_write[I32]((kp + 68) as *I32, 0xefbe4786 as I32) }
+    lowlevel { ptr_write[I32]((kp + 72) as *I32, 0x0fc19dc6 as I32) }
+    lowlevel { ptr_write[I32]((kp + 76) as *I32, 0x240ca1cc as I32) }
+    lowlevel { ptr_write[I32]((kp + 80) as *I32, 0x2de92c6f as I32) }
+    lowlevel { ptr_write[I32]((kp + 84) as *I32, 0x4a7484aa as I32) }
+    lowlevel { ptr_write[I32]((kp + 88) as *I32, 0x5cb0a9dc as I32) }
+    lowlevel { ptr_write[I32]((kp + 92) as *I32, 0x76f988da as I32) }
+    lowlevel { ptr_write[I32]((kp + 96) as *I32, 0x983e5152 as I32) }
+    lowlevel { ptr_write[I32]((kp + 100) as *I32, 0xa831c66d as I32) }
+    lowlevel { ptr_write[I32]((kp + 104) as *I32, 0xb00327c8 as I32) }
+    lowlevel { ptr_write[I32]((kp + 108) as *I32, 0xbf597fc7 as I32) }
+    lowlevel { ptr_write[I32]((kp + 112) as *I32, 0xc6e00bf3 as I32) }
+    lowlevel { ptr_write[I32]((kp + 116) as *I32, 0xd5a79147 as I32) }
+    lowlevel { ptr_write[I32]((kp + 120) as *I32, 0x06ca6351 as I32) }
+    lowlevel { ptr_write[I32]((kp + 124) as *I32, 0x14292967 as I32) }
+    lowlevel { ptr_write[I32]((kp + 128) as *I32, 0x27b70a85 as I32) }
+    lowlevel { ptr_write[I32]((kp + 132) as *I32, 0x2e1b2138 as I32) }
+    lowlevel { ptr_write[I32]((kp + 136) as *I32, 0x4d2c6dfc as I32) }
+    lowlevel { ptr_write[I32]((kp + 140) as *I32, 0x53380d13 as I32) }
+    lowlevel { ptr_write[I32]((kp + 144) as *I32, 0x650a7354 as I32) }
+    lowlevel { ptr_write[I32]((kp + 148) as *I32, 0x766a0abb as I32) }
+    lowlevel { ptr_write[I32]((kp + 152) as *I32, 0x81c2c92e as I32) }
+    lowlevel { ptr_write[I32]((kp + 156) as *I32, 0x92722c85 as I32) }
+    lowlevel { ptr_write[I32]((kp + 160) as *I32, 0xa2bfe8a1 as I32) }
+    lowlevel { ptr_write[I32]((kp + 164) as *I32, 0xa81a664b as I32) }
+    lowlevel { ptr_write[I32]((kp + 168) as *I32, 0xc24b8b70 as I32) }
+    lowlevel { ptr_write[I32]((kp + 172) as *I32, 0xc76c51a3 as I32) }
+    lowlevel { ptr_write[I32]((kp + 176) as *I32, 0xd192e819 as I32) }
+    lowlevel { ptr_write[I32]((kp + 180) as *I32, 0xd6990624 as I32) }
+    lowlevel { ptr_write[I32]((kp + 184) as *I32, 0xf40e3585 as I32) }
+    lowlevel { ptr_write[I32]((kp + 188) as *I32, 0x106aa070 as I32) }
+    lowlevel { ptr_write[I32]((kp + 192) as *I32, 0x19a4c116 as I32) }
+    lowlevel { ptr_write[I32]((kp + 196) as *I32, 0x1e376c08 as I32) }
+    lowlevel { ptr_write[I32]((kp + 200) as *I32, 0x2748774c as I32) }
+    lowlevel { ptr_write[I32]((kp + 204) as *I32, 0x34b0bcb5 as I32) }
+    lowlevel { ptr_write[I32]((kp + 208) as *I32, 0x391c0cb3 as I32) }
+    lowlevel { ptr_write[I32]((kp + 212) as *I32, 0x4ed8aa4a as I32) }
+    lowlevel { ptr_write[I32]((kp + 216) as *I32, 0x5b9cca4f as I32) }
+    lowlevel { ptr_write[I32]((kp + 220) as *I32, 0x682e6ff3 as I32) }
+    lowlevel { ptr_write[I32]((kp + 224) as *I32, 0x748f82ee as I32) }
+    lowlevel { ptr_write[I32]((kp + 228) as *I32, 0x78a5636f as I32) }
+    lowlevel { ptr_write[I32]((kp + 232) as *I32, 0x84c87814 as I32) }
+    lowlevel { ptr_write[I32]((kp + 236) as *I32, 0x8cc70208 as I32) }
+    lowlevel { ptr_write[I32]((kp + 240) as *I32, 0x90befffa as I32) }
+    lowlevel { ptr_write[I32]((kp + 244) as *I32, 0xa4506ceb as I32) }
+    lowlevel { ptr_write[I32]((kp + 248) as *I32, 0xbef9a3f7 as I32) }
+    lowlevel { ptr_write[I32]((kp + 252) as *I32, 0xc67178f2 as I32) }
+}
+
+/// Compute SHA-256 of a string and write the 32-byte digest into a caller-provided buffer.
+/// The buffer must be at least 32 bytes.
+/// kp must point to a 256-byte K constants table (call init_k_table once).
+/// wp must point to a 256-byte message schedule scratch buffer.
+pub func sha256_into_ex(data: Str, out: I64, kp: I64, wp: I64) {
+    let data_len: I64 = str::len(data)
+    let data_ptr: I64 = data as I64
+
+    // Initialize hash state (8 * I32 = 32 bytes) — use output buffer directly
+    // We'll use 8 separate I32s written into a small scratch area.
+    // Actually, write hash state into the out buffer temporarily (it's 32 bytes).
+    lowlevel { ptr_write[I32]((out) as *I32, 0x6a09e667 as I32) }
+    lowlevel { ptr_write[I32]((out + 4) as *I32, 0xbb67ae85 as I32) }
+    lowlevel { ptr_write[I32]((out + 8) as *I32, 0x3c6ef372 as I32) }
+    lowlevel { ptr_write[I32]((out + 12) as *I32, 0xa54ff53a as I32) }
+    lowlevel { ptr_write[I32]((out + 16) as *I32, 0x510e527f as I32) }
+    lowlevel { ptr_write[I32]((out + 20) as *I32, 0x9b05688c as I32) }
+    lowlevel { ptr_write[I32]((out + 24) as *I32, 0x1f83d9ab as I32) }
+    lowlevel { ptr_write[I32]((out + 28) as *I32, 0x5be0cd19 as I32) }
+
+    // Pre-processing: compute padded message length
+    let bit_len: I64 = data_len * 8
+    var padded_len: I64 = data_len + 1 + 8
+    let rem64: I64 = padded_len % 64
+    if rem64 > 0 {
+        padded_len = padded_len + (64 - rem64)
+    }
+
+    // Allocate padded message buffer
+    let msg: *Unit = lowlevel { mem_alloc(padded_len) }
+    let mp: I64 = msg as I64
+
+    // Copy message data
+    if data_len > 0 {
+        lowlevel { copy_nonoverlapping(data_ptr as *Unit, msg, data_len) }
+    }
+
+    // Append 0x80 byte
+    lowlevel { ptr_write[U8]((mp + data_len) as *U8, 0x80 as U8) }
+
+    // Zero padding (from data_len+1 to padded_len-8)
+    var zi: I64 = data_len + 1
+    loop (zi < padded_len - 8) {
+        lowlevel { ptr_write[U8]((mp + zi) as *U8, 0 as U8) }
+        zi = zi + 1
+    }
+
+    // Append bit length as big-endian 64-bit
+    lowlevel { ptr_write[U8]((mp + padded_len - 8) as *U8, ((bit_len >> 56) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 7) as *U8, ((bit_len >> 48) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 6) as *U8, ((bit_len >> 40) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 5) as *U8, ((bit_len >> 32) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 4) as *U8, ((bit_len >> 24) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 3) as *U8, ((bit_len >> 16) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 2) as *U8, ((bit_len >> 8) & 0xff) as U8) }
+    lowlevel { ptr_write[U8]((mp + padded_len - 1) as *U8, (bit_len & 0xff) as U8) }
+
+    // Process each 64-byte block
+    var block_off: I64 = 0
+    loop (block_off < padded_len) {
+        process_block(mp + block_off, wp,
+                      out, out + 4, out + 8, out + 12,
+                      out + 16, out + 20, out + 24, out + 28,
+                      kp)
+        block_off = block_off + 64
+    }
+
+    // Free padded message
+    lowlevel { mem_free(msg) }
+
+    // Convert hash state from native I32 to big-endian bytes in-place
+    var si: I64 = 0
+    loop (si < 8) {
+        let val: I32 = lowlevel { ptr_read[I32]((out + si * 4) as *I32) }
+        write_be32(out + si * 4, val)
+        si = si + 1
+    }
+}
+
+/// Compute SHA-256 of a string. Returns 32-byte digest as heap Str.
+/// Caller must free the returned Str.
+@allocates
+pub func sha256_digest(data: Str) -> Str {
+    // Allocate K table + schedule + result in one shot: 256 + 256 + 33 = 545 bytes
+    let work: *Unit = lowlevel { mem_alloc(545) }
+    let work_p: I64 = work as I64
+    let kp: I64 = work_p
+    let wp: I64 = work_p + 256
+    let result_p: I64 = work_p + 512
+
+    init_k_table(kp)
+    sha256_into_ex(data, result_p, kp, wp)
+
+    // result is at work_p + 512, 32 bytes. Copy to a new allocation.
+    let buf: *Unit = lowlevel { mem_alloc(33) }
+    lowlevel { copy_nonoverlapping((result_p) as *Unit, buf, 32) }
+    lowlevel { ptr_write[U8]((buf as I64 + 32) as *U8, 0 as U8) }
+    lowlevel { mem_free(work) }
+    return buf as Str
+}
+
+/// Compute SHA-256 and return result as a hex string (64 chars).
+@allocates
+pub func sha256_hex(data: Str) -> Str {
+    // Allocate K table + schedule + digest in one shot: 256 + 256 + 32 = 544 bytes
+    let work: *Unit = lowlevel { mem_alloc(544) }
+    let work_p: I64 = work as I64
+    let kp: I64 = work_p
+    let wp: I64 = work_p + 256
+    let digest_p: I64 = work_p + 512
+
+    init_k_table(kp)
+    sha256_into_ex(data, digest_p, kp, wp)
+
+    // Convert to hex (64 chars + null)
+    let hex_table: Str = "0123456789abcdef"
+    let ht: I64 = hex_table as I64
+    let out: *Unit = lowlevel { mem_alloc(65) }
+    var dp: I64 = out as I64
+    var sp: I64 = digest_p
+    let end: I64 = sp + 32
+    loop (sp < end) {
+        let b: I32 = lowlevel { ptr_read[U8](sp as *U8) } as I32
+        lowlevel { ptr_write[U8](dp as *U8, ptr_read[U8]((ht + ((b >> 4) & 15) as I64) as *U8)) }
+        lowlevel { ptr_write[U8]((dp + 1) as *U8, ptr_read[U8]((ht + (b & 15) as I64) as *U8)) }
+        sp = sp + 1
+        dp = dp + 2
+    }
+    lowlevel { ptr_write[U8](dp as *U8, 0 as U8) }
+    lowlevel { mem_free(work) }
+    return out as Str
+}

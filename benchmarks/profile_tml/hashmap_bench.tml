@@ -1,7 +1,8 @@
 // HashMap Benchmarks (TML)
 //
 // Tests HashMap operations: insert, get, contains, remove.
-// Comparable with C++ std::unordered_map and Rust std::collections::HashMap.
+// All benchmarks use 1M operations for accurate ns/op measurement.
+// Results are printed to prevent LLVM dead-code elimination.
 
 use std::collections::HashMap
 use std::time::Instant
@@ -12,106 +13,116 @@ pub func main() -> I32 {
     print("  HashMap Benchmarks (TML)\n")
     print("================================================================\n\n")
 
-    let N: I64 = 100000
-    let NL: I64 = 1000000
+    let N: I64 = 1000000
+    var i: I64 = 0
 
     // Warmup
     let wm: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     var w: I64 = 0
-    loop (w < 100) { wm.set(w, w); w = w + 1 }
+    loop (w < 1000) { wm.set(w, w); w = w + 1 }
     wm.destroy()
 
-    var i: I64 = 0
-
-    // === HashMap Insert ===
+    // === HashMap Insert (1M entries, grow from 16) ===
     let t1: Instant = Instant::now()
     let m1: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     i = 0
     loop (i < N) { m1.set(i, i * 2); i = i + 1 }
     let ns1: I64 = t1.elapsed().as_nanos()
-    m1.destroy()
-    let pop1: I64 = if ns1 > 0 { ns1 / N } else { 0 }
-    let ops1: I64 = if ns1 > 0 { (N * 1000000000) / ns1 } else { 0 }
+    // sink: print len to prevent DCE
     print("  HashMap Insert:\n")
     print("    Iterations: {N}\n")
-    print("    Total time: {ns1 / 1000000} ms\n")
+    let ms1: I64 = ns1 / 1000000
+    print("    Total time: {ms1} ms\n")
+    let pop1: I64 = if ns1 > 0 { ns1 / N } else { 0 }
     print("    Per op:     {pop1} ns\n")
-    print("    Ops/sec:    {ops1}\n\n")
+    let ops1: I64 = if ns1 > 0 { (N * 1000000000) / ns1 } else { 0 }
+    print("    Ops/sec:    {ops1}\n")
+    print("    Notes:      len={m1.len()}\n\n")
+    m1.destroy()
 
-    // === HashMap Insert (reserved) ===
+    // === HashMap Insert (reserved, 1M capacity pre-allocated) ===
     let t2: Instant = Instant::now()
     let m2: HashMap[I64, I64] = HashMap[I64, I64].new(N)
     i = 0
     loop (i < N) { m2.set(i, i * 2); i = i + 1 }
     let ns2: I64 = t2.elapsed().as_nanos()
-    m2.destroy()
-    let pop2: I64 = if ns2 > 0 { ns2 / N } else { 0 }
-    let ops2: I64 = if ns2 > 0 { (N * 1000000000) / ns2 } else { 0 }
     print("  HashMap Insert (reserved):\n")
     print("    Iterations: {N}\n")
-    print("    Total time: {ns2 / 1000000} ms\n")
+    let ms2: I64 = ns2 / 1000000
+    print("    Total time: {ms2} ms\n")
+    let pop2: I64 = if ns2 > 0 { ns2 / N } else { 0 }
     print("    Per op:     {pop2} ns\n")
-    print("    Ops/sec:    {ops2}\n\n")
+    let ops2: I64 = if ns2 > 0 { (N * 1000000000) / ns2 } else { 0 }
+    print("    Ops/sec:    {ops2}\n")
+    print("    Notes:      len={m2.len()}\n\n")
+    m2.destroy()
 
-    // === HashMap Lookup ===
+    // === HashMap Lookup (1M lookups in 10K-entry map) ===
     let m3: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     i = 0
     loop (i < 10000) { m3.set(i, i * 2); i = i + 1 }
     let t3: Instant = Instant::now()
-    var sum: I64 = 0
+    var sum3: I64 = 0
     i = 0
-    loop (i < NL) { sum = sum + m3.get(i % 10000); i = i + 1 }
+    loop (i < N) { sum3 = sum3 + m3.get(i % 10000); i = i + 1 }
     let ns3: I64 = t3.elapsed().as_nanos()
-    m3.destroy()
-    let pop3: I64 = if ns3 > 0 { ns3 / NL } else { 0 }
-    let ops3: I64 = if ns3 > 0 { (NL * 1000000000) / ns3 } else { 0 }
+    // sink: print sum to prevent LLVM from eliminating the loop
     print("  HashMap Lookup:\n")
-    print("    Iterations: {NL}\n")
-    print("    Total time: {ns3 / 1000000} ms\n")
+    print("    Iterations: {N}\n")
+    let ms3: I64 = ns3 / 1000000
+    print("    Total time: {ms3} ms\n")
+    let pop3: I64 = if ns3 > 0 { ns3 / N } else { 0 }
     print("    Per op:     {pop3} ns\n")
-    print("    Ops/sec:    {ops3}\n\n")
+    let ops3: I64 = if ns3 > 0 { (N * 1000000000) / ns3 } else { 0 }
+    print("    Ops/sec:    {ops3}\n")
+    print("    Notes:      sum={sum3}\n\n")
+    m3.destroy()
 
-    // === HashMap Contains ===
+    // === HashMap Contains (1M checks, half hit / half miss) ===
     let m4: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     i = 0
     loop (i < 10000) { m4.set(i, i); i = i + 1 }
     let t4: Instant = Instant::now()
-    var found: I64 = 0
+    var found4: I64 = 0
     i = 0
-    loop (i < NL) {
-        if m4.has(i % 20000) { found = found + 1 }
+    loop (i < N) {
+        if m4.has(i % 20000) { found4 = found4 + 1 }
         i = i + 1
     }
     let ns4: I64 = t4.elapsed().as_nanos()
-    m4.destroy()
-    let pop4: I64 = if ns4 > 0 { ns4 / NL } else { 0 }
-    let ops4: I64 = if ns4 > 0 { (NL * 1000000000) / ns4 } else { 0 }
     print("  HashMap Contains:\n")
-    print("    Iterations: {NL}\n")
-    print("    Total time: {ns4 / 1000000} ms\n")
+    print("    Iterations: {N}\n")
+    let ms4: I64 = ns4 / 1000000
+    print("    Total time: {ms4} ms\n")
+    let pop4: I64 = if ns4 > 0 { ns4 / N } else { 0 }
     print("    Per op:     {pop4} ns\n")
-    print("    Ops/sec:    {ops4}\n\n")
+    let ops4: I64 = if ns4 > 0 { (N * 1000000000) / ns4 } else { 0 }
+    print("    Ops/sec:    {ops4}\n")
+    print("    Notes:      found={found4}\n\n")
+    m4.destroy()
 
-    // === HashMap Remove ===
+    // === HashMap Remove (1M insert then 1M remove) ===
     let m5: HashMap[I64, I64] = HashMap[I64, I64].new(16)
     i = 0
     loop (i < N) { m5.set(i, i); i = i + 1 }
     let t5: Instant = Instant::now()
-    var removed: I64 = 0
+    var removed5: I64 = 0
     i = 0
     loop (i < N) {
-        if m5.remove(i) { removed = removed + 1 }
+        if m5.remove(i) { removed5 = removed5 + 1 }
         i = i + 1
     }
     let ns5: I64 = t5.elapsed().as_nanos()
-    m5.destroy()
-    let pop5: I64 = if ns5 > 0 { ns5 / N } else { 0 }
-    let ops5: I64 = if ns5 > 0 { (N * 1000000000) / ns5 } else { 0 }
     print("  HashMap Remove:\n")
     print("    Iterations: {N}\n")
-    print("    Total time: {ns5 / 1000000} ms\n")
+    let ms5: I64 = ns5 / 1000000
+    print("    Total time: {ms5} ms\n")
+    let pop5: I64 = if ns5 > 0 { ns5 / N } else { 0 }
     print("    Per op:     {pop5} ns\n")
-    print("    Ops/sec:    {ops5}\n\n")
+    let ops5: I64 = if ns5 > 0 { (N * 1000000000) / ns5 } else { 0 }
+    print("    Ops/sec:    {ops5}\n")
+    print("    Notes:      removed={removed5}\n\n")
+    m5.destroy()
 
     0
 }

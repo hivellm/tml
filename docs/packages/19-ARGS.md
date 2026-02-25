@@ -399,7 +399,7 @@ type Cli {
 Built-in parsers for common types:
 
 ```tml
-implement FromStr for types:
+extend types with FromStr:
     - String
     - Bool (true, false, yes, no, 1, 0)
     - I8, I16, I32, I64, I128
@@ -416,7 +416,7 @@ implement FromStr for types:
 ```tml
 type LogLevel = Trace | Debug | Info | Warn | Error
 
-implement FromStr for LogLevel {
+extend LogLevel with FromStr {
     type Err = String
 
     func from_str(s: ref String) -> Outcome[LogLevel, String] {
@@ -450,7 +450,7 @@ pub behavior Validator {
 /// File exists validator
 pub type FileExists {}
 
-implement Validator for FileExists {
+extend FileExists with Validator {
     func validate(value: ref String) -> Outcome[Unit, String] {
         if Path.new(value).exists() then {
             Ok(())
@@ -466,7 +466,7 @@ pub type InRange[T: Ord] {
     max: T,
 }
 
-implement Validator for InRange[T] where T: Ord + FromStr {
+extend InRange[T] with Validator where T: Ord + FromStr {
     func validate(value: ref String) -> Outcome[Unit, String] {
         let v: T = value.parse().map_err(|e| e.to_string())?
         if v >= this.min and v <= this.max then {

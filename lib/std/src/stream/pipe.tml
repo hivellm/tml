@@ -40,7 +40,7 @@ pub func pipe(source: mut ref ByteStream, dest: mut ref ByteStream) -> Outcome[I
     let remaining: I64 = src_len - src_rp
 
     if remaining <= 0 {
-        return Ok(0)
+        return Ok(0 as I64)
     }
 
     let src_data: *Unit = lowlevel { ptr_read[I64](h_src as *I64) } as *Unit
@@ -86,7 +86,7 @@ pub func pipe(source: mut ref ByteStream, dest: mut ref ByteStream) -> Outcome[I
 /// source reaches EOF. Returns the actual number of bytes copied.
 pub func copy_bytes(source: mut ref ByteStream, dest: mut ref ByteStream, limit: I64) -> Outcome[I64, IoError] {
     if limit <= 0 {
-        return Ok(0)
+        return Ok(0 as I64)
     }
 
     let h_src: I64 = source.handle as I64
@@ -99,7 +99,7 @@ pub func copy_bytes(source: mut ref ByteStream, dest: mut ref ByteStream, limit:
         to_copy = limit
     }
     if to_copy <= 0 {
-        return Ok(0)
+        return Ok(0 as I64)
     }
 
     let src_data: *Unit = lowlevel { ptr_read[I64](h_src as *I64) } as *Unit

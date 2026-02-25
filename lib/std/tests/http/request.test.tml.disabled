@@ -1,13 +1,121 @@
 // Tests for std::http::request
 use test::{assert, assert_eq}
+use core::str
 use std::http::request::Request
 use std::http::method::Method
 
 @test
-func test_request_new_basic() -> I32 {
-    let req = Request::new(Method::GET, "http://example.com")
+func test_request_get_basic() -> I32 {
+    let req = Request::get("http://example.com/path")
     assert_eq(req.method().to_string(), "GET", "method is GET")
-    assert_eq(req.url(), "http://example.com", "url preserved")
+    assert_eq(req.url(), "http://example.com/path", "url preserved")
+    let scheme: Str = req.scheme()
+    assert_eq(scheme, "http", "scheme")
+    let host: Str = req.host()
+    assert_eq(host, "example.com", "host")
+    let path: Str = req.path()
+    assert_eq(path, "/path", "path")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_post_with_body() -> I32 {
+    let req = Request::post("http://example.com/api")
+        .body("hello world")
+    assert_eq(req.method().to_string(), "POST", "method is POST")
+    assert_eq(req.body_data(), "hello world", "body set")
+    assert_eq(req.content_length(), 11 as I64, "content-length auto-set")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_json_body() -> I32 {
+    let req = Request::post("http://example.com/api")
+        .json("{\"key\": \"value\"}")
+    assert_eq(req.content_type(), "application/json", "json content-type")
+    assert_eq(req.body_data(), "{\"key\": \"value\"}", "json body")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_headers() -> I32 {
+    let req = Request::get("http://example.com")
+        .header("Accept", "text/html")
+        .header("X-Custom", "test")
+    assert_eq(req.headers().get("accept"), "text/html", "accept header")
+    assert_eq(req.headers().get("x-custom"), "test", "custom header")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_host_header_default_port() -> I32 {
+    let req = Request::get("http://example.com/path")
+    let hh: Str = req.host_header()
+    assert_eq(hh, "example.com", "no port for default http")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_host_header_custom_port() -> I32 {
+    let req = Request::get("http://example.com:8080/path")
+    let hh: Str = req.host_header()
+    assert_eq(hh, "example.com:8080", "custom port shown")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_serialize_get() -> I32 {
+    let req = Request::get("http://example.com/api/test")
+        .header("Accept", "*/*")
+    let wire: Str = req.serialize()
+    // Check request line
+    assert(str::starts_with(wire, "GET /api/test HTTP/1.1\r\n"), "request line")
+    // Check Host header present
+    assert(str::contains(wire, "Host: example.com\r\n"), "host header")
+    // Check Accept header present
+    assert(str::contains(wire, "Accept: */*\r\n"), "accept header")
+    // Check double CRLF (end of headers)
+    assert(str::contains(wire, "\r\n\r\n"), "header terminator")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_serialize_post_with_body() -> I32 {
+    let req = Request::post("http://example.com/data")
+        .body("test=1")
+    let wire: Str = req.serialize()
+    assert(str::starts_with(wire, "POST /data HTTP/1.1\r\n"), "request line")
+    assert(str::contains(wire, "Content-Length: 6\r\n"), "content-length")
+    // Body should be after the double CRLF
+    assert(str::contains(wire, "\r\n\r\ntest=1"), "body present")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_https_detection() -> I32 {
+    let req1 = Request::get("https://example.com")
+    assert(req1.is_secure(), "https is secure")
+    req1.destroy()
+
+    let req2 = Request::get("http://example.com")
+    assert(not req2.is_secure(), "http is not secure")
+    req2.destroy()
+    return 0
+}
+
+@test
+func test_request_path_and_query() -> I32 {
+    let req = Request::get("http://example.com/search?q=hello&lang=en")
+    let pq: Str = req.path_and_query()
+    assert_eq(pq, "/search?q=hello&lang=en", "path and query")
     req.destroy()
     return 0
 }

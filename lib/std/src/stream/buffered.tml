@@ -164,7 +164,7 @@ impl BufferedReader {
         // Read into remaining space
         let space: I64 = cap - filled
         if space <= 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
 
         // Read directly from source's internal data
@@ -172,7 +172,7 @@ impl BufferedReader {
         let src_len: I64 = lowlevel { ptr_read[I64]((h_src + 8) as *I64) }
         let src_avail: I64 = src_len - src_rp
         if src_avail <= 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
 
         var to_read: I64 = src_avail
@@ -286,7 +286,7 @@ impl BufferedReader {
     pub func read(this, source: mut ref ByteStream, buf: mut ref [U8]) -> Outcome[I64, IoError] {
         let needed: I64 = buf.len() as I64
         if needed == 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
 
         // If buffer has data, use it
@@ -324,10 +324,27 @@ impl BufferedReader {
             Ok(n) => { bytes_read = n },
         }
         if bytes_read == 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
-        // Recurse (now buffer has data)
-        return this.read(source, mut ref buf)
+        // Now buffer has data — copy directly (avoid recursion)
+        let avail2: I64 = this.buffered()
+        var to_copy2: I64 = avail2
+        if to_copy2 > needed {
+            to_copy2 = needed
+        }
+        let buf_data2: *Unit = this.get_buf_data()
+        let pos2: I64 = this.get_buf_pos()
+        let out_addr2: I64 = (mut ref buf) as I64
+        let out_hdr2: I64 = lowlevel { ptr_read[I64](out_addr2 as *I64) }
+        let out_data2: I64 = lowlevel { ptr_read[I64](out_hdr2 as *I64) }
+        var j: I64 = 0
+        loop (j < to_copy2) {
+            let bv: U8 = br_read_byte(buf_data2, pos2 + j)
+            lowlevel { ptr_write[U8]((out_data2 + j) as *U8, bv) }
+            j = j + 1
+        }
+        this.set_buf_pos(pos2 + to_copy2)
+        return Ok(to_copy2)
     }
 
     /// Frees the internal buffer memory.
@@ -421,7 +438,7 @@ impl BufferedWriter {
     pub func write(this, dest: mut ref ByteStream, data: ref [U8]) -> Outcome[I64, IoError] {
         let data_len: I64 = data.len() as I64
         if data_len == 0 {
-            return Ok(0)
+            return Ok(0 as I64)
         }
 
         let buf_data: *Unit = this.get_buf_data()

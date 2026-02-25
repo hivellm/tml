@@ -252,6 +252,28 @@ The TML compiler implements 33 optimization passes organized by optimization lev
 | `DeadArgElimination` | Module | Remove unused function arguments |
 | `MergeReturns` | Function | Combine multiple returns into single exit |
 
+#### O0 Essential Passes (2026-02-24)
+
+Even at O0, TML applies essential passes for correct and efficient codegen:
+
+| Pass | Level | Description |
+|------|-------|-------------|
+| `StrengthReduction` | Function | Replace expensive ops (mul → shift) |
+| `InstSimplify` | Function | Simplify trivially reducible instructions |
+| `EntryBlockAllocaHoisting` | Function | Hoist loop-body allocas to entry block for mem2reg |
+| `RemoveUnneededDrops` | Function | Eliminate drops of non-droppable types |
+| `DeadStoreElimination` | Function | Remove stores to subsequently overwritten locations |
+| `ComparisonFolding` | Function | Fold constant comparisons |
+| `DestinationPropagation` | Function | Propagate copy destinations to sources |
+| `UnreachablePropagation` | Function | Remove unreachable code after panics |
+| `NormalizeArrayLen` | Function | Normalize array length computations |
+| `SROA` | Function | Scalar Replacement of Aggregates |
+| `Mem2Reg` | Function | Promote allocas to SSA registers |
+| `EarlyCSE` | Function | Common subexpression elimination |
+| `BasicInlining` | Function | Inline small leaf functions |
+
+These passes are critical because TML's codegen relies on LLVM's `mem2reg` to convert alloca-based code into efficient SSA form.
+
 #### Specialized Passes
 
 | Pass | Level | Description |
@@ -263,7 +285,9 @@ The TML compiler implements 33 optimization passes organized by optimization lev
 
 ```cpp
 enum class OptLevel {
-    O0,  // No optimization - just type checking
+    O0,  // Essential passes only (strength reduction, inst simplify, entry-block alloca hoisting,
+         //   RemoveUnneededDrops, DSE, comparison folding, DestinationProp, UnreachableProp,
+         //   NormalizeArrayLen, SROA, Mem2Reg, EarlyCSE, basic inlining)
     O1,  // Basic optimizations (constant folding, DCE, early CSE)
     O2,  // Standard optimizations (O1 + SROA, mem2reg, GVN, inlining, LICM)
     O3,  // Aggressive optimizations (O2 + loop opts, narrowing, ADCE)

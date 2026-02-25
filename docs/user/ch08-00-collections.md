@@ -84,7 +84,7 @@ v.push(3)
 ```tml
 func sum_list() -> I32 {
     let arr = [10, 20, 30, 40, 50]
-    let mut total: I32 = 0
+    var total: I32 = 0
     loop i in 0 to arr.len() {
         total = total + arr.get(i)
     }

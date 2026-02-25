@@ -33,9 +33,11 @@ func count_digits_u64(n: U64) -> I64 {
 }
 
 /// Converts an I64 to its decimal string representation.
-/// Uses comparison-based digit counting (no division) + single write pass.
+/// Uses two-digit lookup table for fast conversion (half the divisions).
 @allocates
 pub func i64_to_str(value: I64) -> Str {
+    // Two-digit lookup table: "00" "01" "02" ... "99" (200 chars)
+    let DIGIT_PAIRS: Str = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899"
     if value == 0 {
         return "0"
     }
@@ -58,17 +60,34 @@ pub func i64_to_str(value: I64) -> Str {
     let total_len: I64 = if is_negative { num_digits + 1 } else { num_digits }
     let buf: *U8 = lowlevel { mem_alloc(total_len + 1) } as *U8
     let buf_addr: I64 = buf as I64
+    let table_addr: I64 = DIGIT_PAIRS as I64
 
     // Write null terminator
     lowlevel { ptr_write[U8]((buf_addr + total_len) as *U8, 0 as U8) }
 
-    // Write digits backwards from the end
+    // Write digits backwards, two at a time using lookup table
     var pos: I64 = total_len - 1
-    loop (v > 0) {
-        let digit: U8 = (v % 10) as U8 + (48 as U8)
+    loop (v >= 100) {
+        let d2: I64 = v % 100
+        v = v / 100
+        let idx: I64 = d2 * 2
+        let c1: U8 = lowlevel { ptr_read[U8]((table_addr + idx + 1) as *U8) }
+        let c0: U8 = lowlevel { ptr_read[U8]((table_addr + idx) as *U8) }
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, c1) }
+        lowlevel { ptr_write[U8]((buf_addr + pos - 1) as *U8, c0) }
+        pos = pos - 2
+    }
+
+    // Handle remaining 1-2 digits
+    if v >= 10 {
+        let idx: I64 = v * 2
+        let c1: U8 = lowlevel { ptr_read[U8]((table_addr + idx + 1) as *U8) }
+        let c0: U8 = lowlevel { ptr_read[U8]((table_addr + idx) as *U8) }
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, c1) }
+        lowlevel { ptr_write[U8]((buf_addr + pos - 1) as *U8, c0) }
+    } else if v > 0 {
+        let digit: U8 = v as U8 + (48 as U8)
         lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
-        v = v / 10
-        pos = pos - 1
     }
 
     // Write sign if negative
@@ -80,30 +99,46 @@ pub func i64_to_str(value: I64) -> Str {
 }
 
 /// Converts a U64 to its decimal string representation.
-/// Uses comparison-based digit counting (no division) + single write pass.
+/// Uses two-digit lookup table for fast conversion (half the divisions).
 @allocates
 pub func u64_to_str(value: U64) -> Str {
+    let DIGIT_PAIRS: Str = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899"
     if value == 0 {
         return "0"
     }
 
-    // Count digits with comparisons (no divisions needed for counting)
     let num_digits: I64 = count_digits_u64(value)
-
     let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
     let buf_addr: I64 = buf as I64
+    let table_addr: I64 = DIGIT_PAIRS as I64
 
     // Write null terminator
     lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
 
-    // Write digits backwards
+    // Write digits backwards, two at a time
     var pos: I64 = num_digits - 1
     var v: U64 = value
-    loop (v > 0) {
-        let digit: U8 = (v % 10) as U8 + (48 as U8)
+    loop (v >= 100) {
+        let d2: U64 = v % 100
+        v = v / 100
+        let idx: I64 = d2 as I64 * 2
+        let c1: U8 = lowlevel { ptr_read[U8]((table_addr + idx + 1) as *U8) }
+        let c0: U8 = lowlevel { ptr_read[U8]((table_addr + idx) as *U8) }
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, c1) }
+        lowlevel { ptr_write[U8]((buf_addr + pos - 1) as *U8, c0) }
+        pos = pos - 2
+    }
+
+    // Handle remaining 1-2 digits
+    if v >= 10 {
+        let idx: I64 = v as I64 * 2
+        let c1: U8 = lowlevel { ptr_read[U8]((table_addr + idx + 1) as *U8) }
+        let c0: U8 = lowlevel { ptr_read[U8]((table_addr + idx) as *U8) }
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, c1) }
+        lowlevel { ptr_write[U8]((buf_addr + pos - 1) as *U8, c0) }
+    } else if v > 0 {
+        let digit: U8 = v as U8 + (48 as U8)
         lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, digit) }
-        v = v / 10
-        pos = pos - 1
     }
 
     return buf as Str

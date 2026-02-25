@@ -103,15 +103,14 @@ void bench_hashmap_string_key(int64_t iterations) {
 int main() {
     bench::Benchmark b("HashMap");
 
-    const int64_t MAP_ITER = 100000;
-    const int64_t LOOKUP_ITER = 1000000;
+    const int64_t N = 1000000; // 1M ops for all benchmarks
 
-    b.run_with_iter("HashMap Insert", MAP_ITER, bench_hashmap_insert, 10);
-    b.run_with_iter("HashMap Insert (reserved)", MAP_ITER, bench_hashmap_insert_reserved, 10);
-    b.run_with_iter("HashMap Lookup", LOOKUP_ITER, bench_hashmap_lookup, 10);
-    b.run_with_iter("HashMap Contains", LOOKUP_ITER, bench_hashmap_contains, 10);
-    b.run_with_iter("HashMap Remove", MAP_ITER, bench_hashmap_remove, 10);
-    b.run_with_iter("HashMap String Key", MAP_ITER, bench_hashmap_string_key, 10);
+    b.run_with_iter("HashMap Insert", N, bench_hashmap_insert, 3);
+    b.run_with_iter("HashMap Insert (reserved)", N, bench_hashmap_insert_reserved, 3);
+    b.run_with_iter("HashMap Lookup", N, bench_hashmap_lookup, 3);
+    b.run_with_iter("HashMap Contains", N, bench_hashmap_contains, 3);
+    b.run_with_iter("HashMap Remove", N, bench_hashmap_remove, 3);
+    b.run_with_iter("HashMap String Key", N, bench_hashmap_string_key, 3);
 
     b.print_results();
     b.save_json("../results/hashmap_cpp.json");

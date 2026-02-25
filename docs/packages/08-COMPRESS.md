@@ -54,7 +54,7 @@ let adler: I64 = adler32("Hello, TML!")
 use std::zlib::crc32::{crc32_update, crc32_combine}
 
 // Start with initial CRC (0)
-let mut crc: U32 = 0
+var crc: U32 = 0
 crc = crc32_update(crc, "Hello, ")
 crc = crc32_update(crc, "world!")
 
@@ -225,7 +225,7 @@ use std::zlib::brotli::{BrotliCompress, BrotliDecompress}
 use std::zlib::options::BrotliOptions
 
 // Create streaming compressor
-let mut encoder = BrotliCompress::new(BrotliOptions::default()).unwrap()
+var encoder = BrotliCompress::new(BrotliOptions::default()).unwrap()
 
 // Feed chunks
 let chunk1 = encoder.write("Hello, ")
@@ -329,8 +329,8 @@ The `std::zlib::stream` module provides streaming compression/decompression for 
 ```tml
 use std::zlib::stream::{create_deflate, create_gzip, create_inflate, create_gunzip}
 
-let mut compressor = create_gzip().unwrap()
-let mut decompressor = create_gunzip().unwrap()
+var compressor = create_gzip().unwrap()
+var decompressor = create_gunzip().unwrap()
 ```
 
 ### 8.3 Common Streaming Interface

@@ -1,0 +1,131 @@
+use test::{assert_eq, assert_true, assert_false}
+use std::events::EventEmitter
+use core::intrinsics::{ptr_read, ptr_write}
+
+// Listeners write to a counter at the address passed as `data`.
+// data points to: [call_count: I64, last_value: I64]
+func counting_listener(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func add100_listener(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 100) }
+}
+
+func noop_listener(data: I64) {}
+
+@test
+func test_emit_calls_listener() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    let fired: Bool = emitter.emit("data", state as I64)
+    assert_true(fired, "emit returns true when listeners exist")
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 1 as I64, "listener called once")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_no_listeners() -> I32 {
+    var emitter = EventEmitter::new()
+    let fired: Bool = emitter.emit("nothing", 0)
+    assert_false(fired, "emit returns false for unregistered event")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_emit_multiple_listeners() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    emitter.on("data", add100_listener as I64)
+    emitter.emit("data", state as I64)
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 101 as I64, "both listeners called (1 + 100)")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_emit_twice() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    emitter.emit("data", state as I64)
+    emitter.emit("data", state as I64)
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 2 as I64, "listener called twice")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_once_fires_once() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.once("data", counting_listener as I64)
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 listener before emit")
+    emitter.emit("data", state as I64)
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 1 as I64, "once listener called")
+    assert_eq(emitter.listener_count("data"), 0 as I64, "0 listeners after emit")
+    assert_eq(emitter.total_listeners(), 0 as I64, "total is 0")
+    let fired: Bool = emitter.emit("data", state as I64)
+    assert_false(fired, "second emit returns false")
+    let count2: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count2, 1 as I64, "still called only once")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_off_removes_listener() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    emitter.on("data", add100_listener as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 listeners")
+    let removed: Bool = emitter.off("data", counting_listener as I64)
+    assert_true(removed, "off returns true")
+    assert_eq(emitter.listener_count("data"), 1 as I64, "1 listener after off")
+    emitter.emit("data", state as I64)
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 100 as I64, "only add100 called")
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+@test
+func test_off_nonexistent_event() -> I32 {
+    var emitter = EventEmitter::new()
+    let removed: Bool = emitter.off("nope", counting_listener as I64)
+    assert_false(removed, "off returns false for unknown event")
+    emitter.destroy()
+    return 0
+}
+
+@test
+func test_off_wrong_listener() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", counting_listener as I64)
+    let removed: Bool = emitter.off("data", add100_listener as I64)
+    assert_false(removed, "off returns false for wrong listener")
+    assert_eq(emitter.listener_count("data"), 1 as I64, "still 1 listener")
+    emitter.destroy()
+    return 0
+}

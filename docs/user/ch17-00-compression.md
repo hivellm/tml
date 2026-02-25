@@ -38,7 +38,7 @@ Compute CRC32 over multiple chunks:
 ```tml
 use std::zlib::crc32::{crc32_init, crc32_update, crc32_final}
 
-let mut state: U32 = crc32_init()
+var state: U32 = crc32_init()
 state = crc32_update(state, "first chunk")
 state = crc32_update(state, "second chunk")
 let checksum: I64 = crc32_final(state)
@@ -162,14 +162,14 @@ For large data or data that arrives in chunks, use streaming classes. This avoid
 use std::zlib::stream::{DeflateStream, InflateStream}
 
 // Compress in chunks
-let mut compressor: DeflateStream = DeflateStream.new(6)  // level 6
+var compressor: DeflateStream = DeflateStream.new(6)  // level 6
 compressor.write("first chunk of data")
 compressor.write("second chunk of data")
 let compressed: Buffer = compressor.finish()
 compressor.destroy()
 
 // Decompress in chunks
-let mut decompressor: InflateStream = InflateStream.new()
+var decompressor: InflateStream = InflateStream.new()
 decompressor.write(ref compressed)
 let output: Str = decompressor.finish_str()
 decompressor.destroy()
@@ -180,7 +180,7 @@ decompressor.destroy()
 ```tml
 use std::zlib::stream::{GzipStream, GunzipStream}
 
-let mut gz: GzipStream = GzipStream.new(6)
+var gz: GzipStream = GzipStream.new(6)
 gz.write("chunk 1")
 gz.write("chunk 2")
 let compressed: Buffer = gz.finish()

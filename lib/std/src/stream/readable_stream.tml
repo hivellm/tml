@@ -1,0 +1,630 @@
+//! Event-driven readable stream (Node.js-style).
+//!
+//! `ReadableStream` is a push-based byte source that emits events when data
+//! is available. It supports two modes:
+//!
+//! - **Flowing mode**: Data is emitted via `"data"` events as soon as it arrives.
+//! - **Paused mode**: Data accumulates in an internal buffer; call `read()` to pull.
+//!
+//! # Events
+//!
+//! | Event | Data | Description |
+//! |-------|------|-------------|
+//! | `"data"` | Str pointer as I64 | Chunk of data available |
+//! | `"end"` | 0 | No more data will be produced |
+//! | `"error"` | Str pointer as I64 | An error occurred |
+//! | `"close"` | 0 | Stream resources released |
+//! | `"readable"` | 0 | Data available to pull (paused mode) |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::readable_stream::ReadableStream
+//!
+//! func on_data(data: I64) {
+//!     let chunk: Str = data as Str
+//!     print("got: {chunk}\n")
+//! }
+//!
+//! var rs = ReadableStream::new()
+//! rs.on("data", on_data as I64)   // Switches to flowing mode
+//! rs.push("hello")                 // Emits "data" event
+//! rs.push_eof()                    // Emits "end" event
+//! rs.destroy()
+//! ```
+
+use core::intrinsics::{ptr_read, ptr_write}
+use std::events::emitter::EventEmitter
+
+// ============================================================================
+// Memory helpers
+// ============================================================================
+
+func rs_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func rs_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func rs_realloc(ptr: *Unit, size: I64) -> *Unit {
+    lowlevel { mem_realloc(ptr, size) }
+}
+
+func rs_rd(addr: I64) -> I64 {
+    lowlevel { ptr_read[I64](addr as *I64) }
+}
+
+func rs_wr(addr: I64, val: I64) {
+    lowlevel { ptr_write[I64](addr as *I64, val) }
+}
+
+func rs_rd_u8(addr: I64) -> U8 {
+    lowlevel { ptr_read[U8](addr as *U8) }
+}
+
+func rs_wr_u8(addr: I64, val: U8) {
+    lowlevel { ptr_write[U8](addr as *U8, val) }
+}
+
+// ============================================================================
+// State constants
+// ============================================================================
+
+/// Stream is null/initial — no "data" listener attached yet.
+pub const RS_STATE_NULL: I64 = 0
+/// Data flows automatically via "data" events.
+pub const RS_STATE_FLOWING: I64 = 1
+/// Data accumulates in buffer; use read() to pull.
+pub const RS_STATE_PAUSED: I64 = 2
+
+// ============================================================================
+// Internal buffer (simple growable byte array)
+// ============================================================================
+
+// Buffer layout (24 bytes):
+//   offset 0: data_ptr (I64) — pointer to byte data
+//   offset 8: len (I64)      — current byte count
+//   offset 16: cap (I64)     — allocated capacity
+
+func rbuf_new(cap: I64) -> I64 {
+    let h: *Unit = rs_alloc(24)
+    let addr: I64 = h as I64
+    let data: *Unit = rs_alloc(cap)
+    rs_wr(addr, data as I64)
+    rs_wr(addr + 8, 0)
+    rs_wr(addr + 16, cap)
+    addr
+}
+
+func rbuf_destroy(h: I64) {
+    if h == 0 { return }
+    let data: *Unit = rs_rd(h) as *Unit
+    rs_free(data)
+    rs_free(h as *Unit)
+}
+
+func rbuf_len(h: I64) -> I64 {
+    rs_rd(h + 8)
+}
+
+func rbuf_ensure(h: I64, needed: I64) {
+    let len: I64 = rs_rd(h + 8)
+    let cap: I64 = rs_rd(h + 16)
+    if len + needed <= cap { return }
+    var new_cap: I64 = cap * 2
+    loop (new_cap < len + needed) {
+        new_cap = new_cap * 2
+    }
+    let old: *Unit = rs_rd(h) as *Unit
+    let new_data: *Unit = rs_realloc(old, new_cap)
+    rs_wr(h, new_data as I64)
+    rs_wr(h + 16, new_cap)
+}
+
+func rbuf_append_str(h: I64, s: Str) {
+    let slen: I64 = s.len()
+    if slen == 0 { return }
+    rbuf_ensure(h, slen)
+    let len: I64 = rs_rd(h + 8)
+    let data: I64 = rs_rd(h)
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < slen) {
+        rs_wr_u8(data + len + i, rs_rd_u8(src + i))
+        i = i + 1
+    }
+    rs_wr(h + 8, len + slen)
+}
+
+// Prepend string bytes to front of buffer (for unshift)
+func rbuf_prepend_str(h: I64, s: Str) {
+    let slen: I64 = s.len()
+    if slen == 0 { return }
+    let len: I64 = rs_rd(h + 8)
+    rbuf_ensure(h, slen)
+    let data: I64 = rs_rd(h)
+    // Shift existing bytes right by slen
+    var i: I64 = len - 1
+    loop (i >= 0) {
+        rs_wr_u8(data + slen + i, rs_rd_u8(data + i))
+        i = i - 1
+    }
+    // Copy new data to front
+    let src: I64 = s as I64
+    var j: I64 = 0
+    loop (j < slen) {
+        rs_wr_u8(data + j, rs_rd_u8(src + j))
+        j = j + 1
+    }
+    rs_wr(h + 8, len + slen)
+}
+
+// Read N bytes from front as Str, shifting remaining left. Returns "" if empty.
+@allocates
+func rbuf_read(h: I64, size: I64) -> Str {
+    let len: I64 = rs_rd(h + 8)
+    if len == 0 { return "" }
+    var n: I64 = size
+    if n <= 0 or n > len { n = len }
+    let data: I64 = rs_rd(h)
+    // Create string
+    let str_buf: *Unit = rs_alloc(n + 1)
+    let str_addr: I64 = str_buf as I64
+    var i: I64 = 0
+    loop (i < n) {
+        rs_wr_u8(str_addr + i, rs_rd_u8(data + i))
+        i = i + 1
+    }
+    rs_wr_u8(str_addr + n, 0 as U8) // null terminator
+    // Shift remaining bytes left
+    let remaining: I64 = len - n
+    var j: I64 = 0
+    loop (j < remaining) {
+        rs_wr_u8(data + j, rs_rd_u8(data + n + j))
+        j = j + 1
+    }
+    rs_wr(h + 8, remaining)
+    str_buf as Str
+}
+
+// Read all bytes as Str
+@allocates
+func rbuf_read_all(h: I64) -> Str {
+    let len: I64 = rs_rd(h + 8)
+    if len == 0 { return "" }
+    rbuf_read(h, len)
+}
+
+func rbuf_clear(h: I64) {
+    rs_wr(h + 8, 0)
+}
+
+// ============================================================================
+// ReadableStream state layout
+// ============================================================================
+
+// ReadableStream state layout (see handle offsets below)
+
+// Handle layout (56 bytes) — emitter is a struct field, not in handle:
+//   offset 0:  buffer (I64)          — pointer to internal rbuf
+//   offset 8:  state (I64)           — RS_STATE_NULL / FLOWING / PAUSED
+//   offset 16: high_water_mark (I64) — backpressure threshold
+//   offset 24: read_fn (I64)         — user _read callback
+//   offset 32: ended (I64)           — 1 if push_eof called
+//   offset 40: destroyed (I64)       — 1 if destroyed
+//   offset 48: errored (I64)         — 1 if error emitted
+//   offset 56: pipe_dest (I64)       — pointer to piped WritableStream
+
+const OFFSET_BUFFER: I64 = 0
+const OFFSET_STATE: I64 = 8
+const OFFSET_HWM: I64 = 16
+const OFFSET_READ_FN: I64 = 24
+const OFFSET_ENDED: I64 = 32
+const OFFSET_DESTROYED: I64 = 40
+const OFFSET_ERRORED: I64 = 48
+const OFFSET_PIPE_DEST: I64 = 56
+const RS_HANDLE_SIZE: I64 = 64
+
+// ============================================================================
+// ReadableStream type
+// ============================================================================
+
+/// An event-driven readable stream.
+///
+/// Data is pushed into the stream via `push()` and consumed either through
+/// `"data"` events (flowing mode) or `read()` calls (paused mode).
+pub type ReadableStream {
+    emitter: EventEmitter,
+    handle: *Unit
+}
+
+impl ReadableStream {
+    /// Creates a new ReadableStream with default highWaterMark (16384 bytes).
+    pub func new() -> ReadableStream {
+        ReadableStream::with_options(16384)
+    }
+
+    /// Creates a new ReadableStream with a custom highWaterMark.
+    pub func with_options(high_water_mark: I64) -> ReadableStream {
+        var hwm: I64 = high_water_mark
+        if hwm <= 0 { hwm = 16384 }
+
+        // Handle stores: buffer, state, hwm, read_fn, ended, destroyed, errored, pipe_dest
+        let h: *Unit = rs_alloc(RS_HANDLE_SIZE)
+        let addr: I64 = h as I64
+
+        let buf: I64 = rbuf_new(hwm)
+
+        rs_wr(addr + OFFSET_BUFFER, buf)
+        rs_wr(addr + OFFSET_STATE, RS_STATE_NULL)
+        rs_wr(addr + OFFSET_HWM, hwm)
+        rs_wr(addr + OFFSET_READ_FN, 0)
+        rs_wr(addr + OFFSET_ENDED, 0)
+        rs_wr(addr + OFFSET_DESTROYED, 0)
+        rs_wr(addr + OFFSET_ERRORED, 0)
+        rs_wr(addr + OFFSET_PIPE_DEST, 0)
+
+        ReadableStream {
+            emitter: EventEmitter::new(),
+            handle: h
+        }
+    }
+
+    // ---- Internal accessors ----
+
+    pub func get_buf(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_BUFFER)
+    }
+
+    pub func get_state(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_STATE)
+    }
+
+    pub func set_state(mut this, state: I64) {
+        rs_wr(this.handle as I64 + OFFSET_STATE, state)
+    }
+
+    pub func get_hwm(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_HWM)
+    }
+
+    pub func get_read_fn(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_READ_FN)
+    }
+
+    pub func is_ended(this) -> Bool {
+        rs_rd(this.handle as I64 + OFFSET_ENDED) != 0
+    }
+
+    pub func set_ended(mut this) {
+        rs_wr(this.handle as I64 + OFFSET_ENDED, 1)
+    }
+
+    pub func is_destroyed_internal(this) -> Bool {
+        if this.handle == (0 as *Unit) { return true }
+        rs_rd(this.handle as I64 + OFFSET_DESTROYED) != 0
+    }
+
+    pub func set_destroyed_flag(mut this) {
+        rs_wr(this.handle as I64 + OFFSET_DESTROYED, 1)
+    }
+
+    pub func is_errored_internal(this) -> Bool {
+        rs_rd(this.handle as I64 + OFFSET_ERRORED) != 0
+    }
+
+    pub func set_errored_flag(mut this) {
+        rs_wr(this.handle as I64 + OFFSET_ERRORED, 1)
+    }
+
+    pub func get_pipe_dest(this) -> I64 {
+        rs_rd(this.handle as I64 + OFFSET_PIPE_DEST)
+    }
+
+    pub func set_pipe_dest(mut this, dest: I64) {
+        rs_wr(this.handle as I64 + OFFSET_PIPE_DEST, dest)
+    }
+
+    // ---- Internal emitter helpers ----
+
+    pub func emitter_on(mut this, event: Str, listener: I64) {
+        this.emitter.on(event, listener)
+    }
+
+    pub func emitter_once(mut this, event: Str, listener: I64) {
+        this.emitter.once(event, listener)
+    }
+
+    pub func emitter_off(mut this, event: Str, listener: I64) -> Bool {
+        this.emitter.off(event, listener)
+    }
+
+    pub func emitter_emit(mut this, event: Str, data: I64) -> Bool {
+        this.emitter.emit(event, data)
+    }
+
+    pub func emitter_has_listeners(this, event: Str) -> Bool {
+        this.emitter.has_listeners(event)
+    }
+
+    pub func emitter_destroy(mut this) {
+        this.emitter.destroy()
+    }
+
+    // ================================================================
+    // Public API: Event registration
+    // ================================================================
+
+    /// Register a listener for an event.
+    ///
+    /// Attaching a `"data"` listener switches the stream to flowing mode.
+    pub func on(mut this, event: Str, listener: I64) {
+        if this.is_destroyed_internal() { return }
+        this.emitter_on(event, listener)
+        // Attaching "data" listener switches to flowing mode
+        if event == "data" {
+            if this.get_state() == RS_STATE_NULL or this.get_state() == RS_STATE_PAUSED {
+                this.resume()
+            }
+        }
+    }
+
+    /// Register a one-time listener for an event.
+    pub func once(mut this, event: Str, listener: I64) {
+        if this.is_destroyed_internal() { return }
+        this.emitter_once(event, listener)
+        if event == "data" {
+            if this.get_state() == RS_STATE_NULL or this.get_state() == RS_STATE_PAUSED {
+                this.resume()
+            }
+        }
+    }
+
+    /// Remove a listener.
+    pub func off(mut this, event: Str, listener: I64) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        this.emitter_off(event, listener)
+    }
+
+    /// Emit an event directly.
+    pub func emit(mut this, event: Str, data: I64) -> Bool {
+        this.emitter_emit(event, data)
+    }
+
+    // ================================================================
+    // Public API: Push data into the stream (producer side)
+    // ================================================================
+
+    /// Push a chunk of data into the stream.
+    ///
+    /// In flowing mode, emits `"data"` immediately.
+    /// In paused mode, buffers the data and emits `"readable"`.
+    ///
+    /// Returns `true` if the internal buffer is below highWaterMark
+    /// (safe to push more), `false` if backpressure should be applied.
+    pub func push(mut this, data: Str) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        if this.is_ended() { return false }
+
+        let dlen: I64 = data.len()
+        if dlen == 0 { return true }
+
+        let state: I64 = this.get_state()
+
+        if state == RS_STATE_FLOWING {
+            // Emit data event immediately
+            this.emitter_emit("data", data as I64)
+            return true
+        }
+
+        // Paused or null — buffer the data
+        let buf: I64 = this.get_buf()
+        rbuf_append_str(buf, data)
+
+        if state == RS_STATE_PAUSED or state == RS_STATE_NULL {
+            this.emitter_emit("readable", 0)
+        }
+
+        // Return backpressure signal
+        let buf_len: I64 = rbuf_len(buf)
+        let hwm: I64 = this.get_hwm()
+        buf_len < hwm
+    }
+
+    /// Signal that no more data will be pushed.
+    ///
+    /// Emits `"end"` after all buffered data is consumed.
+    pub func push_eof(mut this) {
+        if this.is_destroyed_internal() { return }
+        if this.is_ended() { return }
+        this.set_ended()
+
+        let state: I64 = this.get_state()
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = rbuf_len(buf)
+
+        // If buffer is empty, emit end immediately
+        if buf_len == 0 {
+            this.emitter_emit("end", 0)
+        }
+        // Otherwise end will be emitted when buffer is drained via read()
+    }
+
+    // ================================================================
+    // Public API: Read data from the stream (consumer side)
+    // ================================================================
+
+    /// Pull up to `size` bytes from the internal buffer.
+    ///
+    /// Returns the data as a string. Returns `""` if no data is available.
+    /// When the buffer is drained and EOF was signaled, emits `"end"`.
+    @allocates
+    pub func read(mut this, size: I64) -> Str {
+        if this.is_destroyed_internal() { return "" }
+
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = rbuf_len(buf)
+
+        if buf_len == 0 {
+            if this.is_ended() {
+                this.emitter_emit("end", 0)
+            }
+            return ""
+        }
+
+        let result: Str = rbuf_read(buf, size)
+
+        // Check if we should emit "end" after draining
+        let remaining: I64 = rbuf_len(buf)
+        if remaining == 0 and this.is_ended() {
+            this.emitter_emit("end", 0)
+        }
+
+        // If we have a _read callback and buffer is below hwm, request more
+        let read_fn: I64 = this.get_read_fn()
+        if read_fn != 0 and remaining < this.get_hwm() {
+            let f: func(I64, I64) = read_fn as func(I64, I64)
+            f(this.get_hwm() - remaining, this.handle as I64)
+        }
+
+        result
+    }
+
+    /// Pull all buffered data.
+    @allocates
+    pub func read_all(mut this) -> Str {
+        if this.is_destroyed_internal() { return "" }
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = rbuf_len(buf)
+        if buf_len == 0 {
+            if this.is_ended() {
+                this.emitter_emit("end", 0)
+            }
+            return ""
+        }
+        let result: Str = rbuf_read_all(buf)
+        if this.is_ended() {
+            this.emitter_emit("end", 0)
+        }
+        result
+    }
+
+    /// Set the `_read` callback, called when the stream needs more data.
+    ///
+    /// The callback signature is `func(size: I64, stream_ptr: I64)`.
+    /// `size` is the number of bytes the stream would like.
+    /// `stream_ptr` is a pointer to this ReadableStream's handle.
+    pub func set_read_fn(mut this, f: I64) {
+        rs_wr(this.handle as I64 + OFFSET_READ_FN, f)
+    }
+
+    // ================================================================
+    // Public API: Flow control
+    // ================================================================
+
+    /// Switch to paused mode. Data will accumulate in the buffer.
+    pub func pause(mut this) {
+        if this.is_destroyed_internal() { return }
+        this.set_state(RS_STATE_PAUSED)
+    }
+
+    /// Switch to flowing mode. Buffered data is emitted via `"data"` events.
+    pub func resume(mut this) {
+        if this.is_destroyed_internal() { return }
+        let was: I64 = this.get_state()
+        this.set_state(RS_STATE_FLOWING)
+
+        // Flush any buffered data as "data" events
+        let buf: I64 = this.get_buf()
+        let buf_len: I64 = rbuf_len(buf)
+        if buf_len > 0 {
+            let data: Str = rbuf_read_all(buf)
+            this.emitter_emit("data", data as I64)
+        }
+
+        // If ended and buffer now empty, emit "end"
+        if this.is_ended() and rbuf_len(buf) == 0 {
+            this.emitter_emit("end", 0)
+        }
+    }
+
+    /// Returns true if the stream is in paused mode.
+    pub func is_paused(this) -> Bool {
+        this.get_state() == RS_STATE_PAUSED
+    }
+
+    /// Push data back to the front of the internal buffer.
+    pub func unshift(mut this, data: Str) {
+        if this.is_destroyed_internal() { return }
+        let buf: I64 = this.get_buf()
+        rbuf_prepend_str(buf, data)
+    }
+
+    // ================================================================
+    // Public API: State queries
+    // ================================================================
+
+    /// Returns true if the stream has data to read or hasn't ended.
+    pub func readable(this) -> Bool {
+        if this.is_destroyed_internal() { return false }
+        not this.is_ended() or rbuf_len(this.get_buf()) > 0
+    }
+
+    /// Returns the number of bytes in the internal buffer.
+    pub func readable_length(this) -> I64 {
+        rbuf_len(this.get_buf())
+    }
+
+    /// Returns true if the stream is in flowing mode.
+    pub func readable_flowing(this) -> Bool {
+        this.get_state() == RS_STATE_FLOWING
+    }
+
+    /// Returns true if push_eof() has been called.
+    pub func readable_ended(this) -> Bool {
+        this.is_ended()
+    }
+
+    /// Returns true if the stream has been destroyed.
+    pub func closed(this) -> Bool {
+        this.is_destroyed_internal()
+    }
+
+    /// Returns true if an error was emitted.
+    pub func errored(this) -> Bool {
+        this.is_errored_internal()
+    }
+
+    // ================================================================
+    // Public API: Lifecycle
+    // ================================================================
+
+    /// Destroy the stream and release all resources.
+    ///
+    /// Emits `"close"` event.
+    pub func destroy(mut this) {
+        if this.is_destroyed_internal() { return }
+        this.set_destroyed_flag()
+        this.emitter_emit("close", 0)
+        // Free internal buffer
+        let buf: I64 = this.get_buf()
+        rbuf_destroy(buf)
+        // Free emitter
+        this.emitter_destroy()
+        // Free handle
+        rs_free(this.handle)
+        this.handle = 0 as *Unit
+    }
+
+    /// Destroy the stream with an error.
+    ///
+    /// Emits `"error"` then `"close"`.
+    pub func destroy_with_error(mut this, err: Str) {
+        if this.is_destroyed_internal() { return }
+        this.set_errored_flag()
+        this.emitter_emit("error", err as I64)
+        this.destroy()
+    }
+}

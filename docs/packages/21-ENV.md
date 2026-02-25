@@ -75,7 +75,7 @@ pub type Vars {
     // Internal
 }
 
-implement Iterator for Vars {
+extend Vars with Iterator {
     type Item = (String, String)
 
     func next(mut this) -> Maybe[(String, String)]
@@ -108,13 +108,13 @@ pub type Args {
     // Internal
 }
 
-implement Iterator for Args {
+extend Args with Iterator {
     type Item = String
 
     func next(mut this) -> Maybe[String]
 }
 
-implement ExactSizeIterator for Args {
+extend Args with ExactSizeIterator {
     func len(this) -> U64
 }
 
@@ -136,7 +136,7 @@ pub type ArgsOs {
     // Internal
 }
 
-implement Iterator for ArgsOs {
+extend ArgsOs with Iterator {
     type Item = OsString
 
     func next(mut this) -> Maybe[OsString]
@@ -179,7 +179,7 @@ pub func current_exe() -> Outcome[PathBuf, IoError]
 
 ```tml
 /// Standard directories for the platform
-public module dirs {
+pub module dirs {
     /// User's home directory
     pub func home() -> Maybe[PathBuf]
         caps: [io.process.env]
@@ -310,7 +310,7 @@ pub type SplitPaths {
     // Internal
 }
 
-implement Iterator for SplitPaths {
+extend SplitPaths with Iterator {
     type Item = PathBuf
 
     func next(mut this) -> Maybe[PathBuf]

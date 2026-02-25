@@ -224,7 +224,7 @@ The `loop (condition)` runs while the condition is true:
 
 ```tml
 func main() {
-    let mut count = 0
+    var count = 0
     loop (count < 5) {
         println(count)
         count = count + 1
@@ -245,7 +245,7 @@ The condition is checked before each iteration. You can use `break` and `continu
 
 ```tml
 func main() {
-    let mut i = 0
+    var i = 0
     loop (i < 10) {
         i = i + 1
         if i % 2 == 0 {
@@ -262,7 +262,7 @@ TML supports declaring loop variables inline with automatic initialization:
 
 ```tml
 func main() {
-    let mut sum = 0
+    var sum = 0
     loop (var i: I32 < 5) {
         sum = sum + i
         i = i + 1
@@ -294,7 +294,7 @@ For infinite loops, use `loop (true)`:
 
 ```tml
 func main() {
-    let mut count = 0
+    var count = 0
     loop (true) {
         println(count)
         count = count + 1
@@ -311,7 +311,7 @@ The `while` keyword is supported as an alias for `loop (condition)`:
 
 ```tml
 func main() {
-    let mut count = 0
+    var count = 0
     while count < 5 {
         println(count)
         count = count + 1
@@ -376,7 +376,7 @@ This works with any collection type:
 
 ```tml
 func sum_list(numbers: List) -> I32 {
-    let mut total = 0
+    var total = 0
     for num in numbers {
         total = total + num
     }
@@ -433,9 +433,9 @@ Or using conditional loops:
 
 ```tml
 func main() {
-    let mut i = 0
+    var i = 0
     loop (i < 3) {
-        let mut j = 0
+        var j = 0
         loop (j < 3) {
             println(i, ", ", j)
             j = j + 1
@@ -469,7 +469,7 @@ func main() {
 
 ```tml
 func main() {
-    let mut sum = 0
+    var sum = 0
     for i in 1 through 10 {
         sum = sum + i
     }

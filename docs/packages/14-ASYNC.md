@@ -2,7 +2,23 @@
 
 > `std::async` — Asynchronous programming with futures and async/await.
 
-## Overview
+> **Implementation Status (2026-02-24)**: Basic cooperative multitasking is implemented via C runtime FFI (`Executor`, `Timer`, `yield_now`, `Channel`). Full `async func`/`await` syntax and state machine codegen are **NOT YET IMPLEMENTED**. The API below is the **target spec** — see "Current Implementation" section for what works today.
+
+## Current Implementation
+
+The following primitives are working via `lib/std/src/runtime/` + `compiler/runtime/concurrency/async.c`:
+
+- `Executor` — poll-loop executor with `Executor::run()` and task queue
+- `Timer` — polling timer via `GetTickCount64`/`clock_gettime`
+- `yield_now` — cooperative yield state machine
+- `Channel` — bounded SPSC channel with `send()`/`recv()`/`close()`
+- 12 tests across 5 files (executor lifecycle, timer, yield, channel)
+
+**NOT yet implemented**: `async func`, `await` expression, `Future` behavior, `spawn()`, event loop (epoll/IOCP), work-stealing scheduler, `select!`/`join!`.
+
+---
+
+## Overview (Target Spec)
 
 The async package provides an asynchronous runtime for concurrent programming. It includes the Future trait, async/await syntax support, and runtime implementations for executing async tasks.
 
@@ -23,7 +39,7 @@ The fundamental trait for asynchronous computation.
 
 ```tml
 /// An asynchronous computation that may not have completed yet
-pub behaviorFuture {
+pub behavior Future {
     /// The type of value produced on completion
     type Output
 
@@ -106,13 +122,13 @@ extend Waker {
     }
 }
 
-implement Duplicate for Waker {
+extend Waker with Duplicate {
     func clone(this) -> Waker {
         (this.vtable.clone)(this.data)
     }
 }
 
-implement Disposable for Waker {
+extend Waker with Disposable {
     func drop(mut this) {
         (this.vtable.drop)(this.data)
     }
@@ -127,7 +143,7 @@ implement Disposable for Waker {
 
 ```tml
 /// Async function declaration
-public async func fetch_data(url: String) -> Outcome[Data, Error] {
+pub async func fetch_data(url: String) -> Outcome[Data, Error] {
     let response = http.get(url).await!
     let body = response.body().await!
     return Ok(parse(body)!)
@@ -306,7 +322,7 @@ pub type JoinHandle[T] {
 
 extend JoinHandle[T] {
     /// Awaits the task completion
-    public async func await(this) -> Outcome[T, JoinError]
+    pub async func await(this) -> Outcome[T, JoinError]
 
     /// Aborts the task
     pub func abort(this)
@@ -359,7 +375,7 @@ extend LocalSet {
     pub func new() -> LocalSet
 
     /// Runs the local set until all tasks complete
-    public async func run_until[F: Future](this, future: F) -> F.Output
+    pub async func run_until[F: Future](this, future: F) -> F.Output
 
     /// Spawns a local task
     pub func spawn_local[F: Future](this, future: F) -> JoinHandle[F.Output]
@@ -375,35 +391,35 @@ extend LocalSet {
 
 ```tml
 /// Waits for all futures concurrently
-public async func join[A, B](a: A, b: B) -> (A.Output, B.Output)
+pub async func join[A, B](a: A, b: B) -> (A.Output, B.Output)
     where A: Future, B: Future
 {
     // Polls both futures until both complete
 }
 
 /// Join for tuples
-public async func join3[A, B, C](a: A, b: B, c: C) -> (A.Output, B.Output, C.Output)
+pub async func join3[A, B, C](a: A, b: B, c: C) -> (A.Output, B.Output, C.Output)
     where A: Future, B: Future, C: Future
 
-public async func join4[A, B, C, D](a: A, b: B, c: C, d: D) -> (A.Output, B.Output, C.Output, D.Output)
+pub async func join4[A, B, C, D](a: A, b: B, c: C, d: D) -> (A.Output, B.Output, C.Output, D.Output)
     where A: Future, B: Future, C: Future, D: Future
 
 /// Join for a vector of futures
-public async func join_all[F: Future](futures: Vec[F]) -> Vec[F.Output]
+pub async func join_all[F: Future](futures: Vec[F]) -> Vec[F.Output]
 ```
 
 ### select
 
 ```tml
 /// Waits for the first future to complete
-public async func select[A, B](a: A, b: B) -> Either[A.Output, B.Output]
+pub async func select[A, B](a: A, b: B) -> Either[A.Output, B.Output]
     where A: Future, B: Future
 
 /// Either type for select results
 pub type Either[L, R] = Left(L) | Right(R)
 
 /// Select from multiple futures, returning the first result and remaining futures
-public macro select! {
+pub macro select! {
     // See std.sync for usage
 }
 ```
@@ -412,12 +428,12 @@ public macro select! {
 
 ```tml
 /// Joins futures that return Results, short-circuiting on first error
-public async func try_join[A, B, E](a: A, b: B) -> Outcome[(A.Output.Ok, B.Output.Ok), E]
+pub async func try_join[A, B, E](a: A, b: B) -> Outcome[(A.Output.Ok, B.Output.Ok), E]
     where
         A: Future[Output = Outcome[_, E]],
         B: Future[Output = Outcome[_, E]]
 
-public async func try_join_all[F, T, E](futures: Vec[F]) -> Outcome[Vec[T], E]
+pub async func try_join_all[F, T, E](futures: Vec[F]) -> Outcome[Vec[T], E]
     where F: Future[Output = Outcome[T, E]]
 ```
 
@@ -425,11 +441,11 @@ public async func try_join_all[F, T, E](futures: Vec[F]) -> Outcome[Vec[T], E]
 
 ```tml
 /// Returns the first future to complete, cancelling the other
-public async func race[A, B](a: A, b: B) -> A.Output
+pub async func race[A, B](a: A, b: B) -> A.Output
     where A: Future, B: Future[Output = A.Output]
 
 /// Race all futures, returning first to complete
-public async func race_all[F: Future](futures: Vec[F]) -> F.Output
+pub async func race_all[F: Future](futures: Vec[F]) -> F.Output
 ```
 
 ---
@@ -440,12 +456,12 @@ public async func race_all[F: Future](futures: Vec[F]) -> F.Output
 
 ```tml
 /// Sleeps for the given duration
-public async func sleep(duration: Duration) {
+pub async func sleep(duration: Duration) {
     Sleep.new(duration).await
 }
 
 /// Sleeps until the given instant
-public async func sleep_until(deadline: Instant) {
+pub async func sleep_until(deadline: Instant) {
     Sleep.until(deadline).await
 }
 
@@ -454,7 +470,7 @@ pub type Sleep {
     deadline: Instant,
 }
 
-implement Future for Sleep {
+extend Sleep with Future {
     type Output = Unit
 
     func poll(mut this, cx: mut ref Context) -> Poll[Unit] {
@@ -472,7 +488,7 @@ implement Future for Sleep {
 
 ```tml
 /// Wraps a future with a timeout
-public async func timeout[F: Future](duration: Duration, future: F) -> Outcome[F.Output, TimeoutError] {
+pub async func timeout[F: Future](duration: Duration, future: F) -> Outcome[F.Output, TimeoutError] {
     select! {
         result = future => Ok(result),
         _ = sleep(duration) => Err(TimeoutError),
@@ -494,7 +510,7 @@ pub type Timeout[F: Future] {
     deadline: Instant,
 }
 
-implement Future for Timeout[F] where F: Future {
+extend Timeout[F] with Future where F: Future {
     type Output = Outcome[F.Output, TimeoutError]
 
     func poll(mut this, cx: mut ref Context) -> Poll[Outcome[F.Output, TimeoutError]] {
@@ -537,7 +553,7 @@ pub type Interval {
 
 extend Interval {
     /// Waits for the next tick
-    public async func tick(mut this) -> Instant {
+    pub async func tick(mut this) -> Instant {
         sleep_until(this.next).await
         let now = Instant.now()
         this.next = this.next + this.period
@@ -559,7 +575,7 @@ extend Interval {
 
 ```tml
 /// Async reading from a source
-pub behaviorAsyncRead {
+pub behavior AsyncRead {
     /// Attempts to read data into buf
     func poll_read(
         mut this,
@@ -571,12 +587,12 @@ pub behaviorAsyncRead {
 /// Extension methods for AsyncRead
 extend AsyncRead {
     /// Reads some bytes
-    public async func read(mut this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
+    pub async func read(mut this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         poll_fn(do(cx) this.poll_read(cx, buf)).await
     }
 
     /// Reads exactly n bytes
-    public async func read_exact(mut this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
+    pub async func read_exact(mut this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
         var filled: U64 = 0
         loop filled < buf.len() {
             let n = this.read(&mut buf[filled..]).await!
@@ -589,7 +605,7 @@ extend AsyncRead {
     }
 
     /// Reads to end of stream
-    public async func read_to_end(mut this, buf: mut ref Vec[U8]) -> Outcome[U64, IoError] {
+    pub async func read_to_end(mut this, buf: mut ref Vec[U8]) -> Outcome[U64, IoError] {
         var read: U64 = 0
         var chunk = [0u8; 4096]
         loop {
@@ -602,7 +618,7 @@ extend AsyncRead {
     }
 
     /// Reads to string
-    public async func read_to_string(mut this, buf: mut ref String) -> Outcome[U64, IoError] {
+    pub async func read_to_string(mut this, buf: mut ref String) -> Outcome[U64, IoError] {
         var bytes = Vec.new()
         let n = this.read_to_end(&mut bytes).await!
         let s = String.from_utf8(bytes).map_err(|_| IoError.InvalidData)!
@@ -616,7 +632,7 @@ extend AsyncRead {
 
 ```tml
 /// Async writing to a sink
-pub behaviorAsyncWrite {
+pub behavior AsyncWrite {
     /// Attempts to write data from buf
     func poll_write(
         mut this,
@@ -640,12 +656,12 @@ pub behaviorAsyncWrite {
 /// Extension methods for AsyncWrite
 extend AsyncWrite {
     /// Writes some bytes
-    public async func write(mut this, buf: ref [U8]) -> Outcome[U64, IoError] {
+    pub async func write(mut this, buf: ref [U8]) -> Outcome[U64, IoError] {
         poll_fn(do(cx) this.poll_write(cx, buf)).await
     }
 
     /// Writes all bytes
-    public async func write_all(mut this, buf: ref [U8]) -> Outcome[Unit, IoError] {
+    pub async func write_all(mut this, buf: ref [U8]) -> Outcome[Unit, IoError] {
         var written: U64 = 0
         loop written < buf.len() {
             let n = this.write(&buf[written..]).await!
@@ -658,12 +674,12 @@ extend AsyncWrite {
     }
 
     /// Flushes the output
-    public async func flush(mut this) -> Outcome[Unit, IoError] {
+    pub async func flush(mut this) -> Outcome[Unit, IoError] {
         poll_fn(do(cx) this.poll_flush(cx)).await
     }
 
     /// Shuts down the writer
-    public async func shutdown(mut this) -> Outcome[Unit, IoError] {
+    pub async func shutdown(mut this) -> Outcome[Unit, IoError] {
         poll_fn(do(cx) this.poll_shutdown(cx)).await
     }
 }
@@ -673,7 +689,7 @@ extend AsyncWrite {
 
 ```tml
 /// Async iterator (stream)
-pub behaviorAsyncIterator {
+pub behavior AsyncIterator {
     type Item
 
     /// Polls for the next item
@@ -688,12 +704,12 @@ pub behaviorAsyncIterator {
 /// Extension methods for AsyncIterator
 extend AsyncIterator {
     /// Gets the next item
-    public async func next(mut this) -> Maybe[This.Item] {
+    pub async func next(mut this) -> Maybe[This.Item] {
         poll_fn(do(cx) this.poll_next(cx)).await
     }
 
     /// Collects all items
-    public async func collect[C: FromIterator[This.Item]](mut this) -> C {
+    pub async func collect[C: FromIterator[This.Item]](mut this) -> C {
         var items = Vec.new()
         loop item in this {
             items.push(item)
@@ -743,7 +759,7 @@ pub type PollFn[F] {
     f: F,
 }
 
-implement Future for PollFn[F]
+extend PollFn[F] with Future
     where F: FnMut(mut ref Context) -> Poll[T]
 {
     type Output = T
@@ -758,7 +774,7 @@ implement Future for PollFn[F]
 
 ```tml
 /// Macro to propagate Pending in poll functions
-public macro ready! {
+pub macro ready! {
     ($e:expr) => {
         when $e {
             Poll.Ready(value) -> value,
@@ -778,7 +794,7 @@ func poll_read(mut this, cx: mut ref Context, buf: mut ref [U8]) -> Poll[Outcome
 
 ```tml
 /// Yields execution to other tasks
-public async func yield_now() {
+pub async func yield_now() {
     YieldNow { yielded: false }.await
 }
 
@@ -786,7 +802,7 @@ type YieldNow {
     yielded: Bool,
 }
 
-implement Future for YieldNow {
+extend YieldNow with Future {
     type Output = Unit
 
     func poll(mut this, cx: mut ref Context) -> Poll[Unit] {

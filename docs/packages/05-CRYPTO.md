@@ -44,17 +44,17 @@ use std::crypto::random::{random_bytes, random_int, random_uuid}
 use std::crypto::hash::{md5, sha1, sha256, sha384, sha512, sha512_256, Digest}
 
 // Hash a string — returns a Digest object
-let mut d: Digest = sha256("Hello, TML!")
+var d: Digest = sha256("Hello, TML!")
 println(d.to_hex())    // hex-encoded hash string
 println(d.to_base64()) // base64-encoded hash string
 d.destroy()            // free resources
 
 // Other algorithms
-let mut d_md5: Digest = md5("data")
-let mut d_sha1: Digest = sha1("data")
-let mut d_sha384: Digest = sha384("data")
-let mut d_sha512: Digest = sha512("data")
-let mut d_sha512_256: Digest = sha512_256("data")
+var d_md5: Digest = md5("data")
+var d_sha1: Digest = sha1("data")
+var d_sha384: Digest = sha384("data")
+var d_sha512: Digest = sha512("data")
+var d_sha512_256: Digest = sha512_256("data")
 ```
 
 ### 3.2 Buffer Hashing
@@ -63,7 +63,7 @@ let mut d_sha512_256: Digest = sha512_256("data")
 use std::crypto::hash::{sha256_bytes, md5_bytes}
 
 let buf = Buffer::from("binary data")
-let mut d: Digest = sha256_bytes(ref buf)
+var d: Digest = sha256_bytes(ref buf)
 println(d.to_hex())
 d.destroy()
 ```
@@ -74,7 +74,7 @@ d.destroy()
 use std::crypto::hash::{Hash, HashAlgorithm}
 
 // Create a streaming hasher
-let mut hasher = Hash::create(HashAlgorithm::Sha256)
+var hasher = Hash::create(HashAlgorithm::Sha256)
 
 // Feed data incrementally
 hasher.update("Hello, ")
@@ -85,7 +85,7 @@ let buf = Buffer::from("more data")
 hasher.update_bytes(ref buf)
 
 // Finalize (can only call once)
-let mut digest: Digest = hasher.digest()
+var digest: Digest = hasher.digest()
 println(digest.to_hex())
 digest.destroy()
 hasher.destroy()
@@ -96,18 +96,18 @@ hasher.destroy()
 ```tml
 use std::crypto::hash::{Hash, HashAlgorithm}
 
-let mut hasher = Hash::create(HashAlgorithm::Sha256)
+var hasher = Hash::create(HashAlgorithm::Sha256)
 hasher.update("common prefix")
 
 // Fork the hasher state
-let mut branch1 = hasher.copy()
-let mut branch2 = hasher.copy()
+var branch1 = hasher.copy()
+var branch2 = hasher.copy()
 
 branch1.update(" suffix A")
 branch2.update(" suffix B")
 
-let mut d1 = branch1.digest()
-let mut d2 = branch2.digest()
+var d1 = branch1.digest()
+var d2 = branch2.digest()
 // d1 and d2 are different hashes with the same prefix
 ```
 
@@ -152,12 +152,12 @@ let mut d2 = branch2.digest()
 ```tml
 use std::crypto::hmac::{hmac_sha256, hmac_sha512, HmacDigest}
 
-let mut mac: HmacDigest = hmac_sha256("secret-key", "message to authenticate")
+var mac: HmacDigest = hmac_sha256("secret-key", "message to authenticate")
 println(mac.to_hex())
 mac.destroy()
 
 // Other variants
-let mut mac_512 = hmac_sha512("key", "message")
+var mac_512 = hmac_sha512("key", "message")
 ```
 
 ### 4.2 Streaming HMAC
@@ -165,10 +165,10 @@ let mut mac_512 = hmac_sha512("key", "message")
 ```tml
 use std::crypto::hmac::{Hmac, HashAlgorithm}
 
-let mut hmac = Hmac::create(HashAlgorithm::Sha256, "my-secret-key")
+var hmac = Hmac::create(HashAlgorithm::Sha256, "my-secret-key")
 hmac.update("chunk 1")
 hmac.update("chunk 2")
-let mut digest: HmacDigest = hmac.digest()
+var digest: HmacDigest = hmac.digest()
 println(digest.to_hex())
 digest.destroy()
 hmac.destroy()
@@ -222,7 +222,7 @@ CipherAlgorithm::XChaCha20Poly1305  // XChaCha20-Poly1305 (extended nonce)
 use std::crypto::cipher::{Cipher, Decipher, CipherAlgorithm}
 
 // Encrypt
-let mut cipher = Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+var cipher = Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
 cipher.set_aad_str("additional authenticated data").unwrap()  // AEAD only
 cipher.update("plaintext")
 let ciphertext: Buffer = cipher.finalize().unwrap()
@@ -230,7 +230,7 @@ let tag: AuthTag = cipher.get_auth_tag().unwrap()  // AEAD only
 cipher.destroy()
 
 // Decrypt
-let mut decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+var decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
 decipher.set_aad_str("additional authenticated data").unwrap()
 decipher.set_auth_tag(ref tag).unwrap()  // AEAD only
 decipher.update_bytes(ref ciphertext)
@@ -431,7 +431,7 @@ use std::crypto::random::{
 let buf: Buffer = random_bytes(32)
 
 // Fill existing buffer with random data
-let mut buf = Buffer::new(64)
+var buf = Buffer::new(64)
 random_fill(mut ref buf)
 
 // Random integer in range
@@ -583,19 +583,19 @@ func hash_message(label: Str, msg: Str) {
     println(checksum.to_string())
 
     // MD5
-    let mut d_md5: Digest = md5(msg)
+    var d_md5: Digest = md5(msg)
     print("MD5:     ")
     println(d_md5.to_hex())
     d_md5.destroy()
 
     // SHA-256
-    let mut d_sha256: Digest = sha256(msg)
+    var d_sha256: Digest = sha256(msg)
     print("SHA-256: ")
     println(d_sha256.to_hex())
     d_sha256.destroy()
 
     // SHA-512
-    let mut d_sha512: Digest = sha512(msg)
+    var d_sha512: Digest = sha512(msg)
     print("SHA-512: ")
     println(d_sha512.to_hex())
     d_sha512.destroy()

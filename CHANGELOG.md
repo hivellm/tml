@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HTTP Client** (2026-02-24) — `std::http::client::HttpClient` sends real HTTP requests over TCP/TLS
+  - `HttpClient::new()`, `with_user_agent()` — create client instances
+  - Convenience methods: `get(url)`, `post(url, body)`, `put(url, body)`, `delete(url)`
+  - `send(request)` — send arbitrary `Request` objects with full control
+  - Uses `Connection` for DNS + TCP + optional TLS, `Request` for wire serialization, `Response` for parsing
+  - 8 MB max response size guard to prevent OOM
+  - 14 source files total in `std::http` (router, request, response, headers, cookies, encoding, multipart, method, status, version, error, connection, client, mod)
+  - 12 test files covering router, headers, cookies, method, status, version, error, client
+
+- **SQLite Module** (2026-02-24) — `std::sqlite` with FFI bindings to sqlite3
+  - `Database` — open file or in-memory DB, `exec()`, `prepare()`, `begin()`/`commit()`/`rollback()`, `changes()`, `last_insert_rowid()`
+  - `Statement` — compiled prepared statement with `bind_i64()`/`bind_f64()`/`bind_str()`/`bind_null()`, `step()`, `execute()`, `reset()`, typed column accessors
+  - `Row` — single result row with `get_i64()`/`get_f64()`/`get_str()`/`is_null()`, column metadata
+  - `Value` — dynamic SQLite value (integer, float, text, null) with constructors and accessors
+  - 6 submodules: `ffi`, `constants`, `database`, `statement`, `row`, `value`
+  - 7 test files with 77+ tests covering exec, transactions, bind, statement, row, value
+
+- **Nullable Pointer Optimization for Maybe[ptr-type]** (2026-02-24) — `Maybe[Heap[T]]`, `Maybe[Shared[T]]`, `Maybe[ref T]` use null pointer as `Nothing` instead of a discriminant tag
+  - Layout: pointer-sized (8 bytes) instead of `{ i8, ptr }` (16 bytes) — matches Rust's niche optimization
+  - `Just(x)` = the pointer; `Nothing` = null pointer
+  - `is_just()`/`is_nothing()` = `icmp ne/eq ptr, null` (1 instruction)
+  - `when` matching: `Just(val)` extracts the pointer directly, no GEP needed
+  - `unwrap()` inlines as null-check + panic — no field extraction overhead
+
+- **Stream Module** (2026-02-24) — `std::stream` with 5 source files and comprehensive tests
+  - `Readable` behavior — byte stream source interface with `read(buf, len) -> Outcome[I64, Str]`
+  - `Writable` behavior — byte stream sink interface with `write(buf, len) -> Outcome[I64, Str]`
+  - `BufferedReader` / `BufferedWriter` — configurable buffer sizes, line reading, auto-flush
+  - `ByteStream` — in-memory read/write stream implementing both Readable and Writable
+  - `pipe()`, `copy_bytes()` — stream utilities connecting readable to writable
+  - `read_all()`, `read_to_string()`, `write_all()`, `write_string()` — convenience functions
+  - 6 test files: readable, writable, buffered, pipe, copy, readable_basic
+
 - **Entry-Block Alloca Hoisting** (2026-02-24) — Loop-body allocas are now hoisted to the function entry block, enabling LLVM's `mem2reg` to promote them to SSA registers
   - New `emit_hoisted_alloca()` method collects allocas and splices them into the entry block via marker-based string replacement with `rfind` for O(1) lookup
   - Removed `stacksave`/`stackrestore` from all 3 loop types (`gen_loop`, `gen_while`, `gen_for`)
@@ -23,14 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `cttz[T]` — count trailing zeros (`llvm.cttz`)
   - Guarded with `#if X86_64` preprocessor directives for cross-platform safety
   - Note: SIMD intrinsics work in non-generic functions; generic instantiation has codegen bugs (tracked for future fix)
-
-- **Stream Module** (2026-02-24) — `std::stream` with 5 source files
-  - `readable.tml` — `Readable` behavior for byte stream sources
-  - `writable.tml` — `Writable` behavior for byte stream sinks
-  - `buffered.tml` — `BufferedReader`/`BufferedWriter` with configurable buffer sizes
-  - `pipe.tml` — `pipe()` function connecting readable to writable
-  - `byte_stream.tml` — In-memory `ByteStream` implementing both Readable and Writable
-  - 5 test files: readable, writable, buffered, pipe, copy
 
 ### Fixed
 - **HTTP Headers string comparison** (2026-02-24) — Rewrote `Headers` from `HashMap[Str, Str]` (broken: pointer equality) to linear arrays with string content comparison. Fixes all 6 `headers.test.tml` assertions. HTTP headers are typically <30 entries so linear scan is efficient.
@@ -99,9 +124,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Suite name mapping: `core/str` → `lib/core/tests/str/`, `std/json` → `lib/std/tests/json/`
   - New skills: `/test-suite`, `/list-suites`, `/verify`
 
-### Fixed
-- **Missing `@allocates` annotations** (2026-02-24) — Added `@allocates` to 9 Binary/Octal fmt impls (U16, U32, U64, I8, I16, I32, I64 Binary + U16, U32 Octal), `cli.tml::generate_help()`, and `uuid.tml::to_string()` — prevents leak warnings in callers
+- **Comprehensive `@allocates` Sweep** (2026-02-24) — Added `@allocates` annotation to 50+ functions across core and std libraries
+  - `core::fmt` — float, formatter, tuple, range, builders, Display/Debug impls
+  - `core::error` — ChainedError, ParseError, SimpleError, hex format impls
+  - `core::clone` — DebugAsDisplay, UpperHex impls
+  - `std::fs::glob` — memory ownership fix
+  - `std::cli`, `std::uuid` — generate_help, to_string
+  - Prevents leak warnings in callers and ensures auto-free fires on Str-returning functions
 
+- **Nullable Maybe Regressions** (2026-02-24) — Fixed type inference and method dispatch issues from nullable pointer optimization
+  - Suite-mode failures: Str tracking restored for nullable Maybe types
+  - Generic function returns: removed unsafe NamedType/ClassType inference that broke in suite mode
+  - Type inference: nullable Maybe unwrap/map/and_then correctly dispatch to optimized codegen
+
+- **HashMap Content-Based Hashing** (2026-02-24) — HashMap[Str, V] now hashes string content, not pointer addresses
+  - Key comparison uses string equality (byte-by-byte) instead of pointer equality
+  - Key ownership: HashMap stores deep copies of Str keys to prevent use-after-free
+  - Str deep copy implemented for hash map insertion
+
+- **Memory Leaks in Derive and Flags Enum** (2026-02-24) — Fixed codegen that leaked Str temporaries in derive macros and `@flags` enum operations
+
+- **Lazy Library Defs Missing in Coverage Mode** (2026-02-24) — `lazy_library_defs` was missing in 10 codegen locations across test runners, query_core, and llvm_codegen_backend — resolved ~2,700 silent test failures in coverage mode
+
+- **SIMD Field Access on SSA Values** (2026-02-24) — Fixed codegen for SIMD struct field access when value is SSA (uses `extractelement` directly instead of invalid load-from-SSA)
+
+### Performance
+- **O0 Optimization Pipeline** (2026-02-24) — Complete overhaul of the `-O0` LLVM pass pipeline for dramatically faster debug builds
+  - Phase 1: Strength reduction + InstSimplify at O0
+  - Phase 2: MIR pipeline expanded with 8 additional passes (RemoveUnneededDrops, DSE, comparison folding)
+  - Phase 3: SROA, Mem2Reg, EarlyCSE, Inlining, cleanup passes
+  - Phase 4: DestinationProp, UnreachableProp, NormalizeArrayLen
+  - `tml_str_free` optimized with PE image range check and constant concat elimination
+  - Core string operations: replaced byte-by-byte loops with `copy_nonoverlapping` and `memchr`/`memcmp`
+  - `str_eq` replaced with direct `strcmp` codegen
+  - `i64_to_str` digit counting optimized, crypto `EVP_MD` lookup cached
+
+- **SSA Codegen Improvements** (2026-02-24) — Struct construction and field access now use LLVM SSA instructions
+  - `insertvalue` for struct construction instead of alloca+store+load (3 instructions vs 10)
+  - `extractvalue` for SSA struct field reads — eliminates intermediate allocas
+  - Parameter allocas eliminated — function parameters stay in SSA form
+  - `inbounds` flag on all GEP instructions for better LLVM optimizations
+  - Source location added to overflow panic messages for easier debugging
+
+- **Text and Encoding Optimizations** (2026-02-24) — Bitwise operations and lookup tables
+  - Text batched writes for fewer syscalls
+  - BCrypt provider caching on Windows
+  - Encoding modules use bitwise ops and precomputed lookup tables
+
+- **Benchmark Suite** (2026-02-24) — `benchmarks/` directory with Rust-vs-TML performance comparison
+  - Algorithms: fibonacci, sorting, sieve of Eratosthenes, matrix operations
+  - Profile results tracked across runs in `benchmarks/profile_results/`
+
+### Fixed (2026-02-23)
 - **Drop double-free crashes in crypto test suite** (2026-02-23) — Removed manual `destroy()` calls from tests where types now have Drop impls (auto-cleanup at scope exit). Fixed 4 test files: `cipher_aes.test` (10 tests), `sign.test` (34 tests), `x509.test` (40 tests), `dh.test` (9 tests). Root cause: manual destroy + auto-Drop = double-free → HEAP_CORRUPTION or ACCESS_VIOLATION.
 
 - **DH/DHX key type mismatch in `compute_secret`** (2026-02-23) — `crypto_dh.c` `compute_secret()` always built peer key as "DH" type, but named groups (ffdhe*, modp14+) create "DHX" keys via `EVP_PKEY_CTX_new_from_name`. Type mismatch caused `EVP_PKEY_derive_set_peer` to fail → returned Err → `.unwrap()` panicked → crash during panic cleanup. Fix: detect local key type with `EVP_PKEY_get0_type_name()` and use matching type for peer key.

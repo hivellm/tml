@@ -1,0 +1,221 @@
+{
+  "timestamp": "2026-02-24T11:31:10.180479",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.13.9"
+  },
+  "results": [
+    {
+      "name": "algorithms",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 306.69209989719093,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:10.812 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Type mismatch: expected I64, found ()\n11:31:10.813 ERROR [build] Undefined variable: time_ns\n11:31:10.813 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:10.813 ERROR [build] Return type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "data_structures",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 302.5689001660794,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:11.114 ERROR [build] CGU 3 compilation failed: LLVM backend compilation failed: Failed to parse LLVM IR: ir:131:13: error: use of undefined value '%v11'\n    ret i32 %v11\n            ^\n\n11:31:11.115 ERROR [build] CGU 4 compilation failed: LLVM backend compilation failed: Failed to parse LLVM IR: ir:116:13: error: use of undefined value '%v8'\n    ret i32 %v8\n            ^\n\n"
+    },
+    {
+      "name": "fibonacci",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 760.7442999724299,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:11.665 ERROR [build] LLD linking failed: In-process LLD linking failed (exit code 1):\nlld-link: error: undefined symbol: main\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:78\n>>>               libcmt.lib(exe_main.obj):(int __cdecl invoke_main(void))\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:288\n>>>               libcmt.lib(exe_main.obj):(int __cdecl __scrt_common_main_seh(void))\n\n"
+    },
+    {
+      "name": "http_server_bench",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 2053.3245999831706,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:13.928 ERROR [build] memory leak detected\n"
+    },
+    {
+      "name": "json_bench",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 505.8311999309808,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:14.433 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.434 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.434 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.434 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.434 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.434 ERROR [build] Undefined variable: time_ns\n11:31:14.434 ERROR [build] Type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "json_bench_prebuilt",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 458.12990004196763,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:14.894 ERROR [build] Undefined variable: time_ns\n11:31:14.894 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.894 ERROR [build] Undefined variable: time_ns\n11:31:14.894 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.894 ERROR [build] Undefined variable: time_ns\n11:31:14.894 ERROR [build] Type mismatch: expected I64, found ()\n11:31:14.894 ERROR [build] Undefined variable: time_ns\n11:31:14.894 ERROR [build] Type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "json_ffi_profile",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 645.2764000277966,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:15.539 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n11:31:15.540 ERROR [build] Undefined variable: time_ns\n11:31:15.540 ERROR [build] Type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "json_minimal_bench",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 713.5154998395592,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:16.252 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n11:31:16.253 ERROR [build] Undefined variable: time_ns\n11:31:16.253 ERROR [build] Type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "math",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 321.1554998997599,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:16.573 ERROR [build] CGU 3 compilation failed: LLVM backend compilation failed: Failed to parse LLVM IR: ir:166:13: error: use of undefined value '%v7'\n    ret i32 %v7\n            ^\n\n"
+    },
+    {
+      "name": "mod",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 902.2626001387835,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:17.246 ERROR [build] LLD linking failed: In-process LLD linking failed (exit code 1):\nlld-link: error: undefined symbol: main\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:78\n>>>               libcmt.lib(exe_main.obj):(int __cdecl invoke_main(void))\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:288\n>>>               libcmt.lib(exe_main.obj):(int __cdecl __scrt_common_main_seh(void))\n\n"
+    },
+    {
+      "name": "oop_bench",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 324.2133997846395,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:17.799 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Type mismatch: expected I64, found ()\n11:31:17.800 ERROR [build] Undefined variable: time_ns\n11:31:17.800 ERROR [build] Binary operator '-' requires matching types, found () and I64\n11:31:17.800 ERROR [build] Return type mismatch: expected I64, found ()\n"
+    },
+    {
+      "name": "oop_comparison",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 2055.6879001669586,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:19.854 ERROR [build] memory leak detected\n"
+    },
+    {
+      "name": "optimization_bench",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 325.82179992459714,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:20.182 ERROR [build] CGU 7 compilation failed: LLVM backend compilation failed: Failed to parse LLVM IR: ir:176:19: error: invalid cast opcode for cast from 'i1' to 'i32'\n    %v8 = bitcast i1 %v7 to i32\n                  ^\n\n"
+    },
+    {
+      "name": "overhead_test",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 304.86789997667074,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:20.487 ERROR [build] Expected '(' after 'loop' - syntax is: loop (condition) { body }, found 'identifier'\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected '(' after 'loop' - syntax is: loop (condition) { body }, found 'identifier'\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n11:31:20.488 ERROR [build] Expected declaration\n"
+    },
+    {
+      "name": "profile_demo",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 1171.2892998475581,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:21.439 ERROR [build] LLD linking failed: In-process LLD linking failed (exit code 1):\nlld-link: error: undefined symbol: main\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:78\n>>>               MSVCRT.lib(exe_main.obj):(int __cdecl invoke_main(void))\n>>> referenced by D:\\a\\_work\\1\\s\\src\\vctools\\crt\\vcstartup\\src\\startup\\exe_common.inl:288\n>>>               MSVCRT.lib(exe_main.obj):(int __cdecl __scrt_common_main_seh(void))\n\n"
+    },
+    {
+      "name": "profile_overhead",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 3437.1332998853177,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "11:31:25.082 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Binary operator '=' requires matching types, found I64 and ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Return type mismatch: expected I64, found ()\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n11:31:25.083 ERROR [build] Undefined variable: print_i64. Did you mean: `print`, `println`?\n"
+    },
+    {
+      "name": "algorithms",
+      "language": "C++",
+      "category": "algorithms",
+      "build_time_ms": 2347.2029000986367,
+      "run_time_ms": 190.57370000518858,
+      "binary_size_bytes": 279552,
+      "output": "=== C++ Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n=== Timing (ns per call) ===\n\nfactorial_recursive(10): 0.1985 ns\nfactorial_iterative(10): 0.1945 ns\nfibonacci_recursive(20): 1.44 ns\nfibonacci_iterative(20): 0.1967 ns\ngcd_recursive(48, 18): 3.5171 ns\ngcd_iterative(48, 18): 3.5183 ns\npower_naive(2, 10): 0.1953 ns\npower_fast(2, 10): 0.1973 ns\ncount_primes(100): 57.447 ns\ncount_primes(1000): 1672.44 ns\ncollatz_steps(27): 80.0671 ns\nsum_range(1, 100): 0.1941 ns\nsum_range(1, 10000): 0.195 ns\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "Go",
+      "category": "algorithms",
+      "build_time_ms": 0,
+      "run_time_ms": 5506.147800013423,
+      "binary_size_bytes": 0,
+      "output": "=== Go Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n--- Benchmarks ---\ngoos: windows\ngoarch: amd64\npkg: tml-benchmarks\ncpu: AMD Ryzen 9 7950X3D 16-Core Processor          \nBenchmarkFactorialRecursive10-32    \t22572088\t         5.341 ns/op\nBenchmarkFactorialIterative10-32    \t56163998\t         2.142 ns/op\nBenchmarkFibonacciRecursive20-32    \t    5546\t     21633 ns/op\nBenchmarkFibonacciIterative20-32    \t28225332\t         4.627 ns/op\nBenchmarkGCDRecursive-32            \t51356671\t         2.352 ns/op\nBenchmarkGCDIterative-32            \t34041586\t         3.506 ns/op\nBenchmarkPowerNaive2_10-32          \t51433714\t         2.336 ns/op\nBenchmarkPowerFast2_10-32           \t30152268\t         4.003 ns/op\nBenchmarkCountPrimes100-32          \t 1244244\t        99.18 ns/op\nBenchmarkCountPrimes1000-32         \t   69763\t      1707 ns/op\nBenchmarkCollatz27-32               \t 2164407\t        55.74 ns/op\nBenchmarkSumRange1_100-32           \t 4925521\t        24.77 ns/op\nBenchmarkSumRange1_10000-32         \t   60825\t      1970 ns/op\nPASS\nok  \ttml-benchmarks\t1.968s\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "Rust",
+      "category": "algorithms",
+      "build_time_ms": 1036.9176999665797,
+      "run_time_ms": 188.89230000786483,
+      "binary_size_bytes": 163840,
+      "output": "=== Rust Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n=== Timing (ns per call) ===\n\nfactorial_recursive(10): 0.1937 ns/op\nfactorial_iterative(10): 0.1937 ns/op\nfibonacci_recursive(20): 0.2000 ns/op\nfibonacci_iterative(20): 7.1914 ns/op\ngcd_recursive(48, 18): 2.3183 ns/op\ngcd_iterative(48, 18): 3.4749 ns/op\npower_naive(2, 10): 0.1927 ns/op\npower_fast(2, 10): 0.1938 ns/op\ncount_primes(100): 59.4460 ns/op\ncount_primes(1000): 1661.8200 ns/op\ncollatz_steps(27): 81.5187 ns/op\nsum_range(1, 100): 0.2042 ns/op\nsum_range(1, 10000): 0.1940 ns/op\n",
+      "success": true,
+      "error": ""
+    }
+  ]
+}
