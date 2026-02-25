@@ -38,6 +38,7 @@ func is_unreserved(b: I32) -> Bool {
 /// assert(encode("hello world") == "hello%20world")
 /// assert(encode("a+b=c") == "a%2Bb%3Dc")
 /// ```
+@allocates
 pub func encode(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {
@@ -73,6 +74,7 @@ pub func encode(input: Str) -> Str {
 /// Percent-encode for form data (application/x-www-form-urlencoded).
 ///
 /// Same as `encode` but spaces become '+' instead of '%20'.
+@allocates
 pub func encode_form(input: Str) -> Str {
     let in_len: I64 = str::len(input)
     if in_len == 0 {
@@ -115,6 +117,7 @@ pub func encode_form(input: Str) -> Str {
 /// ```tml
 /// assert(decode("hello%20world") == Ok("hello world"))
 /// ```
+@allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(input)
     if in_len == 0 {
@@ -160,6 +163,7 @@ pub func decode(input: Str) -> Outcome[Str, Str] {
 }
 
 /// Decode form-encoded string ('+' treated as space).
+@allocates
 pub func decode_form(input: Str) -> Outcome[Str, Str] {
     let in_len: I64 = str::len(input)
     if in_len == 0 {
