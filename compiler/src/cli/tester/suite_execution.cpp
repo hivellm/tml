@@ -595,6 +595,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     result.group = suite.group;
                     result.test_count = test_info.test_count;
 
+                    // Log which test is running
+                    TML_LOG_INFO("test", "[RUN] "
+                                             << test_info.test_name << " from "
+                                             << fs::path(test_info.file_path).filename().string());
+
                     auto test_start = Clock::now();
 
                     auto run_result =
@@ -920,6 +925,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     auto& job = jobs[job_idx];
 
+                    // Always log which files are being compiled (even without --verbose)
+                    std::string file_list;
+                    for (size_t fi = 0; fi < job.suite.tests.size(); ++fi) {
+                        if (fi > 0)
+                            file_list += ", ";
+                        file_list += fs::path(job.suite.tests[fi].file_path).filename().string();
+                    }
+                    TML_LOG_INFO("test", "[COMPILE] Starting: " << file_list);
+
                     if (!opts.quiet && opts.verbose) {
                         TML_LOG_DEBUG("test", "Compiling suite: " << job.suite.name << " ("
                                                                   << job.suite.tests.size()
@@ -930,6 +944,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache,
                                                     opts.backend, opts.features);
+
+                    // Log completion of compilation
+                    if (job.result.success) {
+                        TML_LOG_INFO("test", "[COMPILE] Finished: " << file_list);
+                    } else {
+                        TML_LOG_ERROR("test", "[COMPILE] FAILED: " << file_list);
+                    }
                     job.compiled = true;
 
                     if (job.result.success) {
