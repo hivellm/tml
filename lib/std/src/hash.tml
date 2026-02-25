@@ -79,6 +79,7 @@ func ffi_murmur2_64(data: Str, seed: U64) -> U64
 func ffi_murmur2_64_bytes(handle: *Unit, seed: U64) -> U64
 
 @extern("crypto_u32_to_hex")
+@extern("crypto_u32_to_hex")
 func ffi_u32_to_hex(value: U32) -> Str
 
 @extern("crypto_u64_to_hex")
