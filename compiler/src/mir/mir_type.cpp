@@ -142,6 +142,30 @@ auto make_i64_type() -> MirTypePtr {
     return type;
 }
 
+auto make_u8_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::U8};
+    return type;
+}
+
+auto make_u16_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::U16};
+    return type;
+}
+
+auto make_u32_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::U32};
+    return type;
+}
+
+auto make_u64_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::U64};
+    return type;
+}
+
 auto make_f32_type() -> MirTypePtr {
     auto type = std::make_shared<MirType>();
     type->kind = MirPrimitiveType{PrimitiveType::F32};

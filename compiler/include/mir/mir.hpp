@@ -196,6 +196,10 @@ auto make_i8_type() -> MirTypePtr;
 auto make_i16_type() -> MirTypePtr;
 auto make_i32_type() -> MirTypePtr;
 auto make_i64_type() -> MirTypePtr;
+auto make_u8_type() -> MirTypePtr;
+auto make_u16_type() -> MirTypePtr;
+auto make_u32_type() -> MirTypePtr;
+auto make_u64_type() -> MirTypePtr;
 auto make_f32_type() -> MirTypePtr;
 auto make_f64_type() -> MirTypePtr;
 auto make_ptr_type() -> MirTypePtr;
@@ -252,11 +256,12 @@ struct ConstString {
 struct ConstUnit {};
 
 struct ConstFuncRef {
-    std::string func_name;  // Name of the function being referenced
-    MirTypePtr func_type;   // Type of the function (for call signature)
+    std::string func_name; // Name of the function being referenced
+    MirTypePtr func_type;  // Type of the function (for call signature)
 };
 
-using Constant = std::variant<ConstInt, ConstFloat, ConstBool, ConstString, ConstUnit, ConstFuncRef>;
+using Constant =
+    std::variant<ConstInt, ConstFloat, ConstBool, ConstString, ConstUnit, ConstFuncRef>;
 
 // ============================================================================
 // MIR Instructions (SSA Form)

@@ -47,13 +47,13 @@ auto MirBuilder::convert_type(const parser::Type& type) -> MirTypePtr {
                 if (name == "I64")
                     return make_i64_type();
                 if (name == "U8")
-                    return make_i32_type();
+                    return make_u8_type();
                 if (name == "U16")
-                    return make_i32_type();
+                    return make_u16_type();
                 if (name == "U32")
-                    return make_i32_type();
+                    return make_u32_type();
                 if (name == "U64")
-                    return make_i64_type();
+                    return make_u64_type();
                 if (name == "F32")
                     return make_f32_type();
                 if (name == "F64")

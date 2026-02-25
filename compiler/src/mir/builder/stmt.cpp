@@ -196,7 +196,11 @@ void MirBuilder::build_let_stmt(const parser::LetStmt& let) {
     if (!let.init.has_value())
         return;
 
+    if (let.type_annotation.has_value()) {
+        expr_type_hint_ = convert_type(**let.type_annotation);
+    }
     auto init_value = build_expr(**let.init);
+    expr_type_hint_ = nullptr;
     build_pattern_binding(*let.pattern, init_value);
 
     // Register for drop if the pattern is a simple identifier
@@ -211,7 +215,13 @@ void MirBuilder::build_let_stmt(const parser::LetStmt& let) {
 }
 
 void MirBuilder::build_var_stmt(const parser::VarStmt& var) {
+    // Set the type hint before building the initializer so that array/literal
+    // expressions can use the annotated element type (e.g. U8 vs I32).
+    if (var.type_annotation.has_value()) {
+        expr_type_hint_ = convert_type(**var.type_annotation);
+    }
     auto init_value = build_expr(*var.init);
+    expr_type_hint_ = nullptr;
 
     // For mutable variables, allocate stack space
     auto alloca_val =

@@ -160,6 +160,11 @@ private:
     Module module_;
     BuildContext ctx_;
 
+    // Optional type hint for the current expression being built.
+    // Set by build_var_stmt / build_let_stmt when a type annotation is present,
+    // consumed by build_array to emit the array with the correct element type.
+    MirTypePtr expr_type_hint_ = nullptr;
+
     // ============ Type Conversion ============
     auto convert_type(const parser::Type& type) -> MirTypePtr;
     auto convert_type(const types::TypePtr& type) -> MirTypePtr;

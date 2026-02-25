@@ -838,6 +838,59 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 default:
                     break;
                 }
+            } else if (semantic_var_type->is<types::ArrayType>()) {
+                // For array type annotations like [U8; N], propagate the element type
+                // so that array literals like [42; N] use the correct element type.
+                const auto& arr_type = semantic_var_type->as<types::ArrayType>();
+                if (arr_type.element && arr_type.element->is<types::PrimitiveType>()) {
+                    const auto& elem_prim = arr_type.element->as<types::PrimitiveType>();
+                    switch (elem_prim.kind) {
+                    case types::PrimitiveKind::I8:
+                        expected_literal_type_ = "i8";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    case types::PrimitiveKind::I16:
+                        expected_literal_type_ = "i16";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    case types::PrimitiveKind::I32:
+                        expected_literal_type_ = "i32";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    case types::PrimitiveKind::I64:
+                    case types::PrimitiveKind::I128:
+                        expected_literal_type_ = "i64";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    case types::PrimitiveKind::U8:
+                        expected_literal_type_ = "i8";
+                        expected_literal_is_unsigned_ = true;
+                        break;
+                    case types::PrimitiveKind::U16:
+                        expected_literal_type_ = "i16";
+                        expected_literal_is_unsigned_ = true;
+                        break;
+                    case types::PrimitiveKind::U32:
+                        expected_literal_type_ = "i32";
+                        expected_literal_is_unsigned_ = true;
+                        break;
+                    case types::PrimitiveKind::U64:
+                    case types::PrimitiveKind::U128:
+                        expected_literal_type_ = "i64";
+                        expected_literal_is_unsigned_ = true;
+                        break;
+                    case types::PrimitiveKind::F32:
+                        expected_literal_type_ = "float";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    case types::PrimitiveKind::F64:
+                        expected_literal_type_ = "double";
+                        expected_literal_is_unsigned_ = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
             }
         }
 

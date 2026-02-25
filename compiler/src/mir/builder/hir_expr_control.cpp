@@ -249,7 +249,20 @@ auto HirMirBuilder::build_array(const hir::HirArrayExpr& arr) -> Value {
 
 auto HirMirBuilder::build_array_repeat(const hir::HirArrayRepeatExpr& arr) -> Value {
     Value element = build_expr(arr.value);
+
+    // Use the element type from the full array type annotation (arr.type) when available.
+    // This ensures [42; 1024] in a [U8; 1024] context produces [u8; 1024], not [i32; 1024].
     MirTypePtr element_type = element.type;
+    if (arr.type) {
+        MirTypePtr arr_mir_type = convert_type(arr.type);
+        if (arr_mir_type) {
+            if (auto* arr_kind = std::get_if<MirArrayType>(&arr_mir_type->kind)) {
+                if (arr_kind->element) {
+                    element_type = arr_kind->element;
+                }
+            }
+        }
+    }
     MirTypePtr result_type = make_array_type(element_type, arr.count);
 
     // Build array by repeating element

@@ -479,18 +479,33 @@ auto MirBuilder::build_tuple(const parser::TupleExpr& tuple) -> Value {
 }
 
 auto MirBuilder::build_array(const parser::ArrayExpr& arr) -> Value {
+    // Capture and clear the type hint so nested expressions don't inherit it.
+    MirTypePtr hint = expr_type_hint_;
+    expr_type_hint_ = nullptr;
+
+    // If there's an array type hint, extract the element type from it.
+    MirTypePtr hint_elem_type = nullptr;
+    if (hint) {
+        if (auto* arr_hint = std::get_if<MirArrayType>(&hint->kind)) {
+            hint_elem_type = arr_hint->element;
+        }
+    }
+
     return std::visit(
-        [this](const auto& a) -> Value {
+        [this, &hint_elem_type](const auto& a) -> Value {
             using T = std::decay_t<decltype(a)>;
 
             if constexpr (std::is_same_v<T, std::vector<parser::ExprPtr>>) {
                 std::vector<Value> elements;
-                MirTypePtr elem_type = make_i32_type();
+                MirTypePtr elem_type = hint_elem_type ? hint_elem_type : make_i32_type();
 
                 for (const auto& elem : a) {
                     auto val = build_expr(*elem);
                     elements.push_back(val);
-                    elem_type = val.type;
+                    // Update elem_type from actual value only if no hint was given
+                    if (!hint_elem_type) {
+                        elem_type = val.type;
+                    }
                 }
 
                 ArrayInitInst inst;
@@ -515,6 +530,9 @@ auto MirBuilder::build_array(const parser::ArrayExpr& arr) -> Value {
                     }
                 }
 
+                // Use hint element type if available; otherwise use the value's type.
+                MirTypePtr elem_type = hint_elem_type ? hint_elem_type : val.type;
+
                 // Create array with repeated values
                 std::vector<Value> elements;
                 elements.reserve(count);
@@ -524,8 +542,8 @@ auto MirBuilder::build_array(const parser::ArrayExpr& arr) -> Value {
 
                 ArrayInitInst inst;
                 inst.elements = std::move(elements);
-                inst.element_type = val.type;
-                inst.result_type = make_array_type(val.type, count);
+                inst.element_type = elem_type;
+                inst.result_type = make_array_type(elem_type, count);
 
                 return emit(std::move(inst), inst.result_type);
             }

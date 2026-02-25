@@ -455,10 +455,26 @@ void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::st
     std::string current = "undef";
     for (size_t j = 0; j < i.elements.size(); ++j) {
         std::string elem_val = get_value_reg(i.elements[j]);
+
+        // If the element value's actual LLVM type differs from the target element type,
+        // emit a truncation/extension so the insertvalue uses the correct type.
+        std::string actual_elem_type = elem_type;
+        if (i.elements[j].type) {
+            std::string val_type = mir_type_to_llvm(i.elements[j].type);
+            if (val_type != elem_type && (elem_type == "i8" || elem_type == "i16")) {
+                // Truncate wider int to narrower element type
+                std::string trunc_reg = "%trunc" + std::to_string(temp_counter_++);
+                emitln("    " + trunc_reg + " = trunc " + val_type + " " + elem_val + " to " +
+                       elem_type);
+                elem_val = trunc_reg;
+                actual_elem_type = elem_type;
+            }
+        }
+
         std::string next =
             (j == i.elements.size() - 1) ? result_reg : "%tmp" + std::to_string(temp_counter_++);
-        emitln("    " + next + " = insertvalue " + array_type + " " + current + ", " + elem_type +
-               " " + elem_val + ", " + std::to_string(j));
+        emitln("    " + next + " = insertvalue " + array_type + " " + current + ", " +
+               actual_elem_type + " " + elem_val + ", " + std::to_string(j));
         current = next;
     }
 }
