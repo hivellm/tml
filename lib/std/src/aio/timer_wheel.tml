@@ -144,7 +144,9 @@ impl TimerWheel {
         let userdata_ptr: *I64 = (entry_addr + 16) as *I64
         let next_ptr: *I64 = (entry_addr + 24) as *I64
         lowlevel { ptr_write[I64](deadline_ptr, deadline) }
-        lowlevel { ptr_write[I64](callback_ptr, callback) }
+        // If callback is 0 (no callback), store 1 as marker (not 0, which means free)
+        let cb_to_store: I64 = if callback != 0 { callback } else { 1 }
+        lowlevel { ptr_write[I64](callback_ptr, cb_to_store) }
         lowlevel { ptr_write[I64](userdata_ptr, user_data) }
         lowlevel { ptr_write[I64](next_ptr, EMPTY) }
 
@@ -162,13 +164,15 @@ impl TimerWheel {
         let idx: I64 = id.value
         if idx < 0 or idx >= this.capacity { return }
 
-        // Mark as cancelled by setting callback to 0
+        // Check if entry is active (callback != 0, where 0 means free)
         let callback_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 8) as *I64
         let cb: I64 = lowlevel { ptr_read[I64](callback_ptr) }
         if cb != 0 {
+            // Entry is still active, mark it as cancelled
             lowlevel { ptr_write[I64](callback_ptr, 0) }
             this.active_count = this.active_count - 1
         }
+        // Note: If cb == 0, entry was already fired or freed, so no-op
     }
 
     /// Advances the wheel to `now_ms`, firing all expired timers.
@@ -368,20 +372,23 @@ impl TimerWheel {
             let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
             let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
 
-            if callback != 0 and deadline <= now_ms {
-                // Fire the timer
-                let f: func(I64) = callback as func(I64)
-                f(user_data)
+            if callback == 0 {
+                // Already freed/cancelled, just free it
+                this.free_entry(idx)
+            } else if deadline <= now_ms {
+                // Fire the timer (if callback is not the "no callback" marker)
+                if callback != 1 {
+                    let f: func(I64) = callback as func(I64)
+                    f(user_data)
+                }
                 fired = fired + 1
                 this.active_count = this.active_count - 1
-            } else if callback != 0 {
+                this.free_entry(idx)
+            } else {
                 // Not yet expired, re-insert
                 this.insert_entry(idx, deadline)
-                idx = next
-                continue
             }
 
-            this.free_entry(idx)
             idx = next
         }
 
@@ -426,18 +433,21 @@ impl TimerWheel {
             let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
             let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
 
-            if callback != 0 and deadline <= this.current_ms {
-                // Already expired — fire it
-                let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
-                let f: func(I64) = callback as func(I64)
-                f(user_data)
+            if callback == 0 {
+                // Already freed/cancelled, just free it
+                this.free_entry(idx)
+            } else if deadline <= this.current_ms {
+                // Already expired — fire it (if callback is not the marker)
+                if callback != 1 {
+                    let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
+                    let f: func(I64) = callback as func(I64)
+                    f(user_data)
+                }
                 fired = fired + 1
                 this.active_count = this.active_count - 1
                 this.free_entry(idx)
-            } else if callback != 0 {
-                this.insert_entry(idx, deadline)
             } else {
-                this.free_entry(idx)
+                this.insert_entry(idx, deadline)
             }
 
             idx = next
