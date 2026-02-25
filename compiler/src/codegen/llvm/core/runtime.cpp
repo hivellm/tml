@@ -95,6 +95,8 @@ void LLVMIRGen::init_runtime_catalog() {
     add("strlen", "declare i64 @strlen(ptr)");
     add("strcmp", "declare i32 @strcmp(ptr, ptr)");
     add("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
+    add("getenv", "declare ptr @getenv(ptr)");
+    add("tml_coverage_write_file", "declare void @tml_coverage_write_file(ptr)");
 
     // --- LLVM intrinsics ---
     add("llvm.memcpy.p0.p0.i64", "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");

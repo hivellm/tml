@@ -1619,6 +1619,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emit_line("");
         }
 
+        // String constant for coverage file environment variable name
+        emit_line("; Environment variable name for coverage file (EXE mode)");
+        emit_line("@.tml_cov_file_env = private constant [18 x i8] c\"TML_COVERAGE_FILE\\00\"");
+
         // For DLL entry, generate exported test entry function instead of main
         if (options_.generate_dll_entry) {
             // Determine entry function name (tml_test_entry or tml_test_N for suites)
@@ -1742,6 +1746,18 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // In suite mode (coverage_quiet=true), the test runner handles printing
         // after all tests complete, so we don't print here
         emit_coverage_report_calls(coverage_output_str, true);
+
+        // Write coverage data to file for EXE mode subprocess communication
+        // When running under EXE mode, write covered functions to file specified by env var
+        emit_line("  %cov_file_env = call ptr @getenv(ptr @.tml_cov_file_env)");
+        emit_line("  %cov_file_not_null = icmp ne ptr %cov_file_env, null");
+        emit_line("  br i1 %cov_file_not_null, label %write_cov_file, label %cov_file_done");
+        emit_line("");
+        emit_line("write_cov_file:");
+        emit_line("  call void @tml_coverage_write_file(ptr %cov_file_env)");
+        emit_line("  br label %cov_file_done");
+        emit_line("");
+        emit_line("cov_file_done:");
 
         // All tests passed (if we got here, no assertion failed)
         emit_line("  ret i32 0");

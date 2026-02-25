@@ -647,3 +647,29 @@ TML_EXPORT void write_coverage_html(const char* filename) {
     fclose(f);
     printf("[Coverage] HTML report written to %s\n", filename);
 }
+
+// Write covered functions to a file (for subprocess communication in EXE mode)
+// This is called by the test harness after all tests complete when TML_COVERAGE_FILE env var is set
+TML_EXPORT void tml_coverage_write_file(const char* filename) {
+    if (!filename) {
+        return;
+    }
+
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "[Coverage] Failed to open %s for writing\n", filename);
+        return;
+    }
+
+    // Iterate through hash table and write all covered functions
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            int32_t hits = ATOMIC_LOAD(&g_func_table[i].hit_count);
+            if (hits > 0) {
+                fprintf(f, "%s\n", g_func_table[i].name);
+            }
+        }
+    }
+
+    fclose(f);
+}

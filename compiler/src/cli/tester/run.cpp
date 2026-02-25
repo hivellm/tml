@@ -662,9 +662,13 @@ int run_test(int argc, char* argv[], bool verbose) {
         }
     }
 
-    // Run normal tests through suite mode
+    // Run normal tests through suite mode or exe mode (coverage)
     if (!test_files.empty()) {
-        run_tests_suite_mode(test_files, opts, collector, c);
+        if (opts.coverage) {
+            run_tests_exe_mode(test_files, opts, collector, c);
+        } else {
+            run_tests_suite_mode(test_files, opts, collector, c);
+        }
     }
 
     // Run diagnostic tests (*.error.tml) - these expect compilation errors

@@ -22,6 +22,7 @@
 
 #include "cli/commands/cmd_build.hpp"
 #include "cli/commands/cmd_test.hpp"
+#include "cli/tester/exe_test_runner.hpp"
 #include "cli/tester/test_runner.hpp"
 #include "cli/utils.hpp"
 #include "common.hpp"
