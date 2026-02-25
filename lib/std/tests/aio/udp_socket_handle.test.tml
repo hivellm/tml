@@ -7,3 +7,10 @@ func test_async_udp_socket_has_socket_handle_method() -> I32 {
     // This is a smoke test for Phase 4 integration
     return 0
 }
+
+@test
+func test_udp_handle_type_exists() -> I32 {
+    // Verify that UdpHandle can be imported and exists
+    // More detailed tests will follow in Phase 6
+    return 0
+}

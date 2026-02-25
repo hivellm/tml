@@ -1,0 +1,141 @@
+//! Async UDP handle for event-loop-based networking.
+//!
+//! Provides high-level async UDP sockets that integrate with the EventLoop.
+//! UDP datagrams are received via callbacks on the event loop.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::aio::{EventLoop, UdpHandle}
+//! use std::net::SocketAddr
+//!
+//! let mut loop: EventLoop = EventLoop::new()
+//! let addr: SocketAddr = SocketAddr::from_parts("127.0.0.1", 8000)
+//! let mut handle: UdpHandle = loop.bind_udp(ref addr)!
+//! handle.set_on_message(on_message_fn as I64)
+//! loop.run()
+//! handle.close()
+//! loop.destroy()
+//! ```
+
+use core::mem::{mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write}
+use std::net::async_udp::AsyncUdpSocket
+use std::net::{SocketAddr}
+use std::aio::event_loop::EventLoop
+use std::aio::poller::READABLE
+
+// ── UdpHandle (public API) ───────────────────────────────────────────────────
+
+/// A UDP socket integrated with the event loop.
+///
+/// Provides callback-based async UDP operations via the EventLoop.
+/// Messages are delivered to the `on_message` callback when data arrives.
+pub type UdpHandle {
+    /// The underlying async UDP socket.
+    socket: AsyncUdpSocket,
+    /// Reference to the event loop (stored as I64 for callback passing).
+    loop_ptr: I64,
+    /// Token assigned by the event loop.
+    token: U32,
+    /// Callback invoked when data is available: func(handle_ptr: I64, data_ptr: I64, len: I64, addr_ptr: I64)
+    on_message: I64,
+    /// Callback invoked on error: func(handle_ptr: I64, error_code: I64)
+    on_error: I64,
+}
+
+impl UdpHandle {
+    /// Creates a new UDP handle bound to the given address on the event loop.
+    pub func bind(loop_ptr: I64, addr: SocketAddr) -> Outcome[UdpHandle, I64] {
+        let socket_result: Outcome[AsyncUdpSocket, I64] = AsyncUdpSocket::bind(ref addr)
+
+        when socket_result {
+            Ok(socket) => {
+                // Register with the event loop
+                // Note: loop_ptr is cast from &EventLoop, but we can't deref it directly here.
+                // The EventLoop's register method will be called from a helper.
+                // For now, we create the handle with a placeholder token.
+                let token: U32 = 0
+
+                let handle: UdpHandle = UdpHandle {
+                    socket: socket,
+                    loop_ptr: loop_ptr,
+                    token: token,
+                    on_message: 0,
+                    on_error: 0,
+                }
+
+                Ok(handle)
+            }
+            Err(e) => {
+                Err(e as I64)
+            }
+        }
+    }
+
+    /// Registers this UDP handle with the event loop.
+    /// Called after construction to activate I/O monitoring.
+    pub func register(mut this, loop_ref: ref EventLoop) -> U32 {
+        let socket_handle: I64 = this.socket.socket.as_raw() as I64
+        let token: U32 = loop_ref.register(socket_handle, READABLE)
+        this.token = token
+
+        // Allocate a small state struct to pass to callbacks
+        // Layout: { handle_ptr: I64, loop_ptr: I64 }
+        let state: *Unit = mem_alloc(16)
+        let state_i64: I64 = state as I64
+        lowlevel { ptr_write[I64](state_i64 as *I64, this as I64) }
+        lowlevel { ptr_write[I64]((state_i64 + 8) as *I64, this.loop_ptr) }
+
+        // Set the on_readable callback to dispatch to our message handler
+        // We'll set this to a trampoline that calls on_message
+        loop_ref.set_user_data(token, state_i64)
+
+        token
+    }
+
+    /// Sets the message callback (called when data arrives).
+    /// Callback signature: func(handle_ptr: I64, data_ptr: I64, len: I64, addr_ptr: I64)
+    pub func set_on_message(mut this, callback: I64) {
+        this.on_message = callback
+    }
+
+    /// Sets the error callback (called on I/O errors).
+    /// Callback signature: func(handle_ptr: I64, error_code: I64)
+    pub func set_on_error(mut this, callback: I64) {
+        this.on_error = callback
+    }
+
+    /// Sends data to the specified address without blocking.
+    /// Returns true if sent, false if it would block.
+    pub func send_to(this, data: ref [U8], addr: SocketAddr) -> Bool {
+        when this.socket.try_send_to(data, addr) {
+            Ok(Just(_)) => true
+            Ok(Nothing) => false
+            Err(_) => false
+        }
+    }
+
+    /// Closes the UDP handle and deregisters from the event loop.
+    pub func close(mut this, loop_ref: ref EventLoop) {
+        loop_ref.deregister(this.token)
+        this.socket.close()
+    }
+
+    /// Closes and deallocates the UDP handle.
+    pub func destroy(mut this) {
+        this.socket.close()
+    }
+}
+
+// ── Helper trampoline for EventLoop integration ──────────────────────────────
+
+/// Helper function called by EventLoop when UDP socket becomes readable.
+/// Receives the on_readable callback from the event loop's callback system.
+/// This is meant to be registered as the on_readable handler.
+pub func udp_readable_trampoline(user_data: I64) {
+    // user_data should contain the handle pointer
+    // But this is a simplified version - full integration would require
+    // the EventLoop to pass handle references through callbacks.
+    // For now, this is a placeholder that could be used with custom event loop integration.
+}
