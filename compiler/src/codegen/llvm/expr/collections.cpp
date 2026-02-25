@@ -68,7 +68,20 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
 
         // Store each element using GEP
         for (size_t i = 0; i < elements.size(); ++i) {
+            // Set expected type so sub-expressions (e.g., negated float literals)
+            // generate with the correct element type instead of defaulting to double
+            expected_literal_type_ = llvm_elem_type;
             std::string val = gen_expr(*elements[i]);
+            // If the generated value is double but we need float (or vice versa), coerce it
+            if (last_expr_type_ == "double" && llvm_elem_type == "float") {
+                std::string coerced = fresh_reg();
+                emit_line("  " + coerced + " = fptrunc double " + val + " to float");
+                val = coerced;
+            } else if (last_expr_type_ == "float" && llvm_elem_type == "double") {
+                std::string coerced = fresh_reg();
+                emit_line("  " + coerced + " = fpext float " + val + " to double");
+                val = coerced;
+            }
             std::string elem_ptr = fresh_reg();
             emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type + ", ptr " +
                       arr_ptr + ", i32 0, i32 " + std::to_string(i));
