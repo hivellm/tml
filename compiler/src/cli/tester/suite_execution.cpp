@@ -1128,14 +1128,21 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
 
             {
+                // Make a thread-safe copy of covered functions before reading
+                std::set<std::string> covered_functions_copy;
+                {
+                    std::lock_guard<std::mutex> lock(coverage_mutex);
+                    covered_functions_copy = all_covered_functions;
+                }
+
                 // Generate coverage report (even with failures — partial data is valuable)
-                print_library_coverage_report(all_covered_functions, c, test_stats);
+                print_library_coverage_report(covered_functions_copy, c, test_stats);
 
                 // Write HTML report with proper library coverage data ONLY if:
                 // 1. Coverage is not zero
                 // 2. Coverage PERCENTAGE is not regressing from previous report
                 if (!CompilerOptions::coverage_output.empty()) {
-                    int current_covered = static_cast<int>(all_covered_functions.size());
+                    int current_covered = static_cast<int>(covered_functions_copy.size());
 
                     // Never update with zero coverage - something went wrong
                     if (current_covered == 0) {
@@ -1185,7 +1192,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         // Always write to temp files — this ensures coverage history
                         // log is appended even when HTML/JSON won't be promoted
                         std::string tmp_output = CompilerOptions::coverage_output + ".tmp";
-                        write_library_coverage_html(all_covered_functions, tmp_output, test_stats);
+                        write_library_coverage_html(covered_functions_copy, tmp_output, test_stats);
 
                         // The JSON is written alongside HTML by write_library_coverage_html
                         // with replace_extension(".json") — so for "X.html.tmp" it becomes
