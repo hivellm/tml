@@ -335,42 +335,26 @@ int32_t tml_mem_check_leaks(void) {
 
     if (leak_count > 0) {
         fprintf(out, "\n");
-        fprintf(
-            out,
-            "================================================================================\n");
-        fprintf(out, "                         TML MEMORY LEAK REPORT\n");
-        fprintf(
-            out,
-            "================================================================================\n");
-        fprintf(out, "\n");
-        fprintf(out, "Detected %d unfreed allocation(s) totaling %llu bytes:\n\n", leak_count,
+        fprintf(out, "[MEMORY LEAKS] %d unfreed allocation(s) totaling %llu bytes:\n", leak_count,
                 (unsigned long long)leak_bytes);
 
         int shown = 0;
-        for (int i = 0; i < HASH_BUCKETS && shown < 50; i++) {
+        for (int i = 0; i < HASH_BUCKETS && shown < 20; i++) {
             AllocBucket* bucket = g_track.buckets[i];
-            while (bucket && shown < 50) {
-                fprintf(out, "  Leak #%d:\n", shown + 1);
-                fprintf(out, "    Address:  %p\n", bucket->record.ptr);
-                fprintf(out, "    Size:     %llu bytes\n", (unsigned long long)bucket->record.size);
-                fprintf(out, "    Alloc ID: %llu\n", (unsigned long long)bucket->record.alloc_id);
-                if (bucket->record.tag) {
-                    fprintf(out, "    Tag:      %s\n", bucket->record.tag);
-                }
-                if (bucket->record.test_name[0]) {
-                    fprintf(out, "    Test:     %s\n", bucket->record.test_name);
-                }
-                if (bucket->record.test_file[0]) {
-                    fprintf(out, "    File:     %s\n", bucket->record.test_file);
-                }
-                fprintf(out, "\n");
+            while (bucket && shown < 20) {
+                fprintf(out, "  #%d: %p (%llu bytes, id=%llu, tag=%s, test=%s, file=%s)\n",
+                        shown + 1, bucket->record.ptr, (unsigned long long)bucket->record.size,
+                        (unsigned long long)bucket->record.alloc_id,
+                        bucket->record.tag ? bucket->record.tag : "none",
+                        bucket->record.test_name[0] ? bucket->record.test_name : "unknown",
+                        bucket->record.test_file[0] ? bucket->record.test_file : "?");
                 shown++;
                 bucket = bucket->next;
             }
         }
 
-        if (leak_count > 50) {
-            fprintf(out, "  ... and %d more leaks not shown\n\n", leak_count - 50);
+        if (leak_count > 20) {
+            fprintf(out, "  ... and %d more leaks not shown\n", leak_count - 20);
         }
 
         // Print per-test summary (group leaks by test name)
