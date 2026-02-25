@@ -27,28 +27,30 @@ Complete cross-language performance analysis: **TML vs Rust vs Go vs Python vs N
 benchmarks/
 ├── README.md (you are here)
 ├── INDEX.md (navigation guide)
-├── ANALYSIS_SUMMARY.md ⭐ (executive summary)
 │
-├── Executive Summaries
-│   ├── RESUMO_PT_BR.md (Portuguese)
-│   ├── PERFORMANCE_SUMMARY.txt (visual table)
-│   └── RECOMMENDATIONS.md (language selection guide)
-│
-├── Detailed Analysis
-│   ├── BENCHMARK_RESULTS.md (TML sync vs async, 50 ops)
-│   ├── CROSS_LANGUAGE_COMPARISON.md (5 languages, 50 ops)
-│   └── LARGE_SCALE_COMPARISON.md (100,000 ops)
-│
-├── Deep Technical (Why TML is Faster)
-│   ├── WHY_TML_IS_FASTER.md (vs Node.js, 36-54x)
-│   ├── TML_VS_RUST_DETAILED.md (vs Rust, 2.2-3.2x)
-│   └── TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md ⭐⭐⭐
-│       ├── IR analysis (LLVM code generation)
-│       ├── Memory layout comparison
-│       ├── Drop trait overhead breakdown
-│       ├── EventLoop architecture analysis
-│       ├── FFI marshalling costs
-│       └── 700+ lines of technical analysis
+├── docs/
+│   ├── executive/ (Executive summaries & decisions)
+│   │   ├── ANALYSIS_SUMMARY.md ⭐ (executive summary)
+│   │   ├── RESUMO_PT_BR.md (Portuguese)
+│   │   ├── PERFORMANCE_SUMMARY.txt (visual table)
+│   │   └── RECOMMENDATIONS.md (language selection guide)
+│   │
+│   ├── technical/ (Detailed benchmark results)
+│   │   ├── BENCHMARK_RESULTS.md (TML sync vs async, 50 ops)
+│   │   ├── CROSS_LANGUAGE_COMPARISON.md (5 languages, 50 ops)
+│   │   └── LARGE_SCALE_COMPARISON.md (100,000 ops)
+│   │
+│   └── analysis/ (Deep technical analysis)
+│       ├── WHY_TML_IS_FASTER.md (vs Node.js, 36-54x)
+│       ├── TML_VS_RUST_DETAILED.md (vs Rust, 2.2-3.2x)
+│       ├── TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md ⭐⭐⭐
+│       │   ├── IR analysis (LLVM code generation)
+│       │   ├── Memory layout comparison
+│       │   ├── Drop trait overhead breakdown
+│       │   ├── EventLoop architecture analysis
+│       │   ├── FFI marshalling costs
+│       │   └── 700+ lines of technical analysis
+│       └── SESSION_SUMMARY.md (this session's work)
 │
 └── profile_tml/ (TML benchmark programs)
     ├── tcp_sync_async_bench.tml (50 ops)
@@ -85,11 +87,11 @@ benchmarks/
 
 ## 📚 Start Reading Here
 
-1. **Summary** (5 min): [ANALYSIS_SUMMARY.md](ANALYSIS_SUMMARY.md)
-2. **Results** (10 min): [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)
-3. **Why TML?** (20 min): [WHY_TML_IS_FASTER.md](WHY_TML_IS_FASTER.md)
-4. **Choose language** (10 min): [RECOMMENDATIONS.md](RECOMMENDATIONS.md)
-5. **Full analysis** (60 min): [TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md) ⭐⭐⭐
+1. **Summary** (5 min): [docs/executive/ANALYSIS_SUMMARY.md](docs/executive/ANALYSIS_SUMMARY.md)
+2. **Results** (10 min): [docs/technical/BENCHMARK_RESULTS.md](docs/technical/BENCHMARK_RESULTS.md)
+3. **Why TML?** (20 min): [docs/analysis/WHY_TML_IS_FASTER.md](docs/analysis/WHY_TML_IS_FASTER.md)
+4. **Choose language** (10 min): [docs/executive/RECOMMENDATIONS.md](docs/executive/RECOMMENDATIONS.md)
+5. **Full analysis** (60 min): [docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md) ⭐⭐⭐
 
 Or see [INDEX.md](INDEX.md) for complete navigation.
 

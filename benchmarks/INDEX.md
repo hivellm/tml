@@ -18,66 +18,83 @@ Complete cross-language performance comparison: TML vs Rust vs Go vs Python vs N
 
 ## 📋 Documentation Files
 
-### Executive Summaries
+### Executive Summaries (`docs/executive/`)
 
-1. **[RESUMO_PT_BR.md](RESUMO_PT_BR.md)** 🇧🇷
+1. **[docs/executive/RESUMO_PT_BR.md](docs/executive/RESUMO_PT_BR.md)** 🇧🇷
    - Portuguese comprehensive summary
    - Quick decision matrix
    - Cost analysis
    - Use case recommendations
 
-2. **[PERFORMANCE_SUMMARY.txt](PERFORMANCE_SUMMARY.txt)**
+2. **[docs/executive/PERFORMANCE_SUMMARY.txt](docs/executive/PERFORMANCE_SUMMARY.txt)**
    - Ranked table of all languages
    - Scaled scenarios
    - Key insights
    - Visual format
 
-3. **[RECOMMENDATIONS.md](RECOMMENDATIONS.md)**
+3. **[docs/executive/RECOMMENDATIONS.md](docs/executive/RECOMMENDATIONS.md)**
    - Language selection guide
    - Use case analysis
    - Migration paths
    - Final scoring table
 
-### Detailed Analysis
+4. **[docs/executive/ANALYSIS_SUMMARY.md](docs/executive/ANALYSIS_SUMMARY.md)**
+   - Executive summary of all findings
+   - Key insights
+   - Recommendations by use case
 
-4. **[BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md)**
+### Detailed Analysis (`docs/technical/`)
+
+5. **[docs/technical/BENCHMARK_RESULTS.md](docs/technical/BENCHMARK_RESULTS.md)**
    - TML sync vs async comparison
    - 50-operation test results
    - TCP and UDP benchmarks
    - Analysis of TML performance
 
-5. **[CROSS_LANGUAGE_COMPARISON.md](CROSS_LANGUAGE_COMPARISON.md)**
+6. **[docs/technical/CROSS_LANGUAGE_COMPARISON.md](docs/technical/CROSS_LANGUAGE_COMPARISON.md)**
    - Full 5-language comparison
    - 50-operation results
    - Per-language analysis
    - Technical explanations
    - Real-world implications
 
-6. **[LARGE_SCALE_COMPARISON.md](LARGE_SCALE_COMPARISON.md)**
+7. **[docs/technical/LARGE_SCALE_COMPARISON.md](docs/technical/LARGE_SCALE_COMPARISON.md)**
    - 100,000-operation scale tests
    - Scaling analysis
    - Production scenarios
    - 1,000,000 operation projections
 
-### Deep Technical Comparisons
+### Deep Technical Comparisons (`docs/analysis/`)
 
-7. **[TML_VS_RUST_DETAILED.md](TML_VS_RUST_DETAILED.md)**
+8. **[docs/analysis/WHY_TML_IS_FASTER.md](docs/analysis/WHY_TML_IS_FASTER.md)**
+   - Why TML is 36-54x faster than Node.js
+   - Compilation vs interpretation
+   - GC overhead analysis
+   - Abstraction layer comparison
+
+9. **[docs/analysis/TML_VS_RUST_DETAILED.md](docs/analysis/TML_VS_RUST_DETAILED.md)**
    - Why TML is 2.2-3.2x faster than Rust
    - Drop trait overhead (~50-60ns per operation)
    - Tokio vs native EventLoop (21ns vs 0.452ns)
    - Result type dispatch costs
    - Socket binding comparison
 
-8. **[TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md)** ⭐ **MUST READ**
-   - Complete technical breakdown
-   - LLVM IR generation comparison
-   - Memory layout analysis (Maybe[T] vs Option<T>)
-   - Type safety vs runtime dispatch
-   - FFI marshalling costs
-   - EventLoop architecture layers
-   - Compilation efficiency
-   - When Rust is better (safety, borrow checker)
-   - 12 sections, comprehensive coverage
+10. **[docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md)** ⭐ **MUST READ**
+    - Complete technical breakdown
+    - LLVM IR generation comparison
+    - Memory layout analysis (Maybe[T] vs Option<T>)
+    - Type safety vs runtime dispatch
+    - FFI marshalling costs
+    - EventLoop architecture layers
+    - Compilation efficiency
+    - When Rust is better (safety, borrow checker)
+    - 12 sections, comprehensive coverage
+
+11. **[docs/analysis/SESSION_SUMMARY.md](docs/analysis/SESSION_SUMMARY.md)**
+    - Summary of this session's work
+    - Documentation created
+    - Key findings
+    - Recommendations
 
 ---
 
@@ -85,7 +102,7 @@ Complete cross-language performance comparison: TML vs Rust vs Go vs Python vs N
 
 ### Scale 1: Small Operations (50 binds)
 
-**Files**: BENCHMARK_RESULTS.md, CROSS_LANGUAGE_COMPARISON.md
+**Files**: [docs/technical/BENCHMARK_RESULTS.md](docs/technical/BENCHMARK_RESULTS.md), [docs/technical/CROSS_LANGUAGE_COMPARISON.md](docs/technical/CROSS_LANGUAGE_COMPARISON.md)
 
 | Language | Per-Op | Ops/Sec | Time |
 |----------|--------|---------|------|
@@ -100,7 +117,7 @@ Complete cross-language performance comparison: TML vs Rust vs Go vs Python vs N
 
 ### Scale 2: Large Operations (100,000 binds)
 
-**Files**: LARGE_SCALE_COMPARISON.md
+**Files**: [docs/technical/LARGE_SCALE_COMPARISON.md](docs/technical/LARGE_SCALE_COMPARISON.md)
 
 | Language | Per-Op | Ops/Sec | Time |
 |----------|--------|---------|------|
@@ -302,13 +319,13 @@ Improvement:        80.2x faster at scale
 
 ## 📚 Reading Order
 
-1. **Start here**: [RESUMO_PT_BR.md](RESUMO_PT_BR.md) (5 min read)
-2. **Quick numbers**: [PERFORMANCE_SUMMARY.txt](PERFORMANCE_SUMMARY.txt) (3 min read)
-3. **Decisions**: [RECOMMENDATIONS.md](RECOMMENDATIONS.md) (10 min read)
-4. **Details**: [CROSS_LANGUAGE_COMPARISON.md](CROSS_LANGUAGE_COMPARISON.md) (20 min read)
-5. **Scale**: [LARGE_SCALE_COMPARISON.md](LARGE_SCALE_COMPARISON.md) (30 min read)
-6. **Deep technical (Rust focus)**: [TML_VS_RUST_DETAILED.md](TML_VS_RUST_DETAILED.md) (15 min read)
-7. **Comprehensive analysis**: [TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md) (60 min read - full IR, memory layout, design analysis)
+1. **Start here**: [docs/executive/RESUMO_PT_BR.md](docs/executive/RESUMO_PT_BR.md) (5 min read)
+2. **Quick numbers**: [docs/executive/PERFORMANCE_SUMMARY.txt](docs/executive/PERFORMANCE_SUMMARY.txt) (3 min read)
+3. **Decisions**: [docs/executive/RECOMMENDATIONS.md](docs/executive/RECOMMENDATIONS.md) (10 min read)
+4. **Details**: [docs/technical/CROSS_LANGUAGE_COMPARISON.md](docs/technical/CROSS_LANGUAGE_COMPARISON.md) (20 min read)
+5. **Scale**: [docs/technical/LARGE_SCALE_COMPARISON.md](docs/technical/LARGE_SCALE_COMPARISON.md) (30 min read)
+6. **Deep technical (Rust focus)**: [docs/analysis/TML_VS_RUST_DETAILED.md](docs/analysis/TML_VS_RUST_DETAILED.md) (15 min read)
+7. **Comprehensive analysis**: [docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md](docs/analysis/TML_VS_RUST_COMPREHENSIVE_ANALYSIS.md) (60 min read - full IR, memory layout, design analysis)
 
 ---
 
