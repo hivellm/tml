@@ -217,6 +217,12 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
             phase_start = Clock::now();
 
             for (auto& suite : suites_to_compile) {
+                // Break immediately if fail_fast was triggered by previous compilation failure
+                if (fail_fast_triggered.load()) {
+                    TML_LOG_DEBUG("test", "[exe] Stopping compilation due to fail_fast");
+                    break;
+                }
+
                 if (!opts.quiet && opts.verbose) {
                     TML_LOG_DEBUG("test", "[exe] Compiling suite: " << suite.name << " ("
                                                                     << suite.tests.size()
