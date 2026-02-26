@@ -1,0 +1,116 @@
+// Tests for PathBuf owned mutable path
+use test::{assert, assert_eq}
+use std::file::path::{Path, PathBuf}
+
+@test
+func test_pathbuf_new() -> I32 {
+    let p: PathBuf = PathBuf::new()
+    assert_eq(p.as_str(), "", "new PathBuf should be empty")
+    return 0
+}
+
+@test
+func test_pathbuf_from() -> I32 {
+    let p: PathBuf = PathBuf::from("home/user")
+    assert_eq(p.as_str(), "home/user", "from should preserve path")
+    return 0
+}
+
+@test
+func test_pathbuf_push() -> I32 {
+    var p: PathBuf = PathBuf::new()
+    p.push("home")
+    assert_eq(p.as_str(), "home", "after first push")
+    p.push("user")
+    assert_eq(p.as_str(), "home/user", "after second push")
+    p.push("file.txt")
+    assert_eq(p.as_str(), "home/user/file.txt", "after third push")
+    return 0
+}
+
+@test
+func test_pathbuf_push_no_double_slash() -> I32 {
+    var p: PathBuf = PathBuf::from("home/")
+    p.push("user")
+    // Should not produce "home//user"
+    let s: Str = p.as_str()
+    assert(not s.contains("//"), "no double slashes")
+    return 0
+}
+
+@test
+func test_pathbuf_pop() -> I32 {
+    var p: PathBuf = PathBuf::from("home/user/file.txt")
+    let removed: Bool = p.pop()
+    assert(removed, "pop should return true")
+    assert_eq(p.as_str(), "home/user", "after pop")
+    let removed2: Bool = p.pop()
+    assert(removed2, "second pop should return true")
+    assert_eq(p.as_str(), "home", "after second pop")
+    return 0
+}
+
+@test
+func test_pathbuf_set_file_name() -> I32 {
+    var p: PathBuf = PathBuf::from("home/user/old.txt")
+    p.set_file_name("new.txt")
+    assert_eq(p.file_name(), "new.txt", "file name should be updated")
+    return 0
+}
+
+@test
+func test_pathbuf_set_extension() -> I32 {
+    var p: PathBuf = PathBuf::from("home/user/file.txt")
+    p.set_extension("md")
+    let s: Str = p.as_str()
+    assert(s.contains("file"), "stem preserved")
+    assert(s.contains("md"), "new extension applied")
+    return 0
+}
+
+@test
+func test_pathbuf_file_name() -> I32 {
+    let p: PathBuf = PathBuf::from("home/user/file.txt")
+    assert_eq(p.file_name(), "file.txt", "file_name")
+    return 0
+}
+
+@test
+func test_pathbuf_file_stem() -> I32 {
+    let p: PathBuf = PathBuf::from("home/user/file.txt")
+    assert_eq(p.file_stem(), "file", "file_stem")
+    return 0
+}
+
+@test
+func test_pathbuf_extension() -> I32 {
+    let p: PathBuf = PathBuf::from("home/user/file.txt")
+    let ext: Str = p.extension()
+    assert(ext.contains("txt"), "extension should contain txt")
+    return 0
+}
+
+@test
+func test_pathbuf_parent() -> I32 {
+    let p: PathBuf = PathBuf::from("home/user/file.txt")
+    assert_eq(p.parent(), "home/user", "parent")
+    return 0
+}
+
+@test
+func test_pathbuf_is_absolute_relative() -> I32 {
+    let rel: PathBuf = PathBuf::from("relative/path")
+    assert(not rel.is_absolute(), "relative path is not absolute")
+    let abs_unix: PathBuf = PathBuf::from("/absolute/path")
+    assert(abs_unix.is_absolute(), "unix absolute path")
+    return 0
+}
+
+@test
+func test_pathbuf_exists() -> I32 {
+    let p: PathBuf = PathBuf::from(".")
+    assert(p.exists(), "current dir should exist")
+    let fake: PathBuf = PathBuf::from("__nonexistent_pathbuf_test__")
+    assert(not fake.exists(), "fake path should not exist")
+    return 0
+}

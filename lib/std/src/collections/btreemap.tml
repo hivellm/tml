@@ -124,6 +124,67 @@ impl BTreeMap {
         return this.keys.get(this.length - 1)
     }
 
+    /// Returns the key at the given index (for ordered iteration).
+    pub func key_at(this, idx: I64) -> I64 {
+        return this.keys.get(idx)
+    }
+
+    /// Returns the value at the given index (for ordered iteration).
+    pub func value_at(this, idx: I64) -> I64 {
+        return this.values.get(idx)
+    }
+
+    /// Returns the first index with key >= from_key (inclusive lower bound).
+    pub func lower_bound(this, from_key: I64) -> I64 {
+        var lo: I64 = 0
+        var hi: I64 = this.length
+        loop (lo < hi) {
+            let mid: I64 = lo + (hi - lo) / 2
+            if this.keys.get(mid) < from_key {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        return lo
+    }
+
+    /// Returns the first index with key > to_key (exclusive upper bound).
+    pub func upper_bound(this, to_key: I64) -> I64 {
+        var lo: I64 = 0
+        var hi: I64 = this.length
+        loop (lo < hi) {
+            let mid: I64 = lo + (hi - lo) / 2
+            if this.keys.get(mid) <= to_key {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        return lo
+    }
+
+    /// Count of entries with from_key <= key <= to_key.
+    pub func range_count(this, from_key: I64, to_key: I64) -> I64 {
+        let lo: I64 = this.lower_bound(from_key)
+        let hi: I64 = this.upper_bound(to_key)
+        if hi > lo { return hi - lo }
+        return 0
+    }
+
+    /// Returns the key of the i-th entry in range [from_key, to_key].
+    /// Use range_count() to know how many entries exist.
+    pub func range_key_at(this, from_key: I64, to_key: I64, i: I64) -> I64 {
+        let lo: I64 = this.lower_bound(from_key)
+        return this.keys.get(lo + i)
+    }
+
+    /// Returns the value of the i-th entry in range [from_key, to_key].
+    pub func range_value_at(this, from_key: I64, to_key: I64, i: I64) -> I64 {
+        let lo: I64 = this.lower_bound(from_key)
+        return this.values.get(lo + i)
+    }
+
     // ========================================================================
     // Internal helpers
     // ========================================================================

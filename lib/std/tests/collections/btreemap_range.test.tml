@@ -1,0 +1,131 @@
+// Tests for BTreeMap range queries and ordered iteration
+use test::{assert, assert_eq}
+use std::collections::BTreeMap
+
+@test
+func test_btreemap_key_at() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    assert_eq(m.key_at(0), 10, "key_at(0) should be 10")
+    assert_eq(m.key_at(1), 20, "key_at(1) should be 20")
+    assert_eq(m.key_at(2), 30, "key_at(2) should be 30")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_value_at() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    assert_eq(m.value_at(0), 100, "value_at(0) should be 100")
+    assert_eq(m.value_at(1), 200, "value_at(1) should be 200")
+    assert_eq(m.value_at(2), 300, "value_at(2) should be 300")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_lower_bound() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    m.insert(40, 400)
+    // lower_bound returns first index with key >= from_key
+    assert_eq(m.lower_bound(10), 0, "lower_bound(10) -> idx 0")
+    assert_eq(m.lower_bound(20), 1, "lower_bound(20) -> idx 1")
+    assert_eq(m.lower_bound(25), 2, "lower_bound(25) -> idx 2 (first >= 25 is 30)")
+    assert_eq(m.lower_bound(40), 3, "lower_bound(40) -> idx 3")
+    assert_eq(m.lower_bound(50), 4, "lower_bound(50) -> past end")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_upper_bound() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    m.insert(40, 400)
+    // upper_bound returns first index with key > to_key
+    assert_eq(m.upper_bound(5), 0, "upper_bound(5) -> 0")
+    assert_eq(m.upper_bound(10), 1, "upper_bound(10) -> 1")
+    assert_eq(m.upper_bound(25), 2, "upper_bound(25) -> 2")
+    assert_eq(m.upper_bound(40), 4, "upper_bound(40) -> 4")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_range_count() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    m.insert(40, 400)
+    m.insert(50, 500)
+    assert_eq(m.range_count(10, 50), 5, "all elements in range")
+    assert_eq(m.range_count(20, 40), 3, "20..40 -> 3 elements")
+    assert_eq(m.range_count(15, 35), 2, "15..35 -> 20,30")
+    assert_eq(m.range_count(60, 100), 0, "no elements in range")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_range_key_at() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    m.insert(40, 400)
+    // range [20, 40] has 3 elements: 20, 30, 40
+    assert_eq(m.range_key_at(20, 40, 0), 20, "first key in [20,40]")
+    assert_eq(m.range_key_at(20, 40, 1), 30, "second key in [20,40]")
+    assert_eq(m.range_key_at(20, 40, 2), 40, "third key in [20,40]")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_range_value_at() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(10, 100)
+    m.insert(20, 200)
+    m.insert(30, 300)
+    m.insert(40, 400)
+    // range [20, 40] has values: 200, 300, 400
+    assert_eq(m.range_value_at(20, 40, 0), 200, "first value in [20,40]")
+    assert_eq(m.range_value_at(20, 40, 1), 300, "second value in [20,40]")
+    assert_eq(m.range_value_at(20, 40, 2), 400, "third value in [20,40]")
+    m.destroy()
+    return 0
+}
+
+@test
+func test_btreemap_ordered_iteration() -> I32 {
+    var m: BTreeMap = BTreeMap::create()
+    m.insert(50, 500)
+    m.insert(10, 100)
+    m.insert(30, 300)
+    m.insert(20, 200)
+    m.insert(40, 400)
+    // Iterate in sorted order
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < m.len()) {
+        sum = sum + m.value_at(i)
+        i = i + 1
+    }
+    assert_eq(sum, 1500, "sum of all values")
+    // Verify sorted order
+    assert_eq(m.key_at(0), 10, "first key should be 10")
+    assert_eq(m.key_at(4), 50, "last key should be 50")
+    m.destroy()
+    return 0
+}

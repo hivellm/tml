@@ -78,6 +78,106 @@ impl BTreeSet {
     pub func max(this) -> I64 {
         return this.map.max_key()
     }
+
+    /// Returns the element at index i in sorted order.
+    pub func get_at(this, i: I64) -> I64 {
+        return this.map.key_at(i)
+    }
+
+    /// Returns a new set with all elements from both sets.
+    pub func union_with(this, other: ref BTreeSet) -> BTreeSet {
+        let mut result: BTreeSet = BTreeSet::create()
+        var i: I64 = 0
+        loop (i < this.len()) {
+            result.insert(this.map.key_at(i))
+            i = i + 1
+        }
+        var j: I64 = 0
+        loop (j < other.len()) {
+            result.insert(other.map.key_at(j))
+            j = j + 1
+        }
+        return result
+    }
+
+    /// Returns a new set with elements common to both sets.
+    pub func intersection(this, other: ref BTreeSet) -> BTreeSet {
+        let mut result: BTreeSet = BTreeSet::create()
+        var i: I64 = 0
+        loop (i < this.len()) {
+            let val: I64 = this.map.key_at(i)
+            if other.contains(val) {
+                result.insert(val)
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns a new set with elements in this but not in other.
+    pub func difference(this, other: ref BTreeSet) -> BTreeSet {
+        let mut result: BTreeSet = BTreeSet::create()
+        var i: I64 = 0
+        loop (i < this.len()) {
+            let val: I64 = this.map.key_at(i)
+            if not other.contains(val) {
+                result.insert(val)
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns a new set with elements in either but not both.
+    pub func symmetric_difference(this, other: ref BTreeSet) -> BTreeSet {
+        let mut result: BTreeSet = BTreeSet::create()
+        var i: I64 = 0
+        loop (i < this.len()) {
+            let val: I64 = this.map.key_at(i)
+            if not other.contains(val) {
+                result.insert(val)
+            }
+            i = i + 1
+        }
+        var j: I64 = 0
+        loop (j < other.len()) {
+            let val: I64 = other.map.key_at(j)
+            if not this.contains(val) {
+                result.insert(val)
+            }
+            j = j + 1
+        }
+        return result
+    }
+
+    /// Returns true if all elements of this set are in other.
+    pub func is_subset(this, other: ref BTreeSet) -> Bool {
+        var i: I64 = 0
+        loop (i < this.len()) {
+            if not other.contains(this.map.key_at(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if this set contains all elements of other.
+    pub func is_superset(this, other: ref BTreeSet) -> Bool {
+        return other.is_subset(ref this)
+    }
+
+    /// Returns true if this set and other share no elements.
+    pub func is_disjoint(this, other: ref BTreeSet) -> Bool {
+        var i: I64 = 0
+        loop (i < this.len()) {
+            if other.contains(this.map.key_at(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
 }
 
 impl Drop for BTreeSet {

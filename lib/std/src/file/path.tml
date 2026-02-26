@@ -218,3 +218,114 @@ impl Path {
         return Path::join(parent, new_filename)
     }
 }
+
+// ============================================================================
+// PathBuf — owned, mutable path
+// ============================================================================
+
+/// An owned, mutable path.
+///
+/// `PathBuf` wraps a `Str` and provides mutation methods (`push`, `pop`,
+/// `set_extension`, etc.) without calling into the file system.
+///
+/// # Example
+///
+/// ```tml
+/// var p: PathBuf = PathBuf::new()
+/// p.push("home")
+/// p.push("user")
+/// p.push("file.txt")
+/// assert_eq(p.as_str(), "home/user/file.txt")
+/// p.set_extension("md")
+/// assert_eq(p.as_str(), "home/user/file.md")
+/// ```
+pub type PathBuf {
+    inner: Str
+}
+
+impl PathBuf {
+    /// Creates an empty PathBuf.
+    pub func new() -> PathBuf {
+        return PathBuf { inner: "" }
+    }
+
+    /// Creates a PathBuf from an existing string.
+    pub func from(s: Str) -> PathBuf {
+        return PathBuf { inner: s }
+    }
+
+    /// Returns the path as a string.
+    pub func as_str(this) -> Str {
+        return this.inner
+    }
+
+    /// Appends a component to the path.
+    pub func push(mut this, component: Str) {
+        if this.inner.len() == 0 {
+            this.inner = component
+            return
+        }
+        // Avoid double separators
+        let last: Str = this.inner.slice(this.inner.len() - 1, this.inner.len())
+        if last == "/" or last == "\\" {
+            this.inner = this.inner + component
+        } else {
+            this.inner = this.inner + "/" + component
+        }
+    }
+
+    /// Removes the last component. Returns true if something was removed.
+    pub func pop(mut this) -> Bool {
+        let parent: Str = Path::parent(this.inner)
+        if parent == this.inner {
+            return false
+        }
+        this.inner = parent
+        return true
+    }
+
+    /// Replaces the filename component.
+    pub func set_file_name(mut this, name: Str) {
+        let parent: Str = Path::parent(this.inner)
+        if parent.len() == 0 {
+            this.inner = name
+        } else {
+            this.inner = Path::join(parent, name)
+        }
+    }
+
+    /// Replaces or removes the extension.
+    pub func set_extension(mut this, ext: Str) {
+        this.inner = Path::with_extension(this.inner, ext)
+    }
+
+    /// Returns the filename component.
+    pub func file_name(this) -> Str {
+        return Path::filename(this.inner)
+    }
+
+    /// Returns the filename without extension.
+    pub func file_stem(this) -> Str {
+        return Path::file_stem(this.inner)
+    }
+
+    /// Returns the extension (including the dot).
+    pub func extension(this) -> Str {
+        return Path::extension(this.inner)
+    }
+
+    /// Returns the parent path.
+    pub func parent(this) -> Str {
+        return Path::parent(this.inner)
+    }
+
+    /// Returns true if this is an absolute path.
+    pub func is_absolute(this) -> Bool {
+        return Path::is_absolute(this.inner)
+    }
+
+    /// Returns true if this path exists on the file system.
+    pub func exists(this) -> Bool {
+        return Path::exists(this.inner)
+    }
+}

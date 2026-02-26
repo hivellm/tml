@@ -1,0 +1,177 @@
+// Tests for BTreeSet set operations and ordered access
+use test::{assert, assert_eq}
+use std::collections::BTreeSet
+
+@test
+func test_btreeset_get_at() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(30)
+    s.insert(10)
+    s.insert(20)
+    // Elements are sorted
+    assert_eq(s.get_at(0), 10, "get_at(0) should be 10")
+    assert_eq(s.get_at(1), 20, "get_at(1) should be 20")
+    assert_eq(s.get_at(2), 30, "get_at(2) should be 30")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_union_with() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(3)
+    b.insert(4)
+    b.insert(5)
+    let u: BTreeSet = a.union_with(ref b)
+    assert_eq(u.len(), 5, "union should have 5 elements")
+    assert(u.contains(1), "union contains 1")
+    assert(u.contains(3), "union contains 3")
+    assert(u.contains(5), "union contains 5")
+    a.destroy()
+    b.destroy()
+    u.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_intersection() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(2)
+    b.insert(3)
+    b.insert(4)
+    let inter: BTreeSet = a.intersection(ref b)
+    assert_eq(inter.len(), 2, "intersection should have 2 elements")
+    assert(inter.contains(2), "intersection contains 2")
+    assert(inter.contains(3), "intersection contains 3")
+    assert(not inter.contains(1), "intersection does not contain 1")
+    assert(not inter.contains(4), "intersection does not contain 4")
+    a.destroy()
+    b.destroy()
+    inter.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_difference() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(2)
+    b.insert(3)
+    b.insert(4)
+    let diff: BTreeSet = a.difference(ref b)
+    assert_eq(diff.len(), 1, "difference should have 1 element")
+    assert(diff.contains(1), "difference contains 1")
+    assert(not diff.contains(2), "difference does not contain 2")
+    a.destroy()
+    b.destroy()
+    diff.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_symmetric_difference() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(2)
+    b.insert(3)
+    b.insert(4)
+    let sdiff: BTreeSet = a.symmetric_difference(ref b)
+    assert_eq(sdiff.len(), 2, "symmetric_difference should have 2 elements")
+    assert(sdiff.contains(1), "sym_diff contains 1")
+    assert(sdiff.contains(4), "sym_diff contains 4")
+    assert(not sdiff.contains(2), "sym_diff does not contain 2")
+    assert(not sdiff.contains(3), "sym_diff does not contain 3")
+    a.destroy()
+    b.destroy()
+    sdiff.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_is_subset() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(1)
+    b.insert(2)
+    b.insert(3)
+    b.insert(4)
+    assert(a.is_subset(ref b), "a is subset of b")
+    assert(not b.is_subset(ref a), "b is not subset of a")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_is_superset() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    a.insert(3)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(2)
+    b.insert(3)
+    assert(a.is_superset(ref b), "a is superset of b")
+    assert(not b.is_superset(ref a), "b is not superset of a")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_is_disjoint() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    var b: BTreeSet = BTreeSet::create()
+    b.insert(3)
+    b.insert(4)
+    var c: BTreeSet = BTreeSet::create()
+    c.insert(2)
+    c.insert(5)
+    assert(a.is_disjoint(ref b), "a and b are disjoint")
+    assert(not a.is_disjoint(ref c), "a and c share element 2")
+    a.destroy()
+    b.destroy()
+    c.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_empty_operations() -> I32 {
+    var a: BTreeSet = BTreeSet::create()
+    a.insert(1)
+    a.insert(2)
+    var empty: BTreeSet = BTreeSet::create()
+    let u: BTreeSet = a.union_with(ref empty)
+    assert_eq(u.len(), 2, "union with empty = original")
+    let inter: BTreeSet = a.intersection(ref empty)
+    assert_eq(inter.len(), 0, "intersection with empty = empty")
+    let diff: BTreeSet = a.difference(ref empty)
+    assert_eq(diff.len(), 2, "difference with empty = original")
+    assert(empty.is_subset(ref a), "empty is subset of any set")
+    assert(a.is_superset(ref empty), "any set is superset of empty")
+    assert(a.is_disjoint(ref empty), "any set is disjoint with empty")
+    a.destroy()
+    empty.destroy()
+    u.destroy()
+    inter.destroy()
+    diff.destroy()
+    return 0
+}

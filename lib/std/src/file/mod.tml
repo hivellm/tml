@@ -43,7 +43,7 @@ pub use std::file::file::{File}
 pub use std::file::dir::{Dir}
 
 // Re-export path types
-pub use std::file::path::{Path}
+pub use std::file::path::{Path, PathBuf}
 
 // Re-export buffered I/O types
 pub use std::file::bufio::{BufReader, BufWriter, LineWriter}
