@@ -419,7 +419,7 @@ add_library(tml_types STATIC
     src/types/checker/expr.cpp
     src/types/checker/stmt.cpp
     src/types/checker/control.cpp
-    src/types/checker/types.cpp
+    src/types/checker/types_checker.cpp
     src/types/checker/resolve.cpp
     src/types/checker/decl_struct.cpp
     src/types/checker/expr_call.cpp
@@ -442,6 +442,7 @@ add_library(tml_types STATIC
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)
+# Note: Unity builds disabled for tml_types due to symbol conflicts (duplicate static functions/variables)
 
 # Borrow checker library
 add_library(tml_borrow STATIC
@@ -524,12 +525,12 @@ add_library(tml_mir STATIC
     src/mir/mir_serialize.cpp
     src/mir/mir_pass.cpp
     # Builder modules (split from mir_builder.cpp for maintainability)
-    src/mir/builder/types.cpp
+    src/mir/builder/builder_types.cpp
     src/mir/builder/expr.cpp
     src/mir/builder/stmt.cpp
     src/mir/builder/pattern.cpp
     src/mir/builder/control.cpp
-    src/mir/builder/helpers.cpp
+    src/mir/builder/builder_helpers.cpp
     # HIR to MIR builder (uses HIR instead of AST)
     src/mir/hir_mir_builder.cpp
     src/mir/builder/hir_expr.cpp
@@ -610,8 +611,8 @@ add_library(tml_codegen STATIC
     src/codegen/codegen_partitioner.cpp
     # MIR codegen (MIR → LLVM IR text, backend-agnostic interface)
     src/codegen/mir_codegen.cpp
-    src/codegen/mir/helpers.cpp
-    src/codegen/mir/types.cpp
+    src/codegen/mir/codegen_helpers.cpp
+    src/codegen/mir/mir_types.cpp
     src/codegen/mir/terminators.cpp
     src/codegen/mir/instructions.cpp
     src/codegen/mir/instructions_method.cpp
@@ -621,7 +622,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/llvm_ir_gen_stmt.cpp
     src/codegen/llvm/llvm_ir_gen_expr.cpp
     # LLVM declaration codegen
-    src/codegen/llvm/decl/struct.cpp
+    src/codegen/llvm/decl/llvm_struct_decl.cpp
     src/codegen/llvm/decl/enum.cpp
     src/codegen/llvm/decl/func.cpp
     src/codegen/llvm/decl/impl.cpp
@@ -643,8 +644,8 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/control/return.cpp
     src/codegen/llvm/control/when.cpp
     # LLVM core codegen
-    src/codegen/llvm/core/utils.cpp
-    src/codegen/llvm/core/types.cpp
+    src/codegen/llvm/core/llvm_utils.cpp
+    src/codegen/llvm/core/llvm_types.cpp
     src/codegen/llvm/core/types_resolve.cpp
     src/codegen/llvm/core/generic.cpp
     src/codegen/llvm/core/runtime.cpp
@@ -672,7 +673,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/expr/closure.cpp
     src/codegen/llvm/expr/infer.cpp
     src/codegen/llvm/expr/infer_methods.cpp
-    src/codegen/llvm/expr/struct.cpp
+    src/codegen/llvm/expr/llvm_struct_expr.cpp
     src/codegen/llvm/expr/struct_field.cpp
     src/codegen/llvm/expr/tuple.cpp
     src/codegen/llvm/expr/print.cpp
@@ -709,6 +710,39 @@ add_library(tml_codegen STATIC
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
+
+# Precompiled Headers (PCH) for standard C++ headers to speed up compilation
+# Applied to all major targets to maximize cache benefit
+set(TML_PCH_HEADERS
+    <memory>
+    <vector>
+    <string>
+    <map>
+    <unordered_map>
+    <set>
+    <unordered_set>
+    <algorithm>
+    <iostream>
+    <fstream>
+    <sstream>
+    <stdexcept>
+    <variant>
+    <optional>
+    <array>
+    <functional>
+    <chrono>
+    <thread>
+    <mutex>
+    <condition_variable>
+)
+
+if(MSVC)
+    target_precompile_headers(tml_lexer PRIVATE ${TML_PCH_HEADERS})
+    target_precompile_headers(tml_parser PRIVATE ${TML_PCH_HEADERS})
+    target_precompile_headers(tml_types PRIVATE ${TML_PCH_HEADERS})
+    target_precompile_headers(tml_borrow PRIVATE ${TML_PCH_HEADERS})
+    target_precompile_headers(tml_codegen PRIVATE ${TML_PCH_HEADERS})
+endif()
 
 # Query system library (demand-driven compilation with memoization)
 add_library(tml_query STATIC
@@ -1415,7 +1449,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_debug.cpp
     src/cli/commands/cmd_doc.cpp
     # Explain modules
-    src/cli/explain/run.cpp
+    src/cli/explain/explain_run.cpp
     src/cli/explain/lexer_errors.cpp
     src/cli/explain/parser_errors.cpp
     src/cli/explain/type_errors.cpp
@@ -1436,22 +1470,22 @@ add_library(tml_cli STATIC
     src/cli/builder/build_config.cpp
     src/cli/builder/compiler_setup.cpp
     src/cli/builder/dependency_resolver.cpp
-    src/cli/builder/helpers.cpp
+    src/cli/builder/builder_helpers.cpp
     src/cli/builder/object_compiler.cpp
     src/cli/builder/parallel_build.cpp
     src/cli/builder/rlib.cpp
-    src/cli/builder/run.cpp
+    src/cli/builder/builder_run.cpp
     src/cli/builder/run_profiled.cpp
     # Tester modules
     src/cli/tester/benchmark.cpp
     src/cli/tester/coverage.cpp
     src/cli/tester/diagnostic_execution.cpp
-    src/cli/tester/discovery.cpp
+    src/cli/tester/tester_discovery.cpp
     src/cli/tester/execution.cpp
     src/cli/tester/fuzzer.cpp
-    src/cli/tester/helpers.cpp
+    src/cli/tester/tester_helpers.cpp
     src/cli/tester/output.cpp
-    src/cli/tester/run.cpp
+    src/cli/tester/tester_run.cpp
     src/cli/tester/suite_execution.cpp
     src/cli/tester/test_runner.cpp
     src/cli/tester/test_runner_exec.cpp
@@ -1467,14 +1501,19 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_test_v2.cpp
     # Linter modules
     src/cli/linter/config.cpp
-    src/cli/linter/discovery.cpp
-    src/cli/linter/helpers.cpp
-    src/cli/linter/run.cpp
+    src/cli/linter/linter_discovery.cpp
+    src/cli/linter/linter_helpers.cpp
+    src/cli/linter/linter_run.cpp
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_query tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log tml_runtime ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
+
+# Apply PCH to tml_cli after target is defined
+if(MSVC)
+    target_precompile_headers(tml_cli PRIVATE ${TML_PCH_HEADERS})
+endif()
 
 # OpenSSL for SHA256 hashing (non-Windows)
 if(NOT WIN32)

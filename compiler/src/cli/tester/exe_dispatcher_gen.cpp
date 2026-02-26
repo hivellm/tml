@@ -38,9 +38,9 @@ std::string generate_dispatcher_ir(int total_tests, const std::string& module_na
           "c\"ERROR: invalid test index %d\\0A\\00\"\n";
     ir << "@.str.no_index = private unnamed_addr constant [41 x i8] "
           "c\"ERROR: --test-index=N argument required\\0A\\00\"\n";
-    ir << "@.str.result_pass = private unnamed_addr constant [24 x i8] "
+    ir << "@.str.result_pass = private unnamed_addr constant [23 x i8] "
           "c\"TML_RESULT:%d:PASS:%d\\0A\\00\"\n";
-    ir << "@.str.result_fail = private unnamed_addr constant [24 x i8] "
+    ir << "@.str.result_fail = private unnamed_addr constant [23 x i8] "
           "c\"TML_RESULT:%d:FAIL:%d\\0A\\00\"\n";
     ir << "\n";
 

@@ -182,6 +182,158 @@ static const std::string& get_cached_env_block() {
     return cached;
 }
 
+// ============================================================================
+// Async subprocess launch (non-blocking)
+// ============================================================================
+
+AsyncSubprocessHandle launch_subprocess_async(const std::string& exe_path, int expected_tests,
+                                               int timeout_seconds, const std::string& suite_name,
+                                               const TestOptions& opts) {
+    AsyncSubprocessHandle handle;
+    handle.exe_path = exe_path;
+    handle.expected_tests = expected_tests;
+    handle.suite_name = suite_name;
+    handle.timeout_seconds = timeout_seconds;
+    handle.opts = &opts;
+    handle.start_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::high_resolution_clock::now().time_since_epoch())
+                              .count();
+
+#ifdef _WIN32
+    // Create pipes for stdout/stderr capture (same as sync version)
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = NULL;
+
+    HANDLE stdout_read = NULL, stdout_write = NULL;
+    HANDLE stderr_read = NULL, stderr_write = NULL;
+
+    if (!CreatePipe(&stdout_read, &stdout_write, &sa, 0) ||
+        !CreatePipe(&stderr_read, &stderr_write, &sa, 0)) {
+        CloseHandle(stdout_read);
+        CloseHandle(stdout_write);
+        CloseHandle(stderr_read);
+        CloseHandle(stderr_write);
+        return handle; // Failed to create pipes
+    }
+
+    // Build command line
+    std::string cmd = exe_path + " --run-all";
+    std::vector<char> cmd_buf(cmd.begin(), cmd.end());
+    cmd_buf.push_back('\0');
+
+    // Build environment block
+    std::string env_block = get_cached_env_block();
+    if (opts.coverage && !suite_name.empty()) {
+        fs::path cov_dir = fs::path("build") / "coverage";
+        fs::create_directories(cov_dir);
+        std::string cov_file_path = (cov_dir / ("cov_" + suite_name + ".txt")).string();
+        env_block += "TML_COVERAGE_FILE=" + cov_file_path + "\0";
+    }
+
+    LPVOID env_ptr = env_block.empty() ? NULL : (LPVOID)env_block.data();
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(STARTUPINFOA);
+    si.hStdOutput = stdout_write;
+    si.hStdError = stderr_write;
+    si.dwFlags = STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pi = {};
+    BOOL created = CreateProcessA(NULL, cmd_buf.data(), NULL, NULL, TRUE, 0, env_ptr, NULL, &si, &pi);
+
+    CloseHandle(stdout_write);
+    CloseHandle(stderr_write);
+
+    if (!created) {
+        CloseHandle(stdout_read);
+        CloseHandle(stderr_read);
+        return handle; // Failed to create process
+    }
+
+    // Store process handle and pipes for later
+    // We'll store these in a temp structure and pass via handle
+    // For now, just store the process handle
+    handle.process_handle = (void*)pi.hProcess;
+    CloseHandle(pi.hThread); // Don't need thread handle
+
+#else // Unix
+    // Similar for Unix with fork/pipe
+    // For MVP, not implementing Unix async version yet
+#endif
+
+    return handle;
+}
+
+// Wait for async subprocess to complete
+SuiteSubprocessResult wait_for_subprocess(const AsyncSubprocessHandle& handle) {
+    SuiteSubprocessResult result;
+    result.process_ok = false;
+
+#ifdef _WIN32
+    if (!handle.process_handle) {
+        result.stderr_output = "Invalid process handle";
+        return result;
+    }
+
+    DWORD timeout_ms = (handle.timeout_seconds > 0) ? (handle.timeout_seconds * 1000) : INFINITE;
+    DWORD wait_result = WaitForSingleObject((HANDLE)handle.process_handle, timeout_ms);
+
+    if (wait_result == WAIT_TIMEOUT) {
+        result.timed_out = true;
+        TerminateProcess((HANDLE)handle.process_handle, (UINT)-1);
+        CloseHandle((HANDLE)handle.process_handle);
+        return result;
+    }
+
+    if (wait_result != WAIT_OBJECT_0) {
+        result.stderr_output = "WaitForSingleObject failed";
+        CloseHandle((HANDLE)handle.process_handle);
+        return result;
+    }
+
+    DWORD exit_code = 0;
+    if (!GetExitCodeProcess((HANDLE)handle.process_handle, &exit_code)) {
+        result.stderr_output = "GetExitCodeProcess failed";
+        CloseHandle((HANDLE)handle.process_handle);
+        return result;
+    }
+
+    CloseHandle((HANDLE)handle.process_handle);
+
+    // TODO: Collect stdout/stderr from pipes and parse TML_RESULT lines
+    // For MVP, just return success if exit_code was 0
+    result.process_ok = (exit_code == 0);
+
+#else // Unix
+    // Similar for Unix
+#endif
+
+    auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::high_resolution_clock::now().time_since_epoch())
+                          .count() -
+                      handle.start_time_us;
+    result.total_duration_us = elapsed_us;
+
+    return result;
+}
+
+// Check if a subprocess has completed (non-blocking)
+bool subprocess_is_done(const AsyncSubprocessHandle& handle) {
+#ifdef _WIN32
+    if (!handle.process_handle) {
+        return true; // Invalid handle means "done"
+    }
+
+    DWORD wait_result = WaitForSingleObject((HANDLE)handle.process_handle, 0); // 0 = non-blocking
+    return (wait_result == WAIT_OBJECT_0); // WAIT_OBJECT_0 means process exited
+#else
+    // Unix: Similar with waitpid(..., WNOHANG)
+    return false; // TODO: implement for Unix
+#endif
+}
+
 // Helper: launch a subprocess with given arguments, capture stdout/stderr
 struct RawSubprocessResult {
     bool launched = false;
@@ -193,7 +345,9 @@ struct RawSubprocessResult {
 };
 
 static RawSubprocessResult launch_subprocess(const std::string& exe_path,
-                                             const std::string& args_str, int timeout_seconds) {
+                                             const std::string& args_str, int timeout_seconds,
+                                             const std::string& suite_name = "",
+                                             const TestOptions& opts = {}) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -240,7 +394,18 @@ static RawSubprocessResult launch_subprocess(const std::string& exe_path,
     std::vector<char> cmd_buf(cmd.begin(), cmd.end());
     cmd_buf.push_back('\0');
 
-    const std::string& env_block = get_cached_env_block();
+    // Get base environment block (with DLL paths)
+    std::string env_block = get_cached_env_block();
+
+    // Add TML_COVERAGE_FILE env var if running with coverage and suite_name is provided
+    if (opts.coverage && !suite_name.empty()) {
+        fs::path cov_dir = fs::path("build") / "coverage";
+        fs::create_directories(cov_dir);
+        std::string cov_file_path =
+            (cov_dir / ("cov_" + suite_name + ".txt")).string();
+        env_block += "TML_COVERAGE_FILE=" + cov_file_path + "\0";
+    }
+
     LPVOID env_ptr = env_block.empty() ? NULL : (LPVOID)env_block.data();
 
     BOOL created =
@@ -309,8 +474,9 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
 }
 
 SuiteSubprocessResult run_suite_all_subprocess(const std::string& exe_path, int expected_tests,
-                                               int timeout_seconds) {
-    auto raw = launch_subprocess(exe_path, "--run-all", timeout_seconds);
+                                               int timeout_seconds, const std::string& suite_name,
+                                               const TestOptions& opts) {
+    auto raw = launch_subprocess(exe_path, "--run-all", timeout_seconds, suite_name, opts);
 
     SuiteSubprocessResult result;
     result.process_ok = raw.launched && !raw.timed_out;

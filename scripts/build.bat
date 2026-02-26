@@ -220,10 +220,10 @@ echo.
 echo Building TML compiler...
 
 if "%BUILD_TARGET%"=="" (
-    cmake --build . --config %CMAKE_BUILD_TYPE%
+    cmake --build . --config %CMAKE_BUILD_TYPE% --parallel
 ) else (
     echo Building target: %BUILD_TARGET%
-    cmake --build . --config %CMAKE_BUILD_TYPE% --target %BUILD_TARGET%
+    cmake --build . --config %CMAKE_BUILD_TYPE% --target %BUILD_TARGET% --parallel
 )
 
 if errorlevel 1 (

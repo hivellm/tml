@@ -71,6 +71,17 @@ struct SuiteSubprocessResult {
     std::vector<TestOutcome> outcomes;
 };
 
+// Async subprocess handle for parallel execution
+struct AsyncSubprocessHandle {
+    void* process_handle = nullptr;  // HANDLE on Windows, void* on Unix
+    std::string exe_path;
+    int expected_tests = 0;
+    std::string suite_name;
+    int timeout_seconds = 300;
+    const TestOptions* opts = nullptr;
+    int64_t start_time_us = 0;
+};
+
 // Compile a test suite to an EXE (adapts compile_test_suite for EXE output)
 ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose = false,
                                         bool no_cache = false);
@@ -84,7 +95,23 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
 // Run ALL tests in a suite via a single subprocess with --run-all (optimized)
 // Parses structured TML_RESULT lines from stdout for per-test pass/fail
 SuiteSubprocessResult run_suite_all_subprocess(const std::string& exe_path, int expected_tests,
-                                               int timeout_seconds = 300);
+                                               int timeout_seconds = 300,
+                                               const std::string& suite_name = "",
+                                               const TestOptions& opts = {});
+
+// Launch a subprocess asynchronously (non-blocking) — returns a handle
+// Use wait_for_subprocess to collect the result
+AsyncSubprocessHandle launch_subprocess_async(const std::string& exe_path, int expected_tests,
+                                              int timeout_seconds, const std::string& suite_name,
+                                              const TestOptions& opts);
+
+// Wait for an async subprocess to complete and collect results
+// blocks until process finishes or timeout
+SuiteSubprocessResult wait_for_subprocess(const AsyncSubprocessHandle& handle);
+
+// Check if a subprocess has completed (non-blocking)
+// Returns true if process is done, false if still running
+bool subprocess_is_done(const AsyncSubprocessHandle& handle);
 
 // Generate LLVM IR for a dispatcher main() that routes --test-index=N or --run-all
 std::string generate_dispatcher_ir(int total_tests, const std::string& module_name);

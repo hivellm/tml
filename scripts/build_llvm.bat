@@ -30,17 +30,20 @@ cd /d "%LLVM_BUILD%"
 echo Configuring LLVM (this may take a while)...
 echo.
 
-:: Configure LLVM with minimal components needed for TML
-:: We only need: LLVM core, lld, and the C API
+:: Configure LLVM with MINIMAL components needed for TML
+:: X86 target only (no AArch64) for FASTEST possible build
+:: Include LLD (linker) in projects
 cmake -G "Visual Studio 17 2022" -A x64 ^
     -DCMAKE_BUILD_TYPE=Release ^
     -DCMAKE_INSTALL_PREFIX="%LLVM_INSTALL%" ^
     -DLLVM_ENABLE_PROJECTS="lld" ^
-    -DLLVM_TARGETS_TO_BUILD="X86;AArch64" ^
+    -DLLVM_TARGETS_TO_BUILD=X86 ^
     -DLLVM_BUILD_TOOLS=OFF ^
     -DLLVM_BUILD_EXAMPLES=OFF ^
     -DLLVM_BUILD_TESTS=OFF ^
     -DLLVM_BUILD_DOCS=OFF ^
+    -DLLVM_BUILD_RUNTIME=OFF ^
+    -DLLVM_BUILD_RUNTIMES=OFF ^
     -DLLVM_INCLUDE_EXAMPLES=OFF ^
     -DLLVM_INCLUDE_TESTS=OFF ^
     -DLLVM_INCLUDE_DOCS=OFF ^
@@ -51,6 +54,11 @@ cmake -G "Visual Studio 17 2022" -A x64 ^
     -DLLVM_ENABLE_ZSTD=OFF ^
     -DLLVM_ENABLE_LIBXML2=OFF ^
     -DLLVM_ENABLE_TERMINFO=OFF ^
+    -DLLVM_ENABLE_LIBEDIT=OFF ^
+    -DLLVM_ENABLE_LIBPFM=OFF ^
+    -DLLVM_BUILD_LLVM_C_DYLIB=OFF ^
+    -DLLVM_OPTIMIZED_TABLEGEN=ON ^
+    -DLLVM_USE_CRT_RELEASE=/MD ^
     "%LLVM_SRC%\llvm"
 
 if %ERRORLEVEL% neq 0 (
@@ -60,11 +68,11 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo Building LLVM (this will take 30-60 minutes)...
+echo Building LLVM (this will take 20-30 minutes with parallel compilation)...
 echo.
 
-:: Build only the necessary targets
-cmake --build . --config Release --target LLVM-C lld -- /m
+:: Build with parallel compilation and optimizations
+cmake --build . --config Release --parallel
 
 if %ERRORLEVEL% neq 0 (
     echo.

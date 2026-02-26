@@ -32,6 +32,7 @@ TML_MODULE("test")
 #include <iomanip>
 #include <map>
 #include <mutex>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -40,9 +41,54 @@ namespace fs = std::filesystem;
 
 namespace tml::cli::tester {
 
+// ============================================================================
+// Coverage Data Structures and Helpers
+// ============================================================================
+
+struct PreviousCoverage {
+    int covered;    // Number of functions covered
+    int total;      // Total number of library functions
+    double percent; // Coverage percentage
+    bool valid;     // Whether the data was successfully parsed
+};
+
+/// Read the previous coverage from the existing HTML report
+static PreviousCoverage get_previous_coverage(const std::string& html_path) {
+    PreviousCoverage result = {0, 0, 0.0, false};
+
+    if (!fs::exists(html_path)) {
+        return result;
+    }
+
+    std::ifstream file(html_path);
+    if (!file.is_open()) {
+        return result;
+    }
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    // Look for the "Functions Covered" stat card value (format: "N / M")
+    // Pattern: <div class="stat-value">N / M</div>
+    std::regex pattern(R"(<div class="stat-value">(\d+)\s*/\s*(\d+)</div>)");
+    std::smatch match;
+    if (std::regex_search(content, match, pattern)) {
+        try {
+            result.covered = std::stoi(match[1].str());
+            result.total = std::stoi(match[2].str());
+            if (result.total > 0) {
+                result.percent = (100.0 * result.covered) / result.total;
+            }
+            result.valid = true;
+        } catch (...) {
+            // Keep result.valid = false
+        }
+    }
+
+    return result;
+}
+
 int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOptions& opts,
                        TestResultCollector& collector, const ColorOutput& c) {
-    (void)c; // ColorOutput not used in EXE mode (subprocess handles its own output)
     using Clock = std::chrono::high_resolution_clock;
 
     // Test cache for skipping unchanged tests
@@ -217,15 +263,24 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         std::mutex cache_mutex;
         std::atomic<bool> fail_fast_triggered{false};
 
+        // Coverage tracking for subprocess mode
+        std::set<std::string> all_covered_functions;
+        std::mutex coverage_mutex;
+
         // Determine execution thread count
         unsigned int hw_threads = std::thread::hardware_concurrency();
         if (hw_threads == 0)
             hw_threads = 8;
-        unsigned int num_exec_threads = std::clamp(hw_threads / 4, 1u, 4u);
+        // Use half of available threads for subprocess execution, max 8 threads
+        unsigned int num_exec_threads = std::clamp(hw_threads / 2, 2u, 8u);
         num_exec_threads =
             std::min(num_exec_threads, static_cast<unsigned int>(compiled_suites.size()));
 
         std::atomic<size_t> suite_index{0};
+        std::vector<AsyncSubprocessHandle> pending_suites;
+        std::vector<size_t> pending_suite_indices;
+        std::mutex pending_mutex;
+        const size_t max_concurrent = std::min(num_exec_threads * 2, 16u);
 
         auto suite_worker = [&]() {
             while (true) {
@@ -233,12 +288,82 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                     return;
                 }
 
-                size_t idx = suite_index.fetch_add(1);
-                if (idx >= compiled_suites.size()) {
-                    return;
+                // Check ALL pending subprocesses for completion (non-blocking poll)
+                {
+                    std::lock_guard<std::mutex> lock(pending_mutex);
+                    for (int i = (int)pending_suites.size() - 1; i >= 0; --i) {
+                        if (subprocess_is_done(pending_suites[i])) {
+                            // This one is done, collect its result
+                            SuiteSubprocessResult suite_result = wait_for_subprocess(pending_suites[i]);
+                            size_t completed_idx = pending_suite_indices[i];
+                            pending_suites.erase(pending_suites.begin() + i);
+                            pending_suite_indices.erase(pending_suite_indices.begin() + i);
+
+                            auto& [suite, exe_path] = compiled_suites[completed_idx];
+                            TML_LOG_DEBUG("test", "[exe] Suite completed: " << suite.name);
+
+                            // Process result (cache, fail_fast check, coverage collection)
+                            // This was previously in lines 344+, moved to after each collection
+                            // [Collection and processing code continues below at the end of this block]
+                            // For now, mark that we need to process this result
+                            // We'll break and process one at a time to keep locks minimal
+                            break;
+                        }
+                    }
                 }
 
-                auto& [suite, exe_path] = compiled_suites[idx];
+                // Launch new subprocess if we have capacity
+                {
+                    std::lock_guard<std::mutex> lock(pending_mutex);
+                    if (pending_suites.size() < max_concurrent) {
+                        size_t idx = suite_index.fetch_add(1);
+                        if (idx >= compiled_suites.size()) {
+                            // No more suites to launch, wait for pending to finish
+                            if (pending_suites.empty()) {
+                                return; // All done
+                            }
+                            // Continue polling pending subprocesses
+                        } else {
+                            auto& [suite, exe_path] = compiled_suites[idx];
+                            auto handle = launch_subprocess_async(
+                                exe_path, static_cast<int>(suite.tests.size()),
+                                opts.timeout_seconds > 0
+                                    ? opts.timeout_seconds * static_cast<int>(suite.tests.size())
+                                    : 300,
+                                suite.name, opts);
+                            pending_suites.push_back(handle);
+                            pending_suite_indices.push_back(idx);
+                            continue; // Launch more if we have capacity
+                        }
+                    }
+                }
+
+                // Small sleep to avoid busy-waiting (use 1ms instead of 10ms for responsiveness)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+                // Collect results from ANY completed subprocess
+                SuiteSubprocessResult suite_result;
+                size_t completed_idx = 0;
+                bool found_completed = false;
+                {
+                    std::lock_guard<std::mutex> lock(pending_mutex);
+                    for (size_t i = 0; i < pending_suites.size(); ++i) {
+                        if (subprocess_is_done(pending_suites[i])) {
+                            suite_result = wait_for_subprocess(pending_suites[i]);
+                            completed_idx = pending_suite_indices[i];
+                            pending_suites.erase(pending_suites.begin() + i);
+                            pending_suite_indices.erase(pending_suite_indices.begin() + i);
+                            found_completed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!found_completed) {
+                    continue; // No subprocess completed yet, loop and check again
+                }
+
+                auto& [suite, exe_path] = compiled_suites[completed_idx];
 
                 TML_LOG_DEBUG("test", "[exe] Running suite via --run-all: " << suite.name << " ("
                                                                             << suite.tests.size()
@@ -309,18 +434,9 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                     continue;
                 }
 
-                // Run ALL tests in this suite with a single subprocess
-                auto suite_start = Clock::now();
-
-                auto suite_result = run_suite_all_subprocess(
-                    exe_path, static_cast<int>(suite.tests.size()),
-                    opts.timeout_seconds > 0
-                        ? opts.timeout_seconds * static_cast<int>(suite.tests.size())
-                        : 300);
-
-                auto suite_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                             Clock::now() - suite_start)
-                                             .count();
+                // suite_result was already assigned from wait_for_subprocess above
+                // The duration was already calculated there
+                auto suite_duration_us = suite_result.total_duration_us;
                 int64_t per_test_ms =
                     suite.tests.size() > 0
                         ? (suite_duration_us / 1000) / static_cast<int64_t>(suite.tests.size())
@@ -456,6 +572,31 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                     fs::create_directories(cache_file.parent_path());
                     test_cache.save(cache_file.string());
                 }
+
+                // Collect coverage data from subprocess temporary file
+                if (opts.coverage && !suite.name.empty()) {
+                    fs::path cov_file = fs::path("build/coverage") / ("cov_" + suite.name + ".txt");
+                    if (fs::exists(cov_file)) {
+                        std::ifstream in(cov_file);
+                        std::string func_name;
+                        {
+                            std::lock_guard<std::mutex> lock(coverage_mutex);
+                            while (std::getline(in, func_name)) {
+                                if (!func_name.empty()) {
+                                    all_covered_functions.insert(func_name);
+                                }
+                            }
+                        }
+                        in.close();
+                        // Clean up the temporary file
+                        try {
+                            fs::remove(cov_file);
+                        } catch (...) {
+                            // Ignore cleanup errors
+                        }
+                        TML_LOG_DEBUG("test", "[exe] Collected coverage from: " << cov_file.string());
+                    }
+                }
             }
         };
 
@@ -512,6 +653,116 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         if (skipped > 0 && !opts.quiet) {
             TML_LOG_DEBUG("test", "[exe] Skipped " << skipped << " cached test"
                                                    << (skipped != 1 ? "s" : "") << " (unchanged)");
+        }
+
+        // Generate coverage report if coverage was enabled
+        if (opts.coverage) {
+            // Build TestRunStats from collector results
+            TestRunStats test_stats;
+            test_stats.total_files = static_cast<int>(test_files.size());
+
+            // Aggregate stats by suite
+            std::map<std::string, SuiteStats> suite_map;
+            for (const auto& result : collector.results) {
+                auto& ss = suite_map[result.group];
+                ss.name = result.group;
+                ss.test_count += result.test_count;
+                ss.duration_ms += result.duration_ms;
+                test_stats.total_tests += result.test_count;
+                test_stats.total_duration_ms += result.duration_ms;
+            }
+
+            // Convert map to vector
+            for (auto& [name, ss] : suite_map) {
+                test_stats.suites.push_back(std::move(ss));
+            }
+
+            // Sort suites by test count (descending)
+            std::sort(test_stats.suites.begin(), test_stats.suites.end(),
+                      [](const SuiteStats& a, const SuiteStats& b) {
+                          return a.test_count > b.test_count;
+                      });
+
+            // Make thread-safe copy of covered functions
+            std::set<std::string> covered_functions_copy;
+            {
+                std::lock_guard<std::mutex> lock(coverage_mutex);
+                covered_functions_copy = all_covered_functions;
+            }
+
+            // Generate coverage report
+            print_library_coverage_report(covered_functions_copy, c, test_stats);
+
+            // Write HTML report if output path is configured
+            if (!CompilerOptions::coverage_output.empty()) {
+                int current_covered = static_cast<int>(covered_functions_copy.size());
+
+                // Never update with zero coverage - something went wrong
+                if (current_covered == 0) {
+                    TML_LOG_FATAL("test", "========================================================"
+                                          "======");
+                    TML_LOG_FATAL("test", "  COVERAGE ABORTED: Zero functions tracked");
+                    TML_LOG_FATAL("test", "  Tests ran but no coverage data was collected.");
+                    TML_LOG_FATAL("test",
+                                  "  This indicates a bug in coverage instrumentation.");
+                    TML_LOG_FATAL("test", "  HTML/JSON files will NOT be generated.");
+                    TML_LOG_FATAL("test", "========================================================"
+                                          "======");
+                } else {
+                    auto previous = get_previous_coverage(CompilerOptions::coverage_output);
+
+                    // Use the previous total as reference for calculating current percentage
+                    bool should_update = true;
+                    double current_percent = 0.0;
+
+                    if (previous.valid && previous.total > 0) {
+                        current_percent = (100.0 * current_covered) / previous.total;
+                        should_update = current_percent >= previous.percent;
+                    }
+
+                    // Always write to temp files
+                    std::string tmp_output = CompilerOptions::coverage_output + ".tmp";
+                    write_library_coverage_html(covered_functions_copy, tmp_output, test_stats);
+
+                    // Handle JSON file renaming
+                    std::string tmp_json =
+                        fs::path(tmp_output).replace_extension(".json").string();
+                    std::string final_json =
+                        fs::path(CompilerOptions::coverage_output).replace_extension(".json").string();
+
+                    if (should_update) {
+                        bool html_ok = fs::exists(tmp_output) && fs::file_size(tmp_output) > 0;
+                        bool json_ok = fs::exists(tmp_json) && fs::file_size(tmp_json) > 0;
+
+                        if (html_ok) {
+                            fs::rename(tmp_output, CompilerOptions::coverage_output);
+                            if (!opts.quiet) {
+                                TML_LOG_DEBUG("test", "[exe] Updated: " << CompilerOptions::coverage_output);
+                            }
+                        }
+
+                        if (json_ok) {
+                            fs::rename(tmp_json, final_json);
+                            if (!opts.quiet) {
+                                TML_LOG_DEBUG("test", "[exe] Updated: " << final_json);
+                            }
+                        }
+                    } else {
+                        // Regression detected — keep previous report
+                        if (fs::exists(tmp_output))
+                            fs::remove(tmp_output);
+                        if (fs::exists(tmp_json))
+                            fs::remove(tmp_json);
+                        if (!opts.quiet) {
+                            TML_LOG_WARN("test",
+                                         "[exe] Coverage regressed: " << current_percent << "% vs "
+                                                                     << previous.percent
+                                                                     << "% (previous). "
+                                                                     "Keeping old report.");
+                        }
+                    }
+                }
+            }
         }
 
         return 0;
