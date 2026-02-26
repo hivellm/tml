@@ -1,0 +1,44 @@
+// Tests for Rng::next_i32, next_u8, fill_bytes
+use test::{assert, assert_eq}
+use std::random::Rng
+use std::collections::List
+
+@test
+func test_rng_next_i32() -> I32 {
+    var rng: Rng = Rng::new()
+    let v: I32 = rng.next_i32()
+    assert(v >= 0, "next_i32 is non-negative")
+    return 0
+}
+
+@test
+func test_rng_next_u8_range() -> I32 {
+    var rng: Rng = Rng::new()
+    var i: I32 = 0
+    loop (i < 20) {
+        let b: I32 = rng.next_u8()
+        assert(b >= 0 and b <= 255, "next_u8 in [0,255]")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_rng_fill_bytes() -> I32 {
+    var rng: Rng = Rng::new()
+    var buf: List[I64] = List[I64].new(8)
+    buf.push(0)
+    buf.push(0)
+    buf.push(0)
+    buf.push(0)
+    rng.fill_bytes(buf)
+    assert_eq(buf.len(), 4, "buf still has 4 elements")
+    var i: I64 = 0
+    loop (i < buf.len()) {
+        let b: I64 = buf.get(i)
+        assert(b >= 0 and b <= 255, "each byte in [0,255]")
+        i = i + 1
+    }
+    buf.destroy()
+    return 0
+}

@@ -145,6 +145,26 @@ impl Rng {
             i = i - 1
         }
     }
+
+    /// Returns the next pseudo-random I32 value.
+    pub func next_i32(mut this) -> I32 {
+        return (this.next_i64() & 0x7FFFFFFF) as I32
+    }
+
+    /// Returns a pseudo-random byte (0..=255).
+    pub func next_u8(mut this) -> I32 {
+        return (this.next_i64() & 0xFF) as I32
+    }
+
+    /// Fills a List[I64] with random bytes (each element 0..=255).
+    pub func fill_bytes(mut this, buf: List[I64]) {
+        let n: I64 = buf.len()
+        var i: I64 = 0
+        loop (i < n) {
+            buf.set(i, this.next_i64() & 0xFF)
+            i = i + 1
+        }
+    }
 }
 
 /// Returns a random I64 using a fresh Rng seeded from the clock.

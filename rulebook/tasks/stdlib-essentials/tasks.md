@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (93%) - Core utilities needed for production use
+**Status**: In Progress (95%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -224,7 +224,7 @@
 - [x] 6.1.1 Design `Rng` type using xoshiro256** algorithm
 - [x] 6.1.2 Implement `next_i64(this) -> I64`
 - [x] 6.1.3 Implement `range(this, min, max) -> I64`, `next_f64()`, `next_bool()`
-- [ ] 6.1.4 Implement `fill_bytes(this, buf: mut ref [U8])`
+- [x] 6.1.4 Implement `fill_bytes(this, buf: List[I64])`, `next_u8()`, `next_i32()`
 
 ### 6.2 ThreadRng (in `lib/std/src/random.tml`) — DONE
 - [x] 6.2.1 Design `ThreadRng` (thread-local RNG)
