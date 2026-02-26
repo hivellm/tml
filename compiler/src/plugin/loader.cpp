@@ -347,7 +347,8 @@ auto Loader::compute_file_hash(const fs::path& path) -> std::string {
     constexpr size_t BUF_SIZE = 65536;
     char buf[BUF_SIZE];
     while (size > 0) {
-        auto to_read = static_cast<std::streamsize>(std::min(size, BUF_SIZE));
+        size_t to_read_size = (size < BUF_SIZE) ? size : BUF_SIZE;
+        auto to_read = static_cast<std::streamsize>(to_read_size);
         in.read(buf, to_read);
         auto got = static_cast<size_t>(in.gcount());
         for (size_t i = 0; i < got; ++i) {
