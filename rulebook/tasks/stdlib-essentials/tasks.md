@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (95%) - Core utilities needed for production use
+**Status**: In Progress (97%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -240,10 +240,10 @@
 - [ ] 6.3.5 Implement `choose[T](slice: ref [T]) -> Maybe[ref T]`
 
 ### 6.4 Distributions
-- [ ] 6.4.1 Design `Distribution[T]` behavior
-- [ ] 6.4.2 Implement `Uniform` distribution
-- [ ] 6.4.3 Implement `Bernoulli` distribution
-- [x] 6.4.4 Add unit tests for random generation (basic, shuffle, convenience, thread_rng)
+- [ ] 6.4.1 Design `Distribution[T]` behavior (needs generics)
+- [x] 6.4.2 Implement `Uniform` distribution (new, sample, lower, upper)
+- [x] 6.4.3 Implement `Bernoulli` distribution (new, sample, probability, clamp)
+- [x] 6.4.4 Add unit tests for random generation (basic, shuffle, convenience, thread_rng, distributions)
 
 ## Phase 7: Integration Testing
 

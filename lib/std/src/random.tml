@@ -278,6 +278,86 @@ pub func thread_random_range(min: I64, max: I64) -> I64 {
 // Internal helpers
 // ============================================================================
 
+// ============================================================================
+// Distributions
+// ============================================================================
+
+/// A uniform distribution over [low, high).
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::{Rng, Uniform}
+///
+/// var rng: Rng = Rng::new()
+/// let d: Uniform = Uniform::new(1, 7)  // die roll
+/// let roll: I64 = d.sample(ref rng)
+/// ```
+pub type Uniform {
+    low: I64,
+    high: I64
+}
+
+impl Uniform {
+    /// Creates a Uniform distribution over [low, high).
+    pub func new(low: I64, high: I64) -> Uniform {
+        return Uniform { low: low, high: high }
+    }
+
+    /// Samples a value from this distribution using the given Rng.
+    pub func sample(this, rng: mut ref Rng) -> I64 {
+        return rng.range(this.low, this.high)
+    }
+
+    /// Returns the lower bound (inclusive).
+    pub func lower(this) -> I64 {
+        return this.low
+    }
+
+    /// Returns the upper bound (exclusive).
+    pub func upper(this) -> I64 {
+        return this.high
+    }
+}
+
+/// A Bernoulli distribution with probability p of returning true.
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::{Rng, Bernoulli}
+///
+/// var rng: Rng = Rng::new()
+/// let coin: Bernoulli = Bernoulli::new(0.5)
+/// let heads: Bool = coin.sample(ref rng)
+/// ```
+pub type Bernoulli {
+    /// Probability of success in [0.0, 1.0].
+    p: F64
+}
+
+impl Bernoulli {
+    /// Creates a Bernoulli distribution with probability p.
+    /// Clamps p to [0.0, 1.0].
+    pub func new(p: F64) -> Bernoulli {
+        var clamped: F64 = p
+        if clamped < 0.0 { clamped = 0.0 }
+        if clamped > 1.0 { clamped = 1.0 }
+        return Bernoulli { p: clamped }
+    }
+
+    /// Samples a Bool from this distribution.
+    /// Returns true with probability p.
+    pub func sample(this, rng: mut ref Rng) -> Bool {
+        return rng.next_f64() < this.p
+    }
+
+    /// Returns the probability of success.
+    pub func probability(this) -> F64 {
+        return this.p
+    }
+}
+
 /// Rotate left for xoshiro.
 func rotl(x: I64, k: I64) -> I64 {
     return (x << k) | (x >> (64 - k))

@@ -1,0 +1,69 @@
+// Tests for Uniform and Bernoulli distributions
+use test::{assert, assert_eq}
+use std::random::Rng
+use std::random::Uniform
+use std::random::Bernoulli
+
+@test
+func test_uniform_sample_in_range() -> I32 {
+    var rng: Rng = Rng::new()
+    let d: Uniform = Uniform::new(10, 20)
+    assert_eq(d.lower(), 10, "lower bound")
+    assert_eq(d.upper(), 20, "upper bound")
+    var i: I32 = 0
+    loop (i < 20) {
+        let v: I64 = d.sample(mut ref rng)
+        assert(v >= 10 and v < 20, "sample in [10,20)")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_uniform_single_value() -> I32 {
+    var rng: Rng = Rng::new()
+    let d: Uniform = Uniform::new(5, 6)
+    let v: I64 = d.sample(mut ref rng)
+    assert_eq(v, 5, "single value distribution always returns low")
+    return 0
+}
+
+@test
+func test_bernoulli_always_true() -> I32 {
+    var rng: Rng = Rng::new()
+    let d: Bernoulli = Bernoulli::new(1.0)
+    var i: I32 = 0
+    loop (i < 10) {
+        assert(d.sample(mut ref rng), "p=1.0 always true")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_bernoulli_always_false() -> I32 {
+    var rng: Rng = Rng::new()
+    let d: Bernoulli = Bernoulli::new(0.0)
+    var i: I32 = 0
+    loop (i < 10) {
+        assert(not d.sample(mut ref rng), "p=0.0 always false")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_bernoulli_probability() -> I32 {
+    let d: Bernoulli = Bernoulli::new(0.75)
+    assert_eq(d.probability(), 0.75, "probability accessor")
+    return 0
+}
+
+@test
+func test_bernoulli_clamps_p() -> I32 {
+    let d_over: Bernoulli = Bernoulli::new(1.5)
+    let d_under: Bernoulli = Bernoulli::new(-0.5)
+    assert_eq(d_over.probability(), 1.0, "p > 1.0 clamped to 1.0")
+    assert_eq(d_under.probability(), 0.0, "p < 0.0 clamped to 0.0")
+    return 0
+}
