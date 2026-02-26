@@ -28,6 +28,7 @@ extern void mem_free(void*);
 #pragma comment(lib, "advapi32.lib")
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
+#include "../compat.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>

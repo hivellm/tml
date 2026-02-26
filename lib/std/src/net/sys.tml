@@ -13,8 +13,15 @@ use std::net::error::{NetError, NetErrorKind}
 pub const INVALID_SOCKET: I64 = -1
 
 /// Socket address family constants.
-pub const AF_INET: I32 = 2           // IPv4
-pub const AF_INET6: I32 = 23         // IPv6 (10 on Unix, 23 on Windows)
+pub const AF_INET: I32 = 2           // IPv4 (same on all platforms)
+
+#if WINDOWS
+pub const AF_INET6: I32 = 23         // IPv6 on Windows
+#elif MACOS
+pub const AF_INET6: I32 = 30         // IPv6 on macOS
+#else
+pub const AF_INET6: I32 = 10         // IPv6 on Linux/Unix
+#endif
 
 /// Socket type constants.
 pub const SOCK_STREAM: I32 = 1       // TCP
@@ -26,22 +33,44 @@ pub const IPPROTO_TCP: I32 = 6
 pub const IPPROTO_UDP: I32 = 17
 
 /// Socket option levels.
-pub const SOL_SOCKET: I32 = 0xFFFF   // Socket level on Windows
+#if LINUX
+pub const SOL_SOCKET: I32 = 1
+#else
+pub const SOL_SOCKET: I32 = 0xFFFF   // Windows and macOS
+#endif
 pub const IPPROTO_TCP_OPT: I32 = 6
 
 /// Socket options.
-pub const SO_REUSEADDR: I32 = 4
-pub const SO_KEEPALIVE: I32 = 8
-pub const SO_BROADCAST: I32 = 32
+#if LINUX
+pub const SO_REUSEADDR: I32 = 2
+pub const SO_KEEPALIVE: I32 = 9
+pub const SO_BROADCAST: I32 = 6
+pub const SO_RCVBUF: I32 = 8
+pub const SO_SNDBUF: I32 = 7
+pub const SO_RCVTIMEO: I32 = 20
+pub const SO_SNDTIMEO: I32 = 21
+#else
+pub const SO_REUSEADDR: I32 = 0x0004 // Windows and macOS
+pub const SO_KEEPALIVE: I32 = 0x0008
+pub const SO_BROADCAST: I32 = 0x0020
 pub const SO_RCVBUF: I32 = 0x1002
 pub const SO_SNDBUF: I32 = 0x1001
 pub const SO_RCVTIMEO: I32 = 0x1006
 pub const SO_SNDTIMEO: I32 = 0x1005
-pub const TCP_NODELAY: I32 = 1
-pub const IP_TTL: I32 = 4
+#endif
+
+pub const TCP_NODELAY: I32 = 1       // Same on all platforms
+pub const IPPROTO_IP: I32 = 0        // Same on all platforms
+
+#if LINUX
+pub const IP_TTL: I32 = 2
+pub const IP_MULTICAST_LOOP: I32 = 34
+pub const IP_MULTICAST_TTL: I32 = 33
+#else
+pub const IP_TTL: I32 = 4            // Windows and macOS
 pub const IP_MULTICAST_LOOP: I32 = 11
 pub const IP_MULTICAST_TTL: I32 = 10
-pub const IPPROTO_IP: I32 = 0
+#endif
 
 // ============================================================================
 // Socket Type Enum
@@ -122,16 +151,16 @@ impl AddressFamily {
     /// Returns the platform constant for this address family.
     pub func to_raw(this) -> I32 {
         when this {
-            AddressFamily::Inet => 2 as I32
-            AddressFamily::Inet6 => 23 as I32
+            AddressFamily::Inet => AF_INET
+            AddressFamily::Inet6 => AF_INET6
         }
     }
 
     /// Creates from a raw value.
     pub func from_raw(raw: I32) -> Maybe[AddressFamily] {
-        if raw == 2 {
+        if raw == AF_INET {
             Just(AddressFamily::Inet)
-        } else if raw == 23 or raw == 10 {
+        } else if raw == AF_INET6 {
             Just(AddressFamily::Inet6)
         } else {
             Nothing
@@ -209,6 +238,11 @@ impl RawSocket {
             family: family,
             nonblocking: false,
         })
+    }
+
+    /// Returns the raw platform socket handle.
+    pub func as_raw(this) -> I64 {
+        this.handle
     }
 
     /// Checks if the socket handle is valid.

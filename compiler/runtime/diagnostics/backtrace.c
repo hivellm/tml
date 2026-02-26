@@ -7,6 +7,7 @@
  */
 
 #include "backtrace.h"
+#include "../compat.h"
 
 #include "log.h"
 

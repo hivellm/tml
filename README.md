@@ -525,6 +525,14 @@ TML ships with a comprehensive standard library covering:
 - **CMake 3.20+**
 - **LLVM 15+**
 
+### Platform Support
+
+| Platform | Status | Architecture |
+|----------|--------|-------------|
+| **Windows** | Full support | x86_64 |
+| **macOS** | Full support | ARM64 (Apple Silicon), x86_64 |
+| **Linux** | Planned | x86_64 |
+
 ### Optional Dependencies
 
 | Module | Requires | Purpose |
@@ -532,10 +540,16 @@ TML ships with a comprehensive standard library covering:
 | `std::crypto` | OpenSSL 3.0+ | Cryptographic operations |
 | `std::zlib` | zlib, brotli, zstd | Compression algorithms |
 
-Install all optional deps with vcpkg:
+**Windows** — install via vcpkg:
 
 ```bash
-vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-linux, arm64-osx
+vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows
+```
+
+**macOS** — install via Homebrew:
+
+```bash
+brew install llvm openssl@3 zstd brotli sqlite3
 ```
 
 ### Build
@@ -545,9 +559,9 @@ vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-l
 scripts\build.bat              # Debug build
 scripts\build.bat release      # Release build
 
-# Linux/Mac
-./scripts/build.sh debug
-./scripts/build.sh release
+# macOS/Linux
+bash scripts/build.sh          # Debug build (auto-detects Homebrew LLVM)
+bash scripts/build.sh release  # Release build
 ```
 
 ### Usage

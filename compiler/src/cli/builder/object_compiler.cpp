@@ -444,17 +444,7 @@ static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
     cmd << " " << get_optimization_flag(options.optimization_level);
 
     // Target triple (use provided or default to host)
-    if (!options.target_triple.empty()) {
-        cmd << " -target " << options.target_triple;
-    } else {
-#ifdef _WIN32
-        // Windows: use native object format
-        cmd << " -target x86_64-pc-windows-msvc";
-#else
-        // Unix: use ELF object format
-        cmd << " -target x86_64-unknown-linux-gnu";
-#endif
-    }
+    cmd << " -target " << (options.target_triple.empty() ? get_host_target_triple() : options.target_triple);
 
     // Sysroot for cross-compilation
     if (!options.sysroot.empty()) {

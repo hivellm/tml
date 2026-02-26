@@ -468,10 +468,11 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
             }
 
             phase_start = Clock::now();
-            std::vector<std::thread> exec_threads;
+            constexpr size_t EXEC_STACK = 128 * 1024 * 1024; // 128 MB for test execution
+            std::vector<NativeThread> exec_threads;
             for (unsigned int t = 0;
                  t < std::min(num_exec_threads, (unsigned int)compiled_suites.size()); ++t) {
-                exec_threads.emplace_back(suite_worker);
+                exec_threads.emplace_back(suite_worker, EXEC_STACK);
             }
             for (auto& t : exec_threads) {
                 t.join();

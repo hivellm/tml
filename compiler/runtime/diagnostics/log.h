@@ -207,13 +207,22 @@ void rt_log_close_file(void);
  */
 int rt_log_init_from_env(void);
 
-/* Convenience macros for common log levels */
+/* Convenience macros for common log levels.
+ * Uses GNU ##__VA_ARGS__ extension (supported by GCC, Clang, MSVC) to allow
+ * zero variadic arguments, e.g. RT_ERROR("mod", "msg") without trailing comma. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
 #define RT_TRACE(module, fmt, ...) rt_log(RT_LOG_TRACE, module, fmt, ##__VA_ARGS__)
 #define RT_DEBUG(module, fmt, ...) rt_log(RT_LOG_DEBUG, module, fmt, ##__VA_ARGS__)
 #define RT_INFO(module, fmt, ...) rt_log(RT_LOG_INFO, module, fmt, ##__VA_ARGS__)
 #define RT_WARN(module, fmt, ...) rt_log(RT_LOG_WARN, module, fmt, ##__VA_ARGS__)
 #define RT_ERROR(module, fmt, ...) rt_log(RT_LOG_ERROR, module, fmt, ##__VA_ARGS__)
 #define RT_FATAL(module, fmt, ...) rt_log(RT_LOG_FATAL, module, fmt, ##__VA_ARGS__)
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 #ifdef __cplusplus
 }

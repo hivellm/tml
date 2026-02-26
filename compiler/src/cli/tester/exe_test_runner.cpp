@@ -747,9 +747,10 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
             TML_LOG_INFO("test", "  [exe] Generating " << tasks.size() << " LLVM IR files with "
                                                        << num_threads << " threads...");
 
-            std::vector<std::thread> threads;
+            constexpr size_t COMPILE_STACK = 32 * 1024 * 1024; // 32 MB for LLVM
+            std::vector<tester::NativeThread> threads;
             for (unsigned int t = 0; t < std::min(num_threads, (unsigned int)tasks.size()); ++t) {
-                threads.emplace_back(compile_task_worker);
+                threads.emplace_back(compile_task_worker, COMPILE_STACK);
             }
             for (auto& t : threads) {
                 t.join();
@@ -808,10 +809,11 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                                                           << " objects with " << comp_threads
                                                           << " threads...");
 
-                std::vector<std::thread> obj_threads;
+                constexpr size_t OBJ_COMPILE_STACK = 32 * 1024 * 1024; // 32 MB
+                std::vector<tester::NativeThread> obj_threads;
                 for (unsigned int t = 0;
                      t < std::min(comp_threads, (unsigned int)pending_compiles.size()); ++t) {
-                    obj_threads.emplace_back(compile_worker);
+                    obj_threads.emplace_back(compile_worker, OBJ_COMPILE_STACK);
                 }
                 for (auto& t : obj_threads) {
                     t.join();
@@ -994,10 +996,11 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                     // Run fallbacks in parallel
                     unsigned int fb_threads =
                         exe_calc_codegen_threads(static_cast<unsigned int>(failed_compiles.size()));
-                    std::vector<std::thread> fb_thread_pool;
+                    constexpr size_t FB_COMPILE_STACK = 32 * 1024 * 1024; // 32 MB
+                    std::vector<tester::NativeThread> fb_thread_pool;
                     for (unsigned int t = 0;
                          t < std::min(fb_threads, (unsigned int)failed_compiles.size()); ++t) {
-                        fb_thread_pool.emplace_back(fallback_worker);
+                        fb_thread_pool.emplace_back(fallback_worker, FB_COMPILE_STACK);
                     }
                     for (auto& t : fb_thread_pool) {
                         t.join();
@@ -1140,6 +1143,24 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                     link_options.link_flags.push_back("-l" + lib);
                 }
             }
+
+#ifndef _WIN32
+            // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+            link_options.link_flags.push_back("-lm");
+            link_options.link_flags.push_back("-lpthread");
+            link_options.link_flags.push_back("-ldl");
+  #endif
+            {
+                auto openssl = build::find_openssl();
+                if (openssl.found) {
+                    link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                    link_options.link_flags.push_back("-lssl");
+                    link_options.link_flags.push_back("-lcrypto");
+                }
+            }
+            link_options.link_flags.push_back("-lz");
+#endif
 
             TML_LOG_INFO("test", "  [exe] Starting link...");
             auto link_result = link_objects(object_files, cached_exe, clang, link_options);

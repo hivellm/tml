@@ -145,11 +145,6 @@ bool TypeEnv::types_match(const TypePtr& a, const TypePtr& b) {
 }
 
 auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSig> {
-    // Debug: trace function lookups for impl methods
-    if (name.find("::") != std::string::npos) {
-        // Uncomment to debug: std::cerr << "[LOOKUP] Looking for " << name << " in functions_
-        // (size=" << functions_.size() << ")\n";
-    }
     auto it = functions_.find(name);
     if (it != functions_.end() && !it->second.empty()) {
         return it->second[0];
@@ -176,14 +171,25 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                 return direct_result;
             }
 
-            // Try to resolve the type to its module (for Type::method patterns)
+            // Try to resolve the type/module name to its full path
             auto type_import_path = resolve_imported_symbol(module_name);
             if (type_import_path) {
+                // First, try as a module import: look up func_name in the resolved module.
+                // This handles `use core::unicode::char` + `char::is_high_surrogate()`
+                // where "char" is a module, not a type.
+                auto as_module = module_registry_->lookup_function(*type_import_path, func_name);
+                if (as_module) {
+                    return as_module;
+                }
+
+                // Fallback: try as Type::method in the parent module
                 auto pos = type_import_path->rfind("::");
                 if (pos != std::string::npos) {
                     std::string module_path = type_import_path->substr(0, pos);
-                    // Lookup "Type::method" in the module
-                    return module_registry_->lookup_function(module_path, name);
+                    auto as_method = module_registry_->lookup_function(module_path, name);
+                    if (as_method) {
+                        return as_method;
+                    }
                 }
             }
 

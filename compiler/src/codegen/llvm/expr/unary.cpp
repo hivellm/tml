@@ -529,6 +529,151 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 }
             }
         }
+        // Handle ref array[index] and ref array[start to end] (slice)
+        if (unary.operand->is<parser::IndexExpr>()) {
+            const auto& idx_expr = unary.operand->as<parser::IndexExpr>();
+
+            // Check if the index is a RangeExpr (slice operation: ref buf[0 to n])
+            if (idx_expr.index->is<parser::RangeExpr>()) {
+                const auto& range = idx_expr.index->as<parser::RangeExpr>();
+
+                // Get the array pointer
+                std::string arr_ptr;
+                types::TypePtr obj_type = infer_expr_type(*idx_expr.object);
+                std::string elem_llvm_type = "i8"; // default
+
+                if (obj_type) {
+                    if (obj_type->is<types::ArrayType>()) {
+                        elem_llvm_type =
+                            llvm_type_from_semantic(obj_type->as<types::ArrayType>().element, true);
+                    } else if (obj_type->is<types::RefType>()) {
+                        const auto& ref_type = obj_type->as<types::RefType>();
+                        if (ref_type.inner && ref_type.inner->is<types::ArrayType>()) {
+                            elem_llvm_type = llvm_type_from_semantic(
+                                ref_type.inner->as<types::ArrayType>().element, true);
+                        }
+                    }
+                }
+
+                // Get the array base pointer from the local variable
+                if (idx_expr.object->is<parser::IdentExpr>()) {
+                    const auto& ident = idx_expr.object->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    if (it != locals_.end()) {
+                        arr_ptr = it->second.reg;
+                    }
+                }
+
+                if (arr_ptr.empty()) {
+                    // Fallback: generate expression and store to temp
+                    std::string arr_val = gen_expr(*idx_expr.object);
+                    arr_ptr = fresh_reg();
+                    std::string arr_llvm_type = last_expr_type_;
+                    emit_line("  " + arr_ptr + " = alloca " + arr_llvm_type);
+                    emit_line("  store " + arr_llvm_type + " " + arr_val + ", ptr " + arr_ptr);
+                }
+
+                // Generate start and end values
+                std::string start_val = "0";
+                std::string start_type = "i64";
+                if (range.start.has_value()) {
+                    start_val = gen_expr(*range.start.value());
+                    start_type = last_expr_type_;
+                }
+
+                std::string end_val = "0";
+                std::string end_type = "i64";
+                if (range.end.has_value()) {
+                    end_val = gen_expr(*range.end.value());
+                    end_type = last_expr_type_;
+                }
+
+                // Convert start to i64 if needed
+                std::string start_i64 = start_val;
+                if (start_type != "i64") {
+                    start_i64 = fresh_reg();
+                    emit_line("  " + start_i64 + " = sext " + start_type + " " + start_val +
+                              " to i64");
+                }
+
+                // Convert end to i64 if needed
+                std::string end_i64 = end_val;
+                if (end_type != "i64") {
+                    end_i64 = fresh_reg();
+                    emit_line("  " + end_i64 + " = sext " + end_type + " " + end_val + " to i64");
+                }
+
+                // GEP to the start element
+                std::string data_ptr = fresh_reg();
+                emit_line("  " + data_ptr + " = getelementptr inbounds " + elem_llvm_type +
+                          ", ptr " + arr_ptr + ", i64 " + start_i64);
+
+                // Compute length = end - start
+                std::string len_val = fresh_reg();
+                emit_line("  " + len_val + " = sub i64 " + end_i64 + ", " + start_i64);
+
+                // Create fat pointer { ptr, i64 } on stack
+                std::string fat_alloca = fresh_reg();
+                emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+
+                // Store data pointer (field 0)
+                std::string data_field = fresh_reg();
+                emit_line("  " + data_field +
+                          " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                          ", i32 0, i32 0");
+                emit_line("  store ptr " + data_ptr + ", ptr " + data_field);
+
+                // Store length (field 1)
+                std::string len_field = fresh_reg();
+                emit_line("  " + len_field +
+                          " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                          ", i32 0, i32 1");
+                emit_line("  store i64 " + len_val + ", ptr " + len_field);
+
+                last_expr_type_ = "ptr";
+                return fat_alloca;
+            }
+
+            // Simple index: ref arr[i] → pointer to element
+            std::string arr_ptr;
+            types::TypePtr obj_type = infer_expr_type(*idx_expr.object);
+            std::string elem_llvm_type = "i8";
+            std::string array_llvm_type;
+
+            if (obj_type && obj_type->is<types::ArrayType>()) {
+                const auto& arr_type = obj_type->as<types::ArrayType>();
+                elem_llvm_type = llvm_type_from_semantic(arr_type.element, true);
+                array_llvm_type =
+                    "[" + std::to_string(arr_type.size) + " x " + elem_llvm_type + "]";
+            }
+
+            if (idx_expr.object->is<parser::IdentExpr>()) {
+                const auto& ident = idx_expr.object->as<parser::IdentExpr>();
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    arr_ptr = it->second.reg;
+                }
+            }
+
+            if (!arr_ptr.empty() && !array_llvm_type.empty()) {
+                std::string index_val = gen_expr(*idx_expr.index);
+                std::string index_type = last_expr_type_;
+
+                std::string index_i64 = index_val;
+                if (index_type != "i64") {
+                    index_i64 = fresh_reg();
+                    emit_line("  " + index_i64 + " = sext " + index_type + " " + index_val +
+                              " to i64");
+                }
+
+                std::string elem_ptr = fresh_reg();
+                emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type +
+                          ", ptr " + arr_ptr + ", i64 0, i64 " + index_i64);
+                last_expr_type_ = "ptr";
+                return elem_ptr;
+            }
+        }
+
         report_error("Can only take reference of variables", unary.span, "C026");
         last_expr_type_ = "ptr";
         return "null";

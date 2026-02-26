@@ -526,3 +526,47 @@ char* path_absolute(const char* path) {
     return result;
 #endif
 }
+
+// ============================================================================
+// Stdin Operations
+// ============================================================================
+
+char* stdin_read_line(void) {
+    size_t capacity = 256;
+    size_t len = 0;
+    char* line = (char*)malloc(capacity);
+    if (!line)
+        return NULL;
+
+    int c;
+    while ((c = fgetc(stdin)) != EOF) {
+        if (len + 1 >= capacity) {
+            capacity *= 2;
+            char* new_line = (char*)realloc(line, capacity);
+            if (!new_line) {
+                free(line);
+                return NULL;
+            }
+            line = new_line;
+        }
+
+        if (c == '\n') {
+            break;
+        }
+        if (c != '\r') { // Skip CR in CRLF
+            line[len++] = (char)c;
+        }
+    }
+
+    if (len == 0 && c == EOF) {
+        free(line);
+        return NULL;
+    }
+
+    line[len] = '\0';
+    return line;
+}
+
+void stdin_flush_stdout(void) {
+    fflush(stdout);
+}

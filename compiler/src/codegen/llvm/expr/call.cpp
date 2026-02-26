@@ -1555,6 +1555,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             pending_func_it = pending_generic_funcs_.find(bare_name);
         }
     }
+    // Validate parameter count: if the generic function's param count doesn't match
+    // the call's argument count, it's the wrong function. This prevents e.g.
+    // str::replace(s, pattern, replacement) [3 args] from matching
+    // core::mem::replace[T](dest, src) [2 params] via bare name fallback.
+    if (pending_func_it != pending_generic_funcs_.end() &&
+        pending_func_it->second->params.size() != call.args.size()) {
+        pending_func_it = pending_generic_funcs_.end();
+    }
     if (pending_func_it != pending_generic_funcs_.end()) {
         const auto& gen_func = *pending_func_it->second;
 

@@ -83,6 +83,7 @@ struct RunOptions {
     bool verbose = false;
     bool coverage = false;
     bool no_cache = false;
+    bool legacy = false;           // Use legacy sequential pipeline instead of query system
     bool profile = false;          // Enable runtime profiling
     std::string profile_output;    // Custom output path (default: profile.cpuprofile)
     std::vector<std::string> args; // Program arguments

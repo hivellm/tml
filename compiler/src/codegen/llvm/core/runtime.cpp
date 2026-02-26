@@ -28,6 +28,7 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "codegen/target.hpp"
+#include "common.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
@@ -40,6 +41,11 @@ TML_MODULE("codegen_x86")
 namespace tml::codegen {
 
 void LLVMIRGen::emit_header() {
+    // Fall back to host triple when not specified
+    if (options_.target_triple.empty()) {
+        options_.target_triple = get_host_target_triple();
+    }
+
     // Source filename (like Rust's `source_filename = "file.rs"`)
     if (!options_.source_file.empty()) {
         std::filesystem::path p(options_.source_file);
@@ -59,10 +65,17 @@ void LLVMIRGen::emit_header() {
     // comdat any + linkonce_odr: linker keeps one copy across multiple .obj files.
     // @llvm.used: prevents LLVM from stripping the unreferenced constant.
     // Identifiable via `strings foo.exe | grep "tml version"`.
+    // MachO (macOS) does not support COMDATs; use weak linkage instead.
     std::string ident = "tml version " + std::string(tml::VERSION);
-    emit_line("$__tml_ident = comdat any");
-    emit_line("@__tml_ident = linkonce_odr constant [" + std::to_string(ident.size() + 1) +
-              " x i8] c\"" + ident + "\\00\", comdat, align 1");
+    bool is_macho = target && target->object_format == ObjectFormat::MachO;
+    if (is_macho) {
+        emit_line("@__tml_ident = weak constant [" + std::to_string(ident.size() + 1) +
+                  " x i8] c\"" + ident + "\\00\", align 1");
+    } else {
+        emit_line("$__tml_ident = comdat any");
+        emit_line("@__tml_ident = linkonce_odr constant [" + std::to_string(ident.size() + 1) +
+                  " x i8] c\"" + ident + "\\00\", comdat, align 1");
+    }
     emit_line(
         "@llvm.used = appending global [1 x ptr] [ptr @__tml_ident], section \"llvm.metadata\"");
     emit_line("");

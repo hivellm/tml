@@ -158,6 +158,32 @@ struct CompilerOptions {
 };
 
 // ============================================================================
+// Host Target Triple Detection
+// ============================================================================
+
+/// Returns the correct LLVM target triple for the host platform.
+/// Used as the default when no --target flag is provided.
+inline std::string get_host_target_triple() {
+#ifdef _WIN32
+    return "x86_64-pc-windows-msvc";
+#elif defined(__APPLE__)
+  #if defined(__aarch64__) || defined(__arm64__)
+    return "aarch64-apple-darwin";
+  #else
+    return "x86_64-apple-darwin";
+  #endif
+#elif defined(__linux__)
+  #if defined(__aarch64__)
+    return "aarch64-unknown-linux-gnu";
+  #else
+    return "x86_64-unknown-linux-gnu";
+  #endif
+#else
+    return "x86_64-unknown-linux-gnu";
+#endif
+}
+
+// ============================================================================
 // Debug Macros (backward compatibility — delegates to unified logger)
 // ============================================================================
 

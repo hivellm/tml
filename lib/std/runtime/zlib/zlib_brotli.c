@@ -34,7 +34,7 @@ int32_t brotli_get_error_code(TmlBuffer* buf) {
 // ============================================================================
 
 TmlBuffer* brotli_compress(const char* data, int32_t quality, int32_t mode, int32_t lgwin,
-                           int32_t lgblock, int64_t size_hint) {
+                           int32_t lgblock __attribute__((unused)), int64_t size_hint __attribute__((unused))) {
     if (!data) {
         brotli_set_last_error(BROTLI_DECODER_ERROR_INVALID_ARGUMENTS);
         return NULL;
@@ -84,7 +84,7 @@ TmlBuffer* brotli_compress(const char* data, int32_t quality, int32_t mode, int3
 }
 
 TmlBuffer* brotli_compress_buffer(TmlBuffer* data, int32_t quality, int32_t mode, int32_t lgwin,
-                                  int32_t lgblock, int64_t size_hint) {
+                                  int32_t lgblock __attribute__((unused)), int64_t size_hint __attribute__((unused))) {
     if (!data) {
         brotli_set_last_error(BROTLI_DECODER_ERROR_INVALID_ARGUMENTS);
         return NULL;
@@ -133,7 +133,7 @@ TmlBuffer* brotli_compress_buffer(TmlBuffer* data, int32_t quality, int32_t mode
 // Brotli Decompression
 // ============================================================================
 
-char* brotli_decompress(TmlBuffer* data, bool large_window) {
+char* brotli_decompress(TmlBuffer* data, bool large_window __attribute__((unused))) {
     if (!data || data->len == 0) {
         brotli_set_last_error(BROTLI_DECODER_ERROR_INVALID_ARGUMENTS);
         return NULL;
@@ -180,7 +180,7 @@ char* brotli_decompress(TmlBuffer* data, bool large_window) {
     return (char*)output;
 }
 
-TmlBuffer* brotli_decompress_buffer(TmlBuffer* data, bool large_window) {
+TmlBuffer* brotli_decompress_buffer(TmlBuffer* data, bool large_window __attribute__((unused))) {
     if (!data || data->len == 0) {
         brotli_set_last_error(BROTLI_DECODER_ERROR_INVALID_ARGUMENTS);
         return NULL;

@@ -452,13 +452,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         mir_opts.emit_comments = verbose;
 #ifdef _WIN32
         mir_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
-        mir_opts.target_triple = "x86_64-pc-windows-msvc";
-#else
-        mir_opts.target_triple = "x86_64-unknown-linux-gnu";
 #endif
-        if (!CompilerOptions::target_triple.empty()) {
-            mir_opts.target_triple = CompilerOptions::target_triple;
-        }
+        mir_opts.target_triple = CompilerOptions::target_triple.empty()
+            ? get_host_target_triple()
+            : CompilerOptions::target_triple;
 
         codegen::MirCodegen mir_codegen(mir_opts);
         llvm_ir = mir_codegen.generate(mir_module);
@@ -857,6 +854,24 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         }
         // Increase default stack size (debug codegen uses many allocas)
         link_options.link_flags.push_back("/STACK:67108864");
+#else
+        // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+        link_options.link_flags.push_back("-lm");
+        link_options.link_flags.push_back("-lpthread");
+        link_options.link_flags.push_back("-ldl");
+  #endif
+        // Always link OpenSSL (tml_runtime contains crypto objects)
+        {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                link_options.link_flags.push_back("-lssl");
+                link_options.link_flags.push_back("-lcrypto");
+            }
+        }
+        // zlib (system dylib on macOS, needed by tml_zlib_runtime)
+        link_options.link_flags.push_back("-lz");
 #endif
 
         auto link_result = link_objects(object_files, final_output, clang, link_options);
@@ -1079,13 +1094,10 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
             part_opts.codegen_opts.generate_exe_main = (output_type == BuildOutputType::Executable);
 #ifdef _WIN32
             part_opts.codegen_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
-            part_opts.codegen_opts.target_triple = "x86_64-pc-windows-msvc";
-#else
-            part_opts.codegen_opts.target_triple = "x86_64-unknown-linux-gnu";
 #endif
-            if (!tml::CompilerOptions::target_triple.empty()) {
-                part_opts.codegen_opts.target_triple = tml::CompilerOptions::target_triple;
-            }
+            part_opts.codegen_opts.target_triple = tml::CompilerOptions::target_triple.empty()
+                ? get_host_target_triple()
+                : tml::CompilerOptions::target_triple;
 
             codegen::CodegenPartitioner partitioner(part_opts);
             auto partition_result = partitioner.partition(*mir->mir_module);
@@ -1229,6 +1241,24 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     }
     // Increase default stack size (debug codegen uses many allocas)
     link_options.link_flags.push_back("/STACK:67108864");
+#else
+    // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+    link_options.link_flags.push_back("-lm");
+    link_options.link_flags.push_back("-lpthread");
+    link_options.link_flags.push_back("-ldl");
+  #endif
+    // Always link OpenSSL (tml_runtime contains crypto objects)
+    {
+        auto openssl = find_openssl();
+        if (openssl.found) {
+            link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+            link_options.link_flags.push_back("-lssl");
+            link_options.link_flags.push_back("-lcrypto");
+        }
+    }
+    // zlib (system dylib on macOS, needed by tml_zlib_runtime)
+    link_options.link_flags.push_back("-lz");
 #endif
 
     auto link_result = link_objects(object_files, exe_output, clang, link_options);

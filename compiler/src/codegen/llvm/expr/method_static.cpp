@@ -22,7 +22,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
     const std::string& method = call.method;
 
     // Helper lambda to resolve type parameter names to concrete types
-    auto resolve_type_arg_name = [this](const std::string& name) -> std::string {
+    [[maybe_unused]] auto resolve_type_arg_name = [this](const std::string& name) -> std::string {
         // Check if this is a type parameter that needs resolution
         auto it = current_type_subs_.find(name);
         if (it != current_type_subs_.end()) {

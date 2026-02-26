@@ -732,73 +732,265 @@ auto ThirMirBuilder::build_block(const thir::ThirBlockExpr& block) -> Value {
 }
 
 auto ThirMirBuilder::build_loop(const thir::ThirLoopExpr& loop) -> Value {
+    uint32_t entry_block = ctx_.current_block;
     auto header = create_block("loop.header");
     auto body = create_block("loop.body");
     auto exit = create_block("loop.exit");
+
+    // Save all variables before the loop (their pre-loop values)
+    auto pre_loop_vars = ctx_.variables;
+
+    emit_branch(header);
+    switch_to_block(header);
+
+    // Create phi nodes for all variables that exist before the loop
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
+    }
+
+    // Save header variable values (for condition-false path to exit)
+    auto header_vars = ctx_.variables;
 
     BuildContext::LoopContext lc;
     lc.header_block = header;
     lc.exit_block = exit;
     ctx_.loop_stack.push(std::move(lc));
-
-    emit_branch(header);
-    switch_to_block(header);
 
     auto cond = build_expr(loop.condition);
     emit_cond_branch(cond, body, exit);
 
     switch_to_block(body);
     (void)build_expr(loop.body);
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi nodes with back-edge values
     if (!is_terminated()) {
+        auto* header_blk = ctx_.current_func->get_block(header);
+        if (header_blk) {
+            for (auto& inst : header_blk->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         emit_branch(header);
     }
 
-    ctx_.loop_stack.pop();
+    // Get break sources before popping loop context
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
     switch_to_block(exit);
+    ctx_.loop_stack.pop();
+
+    // After a loop, variables used after the loop need correct values.
+    // The exit block can be reached from:
+    // 1. Header (condition false) - variables have header_vars values
+    // 2. Break statements - variables have break_sources values
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            set_variable(var_name, header_val);
+        } else {
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+                exit_phi.incoming.push_back({header_val, header});
+
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                set_variable(var_name, header_val);
+            }
+        }
+    }
+
     return const_unit();
 }
 
 auto ThirMirBuilder::build_while(const thir::ThirWhileExpr& while_expr) -> Value {
+    uint32_t entry_block = ctx_.current_block;
     auto header = create_block("while.header");
     auto body = create_block("while.body");
     auto exit = create_block("while.exit");
+
+    // Save all variables before the loop (their pre-loop values)
+    auto pre_loop_vars = ctx_.variables;
+
+    emit_branch(header);
+    switch_to_block(header);
+
+    // Create phi nodes for all variables that exist before the loop
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
+    }
+
+    // Save header variable values (for condition-false path to exit)
+    auto header_vars = ctx_.variables;
 
     BuildContext::LoopContext lc;
     lc.header_block = header;
     lc.exit_block = exit;
     ctx_.loop_stack.push(std::move(lc));
-
-    emit_branch(header);
-    switch_to_block(header);
 
     auto cond = build_expr(while_expr.condition);
     emit_cond_branch(cond, body, exit);
 
     switch_to_block(body);
     (void)build_expr(while_expr.body);
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi nodes with back-edge values
     if (!is_terminated()) {
+        auto* header_blk = ctx_.current_func->get_block(header);
+        if (header_blk) {
+            for (auto& inst : header_blk->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         emit_branch(header);
     }
 
-    ctx_.loop_stack.pop();
+    // Get break sources before popping loop context
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
     switch_to_block(exit);
+    ctx_.loop_stack.pop();
+
+    // After a while loop, variables used after need correct values.
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            set_variable(var_name, header_val);
+        } else {
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+                exit_phi.incoming.push_back({header_val, header});
+
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                set_variable(var_name, header_val);
+            }
+        }
+    }
+
     return const_unit();
 }
 
 auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
     auto iter_val = build_expr(for_expr.iter);
 
+    uint32_t entry_block = ctx_.current_block;
     auto header = create_block("for.header");
     auto body = create_block("for.body");
     auto exit = create_block("for.exit");
+
+    // Save all variables before the loop (their pre-loop values)
+    auto pre_loop_vars = ctx_.variables;
+
+    emit_branch(header);
+    switch_to_block(header);
+
+    // Create phi nodes for all variables that exist before the loop
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
+    }
+
+    // Save header variable values (for condition-false path to exit)
+    auto header_vars = ctx_.variables;
 
     BuildContext::LoopContext lc;
     lc.header_block = header;
     lc.exit_block = exit;
     ctx_.loop_stack.push(std::move(lc));
-
-    emit_branch(header);
-    switch_to_block(header);
 
     auto result_type = convert_type(for_expr.type);
     CallInst next_inst;
@@ -815,12 +1007,75 @@ auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
     switch_to_block(body);
     build_pattern_binding(for_expr.pattern, next_val);
     (void)build_expr(for_expr.body);
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi nodes with back-edge values
     if (!is_terminated()) {
+        auto* header_blk = ctx_.current_func->get_block(header);
+        if (header_blk) {
+            for (auto& inst : header_blk->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         emit_branch(header);
     }
 
-    ctx_.loop_stack.pop();
+    // Get break sources before popping loop context
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
     switch_to_block(exit);
+    ctx_.loop_stack.pop();
+
+    // After a for loop, variables used after need correct values.
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            set_variable(var_name, header_val);
+        } else {
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+                exit_phi.incoming.push_back({header_val, header});
+
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                set_variable(var_name, header_val);
+            }
+        }
+    }
+
     return const_unit();
 }
 
@@ -836,7 +1091,11 @@ auto ThirMirBuilder::build_return(const thir::ThirReturnExpr& ret) -> Value {
 
 auto ThirMirBuilder::build_break(const thir::ThirBreakExpr& /*brk*/) -> Value {
     if (!ctx_.loop_stack.empty()) {
-        emit_branch(ctx_.loop_stack.top().exit_block);
+        auto& loop_ctx = ctx_.loop_stack.top();
+        // Record break source: current block and all variable values
+        // This is needed to create PHI nodes at the exit block
+        loop_ctx.break_sources.push_back({ctx_.current_block, ctx_.variables});
+        emit_branch(loop_ctx.exit_block);
     }
     return const_unit();
 }

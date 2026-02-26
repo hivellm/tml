@@ -501,6 +501,8 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg == "--backtrace") {
                 CompilerOptions::backtrace = true;
+            } else if (arg == "--legacy") {
+                opts.legacy = true;
             } else if (arg.starts_with("--backend=")) {
                 opts.backend = arg.substr(10);
                 if (opts.backend != "llvm" && opts.backend != "cranelift") {

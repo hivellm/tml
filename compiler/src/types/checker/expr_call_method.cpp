@@ -1233,8 +1233,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
     }
 
     // Handle SliceType methods (e.g., [T].len(), [T].get(0), etc.)
-    if (receiver_type->is<SliceType>()) {
-        auto& slice = receiver_type->as<SliceType>();
+    // Unwrap RefType to handle ref [T] method calls (e.g., slice.len())
+    TypePtr slice_receiver = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        auto inner = env_.resolve(receiver_type->as<RefType>().inner);
+        if (inner->is<SliceType>()) {
+            slice_receiver = inner;
+        }
+    }
+    if (slice_receiver->is<SliceType>()) {
+        auto& slice = slice_receiver->as<SliceType>();
         TypePtr elem_type = slice.element;
 
         // len() returns I64

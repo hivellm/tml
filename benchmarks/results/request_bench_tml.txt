@@ -1,0 +1,49 @@
+
+================================================================
+  TML TCP & UDP Request Round-Trip Benchmark
+================================================================
+
+=== TCP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 7 ms
+    Per op:     7692 ns
+    Ops/sec:    130005
+    Successful: 1000/1000
+
+=== UDP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 6 ms
+    Per op:     6525 ns
+    Ops/sec:    153256
+    Successful: 1000/1000
+
+=== TCP Request (reused connection) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 36 ms
+    Per op:     36663 ns
+    Ops/sec:    27275
+    Successful: 1000/1000
+
+=== UDP Request (send + recv echo) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 32 ms
+    Per op:     32580 ns
+    Ops/sec:    30693
+    Successful: 1000/1000
+
+================================================================
+  Notes:
+  - TCP reused: single connection, N send+recv round-trips
+  - UDP request: send_to + recv_from echo round-trip
+  - Payload: 64 bytes per request
+  - All on 127.0.0.1 (loopback)
+================================================================
+

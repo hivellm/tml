@@ -91,6 +91,15 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     mir::MirTypePtr idx_type_ptr = i.indices[0].type;
                     std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i32";
 
+                    // Only emit bounds check if index type is an integer (not a struct like %struct.Range)
+                    bool is_integer_idx = !idx_type.empty() && idx_type[0] == 'i' &&
+                                          idx_type.find('%') == std::string::npos;
+
+                    if (!is_integer_idx) {
+                        // Skip bounds check for non-integer index types (e.g., struct Range from for-loop)
+                        // Fall through to GEP emission
+                    } else {
+
                     // Check index < 0 (signed comparison)
                     std::string below_zero = "%bc.below." + label_id;
                     emitln("    " + below_zero + " = icmp slt " + idx_type + " " + idx_val + ", 0");
@@ -116,16 +125,21 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
                     // OK block - continue with GEP
                     emitln(ok_label + ":");
+                    } // end is_integer_idx
                 }
                 // Emit @llvm.assume hints when BCE proved the access is safe
                 // This helps LLVM with cross-function optimization and vectorization
                 else if (!i.needs_bounds_check && i.known_array_size >= 0 && !i.indices.empty()) {
+                    mir::MirTypePtr idx_type_ptr = i.indices[0].type;
+                    std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i32";
+
+                    // Only emit assume hints if index type is an integer (not a struct)
+                    bool is_integer_idx = !idx_type.empty() && idx_type[0] == 'i' &&
+                                          idx_type.find('%') == std::string::npos;
+                    if (is_integer_idx) {
                     std::string idx_val = get_value_reg(i.indices[0]);
                     std::string size_str = std::to_string(i.known_array_size);
                     std::string label_id = std::to_string(temp_counter_++);
-
-                    mir::MirTypePtr idx_type_ptr = i.indices[0].type;
-                    std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i32";
 
                     // Emit assume: index >= 0
                     std::string nonneg_cmp = "%assume.nonneg." + label_id;
@@ -137,6 +151,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emitln("    " + bounded_cmp + " = icmp slt " + idx_type + " " + idx_val + ", " +
                            size_str);
                     emitln("    call void @llvm.assume(i1 " + bounded_cmp + ")");
+                    } // end is_integer_idx
                 }
 
                 emit("    " + result_reg + " = getelementptr inbounds " + type_str + ", ptr " +

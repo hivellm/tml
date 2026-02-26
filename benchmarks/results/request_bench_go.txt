@@ -1,0 +1,49 @@
+
+================================================================
+  Go TCP & UDP Request Round-Trip Benchmark
+================================================================
+
+=== TCP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 16 ms
+    Per op:     16948 ns
+    Ops/sec:    59002
+    Successful: 1000/1000
+
+=== UDP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 14 ms
+    Per op:     14357 ns
+    Ops/sec:    69651
+    Successful: 1000/1000
+
+=== TCP Request (reused connection) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 40 ms
+    Per op:     40483 ns
+    Ops/sec:    24701
+    Successful: 1000/1000
+
+=== UDP Request (send + recv echo) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 37 ms
+    Per op:     37818 ns
+    Ops/sec:    26441
+    Successful: 1000/1000
+
+================================================================
+  Notes:
+  - TCP reused: single connection, N send+recv round-trips
+  - UDP request: send + recv echo round-trip
+  - Payload: 64 bytes per request
+  - All on 127.0.0.1 (loopback)
+================================================================
+

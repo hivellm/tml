@@ -864,11 +864,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             codegen::CodegenOptions cg_opts;
                             cg_opts.optimization_level = CompilerOptions::optimization_level;
                             cg_opts.dll_export = true;
-#ifdef _WIN32
-                            cg_opts.target_triple = "x86_64-pc-windows-msvc";
-#else
-                            cg_opts.target_triple = "x86_64-unknown-linux-gnu";
-#endif
+                            cg_opts.target_triple = get_host_target_triple();
                             auto cl_backend =
                                 codegen::create_backend(codegen::BackendType::Cranelift);
                             auto cg_result = cl_backend->compile_mir(mir_module, cg_opts);
@@ -1366,10 +1362,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             TML_LOG_DEBUG("test", "  Generating " << tasks.size() << " LLVM IR files with "
                                                   << num_threads << " threads...");
 
-            // Launch worker threads
-            std::vector<std::thread> threads;
+            // Launch worker threads with custom stack (LLVM needs 32MB+)
+            constexpr size_t COMPILE_STACK = 32 * 1024 * 1024; // 32 MB
+            std::vector<tester::NativeThread> threads;
             for (unsigned int t = 0; t < std::min(num_threads, (unsigned int)tasks.size()); ++t) {
-                threads.emplace_back(compile_task_worker);
+                threads.emplace_back(compile_task_worker, COMPILE_STACK);
             }
             for (auto& t : threads) {
                 t.join();
@@ -1488,10 +1485,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             TML_LOG_DEBUG("test", "  Compiling " << pending_compiles.size() << " objects with "
                                                  << num_threads << " threads...");
 
-            std::vector<std::thread> threads;
+            constexpr size_t OBJ_COMPILE_STACK = 32 * 1024 * 1024; // 32 MB
+            std::vector<tester::NativeThread> threads;
             for (unsigned int t = 0;
                  t < std::min(num_threads, (unsigned int)pending_compiles.size()); ++t) {
-                threads.emplace_back(compile_worker);
+                threads.emplace_back(compile_worker, OBJ_COMPILE_STACK);
             }
             for (auto& t : threads) {
                 t.join();
@@ -1623,6 +1621,23 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             }
             link_options.link_flags.push_back("/STACK:67108864");
+#else
+            // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+            link_options.link_flags.push_back("-lm");
+            link_options.link_flags.push_back("-lpthread");
+            link_options.link_flags.push_back("-ldl");
+  #endif
+            // Always link OpenSSL (tml_runtime contains crypto objects)
+            {
+                auto openssl = build::find_openssl();
+                if (openssl.found) {
+                    link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                    link_options.link_flags.push_back("-lssl");
+                    link_options.link_flags.push_back("-lcrypto");
+                }
+            }
+            link_options.link_flags.push_back("-lz");
 #endif
 
             TML_LOG_DEBUG("test", "  Starting link...");

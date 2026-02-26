@@ -95,8 +95,9 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         auto inner = parse_type();
         if (is_err(inner))
             return inner;
+        auto inner_span = unwrap(inner)->span;
         return make_ref_type(true, std::move(unwrap(inner)),
-                             SourceSpan::merge(start_span, unwrap(inner)->span),
+                             SourceSpan::merge(start_span, inner_span),
                              std::move(lifetime));
     }
     if (match(lexer::TokenKind::KwRef)) {
@@ -153,8 +154,9 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         auto inner = parse_type();
         if (is_err(inner))
             return inner;
+        auto inner_span = unwrap(inner)->span;
         return make_ref_type(false, std::move(unwrap(inner)),
-                             SourceSpan::merge(start_span, unwrap(inner)->span),
+                             SourceSpan::merge(start_span, inner_span),
                              std::move(lifetime));
     }
 
@@ -164,8 +166,9 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         auto inner = parse_type();
         if (is_err(inner))
             return inner;
+        auto inner_span = unwrap(inner)->span;
         return make_ref_type(is_mut, std::move(unwrap(inner)),
-                             SourceSpan::merge(start_span, unwrap(inner)->span));
+                             SourceSpan::merge(start_span, inner_span));
     }
 
     // Pointer: *const T, *mut T

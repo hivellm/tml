@@ -48,86 +48,13 @@ TML_MODULE("test")
 #ifdef _WIN32
 #include <process.h> // _beginthreadex
 #include <windows.h>
+#else
+#include <pthread.h>
 #endif
 
 namespace tml::cli::tester {
 
-// ============================================================================
-// Thread with custom stack size (Windows)
-// ============================================================================
-// std::thread uses the default 1 MB stack on Windows. Test execution needs a
-// larger stack because OpenSSL DH/RSA operations use deep call chains with
-// heavy BIGNUM stack usage (prime generation, modular exponentiation).
-// Without this, DH tests intermittently hit EXCEPTION_STACK_OVERFLOW.
-
-#ifdef _WIN32
-
-/// RAII wrapper for a native Windows thread with a custom stack size.
-/// Provides a join() interface compatible with std::thread usage patterns.
-class NativeThread {
-public:
-    NativeThread() = default;
-
-    template <typename Fn> NativeThread(Fn&& fn, size_t stack_size) {
-        // Wrap the callable in a type-erased invocation
-        auto* ctx = new std::function<void()>(std::forward<Fn>(fn));
-        handle_ =
-            reinterpret_cast<HANDLE>(_beginthreadex(nullptr,                           // security
-                                                    static_cast<unsigned>(stack_size), // stack size
-                                                    &NativeThread::thread_proc, // start routine
-                                                    ctx,                        // argument
-                                                    STACK_SIZE_PARAM_IS_A_RESERVATION, // flags
-                                                    nullptr                            // thread id
-                                                    ));
-        if (!handle_) {
-            delete ctx;
-            throw std::runtime_error("Failed to create thread with custom stack size");
-        }
-    }
-
-    NativeThread(NativeThread&& other) noexcept : handle_(other.handle_) {
-        other.handle_ = nullptr;
-    }
-
-    NativeThread& operator=(NativeThread&& other) noexcept {
-        if (this != &other) {
-            if (handle_)
-                join();
-            handle_ = other.handle_;
-            other.handle_ = nullptr;
-        }
-        return *this;
-    }
-
-    ~NativeThread() {
-        if (handle_)
-            join();
-    }
-
-    bool joinable() const {
-        return handle_ != nullptr;
-    }
-
-    void join() {
-        if (handle_) {
-            WaitForSingleObject(handle_, INFINITE);
-            CloseHandle(handle_);
-            handle_ = nullptr;
-        }
-    }
-
-private:
-    HANDLE handle_ = nullptr;
-
-    static unsigned __stdcall thread_proc(void* arg) {
-        auto* fn = static_cast<std::function<void()>*>(arg);
-        (*fn)();
-        delete fn;
-        return 0;
-    }
-};
-
-#endif // _WIN32
+// NativeThread is defined in tester_internal.hpp
 
 // ============================================================================
 // Coverage Regression Check
@@ -777,13 +704,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         // to machine code with deep call chains; 8 MB is insufficient for
         // test files with 6+ test functions in these modules.
         constexpr size_t EXEC_THREAD_STACK_SIZE = 128 * 1024 * 1024; // 128 MB
-#ifdef _WIN32
         NativeThread exec_thread(execute_worker, EXEC_THREAD_STACK_SIZE);
-#else
-        // On Linux/macOS, pthread_attr_setstack can be used if needed.
-        // Default stack (typically 8 MB) is usually sufficient.
-        std::thread exec_thread(execute_worker);
-#endif
 
         if (suites_to_compile.empty()) {
             if (!opts.quiet && !suites_fully_cached.empty()) {
@@ -893,10 +814,12 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                    << num_compile_threads << " threads...");
             }
 
-            std::vector<std::thread> compile_threads;
+            // LLVM compilation can use deep stacks; 32 MB per compile thread.
+            constexpr size_t COMPILE_THREAD_STACK_SIZE = 32 * 1024 * 1024; // 32 MB
+            std::vector<NativeThread> compile_threads;
             for (unsigned int t = 0; t < std::min(num_compile_threads, (unsigned int)jobs.size());
                  ++t) {
-                compile_threads.emplace_back(compile_worker);
+                compile_threads.emplace_back(compile_worker, COMPILE_THREAD_STACK_SIZE);
             }
             for (auto& t : compile_threads) {
                 t.join();

@@ -276,18 +276,16 @@ func test_socket_type_from_raw_invalid() -> I32 {
 @test
 func test_address_family_to_raw() -> I32 {
     assert_eq(AddressFamily::Inet.to_raw(), 2 as I32, "Inet is AF_INET(2)")
-    assert_eq(AddressFamily::Inet6.to_raw(), 23 as I32, "Inet6 is AF_INET6(23)")
+    assert_eq(AddressFamily::Inet6.to_raw(), AF_INET6, "Inet6 is AF_INET6")
     return 0
 }
 
 @test
 func test_address_family_from_raw() -> I32 {
-    let inet: Maybe[AddressFamily] = AddressFamily::from_raw(2 as I32)
-    assert(inet.is_just(), "from_raw(2) should be Just(Inet)")
-    let inet6: Maybe[AddressFamily] = AddressFamily::from_raw(23 as I32)
-    assert(inet6.is_just(), "from_raw(23) should be Just(Inet6)")
-    let inet6_unix: Maybe[AddressFamily] = AddressFamily::from_raw(10 as I32)
-    assert(inet6_unix.is_just(), "from_raw(10) should be Just(Inet6) on Unix")
+    let inet: Maybe[AddressFamily] = AddressFamily::from_raw(AF_INET)
+    assert(inet.is_just(), "from_raw(AF_INET) should be Just(Inet)")
+    let inet6: Maybe[AddressFamily] = AddressFamily::from_raw(AF_INET6)
+    assert(inet6.is_just(), "from_raw(AF_INET6) should be Just(Inet6)")
     let invalid: Maybe[AddressFamily] = AddressFamily::from_raw(99 as I32)
     assert(invalid.is_nothing(), "from_raw(99) should be Nothing")
     return 0

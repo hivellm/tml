@@ -13,6 +13,8 @@ TML_MODULE("test")
 
 #include "exe_test_runner.hpp"
 
+#include "common.hpp"
+
 #include <sstream>
 #include <string>
 
@@ -24,11 +26,7 @@ std::string generate_dispatcher_ir(int total_tests, const std::string& module_na
     // Module header
     ir << "; ModuleID = '" << module_name << "_dispatcher'\n";
     ir << "source_filename = \"" << module_name << "_dispatcher.ll\"\n";
-#ifdef _WIN32
-    ir << "target triple = \"x86_64-pc-windows-msvc\"\n";
-#else
-    ir << "target triple = \"x86_64-unknown-linux-gnu\"\n";
-#endif
+    ir << "target triple = \"" << tml::get_host_target_triple() << "\"\n";
     ir << "\n";
 
     // String constants

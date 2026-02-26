@@ -182,8 +182,8 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
                     // via the direct LLVM codegen path, not through MIR
                     bool has_impl_generics = !d.generics.empty();
                     bool has_type_generics = false;
-                    if (d.self_type && d.self_type->is<parser::NamedType>()) {
-                        const auto& named = d.self_type->as<parser::NamedType>();
+                    if (d.self_type && d.self_type->template is<parser::NamedType>()) {
+                        const auto& named = d.self_type->template as<parser::NamedType>();
                         if (named.generics.has_value() && !named.generics->args.empty()) {
                             has_type_generics = true;
                         }

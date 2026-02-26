@@ -125,6 +125,45 @@ fi
 mkdir -p "$CACHE_DIR"
 mkdir -p "$OUTPUT_DIR"
 
+# ============================================================================
+# macOS Homebrew LLVM auto-detection
+# ============================================================================
+EXTRA_CMAKE_ARGS=""
+
+if [ "$(uname -s)" = "Darwin" ] && [ -z "$LLVM_DIR" ]; then
+    # Detect Homebrew LLVM installation
+    BREW_LLVM=""
+    if [ -d "/opt/homebrew/opt/llvm" ]; then
+        # Apple Silicon (ARM64)
+        BREW_LLVM="/opt/homebrew/opt/llvm"
+    elif [ -d "/usr/local/opt/llvm" ]; then
+        # Intel (x86_64)
+        BREW_LLVM="/usr/local/opt/llvm"
+    fi
+
+    if [ -n "$BREW_LLVM" ]; then
+        echo -e "Homebrew LLVM: ${YELLOW}$BREW_LLVM${NC}"
+
+        # Pass LLVM_DIR to CMake so find_package(LLVM CONFIG) succeeds
+        if [ -d "$BREW_LLVM/lib/cmake/llvm" ]; then
+            EXTRA_CMAKE_ARGS="$EXTRA_CMAKE_ARGS -DLLVM_DIR=$BREW_LLVM/lib/cmake/llvm"
+            echo -e "  LLVM CMake:  ${DIM}$BREW_LLVM/lib/cmake/llvm${NC}"
+        fi
+
+        # Use Homebrew clang if CC/CXX are not already set
+        if [ -z "$CC" ] && [ -x "$BREW_LLVM/bin/clang" ]; then
+            export CC="$BREW_LLVM/bin/clang"
+            echo -e "  CC:          ${DIM}$CC${NC}"
+        fi
+        if [ -z "$CXX" ] && [ -x "$BREW_LLVM/bin/clang++" ]; then
+            export CXX="$BREW_LLVM/bin/clang++"
+            echo -e "  CXX:         ${DIM}$CXX${NC}"
+        fi
+
+        echo ""
+    fi
+fi
+
 # Configure CMake
 echo -e "${GREEN}Configuring CMake...${NC}"
 cd "$CACHE_DIR"
@@ -139,7 +178,8 @@ cmake "$ROOT_DIR/compiler" \
     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
     -DTML_BUILD_TESTS="$BUILD_TESTS" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DTML_OUTPUT_DIR="$OUTPUT_DIR"
+    -DTML_OUTPUT_DIR="$OUTPUT_DIR" \
+    $EXTRA_CMAKE_ARGS
 
 # Build
 echo ""

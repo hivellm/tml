@@ -1,7 +1,8 @@
-//! I/O error types.
+//! I/O types and standard streams.
 //!
 //! This module provides the error types used by I/O operations across the
-//! standard library (`std::file`, `std::net`, etc.).
+//! standard library (`std::file`, `std::net`, etc.), and standard stream
+//! access (`stdin`).
 //!
 //! # Main Types
 //!
@@ -10,25 +11,23 @@
 //! | [`IoError`] | An I/O error with a kind and optional message |
 //! | [`IoErrorKind`] | Categorization of I/O error types |
 //!
+//! # Submodules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`stdin`] | Read interactive input from the terminal |
+//!
 //! # Example
 //!
 //! ```tml
 //! use std::io::{IoError, IoErrorKind}
+//! use std::io::stdin
 //!
-//! func read_config() -> Outcome[Str, IoError] {
-//!     return Err(IoError::with_message(IoErrorKind::NotFound, "config.json"))
-//! }
-//!
-//! when read_config() {
-//!     Ok(data) => print(data),
-//!     Err(e) => {
-//!         when e.kind() {
-//!             NotFound => print("File not found"),
-//!             _ => print("I/O error: " + e.to_string())
-//!         }
-//!     }
-//! }
+//! let name = stdin::prompt("Your name: ")
+//! print("Hello, {name}!\n")
 //! ```
+
+pub mod stdin
 
 // Re-export from core::error for now — these types were originally defined there.
 // As the project matures, the canonical definitions will move here.

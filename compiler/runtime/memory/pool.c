@@ -160,6 +160,7 @@ TML_EXPORT void pool_release(TmlPool* pool, void* obj) {
 }
 
 // pool_destroy — internal only (not declared in runtime.cpp)
+__attribute__((unused))
 static void pool_destroy(TmlPool* pool) {
     TmlPoolBlock* block = (TmlPoolBlock*)pool->block_list;
     while (block != NULL) {

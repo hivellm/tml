@@ -55,7 +55,7 @@ struct MirCodegenOptions {
     bool coverage_enabled = false;                        ///< Disable inlining for coverage builds.
     bool generate_exe_main = false;                       ///< Emit @main(argc,argv) C entry point
                                                           ///< (renames user `main` to `tml_main`).
-    std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
+    std::string target_triple; ///< LLVM target triple (empty = host).
 };
 
 /// MIR-to-LLVM IR code generator.
@@ -106,6 +106,10 @@ private:
 
     // Enum types used (collected from EnumInitInst, for imported enums)
     std::set<std::string> used_enum_types_;
+
+    // Struct types used in StructInitInst but not in module.structs (for imported structs)
+    // Maps struct name -> vector of LLVM field types
+    std::unordered_map<std::string, std::vector<std::string>> used_struct_types_;
 
     // Generic enum type definitions needed (mangled_name -> max payload size in bytes)
     // Collected from function signatures and instructions referencing generic enums

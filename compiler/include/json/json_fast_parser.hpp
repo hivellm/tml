@@ -87,10 +87,10 @@ inline uint32_t parse_hex4_swar(const char* p) {
     std::memcpy(&block, p, 4);
 
     // Check all characters are valid hex
-    uint8_t v0 = kHexValues[p[0]];
-    uint8_t v1 = kHexValues[p[1]];
-    uint8_t v2 = kHexValues[p[2]];
-    uint8_t v3 = kHexValues[p[3]];
+    uint8_t v0 = kHexValues[(unsigned char)p[0]];
+    uint8_t v1 = kHexValues[(unsigned char)p[1]];
+    uint8_t v2 = kHexValues[(unsigned char)p[2]];
+    uint8_t v3 = kHexValues[(unsigned char)p[3]];
 
     if ((v0 | v1 | v2 | v3) == 0xFF) {
         return 0xFFFFFFFF; // Invalid hex

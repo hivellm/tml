@@ -146,6 +146,11 @@ auto LLDLinker::find_lld() -> bool {
 #ifdef _WIN32
     const std::string lld_name = "lld-link.exe";
     const std::string ar_name = "llvm-ar.exe";
+#elif defined(__APPLE__)
+    // macOS: ld64.lld is the MachO-flavor linker
+    // Note: ld.lld also exists but invokes the ELF driver, not MachO
+    const std::string lld_name = "ld64.lld";
+    const std::string ar_name = "llvm-ar";
 #else
     const std::string lld_name = "ld.lld";
     const std::string ar_name = "llvm-ar";
@@ -268,7 +273,73 @@ auto LLDLinker::build_unix_args(const std::vector<fs::path>& object_files,
     -> std::vector<std::string> {
     std::vector<std::string> args;
 
-    // argv[0]: program name
+#ifdef __APPLE__
+    // macOS: use MachO linker (ld64.lld)
+    // argv[0] determines which LLD driver is used in-process
+    args.push_back("ld64.lld");
+
+    // Output file
+    args.push_back("-o");
+    args.push_back(output_path.string());
+
+    // Architecture
+  #if defined(__aarch64__) || defined(__arm64__)
+    args.push_back("-arch");
+    args.push_back("arm64");
+  #else
+    args.push_back("-arch");
+    args.push_back("x86_64");
+  #endif
+
+    // Platform version (minimum macOS deployment target)
+    args.push_back("-platform_version");
+    args.push_back("macos");
+    args.push_back("13.0.0"); // minimum deployment target
+    args.push_back("0.0.0");  // SDK version (0 = use default)
+
+    // Shared library
+    if (options.output_type == LLDOutputType::SharedLib) {
+        args.push_back("-dylib");
+    }
+
+    // Entry point
+    if (!options.entry_point.empty()) {
+        args.push_back("-e");
+        args.push_back(options.entry_point);
+    }
+
+    // Library paths
+    for (const auto& lib_path : options.library_paths) {
+        args.push_back("-L" + lib_path.string());
+    }
+
+    // System library paths
+    args.push_back("-L/usr/lib");
+    args.push_back("-L/usr/local/lib");
+  #if defined(__aarch64__) || defined(__arm64__)
+    args.push_back("-L/opt/homebrew/lib");
+  #endif
+
+    // Libraries
+    for (const auto& lib : options.libraries) {
+        args.push_back("-l" + lib);
+    }
+
+    // Object files
+    for (const auto& obj : object_files) {
+        args.push_back(obj.string());
+    }
+
+    // Extra flags
+    for (const auto& flag : options.extra_flags) {
+        args.push_back(flag);
+    }
+
+    // Link against system library (provides libc, libm, libpthread on macOS)
+    args.push_back("-lSystem");
+
+#else
+    // Linux/other Unix: use ELF linker (ld.lld)
     args.push_back("ld.lld");
 
     // Output file
@@ -311,6 +382,7 @@ auto LLDLinker::build_unix_args(const std::vector<fs::path>& object_files,
 
     // Link against C library
     args.push_back("-lc");
+#endif
 
     return args;
 }

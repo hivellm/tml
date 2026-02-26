@@ -1219,24 +1219,28 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
-            // Drop Str temps created within this arm
+            // Drop Str temps created within this arm, but NOT the arm result value
+            // (it was just stored to result_ptr and is still needed after the when).
             if (temp_drops_.size() > temps_before_arm) {
                 for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm);
                      it != temp_drops_.end(); ++it) {
-                    if (it->is_heap_str) {
+                    if (it->is_heap_str && it->var_reg != arm_value) {
                         emit_drop_call(*it);
                     }
                 }
                 temp_drops_.erase(temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm),
                                   temp_drops_.end());
             }
-            // Flush Str temps created within this arm
+            // Flush Str temps created within this arm, but skip the arm result
+            // to avoid use-after-free (the result escapes the arm scope).
             if (pending_str_temps_.size() > str_temps_before_arm) {
                 require_runtime_decl("tml_str_free");
                 for (auto it =
                          pending_str_temps_.begin() + static_cast<ptrdiff_t>(str_temps_before_arm);
                      it != pending_str_temps_.end(); ++it) {
-                    emit_line("  call void @tml_str_free(ptr " + *it + ")");
+                    if (*it != arm_value) {
+                        emit_line("  call void @tml_str_free(ptr " + *it + ")");
+                    }
                 }
                 pending_str_temps_.erase(pending_str_temps_.begin() +
                                              static_cast<ptrdiff_t>(str_temps_before_arm),

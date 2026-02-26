@@ -357,7 +357,11 @@ auto Target::host() -> Target {
     return x86_64_linux_gnu(); // Default
 #endif
 #elif defined(__APPLE__)
+#if defined(__aarch64__) || defined(__arm64__)
+    return aarch64_apple_darwin();
+#else
     return x86_64_macos();
+#endif
 #else
     // Default to x86_64-linux-gnu for unknown platforms
     return x86_64_linux_gnu();
@@ -423,6 +427,20 @@ auto Target::wasm32_unknown() -> Target {
 auto Target::x86_64_macos() -> Target {
     Target target;
     target.arch = Arch::X86_64;
+    target.os = OS::MacOS;
+    target.env = Env::None;
+    target.object_format = ObjectFormat::MachO;
+    target.pointer_width = 64;
+    target.pointer_align = 8;
+    target.size_ptr = 8;
+    target.align_ptr = 8;
+    target.is_little_endian = true;
+    return target;
+}
+
+auto Target::aarch64_apple_darwin() -> Target {
+    Target target;
+    target.arch = Arch::Aarch64;
     target.os = OS::MacOS;
     target.env = Env::None;
     target.object_format = ObjectFormat::MachO;

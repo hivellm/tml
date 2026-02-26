@@ -1,0 +1,58 @@
+//! Standard input (stdin) reading.
+//!
+//! Provides functions to read interactive input from the terminal.
+//! The program blocks until the user presses Enter.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::io::stdin
+//!
+//! let name = stdin::prompt("Your name: ")
+//! print("Hello, {name}!\n")
+//!
+//! let line = stdin::read_line()
+//! print("You typed: {line}\n")
+//! ```
+
+// FFI declarations for C runtime stdin operations
+@allocates
+@extern("stdin_read_line")
+func ffi_stdin_read_line() -> Str
+
+@extern("stdin_flush_stdout")
+func ffi_stdin_flush_stdout()
+
+/// Reads a single line from standard input (blocks until Enter).
+///
+/// Returns the line content without the trailing newline character.
+/// Returns an empty string on EOF (e.g., when stdin is closed or piped input ends).
+///
+/// # Example
+///
+/// ```tml
+/// print("Type something: ")
+/// let input = stdin::read_line()
+/// print("Got: {input}\n")
+/// ```
+pub func read_line() -> Str {
+    return ffi_stdin_read_line()
+}
+
+/// Prints a prompt to stdout, then reads a line from stdin.
+///
+/// This is a convenience function that combines `print()` + `read_line()`,
+/// ensuring the prompt is flushed to the terminal before blocking for input.
+///
+/// # Example
+///
+/// ```tml
+/// let name = stdin::prompt("Enter your name: ")
+/// let age = stdin::prompt("Enter your age: ")
+/// print("Hello {name}, you are {age} years old!\n")
+/// ```
+pub func prompt(message: Str) -> Str {
+    print(message)
+    ffi_stdin_flush_stdout()
+    return ffi_stdin_read_line()
+}

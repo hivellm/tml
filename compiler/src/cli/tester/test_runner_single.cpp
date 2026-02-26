@@ -188,6 +188,22 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
         }
     }
     link_options.link_flags.push_back("/STACK:67108864");
+#else
+    // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+    link_options.link_flags.push_back("-lm");
+    link_options.link_flags.push_back("-lpthread");
+    link_options.link_flags.push_back("-ldl");
+  #endif
+    {
+        auto openssl = build::find_openssl();
+        if (openssl.found) {
+            link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+            link_options.link_flags.push_back("-lssl");
+            link_options.link_flags.push_back("-lcrypto");
+        }
+    }
+    link_options.link_flags.push_back("-lz");
 #endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);
@@ -411,6 +427,23 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
         }
     }
     link_options.link_flags.push_back("/STACK:67108864");
+#else
+    link_options.link_flags.push_back("-lm");
+    link_options.link_flags.push_back("-lpthread");
+  #ifdef __APPLE__
+    link_options.link_flags.push_back("-lSystem");
+  #else
+    link_options.link_flags.push_back("-ldl");
+  #endif
+    {
+        auto openssl = build::find_openssl();
+        if (openssl.found) {
+            link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+            link_options.link_flags.push_back("-lssl");
+            link_options.link_flags.push_back("-lcrypto");
+        }
+    }
+    link_options.link_flags.push_back("-lz");
 #endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);
@@ -616,6 +649,24 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
                 link_options.link_flags.push_back("-l" + lib);
             }
         }
+
+#ifndef _WIN32
+        // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+        link_options.link_flags.push_back("-lm");
+        link_options.link_flags.push_back("-lpthread");
+        link_options.link_flags.push_back("-ldl");
+  #endif
+        {
+            auto openssl = build::find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                link_options.link_flags.push_back("-lssl");
+                link_options.link_flags.push_back("-lcrypto");
+            }
+        }
+        link_options.link_flags.push_back("-lz");
+#endif
 
         // Link to temp file first, then rename to cached path
         fs::path temp_dll = cache_dir / (dll_hash + "_" + cache_key + "_temp" + lib_ext);

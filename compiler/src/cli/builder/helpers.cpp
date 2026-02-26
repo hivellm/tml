@@ -256,21 +256,73 @@ OpenSSLPaths find_openssl() {
         return result;
     }
 #else
-    // Unix: check system paths
+  #ifdef __APPLE__
+    // macOS: Homebrew OpenSSL (not linked into /usr/local by default)
+    // Homebrew on Apple Silicon
+    if (fs::exists("/opt/homebrew/opt/openssl/include/openssl/evp.h")) {
+        result.found = true;
+        result.include_dir = "/opt/homebrew/opt/openssl/include";
+        result.lib_dir = "/opt/homebrew/opt/openssl/lib";
+        result.crypto_lib = "libcrypto.dylib";
+        result.ssl_lib = "libssl.dylib";
+        return result;
+    }
+    // Homebrew on Intel Mac
+    if (fs::exists("/usr/local/opt/openssl/include/openssl/evp.h")) {
+        result.found = true;
+        result.include_dir = "/usr/local/opt/openssl/include";
+        result.lib_dir = "/usr/local/opt/openssl/lib";
+        result.crypto_lib = "libcrypto.dylib";
+        result.ssl_lib = "libssl.dylib";
+        return result;
+    }
+    // Check versioned Homebrew OpenSSL paths
+    for (const auto& ver : {"openssl@3", "openssl@1.1"}) {
+        fs::path brew_path = fs::path("/opt/homebrew/opt") / ver;
+        if (fs::exists(brew_path / "include" / "openssl" / "evp.h")) {
+            result.found = true;
+            result.include_dir = brew_path / "include";
+            result.lib_dir = brew_path / "lib";
+            result.crypto_lib = "libcrypto.dylib";
+            result.ssl_lib = "libssl.dylib";
+            return result;
+        }
+        brew_path = fs::path("/usr/local/opt") / ver;
+        if (fs::exists(brew_path / "include" / "openssl" / "evp.h")) {
+            result.found = true;
+            result.include_dir = brew_path / "include";
+            result.lib_dir = brew_path / "lib";
+            result.crypto_lib = "libcrypto.dylib";
+            result.ssl_lib = "libssl.dylib";
+            return result;
+        }
+    }
+  #endif
+    // Linux / generic Unix: check system paths
     if (fs::exists("/usr/include/openssl/evp.h")) {
         result.found = true;
         result.include_dir = "/usr/include";
         result.lib_dir = "/usr/lib";
+  #ifdef __APPLE__
+        result.crypto_lib = "libcrypto.dylib";
+        result.ssl_lib = "libssl.dylib";
+  #else
         result.crypto_lib = "libcrypto.so";
         result.ssl_lib = "libssl.so";
+  #endif
         return result;
     }
     if (fs::exists("/usr/local/include/openssl/evp.h")) {
         result.found = true;
         result.include_dir = "/usr/local/include";
         result.lib_dir = "/usr/local/lib";
+  #ifdef __APPLE__
+        result.crypto_lib = "libcrypto.dylib";
+        result.ssl_lib = "libssl.dylib";
+  #else
         result.crypto_lib = "libcrypto.so";
         result.ssl_lib = "libssl.so";
+  #endif
         return result;
     }
 #endif
@@ -299,10 +351,15 @@ SQLite3Paths find_sqlite3() {
         }
     }
 #else
-    // Unix: check vcpkg_installed, then system paths
+    // Unix: check vcpkg_installed, Homebrew, then system paths
     std::vector<fs::path> search_dirs = {
         "vcpkg_installed/x64-linux/lib",
         "../vcpkg_installed/x64-linux/lib",
+  #ifdef __APPLE__
+        "/opt/homebrew/opt/sqlite/lib",
+        "/opt/homebrew/lib",
+        "/usr/local/opt/sqlite/lib",
+  #endif
         "/usr/lib",
         "/usr/local/lib",
         "/usr/lib/x86_64-linux-gnu",
@@ -314,13 +371,23 @@ SQLite3Paths find_sqlite3() {
             result.lib_path = fs::absolute(lib);
             return result;
         }
-        // Also check .so
+  #ifdef __APPLE__
+        // macOS: check .dylib
+        fs::path dylib = dir / "libsqlite3.dylib";
+        if (fs::exists(dylib)) {
+            result.found = true;
+            result.lib_path = fs::absolute(dylib);
+            return result;
+        }
+  #else
+        // Linux: check .so
         fs::path so = dir / "libsqlite3.so";
         if (fs::exists(so)) {
             result.found = true;
             result.lib_path = fs::absolute(so);
             return result;
         }
+  #endif
     }
 #endif
 
@@ -918,8 +985,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     // lib/std/runtime/collections.c as it has different struct layouts that cause memory corruption
     // when both are linked.
 
-    // Link std::file runtime if imported
-    if (registry->has_module("std::file")) {
+    // Link std::file runtime if imported (also provides stdin functions for std::io::stdin)
+    if (registry->has_module("std::file") || registry->has_module("std::io::stdin")) {
         add_runtime(
             {
                 "lib/std/runtime/file.c",
@@ -1083,6 +1150,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
             // Also need to link the underlying compression libraries
             // (zstd, brotli, zlib) which are dependencies of tml_zlib_runtime
+#ifdef _WIN32
             auto find_vcpkg_lib = [](const std::string& lib_name) -> std::optional<fs::path> {
                 std::vector<std::string> search_paths = {
                     "src/x64-windows/lib",
@@ -1120,6 +1188,32 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 objects.push_back(*zlib_base_lib);
                 TML_LOG_DEBUG("build", "Including zlib base library: " << zlib_base_lib->string());
             }
+#else
+            // Unix: find system/Homebrew compression static libraries
+            auto find_unix_lib = [](const std::string& lib_name) -> std::optional<fs::path> {
+                std::vector<std::string> search_paths = {
+                    "/opt/homebrew/lib",     // macOS ARM64 Homebrew
+                    "/usr/local/lib",        // macOS Intel Homebrew / general
+                    "/usr/lib",
+                    "/usr/lib/x86_64-linux-gnu",  // Debian/Ubuntu
+                    "/usr/lib64",                  // RHEL/Fedora
+                };
+                for (const auto& dir : search_paths) {
+                    fs::path lib_path = fs::path(dir) / ("lib" + lib_name + ".a");
+                    if (fs::exists(lib_path))
+                        return lib_path;
+                }
+                return std::nullopt;
+            };
+
+            for (const auto& lib : {"zstd", "brotlidec", "brotlienc", "brotlicommon"}) {
+                if (auto found = find_unix_lib(lib)) {
+                    objects.push_back(*found);
+                    TML_LOG_DEBUG("build", "Including " << lib << " library: " << found->string());
+                }
+            }
+            // zlib: usually only dylib on macOS, linked via -lz in link_flags elsewhere
+#endif
         } else {
             TML_LOG_WARN("build", "std::zlib imported but tml_zlib_runtime library not found");
         }

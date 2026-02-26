@@ -38,6 +38,12 @@ TML_MODULE("compiler")
 #include <mutex>
 #include <thread>
 
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h> // _NSGetExecutablePath
+#endif
+
 namespace fs = std::filesystem;
 
 namespace tml::cli {
@@ -159,6 +165,34 @@ std::string find_clang() {
     return clang;
 }
 
+/// Returns the directory containing the currently-running executable.
+/// Used as a base path for locating runtime libraries and other resources.
+static fs::path get_executable_dir() {
+    std::error_code ec;
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+        return fs::path(std::string(buf, len)).parent_path();
+    }
+#elif defined(__APPLE__)
+    // macOS: use _NSGetExecutablePath
+    char buf[4096];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) == 0) {
+        return fs::canonical(fs::path(buf), ec).parent_path();
+    }
+#elif defined(__linux__)
+    // Linux: read /proc/self/exe
+    auto exe_path = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec) {
+        return exe_path.parent_path();
+    }
+#endif
+    // Fallback: current working directory
+    return fs::current_path();
+}
+
 std::string find_runtime() {
     // Runtime is organized into themed subdirectories under runtime/
     // essential.c lives in runtime/core/essential.c
@@ -167,8 +201,19 @@ std::string find_runtime() {
         "runtime/core/essential.c",
         "../runtime/core/essential.c",
         "../../runtime/core/essential.c",
-        "F:/Node/hivellm/tml/compiler/runtime/core/essential.c",
     };
+
+    // Add executable-relative paths (works for installed distributions)
+    fs::path exe_dir = get_executable_dir();
+    runtime_search.push_back((exe_dir / "compiler" / "runtime" / "core" / "essential.c").string());
+    runtime_search.push_back((exe_dir / ".." / "compiler" / "runtime" / "core" / "essential.c").string());
+    runtime_search.push_back((exe_dir / ".." / ".." / "compiler" / "runtime" / "core" / "essential.c").string());
+
+#ifdef _WIN32
+    // Windows development paths
+    runtime_search.push_back("F:/Node/hivellm/tml/compiler/runtime/core/essential.c");
+#endif
+
     for (const auto& rp : runtime_search) {
         if (fs::exists(rp)) {
             return to_forward_slashes(fs::absolute(rp).string());
@@ -194,10 +239,22 @@ std::string find_runtime_library() {
         "build/release",
         "../build/debug",
         "../build/release",
-        // Development paths
-        "F:/Node/hivellm/tml/build/debug",
-        "F:/Node/hivellm/tml/build/release",
     };
+
+    // Add executable-relative paths (works regardless of cwd)
+    fs::path exe_dir = get_executable_dir();
+    search_paths.push_back(exe_dir.string());
+    search_paths.push_back((exe_dir / ".." / "lib").string());
+
+#ifdef _WIN32
+    // Windows development paths
+    search_paths.push_back("F:/Node/hivellm/tml/build/debug");
+    search_paths.push_back("F:/Node/hivellm/tml/build/release");
+#else
+    // Unix system install paths
+    search_paths.push_back("/usr/local/lib");
+    search_paths.push_back("/usr/lib");
+#endif
 
     for (const auto& path : search_paths) {
         fs::path lib_path = fs::path(path) / lib_name;

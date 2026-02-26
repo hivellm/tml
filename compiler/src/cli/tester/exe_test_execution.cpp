@@ -91,6 +91,17 @@ parse_run_all_output(const std::string& stdout_output) {
     return outcomes;
 }
 
+// Helper: launch a subprocess with given arguments, capture stdout/stderr
+// (shared type used by both Windows and Unix implementations)
+struct RawSubprocessResult {
+    bool launched = false;
+    bool timed_out = false;
+    int exit_code = 0;
+    std::string stdout_output;
+    std::string stderr_output;
+    int64_t duration_us = 0;
+};
+
 #ifdef _WIN32
 
 // Read all data from a pipe handle into a string
@@ -181,16 +192,6 @@ static const std::string& get_cached_env_block() {
     static std::string cached = build_env_with_dll_paths();
     return cached;
 }
-
-// Helper: launch a subprocess with given arguments, capture stdout/stderr
-struct RawSubprocessResult {
-    bool launched = false;
-    bool timed_out = false;
-    int exit_code = 0;
-    std::string stdout_output;
-    std::string stderr_output;
-    int64_t duration_us = 0;
-};
 
 static RawSubprocessResult launch_subprocess(const std::string& exe_path,
                                              const std::string& args_str, int timeout_seconds) {

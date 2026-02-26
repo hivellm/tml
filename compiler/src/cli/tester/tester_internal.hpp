@@ -43,13 +43,132 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <process.h>
 #undef min
 #undef max
+#else
+#include <pthread.h>
 #endif
 
 namespace fs = std::filesystem;
 
 namespace tml::cli::tester {
+
+// ============================================================================
+// Cross-platform Thread with Custom Stack Size
+// ============================================================================
+// std::thread uses 1 MB stack on Windows and 512KB on macOS secondary threads.
+// LLVM compilation and OpenSSL crypto operations need much larger stacks.
+
+class NativeThread {
+public:
+    NativeThread() = default;
+
+    template <typename Fn> NativeThread(Fn&& fn, size_t stack_size) {
+        auto* ctx = new std::function<void()>(std::forward<Fn>(fn));
+#ifdef _WIN32
+        handle_ =
+            reinterpret_cast<HANDLE>(_beginthreadex(nullptr,
+                                                    static_cast<unsigned>(stack_size),
+                                                    &NativeThread::thread_proc_win,
+                                                    ctx,
+                                                    STACK_SIZE_PARAM_IS_A_RESERVATION,
+                                                    nullptr));
+        if (!handle_) {
+            delete ctx;
+            throw std::runtime_error("Failed to create thread with custom stack size");
+        }
+#else
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, stack_size);
+        int rc = pthread_create(&thread_, &attr, &NativeThread::thread_proc_posix, ctx);
+        pthread_attr_destroy(&attr);
+        if (rc != 0) {
+            delete ctx;
+            throw std::runtime_error("Failed to create thread with custom stack size");
+        }
+        joinable_ = true;
+#endif
+    }
+
+    NativeThread(NativeThread&& other) noexcept {
+#ifdef _WIN32
+        handle_ = other.handle_;
+        other.handle_ = nullptr;
+#else
+        thread_ = other.thread_;
+        joinable_ = other.joinable_;
+        other.joinable_ = false;
+#endif
+    }
+
+    NativeThread& operator=(NativeThread&& other) noexcept {
+        if (this != &other) {
+            if (joinable())
+                join();
+#ifdef _WIN32
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+#else
+            thread_ = other.thread_;
+            joinable_ = other.joinable_;
+            other.joinable_ = false;
+#endif
+        }
+        return *this;
+    }
+
+    ~NativeThread() {
+        if (joinable())
+            join();
+    }
+
+    bool joinable() const {
+#ifdef _WIN32
+        return handle_ != nullptr;
+#else
+        return joinable_;
+#endif
+    }
+
+    void join() {
+#ifdef _WIN32
+        if (handle_) {
+            WaitForSingleObject(handle_, INFINITE);
+            CloseHandle(handle_);
+            handle_ = nullptr;
+        }
+#else
+        if (joinable_) {
+            pthread_join(thread_, nullptr);
+            joinable_ = false;
+        }
+#endif
+    }
+
+private:
+#ifdef _WIN32
+    HANDLE handle_ = nullptr;
+
+    static unsigned __stdcall thread_proc_win(void* arg) {
+        auto* fn = static_cast<std::function<void()>*>(arg);
+        (*fn)();
+        delete fn;
+        return 0;
+    }
+#else
+    pthread_t thread_{};
+    bool joinable_ = false;
+
+    static void* thread_proc_posix(void* arg) {
+        auto* fn = static_cast<std::function<void()>*>(arg);
+        (*fn)();
+        delete fn;
+        return nullptr;
+    }
+#endif
+};
 
 // ============================================================================
 // Color Output Helper

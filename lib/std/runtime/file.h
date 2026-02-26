@@ -78,4 +78,11 @@ char* path_filename(const char* path);
 char* path_extension(const char* path);
 char* path_absolute(const char* path);
 
+// ============================================================================
+// Stdin Operations
+// ============================================================================
+
+char* stdin_read_line(void);    // Returns malloc'd string (line without newline)
+void stdin_flush_stdout(void);  // Flush stdout (for prompt before blocking read)
+
 #endif // STD_FILE_H

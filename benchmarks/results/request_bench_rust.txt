@@ -1,0 +1,49 @@
+
+================================================================
+  Rust TCP & UDP Request Round-Trip Benchmark
+================================================================
+
+=== TCP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 10 ms
+    Per op:     10541 ns
+    Ops/sec:    94866
+    Successful: 1000/1000
+
+=== UDP Bind (baseline) ===
+  1000 iterations, bind + close
+
+    Iterations: 1000
+    Total time: 7 ms
+    Per op:     7761 ns
+    Ops/sec:    128838
+    Successful: 1000/1000
+
+=== TCP Request (reused connection) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 29 ms
+    Per op:     29160 ns
+    Ops/sec:    34292
+    Successful: 1000/1000
+
+=== UDP Request (send + recv echo) ===
+  1000 iterations, 64-byte payload, echo round-trip
+
+    Iterations: 1000
+    Total time: 31 ms
+    Per op:     31044 ns
+    Ops/sec:    32212
+    Successful: 1000/1000
+
+================================================================
+  Notes:
+  - TCP reused: single connection, N send+recv round-trips
+  - UDP request: send + recv echo round-trip
+  - Payload: 64 bytes per request
+  - All on 127.0.0.1 (loopback)
+================================================================
+

@@ -42,6 +42,7 @@
 #include <windows.h>
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
+#include <unistd.h>  // _exit()
 #endif
 
 // Backtrace support for panic handlers
@@ -112,8 +113,14 @@ TML_EXPORT int32_t tml_get_output_suppressed(void) {
 // Panic Catching State (for @should_panic tests)
 // ============================================================================
 
-/** @brief Jump buffer for panic catching via setjmp/longjmp. */
+/** @brief Jump buffer for panic catching via setjmp/longjmp.
+ *  On Unix, we use sigjmp_buf + sigsetjmp/siglongjmp to properly
+ *  save/restore the signal mask when jumping from signal handlers. */
+#ifndef _WIN32
+static sigjmp_buf tml_panic_jmp_buf;
+#else
 static jmp_buf tml_panic_jmp_buf;
+#endif
 
 /** @brief Flag indicating whether panic catching is active. */
 static int32_t tml_catching_panic = 0;
@@ -235,7 +242,9 @@ TML_EXPORT int32_t tml_get_crash_abort_suite(void) {
 TML_EXPORT void tml_clear_crash_severity(void) {
     tml_crash_severity = CRASH_NONE;
     tml_crash_abort_suite = 0;
+#ifdef _WIN32
     tml_crash_bt_count = 0;
+#endif
 }
 
 /** @brief Get raw backtrace frames from last crash. */
@@ -329,7 +338,11 @@ void panic(const char* message) {
                 backtrace_free(bt);
             }
         }
+#ifndef _WIN32
+        siglongjmp(tml_panic_jmp_buf, 1);
+#else
         longjmp(tml_panic_jmp_buf, 1);
+#endif
     }
 
     // Normal panic behavior - print message and exit
@@ -391,7 +404,11 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
                     backtrace_free(bt);
                 }
             }
+#ifndef _WIN32
+            siglongjmp(tml_panic_jmp_buf, 1);
+#else
             longjmp(tml_panic_jmp_buf, 1);
+#endif
         }
 
         // Normal mode - print and exit
@@ -524,7 +541,11 @@ int32_t tml_run_should_panic(tml_test_fn test_fn) {
     tml_panic_msg[0] = '\0';
     tml_catching_panic = 1;
 
+#ifndef _WIN32
+    if (sigsetjmp(tml_panic_jmp_buf, 1) == 0) {
+#else
     if (setjmp(tml_panic_jmp_buf) == 0) {
+#endif
         // First time through - run the test
         test_fn();
         // If we get here, test didn't panic
@@ -574,6 +595,7 @@ static int32_t tml_test_mode = 0;
 
 /** @brief Exit code from caught test failure. */
 #ifndef _WIN32
+__attribute__((unused))
 static int32_t tml_test_exit_code = 0;
 #endif
 
@@ -596,62 +618,66 @@ void tml_disable_test_mode(void) {
 
 // Unix signal handlers - not used on Windows (uses VEH instead)
 #ifndef _WIN32
-/** @brief Signal handler for catching crashes during tests. */
+/** @brief Signal handler for catching crashes during tests.
+ *  Uses only async-signal-safe functions and siglongjmp for ARM64 PAC compat. */
 static void tml_signal_handler(int sig) {
+    // Use pre-formatted strings (async-signal-safe, no snprintf)
+    const char* crash_prefix = "CRASH: ";
     const char* sig_name = "unknown signal";
     switch (sig) {
-    case SIGSEGV:
-        sig_name = "SIGSEGV (Segmentation fault)";
-        break;
-    case SIGFPE:
-        sig_name = "SIGFPE (Floating point exception)";
-        break;
-    case SIGILL:
-        sig_name = "SIGILL (Illegal instruction)";
-        break;
-    case SIGBUS:
-        sig_name = "SIGBUS (Bus error)";
-        break;
-    case SIGABRT:
-        sig_name = "SIGABRT (Abort)";
-        break;
+    case SIGSEGV: sig_name = "SIGSEGV (Segmentation fault)"; break;
+    case SIGFPE:  sig_name = "SIGFPE (Floating point exception)"; break;
+    case SIGILL:  sig_name = "SIGILL (Illegal instruction)"; break;
+    case SIGBUS:  sig_name = "SIGBUS (Bus error)"; break;
+    case SIGABRT: sig_name = "SIGABRT (Abort)"; break;
     }
 
-    // Store crash info and longjmp back if we're catching panics
+    // Store crash info and siglongjmp back if we're catching panics
     if (tml_catching_panic) {
-        snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s", sig_name);
-        longjmp(tml_panic_jmp_buf, 2); // Use 2 to distinguish from panic
+        // Manual string copy (async-signal-safe, no snprintf)
+        size_t i = 0;
+        for (const char* p = crash_prefix; *p && i < sizeof(tml_panic_msg) - 1; p++)
+            tml_panic_msg[i++] = *p;
+        for (const char* p = sig_name; *p && i < sizeof(tml_panic_msg) - 1; p++)
+            tml_panic_msg[i++] = *p;
+        tml_panic_msg[i] = '\0';
+        siglongjmp(tml_panic_jmp_buf, 2); // Use 2 to distinguish from panic
     }
 
-    // Otherwise, print and exit
-    RT_FATAL("runtime", "FATAL: %s", sig_name);
-    fflush(stderr);
+    // Otherwise, write to stderr (async-signal-safe) and exit
+    const char* fatal_msg = "FATAL: ";
+    write(STDERR_FILENO, fatal_msg, 7);
+    write(STDERR_FILENO, sig_name, strlen(sig_name));
+    write(STDERR_FILENO, "\n", 1);
     _exit(128 + sig);
 }
 
-/** @brief Previous signal handlers (to restore after test). */
-static void (*prev_sigsegv)(int) = NULL;
-static void (*prev_sigfpe)(int) = NULL;
-static void (*prev_sigill)(int) = NULL;
-static void (*prev_sigabrt)(int) = NULL;
-static void (*prev_sigbus)(int) = NULL;
+/** @brief Previous signal actions (to restore after test). */
+static struct sigaction prev_sigsegv, prev_sigfpe, prev_sigill, prev_sigabrt, prev_sigbus;
 
-/** @brief Install signal handlers for test crash catching. */
+/** @brief Install signal handlers for test crash catching.
+ *  Uses sigaction() instead of signal() for reliable behavior on ARM64/macOS. */
 static void tml_install_signal_handlers(void) {
-    prev_sigsegv = signal(SIGSEGV, tml_signal_handler);
-    prev_sigfpe = signal(SIGFPE, tml_signal_handler);
-    prev_sigill = signal(SIGILL, tml_signal_handler);
-    prev_sigabrt = signal(SIGABRT, tml_signal_handler);
-    prev_sigbus = signal(SIGBUS, tml_signal_handler);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = tml_signal_handler;
+    sa.sa_flags = SA_RESETHAND; // One-shot: reset to default after first delivery
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGSEGV, &sa, &prev_sigsegv);
+    sigaction(SIGFPE, &sa, &prev_sigfpe);
+    sigaction(SIGILL, &sa, &prev_sigill);
+    sigaction(SIGABRT, &sa, &prev_sigabrt);
+    sigaction(SIGBUS, &sa, &prev_sigbus);
 }
 
 /** @brief Restore previous signal handlers after test. */
 static void tml_restore_signal_handlers(void) {
-    signal(SIGSEGV, prev_sigsegv ? prev_sigsegv : SIG_DFL);
-    signal(SIGFPE, prev_sigfpe ? prev_sigfpe : SIG_DFL);
-    signal(SIGILL, prev_sigill ? prev_sigill : SIG_DFL);
-    signal(SIGABRT, prev_sigabrt ? prev_sigabrt : SIG_DFL);
-    signal(SIGBUS, prev_sigbus ? prev_sigbus : SIG_DFL);
+    sigaction(SIGSEGV, &prev_sigsegv, NULL);
+    sigaction(SIGFPE, &prev_sigfpe, NULL);
+    sigaction(SIGILL, &prev_sigill, NULL);
+    sigaction(SIGABRT, &prev_sigabrt, NULL);
+    sigaction(SIGBUS, &prev_sigbus, NULL);
 }
 #endif // _WIN32
 
@@ -1005,6 +1031,7 @@ static void tml_remove_exception_filter(void) {
 /// Helper: run test_fn wrapped in SEH __try/__except.
 /// This is a separate function because MSVC forbids setjmp and __try in the same function.
 /// Returns -2 on crash, or the test's return value on success.
+#ifdef _WIN32
 static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
     __try {
         return test_fn();
@@ -1012,6 +1039,7 @@ static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
         return -2;
     }
 }
+#endif
 
 TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
     tml_panic_msg[0] = '\0';
@@ -1078,10 +1106,10 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
     }
 
 #else
-    // Unix: Use signal handlers
+    // Unix: Use signal handlers with sigaction + sigsetjmp
     tml_install_signal_handlers();
 
-    int jmp_result = setjmp(tml_panic_jmp_buf);
+    int jmp_result = sigsetjmp(tml_panic_jmp_buf, 1); // 1 = save signal mask
     if (jmp_result == 0) {
         // First time through - run the test
         int32_t result = test_fn();

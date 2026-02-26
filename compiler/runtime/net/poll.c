@@ -19,11 +19,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Interest flags (match TML constants) */
-#define POLL_READABLE 1
-#define POLL_WRITABLE 2
-#define POLL_ERROR 4
-#define POLL_HUP 8
+/* Interest flags (match TML constants, prefixed to avoid OS macro conflicts) */
+#define TML_POLL_READABLE 1
+#define TML_POLL_WRITABLE 2
+#define TML_POLL_ERROR 4
+#define TML_POLL_HUP 8
 
 /* Output event struct — 8 bytes, matches TML PollEvent { token: U32, flags: U32 } */
 typedef struct {
@@ -95,9 +95,9 @@ static void win_poller_grow(WinPoller* p) {
 
 static short interests_to_pollflags(uint32_t interests) {
     short events = 0;
-    if (interests & POLL_READABLE)
+    if (interests & TML_POLL_READABLE)
         events |= POLLIN;
-    if (interests & POLL_WRITABLE)
+    if (interests & TML_POLL_WRITABLE)
         events |= POLLOUT;
     return events;
 }
@@ -105,13 +105,13 @@ static short interests_to_pollflags(uint32_t interests) {
 static uint32_t pollflags_to_interests(short revents) {
     uint32_t flags = 0;
     if (revents & POLLIN)
-        flags |= POLL_READABLE;
+        flags |= TML_POLL_READABLE;
     if (revents & POLLOUT)
-        flags |= POLL_WRITABLE;
+        flags |= TML_POLL_WRITABLE;
     if (revents & POLLERR)
-        flags |= POLL_ERROR;
+        flags |= TML_POLL_ERROR;
     if (revents & POLLHUP)
-        flags |= POLL_HUP;
+        flags |= TML_POLL_HUP;
     return flags;
 }
 
@@ -210,7 +210,7 @@ int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int3
 /* ========================================================================== */
 /* Linux: epoll-based implementation                                          */
 /* ========================================================================== */
-#else
+#elif defined(__linux__)
 
 #include <errno.h>
 #include <sys/epoll.h>
@@ -218,9 +218,9 @@ int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int3
 
 static uint32_t interests_to_epoll(uint32_t interests) {
     uint32_t events = 0;
-    if (interests & POLL_READABLE)
+    if (interests & TML_POLL_READABLE)
         events |= EPOLLIN;
-    if (interests & POLL_WRITABLE)
+    if (interests & TML_POLL_WRITABLE)
         events |= EPOLLOUT;
     return events;
 }
@@ -228,13 +228,13 @@ static uint32_t interests_to_epoll(uint32_t interests) {
 static uint32_t epoll_to_interests(uint32_t events) {
     uint32_t flags = 0;
     if (events & EPOLLIN)
-        flags |= POLL_READABLE;
+        flags |= TML_POLL_READABLE;
     if (events & EPOLLOUT)
-        flags |= POLL_WRITABLE;
+        flags |= TML_POLL_WRITABLE;
     if (events & EPOLLERR)
-        flags |= POLL_ERROR;
+        flags |= TML_POLL_ERROR;
     if (events & EPOLLHUP)
-        flags |= POLL_HUP;
+        flags |= TML_POLL_HUP;
     return flags;
 }
 
@@ -273,7 +273,6 @@ int32_t tml_poll_remove(int64_t poller, int64_t socket_handle) {
 }
 
 int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int32_t timeout_ms) {
-    /* Stack-allocate epoll_events, copy to our output format */
     struct epoll_event ep_events[256];
     int32_t limit = max_events < 256 ? max_events : 256;
 
@@ -287,6 +286,165 @@ int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int3
         out[i].flags = epoll_to_interests(ep_events[i].events);
     }
     return ret;
+}
+
+/* ========================================================================== */
+/* macOS/BSD: POSIX poll()-based implementation                               */
+/* ========================================================================== */
+#else
+
+#include <errno.h>
+#include <poll.h>
+#include <unistd.h>
+
+typedef struct {
+    struct pollfd* fds;
+    uint32_t* tokens;
+    int32_t count;
+    int32_t capacity;
+} PosixPoller;
+
+static PosixPoller* posix_poller_new(void) {
+    PosixPoller* p = (PosixPoller*)calloc(1, sizeof(PosixPoller));
+    if (!p)
+        return NULL;
+    p->capacity = 64;
+    p->fds = (struct pollfd*)calloc(p->capacity, sizeof(struct pollfd));
+    p->tokens = (uint32_t*)calloc(p->capacity, sizeof(uint32_t));
+    p->count = 0;
+    return p;
+}
+
+static void posix_poller_destroy(PosixPoller* p) {
+    if (!p)
+        return;
+    free(p->fds);
+    free(p->tokens);
+    free(p);
+}
+
+static int posix_poller_find(PosixPoller* p, int fd) {
+    for (int i = 0; i < p->count; i++) {
+        if (p->fds[i].fd == fd)
+            return i;
+    }
+    return -1;
+}
+
+static void posix_poller_grow(PosixPoller* p) {
+    int32_t new_cap = p->capacity * 2;
+    p->fds = (struct pollfd*)realloc(p->fds, new_cap * sizeof(struct pollfd));
+    p->tokens = (uint32_t*)realloc(p->tokens, new_cap * sizeof(uint32_t));
+    p->capacity = new_cap;
+}
+
+static short posix_interests_to_pollflags(uint32_t interests) {
+    short events = 0;
+    if (interests & TML_POLL_READABLE)
+        events |= POLLIN;
+    if (interests & TML_POLL_WRITABLE)
+        events |= POLLOUT;
+    return events;
+}
+
+static uint32_t posix_pollflags_to_interests(short revents) {
+    uint32_t flags = 0;
+    if (revents & POLLIN)
+        flags |= TML_POLL_READABLE;
+    if (revents & POLLOUT)
+        flags |= TML_POLL_WRITABLE;
+    if (revents & POLLERR)
+        flags |= TML_POLL_ERROR;
+    if (revents & POLLHUP)
+        flags |= TML_POLL_HUP;
+    return flags;
+}
+
+/* ── Public API (macOS/BSD) ──────────────────────────────────────────────── */
+
+int64_t tml_poll_create(void) {
+    PosixPoller* p = posix_poller_new();
+    return (int64_t)(uintptr_t)p;
+}
+
+void tml_poll_destroy(int64_t poller) {
+    posix_poller_destroy((PosixPoller*)(uintptr_t)poller);
+}
+
+int32_t tml_poll_add(int64_t poller, int64_t socket_handle, uint32_t token, uint32_t interests) {
+    PosixPoller* p = (PosixPoller*)(uintptr_t)poller;
+    if (!p)
+        return -1;
+
+    int fd = (int)socket_handle;
+    if (posix_poller_find(p, fd) >= 0)
+        return -2;
+
+    if (p->count >= p->capacity)
+        posix_poller_grow(p);
+
+    int idx = p->count++;
+    memset(&p->fds[idx], 0, sizeof(struct pollfd));
+    p->fds[idx].fd = fd;
+    p->fds[idx].events = posix_interests_to_pollflags(interests);
+    p->tokens[idx] = token;
+    return 0;
+}
+
+int32_t tml_poll_modify(int64_t poller, int64_t socket_handle, uint32_t token, uint32_t interests) {
+    PosixPoller* p = (PosixPoller*)(uintptr_t)poller;
+    if (!p)
+        return -1;
+
+    int fd = (int)socket_handle;
+    int idx = posix_poller_find(p, fd);
+    if (idx < 0)
+        return -2;
+
+    p->fds[idx].events = posix_interests_to_pollflags(interests);
+    p->tokens[idx] = token;
+    return 0;
+}
+
+int32_t tml_poll_remove(int64_t poller, int64_t socket_handle) {
+    PosixPoller* p = (PosixPoller*)(uintptr_t)poller;
+    if (!p)
+        return -1;
+
+    int fd = (int)socket_handle;
+    int idx = posix_poller_find(p, fd);
+    if (idx < 0)
+        return -2;
+
+    p->count--;
+    if (idx < p->count) {
+        p->fds[idx] = p->fds[p->count];
+        p->tokens[idx] = p->tokens[p->count];
+    }
+    return 0;
+}
+
+int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int32_t timeout_ms) {
+    PosixPoller* p = (PosixPoller*)(uintptr_t)poller;
+    if (!p || p->count == 0)
+        return 0;
+
+    int ret = poll(p->fds, (nfds_t)p->count, timeout_ms);
+    if (ret <= 0)
+        return ret;
+
+    PollEvent* out = (PollEvent*)events_out;
+    int32_t n = 0;
+
+    for (int i = 0; i < p->count && n < max_events; i++) {
+        if (p->fds[i].revents != 0) {
+            out[n].token = p->tokens[i];
+            out[n].flags = posix_pollflags_to_interests(p->fds[i].revents);
+            p->fds[i].revents = 0;
+            n++;
+        }
+    }
+    return n;
 }
 
 #endif

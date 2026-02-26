@@ -125,7 +125,7 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual);
 
 /// Maximum class size for stack allocation eligibility (in bytes).
 /// Classes larger than this are always heap-allocated.
-static constexpr size_t MAX_STACK_CLASS_SIZE = 256;
+[[maybe_unused]] static constexpr size_t MAX_STACK_CLASS_SIZE = 256;
 
 /// Estimate the size of a type in bytes (for stack allocation eligibility).
 /// Returns 0 for unsized types (slices, dyn, etc.).

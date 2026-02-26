@@ -1,0 +1,361 @@
+// TCP & UDP Request Round-Trip Benchmark
+// Measures actual request latency: client sends payload, server echoes back
+// Tests: TCP connect+send+recv, TCP send+recv (reused conn), UDP send+recv
+
+use std::net::tcp::{TcpListener, TcpStream}
+use std::net::udp::UdpSocket
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::time::Instant
+use core::time::Duration
+
+// ============================================================================
+// TCP Echo Server (single-threaded, handles one client at a time)
+// ============================================================================
+
+func tcp_echo_server(listener: ref TcpListener) {
+    // Accept one connection and echo until closed
+    when listener.accept() {
+        Ok(result) => {
+            var stream: TcpStream = result.0
+            var buf: [U8; 256] = [0 as U8; 256]
+            loop (true) {
+                when stream.read(mut ref buf) {
+                    Ok(n) => {
+                        if n == 0 { break }
+                        when stream.write_n(ref buf, n) {
+                            Ok(_) => {}
+                            Err(_) => { break }
+                        }
+                    }
+                    Err(_) => { break }
+                }
+            }
+        }
+        Err(_) => {}
+    }
+}
+
+// ============================================================================
+// Benchmark 1: TCP Connect + Request (new connection per request)
+// ============================================================================
+
+func bench_tcp_connect_request(iterations: I64) {
+    print("=== TCP Connect + Request (new conn per request) ===\n")
+    print("  {iterations} iterations, 64-byte payload, echo round-trip\n\n")
+
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = when TcpListener::bind(addr) {
+        Ok(l) => l
+        Err(_) => {
+            print("  ERROR: Failed to bind TCP listener\n\n")
+            return
+        }
+    }
+    let server_addr: SocketAddr = when listener.local_addr() {
+        Ok(a) => a
+        Err(_) => {
+            print("  ERROR: Failed to get server address\n\n")
+            return
+        }
+    }
+
+    let payload: [U8; 64] = [65 as U8; 64]  // 64 bytes of 'A'
+    var recv_buf: [U8; 256] = [0 as U8; 256]
+    var success: I64 = 0
+    var i: I64 = 0
+
+    let start: Instant = Instant::now()
+
+    loop (i < iterations) {
+        // Server accepts in the same thread before client sends
+        // For single-threaded: we connect, server accepts inline
+        // Actually, we need a different approach for single-threaded:
+        // Use non-blocking or just measure client-side connect+write
+        when TcpStream::connect(server_addr) {
+            Ok(mut stream) => {
+                // Accept on server side
+                tcp_echo_server(ref listener)
+
+                when stream.write_n(ref payload, 64) {
+                    Ok(_) => {
+                        when stream.read(mut ref recv_buf) {
+                            Ok(n) => {
+                                if n > 0 {
+                                    success = success + 1
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+
+    let ns: I64 = start.elapsed().as_nanos()
+    print_results(iterations, ns, success)
+}
+
+// ============================================================================
+// Benchmark 2: TCP Request on Reused Connection
+// ============================================================================
+
+func bench_tcp_reused_request(iterations: I64) {
+    print("=== TCP Request (reused connection) ===\n")
+    print("  {iterations} iterations, 64-byte payload, echo round-trip\n\n")
+
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = when TcpListener::bind(addr) {
+        Ok(l) => l
+        Err(_) => {
+            print("  ERROR: Failed to bind TCP listener\n\n")
+            return
+        }
+    }
+    let server_addr: SocketAddr = when listener.local_addr() {
+        Ok(a) => a
+        Err(_) => {
+            print("  ERROR: Failed to get server address\n\n")
+            return
+        }
+    }
+
+    // Single connection for all iterations
+    var client: TcpStream = when TcpStream::connect(server_addr) {
+        Ok(s) => s
+        Err(_) => {
+            print("  ERROR: Failed to connect\n\n")
+            return
+        }
+    }
+
+    // Accept on server side - keep running for all requests
+    let server_stream_result = listener.accept()
+    var server_stream: TcpStream = when server_stream_result {
+        Ok(result) => result.0
+        Err(_) => {
+            print("  ERROR: Failed to accept\n\n")
+            return
+        }
+    }
+
+    let payload: [U8; 64] = [65 as U8; 64]
+    var recv_buf: [U8; 256] = [0 as U8; 256]
+    var server_buf: [U8; 256] = [0 as U8; 256]
+    var success: I64 = 0
+    var i: I64 = 0
+
+    let start: Instant = Instant::now()
+
+    loop (i < iterations) {
+        // Client writes
+        when client.write_n(ref payload, 64) {
+            Ok(_) => {
+                // Server reads and echoes
+                when server_stream.read(mut ref server_buf) {
+                    Ok(n) => {
+                        if n > 0 {
+                            when server_stream.write_n(ref server_buf, n) {
+                                Ok(_) => {}
+                                Err(_) => {}
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+                // Client reads echo
+                when client.read(mut ref recv_buf) {
+                    Ok(n) => {
+                        if n > 0 {
+                            success = success + 1
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+
+    let ns: I64 = start.elapsed().as_nanos()
+    print_results(iterations, ns, success)
+}
+
+// ============================================================================
+// Benchmark 3: UDP Request Round-Trip
+// ============================================================================
+
+func bench_udp_request(iterations: I64) {
+    print("=== UDP Request (send + recv echo) ===\n")
+    print("  {iterations} iterations, 64-byte payload, echo round-trip\n\n")
+
+    let addr_server: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let addr_client: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+
+    let server: UdpSocket = when UdpSocket::bind(addr_server) {
+        Ok(s) => s
+        Err(_) => {
+            print("  ERROR: Failed to bind UDP server\n\n")
+            return
+        }
+    }
+    let client: UdpSocket = when UdpSocket::bind(addr_client) {
+        Ok(s) => s
+        Err(_) => {
+            print("  ERROR: Failed to bind UDP client\n\n")
+            return
+        }
+    }
+
+    let server_addr: SocketAddr = when server.local_addr() {
+        Ok(a) => a
+        Err(_) => {
+            print("  ERROR: Failed to get server address\n\n")
+            return
+        }
+    }
+
+    let payload: [U8; 64] = [66 as U8; 64]  // 64 bytes of 'B'
+    var recv_buf: [U8; 256] = [0 as U8; 256]
+    var server_buf: [U8; 256] = [0 as U8; 256]
+    var success: I64 = 0
+    var i: I64 = 0
+
+    let start: Instant = Instant::now()
+
+    loop (i < iterations) {
+        // Client sends to server
+        when client.send_to(ref payload, server_addr) {
+            Ok(_) => {
+                // Server receives
+                when server.recv_from(mut ref server_buf) {
+                    Ok(result) => {
+                        let n: I64 = result.0
+                        let sender: SocketAddr = result.1
+                        // Server echoes back to sender
+                        when server.send_to(ref server_buf[0 to n], sender) {
+                            Ok(_) => {
+                                // Client receives echo
+                                when client.recv_from(mut ref recv_buf) {
+                                    Ok(recv_result) => {
+                                        if recv_result.0 > 0 {
+                                            success = success + 1
+                                        }
+                                    }
+                                    Err(_) => {}
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+
+    let ns: I64 = start.elapsed().as_nanos()
+    print_results(iterations, ns, success)
+}
+
+// ============================================================================
+// Benchmark 4: UDP Bind Only (baseline comparison)
+// ============================================================================
+
+func bench_udp_bind(iterations: I64) {
+    print("=== UDP Bind (baseline) ===\n")
+    print("  {iterations} iterations, bind + close\n\n")
+
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    var success: I64 = 0
+    var i: I64 = 0
+
+    let start: Instant = Instant::now()
+
+    loop (i < iterations) {
+        when UdpSocket::bind(addr) {
+            Ok(_) => { success = success + 1 }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+
+    let ns: I64 = start.elapsed().as_nanos()
+    print_results(iterations, ns, success)
+}
+
+// ============================================================================
+// Benchmark 5: TCP Bind Only (baseline comparison)
+// ============================================================================
+
+func bench_tcp_bind(iterations: I64) {
+    print("=== TCP Bind (baseline) ===\n")
+    print("  {iterations} iterations, bind + close\n\n")
+
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    var success: I64 = 0
+    var i: I64 = 0
+
+    let start: Instant = Instant::now()
+
+    loop (i < iterations) {
+        when TcpListener::bind(addr) {
+            Ok(_) => { success = success + 1 }
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+
+    let ns: I64 = start.elapsed().as_nanos()
+    print_results(iterations, ns, success)
+}
+
+// ============================================================================
+// Helper: Print Results
+// ============================================================================
+
+func print_results(iterations: I64, ns: I64, success: I64) {
+    let ms: I64 = ns / 1000000
+    let per_op: I64 = if ns > 0 { ns / iterations } else { 0 }
+    let ops_sec: I64 = if ns > 0 { (iterations * 1000000000) / ns } else { 0 }
+
+    print("    Iterations: {iterations}\n")
+    print("    Total time: {ms} ms\n")
+    print("    Per op:     {per_op} ns\n")
+    print("    Ops/sec:    {ops_sec}\n")
+    print("    Successful: {success}/{iterations}\n\n")
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  TML TCP & UDP Request Round-Trip Benchmark\n")
+    print("================================================================\n\n")
+
+    let N: I64 = 1000
+
+    bench_tcp_bind(N)
+    bench_udp_bind(N)
+    bench_tcp_reused_request(N)
+    bench_udp_request(N)
+
+    print("================================================================\n")
+    print("  Notes:\n")
+    print("  - TCP reused: single connection, N send+recv round-trips\n")
+    print("  - UDP request: send_to + recv_from echo round-trip\n")
+    print("  - Payload: 64 bytes per request\n")
+    print("  - All on 127.0.0.1 (loopback)\n")
+    print("================================================================\n\n")
+
+    return 0
+}

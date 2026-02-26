@@ -73,3 +73,8 @@ compiler/include/version_generated.hpp
 
 # Cranelift Rust bridge build artifacts
 compiler/cranelift/target/
+
+
+
+#docs
+docs/pages/*.html

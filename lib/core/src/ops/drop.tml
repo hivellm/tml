@@ -214,11 +214,11 @@ impl[T] ManuallyDrop[T] {
     ///
     /// ```tml
     /// let x = ManuallyDrop::new(String::from("hello"))
-    /// let s = ManuallyDrop::into_inner(x)
+    /// let s = x.into_inner()
     /// // s will be dropped normally
     /// ```
-    pub func into_inner(slot: ManuallyDrop[T]) -> T {
-        return slot.value
+    pub func into_inner(this) -> T {
+        return this.value
     }
 
     /// Takes the value out, leaving the slot in an unspecified state.

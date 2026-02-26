@@ -88,7 +88,7 @@ public:
     }
 
     void update(const std::string& str) {
-        update(str.size());
+        update(static_cast<uint64_t>(str.size()));
         update(str.data(), str.size());
     }
 

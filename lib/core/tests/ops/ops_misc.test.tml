@@ -297,7 +297,7 @@ func test_manually_drop_get_mut() -> I32 {
 @test
 func test_manually_drop_into_inner() -> I32 {
     let md: ManuallyDrop[I64] = ManuallyDrop::new(999)
-    let value: I64 = ManuallyDrop::into_inner(md)
+    let value: I64 = md.into_inner()
     assert_eq(value, 999, "into_inner should return the value")
     return 0
 }

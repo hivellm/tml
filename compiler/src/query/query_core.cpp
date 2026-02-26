@@ -582,14 +582,9 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         // can be linked into a standalone executable by `tml build`.
         // tml run also benefits (it links an EXE too, not a DLL).
         codegen_opts.generate_exe_main = true;
-#ifdef _WIN32
-        codegen_opts.target_triple = "x86_64-pc-windows-msvc";
-#else
-        codegen_opts.target_triple = "x86_64-unknown-linux-gnu";
-#endif
-        if (!ctx.options().target_triple.empty()) {
-            codegen_opts.target_triple = ctx.options().target_triple;
-        }
+        codegen_opts.target_triple = ctx.options().target_triple.empty()
+            ? get_host_target_triple()
+            : ctx.options().target_triple;
 
         // Create backend from options (defaults to LLVM)
         auto backend_type = codegen::default_backend_type();
@@ -627,9 +622,9 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         llvm_gen_options.emit_debug_info = ck.debug_info;
         llvm_gen_options.coverage_enabled = ctx.options().coverage;
         llvm_gen_options.lazy_library_defs = true; // Only emit library defs actually used
-        if (!ctx.options().target_triple.empty()) {
-            llvm_gen_options.target_triple = ctx.options().target_triple;
-        }
+        llvm_gen_options.target_triple = ctx.options().target_triple.empty()
+            ? get_host_target_triple()
+            : ctx.options().target_triple;
 
         codegen::LLVMIRGen llvm_gen(*tc.env, llvm_gen_options);
         auto gen_result = llvm_gen.generate(*parsed.module);

@@ -288,9 +288,9 @@ int64_t zstd_decompress_bound(TmlBuffer* data) {
     if (!data || data->len == 0)
         return -1;
 
-    unsigned long long bound = ZSTD_getDecompressedSize(data->data, data->len);
-    if (bound == 0) {
-        // Unknown, return estimate
+    unsigned long long bound = ZSTD_getFrameContentSize(data->data, data->len);
+    if (bound == ZSTD_CONTENTSIZE_UNKNOWN || bound == ZSTD_CONTENTSIZE_ERROR) {
+        // Unknown or error, return estimate
         return (int64_t)(data->len * 4);
     }
     return (int64_t)bound;

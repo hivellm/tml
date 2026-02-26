@@ -248,6 +248,42 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
                     .is_mut = true, .inner = receiver_type, .lifetime = std::nullopt};
                 return ref_type;
             }
+
+            // Str.parse_* methods return Maybe[T]
+            if (kind == types::PrimitiveKind::Str) {
+                auto make_maybe = [](types::TypePtr inner) -> types::TypePtr {
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{"Maybe", "", {std::move(inner)}};
+                    return result;
+                };
+
+                if (call.method == "parse_i8")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::I8));
+                if (call.method == "parse_i16")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::I16));
+                if (call.method == "parse_i32")
+                    return make_maybe(types::make_i32());
+                if (call.method == "parse_i64")
+                    return make_maybe(types::make_i64());
+                if (call.method == "parse_i128")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::I128));
+                if (call.method == "parse_u8")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::U8));
+                if (call.method == "parse_u16")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::U16));
+                if (call.method == "parse_u32")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::U32));
+                if (call.method == "parse_u64")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::U64));
+                if (call.method == "parse_u128")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::U128));
+                if (call.method == "parse_f32")
+                    return make_maybe(types::make_primitive(types::PrimitiveKind::F32));
+                if (call.method == "parse_f64")
+                    return make_maybe(types::make_f64());
+                if (call.method == "parse_bool")
+                    return make_maybe(types::make_bool());
+            }
         }
 
         // Check for array methods

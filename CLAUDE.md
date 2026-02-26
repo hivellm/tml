@@ -220,6 +220,28 @@ scripts\test.bat
 scripts\clean.bat
 ```
 
+```bash
+# macOS/Linux - from project root
+bash scripts/build.sh          # Debug build (auto-detects Homebrew LLVM on macOS)
+bash scripts/build.sh release  # Release build
+bash scripts/build.sh --clean  # Clean build
+bash scripts/build.sh --tests  # Also build C++ unit tests (tml_tests)
+
+# Run tests
+build/debug/tml test --no-cache --verbose
+build/debug/tml test --suite=core/str    # Single suite (recommended)
+```
+
+### macOS Prerequisites
+
+The following must be installed via Homebrew:
+
+```bash
+brew install llvm openssl@3 zstd brotli sqlite3
+```
+
+`build.sh` auto-detects Homebrew LLVM at `/opt/homebrew/opt/llvm` (Apple Silicon) or `/usr/local/opt/llvm` (Intel). The system linker (`ld`) is used instead of LLD on macOS.
+
 ### Modular Build (Plugin Architecture)
 
 The `--modular` flag produces a thin launcher + plugin DLLs instead of a single monolithic executable:
@@ -262,7 +284,11 @@ scripts\build.bat --modular release  # Release modular build
 When running a build via Bash, the correct command is:
 
 ```bash
+# Windows:
 cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat" 2>&1
+
+# macOS/Linux:
+bash scripts/build.sh 2>&1
 ```
 
 This is the canonical build invocation. Always use this exact form (adjusting flags as needed, e.g. adding `release` or `--tests`).
@@ -274,10 +300,16 @@ This is the canonical build invocation. Always use this exact form (adjusting fl
 When running the full test suite with coverage, the correct command is:
 
 ```bash
+# Windows:
 cd f:/Node/hivellm/tml && build/debug/tml.exe test --profile --verbose --no-cache --coverage 2>&1
+
+# macOS/Linux:
+build/debug/tml test --profile --verbose --no-cache --coverage 2>&1
 ```
 
 This is the canonical test invocation for generating coverage reports. Always use this exact form.
+
+**macOS note:** The full suite (1000+ tests) may crash the test runner when loading all DLLs simultaneously. Use `--suite=` to run suites individually for reliable results.
 
 ### Suite-Level Test Filtering
 

@@ -336,6 +336,24 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             }
         }
         link_options.link_flags.push_back("/STACK:67108864");
+#else
+        // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+        link_options.link_flags.push_back("-lm");
+        link_options.link_flags.push_back("-lpthread");
+        link_options.link_flags.push_back("-ldl");
+  #endif
+        // Always link OpenSSL (tml_runtime contains crypto objects)
+        {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                link_options.link_flags.push_back("-lssl");
+                link_options.link_flags.push_back("-lcrypto");
+            }
+        }
+        // zlib (system dylib on macOS, needed by tml_zlib_runtime)
+        link_options.link_flags.push_back("-lz");
 #endif
 
         // Link to temporary location first
@@ -531,6 +549,24 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
             }
         }
         link_options.link_flags.push_back("/STACK:67108864");
+#else
+        // Unix system libraries (macOS clang links libSystem automatically)
+  #ifndef __APPLE__
+        link_options.link_flags.push_back("-lm");
+        link_options.link_flags.push_back("-lpthread");
+        link_options.link_flags.push_back("-ldl");
+  #endif
+        // Always link OpenSSL (tml_runtime contains crypto objects)
+        {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back("-L" + to_forward_slashes(openssl.lib_dir.string()));
+                link_options.link_flags.push_back("-lssl");
+                link_options.link_flags.push_back("-lcrypto");
+            }
+        }
+        // zlib (system dylib on macOS, needed by tml_zlib_runtime)
+        link_options.link_flags.push_back("-lz");
 #endif
 
         // Link to a unique temporary location (avoid race conditions)
@@ -626,6 +662,60 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         TML_LOG_INFO("build",
                      "Note: Automatic instrumentation requires recompilation with --profile flag.");
         TML_LOG_INFO("build", "For manual profiling, use std::profiler module in your code.");
+    }
+
+    // Legacy mode: build via sequential pipeline, then execute the result
+    if (opts.legacy) {
+        BuildOptions build_opts;
+        build_opts.verbose = opts.verbose;
+        build_opts.no_cache = opts.no_cache;
+        build_opts.output_type = BuildOutputType::Executable;
+        build_opts.optimization_level = CompilerOptions::optimization_level;
+        build_opts.debug = CompilerOptions::debug_info;
+        build_opts.release = (CompilerOptions::optimization_level >= 2);
+        build_opts.backend = opts.backend;
+
+        int build_ret = run_build_ex(path, build_opts);
+        if (build_ret != 0) {
+            return build_ret;
+        }
+
+        // The legacy pipeline outputs to build/debug/<module_name> (or .exe on Windows)
+        auto module_name = fs::path(path).stem().string();
+        fs::path build_dir = get_build_dir(CompilerOptions::optimization_level >= 2);
+        fs::path exe_path = build_dir / module_name;
+#ifdef _WIN32
+        exe_path += ".exe";
+#endif
+
+        if (!fs::exists(exe_path)) {
+            TML_LOG_ERROR("build", "Built executable not found: " << exe_path);
+            return 1;
+        }
+
+        // Execute the built program
+        std::string run_cmd;
+#ifdef _WIN32
+        run_cmd = "cmd /c \"\"" + to_forward_slashes(exe_path.string()) + "\"";
+        for (const auto& arg : opts.args) {
+            run_cmd += " \"" + arg + "\"";
+        }
+        run_cmd += "\"";
+#else
+        run_cmd = "\"" + exe_path.string() + "\"";
+        for (const auto& arg : opts.args) {
+            run_cmd += " \"" + arg + "\"";
+        }
+#endif
+
+        TML_LOG_DEBUG("build", "Running: " << run_cmd);
+        int run_ret = std::system(run_cmd.c_str());
+
+#ifdef _WIN32
+        return run_ret;
+#else
+        return WEXITSTATUS(run_ret);
+#endif
     }
 
     return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend);

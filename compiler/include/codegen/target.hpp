@@ -124,8 +124,10 @@ struct Target {
     static auto aarch64_linux_gnu() -> Target;
     /// WebAssembly 32-bit.
     static auto wasm32_unknown() -> Target;
-    /// macOS 64-bit.
+    /// macOS x86_64.
     static auto x86_64_macos() -> Target;
+    /// macOS ARM64 (Apple Silicon).
+    static auto aarch64_apple_darwin() -> Target;
 
     /// Returns a list of all known target triple names.
     static auto known_targets() -> std::vector<std::string>;

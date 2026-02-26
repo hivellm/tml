@@ -1070,6 +1070,11 @@ auto TypeChecker::check_index(const parser::IndexExpr& idx) -> TypePtr {
     // Resolve the type in case it's a type alias
     auto resolved = env_.resolve(obj_type);
 
+    // Unwrap RefType to handle ref [T] and ref [T; N] indexing
+    if (resolved->is<RefType>()) {
+        resolved = env_.resolve(resolved->as<RefType>().inner);
+    }
+
     if (resolved->is<ArrayType>()) {
         return resolved->as<ArrayType>().element;
     }

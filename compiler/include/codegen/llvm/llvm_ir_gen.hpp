@@ -319,7 +319,7 @@ struct LLVMGenOptions {
     int debug_level = 2;                 ///< Debug level: 1=minimal, 2=standard, 3=full.
     int suite_test_index = -1;           ///< Suite test index (-1 = tml_test_entry).
     int suite_total_tests = -1;          ///< Total tests in suite (for coverage aggregation).
-    std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
+    std::string target_triple; ///< LLVM target triple (empty = host).
     std::string source_file;                              ///< Source file path for debug info.
     std::string coverage_output_file;                     ///< Coverage output path.
 

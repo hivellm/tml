@@ -426,6 +426,56 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         std::string val;
         std::string actual_type;
 
+        // Pre-set expected_literal_type_ so that integer literals are generated
+        // with the correct width for the parameter type.
+        // Prefer func_it (from codegen's functions_ map, always correct from LLVM
+        // function declarations) over func_sig (from env_.lookup_func(), which can
+        // return wrong types due to module name collisions in fallback search).
+        std::string saved_expected_literal = expected_literal_type_;
+        bool saved_expected_unsigned = expected_literal_is_unsigned_;
+        if (func_it != functions_.end() && i < func_it->second.param_types.size()) {
+            // Use registered parameter types from functions_ map (authoritative)
+            const std::string& pt = func_it->second.param_types[i];
+            if (pt == "i8" || pt == "i16" || pt == "i32" || pt == "i64" || pt == "i128" ||
+                pt == "float" || pt == "double") {
+                expected_literal_type_ = pt;
+            }
+        } else if (func_sig.has_value() && i < func_sig->params.size()) {
+            auto resolved_param = func_sig->params[i];
+            if (!free_func_type_subs.empty()) {
+                resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
+            }
+            if (resolved_param && resolved_param->is<types::PrimitiveType>()) {
+                const auto& prim = resolved_param->as<types::PrimitiveType>();
+                switch (prim.kind) {
+                case types::PrimitiveKind::I8:
+                    expected_literal_type_ = "i8"; expected_literal_is_unsigned_ = false; break;
+                case types::PrimitiveKind::I16:
+                    expected_literal_type_ = "i16"; expected_literal_is_unsigned_ = false; break;
+                case types::PrimitiveKind::I32:
+                case types::PrimitiveKind::Char:
+                    expected_literal_type_ = "i32"; expected_literal_is_unsigned_ = false; break;
+                case types::PrimitiveKind::I64:
+                case types::PrimitiveKind::I128:
+                    expected_literal_type_ = "i64"; expected_literal_is_unsigned_ = false; break;
+                case types::PrimitiveKind::U8:
+                    expected_literal_type_ = "i8"; expected_literal_is_unsigned_ = true; break;
+                case types::PrimitiveKind::U16:
+                    expected_literal_type_ = "i16"; expected_literal_is_unsigned_ = true; break;
+                case types::PrimitiveKind::U32:
+                    expected_literal_type_ = "i32"; expected_literal_is_unsigned_ = true; break;
+                case types::PrimitiveKind::U64:
+                case types::PrimitiveKind::U128:
+                    expected_literal_type_ = "i64"; expected_literal_is_unsigned_ = true; break;
+                case types::PrimitiveKind::F32:
+                    expected_literal_type_ = "float"; expected_literal_is_unsigned_ = false; break;
+                case types::PrimitiveKind::F64:
+                    expected_literal_type_ = "double"; expected_literal_is_unsigned_ = false; break;
+                default: break;
+                }
+            }
+        }
+
         // For ref parameters with IdentExpr arguments, pass the address directly
         // instead of loading the value
         if (param_is_ref && call.args[i]->is<parser::IdentExpr>()) {
@@ -535,6 +585,10 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             }
         }
 
+        // Restore expected_literal_type_ after generating argument expression
+        expected_literal_type_ = saved_expected_literal;
+        expected_literal_is_unsigned_ = saved_expected_unsigned;
+
         std::string expected_type = actual_type; // Default to actual type from expression
 
         // If we have function signature from TypeEnv, use parameter type
@@ -557,28 +611,39 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
 
         // Insert type conversion if needed
         if (actual_type != expected_type) {
-            // i32 -> i64 conversion
-            if (actual_type == "i32" && expected_type == "i64") {
+            // General integer width conversion: handles all iN -> iM cases
+            // This covers i8/i16/i32/i64/i128 in any direction.
+            // Widening uses sext (or zext for unsigned/bool), narrowing uses trunc.
+            auto int_width = [](const std::string& t) -> int {
+                if (t == "i1") return 1;
+                if (t == "i8") return 8;
+                if (t == "i16") return 16;
+                if (t == "i32") return 32;
+                if (t == "i64") return 64;
+                if (t == "i128") return 128;
+                return 0;
+            };
+            int actual_w = int_width(actual_type);
+            int expected_w = int_width(expected_type);
+
+            if (actual_w > 0 && expected_w > 0 && actual_w != expected_w) {
                 std::string converted = fresh_reg();
-                emit_line("  " + converted + " = sext i32 " + val + " to i64");
-                val = converted;
-            }
-            // i64 -> i32 conversion (truncate)
-            else if (actual_type == "i64" && expected_type == "i32") {
-                std::string converted = fresh_reg();
-                emit_line("  " + converted + " = trunc i64 " + val + " to i32");
-                val = converted;
-            }
-            // i1 -> i32 conversion (zero extend)
-            else if (actual_type == "i1" && expected_type == "i32") {
-                std::string converted = fresh_reg();
-                emit_line("  " + converted + " = zext i1 " + val + " to i32");
-                val = converted;
-            }
-            // i32 -> i1 conversion (compare ne 0)
-            else if (actual_type == "i32" && expected_type == "i1") {
-                std::string converted = fresh_reg();
-                emit_line("  " + converted + " = icmp ne i32 " + val + ", 0");
+                if (actual_w == 1 && expected_w > 1) {
+                    // i1 -> iN: always zero-extend (bool is 0 or 1)
+                    emit_line("  " + converted + " = zext i1 " + val + " to " + expected_type);
+                } else if (actual_w > 1 && expected_w == 1) {
+                    // iN -> i1: compare != 0
+                    emit_line("  " + converted + " = icmp ne " + actual_type + " " + val + ", 0");
+                } else if (actual_w < expected_w) {
+                    // Widening: use zext for unsigned, sext for signed
+                    std::string op = last_expr_is_unsigned_ ? "zext" : "sext";
+                    emit_line("  " + converted + " = " + op + " " + actual_type + " " + val +
+                              " to " + expected_type);
+                } else {
+                    // Narrowing: truncate
+                    emit_line("  " + converted + " = trunc " + actual_type + " " + val + " to " +
+                              expected_type);
+                }
                 val = converted;
             }
             // %struct.* -> ptr conversion (extract inner pointer from wrapper struct)

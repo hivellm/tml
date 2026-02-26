@@ -53,6 +53,7 @@ typedef struct TmlPoll {
 
 struct TmlTask;
 struct TmlExecutor;
+struct TmlContext;
 
 typedef TmlPoll (*TmlPollFn)(void* state, struct TmlContext* cx);
 

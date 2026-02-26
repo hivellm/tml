@@ -380,6 +380,15 @@ auto get_tml_executable() -> std::string {
     }
     return "tml.exe";
 #else
+    std::vector<std::string> paths = {
+        "./build/debug/tml",
+        "./build/release/tml",
+    };
+    for (const auto& path : paths) {
+        if (fs::exists(path)) {
+            return fs::absolute(path).string();
+        }
+    }
     return "tml";
 #endif
 }
