@@ -77,23 +77,32 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Output directory for executables (separate from build cache)
+# Output directory structure: bin/ and lib/ (like LLVM)
 # TML_OUTPUT_DIR is set by build scripts, defaults to CMAKE_BINARY_DIR
 if(NOT DEFINED TML_OUTPUT_DIR OR TML_OUTPUT_DIR STREQUAL "")
     set(TML_OUTPUT_DIR ${CMAKE_BINARY_DIR})
 endif()
 
-# Put executables in the output directory
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR})
+# Separate bin/ and lib/ directories
+set(TML_BIN_DIR "${TML_OUTPUT_DIR}/bin")
+set(TML_LIB_DIR "${TML_OUTPUT_DIR}/lib")
+
+# Put executables and DLLs in bin/
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TML_BIN_DIR})
 
 # For multi-config generators (Visual Studio, Xcode), flatten the structure
 foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR})
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_BIN_DIR})
 endforeach()
 
-# Libraries/archives stay in the build cache directory
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+# Libraries/archives go to lib/
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${TML_LIB_DIR})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${TML_LIB_DIR})
+
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_LIB_DIR})
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_LIB_DIR})
+endforeach()
 
 # Build options
 option(TML_BUILD_TESTS "Build tests" ON)
@@ -101,7 +110,7 @@ option(TML_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(TML_ENABLE_LSAN "Enable LeakSanitizer (Linux/macOS only)" OFF)
 option(TML_ENABLE_MSAN "Enable MemorySanitizer (Linux Clang only)" OFF)
-option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" OFF)
+option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" ON)
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -1752,6 +1761,40 @@ if(TML_BUILD_TESTS)
 
     include(GoogleTest)
     gtest_discover_tests(tml_tests)
+endif()
+
+# =============================================================================
+# Copy Runtime Dependencies (vcpkg DLLs)
+# =============================================================================
+# Copy all runtime dependencies from vcpkg to bin/ directory for distribution
+if(TML_BIN_DIR)
+    # Helper function to copy DLL if it exists
+    function(copy_dll_if_exists dll_name)
+        if(WIN32)
+            # Check in vcpkg_installed directory
+            set(vcpkg_bin_dir "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg_installed/x64-windows/bin")
+            set(src_dll "${vcpkg_bin_dir}/${dll_name}")
+
+            if(EXISTS "${src_dll}")
+                add_custom_command(TARGET tml POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${src_dll}"
+                    "$<TARGET_FILE_DIR:tml>/${dll_name}"
+                    COMMENT "Copying ${dll_name} to output directory"
+                )
+            endif()
+        endif()
+    endfunction()
+
+    # Copy vcpkg runtime dependencies
+    copy_dll_if_exists("sqlite3.dll")
+    copy_dll_if_exists("zlib1.dll")
+    copy_dll_if_exists("brotlidec.dll")
+    copy_dll_if_exists("brotlienc.dll")
+    copy_dll_if_exists("brotlicommon.dll")
+    copy_dll_if_exists("zstd.dll")
+    copy_dll_if_exists("libcrypto-3-x64.dll")
+    copy_dll_if_exists("libssl-3-x64.dll")
 endif()
 
 # Install

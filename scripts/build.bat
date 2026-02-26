@@ -25,7 +25,7 @@ set "ENABLE_CRANELIFT_BACKEND=OFF"
 set "BUILD_TARGET="
 set "BUMP_MAJOR=0"
 set "BUMP_MINOR=0"
-set "ENABLE_MODULAR=OFF"
+set "ENABLE_MODULAR=ON"
 set "ENABLE_PACK=0"
 
 :: Parse arguments
@@ -41,7 +41,7 @@ if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
-if /i "%~1"=="--modular" set "ENABLE_MODULAR=ON" & shift & goto :parse_args
+if /i "%~1"=="--monolithic" set "ENABLE_MODULAR=OFF" & shift & goto :parse_args
 if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
@@ -70,8 +70,8 @@ echo   --asan         Enable AddressSanitizer (memory error detection)
 echo   --ubsan        Enable UndefinedBehaviorSanitizer
 echo   --sanitize     Enable both ASan and UBSan
 echo   --cranelift    Enable Cranelift backend (fast debug builds)
-echo   --modular      Build modular plugins (DLLs) instead of monolithic exe
-echo   --pack         Pack plugins (compress DLLs + manifest); requires --modular
+echo   --monolithic   Build single executable (default is modular with DLLs)
+echo   --pack         Pack plugins (compress DLLs + manifest); default modular build
 echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
 echo   --help         Show this help message
 echo.
@@ -81,9 +81,11 @@ echo   Or edit the VERSION file directly (MAJOR.MINOR.BUILD).
 echo.
 echo Host target: %TARGET%
 echo.
-echo Output structure (like Rust's target/):
-echo   build\^<target^>\debug\
-echo   build\^<target^>\release\
+echo Output structure (modular by default):
+echo   build\debug\bin\       - tml.exe ^(small launcher^) + DLLs + dependencies
+echo   build\debug\lib\       - .lib static libraries
+echo   build\release\bin\     - Release executables + DLLs
+echo   build\release\lib\     - Release libraries
 exit /b 0
 
 :args_done
@@ -239,7 +241,7 @@ if exist "compile_commands.json" (
 :: Pack plugins if requested
 if "%ENABLE_PACK%"=="1" (
     if not "%ENABLE_MODULAR%"=="ON" (
-        echo WARNING: --pack requires --modular, skipping plugin packing.
+        echo WARNING: --pack requires modular build, but --monolithic is enabled, skipping plugin packing.
     ) else (
         echo.
         echo Packing plugins...
