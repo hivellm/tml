@@ -336,6 +336,54 @@ pub func args_get(index: I32) -> Str {
     return ffi_args_get(index)
 }
 
+/// An iterator over command-line arguments.
+///
+/// # Example
+///
+/// ```tml
+/// var args: Args = os::args()
+/// loop (args.has_next()) {
+///     let arg: Str = args.next()
+///     print(arg + "\n")
+/// }
+/// ```
+pub type Args {
+    _index: I32,
+    _count: I32
+}
+
+impl Args {
+    /// Returns true if there are more arguments to iterate.
+    pub func has_next(this) -> Bool {
+        return this._index < this._count
+    }
+
+    /// Returns the next argument and advances the iterator.
+    pub func next(mut this) -> Str {
+        let arg: Str = ffi_args_get(this._index)
+        this._index = this._index + 1
+        return arg
+    }
+
+    /// Resets the iterator to the beginning.
+    pub func reset(mut this) {
+        this._index = 0
+    }
+
+    /// Returns the total number of arguments.
+    pub func len(this) -> I32 {
+        return this._count
+    }
+}
+
+/// Returns an iterator over command-line arguments.
+pub func args() -> Args {
+    return Args {
+        _index: 0,
+        _count: ffi_args_count()
+    }
+}
+
 // ============================================================================
 // Process Control
 // ============================================================================

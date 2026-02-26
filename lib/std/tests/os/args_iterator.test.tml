@@ -1,0 +1,43 @@
+// Tests for os::Args iterator
+use test::{assert, assert_eq}
+use std::os
+use std::os::Args
+
+@test
+func test_args_iterator_len() -> I32 {
+    let iter: Args = os::args()
+    let n: I32 = iter.len()
+    assert(n >= 0, "len >= 0")
+    return 0
+}
+
+@test
+func test_args_iterator_has_next_consistent() -> I32 {
+    var iter: Args = os::args()
+    let n: I32 = iter.len()
+    var count: I32 = 0
+    loop (iter.has_next()) {
+        let _arg: Str = iter.next()
+        count = count + 1
+    }
+    assert_eq(count, n, "iterated count matches len")
+    return 0
+}
+
+@test
+func test_args_iterator_reset() -> I32 {
+    var iter: Args = os::args()
+    loop (iter.has_next()) {
+        let _arg: Str = iter.next()
+    }
+    assert(not iter.has_next(), "exhausted after full iteration")
+    iter.reset()
+    let n: I32 = iter.len()
+    var count: I32 = 0
+    loop (iter.has_next()) {
+        let _arg: Str = iter.next()
+        count = count + 1
+    }
+    assert_eq(count, n, "reset allows re-iteration")
+    return 0
+}
