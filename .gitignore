@@ -4,6 +4,7 @@
 
 # Rulebook
 .rulebook-memory/
+.rulebook
 
 # Toolchain submodules (gcc/llvm in src/)
 src/llvm/

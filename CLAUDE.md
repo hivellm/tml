@@ -430,12 +430,60 @@ Since this is a specification project:
 
 ## Rulebook Integration
 
-This project uses @hivellm/rulebook for task management and persistent memory. Key rules:
+This project uses [@hivehub/rulebook](https://www.npmjs.com/package/@hivehub/rulebook) v3.2.0+ for task management, persistent memory, and **Ralph** (autonomous AI iteration loops). Key rules:
 
 1. **ALWAYS read AGENTS.md first** for project standards
 2. **Use Rulebook tasks** for new features: `rulebook task create <id>`
 3. **Validate before commit**: `rulebook task validate <id>`
 4. **Update /docs/** when modifying specifications
+5. **Use Ralph for complex tasks** — for work requiring multiple iterations with fresh context per cycle
+
+### Ralph: Autonomous Iteration Loops (v3.1+)
+
+Ralph is an AI-driven autonomous loop that automatically solves complex development tasks through multiple iterations, resetting context between cycles to avoid exhaustion. Unlike manual iteration, Ralph handles the cycling automatically.
+
+**How Ralph Works:**
+1. **Initialization** — Generates PRD from Rulebook task description
+2. **Iteration Loop** — Runs up to configurable max iterations (default: 10)
+3. **Fresh Context Per Cycle** — Each iteration starts with clean context (avoids AI context exhaustion)
+4. **Quality Gates** — Validates output via type-checking, linting, testing, coverage
+5. **Pause/Resume** — Supports graceful pausing and resuming across sessions
+6. **History Tracking** — Maintains detailed iteration history with metrics
+
+**Ralph is configured in rulebook.json:**
+```json
+{
+  "ralph": {
+    "enabled": true,
+    "maxIterations": 10,
+    "tool": "claude",
+    "maxContextLoss": 3
+  }
+}
+```
+
+**Ralph CLI Commands:**
+```bash
+ralph init           # Initialize and generate PRD from task
+ralph run            # Execute autonomous iteration loop
+ralph status         # Check current loop status
+ralph history        # View iteration history
+ralph pause          # Gracefully pause current loop
+ralph resume         # Resume from pause point
+```
+
+**When to use Ralph:**
+- Complex features requiring multiple implementation iterations (compile → fix → test → repeat)
+- Refactoring with extensive test/validation cycles
+- Coverage improvements requiring repeated analysis and fixes
+- Tasks where fresh context per iteration prevents drift/hallucination
+- Long-running work spanning multiple development sessions
+
+**MCP Tools for Ralph (programmatic use):**
+- `rulebook_ralph_init` — Initialize and generate PRD
+- `rulebook_ralph_run` — Execute iteration loop
+- `rulebook_ralph_status` — Check loop status
+- `rulebook_ralph_get_iteration_history` — Retrieve iteration history
 
 ### Persistent Memory (MANDATORY)
 
@@ -489,6 +537,10 @@ The Rulebook MCP server provides tools beyond memory:
 | `mcp__rulebook__rulebook_task_update` | Update task status |
 | `mcp__rulebook__rulebook_task_validate` | Validate task format |
 | `mcp__rulebook__rulebook_task_archive` | Archive a completed task |
+| `rulebook_ralph_init` | Initialize Ralph and generate PRD from task |
+| `rulebook_ralph_run` | Execute Ralph autonomous iteration loop |
+| `rulebook_ralph_status` | Check Ralph loop status |
+| `rulebook_ralph_get_iteration_history` | Retrieve Ralph iteration history |
 | `mcp__rulebook__rulebook_skill_list` | List available skills |
 | `mcp__rulebook__rulebook_skill_search` | Search for skills |
 
