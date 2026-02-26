@@ -153,6 +153,18 @@ elseif(MSVC)
     # hardware exceptions (ACCESS_VIOLATION, etc.) across DLL boundaries.
     # Without /EHa, SEH only catches C++ exceptions (the default /EHsc mode).
     add_compile_options(/W4 /WX /utf-8 /FS /EHa)
+
+    # Debug info optimization for faster linking:
+    # /Z7 embeds debug info in .obj files instead of separate .pdb
+    #     Reduces .lib file size (less symbol data in libraries)
+    #     Faster linking because linker doesn't need to process separate PDB
+    # /DEBUG:FASTLINK enables fast incremental linking with partial PDB
+    #     Reuses old PDB data, only adds new symbols
+    #     Effective for iterative development builds
+    add_compile_options(/Z7)
+    add_link_options(/DEBUG:FASTLINK)
+    message(STATUS "Debug info optimization: /Z7 (embedded) + /DEBUG:FASTLINK")
+
     # Sanitizer support (MSVC)
     if(TML_ENABLE_ASAN)
         add_compile_options(/fsanitize=address)
@@ -1798,8 +1810,20 @@ if(TML_BIN_DIR)
     copy_dll_if_exists("zstd.dll")
     copy_dll_if_exists("libcrypto-3-x64.dll")
     copy_dll_if_exists("libssl-3-x64.dll")
+
+    # Copy plugins next to tml.exe for modular build
+    add_custom_command(TARGET tml POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:tml>/plugins"
+        COMMENT "Creating plugins directory"
+    )
+    add_custom_command(TARGET tml POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${TML_OUTPUT_DIR}/plugins"
+        "$<TARGET_FILE_DIR:tml>/plugins"
+        COMMENT "Copying plugins to $<TARGET_FILE_DIR:tml>/plugins"
+    )
 endif()
 
 # Install
-install(TARGETS tml RUNTIME DESTINATION bin)
+install(TARGETS tml RUNTIME DESTINATION .)
 install(DIRECTORY include/ DESTINATION include)
