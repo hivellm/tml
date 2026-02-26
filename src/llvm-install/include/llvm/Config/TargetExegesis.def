@@ -25,6 +25,7 @@
 #endif
 
 LLVM_EXEGESIS(X86)
+LLVM_EXEGESIS(AArch64)
 
 
 #undef LLVM_EXEGESIS

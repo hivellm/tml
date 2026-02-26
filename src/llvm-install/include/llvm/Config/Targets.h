@@ -13,7 +13,7 @@
 #define LLVM_CONFIG_TARGETS_H
 
 /* Define if the AArch64 target is built in */
-#define LLVM_HAS_AARCH64_TARGET 0
+#define LLVM_HAS_AARCH64_TARGET 1
 
 /* Define if the AMDGPU target is built in */
 #define LLVM_HAS_AMDGPU_TARGET 0

@@ -24,6 +24,7 @@
 #endif
 
 LLVM_TARGET(X86)
+LLVM_TARGET(AArch64)
 
 
 #undef LLVM_TARGET

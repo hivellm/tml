@@ -69,21 +69,21 @@ add_executable(lld IMPORTED)
 add_library(lldCOFF STATIC IMPORTED)
 
 set_target_properties(lldCOFF PROPERTIES
-  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDebugInfoCodeView;LLVMDebugInfoDWARF;LLVMDebugInfoMSF;LLVMDebugInfoPDB;LLVMDemangle;LLVMDTLTO;LLVMLibDriver;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMSupport;LLVMTargetParser;LLVMWindowsDriver;LLVMWindowsManifest"
+  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMAArch64CodeGen;LLVMAArch64AsmParser;LLVMAArch64Desc;LLVMAArch64Disassembler;LLVMAArch64Info;LLVMAArch64Utils;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDebugInfoCodeView;LLVMDebugInfoDWARF;LLVMDebugInfoMSF;LLVMDebugInfoPDB;LLVMDemangle;LLVMDTLTO;LLVMLibDriver;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMSupport;LLVMTargetParser;LLVMWindowsDriver;LLVMWindowsManifest"
 )
 
 # Create imported target lldELF
 add_library(lldELF STATIC IMPORTED)
 
 set_target_properties(lldELF PROPERTIES
-  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDebugInfoDWARF;LLVMDemangle;LLVMDTLTO;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser;LLVMTransformUtils"
+  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMAArch64CodeGen;LLVMAArch64AsmParser;LLVMAArch64Desc;LLVMAArch64Disassembler;LLVMAArch64Info;LLVMAArch64Utils;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDebugInfoDWARF;LLVMDemangle;LLVMDTLTO;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser;LLVMTransformUtils"
 )
 
 # Create imported target lldMachO
 add_library(lldMachO STATIC IMPORTED)
 
 set_target_properties(lldMachO PROPERTIES
-  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMBinaryFormat;LLVMBitReader;LLVMBitWriter;LLVMCGData;LLVMCore;LLVMDebugInfoDWARF;LLVMDemangle;LLVMLTO;LLVMMC;LLVMObjCARCOpts;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser;LLVMTextAPI"
+  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMAArch64CodeGen;LLVMAArch64AsmParser;LLVMAArch64Desc;LLVMAArch64Disassembler;LLVMAArch64Info;LLVMAArch64Utils;LLVMBinaryFormat;LLVMBitReader;LLVMBitWriter;LLVMCGData;LLVMCore;LLVMDebugInfoDWARF;LLVMDemangle;LLVMLTO;LLVMMC;LLVMObjCARCOpts;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser;LLVMTextAPI"
 )
 
 # Create imported target lldMinGW
@@ -97,7 +97,7 @@ set_target_properties(lldMinGW PROPERTIES
 add_library(lldWasm STATIC IMPORTED)
 
 set_target_properties(lldWasm PROPERTIES
-  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDemangle;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser"
+  INTERFACE_LINK_LIBRARIES "lldCommon;LLVMX86CodeGen;LLVMX86AsmParser;LLVMX86Desc;LLVMX86Disassembler;LLVMX86Info;LLVMAArch64CodeGen;LLVMAArch64AsmParser;LLVMAArch64Desc;LLVMAArch64Disassembler;LLVMAArch64Info;LLVMAArch64Utils;LLVMBinaryFormat;LLVMBitWriter;LLVMCore;LLVMDemangle;LLVMLTO;LLVMMC;LLVMObject;LLVMOption;LLVMPasses;LLVMProfileData;LLVMSupport;LLVMTargetParser"
 )
 
 # Load information for each installed configuration.
@@ -139,7 +139,7 @@ unset(_cmake_import_check_targets)
 # Make sure the targets which have been exported in some other
 # export set exist.
 unset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)
-foreach(_target "LLVMCodeGen" "LLVMCore" "LLVMDebugInfoDWARF" "LLVMDemangle" "LLVMMC" "LLVMOption" "LLVMSupport" "LLVMTarget" "LLVMTargetParser" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Desc" "LLVMX86Disassembler" "LLVMX86Info" "LLVMBinaryFormat" "LLVMBitWriter" "LLVMDebugInfoCodeView" "LLVMDebugInfoMSF" "LLVMDebugInfoPDB" "LLVMDTLTO" "LLVMLibDriver" "LLVMLTO" "LLVMObject" "LLVMPasses" "LLVMWindowsDriver" "LLVMWindowsManifest" "LLVMProfileData" "LLVMTransformUtils" "LLVMBitReader" "LLVMCGData" "LLVMObjCARCOpts" "LLVMTextAPI" )
+foreach(_target "LLVMCodeGen" "LLVMCore" "LLVMDebugInfoDWARF" "LLVMDemangle" "LLVMMC" "LLVMOption" "LLVMSupport" "LLVMTarget" "LLVMTargetParser" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Desc" "LLVMX86Disassembler" "LLVMX86Info" "LLVMAArch64CodeGen" "LLVMAArch64AsmParser" "LLVMAArch64Desc" "LLVMAArch64Disassembler" "LLVMAArch64Info" "LLVMAArch64Utils" "LLVMBinaryFormat" "LLVMBitWriter" "LLVMDebugInfoCodeView" "LLVMDebugInfoMSF" "LLVMDebugInfoPDB" "LLVMDTLTO" "LLVMLibDriver" "LLVMLTO" "LLVMObject" "LLVMPasses" "LLVMWindowsDriver" "LLVMWindowsManifest" "LLVMProfileData" "LLVMTransformUtils" "LLVMBitReader" "LLVMCGData" "LLVMObjCARCOpts" "LLVMTextAPI" )
   if(NOT TARGET "${_target}" )
     set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets "${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}")
   endif()

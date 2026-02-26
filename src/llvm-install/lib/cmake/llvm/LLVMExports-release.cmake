@@ -904,6 +904,66 @@ set_target_properties(LLVMX86Info PROPERTIES
 list(APPEND _cmake_import_check_targets LLVMX86Info )
 list(APPEND _cmake_import_check_files_for_LLVMX86Info "${_IMPORT_PREFIX}/lib/LLVMX86Info.lib" )
 
+# Import target "LLVMAArch64CodeGen" for configuration "Release"
+set_property(TARGET LLVMAArch64CodeGen APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64CodeGen PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64CodeGen.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64CodeGen )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64CodeGen "${_IMPORT_PREFIX}/lib/LLVMAArch64CodeGen.lib" )
+
+# Import target "LLVMAArch64AsmParser" for configuration "Release"
+set_property(TARGET LLVMAArch64AsmParser APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64AsmParser PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64AsmParser.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64AsmParser )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64AsmParser "${_IMPORT_PREFIX}/lib/LLVMAArch64AsmParser.lib" )
+
+# Import target "LLVMAArch64Disassembler" for configuration "Release"
+set_property(TARGET LLVMAArch64Disassembler APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64Disassembler PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64Disassembler.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64Disassembler )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64Disassembler "${_IMPORT_PREFIX}/lib/LLVMAArch64Disassembler.lib" )
+
+# Import target "LLVMAArch64Desc" for configuration "Release"
+set_property(TARGET LLVMAArch64Desc APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64Desc PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64Desc.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64Desc )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64Desc "${_IMPORT_PREFIX}/lib/LLVMAArch64Desc.lib" )
+
+# Import target "LLVMAArch64Info" for configuration "Release"
+set_property(TARGET LLVMAArch64Info APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64Info PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64Info.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64Info )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64Info "${_IMPORT_PREFIX}/lib/LLVMAArch64Info.lib" )
+
+# Import target "LLVMAArch64Utils" for configuration "Release"
+set_property(TARGET LLVMAArch64Utils APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMAArch64Utils PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMAArch64Utils.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMAArch64Utils )
+list(APPEND _cmake_import_check_files_for_LLVMAArch64Utils "${_IMPORT_PREFIX}/lib/LLVMAArch64Utils.lib" )
+
 # Import target "LLVMSandboxIR" for configuration "Release"
 set_property(TARGET LLVMSandboxIR APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 set_target_properties(LLVMSandboxIR PROPERTIES
@@ -1104,6 +1164,16 @@ set_target_properties(LLVMExegesisX86 PROPERTIES
 list(APPEND _cmake_import_check_targets LLVMExegesisX86 )
 list(APPEND _cmake_import_check_files_for_LLVMExegesisX86 "${_IMPORT_PREFIX}/lib/LLVMExegesisX86.lib" )
 
+# Import target "LLVMExegesisAArch64" for configuration "Release"
+set_property(TARGET LLVMExegesisAArch64 APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVMExegesisAArch64 PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/LLVMExegesisAArch64.lib"
+  )
+
+list(APPEND _cmake_import_check_targets LLVMExegesisAArch64 )
+list(APPEND _cmake_import_check_files_for_LLVMExegesisAArch64 "${_IMPORT_PREFIX}/lib/LLVMExegesisAArch64.lib" )
+
 # Import target "LLVMExegesis" for configuration "Release"
 set_property(TARGET LLVMExegesis APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 set_target_properties(LLVMExegesis PROPERTIES
@@ -1123,6 +1193,16 @@ set_target_properties(emb_utils PROPERTIES
 
 list(APPEND _cmake_import_check_targets emb_utils )
 list(APPEND _cmake_import_check_files_for_emb_utils "${_IMPORT_PREFIX}/lib/emb_utils.lib" )
+
+# Import target "LLVM-C" for configuration "Release"
+set_property(TARGET LLVM-C APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(LLVM-C PROPERTIES
+  IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/LLVM-C.lib"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/bin/LLVM-C.dll"
+  )
+
+list(APPEND _cmake_import_check_targets LLVM-C )
+list(APPEND _cmake_import_check_files_for_LLVM-C "${_IMPORT_PREFIX}/lib/LLVM-C.lib" "${_IMPORT_PREFIX}/bin/LLVM-C.dll" )
 
 # Import target "LLVMOptDriver" for configuration "Release"
 set_property(TARGET LLVMOptDriver APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)

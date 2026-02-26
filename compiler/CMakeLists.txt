@@ -1663,7 +1663,7 @@ if(TML_BUILD_MODULAR)
     # ================================================================
     # 367KB binary that loads plugins on demand.
     # Links only the plugin loader — no compiler, no LLVM.
-    add_executable(tml src/launcher/main_launcher.cpp)
+    add_executable(tml src/launcher/main_launcher.cpp src/tml.rc)
     target_include_directories(tml PRIVATE include src)
     target_link_libraries(tml PRIVATE tml_plugin_loader)
     message(STATUS "Launcher: tml.exe (thin, ~400KB, modular with plugins)")
@@ -1686,7 +1686,7 @@ endif()
 
 # MCP server executable (separate from main tml to avoid file locking issues)
 # When MCP server is running, tml.exe can still be rebuilt independently
-add_executable(tml_mcp src/main_mcp.cpp)
+add_executable(tml_mcp src/main_mcp.cpp src/tml.rc)
 target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_doc tml_search tml_log)
 target_include_directories(tml_mcp PRIVATE include src)
 
