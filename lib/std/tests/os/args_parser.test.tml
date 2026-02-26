@@ -1,0 +1,25 @@
+// Tests for os::has_flag and os::flag_value argument parsing utilities
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_has_flag_missing() -> I32 {
+    // Test binary doesn't have --fake-flag
+    let found: Bool = os::has_flag("--fake-flag-xyzzy")
+    assert(not found, "fake flag should not be found")
+    return 0
+}
+
+@test
+func test_flag_value_missing() -> I32 {
+    let val = os::flag_value("--nonexistent-flag-xyzzy")
+    assert(val.is_nothing(), "missing flag returns Nothing")
+    return 0
+}
+
+@test
+func test_flag_value_nothing_on_empty() -> I32 {
+    let val = os::flag_value("")
+    assert(val.is_nothing(), "empty flag returns Nothing")
+    return 0
+}

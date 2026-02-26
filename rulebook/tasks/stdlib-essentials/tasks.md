@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (92%) - Core utilities needed for production use
+**Status**: In Progress (93%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -96,7 +96,7 @@
 - [x] 2.2.1 Implement args functions in `lib/std/src/os.tml`
 - [x] 2.2.2 Implement `os::args_count() -> I32` and `os::args_get(index: I32) -> Str`
 - [x] 2.2.3 Implement `Args` iterator struct (has_next, next, reset, len)
-- [ ] 2.2.4 Add simple argument parser utilities
+- [x] 2.2.4 Add simple argument parser utilities (has_flag, flag_value)
 
 ### 2.3 Process Management (basic in `std::os`, Command builder pending)
 - [x] 2.3.1 Implement basic process functions in `lib/std/src/os.tml`

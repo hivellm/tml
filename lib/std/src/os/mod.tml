@@ -384,6 +384,62 @@ pub func args() -> Args {
     }
 }
 
+/// Returns true if the given flag (e.g. "--verbose", "-v") is present in argv.
+///
+/// # Example
+///
+/// ```tml
+/// if os::has_flag("--verbose") {
+///     print("verbose mode\n")
+/// }
+/// ```
+pub func has_flag(flag: Str) -> Bool {
+    let n: I32 = ffi_args_count()
+    var i: I32 = 0
+    loop (i < n) {
+        if ffi_args_get(i) == flag {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Returns the value of a named argument (e.g. "--output=file.txt" → "file.txt").
+/// Also handles "--output file.txt" style (space-separated).
+/// Returns `Nothing` if the flag is not found.
+///
+/// # Example
+///
+/// ```tml
+/// let out = os::flag_value("--output")
+/// if out.is_just() {
+///     print("output: " + out.unwrap() + "\n")
+/// }
+/// ```
+pub func flag_value(flag: Str) -> Maybe[Str] {
+    let n: I32 = ffi_args_count()
+    let prefix: Str = flag + "="
+    var i: I32 = 0
+    loop (i < n) {
+        let arg: Str = ffi_args_get(i)
+        // --flag=value style
+        if arg.starts_with(prefix) {
+            let val: Str = arg.slice(prefix.len(), arg.len())
+            return Just(val)
+        }
+        // --flag value style
+        if arg == flag {
+            let next: I32 = i + 1
+            if next < n {
+                return Just(ffi_args_get(next))
+            }
+        }
+        i = i + 1
+    }
+    return Nothing
+}
+
 // ============================================================================
 // Process Control
 // ============================================================================
