@@ -1,6 +1,6 @@
 # Tasks: Parallel Test Execution
 
-**Status**: Pending (0%)
+**Status**: In Progress (60%)
 
 ## Phase 1: Infrastructure and Synchronization Primitives
 
@@ -46,21 +46,21 @@
 
 ## Phase 6: Synchronization with Coverage Mode
 
-- [ ] 6.1.1 Ensure LLVM_PROFILE_FILE is set before DLL execution (profile file path)
-- [ ] 6.1.2 Coordinate profile merging: collect all profiles after worker threads exit
-- [ ] 6.1.3 Merge profiles centrally in main thread (after all tests complete)
-- [ ] 6.1.4 Verify coverage.json is generated correctly (no partial/incomplete data)
-- [ ] 6.1.5 Test coverage mode with --test-threads=4 (previously hung)
+- [x] 6.1.1 Ensure LLVM_PROFILE_FILE is set before DLL execution (profile file path)
+- [x] 6.1.2 Coordinate profile merging: collect all profiles after worker threads exit
+- [x] 6.1.3 Merge profiles centrally in main thread (after all tests complete)
+- [x] 6.1.4 Verify coverage.json is generated correctly (no partial/incomplete data)
+- [x] 6.1.5 Test coverage mode with --test-threads=4 (previously hung)
 
 ## Phase 7: Testing and Validation
 
-- [ ] 7.1.1 Smoke test: run `tml test --no-cache --test-threads=4` (224 tests should pass)
-- [ ] 7.1.2 Parallel verification: check logs show tests executing simultaneously (not sequentially)
+- [x] 7.1.1 Smoke test: run `tml test --no-cache --test-threads=4` (224 tests should pass)
+- [x] 7.1.2 Parallel verification: check logs show tests executing simultaneously (not sequentially)
 - [ ] 7.1.3 Crash handling test: create a test that intentionally crashes and verify error reporting
-- [ ] 7.1.4 Performance benchmark: measure test execution time vs single-threaded baseline
-- [ ] 7.1.5 Coverage regression test: run with --coverage --test-threads=4 (should not hang)
+- [x] 7.1.4 Performance benchmark: measure test execution time vs single-threaded baseline
+- [x] 7.1.5 Coverage regression test: run with --coverage --test-threads=4 (should not hang)
 - [ ] 7.1.6 Thread count variation: test with --test-threads=1,2,4,8 (all should work)
-- [ ] 7.1.7 Suite mode verification: ensure --no-suite still works with parallelism
+- [x] 7.1.7 Suite mode verification: ensure --no-suite still works with parallelism
 - [ ] 7.1.8 Stress test: run multiple times to detect race conditions (min 5 runs)
 
 ## Phase 8: Documentation and Cleanup
