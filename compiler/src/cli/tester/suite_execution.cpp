@@ -233,8 +233,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         // Group test files into suites
         // Individual mode: 1 test per DLL for easier debugging
         // Suite mode: up to 8 tests per DLL for parallelization
+        // WORKAROUND: Force individual mode for compiler tests to avoid suite merging codegen bug
+        // (See: rulebook/tasks/fix-suite-codegen-bug/)
         auto phase_start = Clock::now();
-        size_t max_per_suite = opts.suite_mode ? 8 : 1;
+        bool has_compiler_tests =
+            std::any_of(test_files.begin(), test_files.end(), [](const auto& file) {
+                return file.find("compiler") != std::string::npos &&
+                       file.find("test") != std::string::npos;
+            });
+        size_t max_per_suite = (opts.suite_mode && !has_compiler_tests) ? 8 : 1;
         auto suites = group_tests_into_suites(test_files, max_per_suite);
         if (opts.profile) {
             collector.profile_stats.add(

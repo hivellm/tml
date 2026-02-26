@@ -119,8 +119,18 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
 
     try {
         // Group test files into suites
+        // WORKAROUND: Force individual mode for compiler tests to avoid suite merging codegen bug
+        // (See: rulebook/tasks/fix-suite-codegen-bug/)
         auto phase_start = Clock::now();
-        auto suites = group_tests_into_suites(test_files);
+        bool has_compiler_tests =
+            std::any_of(test_files.begin(), test_files.end(), [](const auto& file) {
+                return file.find("compiler") != std::string::npos &&
+                       file.find("test") != std::string::npos;
+            });
+        size_t max_per_suite = has_compiler_tests ? 1 : 8;
+        TML_LOG_DEBUG("test", "[exe] Compiler tests detected: "
+                                  << has_compiler_tests << ", max_per_suite=" << max_per_suite);
+        auto suites = group_tests_into_suites(test_files, max_per_suite);
         if (opts.profile) {
             collector.profile_stats.add(
                 "exe.group_suites",
