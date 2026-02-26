@@ -1,6 +1,7 @@
 TML_MODULE("codegen_x86")
 
 //! # LLVM IR Generator - Loop Control Flow
+//! Updated: gen_for_iterator uses single @ prefix for function names
 //!
 //! This file implements block, loop, while, and for expression code generation.
 
@@ -337,6 +338,19 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
             range_type = last_expr_type_; // Use type of end value
         }
     } else {
+        // Check if the iter expression is a type implementing Iterator behavior
+        auto iter_semantic_type = infer_expr_type(*for_expr.iter);
+        if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
+            const auto& named = iter_semantic_type->as<types::NamedType>();
+            if (env_.type_implements(named.name, "Iterator")) {
+                // Restore loop labels before delegating
+                current_loop_start_ = saved_loop_start;
+                current_loop_end_ = saved_loop_end;
+                current_loop_stack_save_ = saved_loop_stack_save;
+                current_loop_metadata_id_ = saved_loop_metadata_id;
+                return gen_for_iterator(for_expr, named.name);
+            }
+        }
         // Treat as simple range 0 to iter
         std::string iter_val = gen_expr(*for_expr.iter);
         range_end = iter_val;
@@ -408,6 +422,157 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
                                 ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
                                 : "";
     emit_line("  br label %" + label_header + loop_meta);
+
+    // Exit block
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
+    block_terminated_ = false;
+
+    // Restore loop labels
+    current_loop_start_ = saved_loop_start;
+    current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
+
+    return "0";
+}
+
+auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::string& type_name)
+    -> std::string {
+    // =========================================================================
+    // Iterator-based for loop desugaring:
+    //   for pattern in iter { body }
+    // becomes:
+    //   let mut _it = iter;   (alloca + store)
+    //   loop {
+    //       let _next = TypeName::next(mut ref _it);  // call next()
+    //       match _next {
+    //           Just(x) => { body }
+    //           Nothing => break
+    //       }
+    //   }
+    // =========================================================================
+
+    std::string label_preheader = fresh_label("iter.preheader");
+    std::string label_header = fresh_label("iter.header");
+    std::string label_body = fresh_label("iter.body");
+    std::string label_exit = fresh_label("iter.exit");
+
+    // Save/set loop labels
+    std::string saved_loop_start = current_loop_start_;
+    std::string saved_loop_end = current_loop_end_;
+    std::string saved_loop_stack_save = current_loop_stack_save_;
+    int saved_loop_metadata_id = current_loop_metadata_id_;
+    current_loop_start_ = label_header;
+    current_loop_end_ = label_exit;
+    current_loop_metadata_id_ = -1;
+
+    // Get pattern variable name
+    std::string var_name = "_for_item";
+    if (for_expr.pattern->is<parser::IdentPattern>()) {
+        var_name = for_expr.pattern->as<parser::IdentPattern>().name;
+    }
+
+    // Evaluate the iterable and store it to a mutable alloca so next() can take &mut self
+    std::string iter_val = gen_expr(*for_expr.iter);
+    std::string iter_llvm_type = last_expr_type_;
+
+    // Look up next() return type to determine item type
+    std::string next_fn = "tml_" + type_name + "_next";
+    std::string item_llvm_type = "i32"; // fallback
+    auto next_sig = env_.lookup_func(type_name + "::next");
+    if (next_sig && next_sig->return_type) {
+        // next() returns Maybe[Item]; get the struct layout for item extraction
+        if (next_sig->return_type->is<types::NamedType>()) {
+            const auto& ret = next_sig->return_type->as<types::NamedType>();
+            if ((ret.name == "Maybe" || ret.name == "Option") && !ret.type_args.empty()) {
+                item_llvm_type = llvm_type_from_semantic(ret.type_args[0]);
+            }
+        }
+    }
+
+    // Determine the LLVM type for Maybe[Item] (the return type of next())
+    std::string maybe_llvm_type = iter_llvm_type; // fallback
+    if (next_sig && next_sig->return_type) {
+        maybe_llvm_type = llvm_type_from_semantic(next_sig->return_type);
+    }
+
+    // Preheader: allocate iterator storage
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+
+    std::string iter_alloca = fresh_reg();
+    emit_line("  " + iter_alloca + " = alloca " + iter_llvm_type);
+    emit_line("  store " + iter_llvm_type + " " + iter_val + ", ptr " + iter_alloca);
+
+    emit_line("  br label %" + label_header);
+
+    // Header: call next() with mutable reference to iterator
+    emit_line(label_header + ":");
+    current_block_ = label_header;
+    block_terminated_ = false;
+
+    std::string next_result = fresh_reg();
+    if (maybe_llvm_type == "void" || maybe_llvm_type == "ptr") {
+        // Nullable maybe (ptr types): next returns ptr directly, nullptr = Nothing
+        emit_line("  " + next_result + " = call ptr @" + next_fn + "(ptr " + iter_alloca + ")");
+        std::string is_null = fresh_reg();
+        emit_line("  " + is_null + " = icmp eq ptr " + next_result + ", null");
+        emit_line("  br i1 " + is_null + ", label %" + label_exit + ", label %" + label_body);
+
+        // Body: bind item (the non-null ptr)
+        emit_line(label_body + ":");
+        current_block_ = label_body;
+        block_terminated_ = false;
+
+        push_lifetime_scope();
+        // Bind pattern to the value
+        std::string item_alloca = fresh_reg();
+        emit_line("  " + item_alloca + " = alloca ptr");
+        emit_line("  store ptr " + next_result + ", ptr " + item_alloca);
+        locals_[var_name] = VarInfo{item_alloca, "ptr", nullptr, std::nullopt};
+    } else {
+        // Struct maybe: { i32 tag, payload }
+        // Call next() returning the struct by value
+        emit_line("  " + next_result + " = call " + maybe_llvm_type + " @" + next_fn + "(ptr " +
+                  iter_alloca + ")");
+
+        // Extract tag (field 0, i32)
+        std::string tag_val = fresh_reg();
+        emit_line("  " + tag_val + " = extractvalue " + maybe_llvm_type + " " + next_result +
+                  ", 0");
+
+        // TML enum convention: Just is tag 0, Nothing is tag 1
+        // (confirmed from IR: when tag==0 → Just arm, when tag==1 → Nothing arm)
+        std::string is_nothing = fresh_reg();
+        emit_line("  " + is_nothing + " = icmp eq i32 " + tag_val + ", 1");
+        emit_line("  br i1 " + is_nothing + ", label %" + label_exit + ", label %" + label_body);
+
+        // Body: extract item from Maybe payload (field 1)
+        emit_line(label_body + ":");
+        current_block_ = label_body;
+        block_terminated_ = false;
+
+        push_lifetime_scope();
+        std::string item_val = fresh_reg();
+        emit_line("  " + item_val + " = extractvalue " + maybe_llvm_type + " " + next_result +
+                  ", 1");
+
+        // Store item to alloca so pattern binding works uniformly
+        std::string item_alloca = fresh_reg();
+        emit_line("  " + item_alloca + " = alloca " + item_llvm_type);
+        emit_line("  store " + item_llvm_type + " " + item_val + ", ptr " + item_alloca);
+        locals_[var_name] = VarInfo{item_alloca, item_llvm_type, nullptr, std::nullopt};
+    }
+
+    // Generate loop body
+    gen_expr(*for_expr.body);
+
+    if (!block_terminated_) {
+        emit_scope_lifetime_ends();
+        emit_line("  br label %" + label_header);
+    }
+    clear_lifetime_scope();
 
     // Exit block
     emit_line(label_exit + ":");

@@ -186,6 +186,21 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
         } else if (named.name == "HashMap") {
             // For HashMap iteration, we get values (I32)
             element_type = make_primitive(PrimitiveKind::I32);
+        } else if (env_.type_implements(named.name, "Iterator")) {
+            // Any type implementing Iterator: extract Item from next() return type
+            // next() returns Maybe[Item], so we unwrap the type arg of Maybe
+            auto next_sig = env_.lookup_func(named.name + "::next");
+            if (next_sig && next_sig->return_type && next_sig->return_type->is<NamedType>()) {
+                const auto& ret_named = next_sig->return_type->as<NamedType>();
+                if ((ret_named.name == "Maybe" || ret_named.name == "Option") &&
+                    !ret_named.type_args.empty()) {
+                    element_type = ret_named.type_args[0];
+                } else {
+                    element_type = next_sig->return_type;
+                }
+            } else {
+                element_type = make_unit();
+            }
         } else if (iter_type->is<PrimitiveType>()) {
             // Allow iteration over integer ranges (for i in 0 to 10)
             element_type = iter_type;

@@ -1543,6 +1543,8 @@ private:
     auto gen_loop(const parser::LoopExpr& loop) -> std::string;
     auto gen_while(const parser::WhileExpr& while_expr) -> std::string;
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
+    auto gen_for_iterator(const parser::ForExpr& for_expr, const std::string& type_name)
+        -> std::string;
     auto gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
                           const std::string& type_name, size_t iteration_count) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
