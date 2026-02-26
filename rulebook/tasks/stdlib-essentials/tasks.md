@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (97%) - Core utilities needed for production use
+**Status**: In Progress (98%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -118,7 +118,7 @@
 - [x] 3.1.4 Implement `read_line()` — reads next line
 - [x] 3.1.5 Implement `read_all()` — reads all remaining lines
 - [x] 3.1.6 Implement `close()` — close file
-- [ ] 3.1.7 Implement `lines()` iterator (returns Lines iterator struct)
+- [x] 3.1.7 Implement `lines()` iterator (returns Lines iterator struct with has_next/next/close)
 - [ ] 3.1.8 Generic `BufReader[R: Read]` (currently file-specific only)
 
 ### 3.2 BufWriter (in `lib/std/src/file/bufio.tml`)

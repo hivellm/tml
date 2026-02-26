@@ -46,4 +46,4 @@ pub use std::file::dir::{Dir}
 pub use std::file::path::{Path, PathBuf}
 
 // Re-export buffered I/O types
-pub use std::file::bufio::{BufReader, BufWriter, LineWriter}
+pub use std::file::bufio::{BufReader, BufWriter, LineWriter, Lines}

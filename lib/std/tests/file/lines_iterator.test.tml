@@ -1,0 +1,43 @@
+// Tests for BufReader::lines() iterator
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::bufio::BufReader
+use std::file::bufio::Lines
+use std::file::path::Path
+
+@test
+func test_lines_basic() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_basic.tmp"
+    File::write_all(tmp, "alpha\nbeta\ngamma\n")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    let line1: Str = it.next()
+    let line2: Str = it.next()
+    let line3: Str = it.next()
+    it.close()
+    assert_eq(line1, "alpha", "line1")
+    assert_eq(line2, "beta", "line2")
+    assert_eq(line3, "gamma", "line3")
+    Path::remove(tmp)
+    return 0
+}
+
+@test
+func test_lines_has_next() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_hasnext.tmp"
+    File::write_all(tmp, "one\ntwo\n")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    var count: I64 = 0
+    loop (it.has_next()) {
+        let _line: Str = it.next()
+        count = count + 1
+        if count > 10 {
+            break  // safety guard
+        }
+    }
+    it.close()
+    assert(count >= 2, "iterated at least 2 lines")
+    Path::remove(tmp)
+    return 0
+}
