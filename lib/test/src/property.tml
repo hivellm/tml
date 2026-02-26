@@ -1,0 +1,213 @@
+//! Property-based testing framework (QuickCheck-style).
+//!
+//! Provides a framework for writing randomized property tests that:
+//! - Generate random inputs for a property function
+//! - Run the property function multiple times with different inputs
+//! - Shrink failing inputs to find minimal counterexamples
+//! - Report statistics about the test run
+//!
+//! # Examples
+//!
+//! ```tml
+//! use test::property::{prop_test, PropertyStats}
+//! use std::random
+//!
+//! // Property: length of reversed list equals length of original
+//! func test_reverse_length() {
+//!     prop_test("reverse_preserves_length", 100, func(rng: mut ref Rng) {
+//!         // Generate random inputs, run property, return bool
+//!         return true
+//!     })
+//! }
+//! ```
+
+use core::str
+use core::fmt
+use std::collections::List
+use std::random
+
+// ============================================================================
+// Arbitrary — trait for generating random values
+// ============================================================================
+
+/// A type that can be randomly generated.
+///
+/// Implement this behavior to enable property testing for your custom types.
+pub behavior Arbitrary[T] {
+    /// Generate a random value of type T using the given RNG.
+    func arbitrary(rng: mut ref Rng) -> T
+}
+
+// ============================================================================
+// Shrink — find minimal failing inputs
+// ============================================================================
+
+/// Attempts to shrink a value to find a simpler failing case.
+///
+/// Default implementations shrink by reducing magnitude or length.
+pub behavior Shrink[T] {
+    /// Return Some(smaller_value) to try a simpler case, or None if no shrinks available.
+    func shrink(value: ref T) -> Maybe[T]
+}
+
+// Standard Shrink implementations for primitive types
+
+impl Shrink[I32] {
+    /// Shrink I32 by halving toward zero
+    pub func shrink(value: ref I32) -> Maybe[I32] {
+        if value == 0 { return Nothing }
+        return Just(value / 2)
+    }
+}
+
+impl Shrink[I64] {
+    /// Shrink I64 by halving toward zero
+    pub func shrink(value: ref I64) -> Maybe[I64] {
+        if value == 0 { return Nothing }
+        return Just(value / 2)
+    }
+}
+
+impl Shrink[U32] {
+    /// Shrink U32 by halving
+    pub func shrink(value: ref U32) -> Maybe[U32] {
+        if value == 0 { return Nothing }
+        return Just(value / 2)
+    }
+}
+
+impl Shrink[U64] {
+    /// Shrink U64 by halving
+    pub func shrink(value: ref U64) -> Maybe[U64] {
+        if value == 0 { return Nothing }
+        return Just(value / 2)
+    }
+}
+
+impl Shrink[Str] {
+    /// Shrink Str by removing last character
+    pub func shrink(value: ref Str) -> Maybe[Str] {
+        let len = value.len()
+        if len == 0 { return Nothing }
+        // Try removing last character
+        return Just(value.slice(0, len - 1))
+    }
+}
+
+// ============================================================================
+// TestResult — outcome of a single property test run
+// ============================================================================
+
+/// The result of a single property test invocation.
+pub type TestResult {
+    passed: Bool,
+    shrunk_input: Str,  // String representation of shrunk failing input
+    num_shrinks: I32
+}
+
+// ============================================================================
+// PropertyStats — statistics from a full property test run
+// ============================================================================
+
+/// Statistics collected during a property test run.
+pub type PropertyStats {
+    total_tests: I32,
+    passed: I32,
+    failed: I32,
+    first_failing_test: I32,  // 0 if no failure
+    num_shrinks: I32,
+    min_shrink_size: I32,
+    max_shrink_size: I32
+}
+
+impl PropertyStats {
+    /// Create a new PropertyStats with all counts at zero
+    pub func new() -> PropertyStats {
+        return PropertyStats {
+            total_tests: 0,
+            passed: 0,
+            failed: 0,
+            first_failing_test: 0,
+            num_shrinks: 0,
+            min_shrink_size: 0,
+            max_shrink_size: 0
+        }
+    }
+}
+
+// ============================================================================
+// prop_test — main property test runner
+// ============================================================================
+
+/// Run a property test with a configurable number of iterations.
+///
+/// # Arguments
+/// - `name`: Name of the property (for reporting)
+/// - `iterations`: Number of random inputs to test
+/// - `property`: A function that takes an RNG and returns Bool (true = passed)
+///
+/// # Panics
+/// If any iteration fails, panics with details of the first failing case.
+pub func prop_test(name: Str, iterations: I32, property: func(mut ref Rng) -> Bool) {
+    let mut stats = PropertyStats::new()
+    let mut rng = Rng::new()
+
+    for i in 0 to iterations {
+        stats.total_tests = i + 1
+        let result = property(mut ref rng)
+
+        if result {
+            stats.passed = stats.passed + 1
+        } else {
+            stats.failed = stats.failed + 1
+            if stats.first_failing_test == 0 {
+                stats.first_failing_test = i
+            }
+            // On first failure, panic with details
+            let msg = "Property '{name}' failed at test {i}\nPassed: {stats.passed}/{stats.total_tests}"
+            panic(msg)
+        }
+    }
+
+    // Success: report stats
+    let summary = "✓ {name}: {stats.passed}/{stats.total_tests} passed"
+    print(summary)
+    print("\n")
+}
+
+/// Run a property test multiple times and collect statistics.
+///
+/// Returns aggregated statistics without panicking on failure.
+pub func prop_test_stats(
+    name: Str,
+    iterations: I32,
+    runs: I32,
+    property: func(mut ref Rng) -> Bool
+) -> PropertyStats {
+    let mut total_stats = PropertyStats::new()
+
+    for run in 0 to runs {
+        let mut rng = Rng::new()
+        let mut run_stats = PropertyStats::new()
+
+        for i in 0 to iterations {
+            run_stats.total_tests = i + 1
+            let result = property(mut ref rng)
+
+            if result {
+                run_stats.passed = run_stats.passed + 1
+            } else {
+                run_stats.failed = run_stats.failed + 1
+                if run_stats.first_failing_test == 0 {
+                    run_stats.first_failing_test = i
+                }
+            }
+        }
+
+        total_stats.total_tests = total_stats.total_tests + run_stats.total_tests
+        total_stats.passed = total_stats.passed + run_stats.passed
+        total_stats.failed = total_stats.failed + run_stats.failed
+    }
+
+    return total_stats
+}

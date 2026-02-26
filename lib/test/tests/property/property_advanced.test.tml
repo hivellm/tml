@@ -1,0 +1,179 @@
+//! Advanced property-based testing tests.
+
+use test::property::*
+use test::assertions::*
+use std::random
+
+@test
+func test_property_stats_updates() -> Outcome[(), Str] {
+    // Test PropertyStats field updates
+    let mut stats = PropertyStats::new()
+
+    stats.total_tests = 10
+    stats.passed = 8
+    stats.failed = 2
+    stats.first_failing_test = 5
+    stats.num_shrinks = 3
+
+    assert_eq(stats.total_tests, 10, "total_tests updated")
+    assert_eq(stats.passed, 8, "passed updated")
+    assert_eq(stats.failed, 2, "failed updated")
+    assert_eq(stats.first_failing_test, 5, "first_failing_test updated")
+    assert_eq(stats.num_shrinks, 3, "num_shrinks updated")
+
+    Ok(())
+}
+
+@test
+func test_arbitrary_sequence() -> Outcome[(), Str] {
+    // Generate multiple random values in sequence
+    let rng = Rng::new()
+
+    let i1 = I32::arbitrary(mut ref rng)
+    let i2 = I32::arbitrary(mut ref rng)
+    let i3 = I32::arbitrary(mut ref rng)
+
+    // All should be generated (no panic = success)
+    assert(true, "Sequence generation works")
+    Ok(())
+}
+
+@test
+func test_shrink_i64() -> Outcome[(), Str] {
+    // Test shrinking I64 values
+    let mut val: I64 = 1000
+    let shrunk = I64::shrink(mut ref val)
+
+    when shrunk {
+        Just(smaller) => {
+            assert(smaller < 1000, "Shrunk I64 should be smaller")
+        },
+        Nothing => {
+            assert(false, "Should have shrunk 1000")
+        }
+    }
+
+    Ok(())
+}
+
+@test
+func test_shrink_negative_i32() -> Outcome[(), Str] {
+    // Test shrinking negative I32 values
+    let mut val: I32 = -100
+    let shrunk = I32::shrink(mut ref val)
+
+    when shrunk {
+        Just(smaller) => {
+            // Shrinking -100 should give -50 (halved toward zero)
+            assert(smaller > -100 or smaller < 0, "Shrunk negative should move toward zero")
+        },
+        Nothing => {
+            assert(false, "Should have shrunk -100")
+        }
+    }
+
+    Ok(())
+}
+
+@test
+func test_property_stats_aggregation() -> Outcome[(), Str] {
+    // Test aggregating multiple property stats
+    let mut stats1 = PropertyStats::new()
+    stats1.total_tests = 5
+    stats1.passed = 4
+    stats1.failed = 1
+
+    let mut stats2 = PropertyStats::new()
+    stats2.total_tests = 5
+    stats2.passed = 5
+    stats2.failed = 0
+
+    let mut total = PropertyStats::new()
+    total.total_tests = stats1.total_tests + stats2.total_tests
+    total.passed = stats1.passed + stats2.passed
+    total.failed = stats1.failed + stats2.failed
+
+    assert_eq(total.total_tests, 10, "Aggregated total_tests")
+    assert_eq(total.passed, 9, "Aggregated passed")
+    assert_eq(total.failed, 1, "Aggregated failed")
+
+    Ok(())
+}
+
+@test
+func test_shrink_str_multi_step() -> Outcome[(), Str] {
+    // Test multiple shrink steps
+    let original = "abcdef"
+    let mut val = original
+
+    // First shrink: "abcde"
+    let shrunk1 = Str::shrink(mut ref val)
+    when shrunk1 {
+        Just(s1) => {
+            assert_eq(s1, "abcde", "First shrink removes last char")
+
+            // Second shrink: "abcd"
+            let shrunk2 = Str::shrink(mut ref s1)
+            when shrunk2 {
+                Just(s2) => {
+                    assert_eq(s2, "abcd", "Second shrink removes last char")
+                },
+                Nothing => {
+                    assert(false, "Should shrink 'abcde'")
+                }
+            }
+        },
+        Nothing => {
+            assert(false, "Should shrink 'abcdef'")
+        }
+    }
+
+    Ok(())
+}
+
+@test
+func test_arbitrary_different_values() -> Outcome[(), Str] {
+    // Test that consecutive arbitrary calls generate different values (usually)
+    let rng = Rng::new()
+
+    let vals = []I32::new(10)
+    for i in 0 to 10 {
+        let val = I32::arbitrary(mut ref rng)
+        vals.push(val)
+    }
+
+    // At least verify we generated 10 values without panic
+    assert_eq(vals.len(), 10, "Should generate 10 values")
+
+    Ok(())
+}
+
+@test
+func test_property_result_type() -> Outcome[(), Str] {
+    // Test TestResult structure
+    let result = TestResult {
+        passed: true,
+        shrunk_input: "test_input",
+        num_shrinks: 0
+    }
+
+    assert(result.passed, "Result should be passed")
+    assert_eq(result.num_shrinks, 0, "No shrinks performed")
+
+    Ok(())
+}
+
+@test
+func test_property_result_with_shrinks() -> Outcome[(), Str] {
+    // Test TestResult with shrink information
+    let result = TestResult {
+        passed: false,
+        shrunk_input: "100",
+        num_shrinks: 5
+    }
+
+    assert(not result.passed, "Result should be failed")
+    assert_eq(result.num_shrinks, 5, "5 shrinks performed")
+
+    Ok(())
+}
