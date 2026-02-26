@@ -242,6 +242,12 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                                                << suite.name
                                                << " file=" << compile_result.failed_test
                                                << " error=" << compile_result.error_message);
+
+                    // Trigger fail_fast on compilation failure
+                    if (opts.fail_fast) {
+                        fail_fast_triggered.store(true);
+                        TML_LOG_ERROR("test", "fail_fast triggered due to compilation failure");
+                    }
                     continue;
                 }
 
@@ -294,7 +300,8 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                     for (int i = (int)pending_suites.size() - 1; i >= 0; --i) {
                         if (subprocess_is_done(pending_suites[i])) {
                             // This one is done, collect its result
-                            SuiteSubprocessResult suite_result = wait_for_subprocess(pending_suites[i]);
+                            SuiteSubprocessResult suite_result =
+                                wait_for_subprocess(pending_suites[i]);
                             size_t completed_idx = pending_suite_indices[i];
                             pending_suites.erase(pending_suites.begin() + i);
                             pending_suite_indices.erase(pending_suite_indices.begin() + i);
@@ -304,9 +311,9 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
 
                             // Process result (cache, fail_fast check, coverage collection)
                             // This was previously in lines 344+, moved to after each collection
-                            // [Collection and processing code continues below at the end of this block]
-                            // For now, mark that we need to process this result
-                            // We'll break and process one at a time to keep locks minimal
+                            // [Collection and processing code continues below at the end of this
+                            // block] For now, mark that we need to process this result We'll break
+                            // and process one at a time to keep locks minimal
                             break;
                         }
                     }
@@ -594,7 +601,8 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                         } catch (...) {
                             // Ignore cleanup errors
                         }
-                        TML_LOG_DEBUG("test", "[exe] Collected coverage from: " << cov_file.string());
+                        TML_LOG_DEBUG("test",
+                                      "[exe] Collected coverage from: " << cov_file.string());
                     }
                 }
             }
@@ -703,8 +711,7 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                                           "======");
                     TML_LOG_FATAL("test", "  COVERAGE ABORTED: Zero functions tracked");
                     TML_LOG_FATAL("test", "  Tests ran but no coverage data was collected.");
-                    TML_LOG_FATAL("test",
-                                  "  This indicates a bug in coverage instrumentation.");
+                    TML_LOG_FATAL("test", "  This indicates a bug in coverage instrumentation.");
                     TML_LOG_FATAL("test", "  HTML/JSON files will NOT be generated.");
                     TML_LOG_FATAL("test", "========================================================"
                                           "======");
@@ -725,10 +732,10 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                     write_library_coverage_html(covered_functions_copy, tmp_output, test_stats);
 
                     // Handle JSON file renaming
-                    std::string tmp_json =
-                        fs::path(tmp_output).replace_extension(".json").string();
-                    std::string final_json =
-                        fs::path(CompilerOptions::coverage_output).replace_extension(".json").string();
+                    std::string tmp_json = fs::path(tmp_output).replace_extension(".json").string();
+                    std::string final_json = fs::path(CompilerOptions::coverage_output)
+                                                 .replace_extension(".json")
+                                                 .string();
 
                     if (should_update) {
                         bool html_ok = fs::exists(tmp_output) && fs::file_size(tmp_output) > 0;
@@ -737,7 +744,8 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                         if (html_ok) {
                             fs::rename(tmp_output, CompilerOptions::coverage_output);
                             if (!opts.quiet) {
-                                TML_LOG_DEBUG("test", "[exe] Updated: " << CompilerOptions::coverage_output);
+                                TML_LOG_DEBUG(
+                                    "test", "[exe] Updated: " << CompilerOptions::coverage_output);
                             }
                         }
 
@@ -756,9 +764,9 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                         if (!opts.quiet) {
                             TML_LOG_WARN("test",
                                          "[exe] Coverage regressed: " << current_percent << "% vs "
-                                                                     << previous.percent
-                                                                     << "% (previous). "
-                                                                     "Keeping old report.");
+                                                                      << previous.percent
+                                                                      << "% (previous). "
+                                                                         "Keeping old report.");
                         }
                     }
                 }

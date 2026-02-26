@@ -149,7 +149,15 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     char* error = nullptr;
 
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
-        result.error_message = "Failed to parse LLVM IR: " + consume_error_message(error);
+        std::string llvm_error = consume_error_message(error);
+        result.error_message =
+            "Failed to parse LLVM IR: " + llvm_error +
+            "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +
+            "The generated LLVM IR is invalid. Common causes:\n" +
+            "  • Type mismatches in function calls (e.g., passing struct by value vs ref)\n" +
+            "  • Incorrect struct/enum field layouts or sizes\n" +
+            "  • Wrong calling conventions or parameter counts\n" +
+            "  • Invalid aggregate type operations\n";
         return result;
     }
 
@@ -313,7 +321,15 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
     char* error = nullptr;
 
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
-        result.error_message = "Failed to parse LLVM IR: " + consume_error_message(error);
+        std::string llvm_error = consume_error_message(error);
+        result.error_message =
+            "Failed to parse LLVM IR: " + llvm_error +
+            "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +
+            "The generated LLVM IR is invalid. Common causes:\n" +
+            "  • Type mismatches in function calls (e.g., passing struct by value vs ref)\n" +
+            "  • Incorrect struct/enum field layouts or sizes\n" +
+            "  • Wrong calling conventions or parameter counts\n" +
+            "  • Invalid aggregate type operations\n";
         return result;
     }
 
