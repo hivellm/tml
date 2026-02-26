@@ -29,9 +29,9 @@ REM Limpar traces anteriores
 echo Cleaning previous traces...
 wpr.exe -cancel >nul 2>&1
 
-REM Iniciar trace com timeout maior
+REM Iniciar trace
 echo Starting performance trace (CPU profiling)...
-wpr.exe -start CPU -filemode -level verbose -buffersize 1024 -minbuffers 100 -maxbuffers 1024
+wpr.exe -start CPU.Verbose -filemode
 
 REM Checar se trace iniciou corretamente
 if %errorlevel% neq 0 (
