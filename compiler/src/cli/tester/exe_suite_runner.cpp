@@ -124,26 +124,13 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         // BUT: Keep lib tests in suite mode for speed
         auto phase_start = Clock::now();
 
-        // Separate compiler and lib tests
-        std::vector<std::string> compiler_tests;
-        std::vector<std::string> lib_tests;
-        for (const auto& file : test_files) {
-            if (file.find("compiler") != std::string::npos &&
-                file.find("test") != std::string::npos) {
-                compiler_tests.push_back(file);
-            } else {
-                lib_tests.push_back(file);
-            }
-        }
+        // Force individual mode for ALL tests to avoid suite merging codegen bug
+        // Bug affects both compiler and lib tests when grouped into suites
+        auto suites = group_tests_into_suites(test_files, 1); // Individual mode (1 test per DLL)
 
-        // Group with appropriate max_per_suite for each category
-        auto suites = group_tests_into_suites(lib_tests, 8); // lib tests: suite mode (8 per DLL)
-        auto compiler_suites =
-            group_tests_into_suites(compiler_tests, 1); // compiler: individual mode (1 per DLL)
-        suites.insert(suites.end(), compiler_suites.begin(), compiler_suites.end());
-
-        TML_LOG_DEBUG("test", "[exe] Split tests: " << lib_tests.size() << " lib, "
-                                                    << compiler_tests.size() << " compiler");
+        TML_LOG_DEBUG("test", "[exe] Forced individual mode for all " << test_files.size()
+                                                                      << " tests to avoid suite"
+                                                                      << " merge codegen bug");
         if (opts.profile) {
             collector.profile_stats.add(
                 "exe.group_suites",
