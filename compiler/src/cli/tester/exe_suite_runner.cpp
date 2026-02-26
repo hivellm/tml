@@ -200,6 +200,7 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
             std::string exe_path;
         };
         std::vector<CompiledSuite> compiled_suites;
+        std::atomic<bool> fail_fast_triggered{false};
 
         if (suites_to_compile.empty()) {
             if (!opts.quiet && !suites_fully_cached.empty()) {
@@ -267,7 +268,6 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         // ======================================================================
 
         std::mutex cache_mutex;
-        std::atomic<bool> fail_fast_triggered{false};
 
         // Coverage tracking for subprocess mode
         std::set<std::string> all_covered_functions;
