@@ -269,6 +269,16 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
             }
         }
 
+        // Early exit if fail_fast was triggered during compilation
+        if (fail_fast_triggered.load()) {
+            if (should_update_cache) {
+                fs::create_directories(cache_file.parent_path());
+                test_cache.save(cache_file.string());
+            }
+            TML_LOG_ERROR("test", "[exe] Exiting early due to fail_fast compilation failure");
+            return 1;
+        }
+
         // ======================================================================
         // Run tests via --run-all subprocess (1 process per suite)
         // ======================================================================
