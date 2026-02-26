@@ -92,7 +92,8 @@ struct RunCompileResult {
 /// This replaces the manual preprocess->lex->parse->typecheck->borrow->codegen pipeline
 /// with the memoized 8-stage query system that supports incremental compilation.
 RunCompileResult compile_via_queries(const std::string& path, bool coverage, bool no_cache,
-                                     const std::string& backend = "llvm") {
+                                     const std::string& backend = "llvm",
+                                     const std::string& pipeline_dir = "") {
     RunCompileResult result;
 
     // Pre-load all library modules from .tml.meta binary cache
@@ -110,6 +111,10 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
     qopts.sysroot = tml::CompilerOptions::sysroot;
     qopts.incremental = !no_cache;
     qopts.backend = backend;
+    if (!pipeline_dir.empty()) {
+        qopts.emit_pipeline = true;
+        qopts.pipeline_output_dir = pipeline_dir;
+    }
 
     auto source_dir = fs::path(path).parent_path();
     if (source_dir.empty()) {
@@ -214,9 +219,10 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
 ///
 /// Returns the exit code of the executed program.
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
-            bool coverage, bool no_cache, const std::string& backend) {
+            bool coverage, bool no_cache, const std::string& backend,
+            const std::string& pipeline_dir) {
     // Compile via query pipeline (incremental + memoized)
-    auto compile = compile_via_queries(path, coverage, no_cache, backend);
+    auto compile = compile_via_queries(path, coverage, no_cache, backend, pipeline_dir);
     if (!compile.success) {
         TML_LOG_ERROR("build", compile.error_message);
         return 1;
@@ -628,7 +634,17 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         TML_LOG_INFO("build", "For manual profiling, use std::profiler module in your code.");
     }
 
-    return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend);
+    std::string pipeline_dir;
+    if (opts.emit_pipeline) {
+        pipeline_dir = opts.pipeline_output_dir.empty()
+                           ? (fs::path(path).parent_path() / ".." / ".sandbox" / "pipeline")
+                                 .lexically_normal()
+                                 .string()
+                           : opts.pipeline_output_dir;
+    }
+
+    return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend,
+                   pipeline_dir);
 }
 
 } // namespace tml::cli

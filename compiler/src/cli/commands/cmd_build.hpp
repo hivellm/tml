@@ -76,6 +76,10 @@ struct BuildOptions {
 
     // Use Polonius borrow checker (more permissive than NLL)
     bool polonius = false;
+
+    // Emit all pipeline stages (HIR, THIR, MIR pre/per-pass/post, LLVM IR) to a directory.
+    bool emit_pipeline = false;
+    std::string pipeline_output_dir; // Default: .sandbox/pipeline/ relative to source
 };
 
 // Run options (for run command)
@@ -87,6 +91,10 @@ struct RunOptions {
     std::string profile_output;    // Custom output path (default: profile.cpuprofile)
     std::vector<std::string> args; // Program arguments
     std::string backend = "llvm";  // Codegen backend ("llvm" or "cranelift")
+
+    // Emit all pipeline stages to a directory (same as --emit-pipeline for build)
+    bool emit_pipeline = false;
+    std::string pipeline_output_dir;
 };
 
 // Build commands
@@ -101,7 +109,8 @@ int run_build_ex(const std::string& path, const BuildOptions& options);
 int run_build_with_queries(const std::string& path, const BuildOptions& options);
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
-            bool coverage = false, bool no_cache = false, const std::string& backend = "llvm");
+            bool coverage = false, bool no_cache = false, const std::string& backend = "llvm",
+            const std::string& pipeline_dir = "");
 
 // Run with extended options
 int run_run_ex(const std::string& path, const RunOptions& options);

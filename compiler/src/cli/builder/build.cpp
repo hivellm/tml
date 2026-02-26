@@ -940,6 +940,16 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     qopts.profile_use = options.profile_use;
     qopts.incremental = !options.no_cache;
     qopts.backend = options.backend;
+    qopts.emit_pipeline = options.emit_pipeline;
+    if (options.emit_pipeline) {
+        // Default pipeline dir: .sandbox/pipeline/ relative to the source file's directory
+        qopts.pipeline_output_dir =
+            options.pipeline_output_dir.empty()
+                ? (fs::path(path).parent_path() / ".." / ".sandbox" / "pipeline")
+                      .lexically_normal()
+                      .string()
+                : options.pipeline_output_dir;
+    }
 
     auto source_dir = fs::path(path).parent_path();
     if (source_dir.empty()) {

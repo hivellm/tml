@@ -130,6 +130,10 @@ public:
     /// This will be passed to InliningPass instances in the pipeline.
     void set_profile_data(const ProfileData* profile);
 
+    /// Sets the pipeline dump directory. When non-empty, MIR is dumped
+    /// before, after each changing pass, and after all passes.
+    void set_pipeline_dir(std::string dir, std::string module_name);
+
     /// Returns the optimization level.
     [[nodiscard]] auto opt_level() const -> OptLevel {
         return level_;
@@ -139,6 +143,8 @@ private:
     OptLevel level_;
     std::vector<std::unique_ptr<MirPass>> passes_;
     const ProfileData* profile_data_ = nullptr;
+    std::string pipeline_dir_;    // Non-empty when --emit-pipeline is active
+    std::string pipeline_module_; // Module name for output file naming
 };
 
 // ============================================================================

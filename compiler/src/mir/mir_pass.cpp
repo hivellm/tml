@@ -38,7 +38,12 @@ TML_MODULE("compiler")
 #include "log/log.hpp"
 #include "mir/passes_all.hpp"
 #include "types/env.hpp"
+
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+
+namespace fs = std::filesystem;
 
 namespace tml::mir {
 
@@ -127,9 +132,26 @@ static bool verify_mir(const Module& module, const std::string& after_pass) {
     return true;
 }
 
+// Helper: write a string to a file, creating parent directories as needed.
+static void write_pipeline_file(const std::string& path, const std::string& content) {
+    fs::create_directories(fs::path(path).parent_path());
+    std::ofstream f(path, std::ios::out | std::ios::trunc);
+    if (f.is_open()) {
+        f << content;
+    }
+}
+
 auto PassManager::run(Module& module) -> int {
     int changes = 0;
     bool debug_mir = false; // Set to true to debug MIR passes
+
+    const bool dump_pipeline = !pipeline_dir_.empty();
+    const std::string& mod = pipeline_module_;
+
+    // Dump MIR before any passes
+    if (dump_pipeline) {
+        write_pipeline_file(pipeline_dir_ + "/" + mod + ".mir.pre", mir::print_module(module));
+    }
 
     // If profile data is set, pass it to InliningPass instances
     if (profile_data_) {
@@ -140,8 +162,10 @@ auto PassManager::run(Module& module) -> int {
         }
     }
 
+    int pass_index = 0;
     for (auto& pass : passes_) {
-        if (pass->run(module)) {
+        bool changed = pass->run(module);
+        if (changed) {
             ++changes;
 
             if (debug_mir) {
@@ -149,13 +173,33 @@ auto PassManager::run(Module& module) -> int {
                     TML_LOG_ERROR("mir", "Pass " << pass->name() << " corrupted MIR!");
                 }
             }
+
+            // Dump MIR after each pass that changed the module
+            if (dump_pipeline) {
+                char idx[8];
+                snprintf(idx, sizeof(idx), "%02d", pass_index);
+                write_pipeline_file(pipeline_dir_ + "/" + mod + ".mir." + idx + "_" + pass->name(),
+                                    mir::print_module(module));
+            }
         }
+        ++pass_index;
     }
+
+    // Dump MIR after all passes
+    if (dump_pipeline) {
+        write_pipeline_file(pipeline_dir_ + "/" + mod + ".mir.post", mir::print_module(module));
+    }
+
     return changes;
 }
 
 void PassManager::set_profile_data(const ProfileData* profile) {
     profile_data_ = profile;
+}
+
+void PassManager::set_pipeline_dir(std::string dir, std::string module_name) {
+    pipeline_dir_ = std::move(dir);
+    pipeline_module_ = std::move(module_name);
 }
 
 void PassManager::configure_standard_pipeline() {

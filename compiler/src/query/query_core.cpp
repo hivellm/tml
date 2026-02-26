@@ -13,6 +13,7 @@ TML_MODULE("compiler")
 #include "common.hpp"
 #include "hir/hir.hpp"
 #include "hir/hir_builder.hpp"
+#include "hir/hir_printer.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "log/log.hpp"
@@ -40,6 +41,22 @@ TML_MODULE("compiler")
 namespace fs = std::filesystem;
 
 namespace tml::query::providers {
+
+// ============================================================================
+// Pipeline Dump Helper
+// ============================================================================
+
+// Write content to a pipeline dump file, creating parent directories as needed.
+static void pipeline_write(const std::string& dir, const std::string& filename,
+                           const std::string& content) {
+    if (dir.empty())
+        return;
+    fs::create_directories(dir);
+    std::ofstream f(fs::path(dir) / filename, std::ios::out | std::ios::trunc);
+    if (f.is_open()) {
+        f << content;
+    }
+}
 
 // ============================================================================
 // ReadSource Provider
@@ -347,6 +364,8 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
 
     mir::Module mir_module;
 
+    const std::string& pipeline_dir = ctx.options().pipeline_output_dir;
+
     // Route through THIR pipeline when --use-thir is enabled
     if (CompilerOptions::use_thir) {
         auto thir = ctx.thir_lower(mk.file_path, mk.module_name);
@@ -359,6 +378,20 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
             TML_LOG_WARN("thir", diag);
         }
 
+        // Dump THIR summary
+        if (!pipeline_dir.empty() && thir.thir_module) {
+            std::string thir_dump = "THIR Module: " + mk.module_name + "\n";
+            thir_dump +=
+                "Functions (" + std::to_string(thir.thir_module->functions.size()) + "):\n";
+            for (size_t i = 0; i < thir.thir_module->functions.size(); ++i) {
+                thir_dump +=
+                    "  [" + std::to_string(i) + "] " + thir.thir_module->functions[i].name + "\n";
+            }
+            thir_dump += "Structs (" + std::to_string(thir.thir_module->structs.size()) + ")\n";
+            thir_dump += "Enums (" + std::to_string(thir.thir_module->enums.size()) + ")\n";
+            pipeline_write(pipeline_dir, mk.module_name + ".thir", thir_dump);
+        }
+
         // Build MIR from THIR
         mir::ThirMirBuilder thir_mir_builder(*tc.env);
         mir_module = thir_mir_builder.build(*thir.thir_module);
@@ -367,6 +400,12 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
         auto hir = ctx.hir_lower(mk.file_path, mk.module_name);
         if (!hir.success) {
             return result;
+        }
+
+        // Dump HIR
+        if (!pipeline_dir.empty() && hir.hir_module) {
+            pipeline_write(pipeline_dir, mk.module_name + ".hir",
+                           hir::print_hir_module(*hir.hir_module));
         }
 
         mir::HirMirBuilder hir_mir_builder(*tc.env);
@@ -407,6 +446,11 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
         auto env_copy = *tc.env;
         mir::PassManager pm(mir_opt);
         pm.configure_standard_pipeline(env_copy);
+
+        // Configure pipeline dump if enabled
+        if (!pipeline_dir.empty()) {
+            pm.set_pipeline_dir(pipeline_dir, mk.module_name);
+        }
 
         // PGO instrumentation
         if (ctx.options().profile_generate) {
@@ -609,6 +653,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         } else {
             // LLVM: generate IR text (compiled to object later by the build system)
             result.llvm_ir = backend->generate_ir(*mir.mir_module, codegen_opts);
+
+            // Dump LLVM IR if pipeline dump is enabled
+            if (!ctx.options().pipeline_output_dir.empty()) {
+                pipeline_write(ctx.options().pipeline_output_dir, ck.module_name + ".ll",
+                               result.llvm_ir);
+            }
         }
 
         // Extract link_libs from AST

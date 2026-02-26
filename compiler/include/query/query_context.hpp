@@ -48,6 +48,11 @@ struct QueryOptions {
 
     // Backend selection ("llvm" or "cranelift")
     std::string backend = "llvm";
+
+    // Pipeline dump: emit all intermediate representations to a directory.
+    // Enabled by --emit-pipeline on the CLI.
+    bool emit_pipeline = false;
+    std::string pipeline_output_dir; // Default: .sandbox/pipeline/ relative to source
 };
 
 /// Central query context for the compilation session.

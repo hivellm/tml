@@ -176,6 +176,8 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --emit-ir           Emit LLVM IR instead of executable\n";
             std::cerr << "  --emit-mir          Emit MIR (Mid-level IR) for debugging\n";
             std::cerr << "  --emit-header       Generate C header for FFI\n";
+            std::cerr << "  --emit-pipeline[=<dir>]  Dump all pipeline stages to <dir> (default: "
+                         ".sandbox/pipeline/)\n";
             std::cerr << "  --verbose, -v       Show detailed output\n";
             std::cerr << "  --no-cache          Disable build cache\n";
             std::cerr << "  --release           Build with optimizations (-O3)\n";
@@ -251,6 +253,10 @@ int tml_main(int argc, char* argv[]) {
         // Backend selection
         std::string backend = "llvm";
         bool polonius = false; // Use Polonius borrow checker
+
+        // Pipeline dump
+        bool emit_pipeline = false;
+        std::string pipeline_output_dir;
 
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
@@ -368,6 +374,11 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg == "--polonius") {
                 polonius = true;
+            } else if (arg == "--emit-pipeline") {
+                emit_pipeline = true;
+            } else if (arg.starts_with("--emit-pipeline=")) {
+                emit_pipeline = true;
+                pipeline_output_dir = arg.substr(16);
             } else if (arg == "--no-thir") {
                 tml::CompilerOptions::use_thir = false;
             } else if (arg == "--checked-math") {
@@ -429,6 +440,8 @@ int tml_main(int argc, char* argv[]) {
         opts.backend = std::move(backend);
         opts.polonius = polonius;
         tml::CompilerOptions::polonius = polonius;
+        opts.emit_pipeline = emit_pipeline;
+        opts.pipeline_output_dir = std::move(pipeline_output_dir);
 
         // Default: query-based build (demand-driven with incremental compilation)
         // Use --legacy to fall back to the traditional pipeline
@@ -512,6 +525,11 @@ int tml_main(int argc, char* argv[]) {
                 CompilerOptions::checked_math = true;
             } else if (arg == "--no-checked-math") {
                 CompilerOptions::checked_math = false;
+            } else if (arg == "--emit-pipeline") {
+                opts.emit_pipeline = true;
+            } else if (arg.starts_with("--emit-pipeline=")) {
+                opts.emit_pipeline = true;
+                opts.pipeline_output_dir = arg.substr(16);
             } else {
                 opts.args.push_back(arg);
             }
