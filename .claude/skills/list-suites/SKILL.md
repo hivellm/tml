@@ -13,7 +13,7 @@ Run the TML compiler's `--list-suites` command to show all available test suite 
 ### Execute
 
 ```bash
-cd /f/Node/hivellm/tml && build/debug/tml.exe test --list-suites --verbose 2>&1
+cd /f/Node/hivellm/tml && build/debug/bin/tml.exe test --list-suites --verbose 2>&1
 ```
 
 ### Report

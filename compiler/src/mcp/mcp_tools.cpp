@@ -370,7 +370,9 @@ auto get_tml_executable() -> std::string {
 #ifdef _WIN32
     std::vector<std::string> paths = {
         "tml.exe",
+        "./build/debug/bin/tml.exe",
         "./build/debug/tml.exe",
+        "./build/release/bin/tml.exe",
         "./build/release/tml.exe",
     };
     for (const auto& path : paths) {

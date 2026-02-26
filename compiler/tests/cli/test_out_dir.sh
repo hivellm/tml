@@ -3,7 +3,7 @@
 
 set -e  # Exit on error
 
-TML_BIN="${TML_BIN:-./build/debug/tml.exe}"
+TML_BIN="${TML_BIN:-./build/debug/bin/tml.exe}"
 TEST_FILE="packages/compiler/tests/cli/test_out_dir_fixture.tml"
 TEST_DIR="test_output_dir"
 

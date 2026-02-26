@@ -232,18 +232,18 @@ scripts\build.bat --modular release  # Release modular build
 **Output structure (modular):**
 | File | Size | Description |
 |------|------|-------------|
-| `build/debug/tml.exe` | ~367KB | Thin launcher (no LLVM) |
-| `build/debug/tml_full.exe` | ~100MB | Monolithic fallback |
-| `build/debug/plugins/tml_compiler.dll` | ~100MB | Core compiler plugin |
-| `build/debug/plugins/tml_codegen_x86.dll` | ~75MB | LLVM codegen backend |
-| `build/debug/plugins/tml_tools.dll` | ~47KB | Formatter, linter, doc, search |
-| `build/debug/plugins/tml_test.dll` | ~47KB | Test runner, coverage |
-| `build/debug/plugins/tml_mcp.dll` | ~46KB | MCP server |
+| `build/debug/bin/tml.exe` | ~367KB | Thin launcher (no LLVM) |
+| `build/debug/bin/tml_full.exe` | ~100MB | Monolithic fallback |
+| `build/debug/bin/plugins/tml_compiler.dll` | ~100MB | Core compiler plugin |
+| `build/debug/bin/plugins/tml_codegen_x86.dll` | ~75MB | LLVM codegen backend |
+| `build/debug/bin/plugins/tml_tools.dll` | ~47KB | Formatter, linter, doc, search |
+| `build/debug/bin/plugins/tml_test.dll` | ~47KB | Test runner, coverage |
+| `build/debug/bin/plugins/tml_mcp.dll` | ~46KB | MCP server |
 
 **How it works:**
 1. `tml.exe` handles `--help`/`--version` locally (no plugins loaded)
 2. All other commands load `tml_compiler.dll` via `plugin_loader`
-3. Plugins discover each other via `plugins/` directory next to the exe
+3. Plugins discover each other via `plugins/` directory next to the exe (in `bin/plugins/`)
 4. Plugin ABI is pure C (`plugin/abi.h`) to avoid C++ ABI issues across DLL boundaries
 5. Compressed plugins (`.dll.zst`) are auto-decompressed and cached
 
@@ -274,7 +274,7 @@ This is the canonical build invocation. Always use this exact form (adjusting fl
 When running the full test suite with coverage, the correct command is:
 
 ```bash
-cd f:/Node/hivellm/tml && build/debug/tml.exe test --profile --verbose --no-cache --coverage 2>&1
+cd f:/Node/hivellm/tml && build/debug/bin/tml.exe test --profile --verbose --no-cache --coverage 2>&1
 ```
 
 This is the canonical test invocation for generating coverage reports. Always use this exact form.
@@ -316,9 +316,9 @@ The test cache system is designed to automatically invalidate when:
 
 Output directories:
 
-- `build/debug/tml.exe` - Debug compiler
-- `build/release/tml.exe` - Release compiler
-- `build/debug/tml_tests.exe` - Test executable
+- `build/debug/bin/tml.exe` - Debug compiler
+- `build/release/bin/tml.exe` - Release compiler
+- `build/debug/bin/tml_tests.exe` - Test executable
 
 ## What This Project Is
 

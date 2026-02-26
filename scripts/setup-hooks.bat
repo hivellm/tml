@@ -37,8 +37,12 @@ echo echo "Running pre-commit checks..."
 echo.
 echo # Find TML compiler
 echo TML_EXE=""
-echo if [ -f "./build/debug/tml.exe" ]; then
+echo if [ -f "./build/debug/bin/tml.exe" ]; then
+echo     TML_EXE="./build/debug/bin/tml.exe"
+echo elif [ -f "./build/debug/tml.exe" ]; then
 echo     TML_EXE="./build/debug/tml.exe"
+echo elif [ -f "./build/release/bin/tml.exe" ]; then
+echo     TML_EXE="./build/release/bin/tml.exe"
 echo elif [ -f "./build/release/tml.exe" ]; then
 echo     TML_EXE="./build/release/tml.exe"
 echo fi
@@ -83,8 +87,12 @@ echo fi
 echo.
 echo # Find TML compiler
 echo TML_EXE=""
-echo if [ -f "./build/debug/tml.exe" ]; then
+echo if [ -f "./build/debug/bin/tml.exe" ]; then
+echo     TML_EXE="./build/debug/bin/tml.exe"
+echo elif [ -f "./build/debug/tml.exe" ]; then
 echo     TML_EXE="./build/debug/tml.exe"
+echo elif [ -f "./build/release/bin/tml.exe" ]; then
+echo     TML_EXE="./build/release/bin/tml.exe"
 echo elif [ -f "./build/release/tml.exe" ]; then
 echo     TML_EXE="./build/release/tml.exe"
 echo fi
