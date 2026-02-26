@@ -244,6 +244,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     generated_enum_drop_functions_.clear();
     string_literals_.clear();
     string_literal_dedup_.clear();
+    current_type_subs_.clear(); // Clear type substitutions from previous compilation
     temp_counter_ = 0;
     label_counter_ = 0;
 
