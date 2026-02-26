@@ -1546,6 +1546,12 @@ if(TML_BUILD_MODULAR)
     )
     target_include_directories(tml_plugin_loader PUBLIC include src)
     target_include_directories(tml_plugin_loader PRIVATE third_party/zstd)
+
+    # Apply PCH to plugin_loader
+    if(MSVC)
+        target_precompile_headers(tml_plugin_loader PRIVATE ${TML_PCH_HEADERS})
+    endif()
+
     set_source_files_properties(third_party/zstd/zstddeclib.c PROPERTIES
         LANGUAGE C
         COMPILE_FLAGS "$<$<C_COMPILER_ID:MSVC>:/W0>$<$<NOT:$<C_COMPILER_ID:MSVC>>:-w>"
