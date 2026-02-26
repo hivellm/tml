@@ -4,6 +4,7 @@
 
 #include "plugin/loader.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
