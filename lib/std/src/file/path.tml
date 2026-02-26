@@ -147,4 +147,74 @@ impl Path {
     pub func remove_dir(path: Str) -> Bool {
         return ffi_path_remove_dir(path)
     }
+
+    /// Check if a path is absolute (starts with / on Unix, C:\ on Windows)
+    pub func is_absolute(path: Str) -> Bool {
+        if path.len() == 0 {
+            return false
+        }
+
+        // Unix absolute path
+        let first_char: Str = path.slice(0, 1)
+        if first_char == "/" {
+            return true
+        }
+
+        // Windows absolute path (e.g., C:\, D:\)
+        if path.len() >= 3 {
+            let second_char: Str = path.slice(1, 2)
+            let third_char: Str = path.slice(2, 3)
+            if second_char == ":" and third_char == "\\" {
+                return true
+            }
+            // Also allow forward slashes on Windows
+            if second_char == ":" and third_char == "/" {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /// Check if a path is relative (not absolute)
+    pub func is_relative(path: Str) -> Bool {
+        return not Path::is_absolute(path)
+    }
+
+    /// Get the filename without extension (file stem)
+    pub func file_stem(path: Str) -> Str {
+        let filename: Str = Path::filename(path)
+        let ext: Str = Path::extension(path)
+
+        if ext.len() == 0 {
+            return filename
+        }
+
+        // Remove the extension (including the dot)
+        let stem_len: I64 = filename.len() - ext.len()
+        if stem_len <= 0 {
+            return filename
+        }
+
+        return filename.slice(0, stem_len)
+    }
+
+    /// Replace the file extension with a new one
+    pub func with_extension(path: Str, new_ext: Str) -> Str {
+        let parent: Str = Path::parent(path)
+        let filename: Str = Path::filename(path)
+        let stem: Str = Path::file_stem(path)
+
+        // Build new filename with new extension
+        let new_filename: Str = if new_ext.len() == 0 {
+            stem
+        } else if new_ext.slice(0, 1) == "." {
+            stem + new_ext
+        } else {
+            stem + "." + new_ext
+        }
+
+        // Join parent with new filename
+        return Path::join(parent, new_filename)
+    }
 }

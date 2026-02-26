@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (70%) - Core utilities needed for production use
+**Status**: In Progress (78%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -39,8 +39,8 @@
 ### 1.1 Vec[T] (in `class_collections.tml`)
 - [x] 1.1.1 Create `Vec[T]` type in `lib/std/src/collections/class_collections.tml`
 - [x] 1.1.2 Add `Vec::new()`, `Vec::with_capacity()` constructors
-- [ ] 1.1.3 Implement `extend()`, `append()`, `drain()` methods
-- [ ] 1.1.4 Implement `retain()`, `dedup()`, `sort()` methods
+- [x] 1.1.3 Implement `extend()`, `append()` methods (drain deferred)
+- [x] 1.1.4 Implement `dedup()`, `sort()`, `remove_all()` methods (retain deferred)
 - [ ] 1.1.5 Add `Vec::from_iter()` for collection from iterators
 - [x] 1.1.6 Add unit tests for Vec operations
 
@@ -49,8 +49,8 @@
 - [x] 1.2.2 Implement `create()`, `with_capacity()` constructors
 - [x] 1.2.3 Implement `add()`, `remove()`, `contains()` methods
 - [x] 1.2.4 Implement `count()`, `is_empty()`, `clear()` methods
-- [ ] 1.2.5 Implement set operations: `union()`, `intersection()`, `difference()`, `symmetric_difference()`
-- [ ] 1.2.6 Implement `is_subset()`, `is_superset()`, `is_disjoint()`
+- [x] 1.2.5 Implement set operations: `union_with()`, `intersection()`, `difference()`, `symmetric_difference()`
+- [x] 1.2.6 Implement `is_subset()`, `is_superset()`, `is_disjoint()`
 - [ ] 1.2.7 Implement `Iterator` for HashSet
 - [x] 1.2.8 Add unit tests for HashSet
 
@@ -155,10 +155,10 @@
 - [x] 4.1.8 Implement `Path::is_file(path: Str) -> Bool`
 - [x] 4.1.9 Implement `Path::is_dir(path: Str) -> Bool`
 - [x] 4.1.10 Implement `Path::remove()`, `rename()`, `copy()`, `create_dir()`, `create_dir_all()`, `remove_dir()`
-- [ ] 4.1.11 Implement `Path::file_stem(path: Str) -> Str`
-- [ ] 4.1.12 Implement `Path::is_absolute(path: Str) -> Bool`
-- [ ] 4.1.13 Implement `Path::is_relative(path: Str) -> Bool`
-- [ ] 4.1.14 Implement `Path::with_extension(path: Str, ext: Str) -> Str`
+- [x] 4.1.11 Implement `Path::file_stem(path: Str) -> Str`
+- [x] 4.1.12 Implement `Path::is_absolute(path: Str) -> Bool`
+- [x] 4.1.13 Implement `Path::is_relative(path: Str) -> Bool`
+- [x] 4.1.14 Implement `Path::with_extension(path: Str, ext: Str) -> Str`
 
 ### 4.2 PathBuf Type (not yet implemented)
 - [ ] 4.2.1 Design `PathBuf` (owned, mutable path) type
@@ -176,7 +176,7 @@
 
 > **Status**: Mostly Done — Duration fully implemented in `lib/core/src/time.tml`, Instant/SystemTime in `lib/std/src/time.tml`, DateTime in `lib/std/src/datetime.tml`
 
-### 5.1 Duration (in `lib/core/src/time.tml`) — Mostly Done
+### 5.1 Duration (in `lib/core/src/time.tml`) — DONE
 - [x] 5.1.1 Duration type with secs/nanos fields in `lib/core/src/time.tml`
 - [x] 5.1.2 `from_secs(secs: I64) -> Duration`
 - [x] 5.1.3 `from_millis(millis: I64) -> Duration`
@@ -186,16 +186,16 @@
 - [x] 5.1.7 `as_millis(this) -> I64` (also `as_micros()`)
 - [x] 5.1.8 `subsec_nanos(this) -> I32`
 - [x] 5.1.9 Arithmetic: `+` (impl Add), `-` (impl Sub) operators; `.mul()`, `.div()` methods
-- [ ] 5.1.9a Arithmetic: `*` and `/` operator overloads (only `.mul()`/`.div()` methods exist)
+- [x] 5.1.9a Arithmetic: `*` and `/` operator overloads (impl Mul[I32], impl Div[I32])
 - [x] 5.1.10 `checked_add()`, `checked_sub()`, `saturating_add()`, `saturating_sub()`
 
-### 5.2 Instant (in `lib/std/src/time.tml`) — Mostly Done
+### 5.2 Instant (in `lib/std/src/time.tml`) — DONE
 - [x] 5.2.1 Design `Instant` for monotonic time
 - [x] 5.2.2 Implement `Instant::now() -> Instant`
 - [x] 5.2.3 Implement `elapsed(this) -> Duration`
 - [x] 5.2.4 Implement `duration_since(this, earlier: Instant) -> Duration`
-- [ ] 5.2.5 Implement `checked_add(this, dur: Duration) -> Maybe[Instant]`
-- [ ] 5.2.6 Implement `checked_sub(this, dur: Duration) -> Maybe[Instant]`
+- [x] 5.2.5 Implement `checked_add(this, dur: Duration) -> Maybe[Instant]`
+- [x] 5.2.6 Implement `checked_sub(this, dur: Duration) -> Maybe[Instant]`
 - [x] 5.2.7 Platform implementations via `@extern("c")` FFI
 - [x] 5.2.8 Implement `as_nanos(this) -> I64`
 

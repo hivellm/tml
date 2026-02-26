@@ -306,6 +306,128 @@ impl[T: PartialEq] HashSet[T] {
         }
         return false
     }
+
+    /// Returns the union of this set and another set.
+    /// The result contains all elements that are in either set.
+    pub func union_with(this, other: ref HashSet[T]) -> HashSet[T] {
+        let mut result: HashSet[T] = HashSet::create[T]()
+
+        // Add all elements from this set
+        var i: I64 = 0
+        loop (i < this.length) {
+            result.add(this.data.get(i))
+            i = i + 1
+        }
+
+        // Add all elements from other set
+        var j: I64 = 0
+        loop (j < other.length) {
+            result.add(other.data.get(j))
+            j = j + 1
+        }
+
+        return result
+    }
+
+    /// Returns the intersection of this set and another set.
+    /// The result contains only elements that are in both sets.
+    pub func intersection(this, other: ref HashSet[T]) -> HashSet[T] {
+        let mut result: HashSet[T] = HashSet::create[T]()
+
+        var i: I64 = 0
+        loop (i < this.length) {
+            let item: T = this.data.get(i)
+            if other.contains(item) {
+                result.add(item)
+            }
+            i = i + 1
+        }
+
+        return result
+    }
+
+    /// Returns the difference of this set and another set.
+    /// The result contains elements that are in this set but not in the other.
+    pub func difference(this, other: ref HashSet[T]) -> HashSet[T] {
+        let mut result: HashSet[T] = HashSet::create[T]()
+
+        var i: I64 = 0
+        loop (i < this.length) {
+            let item: T = this.data.get(i)
+            if not other.contains(item) {
+                result.add(item)
+            }
+            i = i + 1
+        }
+
+        return result
+    }
+
+    /// Returns the symmetric difference of this set and another set.
+    /// The result contains elements that are in either set but not in both.
+    pub func symmetric_difference(this, other: ref HashSet[T]) -> HashSet[T] {
+        let mut result: HashSet[T] = HashSet::create[T]()
+
+        // Add elements from this set that are not in other
+        var i: I64 = 0
+        loop (i < this.length) {
+            let item: T = this.data.get(i)
+            if not other.contains(item) {
+                result.add(item)
+            }
+            i = i + 1
+        }
+
+        // Add elements from other that are not in this
+        var j: I64 = 0
+        loop (j < other.length) {
+            let item: T = other.data.get(j)
+            if not this.contains(item) {
+                result.add(item)
+            }
+            j = j + 1
+        }
+
+        return result
+    }
+
+    /// Returns true if this set is a subset of another set.
+    /// A set is a subset if all its elements are in the other set.
+    pub func is_subset(this, other: ref HashSet[T]) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if not other.contains(this.data.get(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if this set is a superset of another set.
+    /// A set is a superset if it contains all elements of the other set.
+    pub func is_superset(this, other: ref HashSet[T]) -> Bool {
+        var i: I64 = 0
+        loop (i < other.length) {
+            if not this.contains(other.data.get(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if this set and another set have no elements in common.
+    pub func is_disjoint(this, other: ref HashSet[T]) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if other.contains(this.data.get(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
 }
 
 // ============================================================================
@@ -971,6 +1093,84 @@ impl[T: PartialEq] Vec[T] {
             i = i + 1
         }
         return false
+    }
+
+    /// Removes consecutive duplicate elements, keeping only the first of each group.
+    pub func dedup(mut this) {
+        if this.length <= 1 {
+            return
+        }
+
+        var write_idx: I64 = 1
+        var read_idx: I64 = 1
+        loop (read_idx < this.length) {
+            let current: T = this.data.get(read_idx)
+            let prev: T = this.data.get(write_idx - 1)
+            if current != prev {
+                this.data.set(write_idx, current)
+                write_idx = write_idx + 1
+            }
+            read_idx = read_idx + 1
+        }
+        this.length = write_idx
+    }
+
+    /// Removes all occurrences of the specified value.
+    pub func remove_all(mut this, item: T) {
+        var write_idx: I64 = 0
+        var read_idx: I64 = 0
+        loop (read_idx < this.length) {
+            let current: T = this.data.get(read_idx)
+            if current != item {
+                this.data.set(write_idx, current)
+                write_idx = write_idx + 1
+            }
+            read_idx = read_idx + 1
+        }
+        this.length = write_idx
+    }
+}
+
+/// Methods that require ordering comparison.
+impl[T: PartialOrd] Vec[T] {
+    /// Sorts the Vec in ascending order.
+    pub func sort(mut this) {
+        // Simple bubble sort for now
+        var i: I64 = 0
+        loop (i < this.length) {
+            var j: I64 = 0
+            loop (j < this.length - i - 1) {
+                let a: T = this.data.get(j)
+                let b: T = this.data.get(j + 1)
+                if a > b {
+                    this.data.set(j, b)
+                    this.data.set(j + 1, a)
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+    }
+}
+
+impl[T] Vec[T] {
+    /// Extends the Vec by appending elements from another Vec.
+    pub func extend(mut this, other: ref Vec[T]) {
+        var i: I64 = 0
+        loop (i < other.length) {
+            this.push(other.get(i))
+            i = i + 1
+        }
+    }
+
+    /// Appends all elements from another Vec, consuming it.
+    pub func append(mut this, mut other: Vec[T]) {
+        var i: I64 = 0
+        loop (i < other.length) {
+            this.push(other.data.get(i))
+            i = i + 1
+        }
+        other.length = 0
     }
 }
 

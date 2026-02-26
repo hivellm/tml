@@ -73,6 +73,34 @@ impl Instant {
     pub func as_nanos(this) -> I64 {
         return this.nanos
     }
+
+    /// Checked addition of a duration to this instant.
+    /// Returns `Nothing` if the result would overflow.
+    pub func checked_add(this, dur: Duration) -> Maybe[Instant] {
+        let dur_nanos: I64 = dur.as_nanos()
+
+        // Check for overflow
+        if this.nanos > 9223372036854775807 - dur_nanos {
+            return Nothing
+        }
+
+        let new_nanos: I64 = this.nanos + dur_nanos
+        return Just(Instant { nanos: new_nanos, _padding: 0 })
+    }
+
+    /// Checked subtraction of a duration from this instant.
+    /// Returns `Nothing` if the result would be negative.
+    pub func checked_sub(this, dur: Duration) -> Maybe[Instant] {
+        let dur_nanos: I64 = dur.as_nanos()
+
+        // Check for underflow
+        if this.nanos < dur_nanos {
+            return Nothing
+        }
+
+        let new_nanos: I64 = this.nanos - dur_nanos
+        return Just(Instant { nanos: new_nanos, _padding: 0 })
+    }
 }
 
 // ============================================================================

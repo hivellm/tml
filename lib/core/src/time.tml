@@ -28,7 +28,7 @@
 //! time, see `std::time::Instant` and `std::time::SystemTime`.
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::ops::{Add, Sub}
+use core::ops::{Add, Sub, Mul, Div}
 use core::default::Default
 
 // ============================================================================
@@ -440,6 +440,22 @@ impl Sub for Duration {
             Just(d) => return d,
             Nothing => panic("duration underflow")
         }
+    }
+}
+
+impl Mul[I32] for Duration {
+    type Output = Duration
+
+    pub func mul(this, rhs: I32) -> Duration {
+        return this.mul(rhs)
+    }
+}
+
+impl Div[I32] for Duration {
+    type Output = Duration
+
+    pub func div(this, rhs: I32) -> Duration {
+        return this.div(rhs)
     }
 }
 
