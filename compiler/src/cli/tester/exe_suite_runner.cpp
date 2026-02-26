@@ -305,85 +305,72 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         const size_t max_concurrent = std::min(num_exec_threads * 2, 16u);
 
         auto suite_worker = [&]() {
+            bool did_work = false;
+
             while (true) {
                 if (fail_fast_triggered.load()) {
                     return;
                 }
 
-                // Check ALL pending subprocesses for completion (non-blocking poll)
-                {
-                    std::lock_guard<std::mutex> lock(pending_mutex);
-                    for (int i = (int)pending_suites.size() - 1; i >= 0; --i) {
-                        if (subprocess_is_done(pending_suites[i])) {
-                            // This one is done, collect its result
-                            SuiteSubprocessResult suite_result =
-                                wait_for_subprocess(pending_suites[i]);
-                            size_t completed_idx = pending_suite_indices[i];
-                            pending_suites.erase(pending_suites.begin() + i);
-                            pending_suite_indices.erase(pending_suite_indices.begin() + i);
+                did_work = false;
 
-                            auto& [suite, exe_path] = compiled_suites[completed_idx];
-                            TML_LOG_DEBUG("test", "[exe] Suite completed: " << suite.name);
-
-                            // Process result (cache, fail_fast check, coverage collection)
-                            // This was previously in lines 344+, moved to after each collection
-                            // [Collection and processing code continues below at the end of this
-                            // block] For now, mark that we need to process this result We'll break
-                            // and process one at a time to keep locks minimal
-                            break;
-                        }
-                    }
-                }
-
-                // Launch new subprocess if we have capacity
-                {
-                    std::lock_guard<std::mutex> lock(pending_mutex);
-                    if (pending_suites.size() < max_concurrent) {
-                        size_t idx = suite_index.fetch_add(1);
-                        if (idx >= compiled_suites.size()) {
-                            // No more suites to launch, wait for pending to finish
-                            if (pending_suites.empty()) {
-                                return; // All done
-                            }
-                            // Continue polling pending subprocesses
-                        } else {
-                            auto& [suite, exe_path] = compiled_suites[idx];
-                            auto handle = launch_subprocess_async(
-                                exe_path, static_cast<int>(suite.tests.size()),
-                                opts.timeout_seconds > 0
-                                    ? opts.timeout_seconds * static_cast<int>(suite.tests.size())
-                                    : 300,
-                                suite.name, opts);
-                            pending_suites.push_back(handle);
-                            pending_suite_indices.push_back(idx);
-                            continue; // Launch more if we have capacity
-                        }
-                    }
-                }
-
-                // Small sleep to avoid busy-waiting (use 1ms instead of 10ms for responsiveness)
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-
-                // Collect results from ANY completed subprocess
+                // SINGLE UNIFIED LOOP: Launch new work + Poll for completed
                 SuiteSubprocessResult suite_result;
                 size_t completed_idx = 0;
                 bool found_completed = false;
+
                 {
                     std::lock_guard<std::mutex> lock(pending_mutex);
+
+                    // First: Launch new subprocesses up to max_concurrent capacity
+                    while (pending_suites.size() < max_concurrent) {
+                        size_t idx = suite_index.fetch_add(1);
+                        if (idx >= compiled_suites.size()) {
+                            // No more suites to launch
+                            break;
+                        }
+                        auto& [suite, exe_path] = compiled_suites[idx];
+                        auto handle = launch_subprocess_async(
+                            exe_path, static_cast<int>(suite.tests.size()),
+                            opts.timeout_seconds > 0
+                                ? opts.timeout_seconds * static_cast<int>(suite.tests.size())
+                                : 300,
+                            suite.name, opts);
+                        pending_suites.push_back(handle);
+                        pending_suite_indices.push_back(idx);
+                        did_work = true;
+                    }
+
+                    // Second: Poll ALL pending subprocesses for completion (non-blocking)
                     for (size_t i = 0; i < pending_suites.size(); ++i) {
                         if (subprocess_is_done(pending_suites[i])) {
+                            // Collect result and process it immediately
                             suite_result = wait_for_subprocess(pending_suites[i]);
                             completed_idx = pending_suite_indices[i];
                             pending_suites.erase(pending_suites.begin() + i);
                             pending_suite_indices.erase(pending_suite_indices.begin() + i);
                             found_completed = true;
+                            did_work = true;
                             break;
+                        }
+                    }
+
+                    // Check exit condition: no more work to launch and nothing pending
+                    if (!found_completed && pending_suites.empty()) {
+                        size_t idx = suite_index.load();
+                        if (idx >= compiled_suites.size()) {
+                            return; // All done
                         }
                     }
                 }
 
+                // If we found a completed subprocess, process it OUTSIDE the lock
                 if (!found_completed) {
-                    continue; // No subprocess completed yet, loop and check again
+                    // No work was done this iteration, sleep briefly
+                    if (!did_work) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    continue;
                 }
 
                 auto& [suite, exe_path] = compiled_suites[completed_idx];
