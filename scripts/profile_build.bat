@@ -14,8 +14,8 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM Checar se wpr.exe existe
-where wpr.exe >nul 2>&1
+REM Checar se xperf.exe existe
+where xperf.exe >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Windows Performance Toolkit not found
     echo Install from: https://learn.microsoft.com/en-us/windows-hardware/test/wpt/
@@ -25,20 +25,17 @@ if %errorlevel% neq 0 (
 REM Criar diretório para output
 if not exist "build\profiles" mkdir "build\profiles"
 
-REM Limpar traces anteriores
-echo Cleaning previous traces...
-wpr.exe -cancel >nul 2>&1
+REM Parar qualquer trace anterior
+echo Stopping any previous traces...
+xperf.exe -stop >nul 2>&1
 
-REM Iniciar trace
-echo Starting performance trace (CPU profiling)...
-wpr.exe -start CPU.Verbose -filemode
+REM Gerar timestamp para arquivo
+set TIMESTAMP=%date:~-4%%date:~-10,2%%date:~-7,2%_%time:~0,2%%time:~3,2%%time:~6,2%
+set TRACEFILE=build\profiles\tml_build_%TIMESTAMP%.etl
 
-REM Checar se trace iniciou corretamente
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to start performance trace
-    echo Make sure Windows Performance Toolkit is installed and you have admin rights
-    exit /b 1
-)
+REM Iniciar trace com xperf (mais direto que wpr)
+echo Starting performance trace...
+xperf.exe -on PROC_THREAD+LOADER+DISK_IO+HARD_FAULTS -f "%TRACEFILE%" -buffering mode=circular -maxfile 2048
 
 REM Rodar build
 echo.
@@ -49,14 +46,13 @@ call scripts\build.bat
 REM Parar trace e salvar
 echo.
 echo Stopping performance trace...
-set TIMESTAMP=%date:~-4%%date:~-10,2%%date:~-7,2%_%time:~0,2%%time:~3,2%%time:~6,2%
-set TRACEFILE=build\profiles\tml_build_%TIMESTAMP%.etl
-
-wpr.exe -stop "%TRACEFILE%"
+xperf.exe -stop
 
 REM Checar se trace foi salvo
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to stop performance trace and save to %TRACEFILE%
+if exist "%TRACEFILE%" (
+    echo Trace file created successfully
+) else (
+    echo ERROR: Trace file was not created!
     exit /b 1
 )
 
