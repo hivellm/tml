@@ -1547,12 +1547,11 @@ if(TML_BUILD_MODULAR)
     target_include_directories(tml_plugin_loader PUBLIC include src)
     target_include_directories(tml_plugin_loader PRIVATE third_party/zstd)
 
-    # Apply PCH to plugin_loader (C++ files only, not C files)
+    # Disable PCH for plugin_loader (mixed C/C++ causes issues)
+    # The small size of loader.cpp doesn't benefit much from PCH anyway
     if(MSVC)
-        target_precompile_headers(tml_plugin_loader PRIVATE ${TML_PCH_HEADERS})
-        # Exclude C file from PCH
-        set_source_files_properties(third_party/zstd/zstddeclib.c PROPERTIES
-            SKIP_PRECOMPILE_HEADERS ON
+        set_target_properties(tml_plugin_loader PROPERTIES
+            DISABLE_PRECOMPILE_HEADERS ON
         )
     endif()
 
