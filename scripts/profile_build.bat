@@ -35,7 +35,7 @@ set TRACEFILE=build\profiles\tml_build_%TIMESTAMP%.etl
 
 REM Iniciar trace com xperf (mais direto que wpr)
 echo Starting performance trace...
-xperf.exe -on PROC_THREAD+LOADER+DISK_IO+HARD_FAULTS -f "%TRACEFILE%" -buffering mode=circular -maxfile 2048
+xperf.exe -on PROC_THREAD+LOADER+DISK_IO+HARD_FAULTS -f "%TRACEFILE%"
 
 REM Rodar build
 echo.
