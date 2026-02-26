@@ -15,7 +15,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Criar diretório para output
-if not exist ".sandbox\profiles" mkdir ".sandbox\profiles"
+if not exist "build\profiles" mkdir "build\profiles"
 
 REM Iniciar trace
 echo Starting performance trace...
@@ -31,7 +31,7 @@ REM Parar trace e salvar
 echo.
 echo Stopping performance trace...
 set TIMESTAMP=%date:~-4%%date:~-10,2%%date:~-7,2%_%time:~0,2%%time:~3,2%%time:~6,2%
-set TRACEFILE=.sandbox\profiles\tml_build_%TIMESTAMP%.etl
+set TRACEFILE=build\profiles\tml_build_%TIMESTAMP%.etl
 
 wpr.exe -stop "%TRACEFILE%"
 
