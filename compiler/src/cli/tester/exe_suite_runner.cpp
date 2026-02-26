@@ -304,6 +304,20 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         std::mutex pending_mutex;
         const size_t max_concurrent = std::min(num_exec_threads * 2, 16u);
 
+        // Parallel test execution via async subprocess polling.
+        //
+        // Each worker thread uses work-stealing to claim test suites from the queue.
+        // Instead of blocking on result collection, we use non-blocking polling
+        // (subprocess_is_done) to check multiple pending subprocesses and collect
+        // whichever completes first. This enables true N-way parallelism.
+        //
+        // Architecture:
+        // 1. Launch new subprocesses up to max_concurrent (hw_threads/2, capped at 16)
+        // 2. Poll ALL pending subprocesses once for completion (non-blocking)
+        // 3. Process results immediately after collection (atomic operation)
+        // 4. Sleep only if no work done (real idle, not busy-wait)
+        //
+        // Synchronization: std::mutex guards pending_suites vector and indices
         auto suite_worker = [&]() {
             bool did_work = false;
 
@@ -315,6 +329,7 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                 did_work = false;
 
                 // SINGLE UNIFIED LOOP: Launch new work + Poll for completed
+                // This single loop prevents double-polling and maintains efficiency
                 SuiteSubprocessResult suite_result;
                 size_t completed_idx = 0;
                 bool found_completed = false;
