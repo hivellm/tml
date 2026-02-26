@@ -446,6 +446,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
 
     // Set up type substitutions for associated types
     auto saved_type_subs = current_type_subs_;
+    auto saved_associated_types = current_associated_types_;
     {
         auto this_type = std::make_shared<types::Type>();
         this_type->kind = types::NamedType{type_name, "", {}};
@@ -459,6 +460,9 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
                 if (resolved) {
                     current_type_subs_["This::" + binding.name] = resolved;
                     current_type_subs_[binding.name] = resolved;
+                    // Also set current_associated_types_ so that resolve_parser_type_with_subs
+                    // can resolve This::Item paths (e.g. in Maybe[This::Item] return types)
+                    current_associated_types_[binding.name] = resolved;
                 }
             }
         }
@@ -652,6 +656,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     emit_line("}");
     current_impl_type_.clear();
     current_type_subs_ = saved_type_subs;
+    current_associated_types_ = saved_associated_types;
     return true;
 }
 

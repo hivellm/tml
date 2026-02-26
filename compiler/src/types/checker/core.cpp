@@ -1055,6 +1055,21 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         }
 
         if (behavior_def) {
+            // Build substitution map for This and associated types
+            // e.g., {"This": Counter3, "This::Item": I32, "Item": I32}
+            auto self_type_ptr = std::make_shared<types::Type>();
+            self_type_ptr->kind = NamedType{type_name, "", {}};
+            std::unordered_map<std::string, TypePtr> assoc_subs;
+            assoc_subs["This"] = self_type_ptr;
+            assoc_subs["Self"] = self_type_ptr;
+            for (const auto& binding : impl.type_bindings) {
+                if (binding.type) {
+                    TypePtr resolved = resolve_type(*binding.type);
+                    assoc_subs["This::" + binding.name] = resolved;
+                    assoc_subs[binding.name] = resolved;
+                }
+            }
+
             for (const auto& behavior_method : behavior_def->methods) {
                 // Skip if impl provides this method
                 if (impl_method_names.count(behavior_method.name) > 0)
@@ -1067,27 +1082,14 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
                 // Register default implementation
                 std::string qualified_name = type_name + "::" + behavior_method.name;
 
-                // Substitute 'This' type with the concrete type
+                // Substitute 'This', 'This::Item', etc. in parameter types
                 std::vector<TypePtr> params;
                 for (const auto& p : behavior_method.params) {
-                    TypePtr param_type = p;
-                    // Handle 'This' type substitution
-                    if (param_type->is<NamedType>() && param_type->as<NamedType>().name == "This") {
-                        auto self_type = std::make_shared<types::Type>();
-                        self_type->kind = NamedType{type_name, "", {}};
-                        params.push_back(self_type);
-                    } else {
-                        params.push_back(param_type);
-                    }
+                    params.push_back(substitute_type(p, assoc_subs));
                 }
 
-                TypePtr ret = behavior_method.return_type;
-                // Handle 'This' return type substitution
-                if (ret->is<NamedType>() && ret->as<NamedType>().name == "This") {
-                    auto self_type = std::make_shared<types::Type>();
-                    self_type->kind = NamedType{type_name, "", {}};
-                    ret = self_type;
-                }
+                // Substitute 'This', 'This::Item', etc. in return type
+                TypePtr ret = substitute_type(behavior_method.return_type, assoc_subs);
 
                 env_.define_func(FuncSig{.name = qualified_name,
                                          .params = std::move(params),
