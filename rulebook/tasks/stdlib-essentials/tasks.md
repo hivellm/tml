@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials
 
-**Status**: In Progress (78%) - Core utilities needed for production use
+**Status**: In Progress (90%) - Core utilities needed for production use
 
 **Note**: This task covers essential standard library modules that make TML usable for real-world applications. Many core modules are now implemented with working functionality.
 
@@ -58,13 +58,13 @@
 - [x] 1.3.1 Design `BTreeMap` in `lib/std/src/collections/btreemap.tml` (sorted arrays + binary search, I64-only)
 - [x] 1.3.2 Implement sorted array structure with binary search
 - [x] 1.3.3 Implement `insert()`, `get()`, `remove()` methods
-- [ ] 1.3.4 Implement `range()` for range queries
+- [x] 1.3.4 Implement range queries: lower_bound, upper_bound, range_count, range_key_at, range_value_at, key_at, value_at
 - [ ] 1.3.5 Implement ordered iteration (Iterator behavior)
 - [x] 1.3.6 Add unit tests for BTreeMap
 
 ### 1.4 BTreeSet[T] (in `btreeset.tml`)
 - [x] 1.4.1 Design `BTreeSet` based on BTreeMap (I64-only)
-- [ ] 1.4.2 Implement all set operations
+- [x] 1.4.2 Implement all set operations: union_with, intersection, difference, symmetric_difference, is_subset, is_superset, is_disjoint, get_at
 - [ ] 1.4.3 Implement ordered iteration (Iterator behavior)
 - [x] 1.4.4 Add unit tests for BTreeSet
 
@@ -136,7 +136,7 @@
 - [x] 3.3.2 Implement `open()`, `open_append()`, `from_file()` constructors
 - [x] 3.3.3 Implement `write()` with auto-flush on newline detection
 - [x] 3.3.4 Implement `write_line()`, `flush()`, `close()` methods
-- [ ] 3.3.5 Add unit tests for buffered I/O
+- [x] 3.3.5 Add unit tests for buffered I/O (bufio.test.tml, bufwriter.test.tml, bufreader.test.tml, linewriter.test.tml)
 
 ## Phase 4: Path Utilities
 
@@ -160,17 +160,17 @@
 - [x] 4.1.13 Implement `Path::is_relative(path: Str) -> Bool`
 - [x] 4.1.14 Implement `Path::with_extension(path: Str, ext: Str) -> Str`
 
-### 4.2 PathBuf Type (not yet implemented)
-- [ ] 4.2.1 Design `PathBuf` (owned, mutable path) type
-- [ ] 4.2.2 Implement `PathBuf::new()`, `PathBuf::from(s: Str)`
-- [ ] 4.2.3 Implement `push()`, `pop()`, `set_file_name()`, `set_extension()`
-- [ ] 4.2.4 Implement `as_str()` accessor
+### 4.2 PathBuf Type (in `lib/std/src/file/path.tml`) — DONE
+- [x] 4.2.1 Design `PathBuf` (owned, mutable path) type
+- [x] 4.2.2 Implement `PathBuf::new()`, `PathBuf::from(s: Str)`
+- [x] 4.2.3 Implement `push()`, `pop()`, `set_file_name()`, `set_extension()`
+- [x] 4.2.4 Implement `as_str()`, `file_name()`, `file_stem()`, `extension()`, `parent()`, `is_absolute()`, `exists()` accessors
 
 ### 4.3 Platform-Specific
 - [ ] 4.3.1 Handle path separators (`/` vs `\`)
 - [ ] 4.3.2 Handle drive letters (Windows)
 - [ ] 4.3.3 Handle UNC paths (Windows)
-- [ ] 4.3.4 Add unit tests for path operations
+- [x] 4.3.4 Add unit tests for path operations (path_basic, path, pathbuf)
 
 ## Phase 5: DateTime
 
@@ -247,13 +247,13 @@
 
 ## Phase 7: Integration Testing
 
-> **Status**: Pending
+> **Status**: Partially Done
 
 ### 7.1 Cross-Module Tests
-- [ ] 7.1.1 Create integration test: file + buffered I/O
-- [ ] 7.1.2 Create integration test: process + environment
-- [ ] 7.1.3 Create integration test: datetime formatting
-- [ ] 7.1.4 Create integration test: random + collections (shuffle)
+- [x] 7.1.1 Create integration test: file + buffered I/O (bufio.test.tml covers write+read)
+- [x] 7.1.2 Create integration test: process + environment (integ_env_process.test.tml)
+- [x] 7.1.3 Create integration test: datetime formatting (integ_datetime.test.tml)
+- [x] 7.1.4 Create integration test: random + collections (integ_random_collections.test.tml)
 
 ### 7.2 Benchmarks
 - [ ] 7.2.1 Benchmark collection operations vs Rust

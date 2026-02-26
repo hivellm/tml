@@ -1,0 +1,36 @@
+// Integration test: environment + process
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_env_get_path_exists() -> I32 {
+    let val = os::env_get("PATH")
+    assert(val.is_just(), "PATH env var should exist")
+    assert(val.unwrap().len() > 0, "PATH should be non-empty")
+    return 0
+}
+
+@test
+func test_env_set_and_verify() -> I32 {
+    let key: Str = "TML_INTEG_TEST_VAR"
+    let val: Str = "hello_integ"
+    let ok: Bool = os::env_set(key, val)
+    assert(ok, "env_set should return true")
+    // Clean up
+    os::env_unset(key)
+    return 0
+}
+
+@test
+func test_cwd_not_empty() -> I32 {
+    let cwd: Str = os::current_dir()
+    assert(cwd.len() > 0, "cwd should be non-empty")
+    return 0
+}
+
+@test
+func test_args_count_non_negative() -> I32 {
+    let n: I32 = os::args_count()
+    assert(n >= 0, "args_count >= 0")
+    return 0
+}

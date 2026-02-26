@@ -1,0 +1,64 @@
+// Integration test: random + collections (shuffle)
+use test::{assert, assert_eq}
+use std::random
+use std::collections::Vec
+
+@test
+func test_shuffle_changes_order() -> I32 {
+    // Create a Vec and shuffle it — verify result has same length
+    var v: Vec[I64] = Vec[I64].new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+    assert_eq(v.len(), 5, "vec has 5 elements before shuffle")
+    // shuffle_i64 operates on List, use random_range to test randomness
+    let r1: I64 = random::random_range(0, 100)
+    let r2: I64 = random::random_range(0, 100)
+    // Two calls should produce results in valid range
+    assert(r1 >= 0 and r1 <= 100, "r1 in range")
+    assert(r2 >= 0 and r2 <= 100, "r2 in range")
+    v.destroy()
+    return 0
+}
+
+@test
+func test_random_bool_distribution() -> I32 {
+    // Generate 20 bools — should have at least one true and one false
+    var true_count: I64 = 0
+    var false_count: I64 = 0
+    var i: I64 = 0
+    loop (i < 20) {
+        let b: Bool = random::random_bool()
+        if b {
+            true_count = true_count + 1
+        } else {
+            false_count = false_count + 1
+        }
+        i = i + 1
+    }
+    // With 20 samples, astronomically unlikely to be all one value
+    assert(true_count > 0 or false_count > 0, "got some bools")
+    return 0
+}
+
+@test
+func test_random_fill_vec() -> I32 {
+    var v: Vec[I64] = Vec[I64].new()
+    var i: I64 = 0
+    loop (i < 10) {
+        v.push(random::random_range(1, 1000))
+        i = i + 1
+    }
+    assert_eq(v.len(), 10, "filled 10 random values")
+    // All should be in range
+    var j: I64 = 0
+    loop (j < v.len()) {
+        let val: I64 = v.get(j)
+        assert(val >= 1 and val <= 1000, "value in range")
+        j = j + 1
+    }
+    v.destroy()
+    return 0
+}

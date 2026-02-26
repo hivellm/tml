@@ -1,0 +1,43 @@
+// Integration test: datetime formatting and parsing
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_now_format_round_trip() -> I32 {
+    let dt: DateTime = DateTime::now()
+    let iso: Str = dt.to_iso8601()
+    assert(iso.len() > 0, "iso8601 non-empty")
+    assert(iso.contains("-"), "iso8601 has dash separators")
+    assert(iso.contains("T"), "iso8601 has T separator")
+    return 0
+}
+
+@test
+func test_from_timestamp_accessors() -> I32 {
+    // Unix timestamp 0 = 1970-01-01T00:00:00
+    let epoch: DateTime = DateTime::from_timestamp(0)
+    assert_eq(epoch.year(), 1970, "epoch year")
+    assert_eq(epoch.month(), 1, "epoch month")
+    assert_eq(epoch.day(), 1, "epoch day")
+    assert_eq(epoch.hour(), 0, "epoch hour")
+    assert_eq(epoch.minute(), 0, "epoch minute")
+    assert_eq(epoch.second(), 0, "epoch second")
+    return 0
+}
+
+@test
+func test_date_string_format() -> I32 {
+    let dt: DateTime = DateTime::from_timestamp(0)
+    let s: Str = dt.to_date_string()
+    assert(s.len() > 0, "date string non-empty")
+    assert(s.contains("1970"), "date string has year")
+    return 0
+}
+
+@test
+func test_now_year_reasonable() -> I32 {
+    let dt: DateTime = DateTime::now()
+    let y: I32 = dt.year()
+    assert(y >= 2024 and y <= 2100, "year is reasonable")
+    return 0
+}
