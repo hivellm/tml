@@ -474,7 +474,13 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Only register the bare short name for local (non-module) functions.
     // For library modules, the short name would shadow local functions with
     // the same name (e.g., core::str::to_uppercase shadowing a local to_uppercase).
-    functions_[func.name] = func_info;
+    // BUG FIX: Do NOT register bare name for library functions — multiple modules can
+    // have functions with the same short name (e.g., core::str::to_lowercase and
+    // core::char::methods::to_lowercase). The last one registered wins and overwrites
+    // the previous, causing type mismatches in suite mode (codegen bug fix).
+    if (current_module_prefix_.empty()) {
+        functions_[func.name] = func_info;
+    }
 
     // Also register with module-qualified name for cross-module calls
     // When module A calls module B's function, the lookup uses "B::func" or "B_func"
