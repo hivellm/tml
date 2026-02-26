@@ -354,7 +354,7 @@ auto Loader::compute_file_hash(const fs::path& path) -> std::string {
         for (size_t i = 0; i < got; ++i) {
             crc ^= static_cast<uint8_t>(buf[i]);
             for (int j = 0; j < 8; ++j)
-                crc = (crc >> 1) ^ (0x82F63B78 & -(crc & 1));
+                crc = (crc >> 1) ^ (0x82F63B78 & static_cast<uint32_t>(-(static_cast<int32_t>(crc & 1))));
         }
         size -= got;
     }
