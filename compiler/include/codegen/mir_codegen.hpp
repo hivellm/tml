@@ -157,6 +157,14 @@ private:
     auto atomic_rmw_op_to_llvm(mir::AtomicRMWOp op) -> std::string;
     auto get_type_alignment(const mir::MirTypePtr& type) -> size_t;
 
+    // Name helpers
+    /// Quote a function name for use in LLVM IR to avoid keyword collisions.
+    /// LLVM IR keywords like `double`, `float`, `void`, `call`, etc. cannot be used
+    /// as bare identifiers. Quoting (e.g., `@"double"`) makes any name safe.
+    /// Names starting with llvm., str_concat_opt, assert, or drop_ are internal
+    /// and don't need quoting.
+    auto quote_func_name(const std::string& name) -> std::string;
+
     // Emit helpers
     void emit(const std::string& s);
     void emitln(const std::string& s = "");

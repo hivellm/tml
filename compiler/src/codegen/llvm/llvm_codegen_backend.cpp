@@ -7,6 +7,7 @@ TML_MODULE("codegen_x86")
 #include "codegen/mir_codegen.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 namespace fs = std::filesystem;
 

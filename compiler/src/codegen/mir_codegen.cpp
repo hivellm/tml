@@ -290,7 +290,7 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
     // When generating exe entry, user `main` is renamed to `tml_main` across all CGUs.
     std::string decl_name =
         (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
-    emit("declare " + ret_type + " @" + decl_name + "(");
+    emit("declare " + ret_type + " @" + quote_func_name(decl_name) + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {
@@ -684,7 +684,7 @@ void MirCodegen::emit_function(const mir::Function& func) {
     // the C wrapper @main(argc, argv) can call it without a symbol collision.
     std::string emit_name =
         (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
-    emit(linkage + " " + ret_type + " @" + emit_name + "(");
+    emit(linkage + " " + ret_type + " @" + quote_func_name(emit_name) + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {

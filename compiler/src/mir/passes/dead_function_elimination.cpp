@@ -124,6 +124,13 @@ void DeadFunctionEliminationPass::build_call_graph(const Module& module) {
                         call_graph_[func.name].insert(devirt_target);
                     }
                 }
+                // Check for function references (function pointers)
+                // A ConstFuncRef means the function's address is taken, so it must be kept alive.
+                else if (auto* const_inst = std::get_if<ConstantInst>(&inst.inst)) {
+                    if (auto* func_ref = std::get_if<ConstFuncRef>(&const_inst->value)) {
+                        call_graph_[func.name].insert(func_ref->func_name);
+                    }
+                }
             }
         }
     }

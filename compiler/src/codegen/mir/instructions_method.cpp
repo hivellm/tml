@@ -303,7 +303,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         func_name = "tml_" + recv_type + "_" + i.method_name;
     }
 
-    emit("call " + ret_type + " @" + func_name + "(");
+    emit("call " + ret_type + " @" + quote_func_name(func_name) + "(");
     emit(receiver_type_for_call + " " + receiver);
     for (size_t j = 0; j < i.args.size(); ++j) {
         emit(", ");

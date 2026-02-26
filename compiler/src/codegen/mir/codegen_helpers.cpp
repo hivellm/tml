@@ -3,6 +3,7 @@ TML_MODULE("codegen_x86")
 //! MIR Codegen Helper Methods
 //!
 //! This file contains helper methods for the MIR-based code generator:
+//! - quote_func_name: Quotes function names to avoid LLVM IR keyword collisions
 //! - get_value_reg: Maps MIR values to LLVM registers
 //! - get_binop_name: Gets LLVM binary operation names
 //! - get_cmp_predicate: Gets LLVM comparison predicates
@@ -13,6 +14,23 @@ TML_MODULE("codegen_x86")
 #include "codegen/mir_codegen.hpp"
 
 namespace tml::codegen {
+
+auto MirCodegen::quote_func_name(const std::string& name) -> std::string {
+    // Internal helpers emitted by the preamble are already safe LLVM identifiers.
+    // Don't quote them — they use well-known names that never collide with keywords.
+    if (name.starts_with("llvm.") || name.starts_with("str_concat_opt") ||
+        name.starts_with("assert") || name.starts_with("drop_") || name == "printf" ||
+        name == "print" || name == "println" || name == "abort" || name == "mem_alloc" ||
+        name == "strlen" || name == "malloc" || name == "memcpy" || name == "black_box_i32" ||
+        name == "black_box_i64" || name == "black_box_f64" || name == "main" ||
+        name == "tml_main") {
+        return name;
+    }
+    // All user-defined function names are quoted to prevent collisions with
+    // LLVM IR keywords (double, float, void, add, call, ret, etc.).
+    // LLVM IR supports @"any string" as a valid global identifier.
+    return "\"" + name + "\"";
+}
 
 auto MirCodegen::get_value_reg(const mir::Value& val) -> std::string {
     if (!val.is_valid()) {

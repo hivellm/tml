@@ -183,15 +183,11 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
             } else if constexpr (std::is_same_v<C, mir::ConstUnit>) {
                 // Unit type - no value needed
             } else if constexpr (std::is_same_v<C, mir::ConstFuncRef>) {
-                // Function reference - store pointer to the function
+                // Function reference - store as opaque pointer (modern LLVM uses ptr for all
+                // pointers including function pointers)
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_regs_[inst.result] = "@" + c.func_name;
-                    // Generate the function pointer type string
-                    if (c.func_type) {
-                        value_types_[inst.result] = mir_type_to_llvm(c.func_type) + "*";
-                    } else {
-                        value_types_[inst.result] = "ptr";
-                    }
+                    value_regs_[inst.result] = "@" + quote_func_name(c.func_name);
+                    value_types_[inst.result] = "ptr";
                 }
             }
         },

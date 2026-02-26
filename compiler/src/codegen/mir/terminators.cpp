@@ -36,8 +36,10 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                             type_str = it->second;
                         }
                     }
-                    if (type_str.empty()) {
-                        type_str = "void";
+                    if (type_str.empty() || type_str == "void") {
+                        // Having a return value with void type means type info was lost;
+                        // fall back to i32 rather than emitting invalid "ret void %vN"
+                        type_str = "i32";
                     }
                     emitln("    ret " + type_str + " " + val);
                 } else {

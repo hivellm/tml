@@ -689,6 +689,16 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     std::string ret_type =
         mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type) : "void";
 
+    // Build function type signature for opaque pointer indirect calls
+    // Modern LLVM requires: call ret_type (param_types) %func_ptr(args)
+    std::string func_sig_types;
+    for (size_t j = 0; j < param_types.size(); ++j) {
+        if (j > 0)
+            func_sig_types += ", ";
+        func_sig_types += param_types[j];
+    }
+    std::string func_sig = ret_type + " (" + func_sig_types + ")";
+
     // Build argument list
     std::string args_str;
     for (size_t j = 0; j < i.args.size(); ++j) {
@@ -699,11 +709,11 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
         args_str += arg_type + " " + arg;
     }
 
-    // Emit the indirect call
+    // Emit the indirect call with explicit function type (required for opaque pointer IR)
     if (ret_type == "void") {
-        emitln("    call void " + func_ptr + "(" + args_str + ")");
+        emitln("    call " + func_sig + " " + func_ptr + "(" + args_str + ")");
     } else {
-        emitln("    " + result_reg + " = call " + ret_type + " " + func_ptr + "(" + args_str + ")");
+        emitln("    " + result_reg + " = call " + func_sig + " " + func_ptr + "(" + args_str + ")");
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = ret_type;
         }
@@ -760,7 +770,8 @@ void MirCodegen::emit_sret_call(const std::string& func_name, const std::string&
     std::string sret_slot = "%sret.slot." + std::to_string(spill_counter_++);
     emitln("    " + sret_slot + " = alloca " + orig_ret_type + ", align 8");
 
-    emit("    call void @" + func_name + "(ptr sret(" + orig_ret_type + ") " + sret_slot);
+    emit("    call void @" + quote_func_name(func_name) + "(ptr sret(" + orig_ret_type + ") " +
+         sret_slot);
     for (const auto& arg : processed_args) {
         emit(", " + arg);
     }
@@ -789,7 +800,7 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
     } else {
         emit("    ");
     }
-    emit("call " + ret_type + " @" + func_name + "(");
+    emit("call " + ret_type + " @" + quote_func_name(func_name) + "(");
     for (size_t j = 0; j < processed_args.size(); ++j) {
         if (j > 0) {
             emit(", ");

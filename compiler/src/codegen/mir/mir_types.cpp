@@ -62,15 +62,9 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                 return "%struct." + mangled;
 
             } else if constexpr (std::is_same_v<T, mir::MirFunctionType>) {
-                std::string result = mir_type_to_llvm(t.return_type) + " (";
-                for (size_t i = 0; i < t.params.size(); ++i) {
-                    if (i > 0) {
-                        result += ", ";
-                    }
-                    result += mir_type_to_llvm(t.params[i]);
-                }
-                result += ")*";
-                return result;
+                // Modern LLVM uses opaque pointers (ptr) for all pointer types
+                // including function pointers - typed function pointers are not valid
+                return "ptr";
             } else {
                 // Should not be reached if all variant types are handled
                 return "void";

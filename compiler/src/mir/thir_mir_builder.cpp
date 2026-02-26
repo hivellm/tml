@@ -523,7 +523,22 @@ auto ThirMirBuilder::build_literal(const thir::ThirLiteralExpr& lit) -> Value {
 }
 
 auto ThirMirBuilder::build_var(const thir::ThirVarExpr& var) -> Value {
-    return get_variable(var.name);
+    Value result = get_variable(var.name);
+
+    // If variable not found but type is a FuncType, this is a function reference
+    // being passed as a value (e.g., `apply(double, 5)` where `double` is a named function)
+    if (result.id == INVALID_VALUE && var.type && var.type->is<types::FuncType>()) {
+        MirTypePtr func_type = convert_type(var.type);
+        mir::ConstFuncRef func_ref;
+        func_ref.func_name = var.name;
+        func_ref.func_type = func_type;
+
+        mir::ConstantInst const_inst;
+        const_inst.value = func_ref;
+        return emit(std::move(const_inst), func_type);
+    }
+
+    return result;
 }
 
 auto ThirMirBuilder::build_binary(const thir::ThirBinaryExpr& bin) -> Value {
