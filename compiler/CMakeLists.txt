@@ -1666,26 +1666,20 @@ if(TML_BUILD_MODULAR)
     add_executable(tml src/launcher/main_launcher.cpp)
     target_include_directories(tml PRIVATE include src)
     target_link_libraries(tml PRIVATE tml_plugin_loader)
-    message(STATUS "Launcher: tml.exe (thin, ~400KB)")
+    message(STATUS "Launcher: tml.exe (thin, ~400KB, modular with plugins)")
 
-    # Monolithic fallback — tml_full.exe for debugging/compatibility
-    add_executable(tml_full src/main.cpp)
-    target_link_libraries(tml_full PRIVATE tml_cli tml_plugin_loader)
-    set_target_properties(tml_full PROPERTIES
-        OUTPUT_NAME "tml_full"
-    )
+    # Increase stack size on Windows to handle deep recursion during test execution
+    # Default is 1MB, increase to 32MB for running large test suites with coverage.
+    if(MSVC)
+        target_link_options(tml PRIVATE /STACK:33554432)
+    endif()
 else()
     # Monolithic build — unchanged from before
     add_executable(tml src/main.cpp)
     target_link_libraries(tml PRIVATE tml_cli)
-endif()
 
-# Increase stack size on Windows to handle deep recursion during test execution
-# Default is 1MB, increase to 32MB for running large test suites with coverage.
-if(MSVC)
-    if(TML_BUILD_MODULAR)
-        target_link_options(tml_full PRIVATE /STACK:33554432)
-    else()
+    # Increase stack size on Windows to handle deep recursion during test execution
+    if(MSVC)
         target_link_options(tml PRIVATE /STACK:33554432)
     endif()
 endif()
