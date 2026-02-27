@@ -4,7 +4,6 @@
 
 # Rulebook
 .rulebook-memory/
-.rulebook
 
 # Toolchain submodules (gcc/llvm in src/)
 src/llvm/
@@ -48,6 +47,10 @@ TODO.txt
 TASKS.md
 !rulebook/tasks/**/tasks.md
 
+# LLVM profiling data (coverage instrumentation)
+*.profraw
+*.profdata
+
 # Build outputs
 build/
 **/build/
@@ -74,3 +77,9 @@ compiler/include/version_generated.hpp
 
 # Cranelift Rust bridge build artifacts
 compiler/cranelift/target/
+
+# Rulebook - ignore runtime data, keep specs and tasks
+/.rulebook/*
+!/.rulebook/specs/
+!/.rulebook/tasks/
+!/.rulebook/rulebook.json

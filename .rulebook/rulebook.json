@@ -1,0 +1,67 @@
+{
+  "version": "3.3.0",
+  "installedAt": "2026-02-26T06:53:15.704Z",
+  "updatedAt": "2026-02-27T10:54:02.864Z",
+  "projectId": "tml",
+  "mode": "full",
+  "features": {
+    "watcher": false,
+    "agent": false,
+    "logging": true,
+    "telemetry": false,
+    "notifications": false,
+    "dryRun": false,
+    "gitHooks": true,
+    "repl": false,
+    "templates": true,
+    "context": true,
+    "health": true,
+    "plugins": false,
+    "parallel": true,
+    "smartContinue": true
+  },
+  "coverageThreshold": 95,
+  "language": "en",
+  "outputLanguage": "en",
+  "cliTools": [],
+  "maxParallelTasks": 1,
+  "timeouts": {
+    "taskExecution": 300000,
+    "cliResponse": 60000,
+    "testRun": 120000
+  },
+  "memory": {
+    "enabled": true,
+    "autoCapture": true,
+    "dbPath": ".rulebook/memory/memory.db",
+    "maxSizeBytes": 524288000,
+    "vectorDimensions": 256
+  },
+  "ralph": {
+    "enabled": true,
+    "maxIterations": 10,
+    "tool": "claude",
+    "maxContextLoss": 3,
+    "autoInit": true,
+    "generatePRD": true,
+    "validatePhases": true,
+    "pauseOnError": false,
+    "stateDir": ".rulebook/ralph/state",
+    "historyFile": ".rulebook/ralph/history.json",
+    "defaultTasks": [
+      "parallel-test-execution",
+      "coverage-migration"
+    ]
+  },
+  "skills": {
+    "enabled": [
+      "languages/cpp",
+      "core/rulebook-task-management",
+      "core/agent-automation",
+      "core/dag",
+      "core/documentation-rules",
+      "core/quality-enforcement",
+      "core/rulebook"
+    ]
+  }
+}

@@ -109,7 +109,7 @@ This is a HARD REQUIREMENT because rushing to execute tasks without analysis lea
 1. **Check existing examples first** - Look at how similar tasks were done before
    ```bash
    # Example: Before archiving a task, check the archive folder structure
-   ls rulebook/tasks/archive/
+   ls .rulebook/tasks/archive/
    # Learn: Tasks are named YYYY-MM-DD-task-name
    ```
 
@@ -122,7 +122,7 @@ This is a HARD REQUIREMENT because rushing to execute tasks without analysis lea
 **Examples of tasks that REQUIRE analysis first:**
 - Archiving tasks → Check `archive/` folder naming pattern
 - Creating tests → Check existing test file patterns (`use test`, return types, etc.)
-- Creating tasks → Check `rulebook/RULEBOOK.md` for format
+- Creating tasks → Check `.rulebook/README.md` for format
 - Adding new modules → Check existing module structures
 
 **WHY:** Executing quickly without analysis causes MORE errors, which requires MORE fixes, which wastes MORE tokens and time. Taking 30 seconds to analyze saves minutes of corrections.
@@ -546,7 +546,7 @@ The Rulebook MCP server provides tools beyond memory:
 
 ### tasks.md Format
 
-**IMPORTANT**: All `rulebook/tasks/*/tasks.md` files must be **simple checklists only**.
+**IMPORTANT**: All `.rulebook/tasks/*/tasks.md` files must be **simple checklists only**.
 
 - **NO prose explanations** - tasks.md is for tracking, not documentation
 - **NO "Fixed Issues" sections** with detailed descriptions
@@ -754,7 +754,7 @@ This is a HARD REQUIREMENT. The TML compiler aims to produce IR of the same qual
 
 ### Rulebook Task (Living Document)
 
-Full task details: `rulebook/tasks/optimize-codegen-like-rust/`
+Full task details: `.rulebook/tasks/optimize-codegen-like-rust/`
 
 **This task is incremental and deferred.** Whenever you discover a codegen inefficiency, bug, or interesting pattern during ANY work (iterator fixes, closure fixes, generic instantiation, etc.), you MUST update the task's `tasks.md` with the new finding — add new checklist items, add notes to existing items, or create new phases. The task serves as a running log of everything that needs optimization. Dedicated execution happens later when the compiler is stable.
 
@@ -788,7 +788,7 @@ When a test fails:
 - Do NOT invent creative ways to bypass the test
 
 If a test reveals a bug that requires significant work:
-- Create a task in `rulebook/tasks/` to track the fix
+- Create a task in `.rulebook/tasks/` to track the fix
 - Fix the bug properly, don't defer it
 - The test stays in place and must pass before committing
 
