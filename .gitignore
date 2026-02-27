@@ -83,3 +83,4 @@ compiler/cranelift/target/
 !/.rulebook/specs/
 !/.rulebook/tasks/
 !/.rulebook/rulebook.json
+!/.rulebook/tasks/**/*.md
