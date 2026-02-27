@@ -520,6 +520,81 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 val = gen_expr(*call.args[i]);
                 actual_type = last_expr_type_;
             }
+        } else if (param_is_ref && call.args[i]->is<parser::ArrayExpr>() &&
+                   func_sig.has_value() && i < func_sig->params.size()) {
+            // Array literal passed to ref [T] parameter: create fat pointer { ptr, i64 }
+            // on the stack and pass a pointer to it. gen_array() would load the array value
+            // and lose the stack pointer, so we handle this case specially.
+            auto resolved_param = func_sig->params[i];
+            if (!free_func_type_subs.empty()) {
+                resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
+            }
+            bool is_slice_ref = resolved_param && resolved_param->is<types::RefType>() &&
+                                 resolved_param->as<types::RefType>().inner &&
+                                 resolved_param->as<types::RefType>().inner->is<types::SliceType>();
+            if (is_slice_ref) {
+                // Generate the array literal but keep the alloca pointer, not the loaded value.
+                // We do this by generating array elements directly into a temp alloca.
+                const auto& arr = call.args[i]->as<parser::ArrayExpr>();
+                if (std::holds_alternative<std::vector<parser::ExprPtr>>(arr.kind)) {
+                    const auto& elements = std::get<std::vector<parser::ExprPtr>>(arr.kind);
+                    size_t count = elements.size();
+
+                    // Infer element type from first element
+                    std::string llvm_elem_type;
+                    if (!elements.empty()) {
+                        types::TypePtr elem_type = infer_expr_type(*elements[0]);
+                        llvm_elem_type = llvm_type_from_semantic(elem_type, true);
+                    } else {
+                        llvm_elem_type = "i64";
+                    }
+
+                    std::string array_type = "[" + std::to_string(count) + " x " + llvm_elem_type + "]";
+
+                    // Allocate array on stack
+                    std::string arr_ptr = fresh_reg();
+                    emit_line("  " + arr_ptr + " = alloca " + array_type);
+
+                    // Store each element
+                    for (size_t ei = 0; ei < elements.size(); ++ei) {
+                        expected_literal_type_ = llvm_elem_type;
+                        std::string elem_val = gen_expr(*elements[ei]);
+                        std::string elem_ptr = fresh_reg();
+                        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type +
+                                  ", ptr " + arr_ptr + ", i32 0, i32 " + std::to_string(ei));
+                        emit_line("  store " + llvm_elem_type + " " + elem_val + ", ptr " + elem_ptr);
+                    }
+
+                    // Build fat pointer { ptr, i64 } on stack
+                    std::string fat_alloca = fresh_reg();
+                    emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 0");
+                    emit_line("  store ptr " + arr_ptr + ", ptr " + data_field);
+                    std::string len_field = fresh_reg();
+                    emit_line("  " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 1");
+                    emit_line("  store i64 " + std::to_string(count) + ", ptr " + len_field);
+
+                    val = fat_alloca;
+                    actual_type = "ptr";
+                } else {
+                    // Fallback for repeat syntax [expr; N]
+                    val = gen_expr(*call.args[i]);
+                    actual_type = "ptr";
+                }
+            } else {
+                val = gen_expr(*call.args[i]);
+                actual_type = last_expr_type_;
+                if (actual_type.starts_with("%struct.")) {
+                    std::string temp_alloca = fresh_reg();
+                    emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                    emit_line("  store " + actual_type + " " + val + ", ptr " + temp_alloca);
+                    val = temp_alloca;
+                    actual_type = "ptr";
+                }
+            }
         } else {
             val = gen_expr(*call.args[i]);
             actual_type = last_expr_type_;
@@ -603,6 +678,33 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
                 emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
                 val = fat2;
+            }
+            // [N x T] -> ptr conversion: array value passed to ref [T] (slice) parameter
+            // Store the array on stack and create a fat pointer { ptr, i64 }
+            else if (actual_type.size() > 4 && actual_type[0] == '[' && expected_type == "ptr") {
+                // Parse array size from "[N x T]"
+                size_t x_pos = actual_type.find(" x ");
+                if (x_pos != std::string::npos) {
+                    size_t arr_count = std::stoull(actual_type.substr(1, x_pos - 1));
+                    // Store the array value in a temp alloca
+                    std::string arr_alloca = fresh_reg();
+                    emit_line("  " + arr_alloca + " = alloca " + actual_type);
+                    emit_line("  store " + actual_type + " " + val + ", ptr " + arr_alloca);
+                    // Create fat pointer { ptr, i64 } on stack
+                    std::string fat_alloca = fresh_reg();
+                    emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field +
+                              " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                              ", i32 0, i32 0");
+                    emit_line("  store ptr " + arr_alloca + ", ptr " + data_field);
+                    std::string len_field = fresh_reg();
+                    emit_line("  " + len_field +
+                              " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
+                              ", i32 0, i32 1");
+                    emit_line("  store i64 " + std::to_string(arr_count) + ", ptr " + len_field);
+                    val = fat_alloca;
+                }
             }
         }
 

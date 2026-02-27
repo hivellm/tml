@@ -295,6 +295,9 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
         }
         result += " }";
         return result;
+    } else if (type.is<parser::SliceType>()) {
+        // Slice types are fat pointers: { ptr, i64 } (data pointer + length)
+        return "{ ptr, i64 }";
     } else if (type.is<parser::ImplBehaviorType>()) {
         // impl Behavior return types - look up the concrete type from function analysis
         if (!current_func_.empty()) {

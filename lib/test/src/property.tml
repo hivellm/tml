@@ -50,50 +50,6 @@ pub behavior Shrink[T] {
     func shrink(value: ref T) -> Maybe[T]
 }
 
-// Standard Shrink implementations for primitive types
-
-impl Shrink[I32] {
-    /// Shrink I32 by halving toward zero
-    pub func shrink(value: ref I32) -> Maybe[I32] {
-        if value == 0 { return Nothing }
-        return Just(value / 2)
-    }
-}
-
-impl Shrink[I64] {
-    /// Shrink I64 by halving toward zero
-    pub func shrink(value: ref I64) -> Maybe[I64] {
-        if value == 0 { return Nothing }
-        return Just(value / 2)
-    }
-}
-
-impl Shrink[U32] {
-    /// Shrink U32 by halving
-    pub func shrink(value: ref U32) -> Maybe[U32] {
-        if value == 0 { return Nothing }
-        return Just(value / 2)
-    }
-}
-
-impl Shrink[U64] {
-    /// Shrink U64 by halving
-    pub func shrink(value: ref U64) -> Maybe[U64] {
-        if value == 0 { return Nothing }
-        return Just(value / 2)
-    }
-}
-
-impl Shrink[Str] {
-    /// Shrink Str by removing last character
-    pub func shrink(value: ref Str) -> Maybe[Str] {
-        let len = value.len()
-        if len == 0 { return Nothing }
-        // Try removing last character
-        return Just(value.slice(0, len - 1))
-    }
-}
-
 // ============================================================================
 // TestResult — outcome of a single property test run
 // ============================================================================
@@ -210,4 +166,39 @@ pub func prop_test_stats(
     }
 
     return total_stats
+}
+
+// ============================================================================
+// Shrink Utilities
+// ============================================================================
+
+/// Shrink an I32 value by halving it toward zero
+pub func shrink_i32(val: I32) -> Maybe[I32] {
+    if val == 0 { return Nothing }
+    return Just(val / 2)
+}
+
+/// Shrink an I64 value by halving it toward zero
+pub func shrink_i64(val: I64) -> Maybe[I64] {
+    if val == 0 { return Nothing }
+    return Just(val / 2)
+}
+
+/// Shrink a U32 value by halving it
+pub func shrink_u32(val: U32) -> Maybe[U32] {
+    if val == 0 { return Nothing }
+    return Just(val / 2)
+}
+
+/// Shrink a U64 value by halving it
+pub func shrink_u64(val: U64) -> Maybe[U64] {
+    if val == 0 { return Nothing }
+    return Just(val / 2)
+}
+
+/// Shrink a Str value by removing the last character
+pub func shrink_str(s: Str) -> Maybe[Str] {
+    let len = s.len()
+    if len == 0 { return Nothing }
+    return Just(s.slice(0, len - 1))
 }

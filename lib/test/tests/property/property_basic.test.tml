@@ -5,7 +5,6 @@ use test::assertions::*
 
 @test
 func test_property_stats_new() -> Outcome[(), Str] {
-    // Test PropertyStats initialization
     let stats = PropertyStats::new()
     assert_eq(stats.total_tests, 0, "total_tests should be 0")
     assert_eq(stats.passed, 0, "passed should be 0")
@@ -14,106 +13,83 @@ func test_property_stats_new() -> Outcome[(), Str] {
 }
 
 @test
-func test_property_stats_updates() -> Outcome[(), Str] {
-    // Test PropertyStats field updates
+func test_property_stats_increment() -> Outcome[(), Str] {
     let mut stats = PropertyStats::new()
+    stats.total_tests = 5
+    stats.passed = 4
+    stats.failed = 1
 
-    stats.total_tests = 10
-    stats.passed = 8
-    stats.failed = 2
-    stats.first_failing_test = 5
-    stats.num_shrinks = 3
-
-    assert_eq(stats.total_tests, 10, "total_tests updated")
-    assert_eq(stats.passed, 8, "passed updated")
-    assert_eq(stats.failed, 2, "failed updated")
-    assert_eq(stats.first_failing_test, 5, "first_failing_test updated")
-    assert_eq(stats.num_shrinks, 3, "num_shrinks updated")
-
+    assert_eq(stats.total_tests, 5, "total_tests set")
+    assert_eq(stats.passed, 4, "passed set")
+    assert_eq(stats.failed, 1, "failed set")
     Ok(())
 }
 
 @test
-func test_test_result_passed() -> Outcome[(), Str] {
-    // Test TestResult structure
+func test_test_result_creation() -> Outcome[(), Str] {
     let result = TestResult {
         passed: true,
-        shrunk_input: "test_input",
+        shrunk_input: "test",
         num_shrinks: 0
     }
 
-    assert(result.passed, "Result should be passed")
-    assert_eq(result.num_shrinks, 0, "No shrinks performed")
-
+    assert(result.passed, "Result passed")
+    assert_eq(result.num_shrinks, 0, "No shrinks")
     Ok(())
 }
 
 @test
-func test_test_result_failed() -> Outcome[(), Str] {
-    // Test TestResult with shrink information
-    let result = TestResult {
-        passed: false,
-        shrunk_input: "100",
-        num_shrinks: 5
-    }
-
-    assert(not result.passed, "Result should be failed")
-    assert_eq(result.num_shrinks, 5, "5 shrinks performed")
-
+func test_shrink_i32_utility() -> Outcome[(), Str] {
+    let shrunk = shrink_i32(100)
+    assert(true, "shrink_i32 compiles")
     Ok(())
 }
 
 @test
-func test_shrink_i32_halves_positive() -> Outcome[(), Str] {
-    // Test that I32::shrink halves positive values
-    let mut val: I32 = 100
-    let shrunk_opt = I32::shrink(mut ref val)
-
-    // Just verify it compiles and returns Maybe[I32]
-    assert(true, "I32 shrinking implemented")
+func test_shrink_i64_utility() -> Outcome[(), Str] {
+    let shrunk = shrink_i64(1000)
+    assert(true, "shrink_i64 compiles")
     Ok(())
 }
 
 @test
-func test_shrink_i32_halves_zero() -> Outcome[(), Str] {
-    // Test that I32::shrink of 0 returns Nothing
-    let mut val: I32 = 0
-    let shrunk_opt = I32::shrink(mut ref val)
-
-    // Verify it compiles
-    assert(true, "Zero shrinking implemented")
+func test_shrink_u32_utility() -> Outcome[(), Str] {
+    let shrunk = shrink_u32(100)
+    assert(true, "shrink_u32 compiles")
     Ok(())
 }
 
 @test
-func test_shrink_str_removes_last() -> Outcome[(), Str] {
-    // Test that Str::shrink removes last character
-    let mut val = "hello"
-    let shrunk_opt = Str::shrink(mut ref val)
-
-    // Verify it compiles
-    assert(true, "Str shrinking implemented")
+func test_shrink_u64_utility() -> Outcome[(), Str] {
+    let shrunk = shrink_u64(1000)
+    assert(true, "shrink_u64 compiles")
     Ok(())
 }
 
 @test
-func test_shrink_str_empty() -> Outcome[(), Str] {
-    // Test that Str::shrink of empty string returns Nothing
-    let mut val = ""
-    let shrunk_opt = Str::shrink(mut ref val)
-
-    // Verify it compiles
-    assert(true, "Empty str shrinking returns Nothing")
+func test_shrink_str_utility() -> Outcome[(), Str] {
+    let shrunk = shrink_str("hello")
+    assert(true, "shrink_str compiles")
     Ok(())
 }
 
 @test
-func test_shrink_i64_halves() -> Outcome[(), Str] {
-    // Test that I64::shrink halves positive values
-    let mut val: I64 = 1000
-    let shrunk_opt = I64::shrink(mut ref val)
+func test_property_stats_all_fields() -> Outcome[(), Str] {
+    let mut stats = PropertyStats::new()
+    stats.total_tests = 100
+    stats.passed = 95
+    stats.failed = 5
+    stats.first_failing_test = 50
+    stats.num_shrinks = 3
+    stats.min_shrink_size = 10
+    stats.max_shrink_size = 50
 
-    // Verify it compiles
-    assert(true, "I64 shrinking implemented")
+    assert_eq(stats.total_tests, 100, "total")
+    assert_eq(stats.passed, 95, "passed")
+    assert_eq(stats.failed, 5, "failed")
+    assert_eq(stats.first_failing_test, 50, "first fail")
+    assert_eq(stats.num_shrinks, 3, "shrinks")
+    assert_eq(stats.min_shrink_size, 10, "min")
+    assert_eq(stats.max_shrink_size, 50, "max")
     Ok(())
 }

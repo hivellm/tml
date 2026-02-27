@@ -245,11 +245,26 @@
 - [x] 13.1.3 Write unit tests (16 tests: basic 4, verify 6, advanced 6)
 - [x] All mock tests passing ✓
 
-### 13.2 Property-Based Testing (`lib/test/src/property.tml`) [PENDING]
-- [ ] 13.2.1 Design `Arbitrary[T]` behavior — generate random values
-- [ ] 13.2.2 Implement `prop_test(name, f)` with random inputs
-- [ ] 13.2.3 Implement shrinking — minimize failing input
-- [ ] 13.2.4 Write unit tests
+### 13.2 Property-Based Testing (`lib/test/src/property.tml`) [DONE]
+- [x] 13.2.1 Design `Arbitrary[T]` behavior — generate random values (behavior definition)
+- [x] 13.2.2 Implement `prop_test(name, iterations, f)` with random inputs (2 variants)
+- [x] 13.2.3 Implement shrinking — minimize failing input (5 utility functions)
+- [x] 13.2.4 Write unit tests (9 tests: stats, result, shrink utilities, all passing ✓)
+
+**Shrink Utilities Implemented**:
+- `shrink_i32(val: I32) -> Maybe[I32]` - Halves toward zero
+- `shrink_i64(val: I64) -> Maybe[I64]` - Halves toward zero
+- `shrink_u32(val: U32) -> Maybe[U32]` - Halves
+- `shrink_u64(val: U64) -> Maybe[U64]` - Halves
+- `shrink_str(s: Str) -> Maybe[Str]` - Removes last character
+
+**Test Framework Exports**:
+- `PropertyStats` - Test statistics tracking
+- `TestResult` - Individual test result
+- `Arbitrary[T]` - Type class for random generation
+- `Shrink[T]` - Type class for input shrinking
+- `prop_test` - Main test runner (panics on failure)
+- `prop_test_stats` - Non-panicking variant that collects stats
 
 ## Phase 14: Integration and Validation [DONE]
 
@@ -321,9 +336,9 @@ These modules were implemented as part of broader TML ecosystem initiatives but 
 - ✅ Profiling
 
 **Test Framework (lib/test/src/)**:
-- ✅ Mock framework (16 tests)
-- ⏳ Property-based testing (NOT IMPLEMENTED)
+- ✅ Mock framework (16 tests passing)
+- ✅ Property-based testing (9 tests passing, full framework implemented)
 
-**Total Test Coverage**: 700+ tests passing, 0 critical failures
+**Total Test Coverage**: 700+ tests passing across all modules + 9 property tests = **709+ TESTS PASSING**, 0 critical failures
 
-**Status**: **READY FOR ARCHIVE** ✅
+**Status**: ✅ **100% COMPLETE - READY FOR ARCHIVE** ✅

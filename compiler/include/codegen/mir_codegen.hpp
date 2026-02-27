@@ -126,6 +126,9 @@ private:
     // Parameter name to (value_id, type) mapping for indirect calls
     std::unordered_map<std::string, std::pair<mir::ValueId, mir::MirTypePtr>> param_info_;
 
+    // Function name to declared parameter types (for array-to-slice coercion etc.)
+    std::unordered_map<std::string, std::vector<mir::MirTypePtr>> func_param_types_;
+
     // Generate helpers
     void emit_preamble();
     void emit_type_defs(const mir::Module& module);

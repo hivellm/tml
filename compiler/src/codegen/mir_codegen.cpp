@@ -147,6 +147,16 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         }
     }
 
+    // Collect declared parameter types for all functions (for array-to-slice coercion)
+    func_param_types_.clear();
+    for (const auto& func : module.functions) {
+        std::vector<mir::MirTypePtr> param_types;
+        for (const auto& p : func.params) {
+            param_types.push_back(p.type);
+        }
+        func_param_types_[func.name] = std::move(param_types);
+    }
+
     // Emit functions
     for (const auto& func : module.functions) {
         emit_function(func);
@@ -252,6 +262,16 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         if (func.uses_sret && func.original_return_type) {
             sret_functions_[func.name] = mir_type_to_llvm(func.original_return_type);
         }
+    }
+
+    // Collect declared parameter types for all functions (for array-to-slice coercion)
+    func_param_types_.clear();
+    for (const auto& func : module.functions) {
+        std::vector<mir::MirTypePtr> param_types;
+        for (const auto& p : func.params) {
+            param_types.push_back(p.type);
+        }
+        func_param_types_[func.name] = std::move(param_types);
     }
 
     // Emit functions: define for included, declare for others

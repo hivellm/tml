@@ -613,6 +613,13 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         pos += 2;
     }
 
+    // Look up declared parameter types from function signature
+    std::vector<mir::MirTypePtr> const* declared_param_types = nullptr;
+    auto fpt_it = func_param_types_.find(func_name);
+    if (fpt_it != func_param_types_.end()) {
+        declared_param_types = &fpt_it->second;
+    }
+
     // Pre-process arguments
     std::vector<std::string> processed_args;
     for (size_t j = 0; j < i.args.size(); ++j) {
@@ -635,24 +642,81 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         std::string arg_type = declared_type;
 
-        // For devirtualized method calls, the first arg is the receiver (this)
-        // If it's a struct value but the function expects ptr, spill to memory
-        bool is_devirt_receiver = i.devirt_info.has_value() && j == 0;
-        bool is_struct_value = actual_type.find("%struct.") == 0;
-        bool expects_ptr = declared_type == "ptr";
+        // Check if this argument needs array-to-slice coercion.
+        // When the declared parameter is *[T] (pointer to slice) and the actual
+        // argument is a fixed-size array [N x T], we need to:
+        // 1. Spill the array to the stack
+        // 2. Build a fat pointer { ptr, i64 } with array address and length
+        // 3. Spill the fat pointer to the stack
+        // 4. Pass the fat pointer's address as ptr
+        bool did_array_to_slice = false;
+        if (declared_param_types && j < declared_param_types->size()) {
+            auto& param_type = (*declared_param_types)[j];
+            if (param_type) {
+                auto* ptr_type = std::get_if<mir::MirPointerType>(&param_type->kind);
+                if (ptr_type && ptr_type->pointee) {
+                    auto* slice_type = std::get_if<mir::MirSliceType>(&ptr_type->pointee->kind);
+                    if (slice_type && actual_type.size() > 2 && actual_type[0] == '[' &&
+                        actual_type[1] != '0') {
+                        // Extract array size from "[N x T]"
+                        size_t array_size = 0;
+                        auto space_pos = actual_type.find(' ');
+                        if (space_pos != std::string::npos) {
+                            array_size = std::stoull(actual_type.substr(1, space_pos - 1));
+                        }
 
-        if (is_devirt_receiver && is_struct_value && expects_ptr) {
-            // Spill struct value to memory so we can pass a pointer
-            std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
-            emitln("    " + spill_ptr + " = alloca " + actual_type);
-            emitln("    store " + actual_type + " " + arg + ", ptr " + spill_ptr);
-            arg = spill_ptr;
-            arg_type = "ptr";
-        } else if (is_struct_value) {
-            arg_type = actual_type;
-        } else if ((declared_type == "void" || declared_type == "i32") && !actual_type.empty() &&
-                   actual_type != declared_type) {
-            arg_type = actual_type;
+                        std::string id = std::to_string(temp_counter_++);
+                        std::string elem_type = mir_type_to_llvm(slice_type->element);
+
+                        // 1. Alloca for the array and store value
+                        std::string arr_ptr = "%arr_spill." + id;
+                        emitln("    " + arr_ptr + " = alloca " + actual_type + ", align 16");
+                        emitln("    store " + actual_type + " " + arg + ", ptr " + arr_ptr +
+                               ", align 16");
+
+                        // 2. Build fat pointer { ptr, i64 } on the stack
+                        std::string fat_ptr = "%fat_ptr." + id;
+                        emitln("    " + fat_ptr + " = alloca { ptr, i64 }, align 8");
+                        // Store data pointer (array address)
+                        std::string data_field = "%fat_data." + id;
+                        emitln("    " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                               fat_ptr + ", i32 0, i32 0");
+                        emitln("    store ptr " + arr_ptr + ", ptr " + data_field);
+                        // Store length
+                        std::string len_field = "%fat_len." + id;
+                        emitln("    " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                               fat_ptr + ", i32 0, i32 1");
+                        emitln("    store i64 " + std::to_string(array_size) + ", ptr " + len_field);
+
+                        // 3. Pass the fat pointer address as ptr
+                        arg = fat_ptr;
+                        arg_type = "ptr";
+                        did_array_to_slice = true;
+                    }
+                }
+            }
+        }
+
+        if (!did_array_to_slice) {
+            // For devirtualized method calls, the first arg is the receiver (this)
+            // If it's a struct value but the function expects ptr, spill to memory
+            bool is_devirt_receiver = i.devirt_info.has_value() && j == 0;
+            bool is_struct_value = actual_type.find("%struct.") == 0;
+            bool expects_ptr = declared_type == "ptr";
+
+            if (is_devirt_receiver && is_struct_value && expects_ptr) {
+                // Spill struct value to memory so we can pass a pointer
+                std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+                emitln("    " + spill_ptr + " = alloca " + actual_type);
+                emitln("    store " + actual_type + " " + arg + ", ptr " + spill_ptr);
+                arg = spill_ptr;
+                arg_type = "ptr";
+            } else if (is_struct_value) {
+                arg_type = actual_type;
+            } else if ((declared_type == "void" || declared_type == "i32") && !actual_type.empty() &&
+                       actual_type != declared_type) {
+                arg_type = actual_type;
+            }
         }
 
         processed_args.push_back(arg_type + " " + arg);
