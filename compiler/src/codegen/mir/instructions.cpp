@@ -229,28 +229,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
 
             } else if constexpr (std::is_same_v<T, mir::ClosureInitInst>) {
-                // Closure initialization: create fat pointer { func_ptr, env_ptr }
-                // First insertvalue: set function pointer to @closure_name
-                std::string tmp1 = "%tmp" + std::to_string(temp_counter_++);
-                std::string tmp2 = "%tmp" + std::to_string(temp_counter_++);
-                emitln("    " + tmp1 + " = insertvalue { ptr, ptr } undef, ptr @" + i.func_name +
-                       ", 0");
-
-                // Second insertvalue: set environment pointer (null for non-capturing closures)
-                std::string env_ptr = "null";
-                if (!i.captures.empty()) {
-                    // For capturing closures, would need to create environment struct
-                    // For now, just use null (non-capturing case)
-                    env_ptr = "null";
-                }
-                emitln("    " + tmp2 + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + env_ptr +
-                       ", 1");
-                emitln("    " + result_reg + " = " + tmp2);
-
-                // Mark the result type as function type (fat pointer)
-                if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "{ ptr, ptr }";
-                }
+                emit_closure_init_inst(i, result_reg, inst);
             }
         },
         inst.inst);

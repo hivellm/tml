@@ -198,6 +198,8 @@ private:
                                const mir::InstructionData& inst);
     void emit_tuple_init_inst(const mir::TupleInitInst& i, const std::string& result_reg);
     void emit_array_init_inst(const mir::ArrayInitInst& i, const std::string& result_reg);
+    void emit_closure_init_inst(const mir::ClosureInitInst& i, const std::string& result_reg,
+                                const mir::InstructionData& inst);
     void emit_atomic_load_inst(const mir::AtomicLoadInst& i, const std::string& result_reg,
                                const mir::InstructionData& inst);
     void emit_atomic_store_inst(const mir::AtomicStoreInst& i);

@@ -545,4 +545,35 @@ void MirCodegen::emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i,
 
 // emit_inline_int_to_string removed — was only used by V8-style Text optimizations
 
+// ============================================================================
+// Closure Initialization Instruction
+// ============================================================================
+
+void MirCodegen::emit_closure_init_inst(const mir::ClosureInitInst& i,
+                                        const std::string& result_reg,
+                                        const mir::InstructionData& inst) {
+    // Closure initialization: create fat pointer { func_ptr, env_ptr }
+    // First insertvalue: set function pointer to @closure_name
+    std::string tmp1 = "%tmp" + std::to_string(temp_counter_++);
+    std::string tmp2 = "%tmp" + std::to_string(temp_counter_++);
+    emitln("    " + tmp1 + " = insertvalue { ptr, ptr } undef, ptr @" + i.func_name + ", 0");
+
+    // Second insertvalue: set environment pointer (null for non-capturing closures)
+    std::string env_ptr = "null";
+    if (!i.captures.empty()) {
+        // For capturing closures, would need to create environment struct
+        // For now, just use null (non-capturing case)
+        env_ptr = "null";
+    }
+    emitln("    " + tmp2 + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + env_ptr + ", 1");
+    emitln("    " + result_reg + " = " + tmp2);
+
+    // Mark the result type as function type (fat pointer)
+    // CRITICAL: This must be done so that when CallInst looks up the argument type,
+    // it finds the { ptr, ptr } type in the value_types_ map
+    if (inst.result != mir::INVALID_VALUE) {
+        value_types_[inst.result] = "{ ptr, ptr }";
+    }
+}
+
 } // namespace tml::codegen
