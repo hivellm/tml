@@ -271,10 +271,10 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                       const std::vector<std::string>& features, bool emit_pipeline,
                                       const std::string& pipeline_output_dir,
                                       const std::string& output_dir) {
-    // TODO: Phase 1.2/1.3 - Implement emit_pipeline and output_dir support
+    // Phase 1.3 Extension: output_dir support implemented below
+    // Phase 1.2 Extension: emit_pipeline support pending (requires QueryContext integration)
     (void)emit_pipeline;
     (void)pipeline_output_dir;
-    (void)output_dir;
 
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
@@ -296,6 +296,21 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         }
 
         fs::path cache_dir = get_run_cache_dir();
+
+        // Phase 1.3 Extension: Use custom output_dir if specified
+        if (!output_dir.empty()) {
+            cache_dir = fs::path(output_dir);
+            // Create output directory if it doesn't exist
+            std::error_code ec;
+            fs::create_directories(cache_dir, ec);
+            if (ec) {
+                result.success = false;
+                result.error_message = "Failed to create output directory: " + output_dir;
+                return result;
+            }
+            TML_LOG_INFO("test", "Using custom output directory: " << output_dir);
+        }
+
         // Note: clang may be empty if LLVM backend is available (self-contained mode)
         std::string clang = find_clang();
 
