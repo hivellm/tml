@@ -177,6 +177,9 @@ struct TestOptions {
         features; // Feature flags (--feature network → defines FEATURE_NETWORK)
     std::vector<std::string> suite_filters; // Suite group filters (e.g., "core/str", "std/json")
     bool list_suites = false;               // Print discovered suite groups and exit
+    bool emit_pipeline = false;             // Emit compilation pipeline stages
+    std::string pipeline_output_dir = "";   // Directory for pipeline output
+    std::string output_dir = "";            // Output directory for generated files
 };
 
 // Parse test command arguments

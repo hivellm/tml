@@ -203,7 +203,10 @@ std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& t
 // The DLL exports: tml_suite_count() and tml_suite_run(int index)
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose = false,
                                       bool no_cache = false, const std::string& backend = "llvm",
-                                      const std::vector<std::string>& features = {});
+                                      const std::vector<std::string>& features = {},
+                                      bool emit_pipeline = false,
+                                      const std::string& pipeline_output_dir = "",
+                                      const std::string& output_dir = "");
 
 // Compile a suite with phase profiling
 SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimings* timings,

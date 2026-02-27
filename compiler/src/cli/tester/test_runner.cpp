@@ -268,7 +268,14 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache,
                                       const std::string& backend,
-                                      const std::vector<std::string>& features) {
+                                      const std::vector<std::string>& features, bool emit_pipeline,
+                                      const std::string& pipeline_output_dir,
+                                      const std::string& output_dir) {
+    // TODO: Phase 1.2/1.3 - Implement emit_pipeline and output_dir support
+    (void)emit_pipeline;
+    (void)pipeline_output_dir;
+    (void)output_dir;
+
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -1714,7 +1721,7 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    auto result = compile_test_suite(suite, verbose, no_cache, "llvm", features);
+    auto result = compile_test_suite(suite, verbose, no_cache, "llvm", features, false, "", "");
 
     if (timings) {
         auto end = Clock::now();

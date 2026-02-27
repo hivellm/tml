@@ -296,6 +296,15 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.features.push_back(arg.substr(10));
         } else if (arg == "--feature" && i + 1 < argc) {
             opts.features.push_back(argv[++i]);
+        } else if (arg == "--emit-pipeline") {
+            opts.emit_pipeline = true;
+        } else if (arg.starts_with("--emit-pipeline=")) {
+            opts.emit_pipeline = true;
+            opts.pipeline_output_dir = arg.substr(16);
+        } else if (arg.starts_with("--out-dir=")) {
+            opts.output_dir = arg.substr(10);
+        } else if (arg == "--out-dir" && i + 1 < argc) {
+            opts.output_dir = argv[++i];
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }
