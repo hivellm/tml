@@ -307,9 +307,16 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
 
 void MirCodegen::emit_function_declaration(const mir::Function& func) {
     std::string ret_type = mir_type_to_llvm(func.return_type);
-    // When generating exe entry, user `main` is renamed to `tml_main` across all CGUs.
-    std::string decl_name =
-        (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
+    // Rename `main` based on entry mode:
+    // - generate_exe_main: rename to tml_main (C entry wrapper calls it)
+    // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
+    std::string decl_name = func.name;
+    if (func.name == "main") {
+        if (options_.generate_exe_main)
+            decl_name = "tml_main";
+        else if (!options_.test_entry_name.empty())
+            decl_name = options_.test_entry_name;
+    }
     emit("declare " + ret_type + " @" + quote_func_name(decl_name) + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
@@ -700,10 +707,16 @@ void MirCodegen::emit_function(const mir::Function& func) {
     }
 
     std::string ret_type = mir_type_to_llvm(func.return_type);
-    // When emitting an executable entry point, rename user `main` → `tml_main` so
-    // the C wrapper @main(argc, argv) can call it without a symbol collision.
-    std::string emit_name =
-        (options_.generate_exe_main && func.name == "main") ? "tml_main" : func.name;
+    // Rename `main` based on entry mode:
+    // - generate_exe_main: rename to tml_main (C entry wrapper calls it)
+    // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
+    std::string emit_name = func.name;
+    if (func.name == "main") {
+        if (options_.generate_exe_main)
+            emit_name = "tml_main";
+        else if (!options_.test_entry_name.empty())
+            emit_name = options_.test_entry_name;
+    }
     emit(linkage + " " + ret_type + " @" + quote_func_name(emit_name) + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {

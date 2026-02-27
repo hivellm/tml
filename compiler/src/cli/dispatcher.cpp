@@ -119,8 +119,8 @@ int tml_main(int argc, char* argv[]) {
         log_config.level = tml::log::LogLevel::Info;
     }
 
-    // For test command: suppress metadata module logging unless explicitly verbose
-    if (command == "test" && !verbose && log_config.filter_spec.empty()) {
+    // For test commands: suppress metadata module logging unless explicitly verbose
+    if ((command == "test" || command == "test-v2") && !verbose && log_config.filter_spec.empty()) {
         log_config.filter_spec = "meta=off";
     }
 

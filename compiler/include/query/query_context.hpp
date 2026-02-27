@@ -53,6 +53,12 @@ struct QueryOptions {
     // Enabled by --emit-pipeline on the CLI.
     bool emit_pipeline = false;
     std::string pipeline_output_dir; // Default: .sandbox/pipeline/ relative to source
+
+    // Test entry point generation (for v3 test system).
+    // When true, generate @main wrapper. When false, generate tml_test_N() entry.
+    // Default: true (standalone executable). Set to false for v3 test suites.
+    bool generate_exe_main = true;
+    int test_entry_index = -1; // -1 = tml_test_entry, >=0 = tml_test_N
 };
 
 /// Central query context for the compilation session.

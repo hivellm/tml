@@ -622,10 +622,15 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         codegen::CodegenOptions codegen_opts;
         codegen_opts.emit_comments = ctx.options().verbose;
         codegen_opts.coverage_enabled = ctx.options().coverage;
-        // Always generate the C entry point (@main wrapper) so the query-built IR
-        // can be linked into a standalone executable by `tml build`.
-        // tml run also benefits (it links an EXE too, not a DLL).
-        codegen_opts.generate_exe_main = true;
+        // Generate the C entry point (@main wrapper) for standalone executables,
+        // or tml_test_N entry for v3 test suites.
+        codegen_opts.generate_exe_main = ctx.options().generate_exe_main;
+        if (!ctx.options().generate_exe_main && ctx.options().test_entry_index >= 0) {
+            codegen_opts.test_entry_name =
+                "tml_test_" + std::to_string(ctx.options().test_entry_index);
+        } else if (!ctx.options().generate_exe_main) {
+            codegen_opts.test_entry_name = "tml_test_entry";
+        }
 #ifdef _WIN32
         codegen_opts.target_triple = "x86_64-pc-windows-msvc";
 #else
@@ -679,6 +684,11 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         llvm_gen_options.lazy_library_defs = true; // Only emit library defs actually used
         if (!ctx.options().target_triple.empty()) {
             llvm_gen_options.target_triple = ctx.options().target_triple;
+        }
+        // v3 test system: generate tml_test_N entry instead of main
+        if (!ctx.options().generate_exe_main) {
+            llvm_gen_options.generate_dll_entry = true;
+            llvm_gen_options.suite_test_index = ctx.options().test_entry_index;
         }
 
         codegen::LLVMIRGen llvm_gen(*tc.env, llvm_gen_options);

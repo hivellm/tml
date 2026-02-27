@@ -126,7 +126,10 @@ static unsigned int exe_calc_codegen_threads(unsigned int task_count) {
     return std::min(clamped, task_count);
 }
 
-ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bool no_cache) {
+// Internal implementation with optional custom dispatcher
+static ExeCompileResult
+compile_test_suite_exe_impl(const TestSuite& suite, bool verbose, bool no_cache,
+                            const DispatcherIRGenerator* custom_dispatcher) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -1033,8 +1036,13 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
 
         auto dispatcher_start = Clock::now();
 
-        std::string dispatcher_ir =
-            generate_dispatcher_ir(static_cast<int>(suite.tests.size()), suite.name);
+        std::string dispatcher_ir;
+        if (custom_dispatcher) {
+            dispatcher_ir = (*custom_dispatcher)(static_cast<int>(suite.tests.size()), suite.name);
+        } else {
+            dispatcher_ir =
+                generate_dispatcher_ir(static_cast<int>(suite.tests.size()), suite.name);
+        }
 
         std::string disp_hash = generate_content_hash(dispatcher_ir + ":exe_v2");
         fs::path dispatcher_obj = cache_dir / (disp_hash + "_dispatcher" + get_object_extension());
@@ -1211,6 +1219,15 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
         TML_LOG_FATAL("test", "[exe] Unknown exception in compile_test_suite_exe");
         return result;
     }
+}
+
+ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bool no_cache) {
+    return compile_test_suite_exe_impl(suite, verbose, no_cache, nullptr);
+}
+
+ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bool no_cache,
+                                        const DispatcherIRGenerator& custom_dispatcher) {
+    return compile_test_suite_exe_impl(suite, verbose, no_cache, &custom_dispatcher);
 }
 
 } // namespace tml::cli

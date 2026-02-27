@@ -62,6 +62,7 @@ struct CodegenOptions {
     bool emit_comments = true;
     bool dll_export = false;
     bool generate_exe_main = false; ///< Emit @main(argc,argv) C entry wrapper for executables.
+    std::string test_entry_name;    ///< When non-empty, rename test main to this name.
     std::string target_triple;
 };
 

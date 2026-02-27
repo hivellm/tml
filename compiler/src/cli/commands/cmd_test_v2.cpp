@@ -14,6 +14,7 @@ TML_MODULE("compiler")
 #include "cli/tester/tester_internal.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
+#include "testing/testing_coordinator.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -98,6 +99,89 @@ int run_test_v2(int argc, char* argv[], bool verbose) {
     if (opts.fuzz) {
         TML_LOG_ERROR("test", "Fuzz tests not supported in test-v2. Use 'tml test --fuzz'.");
         return 1;
+    }
+
+    // ======================================================================
+    // New coordinator-based test runner (--new-runner)
+    // ======================================================================
+    if (opts.new_runner) {
+        testing::TestConfig tc;
+        tc.patterns = opts.patterns;
+        tc.suite_filters = opts.suite_filters;
+        // Force individual mode (1 test per suite) until the suite-mode codegen
+        // bug is resolved. When multiple test files share generic functions in
+        // the same suite, the codegen produces invalid LLVM IR with type mismatches.
+        tc.max_per_suite = 1;
+        tc.compile_threads = opts.test_threads;
+        tc.exec_concurrent = 0; // auto
+        tc.timeout_seconds = opts.timeout_seconds;
+        tc.no_cache = opts.no_cache;
+        tc.verbose = opts.verbose;
+        tc.coverage = opts.coverage;
+        tc.fail_fast = opts.fail_fast;
+        tc.list_suites = opts.list_suites;
+
+        TML_LOG_INFO("test", c.cyan() << "[coordinator]" << c.reset() << " Using new test runner");
+
+        auto result = testing::run_tests(tc);
+
+        // Print summary
+        if (!opts.quiet) {
+            TML_LOG_INFO("test", "");
+            TML_LOG_INFO("test", c.bold() << "Test Results" << c.reset());
+            int cached_count = 0;
+            for (const auto& s : result.suites) {
+                if (s.cached)
+                    ++cached_count;
+            }
+            TML_LOG_INFO("test",
+                         "  Suites:  " << result.suites.size()
+                                       << (cached_count > 0
+                                               ? " (" + std::to_string(cached_count) + " cached)"
+                                               : ""));
+            TML_LOG_INFO("test", "  Tests:   " << result.total_tests);
+            TML_LOG_INFO("test", "  " << c.green() << "Passed:  " << result.passed << c.reset());
+            if (result.failed > 0) {
+                TML_LOG_INFO("test", "  " << c.red() << "Failed:  " << result.failed << c.reset());
+            }
+            if (result.crashed > 0) {
+                TML_LOG_INFO("test", "  " << c.red() << "Crashed: " << result.crashed << c.reset());
+            }
+            if (result.compilation_errors > 0) {
+                TML_LOG_INFO("test", "  " << c.yellow() << "Compile errors: "
+                                          << result.compilation_errors << c.reset());
+            }
+            TML_LOG_INFO("test", "  Duration: " << (result.total_duration_us / 1000) << "ms");
+            if (result.covered_functions_count > 0) {
+                TML_LOG_INFO("test", "  " << c.cyan()
+                                          << "Covered: " << result.covered_functions_count
+                                          << " functions" << c.reset());
+            }
+            if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
+                TML_LOG_INFO("test", c.dim() << "  Coverage report: " << c.reset()
+                                             << CompilerOptions::coverage_output);
+            }
+
+            // Print failed test details
+            for (const auto& suite : result.suites) {
+                if (!suite.compile_ok) {
+                    TML_LOG_ERROR("test", c.red() << "COMPILE ERROR" << c.reset() << " "
+                                                  << suite.name << ": " << suite.compile_error);
+                }
+                for (const auto& test : suite.tests) {
+                    if (!test.passed) {
+                        TML_LOG_ERROR("test", c.red()
+                                                  << "FAIL" << c.reset() << " " << suite.group
+                                                  << "/" << test.name << " (" << test.file << ")");
+                        if (!test.error.empty()) {
+                            TML_LOG_ERROR("test", "  " << test.error);
+                        }
+                    }
+                }
+            }
+        }
+
+        return (result.failed > 0 || result.crashed > 0 || result.compilation_errors > 0) ? 1 : 0;
     }
 
     // Discover test files

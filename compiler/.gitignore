@@ -27,8 +27,8 @@ cmake_install.cmake
 Makefile
 compile_commands.json
 
-# Testing
-Testing/
+# CTest artifacts (NOT compiler/src/testing/ or compiler/tests/testing/)
+/testing/
 CTestTestfile.cmake
 
 # Coverage

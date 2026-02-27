@@ -50,11 +50,13 @@ namespace tml::codegen {
 
 /// Options for MIR-to-LLVM code generation.
 struct MirCodegenOptions {
-    bool emit_comments = true;                            ///< Include source comments in IR.
-    bool dll_export = false;                              ///< Add dllexport for Windows DLLs.
-    bool coverage_enabled = false;                        ///< Disable inlining for coverage builds.
-    bool generate_exe_main = false;                       ///< Emit @main(argc,argv) C entry point
-                                                          ///< (renames user `main` to `tml_main`).
+    bool emit_comments = true;      ///< Include source comments in IR.
+    bool dll_export = false;        ///< Add dllexport for Windows DLLs.
+    bool coverage_enabled = false;  ///< Disable inlining for coverage builds.
+    bool generate_exe_main = false; ///< Emit @main(argc,argv) C entry point
+                                    ///< (renames user `main` to `tml_main`).
+    std::string test_entry_name;    ///< When non-empty, rename test main to this
+                                    ///< (e.g. "tml_test_0") instead of @main.
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
 };
 

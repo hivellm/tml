@@ -330,16 +330,16 @@ SQLite3Paths find_sqlite3() {
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
     if (!registry)
         return false;
-    return registry->has_module("std::crypto") || registry->has_module("std::crypto::hash") ||
-           registry->has_module("std::crypto::hmac") ||
-           registry->has_module("std::crypto::cipher") ||
-           registry->has_module("std::crypto::random") ||
-           registry->has_module("std::crypto::x509") || registry->has_module("std::crypto::key") ||
-           registry->has_module("std::crypto::sign") || registry->has_module("std::crypto::dh") ||
-           registry->has_module("std::crypto::ecdh") || registry->has_module("std::crypto::kdf") ||
-           registry->has_module("std::crypto::rsa") || registry->has_module("std::hash") ||
-           registry->has_module("std::net::tls") || registry->has_module("std::http::connection") ||
-           registry->has_module("std::http::client");
+    // Check non-crypto modules that depend on OpenSSL
+    if (registry->has_module("std::hash") || registry->has_module("std::net::tls") ||
+        registry->has_module("std::http::connection") || registry->has_module("std::http::client"))
+        return true;
+    // Check any std::crypto submodule (covers constants, error, and future additions)
+    for (const auto& [path, _] : registry->get_all_modules()) {
+        if (path == "std::crypto" || path.find("std::crypto::") == 0)
+            return true;
+    }
+    return false;
 }
 
 // ============================================================================
@@ -917,8 +917,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     // lib/std/runtime/collections.c as it has different struct layouts that cause memory corruption
     // when both are linked.
 
-    // Link std::file runtime if imported
-    if (registry->has_module("std::file")) {
+    // Link std::file runtime if imported (check submodules too)
+    auto uses_file_module = [&registry]() -> bool {
+        if (registry->has_module("std::file"))
+            return true;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path.find("std::file::") == 0)
+                return true;
+        }
+        return false;
+    };
+    if (uses_file_module()) {
         add_runtime(
             {
                 "lib/std/runtime/file.c",
@@ -1308,13 +1317,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         }
     }
 
-    // Link sqlite3 library if std::sqlite is imported
-    if (registry &&
-        (registry->has_module("std::sqlite") || registry->has_module("std::sqlite::database") ||
-         registry->has_module("std::sqlite::statement") ||
-         registry->has_module("std::sqlite::row") || registry->has_module("std::sqlite::ffi") ||
-         registry->has_module("std::sqlite::constants") ||
-         registry->has_module("std::sqlite::value"))) {
+    // Link sqlite3 library if std::sqlite is imported (check submodules too)
+    auto uses_sqlite_module = [&registry]() -> bool {
+        if (!registry)
+            return false;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path == "std::sqlite" || path.find("std::sqlite::") == 0)
+                return true;
+        }
+        return false;
+    };
+    if (uses_sqlite_module()) {
         auto sqlite = find_sqlite3();
         if (sqlite.found) {
             objects.push_back(sqlite.lib_path);

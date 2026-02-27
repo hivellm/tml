@@ -31,10 +31,16 @@
 #include "cli/tester/test_runner.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace tml::cli {
+
+// Custom dispatcher IR generator callback.
+// Args: (total_test_count, suite_name) → LLVM IR string.
+// When provided to compile_test_suite_exe(), replaces the default dispatcher.
+using DispatcherIRGenerator = std::function<std::string(int, const std::string&)>;
 
 // Result of compiling a test suite to an executable
 struct ExeCompileResult {
@@ -73,7 +79,7 @@ struct SuiteSubprocessResult {
 
 // Async subprocess handle for parallel execution
 struct AsyncSubprocessHandle {
-    void* process_handle = nullptr;  // HANDLE on Windows, void* on Unix
+    void* process_handle = nullptr; // HANDLE on Windows, void* on Unix
     std::string exe_path;
     int expected_tests = 0;
     std::string suite_name;
@@ -85,6 +91,10 @@ struct AsyncSubprocessHandle {
 // Compile a test suite to an EXE (adapts compile_test_suite for EXE output)
 ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose = false,
                                         bool no_cache = false);
+
+// Compile with a custom dispatcher IR generator (e.g. NDJSON dispatcher for coordinator)
+ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bool no_cache,
+                                        const DispatcherIRGenerator& custom_dispatcher);
 
 // Run a single test from a compiled suite EXE via subprocess (legacy, 1 process per test)
 // The EXE is invoked with --test-index=N to run a specific test

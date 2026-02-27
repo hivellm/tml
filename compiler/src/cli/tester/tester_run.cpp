@@ -305,6 +305,8 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.output_dir = arg.substr(10);
         } else if (arg == "--out-dir" && i + 1 < argc) {
             opts.output_dir = argv[++i];
+        } else if (arg == "--new-runner") {
+            opts.new_runner = true;
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }

@@ -180,6 +180,7 @@ struct TestOptions {
     bool emit_pipeline = false;             // Emit compilation pipeline stages
     std::string pipeline_output_dir = "";   // Directory for pipeline output
     std::string output_dir = "";            // Output directory for generated files
+    bool new_runner = false;                // Use new coordinator-based test runner
 };
 
 // Parse test command arguments

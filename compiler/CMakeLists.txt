@@ -1520,6 +1520,15 @@ add_library(tml_cli STATIC
     src/cli/tester/exe_test_execution.cpp
     src/cli/tester/exe_suite_runner.cpp
     src/cli/commands/cmd_test_v2.cpp
+    # New testing abstractions (test system rewrite)
+    src/testing/testing_process.cpp
+    src/testing/testing_protocol.cpp
+    src/testing/testing_dispatcher_gen.cpp
+    src/testing/testing_coordinator.cpp
+    src/testing/testing_test_cache.cpp
+    src/testing/testing_discovery.cpp
+    src/testing/testing_compile.cpp
+    src/testing/testing_coverage.cpp
     # Linter modules
     src/cli/linter/config.cpp
     src/cli/linter/linter_discovery.cpp
@@ -1766,6 +1775,12 @@ if(TML_BUILD_TESTS)
         tests/search/bm25_index_test.cpp
         tests/search/hnsw_index_test.cpp
         tests/search/search_benchmark_test.cpp
+        # Testing abstractions
+        tests/testing/testing_process_test.cpp
+        tests/testing/testing_protocol_test.cpp
+        tests/testing/testing_dispatcher_gen_test.cpp
+        tests/testing/testing_coordinator_test.cpp
+        tests/testing/testing_test_cache_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

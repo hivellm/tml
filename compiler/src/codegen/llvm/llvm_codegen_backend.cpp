@@ -35,6 +35,7 @@ static MirCodegenOptions to_mir_opts(const CodegenOptions& opts) {
     mir_opts.dll_export = opts.dll_export;
     mir_opts.coverage_enabled = opts.coverage_enabled;
     mir_opts.generate_exe_main = opts.generate_exe_main;
+    mir_opts.test_entry_name = opts.test_entry_name;
     if (!opts.target_triple.empty()) {
         mir_opts.target_triple = opts.target_triple;
     }
