@@ -227,6 +227,30 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 } else {
                     emitln("    fence " + ordering);
                 }
+
+            } else if constexpr (std::is_same_v<T, mir::ClosureInitInst>) {
+                // Closure initialization: create fat pointer { func_ptr, env_ptr }
+                // First insertvalue: set function pointer to @closure_name
+                std::string tmp1 = "%tmp" + std::to_string(temp_counter_++);
+                std::string tmp2 = "%tmp" + std::to_string(temp_counter_++);
+                emitln("    " + tmp1 + " = insertvalue { ptr, ptr } undef, ptr @" + i.func_name +
+                       ", 0");
+
+                // Second insertvalue: set environment pointer (null for non-capturing closures)
+                std::string env_ptr = "null";
+                if (!i.captures.empty()) {
+                    // For capturing closures, would need to create environment struct
+                    // For now, just use null (non-capturing case)
+                    env_ptr = "null";
+                }
+                emitln("    " + tmp2 + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + env_ptr +
+                       ", 1");
+                emitln("    " + result_reg + " = " + tmp2);
+
+                // Mark the result type as function type (fat pointer)
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "{ ptr, ptr }";
+                }
             }
         },
         inst.inst);
@@ -679,14 +703,16 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                         emitln("    " + fat_ptr + " = alloca { ptr, i64 }, align 8");
                         // Store data pointer (array address)
                         std::string data_field = "%fat_data." + id;
-                        emitln("    " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
-                               fat_ptr + ", i32 0, i32 0");
+                        emitln("    " + data_field +
+                               " = getelementptr inbounds { ptr, i64 }, ptr " + fat_ptr +
+                               ", i32 0, i32 0");
                         emitln("    store ptr " + arr_ptr + ", ptr " + data_field);
                         // Store length
                         std::string len_field = "%fat_len." + id;
                         emitln("    " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
                                fat_ptr + ", i32 0, i32 1");
-                        emitln("    store i64 " + std::to_string(array_size) + ", ptr " + len_field);
+                        emitln("    store i64 " + std::to_string(array_size) + ", ptr " +
+                               len_field);
 
                         // 3. Pass the fat pointer address as ptr
                         arg = fat_ptr;
@@ -713,8 +739,8 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                 arg_type = "ptr";
             } else if (is_struct_value) {
                 arg_type = actual_type;
-            } else if ((declared_type == "void" || declared_type == "i32") && !actual_type.empty() &&
-                       actual_type != declared_type) {
+            } else if ((declared_type == "void" || declared_type == "i32") &&
+                       !actual_type.empty() && actual_type != declared_type) {
                 arg_type = actual_type;
             }
         }

@@ -269,8 +269,9 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
 
         return "[" + std::to_string(arr_size) + " x " + elem_type + "]";
     } else if (type.is<parser::FuncType>()) {
-        // Function types are pointers in LLVM
-        return "ptr";
+        // Function types are fat pointers in LLVM: { func_ptr, env_ptr }
+        // to support both plain function pointers and capturing closures
+        return "{ ptr, ptr }";
     } else if (type.is<parser::DynType>()) {
         // Dyn types are fat pointers: { data_ptr, vtable_ptr }
         const auto& dyn = type.as<parser::DynType>();
@@ -771,8 +772,9 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         result += " }";
         return result;
     } else if (type->is<types::FuncType>()) {
-        // Function types are pointers in LLVM
-        return "ptr";
+        // Function types are fat pointers in LLVM: { func_ptr, env_ptr }
+        // to support both plain function pointers and capturing closures
+        return "{ ptr, ptr }";
     } else if (type->is<types::DynBehaviorType>()) {
         // Trait objects are fat pointers: { data_ptr, vtable_ptr }
         // We use a struct type: %dyn.BehaviorName

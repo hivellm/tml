@@ -269,6 +269,17 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
         return std::make_shared<MirType>(MirType{MirFunctionType{std::move(params), ret}});
     }
 
+    if (auto* closure_type = std::get_if<types::ClosureType>(&type->kind)) {
+        // Closures are function types: { ptr, ptr } for fat pointer support
+        // Convert closure params and return type to MIR types
+        std::vector<MirTypePtr> params;
+        for (const auto& param : closure_type->params) {
+            params.push_back(convert_type_impl(param));
+        }
+        auto ret = convert_type_impl(closure_type->return_type);
+        return std::make_shared<MirType>(MirType{MirFunctionType{std::move(params), ret}});
+    }
+
     // Class types are returned as struct values (like regular structs)
     // When passed as parameters or stored, they may be passed by pointer
     if (auto* class_type = std::get_if<types::ClassType>(&type->kind)) {
