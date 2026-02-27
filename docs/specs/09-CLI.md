@@ -79,6 +79,7 @@ tml build --emit-header          # Generate .h file from public functions
 # Other options
 tml build --emit-ir              # Emit LLVM IR (.ll files)
 tml build --emit-mir             # Emit MIR (Mid-level IR) for debugging
+tml build --emit-pipeline        # Emit pipeline graph (.dot file) for introspection
 tml build --no-cache             # Disable build cache (force full recompilation)
 tml build --legacy               # Use legacy sequential pipeline (bypass query system)
 tml build --out-dir=path         # Specify output directory

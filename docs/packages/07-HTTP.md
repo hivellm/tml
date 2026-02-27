@@ -1146,7 +1146,87 @@ impl Server {
 }
 ```
 
-## 19. [NOT YET IMPLEMENTED] Middleware
+## 19. HttpClient — High-Level HTTP Requests
+
+The `HttpClient` type provides a convenient high-level interface for sending HTTP requests:
+
+### Constructor
+
+```tml
+func HttpClient::new() -> HttpClient
+  Create a new HTTP client with default settings
+
+func HttpClient::with_user_agent(agent: Str) -> HttpClient
+  Set custom User-Agent header for all requests
+```
+
+### Convenience Methods
+
+```tml
+func HttpClient::get(url: Str) -> Outcome[Response, Str]
+  Send HTTP GET request to URL, return Response or error string
+
+func HttpClient::post(url: Str, body: Str) -> Outcome[Response, Str]
+  Send HTTP POST request with body string, return Response or error string
+
+func HttpClient::put(url: Str, body: Str) -> Outcome[Response, Str]
+  Send HTTP PUT request with body string, return Response or error string
+
+func HttpClient::delete(url: Str) -> Outcome[Response, Str]
+  Send HTTP DELETE request, return Response or error string
+```
+
+### Advanced Method
+
+```tml
+func HttpClient::send(request: Request) -> Outcome[Response, Str]
+  Send arbitrary Request object with full control over headers, body, and method
+```
+
+### Features
+
+- **Automatic URL Parsing**: Extracts host, port, and path from URL
+- **TLS Support**: Automatically uses HTTPS for `https://` URLs
+- **DNS Resolution**: Built-in hostname to IP address resolution
+- **Max Response Size**: 8 MB guard (prevents OOM on large responses)
+- **Internal Connection**: Uses `Connection` type for DNS + TCP + optional TLS
+
+### Example
+
+```tml
+use std::http::{HttpClient, Response}
+
+func main() {
+  let client = HttpClient::new()
+    .with_user_agent("MyApp/1.0")
+
+  when client.get("https://api.example.com/users") {
+    Ok(resp) => {
+      print("Status: {resp.status()}\n")
+      print("Body: {resp.body()}\n")
+    },
+    Err(e) => print("Error: {e}\n")
+  }
+
+  // POST request
+  when client.post("https://api.example.com/users", "name=Alice") {
+    Ok(resp) => print("Created: {resp.status()}\n"),
+    Err(e) => print("Error: {e}\n")
+  }
+}
+```
+
+### Integration with Other Types
+
+- Uses `Request` for wire serialization (builds request from URL)
+- Uses `Response` for parsing HTTP/1.1 wire format
+- Uses `Connection` for DNS + TCP + optional TLS transport
+- Uses `Headers` for header management
+- Returns `Outcome[Response, Str]` for error handling
+
+---
+
+## 20. [NOT YET IMPLEMENTED] Middleware
 
 > **This section describes planned functionality that is not yet implemented.**
 

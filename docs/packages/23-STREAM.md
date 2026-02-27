@@ -1,384 +1,214 @@
 # std::stream — Streaming Byte I/O
 
-> **Status**: IMPLEMENTED (2026-02-24)
+## Overview
 
-## 1. Overview
-
-The `std::stream` module provides byte-oriented I/O abstractions inspired by Node.js streams, adapted for TML's synchronous ownership model.
+The `std::stream` module provides streaming interfaces for byte-level I/O with support for buffering, transformation, and composition.
 
 ```tml
-use std::stream::{Readable, Writable, ByteStream, BufferedReader, BufferedWriter, pipe, copy_bytes}
+use std::stream                                    // all re-exports
+use std::stream::{Readable, Writable}
+use std::stream::{BufferedReader, BufferedWriter}
+use std::stream::{ByteStream, DuplexStream}
+use std::stream::{PassThroughStream, PipelineStream}
+use std::stream::{pipe, copy_bytes, read_all, write_all}
 ```
 
-## 2. Module Structure
+## Core Behaviors
 
-| File | Description |
-|------|-------------|
-| `readable.tml` | `Readable` behavior — byte source interface |
-| `writable.tml` | `Writable` behavior — byte sink interface |
-| `byte_stream.tml` | `ByteStream` — in-memory read/write stream + utility functions |
-| `buffered.tml` | `BufferedReader` / `BufferedWriter` — buffered wrappers |
-| `duplex.tml` | `DuplexStream` — combined readable+writable stream with separate buffers |
-| `passthrough.tml` | `PassThroughStream` — identity stream with optional transform callback |
-| `pipeline.tml` | `PipelineStream` — chain multiple streams with backpressure |
-| `transform.tml` | `TransformStream` — stateful transformations (filter, map, compress patterns) |
-| `pipe.tml` | `pipe()` / `copy_bytes()` — stream piping utilities |
+### Readable
 
-## 3. Core Behaviors
-
-### 3.1 Readable
-
-The fundamental byte source abstraction. Anything you can `read()` from.
+Interface for reading bytes from a stream:
 
 ```tml
-pub behavior Readable {
-    /// Pull bytes from the source into `buf`.
-    /// Returns byte count (0 = EOF). May return fewer bytes than buffer size.
-    func read(mut this, buf: mut ref [U8]) -> Outcome[I64, IoError]
+behavior Readable {
+  func read(buf: ref Buffer, len: U64) -> Outcome[I64, Str]
+    Read up to len bytes into buf, return bytes read or error
 }
 ```
 
-**Contract:**
-- Returns the number of bytes placed into `buf` (may be less than `buf.len()`)
-- Returns `0` to signal end-of-stream (EOF)
-- Returns `Err(IoError)` on failure
+### Writable
 
-### 3.2 Writable
-
-The fundamental byte sink abstraction. Anything you can `write()` to.
+Interface for writing bytes to a stream:
 
 ```tml
-pub behavior Writable {
-    /// Push bytes from `buf` into the sink.
-    /// Returns byte count consumed (may be less than `buf.len()` on backpressure).
-    func write(mut this, buf: ref [U8]) -> Outcome[I64, IoError]
-
-    /// Flush all buffered data to the underlying destination.
-    func flush(mut this) -> Outcome[Unit, IoError]
+behavior Writable {
+  func write(buf: ref Buffer, len: U64) -> Outcome[I64, Str]
+    Write up to len bytes from buf, return bytes written or error
 }
 ```
 
-## 4. Types
+## Types
 
-### 4.1 ByteStream
+### BufferedReader
 
-In-memory growable byte buffer implementing both `Readable` and `Writable`. Ideal for testing stream-based APIs and constructing HTTP bodies.
+Wraps any `Readable` with configurable buffer:
 
 ```tml
-pub type ByteStream {
-    handle: *Unit    // Internal header: data ptr, len, capacity, read_pos
+type BufferedReader {
+  inner: Heap[ref Readable],
+  capacity: U64
 }
 
-impl ByteStream {
-    /// Create an empty stream with default capacity.
-    pub func new() -> ByteStream
+func BufferedReader::new(inner: ref Readable, capacity: U64) -> Heap[BufferedReader]
+  Create buffered reader with given capacity
 
-    /// Create a stream with specific initial capacity.
-    pub func with_capacity(cap: I64) -> ByteStream
+func read_line(reader: ref BufferedReader) -> Maybe[Str]
+  Read until newline (inclusive)
 
-    /// Create a stream pre-filled with string data.
-    pub func from_string(s: Str) -> ByteStream
+func read_all(reader: ref BufferedReader) -> Str
+  Read entire stream to string
 
-    /// Current number of bytes written.
-    pub func len(this) -> I64
+func is_eof(reader: ref BufferedReader) -> Bool
+  Check if at end of stream
+```
 
-    /// Number of bytes remaining to read (len - read_pos).
-    pub func remaining(this) -> I64
+### BufferedWriter
 
-    /// Reset read position to beginning.
-    pub func reset_read(mut this)
+Wraps any `Writable` with configurable buffer (auto-flush at capacity):
 
-    /// Convert all written bytes to a string.
-    pub func to_string(this) -> Str
-
-    /// Free all allocated memory.
-    pub func destroy(mut this)
+```tml
+type BufferedWriter {
+  inner: Heap[ref Writable],
+  capacity: U64
 }
 
-impl Readable for ByteStream { ... }
-impl Writable for ByteStream { ... }
+func BufferedWriter::new(inner: ref Writable, capacity: U64) -> Heap[BufferedWriter]
+  Create buffered writer with given capacity (auto-flush at capacity)
+
+func write_line(writer: ref BufferedWriter, line: Str) -> Outcome[I64, Str]
+  Write line with newline, return bytes written or error
+
+func flush(writer: ref BufferedWriter) -> Outcome[I64, Str]
+  Flush buffer immediately
 ```
 
-**Example:**
-```tml
-use std::stream::{ByteStream, Readable, Writable}
+### ByteStream
 
-var stream = ByteStream::from_string("Hello, streams!")
-var buf: [U8; 5] = [0 as U8; 5]
-let n = stream.read(mut ref buf)!   // n == 5, buf = "Hello"
-stream.destroy()
-```
-
-### 4.2 BufferedReader
-
-Wraps any `Readable` source with an internal buffer for line-oriented reading. Essential for parsing HTTP headers, config files, etc.
+In-memory read/write stream:
 
 ```tml
-pub type BufferedReader {
-    handle: *Unit    // Internal: buf_data, buf_cap, buf_pos, buf_filled
+type ByteStream {
+  data: Heap[Buffer]
 }
 
-impl BufferedReader {
-    /// Create with default capacity (8 KB).
-    pub func new() -> BufferedReader
+func ByteStream::new(capacity: U64) -> Heap[ByteStream]
+  Create in-memory stream with initial capacity
 
-    /// Create with specific buffer capacity.
-    pub func with_capacity(cap: I64) -> BufferedReader
-
-    /// Read one line from the source (strips \r\n or \n).
-    pub func read_line(mut this, source: mut ref ByteStream) -> Outcome[Str, IoError]
-
-    /// Read all remaining data from the source as a string.
-    pub func read_all(mut this, source: mut ref ByteStream) -> Outcome[Str, IoError]
-
-    /// Check if end-of-stream was reached.
-    pub func is_eof(this) -> Bool
-
-    /// Free buffer memory.
-    pub func destroy(mut this)
-}
+func ByteStream::from_str(s: Str) -> Heap[ByteStream]
+  Create stream pre-loaded with string content
 ```
 
-**Example:**
-```tml
-use std::stream::{ByteStream, BufferedReader}
+### DuplexStream
 
-var stream = ByteStream::from_string("line1\r\nline2\r\nline3\r\n")
-var reader = BufferedReader::new()
-let line1 = reader.read_line(mut ref stream)!  // "line1"
-let line2 = reader.read_line(mut ref stream)!  // "line2"
-let line3 = reader.read_line(mut ref stream)!  // "line3"
-reader.destroy()
-stream.destroy()
-```
-
-### 4.3 BufferedWriter
-
-Batches writes and flushes when the buffer is full. Reduces syscall overhead for small writes.
+Combined readable + writable stream with separate buffers:
 
 ```tml
-pub type BufferedWriter {
-    handle: *Unit
+type DuplexStream {
+  read_buffer: Heap[Buffer],
+  write_buffer: Heap[Buffer]
 }
 
-impl BufferedWriter {
-    /// Create with default capacity (8 KB).
-    pub func new() -> BufferedWriter
-
-    /// Create with specific buffer capacity.
-    pub func with_capacity(cap: I64) -> BufferedWriter
-
-    /// Write string data to the buffer.
-    pub func write_string(mut this, dest: mut ref ByteStream, data: Str) -> Outcome[I64, IoError]
-
-    /// Flush all buffered data to the destination.
-    pub func flush(mut this, dest: mut ref ByteStream) -> Outcome[Unit, IoError]
-
-    /// Free buffer memory.
-    pub func destroy(mut this)
-}
+func DuplexStream::new(read_capacity: U64, write_capacity: U64) -> Heap[DuplexStream]
+  Create duplex stream (read and write independently)
 ```
 
-## 5. Utility Functions
+### PassThroughStream
 
-### 5.1 pipe
-
-Copy all remaining bytes from source to destination.
+Identity stream with optional transformation callback:
 
 ```tml
-pub func pipe(source: mut ref ByteStream, dest: mut ref ByteStream) -> Outcome[I64, IoError]
-```
-
-**Example:**
-```tml
-use std::stream::{ByteStream, pipe}
-
-var src = ByteStream::from_string("Hello World")
-var dst = ByteStream::new()
-let n = pipe(mut ref src, mut ref dst)!  // n == 11
-assert_eq(dst.to_string(), "Hello World")
-```
-
-### 5.2 copy_bytes
-
-Copy up to `limit` bytes from source to destination. Stops at EOF or limit.
-
-```tml
-pub func copy_bytes(source: mut ref ByteStream, dest: mut ref ByteStream, limit: I64) -> Outcome[I64, IoError]
-```
-
-### 5.3 read_all / read_to_string / write_all / write_string
-
-Convenience functions in `byte_stream.tml`:
-
-```tml
-/// Read all remaining bytes into a new ByteStream.
-pub func read_all(source: mut ref ByteStream) -> Outcome[ByteStream, IoError]
-
-/// Read all remaining bytes as a UTF-8 string.
-pub func read_to_string(source: mut ref ByteStream) -> Outcome[Str, IoError]
-
-/// Write all bytes from data, retrying on partial writes.
-pub func write_all(dest: mut ref ByteStream, data: ref [U8]) -> Outcome[I64, IoError]
-
-/// Write a string's bytes to the stream.
-pub func write_string(dest: mut ref ByteStream, s: Str) -> Outcome[I64, IoError]
-```
-
-## 6. Usage with HTTP
-
-The stream module is the foundation for HTTP body handling:
-
-```tml
-use std::stream::{ByteStream, BufferedReader}
-use std::http::client::HttpClient
-
-// HTTP client uses ByteStream internally for request/response bodies
-let client = HttpClient::new()
-let resp = client.get("https://example.com")!
-// Response body is parsed from the raw TCP byte stream
-```
-
-### 4.4 DuplexStream (NEW — 2026-02-25)
-
-Combined readable and writable stream with separate internal read and write buffers. Ideal for bidirectional communication patterns.
-
-```tml
-pub type DuplexStream {
-    handle: *Unit
+type PassThroughStream {
+  transform: Maybe[I64]  // optional callback (I64 function pointer)
 }
 
-impl DuplexStream {
-    /// Create a new duplex stream with separate read/write buffers.
-    pub func new() -> DuplexStream
-
-    /// Create with specific capacities for read and write buffers.
-    pub func with_capacity(read_cap: I64, write_cap: I64) -> DuplexStream
-
-    /// Get bytes written to the write side.
-    pub func written(this) -> Str
-
-    /// Reset the read position (read side advances independently).
-    pub func reset_read(mut this)
-
-    /// Reset the write position (write side advances independently).
-    pub func reset_write(mut this)
-
-    /// Free all allocated memory.
-    pub func destroy(mut this)
-}
-
-impl Readable for DuplexStream { ... }
-impl Writable for DuplexStream { ... }
+func PassThroughStream::new(transform_fn: I64) -> Heap[PassThroughStream]
+  Create pass-through with optional per-byte/chunk transformation
 ```
 
-**Example:**
-```tml
-use std::stream::{DuplexStream, Readable, Writable}
+### PipelineStream
 
-var duplex = DuplexStream::new()
-duplex.write("Hello")!           // Write to write side
-var buf: [U8; 5] = [0 as U8; 5]
-duplex.read(mut ref buf)!         // Read from read side
-assert_eq(String::from_utf8(buf), "Hello")
-duplex.destroy()
+Chain multiple streams with backpressure handling:
+
+```tml
+type PipelineStream {
+  sources: List[Heap[ref Readable]],
+  transforms: List[Heap[ref PassThroughStream]],
+  sinks: List[Heap[ref Writable]]
+}
+
+func PipelineStream::new() -> Heap[PipelineStream]
+  Create empty pipeline
+
+func add_source(pipeline: ref PipelineStream, source: Heap[ref Readable]) -> Outcome[(), Str]
+  Add readable source to pipeline
+
+func add_transform(pipeline: ref PipelineStream, transform: Heap[PassThroughStream]) -> Outcome[(), Str]
+  Add transformation stage to pipeline
+
+func add_sink(pipeline: ref PipelineStream, sink: Heap[ref Writable]) -> Outcome[(), Str]
+  Add writable sink to pipeline
+
+func run(pipeline: ref PipelineStream) -> Outcome[(), Str]
+  Execute pipeline with proper backpressure
 ```
 
-### 4.5 PassThroughStream (NEW — 2026-02-25)
+## Utility Functions
 
-Identity stream with optional transformation callback. Useful for monitoring, logging, or light transformations on stream data.
+### Basic Piping
 
 ```tml
-pub type PassThroughStream {
-    handle: *Unit
-}
+func pipe(reader: ref Readable, writer: ref Writable) -> Outcome[I64, Str]
+  Copy all bytes from reader to writer, return bytes transferred
 
-impl PassThroughStream {
-    /// Create a pass-through stream with no transformation.
-    pub func new() -> PassThroughStream
-
-    /// Create with a transformation callback: func(buf: ref [U8]) -> Outcome[Unit, Str]
-    pub func with_transform(transform: I64) -> PassThroughStream
-
-    /// Set or update the transformation callback.
-    pub func set_transform(mut this, transform: I64)
-
-    /// Get all data that passed through.
-    pub func buffered(this) -> Str
-
-    /// Free resources.
-    pub func destroy(mut this)
-}
-
-impl Readable for PassThroughStream { ... }
-impl Writable for PassThroughStream { ... }
+func copy_bytes(reader: ref Readable, writer: ref Writable, buf_size: U64) -> Outcome[I64, Str]
+  Copy with custom buffer size, return bytes transferred
 ```
 
-### 4.6 PipelineStream (NEW — 2026-02-25)
-
-Chain multiple streams together with backpressure and error propagation. Enable composable stream topologies.
+### Reading
 
 ```tml
-pub type PipelineStream {
-    handle: *Unit
-}
+func read_all(reader: ref Readable) -> Str
+  Read entire stream to string (uses default 8KB buffer)
 
-impl PipelineStream {
-    /// Create a pipeline from a readable source.
-    pub func from(source: mut ref ByteStream) -> PipelineStream
+func read_to_string(reader: ref Readable) -> Maybe[Str]
+  Read stream, return Nothing on error
+```
 
-    /// Add a transformation stage to the pipeline.
-    pub func pipe(mut this, stage: I64) -> PipelineStream  // stage: I64 opaque callback
+### Writing
 
-    /// Complete the pipeline, writing to the final destination.
-    pub func to(mut this, dest: mut ref ByteStream) -> Outcome[I64, IoError]
+```tml
+func write_all(writer: ref Writable, data: Str) -> Outcome[I64, Str]
+  Write entire string, return bytes written or error
 
-    /// Free resources.
-    pub func destroy(mut this)
+func write_string(writer: ref Writable, s: Str) -> Maybe[I64]
+  Write string, return Nothing on error
+```
+
+## Example: Reading a File with Buffering
+
+```tml
+use std::stream::{BufferedReader, Readable}
+use std::file::File
+
+func count_lines() {
+  let file = File::open("data.txt").unwrap()
+  let reader = BufferedReader::new(file, 4096)
+
+  loop when reader.read_line() {
+    Just(line) => print("Line: {line}\n"),
+    Nothing => break
+  }
 }
 ```
 
-### 4.7 TransformStream (NEW — 2026-02-25)
+## See Also
 
-Stateful stream transformation supporting patterns like filtering, mapping, and compression.
+- [std::file](./01-FS.md) — File I/O
+- [std::net](./02-NET.md) — Network I/O
+- [std::http](./07-HTTP.md) — HTTP with streaming responses
+- [std::buffer](./03-BUFFER.md) — Binary buffer operations
 
-```tml
-pub type TransformStream {
-    handle: *Unit
-}
+---
 
-impl TransformStream {
-    /// Create a transform stream with a state machine callback.
-    pub func new(transform: I64) -> TransformStream  // transform: func(state: ref Unit, buf: ref [U8]) -> Outcome[[U8], Str]
-
-    /// Update internal state.
-    pub func set_state(mut this, state: I64)
-
-    /// Get the current transform state.
-    pub func state(this) -> I64
-
-    /// Free resources.
-    pub func destroy(mut this)
-}
-
-impl Readable for TransformStream { ... }
-impl Writable for TransformStream { ... }
-```
-
-## 7. Test Coverage
-
-11 test files in `lib/std/tests/stream/`:
-
-| File | Tests | Description |
-|------|-------|-------------|
-| `readable.test.tml` | 15+ | ByteStream read operations, EOF, partial reads |
-| `readable_basic.test.tml` | 2 | Basic smoke tests |
-| `writable.test.tml` | 8+ | ByteStream write operations |
-| `buffered.test.tml` | 20+ | BufferedReader line reading, BufferedWriter batching |
-| `pipe.test.tml` | 3+ | Pipe and copy operations |
-| `copy.test.tml` | 3+ | copy_bytes with limits |
-| `duplex.test.tml` | 8+ | DuplexStream read/write independence, bidirectional I/O |
-| `passthrough.test.tml` | 6+ | PassThroughStream identity, transformation callbacks |
-| `pipeline.test.tml` | 5+ | Pipeline chaining, backpressure propagation |
-| `transform.test.tml` | 7+ | TransformStream state management, filter/map patterns |
-| (NEW) Stream integration tests | 5+ | End-to-end pipeline tests with HTTP upgrade patterns |
+*Previous: [22-](./22-.md)*
+*Next: [24-SQLITE.md](./24-SQLITE.md)*

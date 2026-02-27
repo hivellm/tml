@@ -23,8 +23,8 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::net](./02-NET.md) | Low-level networking (TCP/UDP) | `io::network` |
 | [std::buffer](./03-BUFFER.md) | Binary buffers and streams | None |
 | [std::tls](./06-TLS.md) | TLS/SSL connections | `io::network.tls` |
-| [std::http](./07-HTTP.md) | HTTP client and server | `io::network.http` |
-| [std::stream](./23-STREAM.md) | Streaming byte I/O (Readable, Writable, BufferedReader, BufferedWriter, ByteStream, pipe) | None |
+| [std::http](./07-HTTP.md) | HTTP client and server (HttpClient, routing, headers, cookies) | `io::network.http` |
+| [std::stream](./23-STREAM.md) | Streaming byte I/O (Readable, Writable, BufferedReader, BufferedWriter, ByteStream, DuplexStream, PassThroughStream, PipelineStream, pipe) | None |
 
 ### Concurrency and Async I/O Packages
 

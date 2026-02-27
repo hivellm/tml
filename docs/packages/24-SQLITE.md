@@ -1,261 +1,249 @@
 # std::sqlite — SQLite Embedded Database
 
-> **Status**: IMPLEMENTED (2026-02-24)
+## Overview
 
-## 1. Overview
-
-The `std::sqlite` module provides a safe TML interface to SQLite3 via FFI bindings, inspired by Node.js `node:sqlite`. Supports file-based and in-memory databases, prepared statements with typed parameters, transactions, and typed column access.
+The `std::sqlite` module provides FFI bindings to SQLite3 for embedded database operations. SQLite is a self-contained, serverless SQL database engine that stores all data in a single file.
 
 ```tml
-use std::sqlite::{Database, Statement, Row, Value}
+use std::sqlite                              // all re-exports
+use std::sqlite::{Database, Statement}
+use std::sqlite::{Row, Value}
+use std::sqlite::{SqliteError}
 ```
 
-**Dependency**: Requires `sqlite3` library (installed via vcpkg).
+## Core Types
 
-## 2. Module Structure
+### Database
 
-| File | Description |
-|------|-------------|
-| `mod.tml` | Module re-exports |
-| `ffi.tml` | Raw `@extern("c")` bindings to sqlite3 C API |
-| `constants.tml` | SQLite constants (SQLITE_OK, SQLITE_ROW, type codes, open flags) |
-| `database.tml` | `Database` — connection, exec, prepare, transactions |
-| `statement.tml` | `Statement` — prepared statements, bind, step, column access |
-| `row.tml` | `Row` — single result row with typed getters |
-| `value.tml` | `Value` — dynamic SQLite value type |
-
-## 3. Database
+Main database connection:
 
 ```tml
-pub type Database {
-    handle: *Unit,
-    is_open: Bool
+type Database {
+  handle: I64  // opaque SQLite3 database pointer
 }
 
-impl Database {
-    /// Open a database file (read-write, create if not exists).
-    pub func open(path: Str) -> Outcome[Database, Str]
+func Database::open(path: Str) -> Outcome[Heap[Database], Str]
+  Open file-based database, create if not exists
 
-    /// Open with explicit flags (SQLITE_OPEN_READONLY, etc.).
-    pub func open_with_flags(path: Str, flags: I32) -> Outcome[Database, Str]
+func Database::memory() -> Heap[Database]
+  Create in-memory database (data lost on close)
 
-    /// Open a read-only database.
-    pub func open_readonly(path: Str) -> Outcome[Database, Str]
+func exec(db: ref Database, sql: Str) -> Outcome[(), Str]
+  Execute SQL statement without result set (INSERT, UPDATE, DELETE, CREATE, etc.)
 
-    /// Open an in-memory database.
-    pub func open_in_memory() -> Outcome[Database, Str]
+func prepare(db: ref Database, sql: Str) -> Outcome[Heap[Statement], Str]
+  Prepare statement for execution with parameters
 
-    /// Execute SQL that doesn't return rows.
-    pub func exec(this, sql: Str) -> Outcome[Unit, Str]
+func begin(db: ref Database) -> Outcome[(), Str]
+  Start transaction (BEGIN)
 
-    /// Prepare a SQL statement for execution.
-    pub func prepare(this, sql: Str) -> Outcome[Statement, Str]
+func commit(db: ref Database) -> Outcome[(), Str]
+  Commit transaction (COMMIT)
 
-    /// Close the database connection.
-    pub func close(mut this)
+func rollback(db: ref Database) -> Outcome[(), Str]
+  Rollback transaction (ROLLBACK)
 
-    /// Number of rows changed by last INSERT/UPDATE/DELETE.
-    pub func changes(this) -> I64
+func changes(db: ref Database) -> I64
+  Get number of rows affected by last INSERT/UPDATE/DELETE
 
-    /// Total rows changed since connection opened.
-    pub func total_changes(this) -> I64
-
-    /// Row ID of last successful INSERT.
-    pub func last_insert_rowid(this) -> I64
-
-    /// Begin a transaction.
-    pub func begin(this) -> Outcome[Unit, Str]
-
-    /// Commit current transaction.
-    pub func commit(this) -> Outcome[Unit, Str]
-
-    /// Rollback current transaction.
-    pub func rollback(this) -> Outcome[Unit, Str]
-}
+func last_insert_rowid(db: ref Database) -> I64
+  Get ROWID of last inserted row
 ```
 
-### Quick Start
+### Statement
+
+Compiled prepared statement:
 
 ```tml
-use std::sqlite::database::Database
-
-let db = Database::open_in_memory().unwrap()
-db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
-db.exec("INSERT INTO users (name, age) VALUES ('Alice', 30)")
-db.exec("INSERT INTO users (name, age) VALUES ('Bob', 25)")
-
-let stmt = db.prepare("SELECT id, name, age FROM users ORDER BY id").unwrap()
-loop (stmt.step()) {
-    print("{}: {} (age {})\n", stmt.column_i64(0), stmt.column_str(1), stmt.column_i64(2))
+type Statement {
+  handle: I64,  // opaque SQLite3 statement pointer
+  db: Heap[ref Database]
 }
-stmt.finalize()
-db.close()
+
+func bind_i64(stmt: ref Statement, param: I64, value: I64) -> Outcome[(), Str]
+  Bind integer parameter (1-indexed)
+
+func bind_f64(stmt: ref Statement, param: I64, value: F64) -> Outcome[(), Str]
+  Bind float parameter (1-indexed)
+
+func bind_str(stmt: ref Statement, param: I64, value: Str) -> Outcome[(), Str]
+  Bind string parameter (1-indexed)
+
+func bind_null(stmt: ref Statement, param: I64) -> Outcome[(), Str]
+  Bind NULL value at parameter (1-indexed)
+
+func step(stmt: ref Statement) -> Outcome[Bool, Str]
+  Execute statement, return true if row available, false if done
+
+func execute(stmt: ref Statement) -> Outcome[I64, Str]
+  Execute and return rows affected
+
+func reset(stmt: ref Statement) -> Outcome[(), Str]
+  Reset statement for re-execution
 ```
 
-## 4. Statement
+### Row
+
+Single result row:
 
 ```tml
-pub type Statement {
-    handle: *Unit,
-    db: *Unit,
-    column_count: I32,
-    has_row: Bool
+type Row {
+  handle: I64,  // opaque SQLite3 statement pointer
+  col_count: I64
 }
 
-impl Statement {
-    // ── Execution ─────────────────────────────────────
+func get_i64(row: ref Row, col: I64) -> I64
+  Get integer column value (0-indexed)
 
-    /// Step to next row. Returns true if row available, false when done.
-    pub func step(mut this) -> Bool
+func get_f64(row: ref Row, col: I64) -> F64
+  Get float column value (0-indexed)
 
-    /// Execute and discard results (for INSERT/UPDATE/DELETE).
-    pub func run(mut this) -> Outcome[Unit, Str]
+func get_str(row: ref Row, col: I64) -> Str
+  Get string column value (0-indexed)
 
-    /// Reset statement for re-execution with new parameters.
-    pub func reset(mut this) -> Outcome[Unit, Str]
+func is_null(row: ref Row, col: I64) -> Bool
+  Check if column is NULL (0-indexed)
 
-    /// Release statement resources.
-    pub func finalize(mut this)
+func column_count(row: ref Row) -> I64
+  Get number of columns in result set
 
-    // ── Parameter Binding (1-based index) ──────────────
-
-    pub func bind_i64(this, idx: I32, val: I64) -> Outcome[Unit, Str]
-    pub func bind_f64(this, idx: I32, val: F64) -> Outcome[Unit, Str]
-    pub func bind_str(this, idx: I32, val: Str) -> Outcome[Unit, Str]
-    pub func bind_null(this, idx: I32) -> Outcome[Unit, Str]
-    pub func bind_value(this, idx: I32, val: Value) -> Outcome[Unit, Str]
-
-    /// Number of bound parameters in the SQL.
-    pub func bind_parameter_count(this) -> I32
-
-    /// Name of the parameter at index (e.g., ":name").
-    pub func bind_parameter_name(this, idx: I32) -> Str
-
-    /// Index of a named parameter.
-    pub func bind_parameter_index(this, name: Str) -> I32
-
-    // ── Column Access (0-based index) ──────────────────
-
-    pub func column_i64(this, idx: I32) -> I64
-    pub func column_f64(this, idx: I32) -> F64
-    pub func column_str(this, idx: I32) -> Str
-    pub func column_type(this, idx: I32) -> I32
-    pub func column_name(this, idx: I32) -> Str
-    pub func column_decltype(this, idx: I32) -> Str
-    pub func column_count(this) -> I32
-    pub func data_count(this) -> I32
-    pub func column_value(this, idx: I32) -> Value
-}
+func column_name(row: ref Row, col: I64) -> Str
+  Get column name (0-indexed)
 ```
 
-### Prepared Statements Example
+### Value
+
+Dynamic SQLite value:
 
 ```tml
-let insert = db.prepare("INSERT INTO users (name, age) VALUES (?, ?)").unwrap()
-insert.bind_str(1, "Charlie")
-insert.bind_i64(2, 35)
-insert.run()
-
-insert.reset()
-insert.bind_str(1, "Diana")
-insert.bind_i64(2, 28)
-insert.run()
-insert.finalize()
-```
-
-## 5. Row
-
-```tml
-pub type Row {
-    stmt_handle: *Unit,
-    num_columns: I32
+enum Value {
+  Integer(I64),
+  Float(F64),
+  Text(Str),
+  Null
 }
 
-impl Row {
-    pub func columns(this) -> I32
-    pub func column_name(this, idx: I32) -> Str
-    pub func column_type(this, idx: I32) -> I32
-    pub func get_i64(this, idx: I32) -> I64
-    pub func get_i32(this, idx: I32) -> I32
-    pub func get_f64(this, idx: I32) -> F64
-    pub func get_str(this, idx: I32) -> Str
-    pub func is_null(this, idx: I32) -> Bool
-    pub func get_value(this, idx: I32) -> Value
+func Value::to_i64(v: ref Value) -> Maybe[I64]
+func Value::to_f64(v: ref Value) -> Maybe[F64]
+func Value::to_str(v: ref Value) -> Maybe[Str]
+func Value::is_null(v: ref Value) -> Bool
+```
+
+## Example: CRUD Operations
+
+```tml
+use std::sqlite::{Database, Statement}
+
+func main() {
+  // Open database
+  let db = Database::open("data.db").unwrap()
+
+  // Create table
+  db.exec("CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE
+  )").unwrap()
+
+  // Prepared insert
+  let stmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)").unwrap()
+  stmt.bind_str(1, "Alice").unwrap()
+  stmt.bind_str(2, "alice@example.com").unwrap()
+  stmt.execute().unwrap()
+
+  // Query with parameters
+  let query = db.prepare("SELECT * FROM users WHERE id = ?").unwrap()
+  query.bind_i64(1, 1).unwrap()
+
+  when query.step() {
+    Ok(true) => {
+      print("Found user: {query.get_str(1)}\n")
+    },
+    Ok(false) => {
+      print("Not found\n")
+    },
+    Err(e) => print("Error: {e}\n")
+  }
+
+  // Transaction
+  db.begin().unwrap()
+  db.exec("UPDATE users SET name = 'Bob' WHERE id = 1").unwrap()
+  db.commit().unwrap()
 }
 ```
 
-## 6. Value
-
-Dynamic SQLite value for generic column access.
+## Example: Bulk Insert with Transaction
 
 ```tml
-pub type Value {
-    kind: I32,     // SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_NULL
-    int_val: I64,
-    float_val: F64,
-    text_val: Str
-}
+use std::sqlite::Database
 
-impl Value {
-    pub func integer(v: I64) -> Value
-    pub func float(v: F64) -> Value
-    pub func text(v: Str) -> Value
-    pub func null() -> Value
+func bulk_insert(db: ref Database, users: List[{name: Str, email: Str}]) {
+  db.begin().unwrap()
 
-    pub func as_i64(this) -> I64
-    pub func as_f64(this) -> F64
-    pub func as_str(this) -> Str
-    pub func type_code(this) -> I32
-    pub func type_name(this) -> Str
-    pub func is_null(this) -> Bool
+  let stmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)").unwrap()
+  
+  loop u in users {
+    stmt.bind_str(1, u.name).unwrap()
+    stmt.bind_str(2, u.email).unwrap()
+    stmt.execute().unwrap()
+    stmt.reset().unwrap()
+  }
+
+  db.commit().unwrap()
+  print("Inserted {users.len()} rows\n")
 }
 ```
 
-## 7. Transactions
+## Example: Query with Type Handling
 
 ```tml
-let db = Database::open_in_memory().unwrap()
-db.exec("CREATE TABLE t (id INTEGER, name TEXT)")
+use std::sqlite::Database
 
-db.begin()
-db.exec("INSERT INTO t VALUES (1, 'Alice')")
-db.exec("INSERT INTO t VALUES (2, 'Bob')")
-db.commit()
+func query_all_users(db: ref Database) {
+  let query = db.prepare("SELECT id, name, email FROM users").unwrap()
 
-// Or rollback on error:
-db.begin()
-db.exec("INSERT INTO t VALUES (3, 'Charlie')")
-db.rollback()  // Charlie is NOT saved
+  loop {
+    when query.step() {
+      Ok(true) => {
+        let id = query.get_i64(0)
+        let name = query.get_str(1)
+        let email = when query.is_null(2) {
+          true => "<unknown>",
+          false => query.get_str(2)
+        }
+        print("{id}: {name} ({email})\n")
+      },
+      Ok(false) => break,  // done
+      Err(e) => {
+        print("Error: {e}\n")
+        break
+      }
+    }
+  }
+}
 ```
 
-## 8. Constants
+## FFI Modules
 
-Key constants from `std::sqlite::constants`:
+- `sqlite::ffi` — Low-level C bindings to sqlite3.h
+- `sqlite::constants` — SQLite result codes and configuration constants
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `SQLITE_OK` | 0 | Success |
-| `SQLITE_ROW` | 100 | `step()` has another row |
-| `SQLITE_DONE` | 101 | `step()` finished |
-| `SQLITE_INTEGER` | 1 | Column type: integer |
-| `SQLITE_FLOAT` | 2 | Column type: float |
-| `SQLITE_TEXT` | 3 | Column type: text |
-| `SQLITE_NULL` | 5 | Column type: NULL |
-| `SQLITE_OPEN_READONLY` | 1 | Open read-only |
-| `SQLITE_OPEN_READWRITE` | 2 | Open read-write |
-| `SQLITE_OPEN_CREATE` | 4 | Create if not exists |
-| `SQLITE_OPEN_MEMORY` | 128 | In-memory database |
+## Supported Data Types
 
-## 9. Test Coverage
+SQLite supports 5 fundamental datatypes:
+- **NULL** — NULL value
+- **INTEGER** — 64-bit signed integer
+- **REAL** — 8-byte IEEE float
+- **TEXT** — UTF-8 text string
+- **BLOB** — Binary large object (treated as Vec[U8])
 
-7 test files in `lib/std/tests/sqlite/` with 77+ tests:
+## See Also
 
-| File | Tests | Description |
-|------|-------|-------------|
-| `database.test.tml` | 18 | Open, close, exec, prepare, changes, rowid |
-| `exec.test.tml` | 8 | DDL/DML execution, error handling |
-| `transaction.test.tml` | 6 | Begin, commit, rollback |
-| `bind.test.tml` | 12 | Typed parameter binding, named params |
-| `statement.test.tml` | 10 | Column metadata, step, reset, finalize |
-| `row.test.tml` | 13 | Typed getters, null checks, metadata |
-| `value.test.tml` | 10 | Value constructors, type detection |
+- [std::file](./01-FS.md) — File operations (for database file handling)
+- [std::encoding](./04-ENCODING.md) — Data encoding and serialization
+- [std::collections](./10-COLLECTIONS.md) — In-memory collections
+
+---
+
+*Previous: [23-STREAM.md](./23-STREAM.md)*
+*Next: [25-EVENTS.md](./25-EVENTS.md)*
