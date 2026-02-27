@@ -44,10 +44,22 @@ static void print_usage() {
               << "  mcp               Start MCP server\n"
               << "  explain <code>    Explain an error code\n"
               << "\n"
-              << "Flags:\n"
+              << "Global Flags:\n"
               << "  --help, -h        Show this help\n"
               << "  --version, -V     Show version\n"
-              << "  --verbose, -v     Enable verbose output\n";
+              << "  --verbose, -v     Enable verbose output\n"
+              << "\n"
+              << "Test Command (tml test [PATTERN...]):\n"
+              << "  --backend=llvm|cranelift        Select compilation backend\n"
+              << "  --out-dir=/path                 Output test DLLs to custom directory\n"
+              << "  --emit-pipeline[=/path]         Emit compilation pipeline stages (MIR/IR)\n"
+              << "  --coverage                      Generate code coverage report\n"
+              << "  --release                       Run tests in release mode\n"
+              << "  --no-suite                      1 DLL per test (vs. 8 per suite)\n"
+              << "  --no-cache                      Force full recompilation\n"
+              << "  --verbose                       Show detailed compiler output\n"
+              << "  --nocapture                     Show stdout/stderr during tests\n"
+              << "  --filter=PATTERN                Run only tests matching pattern\n";
 }
 
 static void print_version() {

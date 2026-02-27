@@ -62,14 +62,26 @@ void print_usage() {
               << "  explain   Show detailed error code explanation\n"
               << "  lex       Tokenize a file (debug)\n"
               << "  parse     Parse a file (debug)\n"
-              << "\nOptions:\n"
+              << "\nGlobal Options:\n"
               << "  --help, -h       Show this help\n"
               << "  --version, -V    Show version\n"
               << "  --release        Build with optimizations (-O3)\n"
               << "  --debug, -g      Include debug info (DWARF)\n"
               << "  -O0...-O3        Set optimization level\n"
               << "  -Os, -Oz         Optimize for size\n"
-              << "  --verbose        Show detailed output\n";
+              << "  --verbose        Show detailed output\n"
+              << "\nTest Command Options:\n"
+              << "  tml test [PATTERN...]              Run tests matching pattern(s)\n"
+              << "  --backend=llvm|cranelift          Select compilation backend\n"
+              << "  --out-dir=/path                   Output test DLLs to custom directory\n"
+              << "  --emit-pipeline[=/path]           Emit compilation pipeline stages (MIR/IR)\n"
+              << "  --coverage                        Generate code coverage report\n"
+              << "  --release                         Run tests in release mode\n"
+              << "  --no-suite                        1 DLL per test (vs. 8 per suite)\n"
+              << "  --no-cache                        Force full recompilation\n"
+              << "  --verbose                         Show detailed compiler output\n"
+              << "  --nocapture                       Show stdout/stderr during tests\n"
+              << "  --filter=PATTERN                  Run only tests matching pattern\n";
 }
 
 void print_version() {
