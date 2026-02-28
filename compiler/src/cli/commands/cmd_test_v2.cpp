@@ -118,7 +118,9 @@ int run_test_v2(int argc, char* argv[], bool verbose) {
         tc.no_cache = opts.no_cache;
         tc.verbose = opts.verbose;
         tc.coverage = opts.coverage;
-        tc.fail_fast = opts.fail_fast;
+        // For coverage runs, disable fail_fast so all suites are compiled and
+        // executed, maximizing the number of covered functions.
+        tc.fail_fast = opts.coverage ? false : opts.fail_fast;
         tc.list_suites = opts.list_suites;
 
         TML_LOG_INFO("test", c.cyan() << "[coordinator]" << c.reset() << " Using new test runner");

@@ -31,7 +31,6 @@ TML_MODULE("codegen_x86")
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "types/module.hpp"
 
-#include <iostream>
 #include <unordered_set>
 
 namespace tml::codegen {
@@ -1072,6 +1071,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // 10. Check for user-defined impl methods (see method_impl.cpp)
     // =========================================================================
     if (auto impl_result = try_gen_impl_method_call(call, receiver, receiver_ptr, receiver_type)) {
+        // Mark receiver as consumed when .destroy() is called to prevent
+        // automatic drop at scope exit (double-free). destroy() is the TML
+        // convention for explicit cleanup; drop() would be redundant.
+        if (method == "destroy" && call.receiver->is<parser::IdentExpr>()) {
+            const auto& ident_name = call.receiver->as<parser::IdentExpr>().name;
+            mark_var_consumed(ident_name);
+        }
         return *impl_result;
     }
 
@@ -1080,6 +1086,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     if (auto module_impl_result =
             try_gen_module_impl_method_call(call, receiver, receiver_ptr, receiver_type)) {
+        // Same destroy-consumes-receiver logic for module-imported impl methods
+        if (method == "destroy" && call.receiver->is<parser::IdentExpr>()) {
+            const auto& ident_name = call.receiver->as<parser::IdentExpr>().name;
+            mark_var_consumed(ident_name);
+        }
         return *module_impl_result;
     }
 

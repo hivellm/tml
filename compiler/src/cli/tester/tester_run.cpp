@@ -20,6 +20,7 @@ TML_MODULE("test")
 //! disable suite bundling (one DLL per test file).
 
 #include "cli/builder/builder_internal.hpp"
+#include "cli/commands/cmd_test_v2.hpp"
 #include "coverage.hpp"
 #include "log/log.hpp"
 #include "tester_internal.hpp"
@@ -404,6 +405,11 @@ int run_test(int argc, char* argv[], bool verbose) {
     // If --fuzz flag is set, run fuzz tests instead
     if (opts.fuzz) {
         return run_fuzz_tests(opts, c);
+    }
+
+    // If --new-runner flag is set, delegate to the v3 coordinator
+    if (opts.new_runner) {
+        return run_test_v2(argc, argv, opts.verbose);
     }
 
     std::string cwd = fs::current_path().string();

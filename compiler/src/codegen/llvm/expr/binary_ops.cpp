@@ -572,6 +572,12 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     // show that using `a & b` exercises `BitAnd::bitand`.
     auto emit_operator_coverage = [&](const std::string& trait_name, const std::string& method) {
         emit_coverage(trait_name + "::" + method);
+        // Also emit concrete type coverage (e.g., "I32::add" alongside "Add::add")
+        if (left_semantic) {
+            if (auto* prim = std::get_if<types::PrimitiveType>(&left_semantic->kind)) {
+                emit_coverage(types::primitive_kind_to_string(prim->kind) + "::" + method);
+            }
+        }
     };
 
     switch (bin.op) {

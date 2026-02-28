@@ -163,7 +163,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         qopts.verbose = verbose;
         qopts.coverage = config.coverage;
         qopts.optimization_level = config.optimization_level;
-        qopts.incremental = !config.no_cache;
+        // Coverage mode MUST disable incremental cache: the GREEN path would
+        // reuse cached IR compiled without tml_cover_func() instrumentation,
+        // causing library functions to show 0% coverage despite tests passing.
+        qopts.incremental = !config.no_cache && !config.coverage;
         // v3 test system: generate tml_test_N entry instead of @main
         // (the NDJSON dispatcher provides @main and calls these entries)
         qopts.generate_exe_main = false;

@@ -1738,15 +1738,40 @@ if(TML_BUILD_TESTS)
         tests/frontend/types_test.cpp
         tests/frontend/borrow_test.cpp
         tests/frontend/format_test.cpp
+        tests/frontend/doc_parser_test.cpp
+        tests/frontend/traits_test.cpp
+        tests/frontend/thir_test.cpp
         # IR
         tests/ir/ir_test.cpp
         tests/ir/hir_test.cpp
         tests/ir/mir_test.cpp
+        # MIR Optimization Passes
+        tests/mir/constant_folding_test.cpp
+        tests/mir/constant_propagation_test.cpp
+        tests/mir/dead_code_elimination_test.cpp
+        tests/mir/adce_test.cpp
+        tests/mir/mem2reg_test.cpp
+        tests/mir/copy_propagation_test.cpp
+        tests/mir/sroa_test.cpp
+        tests/mir/inlining_test.cpp
+        tests/mir/gvn_test.cpp
+        tests/mir/early_cse_test.cpp
+        tests/mir/strength_reduction_test.cpp
+        tests/mir/simplify_cfg_test.cpp
+        tests/mir/control_flow_passes_test.cpp
+        tests/mir/loop_passes_test.cpp
+        tests/mir/dead_elimination_passes_test.cpp
+        tests/mir/specialized_passes_test.cpp
+        tests/mir/pass_manager_test.cpp
         # Codegen
         tests/codegen/codegen_test.cpp
         tests/codegen/codegen_builtins_test.cpp
         tests/codegen/text_test.cpp
         tests/codegen/oop_test.cpp
+        tests/codegen/expr_codegen_test.cpp
+        tests/codegen/derive_codegen_test.cpp
+        tests/codegen/codegen_core_test.cpp
+        tests/codegen/builtins_extended_test.cpp
         # Analysis
         tests/analysis/escape_analysis_test.cpp
         tests/analysis/devirtualization_test.cpp

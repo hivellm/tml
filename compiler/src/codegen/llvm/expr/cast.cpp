@@ -282,6 +282,47 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         }
     }
 
+    // Int to function type (fat pointer): i64 → { ptr, ptr }
+    // Used for patterns like: let f: func(I64, I64) = stored_int as func(I64, I64)
+    // Converts the integer to a function pointer with null environment (thin closure)
+    if (is_int_type(src_type) && target_type == "{ ptr, ptr }") {
+        std::string int_val = src;
+        if (src_type != "i64") {
+            std::string ext_reg = fresh_reg();
+            if (src_is_unsigned) {
+                emit_line("  " + ext_reg + " = zext " + src_type + " " + src + " to i64");
+            } else {
+                emit_line("  " + ext_reg + " = sext " + src_type + " " + src + " to i64");
+            }
+            int_val = ext_reg;
+        }
+        std::string fn_ptr = fresh_reg();
+        emit_line("  " + fn_ptr + " = inttoptr i64 " + int_val + " to ptr");
+        // Build fat pointer { fn_ptr, null } — thin closure (no captured environment)
+        std::string ins1 = fresh_reg();
+        emit_line("  " + ins1 + " = insertvalue { ptr, ptr } undef, ptr " + fn_ptr + ", 0");
+        emit_line("  " + result + " = insertvalue { ptr, ptr } " + ins1 + ", ptr null, 1");
+        last_expr_type_ = "{ ptr, ptr }";
+        return result;
+    }
+
+    // Function type (fat pointer) to int: { ptr, ptr } → i64
+    // Extracts the function pointer and converts to integer, discarding environment
+    if (src_type == "{ ptr, ptr }" && is_int_type(target_type)) {
+        std::string fn_ptr = fresh_reg();
+        emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + src + ", 0");
+        std::string ptr_int = fresh_reg();
+        emit_line("  " + ptr_int + " = ptrtoint ptr " + fn_ptr + " to i64");
+        if (target_type == "i64") {
+            last_expr_type_ = "i64";
+            return ptr_int;
+        } else {
+            emit_line("  " + result + " = trunc i64 " + ptr_int + " to " + target_type);
+            last_expr_type_ = target_type;
+            return result;
+        }
+    }
+
     // Fallback: bitcast for same-size types
     emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
     last_expr_type_ = target_type;

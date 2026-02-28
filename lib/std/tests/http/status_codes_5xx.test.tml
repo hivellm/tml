@@ -1,0 +1,74 @@
+// Tests for std::http::status — 5xx server error codes
+use test::{assert, assert_eq}
+use std::http::status::Status
+
+@test
+func test_5xx_server_error_codes() -> I32 {
+    assert_eq(Status::INTERNAL_SERVER_ERROR().code(), 500 as I32, "INTERNAL_SERVER_ERROR")
+    assert_eq(Status::NOT_IMPLEMENTED().code(), 501 as I32, "NOT_IMPLEMENTED")
+    assert_eq(Status::BAD_GATEWAY().code(), 502 as I32, "BAD_GATEWAY")
+    assert_eq(Status::SERVICE_UNAVAILABLE().code(), 503 as I32, "SERVICE_UNAVAILABLE")
+    assert_eq(Status::GATEWAY_TIMEOUT().code(), 504 as I32, "GATEWAY_TIMEOUT")
+    assert_eq(Status::HTTP_VERSION_NOT_SUPPORTED().code(), 505 as I32, "HTTP_VERSION_NOT_SUPPORTED")
+    assert_eq(Status::VARIANT_ALSO_NEGOTIATES().code(), 506 as I32, "VARIANT_ALSO_NEGOTIATES")
+    assert_eq(Status::INSUFFICIENT_STORAGE().code(), 507 as I32, "INSUFFICIENT_STORAGE")
+    assert_eq(Status::LOOP_DETECTED().code(), 508 as I32, "LOOP_DETECTED")
+    assert_eq(Status::BANDWIDTH_LIMIT_EXCEEDED().code(), 509 as I32, "BANDWIDTH_LIMIT_EXCEEDED")
+    assert_eq(Status::NOT_EXTENDED().code(), 510 as I32, "NOT_EXTENDED")
+    assert_eq(Status::NETWORK_AUTHENTICATION_REQUIRED().code(), 511 as I32, "NETWORK_AUTH_REQUIRED")
+    return 0
+}
+
+@test
+func test_5xx_reasons() -> I32 {
+    assert_eq(Status::INTERNAL_SERVER_ERROR().reason(), "Internal Server Error", "500 reason")
+    assert_eq(Status::NOT_IMPLEMENTED().reason(), "Not Implemented", "501 reason")
+    assert_eq(Status::BAD_GATEWAY().reason(), "Bad Gateway", "502 reason")
+    assert_eq(Status::SERVICE_UNAVAILABLE().reason(), "Service Unavailable", "503 reason")
+    assert_eq(Status::GATEWAY_TIMEOUT().reason(), "Gateway Timeout", "504 reason")
+    assert_eq(Status::HTTP_VERSION_NOT_SUPPORTED().reason(), "HTTP Version Not Supported", "505 reason")
+    assert_eq(Status::VARIANT_ALSO_NEGOTIATES().reason(), "Variant Also Negotiates", "506 reason")
+    assert_eq(Status::INSUFFICIENT_STORAGE().reason(), "Insufficient Storage", "507 reason")
+    assert_eq(Status::LOOP_DETECTED().reason(), "Loop Detected", "508 reason")
+    assert_eq(Status::BANDWIDTH_LIMIT_EXCEEDED().reason(), "Bandwidth Limit Exceeded", "509 reason")
+    assert_eq(Status::NOT_EXTENDED().reason(), "Not Extended", "510 reason")
+    assert_eq(Status::NETWORK_AUTHENTICATION_REQUIRED().reason(), "Network Authentication Required", "511 reason")
+    return 0
+}
+
+@test
+func test_5xx_is_server_error() -> I32 {
+    assert(Status::INTERNAL_SERVER_ERROR().is_server_error(), "500 server error")
+    assert(Status::NOT_IMPLEMENTED().is_server_error(), "501 server error")
+    assert(Status::BAD_GATEWAY().is_server_error(), "502 server error")
+    assert(Status::SERVICE_UNAVAILABLE().is_server_error(), "503 server error")
+    assert(Status::GATEWAY_TIMEOUT().is_server_error(), "504 server error")
+    assert(Status::HTTP_VERSION_NOT_SUPPORTED().is_server_error(), "505 server error")
+    assert(Status::VARIANT_ALSO_NEGOTIATES().is_server_error(), "506 server error")
+    assert(Status::INSUFFICIENT_STORAGE().is_server_error(), "507 server error")
+    assert(Status::LOOP_DETECTED().is_server_error(), "508 server error")
+    assert(Status::BANDWIDTH_LIMIT_EXCEEDED().is_server_error(), "509 server error")
+    assert(Status::NOT_EXTENDED().is_server_error(), "510 server error")
+    assert(Status::NETWORK_AUTHENTICATION_REQUIRED().is_server_error(), "511 server error")
+    return 0
+}
+
+@test
+func test_is_retry() -> I32 {
+    assert(Status::BAD_GATEWAY().is_retry(), "502 retry")
+    assert(Status::SERVICE_UNAVAILABLE().is_retry(), "503 retry")
+    assert(Status::GATEWAY_TIMEOUT().is_retry(), "504 retry")
+    assert(not Status::INTERNAL_SERVER_ERROR().is_retry(), "500 not retry")
+    assert(not Status::NOT_IMPLEMENTED().is_retry(), "501 not retry")
+    assert(not Status::NOT_FOUND().is_retry(), "404 not retry")
+    return 0
+}
+
+@test
+func test_custom_status() -> I32 {
+    let custom = Status::new(599 as I32)
+    assert_eq(custom.code(), 599 as I32, "custom code")
+    assert(custom.is_server_error(), "599 is server error")
+    assert_eq(custom.reason(), "Unknown", "unknown reason")
+    return 0
+}

@@ -30,6 +30,7 @@ TML_MODULE("test")
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <map>
 #include <mutex>
 #include <set>
 #include <sstream>
@@ -580,16 +581,23 @@ TestRunResult run_tests(const TestConfig& config) {
         cov_stats.total_duration_ms = result.total_duration_us / 1000;
         cov_stats.no_cache = config.no_cache;
 
-        // Populate per-suite info for HTML report
+        // Populate per-suite info for HTML report — aggregate by group
+        // (matches old system: multiple files in the same group are combined)
+        std::map<std::string, SuiteInfo> suite_map;
         for (const auto& sr : result.suites) {
-            if (!sr.compile_ok)
-                continue; // Skip suites that failed to compile
-            SuiteInfo si;
-            si.name = sr.group.empty() ? sr.name : sr.group;
-            si.test_count = sr.passed;
-            si.duration_ms = sr.exec_time_us / 1000;
+            std::string group_name = sr.group.empty() ? sr.name : sr.group;
+            auto& si = suite_map[group_name];
+            si.name = group_name;
+            si.test_count += sr.test_count; // Total tests, not just passed
+            si.duration_ms += sr.exec_time_us / 1000;
+        }
+        for (auto& [name, si] : suite_map) {
             cov_stats.suites.push_back(std::move(si));
         }
+        // Sort by test count descending (largest suites first)
+        std::sort(
+            cov_stats.suites.begin(), cov_stats.suites.end(),
+            [](const SuiteInfo& a, const SuiteInfo& b) { return a.test_count > b.test_count; });
 
         // Always print coverage to console (even partial runs)
         print_coverage_report(all_covered_functions, true, cov_stats);

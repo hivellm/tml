@@ -36,8 +36,7 @@ TML_EXPORT void* crypto_pbkdf2(const char* password, void* salt_handle, int64_t 
     int rc = PKCS5_PBKDF2_HMAC(password, (int)strlen(password), salt->data, (int)salt->length,
                                (int)iterations, md, (int)key_length, out->data);
     if (rc != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         return NULL;
     }
     out->length = key_length;
@@ -62,8 +61,7 @@ TML_EXPORT void* crypto_pbkdf2_bytes(void* password_handle, void* salt_handle, i
     int rc = PKCS5_PBKDF2_HMAC((const char*)password->data, (int)password->length, salt->data,
                                (int)salt->length, (int)iterations, md, (int)key_length, out->data);
     if (rc != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         return NULL;
     }
     out->length = key_length;
@@ -88,8 +86,7 @@ TML_EXPORT void* crypto_scrypt(const char* password, void* salt_handle, int64_t 
         EVP_PBE_scrypt(password, strlen(password), salt->data, (size_t)salt->length, (uint64_t)n,
                        (uint64_t)r, (uint64_t)p, (uint64_t)maxmem, out->data, (size_t)key_length);
     if (rc != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         return NULL;
     }
     out->length = key_length;
@@ -111,8 +108,7 @@ TML_EXPORT void* crypto_scrypt_bytes(void* password_handle, void* salt_handle, i
                             (size_t)salt->length, (uint64_t)n, (uint64_t)r, (uint64_t)p,
                             (uint64_t)maxmem, out->data, (size_t)key_length);
     if (rc != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         return NULL;
     }
     out->length = key_length;
@@ -165,8 +161,7 @@ static void* hkdf_derive_impl(const char* digest, const uint8_t* ikm_data, size_
     }
 
     if (EVP_KDF_derive(kctx, out->data, (size_t)key_length, params) != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         EVP_KDF_CTX_free(kctx);
         return NULL;
     }
@@ -271,6 +266,11 @@ TML_EXPORT void* crypto_argon2(const char* variant, const char* password, void* 
     uint32_t t = (uint32_t)time_cost;
     uint32_t m = (uint32_t)memory_cost;
     uint32_t p_val = (uint32_t)parallelism;
+    /* Use threads=1 to avoid heap corruption when running inside a DLL
+     * (test runner). OpenSSL spawns OS threads for parallelism > 1 which
+     * can corrupt the heap when allocators differ between DLL and host.
+     * lanes=p_val preserves the algorithmic output (same hash result). */
+    uint32_t threads = 1;
     size_t pass_len = strlen(password);
 
     OSSL_PARAM params[7];
@@ -281,7 +281,7 @@ TML_EXPORT void* crypto_argon2(const char* variant, const char* password, void* 
                                                       (size_t)salt->length);
     params[idx++] = OSSL_PARAM_construct_uint32(OSSL_KDF_PARAM_ITER, &t);
     params[idx++] = OSSL_PARAM_construct_uint32("memcost", &m);
-    params[idx++] = OSSL_PARAM_construct_uint32("threads", &p_val);
+    params[idx++] = OSSL_PARAM_construct_uint32("threads", &threads);
     params[idx++] = OSSL_PARAM_construct_uint32("lanes", &p_val);
     params[idx] = OSSL_PARAM_construct_end();
 
@@ -292,8 +292,7 @@ TML_EXPORT void* crypto_argon2(const char* variant, const char* password, void* 
     }
 
     if (EVP_KDF_derive(kctx, out->data, (size_t)key_length, params) != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         EVP_KDF_CTX_free(kctx);
         return NULL;
     }
@@ -324,6 +323,7 @@ TML_EXPORT void* crypto_argon2_bytes(const char* variant, void* password_handle,
     uint32_t t = (uint32_t)time_cost;
     uint32_t m = (uint32_t)memory_cost;
     uint32_t p_val = (uint32_t)parallelism;
+    uint32_t threads = 1; /* single-threaded to avoid DLL heap issues */
 
     OSSL_PARAM params[7];
     int idx = 0;
@@ -333,7 +333,7 @@ TML_EXPORT void* crypto_argon2_bytes(const char* variant, void* password_handle,
                                                       (size_t)salt->length);
     params[idx++] = OSSL_PARAM_construct_uint32(OSSL_KDF_PARAM_ITER, &t);
     params[idx++] = OSSL_PARAM_construct_uint32("memcost", &m);
-    params[idx++] = OSSL_PARAM_construct_uint32("threads", &p_val);
+    params[idx++] = OSSL_PARAM_construct_uint32("threads", &threads);
     params[idx++] = OSSL_PARAM_construct_uint32("lanes", &p_val);
     params[idx] = OSSL_PARAM_construct_end();
 
@@ -344,8 +344,7 @@ TML_EXPORT void* crypto_argon2_bytes(const char* variant, void* password_handle,
     }
 
     if (EVP_KDF_derive(kctx, out->data, (size_t)key_length, params) != 1) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         EVP_KDF_CTX_free(kctx);
         return NULL;
     }

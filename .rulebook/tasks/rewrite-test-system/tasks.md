@@ -1,6 +1,14 @@
 # Tasks: Rewrite Test System
 
-**Status**: In Progress (80%) — BLOCKED: coverage at 73.2%, must reach 80%+ to complete
+**Status**: In Progress (87%) — Coverage at 77.7% (4386/5647), target 80%+
+
+### Progress Log
+- **??%** (pending) — Fixed 2 compiler/runtime bugs: (1) double destroy+drop codegen in method.cpp (mark_var_consumed on .destroy()), (2) argon2 DLL threading crash in crypto_kdf.c (threads=1 + mem_free fix). All 26 kdf tests now pass, 0 memory leaks.
+- **77.7%** (4386/5647) — Fixed coverage instrumentation for inlined primitives (method_primitive_ext.cpp + binary_ops.cpp): concrete type names now emitted alongside trait names
+- **77.5%** (4377/5647) — Fixed incremental cache bypass for coverage mode, fixed closure/fat-pointer codegen bug (i64↔{ptr,ptr}), fixed coverage HTML Test Suites overview
+- **76.2%** (4306/5647) — Full coverage run with --new-runner, no hangs
+- **73.2%** (4136/5647) — Initial full coverage run, 73 compile errors fixed (vcpkg linking)
+- **44 modules at 0%** — Root cause analysis complete: 10 stub tests, 7 no tests, 4 disabled tests, ~23 crash at runtime (heap corruption in crypto/kdf, etc.)
 
 ## Phase 1: Process Abstraction (Cross-Platform Subprocess Management)
 
@@ -112,7 +120,13 @@
 - [x] 5b.21 Fix `has_crypto_modules()` — changed from explicit module list to prefix-scanning for all `std::crypto::*` submodules
 - [x] 5b.22 Fix runtime DLL discovery — added `ensure_runtime_dlls()` to copy vcpkg DLLs (zlib1, zstd, brotli*, sqlite3, libcrypto, libssl) to test exe cache dir
 - [x] 5b.23 Fix sqlite module detection — prefix-scanning for `std::sqlite::*` submodules (both in testing_compile.cpp and builder_helpers.cpp)
-- [ ] 5b.24 **MANDATORY**: Coverage must reach 80%+ (currently 73.2%) — migration NOT complete until this is achieved. Gap: ~380 uncovered functions from remaining 27 compile errors + test failures
+- [x] 5b.24 Coverage instrumentation audit: verified crypto modules with tests show 100%, modules at 0% are genuine (kdf=HEAP_CORRUPTION crash, rsa/sha256_impl=no working tests)
+- [x] 5b.25 Fix incremental cache bypass: disable incremental cache when coverage=true (prevents GREEN path reusing non-instrumented cached IR)
+- [x] 5b.26 Fix closure/fat-pointer codegen bug: i64↔{ptr,ptr} type mismatch blocking 6 stream tests + 263 library functions
+- [x] 5b.27 Fix coverage HTML Test Suites overview: aggregate by group, use test_count, sort descending
+- [x] 5b.28 Root cause analysis of 44 modules at 0% coverage: categorized as stub tests (10), no tests (7), disabled tests (4), runtime crashes (23+)
+- [x] 5b.29 Fix coverage instrumentation for inlined primitives: method_primitive_ext.cpp (hash, checked_add/sub/mul/div/rem/neg, checked_shl/shr) and binary_ops.cpp (all arithmetic/bitwise operators) now emit concrete type names (e.g., "I32::add") alongside trait names (e.g., "Add::add")
+- [ ] 5b.30 **MANDATORY**: Coverage must reach 80%+ (currently 77.7%, 4386/5647) — need ~131 more covered functions
 
 ## Phase 6: Reporter System (Multi-Format, Catch2-Inspired)
 
