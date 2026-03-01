@@ -4,7 +4,7 @@ TML_MODULE("test")
 //!
 //! Central orchestrator for the TML test system. Uses only modules from
 //! compiler/src/testing/ and compiler/include/testing/. Zero dependency
-//! on cli/tester/.
+//! on the old test system.
 //!
 //! Pipeline:
 //!   testing::discover_tests() → testing::group_into_suites()
@@ -218,6 +218,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
         int suite_index;
         Process proc;
         std::string accumulated_stdout;
+        std::string accumulated_stderr;
         int64_t start_us;
     };
 
@@ -256,7 +257,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
             auto proc = Process::launch(opts);
             if (proc) {
-                running.push_back({work.suite_index, std::move(*proc), "", now_us()});
+                running.push_back({work.suite_index, std::move(*proc), "", "", now_us()});
             } else {
                 auto& r = results[work.suite_index];
                 r.name = suite.name;
@@ -277,38 +278,78 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             auto chunk = it->proc.read_stdout();
             if (!chunk.empty())
                 it->accumulated_stdout += chunk;
+            auto err_chunk = it->proc.read_stderr();
+            if (!err_chunk.empty())
+                it->accumulated_stderr += err_chunk;
 
             if (it->proc.is_done()) {
                 any_done = true;
                 auto final_chunk = it->proc.read_stdout();
                 if (!final_chunk.empty())
                     it->accumulated_stdout += final_chunk;
+                auto final_err = it->proc.read_stderr();
+                if (!final_err.empty())
+                    it->accumulated_stderr += final_err;
 
                 int64_t exec_us = now_us() - it->start_us;
                 auto proc_result = it->proc.wait(std::chrono::milliseconds(100));
+                // Merge any remaining stderr from wait()
+                if (!proc_result.stderr_output.empty())
+                    it->accumulated_stderr += proc_result.stderr_output;
+
                 auto& suite = suites[it->suite_index];
 
                 results[it->suite_index] =
                     parse_ndjson_output(it->accumulated_stdout, suite, exec_us);
-                results[it->suite_index].compile_time_us =
-                    compile_results[it->suite_index].compile_time_us;
+                auto& sr = results[it->suite_index];
+                sr.compile_time_us = compile_results[it->suite_index].compile_time_us;
+
+                // Propagate per-file compile errors
+                for (const auto& pfe : compile_results[it->suite_index].per_file_errors) {
+                    sr.per_file_compile_errors.push_back({pfe.file_path, pfe.error});
+                }
+
+                // Propagate stderr for diagnostics
+                if (!it->accumulated_stderr.empty()) {
+                    sr.process_stderr = it->accumulated_stderr;
+                }
+
+                // When process crashed (non-zero exit, no NDJSON events parsed),
+                // propagate stderr to all failed tests so the user sees WHY it failed.
+                if (proc_result.exit_code != 0) {
+                    for (auto& t : sr.tests) {
+                        if (!t.passed && t.error.empty()) {
+                            t.exit_code = proc_result.exit_code;
+                            if (!it->accumulated_stderr.empty()) {
+                                t.error = it->accumulated_stderr;
+                            } else {
+                                t.error = "Process exited with code " +
+                                          std::to_string(proc_result.exit_code);
+                            }
+                        }
+                    }
+                    // If no tests were reported at all, this was a process crash
+                    if (sr.passed == 0 && sr.failed == 0 && sr.crashed == 0) {
+                        sr.crashed = sr.test_count;
+                        sr.failed = 0;
+                    }
+                }
 
                 if (proc_result.timed_out) {
-                    results[it->suite_index].failed = results[it->suite_index].test_count;
-                    for (auto& t : results[it->suite_index].tests) {
+                    sr.failed = sr.test_count;
+                    for (auto& t : sr.tests) {
                         if (!t.passed && t.error.empty())
                             t.error = "TIMEOUT (suite-level)";
                     }
                 }
 
-                if (config.fail_fast && results[it->suite_index].failed > 0) {
+                if (config.fail_fast && (sr.failed > 0 || sr.crashed > 0)) {
                     should_stop.store(true, std::memory_order_relaxed);
                 }
 
-                TML_LOG_DEBUG("test", "Suite done: "
-                                          << suite.name
-                                          << " (passed=" << results[it->suite_index].passed
-                                          << " failed=" << results[it->suite_index].failed << ")");
+                TML_LOG_DEBUG("test", "Suite done: " << suite.name << " (passed=" << sr.passed
+                                                     << " failed=" << sr.failed
+                                                     << " crashed=" << sr.crashed << ")");
 
                 // Read coverage data from subprocess output file
                 if (config.coverage && out_covered) {
@@ -399,7 +440,7 @@ TestRunResult run_tests(const TestConfig& config) {
 
     TML_LOG_DEBUG("test", "[coordinator] After filtering: " << test_files.size() << " test files");
 
-    // 4. Suite grouping (always max_per_suite=1 to avoid codegen bug)
+    // 4. Suite grouping (default max_per_suite=10; coverage uses 1)
     auto suites = group_into_suites(test_files, config.max_per_suite);
     TML_LOG_DEBUG("test", "[coordinator] After grouping: " << suites.size() << " suites from "
                                                            << test_files.size() << " files");
@@ -446,9 +487,15 @@ TestRunResult run_tests(const TestConfig& config) {
         cache.set_compiler_hash(compiler_hash);
     }
 
-    // 5b. Partition suites into cached (skip) and uncached (need compile+run)
+    // 5b. Partition suites into:
+    //   - cached_results:    fully cached (passed last time, skip compile+run)
+    //   - reuse_exe_suites:  source unchanged + exe on disk (skip compile, re-run)
+    //   - uncached_suites:   need full compile+run
     std::vector<Suite> uncached_suites;
     std::vector<SuiteRunResult> cached_results;
+    // Suites whose previous exe can be reused (source unchanged, but failed last time)
+    std::vector<Suite> reuse_exe_suites;
+    std::vector<std::string> reuse_exe_paths; // parallel to reuse_exe_suites
 
     if (use_cache) {
         for (auto& suite : suites) {
@@ -473,13 +520,22 @@ TestRunResult run_tests(const TestConfig& config) {
                 cached_results.push_back(std::move(sr));
                 TML_LOG_INFO("test",
                              "  [cache] Suite " << suite.name << " is cached (passed, skipping)");
+            } else if (auto exe = cache.get_reusable_exe(suite.name, source_hashes, flags_hash);
+                       !exe.empty()) {
+                // Source unchanged + exe exists: skip recompilation, just re-run
+                TML_LOG_INFO("test", "  [cache] Suite " << suite.name
+                                                        << " exe reusable (source unchanged, "
+                                                           "skipping recompilation)");
+                reuse_exe_paths.push_back(std::move(exe));
+                reuse_exe_suites.push_back(std::move(suite));
             } else {
                 uncached_suites.push_back(std::move(suite));
             }
         }
 
-        if (!cached_results.empty()) {
+        if (!cached_results.empty() || !reuse_exe_suites.empty()) {
             TML_LOG_INFO("test", "[coordinator] " << cached_results.size() << " suites cached, "
+                                                  << reuse_exe_suites.size() << " exe reusable, "
                                                   << uncached_suites.size()
                                                   << " need recompilation");
         }
@@ -487,9 +543,25 @@ TestRunResult run_tests(const TestConfig& config) {
         uncached_suites = std::move(suites);
     }
 
+    // 5c. Longest-job-first scheduling: sort uncached suites by estimated duration
+    // (descending) using timing data from the previous cache run. This minimises
+    // thread idle time at the tail of the compilation phase — inspired by LLVM LIT.
+    if (use_cache && !uncached_suites.empty()) {
+        std::stable_sort(uncached_suites.begin(), uncached_suites.end(),
+                         [&](const Suite& a, const Suite& b) {
+                             const auto* ea = cache.get(a.name);
+                             const auto* eb = cache.get(b.name);
+                             // Unknown suites go first (INT64_MAX) to avoid scheduling them last
+                             int64_t ta = ea ? (ea->duration_us + ea->compile_time_us) : INT64_MAX;
+                             int64_t tb = eb ? (eb->duration_us + eb->compile_time_us) : INT64_MAX;
+                             return ta > tb; // descending: longest first
+                         });
+    }
+
     // 6. Parallel compilation (independent pipeline via QueryContext)
     std::atomic<bool> should_stop{false};
     std::vector<SuiteRunResult> exec_results;
+    std::vector<CompileResult> compile_results; // kept in scope for cache update (compile_time_us)
     std::set<std::string> all_covered_functions;
 
     if (!uncached_suites.empty()) {
@@ -499,8 +571,7 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.no_cache = config.no_cache;
         compile_config.num_threads = config.compile_threads;
 
-        auto compile_results =
-            compile_suites_parallel(uncached_suites, compile_config, should_stop);
+        compile_results = compile_suites_parallel(uncached_suites, compile_config, should_stop);
 
         // Count compilation errors
         for (const auto& cr : compile_results) {
@@ -512,6 +583,29 @@ TestRunResult run_tests(const TestConfig& config) {
         exec_results =
             execute_suites_parallel(uncached_suites, compile_results, config, should_stop,
                                     config.coverage ? &all_covered_functions : nullptr);
+    }
+
+    // 7b. Execute suites with reusable exe (source unchanged, exe cached — skip recompile)
+    if (!reuse_exe_suites.empty()) {
+        // Build CompileResults pointing at existing cached exes (no actual compilation)
+        std::vector<CompileResult> reuse_compile_results;
+        reuse_compile_results.reserve(reuse_exe_suites.size());
+        for (const auto& exe : reuse_exe_paths) {
+            CompileResult cr;
+            cr.success = true;
+            cr.exe_path = exe;
+            reuse_compile_results.push_back(std::move(cr));
+        }
+        auto reuse_exec =
+            execute_suites_parallel(reuse_exe_suites, reuse_compile_results, config, should_stop,
+                                    config.coverage ? &all_covered_functions : nullptr);
+        for (auto& r : reuse_exec)
+            exec_results.push_back(std::move(r));
+        // Append to uncached_suites and compile_results for unified cache update in step 8
+        for (auto& s : reuse_exe_suites)
+            uncached_suites.push_back(std::move(s));
+        for (auto& cr : reuse_compile_results)
+            compile_results.push_back(std::move(cr));
     }
 
     // 8. Update cache with new results
@@ -535,6 +629,13 @@ TestRunResult run_tests(const TestConfig& config) {
             entry.passed_count = sr.passed;
             entry.failed_count = sr.failed;
             entry.duration_us = sr.exec_time_us;
+            // Store compile time for longest-job-first scheduling on subsequent runs
+            if (i < compile_results.size()) {
+                entry.compile_time_us = compile_results[i].compile_time_us;
+                // Always store exe_path (even for failing suites) so get_reusable_exe()
+                // can skip recompilation on the next run if source is unchanged.
+                entry.exe_path = compile_results[i].exe_path;
+            }
 
             cache.update(suite.name, entry);
         }

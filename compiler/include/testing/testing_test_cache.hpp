@@ -37,8 +37,9 @@ struct SuiteCacheEntry {
     int test_count = 0;
     int passed_count = 0;
     int failed_count = 0;
-    int64_t duration_us = 0;
-    std::string exe_path; // Path to compiled EXE (for potential reuse)
+    int64_t duration_us = 0;     // Execution time of last run (microseconds)
+    int64_t compile_time_us = 0; // Compilation time of last run (microseconds)
+    std::string exe_path;        // Path to compiled EXE (for potential reuse)
 };
 
 // ============================================================================
@@ -56,6 +57,14 @@ public:
     /// Check if a suite can be skipped (all hashes match + passed last time).
     bool is_cached(const std::string& suite_name, const std::vector<std::string>& source_hashes,
                    const std::string& flags_hash) const;
+
+    /// Check if a previously compiled exe can be reused for a suite that failed.
+    /// Returns the exe path if the source is unchanged and the exe still exists on disk.
+    /// Unlike is_cached(), does NOT require all_passed == true.
+    /// Use this to skip recompilation when only re-running a failing suite.
+    std::string get_reusable_exe(const std::string& suite_name,
+                                 const std::vector<std::string>& source_hashes,
+                                 const std::string& flags_hash) const;
 
     /// Get cached entry for a suite (returns nullptr if not found).
     const SuiteCacheEntry* get(const std::string& suite_name) const;

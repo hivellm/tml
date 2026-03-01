@@ -3,7 +3,7 @@ TML_MODULE("test")
 //! # Independent Compilation Pipeline
 //!
 //! Compiles test suites to executables using QueryContext::codegen_unit(),
-//! with zero dependency on cli/tester/. Part of the v3 independent test system.
+//! with zero dependency on the old test system. Part of the v3 independent test system.
 //!
 //! Pipeline:
 //!   1. preload_all_meta_caches() (once)
@@ -31,6 +31,7 @@ TML_MODULE("test")
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <set>
 #include <thread>
 
 namespace fs = std::filesystem;
@@ -153,6 +154,9 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     // Keep a shared_ptr alive for the parsed module
     std::shared_ptr<parser::Module> parsed_module_holder;
 
+    // Track which test indices compiled successfully (for dispatcher generation)
+    std::set<size_t> compiled_indices;
+
     for (size_t i = 0; i < suite.tests.size(); ++i) {
         const auto& test = suite.tests[i];
         auto file_path = test.file_path;
@@ -188,25 +192,22 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         auto codegen_result = qctx.codegen_unit(file_path, module_name);
 
         if (!codegen_result.success) {
-            result.success = false;
-            result.error_message = codegen_result.error_message;
-            if (result.error_message.empty()) {
-                // Try to get errors from earlier stages
-                auto tc = qctx.cache().lookup<query::TypecheckResult>(
+            // Log the error but continue compiling remaining files in the suite.
+            // This prevents a single failing file from aborting all tests in the suite.
+            std::string err = codegen_result.error_message;
+            if (err.empty()) {
+                auto tc_r = qctx.cache().lookup<query::TypecheckResult>(
                     query::TypecheckModuleKey{file_path, module_name});
-                if (tc && !tc->success && !tc->errors.empty()) {
-                    result.error_message = tc->errors[0];
-                }
-                auto parsed = qctx.cache().lookup<query::ParseModuleResult>(
+                if (tc_r && !tc_r->success && !tc_r->errors.empty())
+                    err = tc_r->errors[0];
+                auto pr = qctx.cache().lookup<query::ParseModuleResult>(
                     query::ParseModuleKey{file_path, module_name});
-                if (parsed && !parsed->success && !parsed->errors.empty()) {
-                    result.error_message = parsed->errors[0];
-                }
+                if (pr && !pr->success && !pr->errors.empty())
+                    err = pr->errors[0];
             }
-            auto end = Clock::now();
-            result.compile_time_us =
-                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            return result;
+            TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
+            result.per_file_errors.push_back({file_path, err});
+            continue;
         }
 
         // Save incremental cache
@@ -228,29 +229,38 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         if (codegen_result.has_object_file()) {
             // Cranelift backend: object file already produced
             all_object_files.push_back(codegen_result.object_file);
+            compiled_indices.insert(i);
         } else {
             obj_result = cli::compile_ir_string_to_object(codegen_result.llvm_ir, obj_path,
                                                           g_clang_path, obj_opts);
 
             if (!obj_result.success) {
-                result.success = false;
-                result.error_message = "Object compilation failed: " + obj_result.error_message;
-                auto end = Clock::now();
-                result.compile_time_us =
-                    std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                return result;
+                TML_LOG_ERROR("test",
+                              "  [compile] SKIP " << file_path << ": " << obj_result.error_message);
+                result.per_file_errors.push_back({file_path, obj_result.error_message});
+                continue;
             }
             all_object_files.push_back(obj_result.object_file);
+            compiled_indices.insert(i);
         }
 
         // Collect link libraries
         all_link_libs.insert(codegen_result.link_libs.begin(), codegen_result.link_libs.end());
 
-        // Extract registry and parsed module (from last test — they share library imports)
+        // Merge registry from each test file (different files may import different modules)
         auto tc = qctx.cache().lookup<query::TypecheckResult>(
             query::TypecheckModuleKey{file_path, module_name});
         if (tc && tc->success && tc->registry) {
-            registry = tc->registry;
+            if (!registry) {
+                registry = tc->registry;
+            } else {
+                // Merge: add all modules from this test's registry into the accumulated one
+                for (const auto& [mod_path, mod_info] : tc->registry->get_all_modules()) {
+                    if (!registry->has_module(mod_path)) {
+                        registry->register_module(mod_path, mod_info);
+                    }
+                }
+            }
         }
         auto parsed = qctx.cache().lookup<query::ParseModuleResult>(
             query::ParseModuleKey{file_path, module_name});
@@ -259,10 +269,21 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         }
     }
 
-    // Generate NDJSON dispatcher IR
+    // If no files compiled at all, report the first error
+    if (compiled_indices.empty()) {
+        result.success = false;
+        result.error_message = result.per_file_errors.empty() ? "All files failed to compile"
+                                                              : result.per_file_errors[0].error;
+        auto end = Clock::now();
+        result.compile_time_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        return result;
+    }
+
+    // Generate NDJSON dispatcher IR (only for successfully compiled files)
     std::vector<DispatcherTestInfo> dispatcher_infos;
-    dispatcher_infos.reserve(suite.tests.size());
-    for (size_t i = 0; i < suite.tests.size(); ++i) {
+    dispatcher_infos.reserve(compiled_indices.size());
+    for (size_t i : compiled_indices) {
         dispatcher_infos.push_back(
             {suite.tests[i].test_name, suite.tests[i].file_path, static_cast<int>(i)});
     }
@@ -331,8 +352,8 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         link_opts.link_flags.push_back("-ladvapi32");
         link_opts.link_flags.push_back("-luserenv");
     }
-    // Link OpenSSL libraries when crypto/TLS modules are used
-    if (cli::build::has_crypto_modules(registry)) {
+    // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+    {
         auto openssl = cli::build::find_openssl();
         if (openssl.found) {
             link_opts.link_flags.push_back(
@@ -356,6 +377,39 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             auto sqlite = cli::build::find_sqlite3();
             if (sqlite.found) {
                 link_opts.link_flags.push_back(to_fwd_slashes(sqlite.lib_path.string()));
+            }
+        }
+    }
+    // Link search runtime when search modules are used
+    {
+        bool uses_search = false;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path == "std::search" || path.find("std::search::") == 0) {
+                uses_search = true;
+                break;
+            }
+        }
+        if (uses_search) {
+            // Find tml_search_runtime.lib
+            std::vector<std::string> search_paths = {"build/debug", "build/release",
+                                                     "F:/Node/hivellm/tml/build/debug",
+                                                     "F:/Node/hivellm/tml/build/release"};
+            for (const auto& sp : search_paths) {
+                fs::path lib_path = fs::path(sp) / "tml_search_runtime.lib";
+                if (fs::exists(lib_path)) {
+                    all_object_files.push_back(fs::absolute(lib_path));
+                    TML_LOG_DEBUG("test",
+                                  "[compile] Including search runtime: " << lib_path.string());
+                    // Also find tml_search.lib (dependency of search_runtime)
+                    // Check lib/ subdirectory first (CMake outputs there)
+                    auto lib_subdir = fs::path(sp) / "lib" / "tml_search.lib";
+                    if (fs::exists(lib_subdir)) {
+                        all_object_files.push_back(fs::absolute(lib_subdir));
+                        TML_LOG_DEBUG("test",
+                                      "[compile] Including search core: " << lib_subdir.string());
+                    }
+                    break;
+                }
             }
         }
     }
@@ -395,7 +449,7 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     int num_threads = config.num_threads;
     if (num_threads <= 0) {
-        num_threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) / 2);
+        num_threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
     }
     num_threads = std::min(num_threads, static_cast<int>(suites.size()));
 

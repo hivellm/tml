@@ -276,6 +276,12 @@ std::pair<SuiteCacheEntry, size_t> parse_suite_entry(const std::string& s, size_
                 return {entry, std::string::npos};
             entry.duration_us = val;
             pos = next;
+        } else if (key == "compile_time_us") {
+            auto [val, next] = read_json_int(s, pos);
+            if (next == std::string::npos)
+                return {entry, std::string::npos};
+            entry.compile_time_us = val;
+            pos = next;
         } else if (key == "exe_path") {
             auto [val, next] = read_json_string(s, pos);
             if (next == std::string::npos)
@@ -429,6 +435,7 @@ bool TestResultCache::save(const std::string& cache_file) const {
         ofs << "      \"passed_count\": " << entry.passed_count << ",\n";
         ofs << "      \"failed_count\": " << entry.failed_count << ",\n";
         ofs << "      \"duration_us\": " << entry.duration_us << ",\n";
+        ofs << "      \"compile_time_us\": " << entry.compile_time_us << ",\n";
         ofs << "      \"exe_path\": ";
         write_json_string(ofs, entry.exe_path);
         ofs << "\n";
@@ -478,6 +485,34 @@ const SuiteCacheEntry* TestResultCache::get(const std::string& suite_name) const
     if (it == entries_.end())
         return nullptr;
     return &it->second;
+}
+
+std::string TestResultCache::get_reusable_exe(const std::string& suite_name,
+                                              const std::vector<std::string>& source_hashes,
+                                              const std::string& flags_hash) const {
+    auto it = entries_.find(suite_name);
+    if (it == entries_.end())
+        return {};
+
+    const auto& entry = it->second;
+
+    // Source must be unchanged
+    if (entry.source_hashes != source_hashes)
+        return {};
+
+    // Flags must match (coverage mode produces different instrumentation)
+    if (entry.flags_hash != flags_hash)
+        return {};
+
+    // Exe must actually exist on disk
+    if (entry.exe_path.empty())
+        return {};
+
+    std::error_code ec;
+    if (!std::filesystem::exists(entry.exe_path, ec))
+        return {};
+
+    return entry.exe_path;
 }
 
 void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntry& entry) {
