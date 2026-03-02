@@ -316,33 +316,40 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
                 }
 
                 if (target_has_phi) {
-                    // Check if another empty block ALSO forwards to target_id
-                    // and shares a predecessor with this block
-                    bool has_sibling_forwarder = false;
-                    for (size_t j = 1; j < func.blocks.size(); ++j) {
-                        if (j == i) continue;
-                        auto& other = func.blocks[j];
-                        if (!other.instructions.empty()) continue;
-                        if (!other.terminator) continue;
-                        auto* other_br = std::get_if<BranchTerm>(&*other.terminator);
-                        if (!other_br || other_br->target != target_id) continue;
+                    // Removing this empty forwarder block replaces its phi entry with
+                    // entries from each of its predecessors. If ANY of those predecessors
+                    // already appears in the target's phi (as an existing incoming block),
+                    // removal would create duplicate predecessor entries, destroying value
+                    // selection. This catches both the original sibling-forwarder case AND
+                    // the cross-pass case where a sibling was already removed and the
+                    // target phi now contains entries from this block's predecessors.
+                    //
+                    // Example cross-pass destruction:
+                    //   Pass 1: remove bb1 (empty->bb3) -> phi: [%0, entry0], [%1, bb2]
+                    //   Pass 2: try to remove bb2 (empty->bb3):
+                    //           entry0 already in phi -> would create [%0,entry0],[%1,entry0]
+                    //           -> BROKEN. Fix: skip removal.
+                    bool would_create_duplicate = false;
 
-                        // This other block also forwards to the same target.
-                        // Check if it shares a predecessor with our block.
-                        auto& other_preds = preds[other.id];
-                        for (uint32_t p1 : block_preds) {
-                            for (uint32_t p2 : other_preds) {
-                                if (p1 == p2) {
-                                    has_sibling_forwarder = true;
-                                    break;
+                    std::unordered_set<uint32_t> phi_predecessor_ids;
+                    for (const auto& inst : tgt_block.instructions) {
+                        if (const auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                            for (const auto& [val, from_block] : phi->incoming) {
+                                if (from_block != removed_id) {
+                                    phi_predecessor_ids.insert(from_block);
                                 }
                             }
-                            if (has_sibling_forwarder) break;
                         }
-                        if (has_sibling_forwarder) break;
                     }
 
-                    if (has_sibling_forwarder) {
+                    for (uint32_t pred_id : block_preds) {
+                        if (phi_predecessor_ids.count(pred_id)) {
+                            would_create_duplicate = true;
+                            break;
+                        }
+                    }
+
+                    if (would_create_duplicate) {
                         continue; // Preserve critical edge splitter block
                     }
                 }

@@ -289,13 +289,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     {
         std::string vt_str = "none";
         auto dbg_it = value_types_.find(i.receiver.id);
-        if (dbg_it != value_types_.end()) vt_str = dbg_it->second;
-        emitln("    ; MCALL: " + recv_type + "." + i.method_name +
-               " recv_id=" + std::to_string(i.receiver.id) +
-               " recv_reg=" + receiver +
-               " vt=" + vt_str +
-               " actual=" + receiver_actual_type +
-               " for_call=" + receiver_type_for_call);
+        if (dbg_it != value_types_.end())
+            vt_str = dbg_it->second;
+        emitln("    ; MCALL: " + recv_type + "." + i.method_name + " recv_id=" +
+               std::to_string(i.receiver.id) + " recv_reg=" + receiver + " vt=" + vt_str +
+               " actual=" + receiver_actual_type + " for_call=" + receiver_type_for_call);
     }
 
     if (ret_type != "void" && !result_reg.empty()) {

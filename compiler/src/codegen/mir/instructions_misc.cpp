@@ -372,6 +372,18 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
         }
         std::string elem_type = mir_type_to_llvm(elem_ptr);
 
+        // If this element is an array type that was spilled to an alloca for
+        // mutation (e.g., var arr: [U8; 4] with subsequent arr[i] = x), reload
+        // from the spill alloca so the mutations are included in the tuple.
+        if (!elem_type.empty() && elem_type[0] == '[') {
+            auto spill_it = value_spill_allocas_.find(i.elements[j].id);
+            if (spill_it != value_spill_allocas_.end()) {
+                std::string reloaded = "%reload" + std::to_string(temp_counter_++);
+                emitln("    " + reloaded + " = load " + elem_type + ", ptr " + spill_it->second);
+                elem_val = reloaded;
+            }
+        }
+
         std::string elem_ptr_reg = "%gep" + std::to_string(temp_counter_++);
         emitln("    " + elem_ptr_reg + " = getelementptr inbounds " + tuple_type + ", ptr " +
                alloc_reg + ", i32 0, i32 " + std::to_string(j));

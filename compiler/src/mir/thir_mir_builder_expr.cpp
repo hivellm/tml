@@ -227,18 +227,42 @@ auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
     // build_index always does GEP + LOAD, but we need just the GEP pointer for store.
     if (assign.target->is<thir::ThirIndexExpr>()) {
         const auto& index = assign.target->as<thir::ThirIndexExpr>();
-        auto object = build_expr(index.object);
         auto idx = build_expr(index.index);
         auto result_type = convert_type(index.type);
+
+        // For mutable array variables stored via alloca, use the alloca pointer directly.
+        // build_expr would load the array value, but GEP needs a pointer to the array.
+        Value object;
+        MirTypePtr base_type;
+        bool using_alloca = false;
+        if (index.object->is<thir::ThirVarExpr>()) {
+            const auto& var = index.object->as<thir::ThirVarExpr>();
+            if (ctx_.mut_struct_vars.count(var.name) > 0) {
+                Value alloca_ptr = get_variable(var.name);
+                if (alloca_ptr.type) {
+                    if (auto* ptr_t = std::get_if<MirPointerType>(&alloca_ptr.type->kind)) {
+                        if (ptr_t->pointee && ptr_t->pointee->is_array()) {
+                            object = alloca_ptr;
+                            base_type = ptr_t->pointee; // The array type, not the pointer type
+                            using_alloca = true;
+                        }
+                    }
+                }
+            }
+        }
+        if (!using_alloca) {
+            object = build_expr(index.object);
+            base_type = object.type;
+        }
 
         GetElementPtrInst gep;
         gep.base = object;
         gep.indices = {idx};
-        gep.base_type = object.type;
+        gep.base_type = base_type;
         gep.result_type = make_pointer_type(result_type, false);
 
-        if (object.type) {
-            if (auto* arr_type = std::get_if<MirArrayType>(&object.type->kind)) {
+        if (base_type) {
+            if (auto* arr_type = std::get_if<MirArrayType>(&base_type->kind)) {
                 gep.known_array_size = static_cast<int64_t>(arr_type->size);
             }
         }

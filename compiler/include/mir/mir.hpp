@@ -339,6 +339,8 @@ struct AllocaInst {
     std::string name;              // Original variable name (for debugging)
     bool is_stack_eligible = true; // Always stack-eligible since it's already alloca
     bool is_volatile = false;      // Volatile variable (prevents optimization)
+    bool zero_init = false;        // Emit zeroinitializer store after alloca to avoid
+                                   // large aggregate SSA stores that crash LLVM's backend.
 };
 
 // Get element pointer: result = &aggregate[index]

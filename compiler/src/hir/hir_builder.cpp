@@ -157,6 +157,14 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
 
     current_module_ = &module;
 
+    // Build struct declaration map for default field value injection
+    struct_decl_map_.clear();
+    for (const auto& decl : ast_module.decls) {
+        if (const auto* s = std::get_if<parser::StructDecl>(&decl->kind)) {
+            struct_decl_map_[s->name] = s;
+        }
+    }
+
     // Lower all declarations
     for (const auto& decl : ast_module.decls) {
         std::visit(
