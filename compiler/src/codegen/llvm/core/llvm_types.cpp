@@ -162,6 +162,11 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "%union." + name;
     }
 
+    // Resolve "This"/"Self" placeholder to the current impl type.
+    if ((name == "This" || name == "Self") && !current_impl_type_.empty()) {
+        return llvm_type_name(current_impl_type_);
+    }
+
     // User-defined type - return struct type
     return "%struct." + name;
 }
@@ -743,6 +748,14 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             }
         }
 
+        // Resolve "This"/"Self" placeholder to the current impl type.
+        // The type environment stores method parameters as NamedType("This") which
+        // must be resolved to the concrete implementing type during codegen.
+        // current_impl_type_ is set by gen_impl_method() and generate_default_method().
+        if ((named.name == "This" || named.name == "Self") && !current_impl_type_.empty()) {
+            return llvm_type_name(current_impl_type_);
+        }
+
         return "%struct." + named.name;
     } else if (type->is<types::GenericType>()) {
         // Check if there's a substitution available for this generic type parameter
@@ -1039,7 +1052,21 @@ auto LLVMIRGen::mangle_func_name(const std::string& base_name,
     if (type_args.empty()) {
         return base_name;
     }
-    return base_name + "__" + mangle_type_args(type_args);
+
+    std::string type_suffix = "__" + mangle_type_args(type_args);
+
+    // Phase 4: Add hierarchical path encoding + hash for library generic functions.
+    // Look up the module that owns this generic function.
+    auto mod_it = generic_func_modules_.find(base_name);
+    if (mod_it != generic_func_modules_.end() && !mod_it->second.empty()) {
+        // Use hierarchical mangling: N<path><name>E__<TypeArgs>_h<hash>
+        // e.g., core::iter::take[I32] → N4core4iter4takeE__I32_h7f8a9b1c
+        std::string hash = fnv1a_hash_hex(type_suffix);
+        return mangle_tml_symbol(mod_it->second, base_name) + type_suffix + "_h" + hash;
+    }
+
+    // Local (non-library) generic functions use bare name
+    return base_name + type_suffix;
 }
 
 } // namespace tml::codegen

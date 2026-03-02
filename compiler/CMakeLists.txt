@@ -184,9 +184,9 @@ endif()
 # This avoids requiring explicit #include in each source file.
 set(_module_header "${CMAKE_CURRENT_SOURCE_DIR}/include/plugin/module.hpp")
 if(MSVC)
-    add_compile_options(/FI"${_module_header}")
+    add_compile_options(/FI${_module_header})
 else()
-    add_compile_options(-include "${_module_header}")
+    add_compile_options(-include ${_module_header})
 endif()
 
 # Include directories

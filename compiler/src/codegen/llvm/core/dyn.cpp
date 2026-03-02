@@ -187,7 +187,7 @@ void LLVMIRGen::emit_vtables() {
 
         // First pass: collect all function references and check which need declarations
         std::vector<std::string> vtable_entries;
-        std::vector<std::string> missing_decls;
+        std::vector<std::pair<std::string, std::string>> missing_decls; // (func_name, method_name)
         bool all_methods_available = true;
 
         for (size_t di = 0; di < dispatchable_method_indices.size(); ++di) {
@@ -250,11 +250,11 @@ void LLVMIRGen::emit_vtables() {
                     break;
                 }
 
-                // Use non-prefixed name for default methods
-                func_name = "@tml_" + type_name + "_" + method.name;
+                // Use mangled name for default methods
+                func_name = "@" + mangle_impl_method(type_name, method.name);
                 // Mark as needing an external declaration only if not already generated
                 if (functions_.find(type_name + "_" + method.name) == functions_.end()) {
-                    missing_decls.push_back(func_name);
+                    missing_decls.push_back({func_name, method.name});
                 }
             }
             vtable_entries.push_back(func_name);
@@ -294,13 +294,7 @@ void LLVMIRGen::emit_vtables() {
                     }
                 }
 
-                for (const auto& decl : missing_decls) {
-                    // Extract method name from "@tml_TypeName_method"
-                    std::string prefix = "@tml_" + type_name + "_";
-                    if (decl.find(prefix) != 0)
-                        continue;
-                    std::string method_name_only = decl.substr(prefix.size());
-
+                for (const auto& [decl, method_name_only] : missing_decls) {
                     // Find the trait method declaration
                     bool generated = false;
                     for (const auto& trait_method : trait_decl->methods) {
@@ -434,6 +428,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
         return false;
 
     std::string method_name = type_name + "_" + trait_method.name;
+    std::string func_llvm_name = mangle_impl_method(type_name, trait_method.name);
 
     // Skip if already generated
     if (functions_.find(method_name) != functions_.end())
@@ -578,12 +573,12 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
 
     // Register function
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[method_name] = FuncInfo{"@tml_" + method_name, func_type, ret_type, param_types_vec};
+    functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
 
     // Generate function
     emit_line("");
     emit_line("; Default implementation from behavior " + trait_decl->name);
-    emit_line("define internal " + ret_type + " @tml_" + method_name + "(" + params + ") #0 {");
+    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
 
     // Register params in locals
@@ -657,6 +652,10 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     current_impl_type_.clear();
     current_type_subs_ = saved_type_subs;
     current_associated_types_ = saved_associated_types;
+
+    // Mark as generated to prevent duplicate emission by impl.cpp
+    generated_impl_methods_output_.insert(func_llvm_name);
+    generated_functions_.insert("@" + func_llvm_name);
     return true;
 }
 

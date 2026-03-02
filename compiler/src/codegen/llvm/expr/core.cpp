@@ -601,16 +601,17 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
             } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
                        expr_type == "i64") {
                 // Phase 45: Use TML Display behavior dispatch per type
-                std::string func;
+                std::string tml_type;
                 if (expr_type == "i8") {
-                    func = last_expr_is_unsigned_ ? "@tml_U8_to_string" : "@tml_I8_to_string";
+                    tml_type = last_expr_is_unsigned_ ? "U8" : "I8";
                 } else if (expr_type == "i16") {
-                    func = last_expr_is_unsigned_ ? "@tml_U16_to_string" : "@tml_I16_to_string";
+                    tml_type = last_expr_is_unsigned_ ? "U16" : "I16";
                 } else if (expr_type == "i32") {
-                    func = last_expr_is_unsigned_ ? "@tml_U32_to_string" : "@tml_I32_to_string";
+                    tml_type = last_expr_is_unsigned_ ? "U32" : "I32";
                 } else {
-                    func = last_expr_is_unsigned_ ? "@tml_U64_to_string" : "@tml_I64_to_string";
+                    tml_type = last_expr_is_unsigned_ ? "U64" : "I64";
                 }
+                std::string func = "@" + mangle_impl_method(tml_type, "to_string");
                 std::string str_result = fresh_reg();
                 emit_line("  " + str_result + " = call ptr " + func + "(" + expr_type + " " +
                           expr_val + ")");
@@ -619,10 +620,12 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
                 // Phase 45: Use TML Display behavior dispatch
                 std::string str_result = fresh_reg();
                 if (expr_type == "float") {
-                    emit_line("  " + str_result + " = call ptr @tml_F32_to_string(float " +
+                    std::string func = "@" + mangle_impl_method("F32", "to_string");
+                    emit_line("  " + str_result + " = call ptr " + func + "(float " +
                               expr_val + ")");
                 } else {
-                    emit_line("  " + str_result + " = call ptr @tml_F64_to_string(double " +
+                    std::string func = "@" + mangle_impl_method("F64", "to_string");
+                    emit_line("  " + str_result + " = call ptr " + func + "(double " +
                               expr_val + ")");
                 }
                 segment_strs.push_back(str_result);
@@ -674,9 +677,12 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
     // This produces Text type instead of Str
     //
     // Uses TML-dispatched methods:
-    //   @tml_Text_new() -> %struct.Text
-    //   @tml_Text_from(ptr) -> %struct.Text
-    //   @tml_Text_push_str(ptr %text_alloca, ptr %str) -> void
+    //   Text::new() -> %struct.Text
+    //   Text::from(ptr) -> %struct.Text
+    //   Text::push_str(ptr %text_alloca, ptr %str) -> void
+    std::string text_new_fn = "@" + mangle_impl_method("Text", "new");
+    std::string text_from_fn = "@" + mangle_impl_method("Text", "from");
+    std::string text_push_str_fn = "@" + mangle_impl_method("Text", "push_str");
 
     // Allocate stack space for the Text struct (needed for push_str calls)
     std::string text_alloca = fresh_reg();
@@ -685,7 +691,7 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
     if (tpl.segments.empty()) {
         // Empty template literal - create empty Text
         std::string text_val = fresh_reg();
-        emit_line("  " + text_val + " = call %struct.Text @tml_Text_new()");
+        emit_line("  " + text_val + " = call %struct.Text " + text_new_fn + "()");
         emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         std::string result = fresh_reg();
         emit_line("  " + result + " = load %struct.Text, ptr " + text_alloca);
@@ -704,16 +710,17 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
                    expr_type == "i64") {
             // Phase 45: Use TML Display behavior dispatch per type
-            std::string func;
+            std::string tml_type;
             if (expr_type == "i8") {
-                func = last_expr_is_unsigned_ ? "@tml_U8_to_string" : "@tml_I8_to_string";
+                tml_type = last_expr_is_unsigned_ ? "U8" : "I8";
             } else if (expr_type == "i16") {
-                func = last_expr_is_unsigned_ ? "@tml_U16_to_string" : "@tml_I16_to_string";
+                tml_type = last_expr_is_unsigned_ ? "U16" : "I16";
             } else if (expr_type == "i32") {
-                func = last_expr_is_unsigned_ ? "@tml_U32_to_string" : "@tml_I32_to_string";
+                tml_type = last_expr_is_unsigned_ ? "U32" : "I32";
             } else {
-                func = last_expr_is_unsigned_ ? "@tml_U64_to_string" : "@tml_I64_to_string";
+                tml_type = last_expr_is_unsigned_ ? "U64" : "I64";
             }
+            std::string func = "@" + mangle_impl_method(tml_type, "to_string");
             std::string str_result = fresh_reg();
             emit_line("  " + str_result + " = call ptr " + func + "(" + expr_type + " " + expr_val +
                       ")");
@@ -722,10 +729,12 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
             // Phase 45: Use TML Display behavior dispatch
             std::string str_result = fresh_reg();
             if (expr_type == "float") {
-                emit_line("  " + str_result + " = call ptr @tml_F32_to_string(float " + expr_val +
+                std::string func = "@" + mangle_impl_method("F32", "to_string");
+                emit_line("  " + str_result + " = call ptr " + func + "(float " + expr_val +
                           ")");
             } else {
-                emit_line("  " + str_result + " = call ptr @tml_F64_to_string(double " + expr_val +
+                std::string func = "@" + mangle_impl_method("F64", "to_string");
+                emit_line("  " + str_result + " = call ptr " + func + "(double " + expr_val +
                           ")");
             }
             return str_result;
@@ -750,7 +759,7 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         const std::string& text = std::get<std::string>(first_segment.content);
         std::string const_name = add_string_literal(text);
         std::string text_val = fresh_reg();
-        emit_line("  " + text_val + " = call %struct.Text @tml_Text_from(ptr " + const_name + ")");
+        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + const_name + ")");
         emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     } else {
@@ -758,7 +767,7 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         const auto& expr_ptr = std::get<parser::ExprPtr>(first_segment.content);
         std::string str_val = convert_expr_to_str(expr_ptr);
         std::string text_val = fresh_reg();
-        emit_line("  " + text_val + " = call %struct.Text @tml_Text_from(ptr " + str_val + ")");
+        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + str_val + ")");
         emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     }
@@ -770,14 +779,14 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
             // Literal text segment
             const std::string& text = std::get<std::string>(segment.content);
             std::string const_name = add_string_literal(text);
-            emit_line("  call void @tml_Text_push_str(ptr " + text_alloca + ", ptr " + const_name +
-                      ")");
+            emit_line("  call void " + text_push_str_fn + "(ptr " + text_alloca + ", ptr " +
+                      const_name + ")");
         } else {
             // Expression segment
             const auto& expr_ptr = std::get<parser::ExprPtr>(segment.content);
             std::string str_val = convert_expr_to_str(expr_ptr);
-            emit_line("  call void @tml_Text_push_str(ptr " + text_alloca + ", ptr " + str_val +
-                      ")");
+            emit_line("  call void " + text_push_str_fn + "(ptr " + text_alloca + ", ptr " +
+                      str_val + ")");
         }
     }
 

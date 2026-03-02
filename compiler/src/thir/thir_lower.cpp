@@ -824,20 +824,48 @@ auto ThirLower::needs_coercion(ThirType from, ThirType to) -> std::optional<Coer
     auto fk = *from_kind;
     auto tk = *to_kind;
 
-    // Signed integer widening
+    // Integer widening (signed or unsigned) — only when target is actually wider
     if (is_integer_type(from) && is_integer_type(to)) {
-        // Check if both are signed or both unsigned
-        bool from_signed = (fk == types::PrimitiveKind::I8 || fk == types::PrimitiveKind::I16 ||
-                            fk == types::PrimitiveKind::I32 || fk == types::PrimitiveKind::I64 ||
-                            fk == types::PrimitiveKind::I128);
-        bool to_signed = (tk == types::PrimitiveKind::I8 || tk == types::PrimitiveKind::I16 ||
-                          tk == types::PrimitiveKind::I32 || tk == types::PrimitiveKind::I64 ||
-                          tk == types::PrimitiveKind::I128);
+        // Bit-width lookup for integer types
+        auto int_bit_width = [](types::PrimitiveKind k) -> int {
+            switch (k) {
+            case types::PrimitiveKind::I8:
+            case types::PrimitiveKind::U8:
+                return 8;
+            case types::PrimitiveKind::I16:
+            case types::PrimitiveKind::U16:
+                return 16;
+            case types::PrimitiveKind::I32:
+            case types::PrimitiveKind::U32:
+                return 32;
+            case types::PrimitiveKind::I64:
+            case types::PrimitiveKind::U64:
+                return 64;
+            case types::PrimitiveKind::I128:
+            case types::PrimitiveKind::U128:
+                return 128;
+            default:
+                return 0;
+            }
+        };
+        int from_width = int_bit_width(fk);
+        int to_width = int_bit_width(tk);
 
-        if (from_signed && to_signed)
-            return CoercionKind::IntWidening;
-        if (!from_signed && !to_signed)
-            return CoercionKind::UintWidening;
+        // Only coerce if target is strictly wider (not narrowing or same-width)
+        if (from_width > 0 && to_width > 0 && from_width < to_width) {
+            bool from_signed =
+                (fk == types::PrimitiveKind::I8 || fk == types::PrimitiveKind::I16 ||
+                 fk == types::PrimitiveKind::I32 || fk == types::PrimitiveKind::I64 ||
+                 fk == types::PrimitiveKind::I128);
+            bool to_signed = (tk == types::PrimitiveKind::I8 || tk == types::PrimitiveKind::I16 ||
+                              tk == types::PrimitiveKind::I32 || tk == types::PrimitiveKind::I64 ||
+                              tk == types::PrimitiveKind::I128);
+
+            if (from_signed && to_signed)
+                return CoercionKind::IntWidening;
+            if (!from_signed && !to_signed)
+                return CoercionKind::UintWidening;
+        }
     }
 
     // Float widening
@@ -908,7 +936,12 @@ auto ThirLower::resolve_method(const hir::HirMethodCallExpr& call) -> ResolvedMe
                 auto result = solver_->solve(goal);
                 if (std::holds_alternative<traits::TraitCandidate>(result)) {
                     resolved.behavior_name = bname;
-                    resolved.qualified_name = bname + "::" + call.method_name;
+                    // Keep qualified_name based on concrete type (TypeName::method)
+                    // since function definitions are mangled as TypeName__method.
+                    // Only override if we don't already have a type-prefixed name.
+                    if (!(lookup_type && lookup_type->is<types::NamedType>())) {
+                        resolved.qualified_name = bname + "::" + call.method_name;
+                    }
                     break;
                 }
             }

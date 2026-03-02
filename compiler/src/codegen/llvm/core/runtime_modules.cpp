@@ -24,6 +24,92 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Static helper to parse mangled type strings like "Mutex__I32" into proper TypePtr
+// Duplicated from call_generic_struct.cpp since this is a pure helper function.
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Usize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Isize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+
+    if (s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.inner = inner};
+            return t;
+        }
+    }
+
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 // Helper: Get the LLVM type string for a constant's declared type
 // (duplicated from runtime.cpp - static helper used in emit_module_pure_tml_functions)
 static std::string get_const_llvm_type(const parser::TypePtr& type) {
@@ -189,16 +275,8 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                     params_str += llvm_type_from_semantic(func_sig.params[i]);
                 }
 
-                // Sanitize function name: replace :: with _ for valid LLVM identifiers
-                std::string sanitized_name = func_name;
-                size_t pos = 0;
-                while ((pos = sanitized_name.find("::", pos)) != std::string::npos) {
-                    sanitized_name.replace(pos, 2, "_");
-                    pos += 1;
-                }
-
-                // Skip if already emitted (prevents duplicate LLVM declarations)
-                std::string symbol = "tml_" + sanitized_name;
+                // Build mangled symbol name with hierarchical path + type encoding
+                std::string symbol = "tml_" + mangle_tml_symbol(module_name, func_name, func_sig.params);
                 if (!emitted.insert(symbol).second) {
                     continue;
                 }
@@ -679,6 +757,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
     for (const auto& info : eligible_modules) {
         const auto& parsed_module = *info.parsed_module_ptr;
         current_module_prefix_ = info.sanitized_prefix;
+        current_module_name_ = info.module_name;
         current_submodule_name_ = info.mod_name;
 
         // First pass: register struct/enum declarations (including generic ones)
@@ -804,6 +883,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
     }
     current_module_prefix_.clear();
+    current_module_name_.clear();
 
     // ========================================================================
     // PHASE 2: Generate code for functions and impl methods.
@@ -818,6 +898,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         const auto& parsed_module = *info.parsed_module_ptr;
         const auto& module_name = info.module_name;
         current_module_prefix_ = info.sanitized_prefix;
+        current_module_name_ = info.module_name;
         current_submodule_name_ = info.mod_name;
 
         emit_line("; Module: " + module_name);
@@ -1027,8 +1108,9 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             }
         }
 
-        // Clear module prefix after processing this module
+        // Clear module prefix and name after processing this module
         current_module_prefix_.clear();
+        current_module_name_.clear();
     }
 
     emit_line("");
@@ -1094,12 +1176,13 @@ void LLVMIRGen::emit_referenced_library_definitions() {
         }
     }
 
-    if (worklist.empty()) {
+    if (worklist.empty() && pending_impl_method_instantiations_.empty()) {
         return;
     }
 
     // Save codegen state
     auto saved_module_prefix = current_module_prefix_;
+    auto saved_module_name = current_module_name_;
     auto saved_submodule = current_submodule_name_;
     auto saved_in_library_body = in_library_body_;
     in_library_body_ = true;
@@ -1138,10 +1221,53 @@ void LLVMIRGen::emit_referenced_library_definitions() {
             if (method_it != pending_library_methods_.end()) {
                 const auto& info = method_it->second;
                 current_module_prefix_ = info.module_prefix;
+                current_module_name_ = info.module_name;
                 current_submodule_name_ = info.submodule_name;
                 options_.lazy_library_defs = false;
                 generated_functions_.erase(fn);
+
+                // For generic type methods (e.g., LockFreeStack__I32::push),
+                // set up type substitutions so the body can resolve type params.
+                // Extract base type and type args from the mangled type name.
+                auto saved_type_subs = current_type_subs_;
+                auto dunder = info.type_name.find("__");
+                if (dunder != std::string::npos) {
+                    std::string base = info.type_name.substr(0, dunder);
+                    std::string suffix = info.type_name.substr(dunder + 2);
+                    // Look up impl generics from pending_generic_impls_
+                    auto impl_it = pending_generic_impls_.find(base);
+                    if (impl_it != pending_generic_impls_.end()) {
+                        const auto& impl_block = *impl_it->second;
+                        if (impl_block.generics.size() == 1) {
+                            auto type_arg = parse_mangled_type_string(suffix);
+                            if (type_arg) {
+                                current_type_subs_[impl_block.generics[0].name] = type_arg;
+                            }
+                        } else if (impl_block.generics.size() > 1) {
+                            // Multi-param: split on "__"
+                            std::vector<std::string> parts;
+                            size_t pos = 0;
+                            while (pos < suffix.size()) {
+                                size_t next = suffix.find("__", pos);
+                                if (next == std::string::npos) {
+                                    parts.push_back(suffix.substr(pos));
+                                    break;
+                                }
+                                parts.push_back(suffix.substr(pos, next - pos));
+                                pos = next + 2;
+                            }
+                            for (size_t gi = 0; gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
+                                auto type_arg = parse_mangled_type_string(parts[gi]);
+                                if (type_arg) {
+                                    current_type_subs_[impl_block.generics[gi].name] = type_arg;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 gen_impl_method(info.type_name, *info.method);
+                current_type_subs_ = saved_type_subs;
                 options_.lazy_library_defs = true;
                 continue;
             }
@@ -1150,6 +1276,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
             if (func_it != pending_library_funcs_.end()) {
                 const auto& finfo = func_it->second;
                 current_module_prefix_ = finfo.module_prefix;
+                current_module_name_ = finfo.module_name;
                 current_submodule_name_ = finfo.submodule_name;
                 options_.lazy_library_defs = false;
                 generated_functions_.erase(fn);
@@ -1227,10 +1354,49 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                 if (method_it != pending_library_methods_.end()) {
                     const auto& info = method_it->second;
                     current_module_prefix_ = info.module_prefix;
+                    current_module_name_ = info.module_name;
                     current_submodule_name_ = info.submodule_name;
                     options_.lazy_library_defs = false;
                     generated_functions_.erase(fn);
+
+                    // Set up type subs for generic type methods (same as main worklist)
+                    auto saved_type_subs = current_type_subs_;
+                    auto dunder = info.type_name.find("__");
+                    if (dunder != std::string::npos) {
+                        std::string base = info.type_name.substr(0, dunder);
+                        std::string suffix = info.type_name.substr(dunder + 2);
+                        auto impl_it = pending_generic_impls_.find(base);
+                        if (impl_it != pending_generic_impls_.end()) {
+                            const auto& impl_block = *impl_it->second;
+                            if (impl_block.generics.size() == 1) {
+                                auto type_arg = parse_mangled_type_string(suffix);
+                                if (type_arg) {
+                                    current_type_subs_[impl_block.generics[0].name] = type_arg;
+                                }
+                            } else if (impl_block.generics.size() > 1) {
+                                std::vector<std::string> parts;
+                                size_t pos = 0;
+                                while (pos < suffix.size()) {
+                                    size_t next = suffix.find("__", pos);
+                                    if (next == std::string::npos) {
+                                        parts.push_back(suffix.substr(pos));
+                                        break;
+                                    }
+                                    parts.push_back(suffix.substr(pos, next - pos));
+                                    pos = next + 2;
+                                }
+                                for (size_t gi = 0; gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
+                                    auto type_arg = parse_mangled_type_string(parts[gi]);
+                                    if (type_arg) {
+                                        current_type_subs_[impl_block.generics[gi].name] = type_arg;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     gen_impl_method(info.type_name, *info.method);
+                    current_type_subs_ = saved_type_subs;
                     options_.lazy_library_defs = true;
                     continue;
                 }
@@ -1239,6 +1405,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                 if (func_it != pending_library_funcs_.end()) {
                     const auto& finfo = func_it->second;
                     current_module_prefix_ = finfo.module_prefix;
+                    current_module_name_ = finfo.module_name;
                     current_submodule_name_ = finfo.submodule_name;
                     options_.lazy_library_defs = false;
                     generated_functions_.erase(fn);
@@ -1265,6 +1432,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
 
     // Restore codegen state
     current_module_prefix_ = saved_module_prefix;
+    current_module_name_ = saved_module_name;
     current_submodule_name_ = saved_submodule;
     in_library_body_ = saved_in_library_body;
 
@@ -1297,9 +1465,13 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                  << (pending_library_methods_.size() + pending_library_funcs_.size())
                  << " library functions");
 
-    // Verify: scan final IR for any @tml_ calls that lack a define or declare.
-    // This catches transitive resolution bugs before LLVM tries to parse the IR.
-    {
+    // Verify and recover: scan final IR for any @tml_ calls that lack a define or declare.
+    // For unresolved generic type methods (e.g., @tml_StackNode__I32_new), attempt to
+    // queue them as pending impl method instantiations and flush. This handles cases where
+    // generate_pending_instantiations() generated a method body that calls internal generic
+    // type methods which weren't queued through the normal path.
+    in_library_body_ = true; // Recovery needs library body mode
+    for (int verify_round = 0; verify_round < 3; ++verify_round) {
         std::string final_ir = output_.str();
         auto all_refs = collect_refs(final_ir);
 
@@ -1321,43 +1493,195 @@ void LLVMIRGen::emit_referenced_library_definitions() {
             }
         }
 
+        bool queued_recovery = false;
         for (const auto& ref : all_refs) {
             if (defined_or_declared.count(ref) == 0) {
-                // Skip functions that will be provided by the runtime catalog
-                // (e.g., @tml_str_free, @tml_random_seed). These are emitted
-                // later by finalize_runtime_decls() and are not truly unresolved.
                 std::string name_no_at = ref.size() > 1 ? ref.substr(1) : ref;
                 if (runtime_catalog_index_.count(name_no_at) > 0) {
-                    // Ensure it's marked as needed so finalize_runtime_decls emits it
                     require_runtime_decl(name_no_at);
                     continue;
                 }
 
-                // For enum drop functions in suite mode, auto-declare as external
-                // Pattern: @tml_s<N>_<TypeName>_drop (e.g., @tml_s0_IntList_drop)
-                // This handles the case where a type is defined in one test file
-                // but dropped in another test file within the same suite.
                 bool is_enum_drop = (ref.find("_drop") != std::string::npos &&
                                      name_no_at.find("_s") != std::string::npos);
                 if (is_enum_drop) {
                     TML_LOG_DEBUG(
                         "codegen",
                         "[LAZY_LIB] Auto-declaring unreferenced enum drop function: " << ref);
-                    // Add it to the declarations that will be emitted at the top of the IR
                     deferred_runtime_decls_ += "declare void " + ref + "(ptr) #0\n";
                     continue;
                 }
 
-                // Check if it's in pending but wasn't resolved
-                bool in_pending = pending_library_methods_.count(ref) > 0 ||
-                                  pending_library_funcs_.count(ref) > 0;
-                TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED reference: "
-                                            << ref
-                                            << (in_pending ? " (IN PENDING BUT NOT GENERATED)" : "")
-                                            << " — this will cause LLVM IR parse failure");
+                // Recovery: try to queue unresolved generic type methods for instantiation.
+                // Pattern: @tml_<Type>__<TypeArg>_<method> (e.g., @tml_StackNode__I32_new)
+                // Strip the "tml_" prefix and look for a double-underscore type separator.
+                std::string func_name = name_no_at;
+                if (func_name.substr(0, 4) == "tml_") {
+                    func_name = func_name.substr(4);
+                }
+                // Also strip mangled module prefix like "N3std4sync5stack"
+                // by looking for a leading "N" followed by length-prefixed segments.
+                if (!func_name.empty() && func_name[0] == 'N') {
+                    // Skip over N<len><name> segments until we hit an uppercase letter
+                    // that starts a type name (not part of a module segment).
+                    // Actually, simpler: look for the pattern Type__TypeArg_method directly.
+                    // The function names are like: StackNode__I32_new (no module prefix for internal)
+                    // or N3std4sync5stack22StackNode__I32_new for module-prefixed ones.
+                    // For now, just handle the simple non-prefixed case.
+                }
+
+                auto dunder = func_name.find("__");
+                if (dunder != std::string::npos) {
+                    std::string base_type = func_name.substr(0, dunder);
+                    std::string rest = func_name.substr(dunder + 2);
+                    // rest = "I32_new" or "I32_free" — split on last underscore for method name
+                    auto last_underscore = rest.rfind('_');
+                    if (last_underscore != std::string::npos && last_underscore > 0) {
+                        std::string type_arg_str = rest.substr(0, last_underscore);
+                        std::string method_name = rest.substr(last_underscore + 1);
+                        std::string mangled_type = base_type + "__" + type_arg_str;
+
+                        // Check if this base type has a generic impl
+                        auto impl_it = pending_generic_impls_.find(base_type);
+                        if (impl_it != pending_generic_impls_.end()) {
+                            const auto& impl_block = *impl_it->second;
+                            // Verify the impl has this method
+                            bool has_method = false;
+                            std::string available_methods;
+                            for (const auto& m : impl_block.methods) {
+                                if (!available_methods.empty()) available_methods += ", ";
+                                available_methods += m.name;
+                                if (m.name == method_name) {
+                                    has_method = true;
+                                }
+                            }
+                            if (has_method) {
+                                std::string mangled_method = mangle_impl_method(mangled_type, method_name);
+                                if (generated_impl_methods_output_.count(mangled_method) == 0) {
+                                    // Build type_subs from the type arg
+                                    std::unordered_map<std::string, types::TypePtr> type_subs;
+                                    if (impl_block.generics.size() == 1) {
+                                        auto type_arg = parse_mangled_type_string(type_arg_str);
+                                        if (type_arg) {
+                                            type_subs[impl_block.generics[0].name] = type_arg;
+                                        }
+                                    }
+                                    pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                        mangled_type, method_name, type_subs, base_type, "",
+                                        /*is_library_type=*/true});
+                                    generated_impl_methods_.insert(mangled_method);
+                                    queued_recovery = true;
+                                    TML_LOG_DEBUG("codegen",
+                                        "[LAZY_LIB] Recovery: queued " << base_type << "::"
+                                        << method_name << " for instantiation (type_arg="
+                                        << type_arg_str << ")");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!queued_recovery && verify_round == 2) {
+                    // Final round: genuinely unresolved reference
+                    TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED: " << ref);
+                }
             }
         }
+
+        // If we queued recovery instantiations, flush them and re-verify
+        if (queued_recovery && !pending_impl_method_instantiations_.empty()) {
+            output_.str("");
+            output_.clear();
+            // Restore the full IR first
+            output_ << final_ir;
+
+            // Generate the recovered instantiations
+            std::stringstream recovery_output;
+            auto saved_output = output_.str();
+            output_.str("");
+            output_.clear();
+            generate_pending_instantiations();
+            std::string recovery_ir = output_.str();
+            if (!recovery_ir.empty()) {
+                output_.str("");
+                output_.clear();
+                output_ << saved_output;
+                output_ << "\n; Recovery instantiations (round " << verify_round << ")\n";
+                output_ << recovery_ir;
+
+                // Also resolve any transitive pending library methods
+                auto recovery_refs = collect_refs(recovery_ir);
+                std::unordered_set<std::string> recovery_worklist;
+                for (const auto& name : recovery_refs) {
+                    if (!generated.count(name) &&
+                        (pending_library_methods_.count(name) || pending_library_funcs_.count(name))) {
+                        recovery_worklist.insert(name);
+                    }
+                }
+                if (!recovery_worklist.empty()) {
+                    // Generate transitive dependencies
+                    while (!recovery_worklist.empty()) {
+                        std::unordered_set<std::string> next;
+                        std::string rnd_ir_saved = output_.str();
+                        output_.str("");
+                        output_.clear();
+                        for (const auto& fn : recovery_worklist) {
+                            if (generated.count(fn)) continue;
+                            generated.insert(fn);
+                            auto method_it = pending_library_methods_.find(fn);
+                            if (method_it != pending_library_methods_.end()) {
+                                const auto& info = method_it->second;
+                                current_module_prefix_ = info.module_prefix;
+                                current_module_name_ = info.module_name;
+                                current_submodule_name_ = info.submodule_name;
+                                options_.lazy_library_defs = false;
+                                generated_functions_.erase(fn);
+                                gen_impl_method(info.type_name, *info.method);
+                                options_.lazy_library_defs = true;
+                            }
+                            auto func_it = pending_library_funcs_.find(fn);
+                            if (func_it != pending_library_funcs_.end()) {
+                                const auto& finfo = func_it->second;
+                                current_module_prefix_ = finfo.module_prefix;
+                                current_module_name_ = finfo.module_name;
+                                current_submodule_name_ = finfo.submodule_name;
+                                options_.lazy_library_defs = false;
+                                generated_functions_.erase(fn);
+                                gen_func_decl(*finfo.func);
+                                options_.lazy_library_defs = true;
+                            }
+                        }
+                        std::string extra_ir = output_.str();
+                        output_.str("");
+                        output_.clear();
+                        output_ << rnd_ir_saved << extra_ir;
+                        auto extra_refs = collect_refs(extra_ir);
+                        for (const auto& name : extra_refs) {
+                            if (!generated.count(name) &&
+                                (pending_library_methods_.count(name) ||
+                                 pending_library_funcs_.count(name))) {
+                                next.insert(name);
+                            }
+                        }
+                        recovery_worklist = next;
+                    }
+                }
+            } else {
+                // No recovery IR generated, restore original
+                output_.str("");
+                output_.clear();
+                output_ << saved_output;
+            }
+            continue; // Re-verify
+        }
+        break; // No recovery needed, exit verification loop
     }
+
+    // Restore codegen state
+    current_module_prefix_ = saved_module_prefix;
+    current_module_name_ = saved_module_name;
+    current_submodule_name_ = saved_submodule;
+    in_library_body_ = saved_in_library_body;
 }
 
 void LLVMIRGen::emit_referenced_library_declarations() {
@@ -1460,12 +1784,7 @@ void LLVMIRGen::emit_referenced_library_declarations() {
                 ++scan_pos;
             std::string ref = final_ir.substr(s, scan_pos - s);
             if (defined_or_declared.count(ref) == 0) {
-                bool in_pending = pending_library_methods_.count(ref) > 0 ||
-                                  pending_library_funcs_.count(ref) > 0;
-                TML_LOG_WARN("codegen", "[LAZY_LIB_DECL] UNRESOLVED: "
-                                            << ref
-                                            << (in_pending ? " (IN PENDING)" : " (NOT IN PENDING)")
-                                            << " — will cause LLVM parse failure");
+                TML_LOG_WARN("codegen", "[LAZY_LIB_DECL] UNRESOLVED: " << ref);
             }
         }
     }

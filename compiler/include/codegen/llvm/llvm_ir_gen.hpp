@@ -428,6 +428,10 @@ private:
     std::string
         current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml
 
+    // Current module name with :: separators (for hierarchical name mangling)
+    // e.g., "core::str" — matches the module registry key, set alongside current_module_prefix_
+    std::string current_module_name_; // e.g., "core::str" (with :: separators)
+
     // Current submodule name (file stem) for cross-module function lookups
     // e.g., "unicode_data" when processing unicode_data.tml within core::unicode module
     std::string current_submodule_name_;
@@ -1139,6 +1143,9 @@ private:
     // All struct declarations (for accessing default field values during codegen)
     std::unordered_map<std::string, const parser::StructDecl*> struct_decls_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+    /// Maps generic function bare name → module path (e.g., "take" → "core::iter")
+    /// Used by Phase 4 mangling to add hierarchical path to generic instantiations.
+    std::unordered_map<std::string, std::string> generic_func_modules_;
     std::unordered_map<std::string, const parser::ClassDecl*> pending_generic_classes_;
 
     // Pending generic impl blocks (type_name -> impl block pointer)
@@ -1207,6 +1214,7 @@ private:
         std::string type_name;
         const parser::FuncDecl* method;
         std::string module_prefix;  // current_module_prefix_ when deferred
+        std::string module_name;    // current_module_name_ when deferred (:: separated)
         std::string submodule_name; // current_submodule_name_ when deferred
     };
     // Key: LLVM function name (e.g., "@tml_RawSocket_close")
@@ -1215,6 +1223,7 @@ private:
     struct PendingLibraryFunc {
         const parser::FuncDecl* func;
         std::string module_prefix;  // current_module_prefix_ when deferred
+        std::string module_name;    // current_module_name_ when deferred (:: separated)
         std::string submodule_name; // current_submodule_name_ when deferred
     };
     std::unordered_map<std::string, PendingLibraryFunc> pending_library_funcs_;
@@ -1351,9 +1360,44 @@ private:
     /// Used to avoid symbol collisions when multiple test files are linked into one DLL.
     auto get_suite_prefix() const -> std::string;
 
+    /// Hierarchical Itanium-style name mangling for library functions.
+    /// Converts module_name ("::" separated) + func_name into N<len><seg>...<len><seg>E format.
+    /// Example: mangle_tml_symbol("core::str", "to_lowercase") → "N4core3str12to_lowercaseE"
+    /// For local (non-library) functions, returns func_name unchanged.
+    auto mangle_tml_symbol(const std::string& module_name, const std::string& func_name) const
+        -> std::string;
+
+    /// Overload with parameter type encoding appended after the path.
+    /// Example: mangle_tml_symbol("core::str", "repeat", {Str, I64}) → "N4core3str6repeatE_si"
+    auto mangle_tml_symbol(const std::string& module_name, const std::string& func_name,
+                           const std::vector<types::TypePtr>& param_types) const -> std::string;
+
+    /// Encode a single TML type into a mangling code character/string.
+    /// Primitives: I8→a, I16→s, I32→i, I64→l, I128→x, U8→h, U16→t, U32→j, U64→m, U128→y,
+    ///            F32→f, F64→d, Bool→b, Char→c, Str→S, Unit→v, Never→z
+    /// Structs/Enums: <len><name> (e.g., "4Text", "6Buffer")
+    /// Ref types: R<inner>, Ptr: P<inner>, Slice: A<inner>
+    static auto mangle_type_code(const types::TypePtr& type) -> std::string;
+
+    /// FNV-1a 64-bit hash of a string, returned as 8-char hex.
+    /// Used by Phase 4 to create compact hash suffixes for generic instantiations.
+    static auto fnv1a_hash_hex(const std::string& input) -> std::string;
+
     /// Returns true if type_name::method is found in the module registry (library method).
     /// Used to avoid adding suite prefix to library method calls.
     auto is_library_method(const std::string& type_name, const std::string& method) const -> bool;
+
+    /// Find the module that defines a given type (struct, enum, or class).
+    /// Returns the module name (e.g., "core::str") or empty string if the type is local.
+    auto find_module_for_type(const std::string& type_name) const -> std::string;
+
+    /// Generate a mangled LLVM symbol name for an impl method.
+    /// For library types: uses Itanium-style encoding with module path.
+    ///   e.g., ("Str", "split", "core::str") → "tml_N4core3str3Str5splitE"
+    /// For local types: uses flat naming with optional suite prefix.
+    ///   e.g., ("MyStruct", "foo", "") → "tml_s0_MyStruct_foo"
+    auto mangle_impl_method(const std::string& type_name, const std::string& method_name) const
+        -> std::string;
 
     // Type translation
     auto llvm_type(const parser::Type& type) -> std::string;

@@ -48,6 +48,14 @@ private:
     Module module_;
     BuildContext ctx_;
 
+    /// Source-level type context for propagating expected types to literals.
+    /// Set by build_let_stmt (from declaration type) and build_return (from function return type).
+    /// Used by build_literal/build_array/build_tuple to produce correctly-typed values.
+    types::TypePtr context_type_ = nullptr;
+
+    /// Return type of the current function being built.
+    types::TypePtr current_return_type_ = nullptr;
+
     // ============ Type Conversion ============
 
     [[nodiscard]] auto convert_type(const thir::ThirType& type) -> MirTypePtr;

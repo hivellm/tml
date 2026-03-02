@@ -16,8 +16,6 @@
 
 #include "crypto_common.h"
 
-#ifdef TML_HAS_OPENSSL
-
 #include <openssl/core_names.h>
 #include <openssl/dh.h>
 #include <openssl/param_build.h>
@@ -766,72 +764,3 @@ TML_EXPORT void* crypto_dh_group_get_generator(const char* group_name) {
     crypto_dh_destroy(dh_handle);
     return gen;
 }
-
-#else /* !TML_HAS_OPENSSL */
-
-// ============================================================================
-// Stubs when OpenSSL is not available
-// ============================================================================
-
-TML_EXPORT void* crypto_dh_create(void* prime_handle, void* generator_handle) {
-    (void)prime_handle;
-    (void)generator_handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_generate(int64_t prime_length) {
-    (void)prime_length;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_create_group(const char* group_name) {
-    (void)group_name;
-    return NULL;
-}
-TML_EXPORT void crypto_dh_generate_keys(void* handle) {
-    (void)handle;
-}
-TML_EXPORT void* crypto_dh_get_public_key(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_get_private_key(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_dh_set_public_key(void* handle, void* key_handle) {
-    (void)handle;
-    (void)key_handle;
-}
-TML_EXPORT void crypto_dh_set_private_key(void* handle, void* key_handle) {
-    (void)handle;
-    (void)key_handle;
-}
-TML_EXPORT void* crypto_dh_get_prime(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_get_generator(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_compute_secret(void* handle, void* other_pub_handle) {
-    (void)handle;
-    (void)other_pub_handle;
-    return NULL;
-}
-TML_EXPORT int64_t crypto_dh_check(void* handle) {
-    (void)handle;
-    return -1;
-}
-TML_EXPORT void crypto_dh_destroy(void* handle) {
-    (void)handle;
-}
-TML_EXPORT void* crypto_dh_group_get_prime(const char* group_name) {
-    (void)group_name;
-    return NULL;
-}
-TML_EXPORT void* crypto_dh_group_get_generator(const char* group_name) {
-    (void)group_name;
-    return NULL;
-}
-
-#endif /* TML_HAS_OPENSSL */

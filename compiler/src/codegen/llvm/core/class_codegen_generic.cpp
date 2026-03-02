@@ -48,7 +48,7 @@ void LLVMIRGen::gen_class_constructor_instantiation(
     }
 
     // Generate unique constructor name based on parameter types (for overloading)
-    std::string func_name = "@tml_" + get_suite_prefix() + mangled_name + "_new";
+    std::string func_name = "@" + mangle_impl_method(mangled_name, "new");
     if (!param_types.empty()) {
         for (const auto& pt : param_types) {
             std::string type_suffix = pt;
@@ -147,7 +147,7 @@ void LLVMIRGen::gen_class_method_instantiation(
     auto saved_subs = current_type_subs_;
     current_type_subs_ = type_subs;
 
-    std::string func_name = "@tml_" + get_suite_prefix() + mangled_name + "_" + method.name;
+    std::string func_name = "@" + mangle_impl_method(mangled_name, method.name);
     std::string class_type = "%class." + mangled_name;
 
     // Build parameter list with type substitution
@@ -275,10 +275,9 @@ void LLVMIRGen::gen_generic_class_static_method(
     auto saved_subs = current_type_subs_;
     current_type_subs_ = type_subs;
 
-    // Function name: @tml_ClassName_methodName_TypeSuffix
-    // e.g., @tml_Utils_identity_I32
+    // Function name with proper mangling
     std::string func_name =
-        "@tml_" + get_suite_prefix() + c.name + "_" + method.name + method_suffix;
+        "@" + mangle_impl_method(c.name, method.name + method_suffix);
 
     // Build parameter list with type substitution
     std::vector<std::string> param_types;
@@ -386,10 +385,7 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
         return;
     }
 
-    // In library_decls_only mode, use no suite prefix (library methods are shared)
-    std::string prefix =
-        (options_.library_decls_only && !current_module_prefix_.empty()) ? "" : get_suite_prefix();
-    std::string func_name = "@tml_" + prefix + c.name + "_" + method.name;
+    std::string func_name = "@" + mangle_impl_method(c.name, method.name);
     std::string class_type = "%class." + c.name;
 
     // Build parameter list - first param is always 'this' for instance methods

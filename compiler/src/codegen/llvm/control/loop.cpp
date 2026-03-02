@@ -478,7 +478,7 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     std::string iter_llvm_type = last_expr_type_;
 
     // Look up next() return type to determine item type
-    std::string next_fn = "tml_" + type_name + "_next";
+    std::string next_fn = mangle_impl_method(type_name, "next");
     std::string item_llvm_type = "i32"; // fallback
     auto next_sig = env_.lookup_func(type_name + "::next");
     if (next_sig && next_sig->return_type) {

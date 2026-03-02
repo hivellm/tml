@@ -37,6 +37,15 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
     // Check if this function was registered (includes @extern functions)
     auto func_it = functions_.find(fn_name);
 
+    // If not found by bare name, try qualifying with current_module_name_ (:: separated).
+    // This handles library-internal calls like `len` inside core::str which is registered
+    // as "core::str::len" or "str::len" in the functions_ map.
+    if (func_it == functions_.end() && !current_module_name_.empty() &&
+        fn_name.find("::") == std::string::npos) {
+        std::string qualified = current_module_name_ + "::" + fn_name;
+        func_it = functions_.find(qualified);
+    }
+
     // If not found directly, check if it's a qualified FFI call (e.g., "SDL2::init")
     // In this case, the function is registered with just the bare name ("init")
     if (func_it == functions_.end() && func_sig.has_value() && func_sig->has_ffi_module()) {
@@ -186,6 +195,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         // This handles mutual recursion where called function isn't yet in functions_ map
         // BUT: Don't add suite prefix for library functions (they don't have prefixes)
         bool is_library_function = false;
+        std::string found_mod_name; // Capture module path for mangling
+        std::vector<types::TypePtr> found_param_types; // Capture param types for type encoding
         if (env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             // Also extract the bare function name (last segment after ::) for module lookup.
@@ -198,11 +209,16 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 }
             }
             for (const auto& [mod_name, mod] : all_modules) {
-                if (mod.functions.find(fn_name) != mod.functions.end() ||
-                    mod.functions.find(sanitized_name) != mod.functions.end() ||
-                    (!bare_fn_name.empty() &&
-                     mod.functions.find(bare_fn_name) != mod.functions.end())) {
+                // Try all name variants to find the function in this module
+                auto found_func_it = mod.functions.find(fn_name);
+                if (found_func_it == mod.functions.end())
+                    found_func_it = mod.functions.find(sanitized_name);
+                if (found_func_it == mod.functions.end() && !bare_fn_name.empty())
+                    found_func_it = mod.functions.find(bare_fn_name);
+                if (found_func_it != mod.functions.end()) {
                     is_library_function = true;
+                    found_mod_name = mod_name;
+                    found_param_types = found_func_it->second.params;
 
                     // Queue instantiation for non-generic library static methods (e.g., Text::from)
                     // Only for Type::method calls (sanitized_name has no ::)
@@ -226,7 +242,7 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                             enum_it != mod.enums.end() && !enum_it->second.type_params.empty();
 
                         if (is_type && !is_generic_struct && !is_generic_enum) {
-                            std::string mangled_method = "tml_" + type_name + "_" + method_name;
+                            std::string mangled_method = mangle_impl_method(type_name, method_name);
                             if (generated_impl_methods_.find(mangled_method) ==
                                 generated_impl_methods_.end()) {
                                 pending_impl_method_instantiations_.push_back(
@@ -296,7 +312,7 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
 
                 // Build mangled name with suffix (uses __ separator)
                 // e.g., I32_try_from__I64 for I32::try_from(I64 value)
-                mangled = "@tml_" + prefix + sanitized_name + behavior_suffix;
+                mangled = "@" + mangle_impl_method(type_name, method + behavior_suffix);
 
                 // Queue method instantiation with behavior suffix
                 // The mangled_method key must match what impl.cpp generates
@@ -304,7 +320,7 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 // That set is for tracking ACTUALLY generated methods, not queued ones.
                 // The queue processing in generic.cpp handles deduplication via
                 // processed_impl_methods.
-                std::string mangled_method = "tml_" + type_name + "_" + method + behavior_suffix;
+                std::string mangled_method = mangle_impl_method(type_name, method + behavior_suffix);
                 if (generated_impl_methods_.find(mangled_method) == generated_impl_methods_.end()) {
                     TML_DEBUG_LN("[IMPL_INST] Queueing " << type_name << "::" << method
                                                          << " suffix=" << arg_tml_type
@@ -337,7 +353,33 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             }
         }
 
-        mangled = "@tml_" + prefix + sanitized_name;
+        if (is_library_function && !found_mod_name.empty()) {
+            // Check if this is a Type::method call (static method on a type)
+            // vs a module::function call (free function in a module).
+            // Type::method calls need mangle_impl_method for correct symbol names.
+            size_t sep_pos2 = fn_name.find("::");
+            bool is_static_method = false;
+            if (sep_pos2 != std::string::npos) {
+                std::string first_seg = fn_name.substr(0, sep_pos2);
+                is_static_method = !first_seg.empty() && std::isupper(first_seg[0]);
+            }
+            if (is_static_method && sep_pos2 != std::string::npos) {
+                // Type::method → use mangle_impl_method for correct encoding
+                std::string type_name2 = fn_name.substr(0, sep_pos2);
+                std::string method_name2 = fn_name.substr(sep_pos2 + 2);
+                mangled = "@" + mangle_impl_method(type_name2, method_name2);
+            } else {
+                // Module-qualified free function → use bare name with module path
+                std::string bare = fn_name;
+                size_t last_sep = bare.rfind("::");
+                if (last_sep != std::string::npos) {
+                    bare = bare.substr(last_sep + 2);
+                }
+                mangled = "@tml_" + mangle_tml_symbol(found_mod_name, bare, found_param_types);
+            }
+        } else {
+            mangled = "@tml_" + prefix + sanitized_name;
+        }
     }
 
     // For generic functions, build type substitution map from actual arguments.
@@ -520,8 +562,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 val = gen_expr(*call.args[i]);
                 actual_type = last_expr_type_;
             }
-        } else if (param_is_ref && call.args[i]->is<parser::ArrayExpr>() &&
-                   func_sig.has_value() && i < func_sig->params.size()) {
+        } else if (param_is_ref && call.args[i]->is<parser::ArrayExpr>() && func_sig.has_value() &&
+                   i < func_sig->params.size()) {
             // Array literal passed to ref [T] parameter: create fat pointer { ptr, i64 }
             // on the stack and pass a pointer to it. gen_array() would load the array value
             // and lose the stack pointer, so we handle this case specially.
@@ -530,8 +572,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
             }
             bool is_slice_ref = resolved_param && resolved_param->is<types::RefType>() &&
-                                 resolved_param->as<types::RefType>().inner &&
-                                 resolved_param->as<types::RefType>().inner->is<types::SliceType>();
+                                resolved_param->as<types::RefType>().inner &&
+                                resolved_param->as<types::RefType>().inner->is<types::SliceType>();
             if (is_slice_ref) {
                 // Generate the array literal but keep the alloca pointer, not the loaded value.
                 // We do this by generating array elements directly into a temp alloca.
@@ -549,7 +591,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         llvm_elem_type = "i64";
                     }
 
-                    std::string array_type = "[" + std::to_string(count) + " x " + llvm_elem_type + "]";
+                    std::string array_type =
+                        "[" + std::to_string(count) + " x " + llvm_elem_type + "]";
 
                     // Allocate array on stack
                     std::string arr_ptr = fresh_reg();
@@ -562,7 +605,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         std::string elem_ptr = fresh_reg();
                         emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_type +
                                   ", ptr " + arr_ptr + ", i32 0, i32 " + std::to_string(ei));
-                        emit_line("  store " + llvm_elem_type + " " + elem_val + ", ptr " + elem_ptr);
+                        emit_line("  store " + llvm_elem_type + " " + elem_val + ", ptr " +
+                                  elem_ptr);
                     }
 
                     // Build fat pointer { ptr, i64 } on stack
@@ -694,14 +738,12 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                     std::string fat_alloca = fresh_reg();
                     emit_line("  " + fat_alloca + " = alloca { ptr, i64 }");
                     std::string data_field = fresh_reg();
-                    emit_line("  " + data_field +
-                              " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
-                              ", i32 0, i32 0");
+                    emit_line("  " + data_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 0");
                     emit_line("  store ptr " + arr_alloca + ", ptr " + data_field);
                     std::string len_field = fresh_reg();
-                    emit_line("  " + len_field +
-                              " = getelementptr inbounds { ptr, i64 }, ptr " + fat_alloca +
-                              ", i32 0, i32 1");
+                    emit_line("  " + len_field + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                              fat_alloca + ", i32 0, i32 1");
                     emit_line("  store i64 " + std::to_string(arr_count) + ", ptr " + len_field);
                     val = fat_alloca;
                 }

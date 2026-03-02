@@ -100,17 +100,8 @@ auto HirBuilder::lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr {
     // Lower pattern
     auto pattern = lower_pattern(*let_stmt.pattern, type);
 
-    // Add bindings to current scope
-    if (let_stmt.pattern->is<parser::IdentPattern>()) {
-        const auto& ident = let_stmt.pattern->as<parser::IdentPattern>();
-        if (!scopes_.empty()) {
-            scopes_.back().insert(ident.name);
-        }
-        // Also define in type environment scope so we can look up the type later
-        if (auto scope = type_env_.current_scope()) {
-            scope->define(ident.name, type, ident.is_mut, let_stmt.span);
-        }
-    }
+    // Add bindings to current scope (handles all pattern types recursively)
+    register_pattern_bindings(*let_stmt.pattern, type, let_stmt.span);
 
     // Lower initializer
     std::optional<HirExprPtr> init;
@@ -341,6 +332,102 @@ auto HirBuilder::lower_nested_decl(const parser::Decl& decl, SourceSpan span) ->
             }
         },
         decl.kind);
+}
+
+// ============================================================================
+// Pattern Binding Registration
+// ============================================================================
+//
+// Recursively walks an AST pattern and registers all identifier bindings
+// in both the lexical scope and type environment. This ensures that
+// variables bound via destructuring patterns (tuple, struct, enum, etc.)
+// are findable during expression lowering.
+//
+// Without this, `let (a, b) = get_pair()` would leave `a` and `b`
+// unregistered, causing them to default to unit type `()` when referenced.
+
+void HirBuilder::register_pattern_bindings(const parser::Pattern& pattern, HirType type,
+                                           SourceSpan span) {
+    std::visit(
+        [&](const auto& p) {
+            using T = std::decay_t<decltype(p)>;
+
+            if constexpr (std::is_same_v<T, parser::IdentPattern>) {
+                // Base case: register this identifier binding
+                if (!scopes_.empty()) {
+                    scopes_.back().insert(p.name);
+                }
+                if (auto scope = type_env_.current_scope()) {
+                    scope->define(p.name, type, p.is_mut, span);
+                }
+
+            } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
+                // Recurse into tuple elements with their respective types
+                std::vector<HirType> element_types;
+                if (type && type->template is<types::TupleType>()) {
+                    element_types = type->template as<types::TupleType>().elements;
+                }
+                for (size_t i = 0; i < p.elements.size(); ++i) {
+                    HirType elem_type = (i < element_types.size()) ? element_types[i] : nullptr;
+                    register_pattern_bindings(*p.elements[i], elem_type, span);
+                }
+
+            } else if constexpr (std::is_same_v<T, parser::StructPattern>) {
+                // Recurse into struct fields
+                std::string struct_name;
+                if (!p.path.segments.empty()) {
+                    struct_name = p.path.segments.back();
+                }
+                for (const auto& [field_name, field_pattern] : p.fields) {
+                    HirType field_type = nullptr;
+                    if (!struct_name.empty()) {
+                        if (auto struct_def = type_env_.lookup_struct(struct_name)) {
+                            for (const auto& f : struct_def->fields) {
+                                if (f.name == field_name) {
+                                    field_type = type_env_.resolve(f.type);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    register_pattern_bindings(*field_pattern, field_type, span);
+                }
+
+            } else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
+                // Recurse into enum payload patterns
+                if (p.payload) {
+                    for (const auto& payload_pat : *p.payload) {
+                        register_pattern_bindings(*payload_pat, nullptr, span);
+                    }
+                }
+
+            } else if constexpr (std::is_same_v<T, parser::OrPattern>) {
+                // Register bindings from the first alternative (all must bind same names)
+                if (!p.patterns.empty()) {
+                    register_pattern_bindings(*p.patterns[0], type, span);
+                }
+
+            } else if constexpr (std::is_same_v<T, parser::RangePattern>) {
+                // Range patterns don't introduce bindings
+                (void)p;
+
+            } else if constexpr (std::is_same_v<T, parser::ArrayPattern>) {
+                // Recurse into array element patterns
+                HirType element_type = nullptr;
+                if (type && type->template is<types::ArrayType>()) {
+                    element_type = type->template as<types::ArrayType>().element;
+                }
+                for (const auto& elem : p.elements) {
+                    register_pattern_bindings(*elem, element_type, span);
+                }
+                if (p.rest) {
+                    // Rest pattern binds a slice; use the overall type as fallback
+                    register_pattern_bindings(**p.rest, type, span);
+                }
+            }
+            // WildcardPattern and LiteralPattern don't introduce bindings
+        },
+        pattern.kind);
 }
 
 } // namespace tml::hir

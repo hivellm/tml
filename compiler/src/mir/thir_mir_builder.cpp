@@ -100,6 +100,7 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
     mir_func.name = func.mangled_name.empty() ? func.name : func.mangled_name;
     mir_func.return_type = convert_type(func.return_type);
     mir_func.is_public = func.is_public;
+    mir_func.attributes = func.attributes;
 
     // Add parameters
     for (const auto& param : func.params) {
@@ -121,6 +122,8 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
     ctx_.current_func = &module_.functions.back();
     ctx_.variables.clear();
     ctx_.drop_scopes.clear();
+    current_return_type_ = func.return_type;
+    context_type_ = nullptr;
     // Clear the loop stack (std::stack has no clear())
     while (!ctx_.loop_stack.empty()) {
         ctx_.loop_stack.pop();
@@ -154,6 +157,8 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
     }
 
     ctx_.current_func = nullptr;
+    current_return_type_ = nullptr;
+    context_type_ = nullptr;
 }
 
 // ============================================================================
@@ -252,6 +257,11 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
             return make_enum_type(named.name);
         }
         return make_struct_type(named.name);
+    }
+
+    // impl Behavior types are opaque — lower to pointer (fat pointer in future)
+    if (type->is<types::ImplBehaviorType>()) {
+        return make_pointer_type(make_i8_type(), false);
     }
 
     return make_unit_type();
@@ -430,7 +440,13 @@ auto ThirMirBuilder::build_stmt(const thir::ThirStmt& stmt) -> bool {
 
 void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
     if (let.init) {
+        // Propagate declared type as context for literal coercion
+        auto saved_context = context_type_;
+        if (let.type) {
+            context_type_ = let.type;
+        }
         auto init_val = build_expr(*let.init);
+        context_type_ = saved_context;
         build_pattern_binding(let.pattern, init_val);
     }
 }
@@ -448,7 +464,17 @@ auto ThirMirBuilder::build_literal(const thir::ThirLiteralExpr& lit) -> Value {
         [this, &lit](const auto& v) -> Value {
             using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, int64_t>) {
+                // Prefer context type (from let/var declaration or return type) over
+                // literal's own type, since HIR defaults unsuffixed integers to I32
+                // even when the type checker resolved them to U8, I64, etc.
                 auto type = convert_type(lit.type);
+                if (context_type_) {
+                    if (auto ctx_converted = convert_type(context_type_)) {
+                        if (std::get_if<MirPrimitiveType>(&ctx_converted->kind)) {
+                            type = ctx_converted;
+                        }
+                    }
+                }
                 int bits = 32;
                 bool is_signed = true;
                 if (type) {
@@ -550,6 +576,14 @@ auto ThirMirBuilder::build_binary(const thir::ThirBinaryExpr& bin) -> Value {
 
         CallInst inst;
         inst.func_name = bin.operator_method->qualified_name;
+        // Normalize :: to __ to match function definition mangling
+        {
+            size_t pos = 0;
+            while ((pos = inst.func_name.find("::", pos)) != std::string::npos) {
+                inst.func_name.replace(pos, 2, "__");
+                pos += 2;
+            }
+        }
         inst.args = {left, right};
         inst.arg_types = {left.type, right.type};
         inst.return_type = result_type;
@@ -646,7 +680,16 @@ auto ThirMirBuilder::build_method_call(const thir::ThirMethodCallExpr& call) -> 
     auto result_type = convert_type(call.type);
 
     CallInst inst;
+    // Normalize :: to __ in method call names to match function definition mangling
+    // (HIR sets mangled_name = "TypeName__method", THIR resolver uses "TypeName::method")
     inst.func_name = call.resolved.qualified_name;
+    {
+        size_t pos = 0;
+        while ((pos = inst.func_name.find("::", pos)) != std::string::npos) {
+            inst.func_name.replace(pos, 2, "__");
+            pos += 2;
+        }
+    }
     inst.args = std::move(args);
     inst.arg_types = std::move(arg_types);
     inst.return_type = result_type;
@@ -683,6 +726,23 @@ auto ThirMirBuilder::build_index(const thir::ThirIndexExpr& index) -> Value {
     auto idx = build_expr(index.index);
     auto result_type = convert_type(index.type);
 
+    // If the THIR type is missing (null → unit/void), derive element type from
+    // the object's array type. This happens when the HIR builder doesn't track
+    // the element type through extractvalue + index chains.
+    bool is_void = false;
+    if (result_type) {
+        if (auto* prim = std::get_if<MirPrimitiveType>(&result_type->kind)) {
+            is_void = (prim->kind == PrimitiveType::Unit);
+        }
+    }
+    if (!result_type || is_void) {
+        if (object.type) {
+            if (auto* arr = std::get_if<MirArrayType>(&object.type->kind)) {
+                result_type = arr->element;
+            }
+        }
+    }
+
     GetElementPtrInst gep;
     gep.base = object;
     gep.indices = {idx};
@@ -715,7 +775,9 @@ auto ThirMirBuilder::build_if(const thir::ThirIfExpr& if_expr) -> Value {
 
     switch_to_block(then_block);
     auto then_val = build_expr(if_expr.then_branch);
-    if (!is_terminated()) {
+    bool then_reaches_merge = !is_terminated();
+    uint32_t then_exit_block = ctx_.current_block;
+    if (then_reaches_merge) {
         emit_branch(merge_block);
     }
 
@@ -724,12 +786,38 @@ auto ThirMirBuilder::build_if(const thir::ThirIfExpr& if_expr) -> Value {
     if (if_expr.else_branch) {
         else_val = build_expr(*if_expr.else_branch);
     }
-    if (!is_terminated()) {
+    bool else_reaches_merge = !is_terminated();
+    uint32_t else_exit_block = ctx_.current_block;
+    if (else_reaches_merge) {
         emit_branch(merge_block);
     }
 
     switch_to_block(merge_block);
-    return then_val;
+
+    // If the result type is unit, no phi node is needed
+    if (result_type && result_type->is_unit()) {
+        return const_unit();
+    }
+
+    // If only one branch reaches the merge, return its value directly
+    if (then_reaches_merge && !else_reaches_merge) {
+        return then_val;
+    }
+    if (!then_reaches_merge && else_reaches_merge) {
+        return else_val;
+    }
+    if (!then_reaches_merge && !else_reaches_merge) {
+        // Neither branch reaches merge (both return/break) - unreachable
+        emit_unreachable();
+        return const_unit();
+    }
+
+    // Both branches reach merge - create phi node to select between values
+    PhiInst phi;
+    phi.incoming.emplace_back(then_val, then_exit_block);
+    phi.incoming.emplace_back(else_val, else_exit_block);
+    phi.result_type = result_type;
+    return emit(std::move(phi), result_type, if_expr.span);
 }
 
 auto ThirMirBuilder::build_block(const thir::ThirBlockExpr& block) -> Value {
@@ -841,7 +929,11 @@ auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
 
 auto ThirMirBuilder::build_return(const thir::ThirReturnExpr& ret) -> Value {
     if (ret.value) {
+        // Propagate function return type to value expression for literal coercion
+        auto saved_context = context_type_;
+        context_type_ = current_return_type_;
         auto val = build_expr(*ret.value);
+        context_type_ = saved_context;
         emit_return(val);
     } else {
         emit_return();
@@ -868,7 +960,8 @@ auto ThirMirBuilder::build_when(const thir::ThirWhenExpr& when) -> Value {
     auto result_type = convert_type(when.type);
     auto merge_block = create_block("when.merge");
 
-    Value result = const_unit();
+    // Collect (value, exit_block_id) pairs for phi node construction
+    std::vector<std::pair<Value, uint32_t>> phi_incoming;
 
     for (size_t i = 0; i < when.arms.size(); ++i) {
         const auto& arm = when.arms[i];
@@ -891,9 +984,11 @@ auto ThirMirBuilder::build_when(const thir::ThirWhenExpr& when) -> Value {
 
         switch_to_block(match_block);
         build_pattern_binding(arm.pattern, scrutinee);
-        result = build_expr(arm.body);
+        auto arm_val = build_expr(arm.body);
         if (!is_terminated()) {
+            uint32_t arm_exit_block = ctx_.current_block;
             emit_branch(merge_block);
+            phi_incoming.emplace_back(arm_val, arm_exit_block);
         }
 
         if (i + 1 < when.arms.size()) {
@@ -902,7 +997,28 @@ auto ThirMirBuilder::build_when(const thir::ThirWhenExpr& when) -> Value {
     }
 
     switch_to_block(merge_block);
-    return result;
+
+    // If the result type is unit, no phi node is needed
+    if (result_type && result_type->is_unit()) {
+        return const_unit();
+    }
+
+    // If no arms reach merge, this is unreachable
+    if (phi_incoming.empty()) {
+        emit_unreachable();
+        return const_unit();
+    }
+
+    // If exactly one arm reaches merge, return its value directly
+    if (phi_incoming.size() == 1) {
+        return phi_incoming[0].first;
+    }
+
+    // Multiple arms reach merge - create phi node
+    PhiInst phi;
+    phi.incoming = std::move(phi_incoming);
+    phi.result_type = result_type;
+    return emit(std::move(phi), result_type, when.span);
 }
 
 } // namespace tml::mir

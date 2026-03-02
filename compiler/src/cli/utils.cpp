@@ -60,6 +60,7 @@ void print_usage() {
               << "  deps      List project dependencies\n"
               << "  remove    Remove a dependency from tml.toml\n"
               << "  explain   Show detailed error code explanation\n"
+              << "  demangle  Decode a mangled TML symbol\n"
               << "  lex       Tokenize a file (debug)\n"
               << "  parse     Parse a file (debug)\n"
               << "\nGlobal Options:\n"

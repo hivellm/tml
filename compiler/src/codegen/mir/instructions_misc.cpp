@@ -82,6 +82,16 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
             } else if (src_type == "double" && tgt_type == "float") {
                 cast_name = "fptrunc";
             }
+        } else if (src_is_int && tgt_is_int && src_type != tgt_type) {
+            // Safety net: auto-correct int-to-int casts based on width
+            int src_bits = std::stoi(src_type.substr(1));
+            int tgt_bits = std::stoi(tgt_type.substr(1));
+            if (tgt_bits < src_bits) {
+                cast_name = "trunc";
+            } else if (tgt_bits > src_bits) {
+                // Default to zext; sext would need signed info from MIR
+                cast_name = (i.kind == mir::CastKind::SExt) ? "sext" : "zext";
+            }
         }
 
         emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " + operand + " to " +
@@ -111,14 +121,25 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
             }
             std::string val = get_value_reg(i.incoming[j].first);
             uint32_t block_id = i.incoming[j].second;
-            auto label_it = block_labels_.find(block_id);
+            // Use the exit label for the predecessor block. Bounds check injection
+            // can split a MIR block into multiple LLVM blocks (e.g., if.then1 ->
+            // bc.panic.N + bc.ok.N). The phi must reference the actual LLVM block
+            // that branches to this merge point (bc.ok.N), not the original entry
+            // label (if.then1).
             std::string label;
-            if (label_it != block_labels_.end()) {
-                label = label_it->second;
+            auto exit_it = block_exit_labels_.find(block_id);
+            if (exit_it != block_exit_labels_.end()) {
+                label = exit_it->second;
             } else {
-                label = "MISSING_BLOCK_" + std::to_string(block_id);
-                TML_LOG_WARN("codegen", "[CODEGEN] PHI references block "
-                                            << block_id << " which is not in block_labels_");
+                // Fall back to entry label
+                auto label_it = block_labels_.find(block_id);
+                if (label_it != block_labels_.end()) {
+                    label = label_it->second;
+                } else {
+                    label = "MISSING_BLOCK_" + std::to_string(block_id);
+                    TML_LOG_WARN("codegen", "[CODEGEN] PHI references block "
+                                                << block_id << " which is not in block_labels_");
+                }
             }
             emit("[ " + val + ", %" + label + " ]");
         }

@@ -686,7 +686,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     // Property assignment - call setter method instead of direct field store
                     const auto& prop_info = prop_it->second;
                     std::string setter_name =
-                        "@tml_" + get_suite_prefix() + type_name + "_set_" + prop_info.name;
+                        "@" + mangle_impl_method(type_name, "set_" + prop_info.name);
 
                     if (prop_info.is_static) {
                         // Static property setter - no 'this' parameter

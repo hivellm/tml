@@ -305,6 +305,7 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@should_panic` | Func | Expect test to panic |
 | `@should_panic(message)` | Func | Expect panic with specific message |
 | `@extern("c")` | Func | FFI: bind to C function |
+| `@no_mangle` | Func | Emit with bare symbol name (no mangling, external linkage) |
 | `@link("lib")` | Module | FFI: link to native library |
 | `@when(...)` | Any | Conditional compilation |
 | `@doc(...)` | Any | Documentation |

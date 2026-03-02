@@ -10,9 +10,7 @@
 
 #include <limits.h>
 
-#ifdef TML_HAS_OPENSSL
 #include <openssl/rand.h>
-#endif
 
 // ============================================================================
 // Random generation (OpenSSL RAND_bytes)
@@ -21,14 +19,9 @@
 static int fill_random_bytes(uint8_t* buffer, size_t size) {
     if (size == 0)
         return 0;
-#ifdef TML_HAS_OPENSSL
     if (size > (size_t)INT_MAX)
         return -1;
     return RAND_bytes(buffer, (int)size) == 1 ? 0 : -1;
-#else
-    (void)buffer;
-    return -1;
-#endif
 }
 
 // ============================================================================
@@ -50,8 +43,7 @@ TML_EXPORT void* crypto_random_bytes(int64_t size) {
     if (!buf)
         return NULL;
     if (fill_random_bytes(buf->data, size) != 0) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf); // single free: tml_create_buffer allocates header+data in one block
         return NULL;
     }
     buf->length = size;
@@ -195,8 +187,6 @@ TML_EXPORT int32_t crypto_timing_safe_equal_str(const char* a, const char* b) {
 // Hash Functions (OpenSSL EVP)
 // ============================================================================
 
-#ifdef TML_HAS_OPENSSL
-
 // Map TML hash names to OpenSSL names
 static const char* map_hash_name(const char* name) {
     if (!name)
@@ -294,19 +284,6 @@ static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
     return result;
 }
 
-#else
-// No OpenSSL — stubs
-static TmlBuffer* hash_string(const char* data, const char* algorithm) {
-    (void)data;
-    (void)algorithm;
-    return NULL;
-}
-static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
-    (void)input;
-    (void)algorithm;
-    return NULL;
-}
-#endif
 
 // ============================================================================
 // Public API: One-shot hash functions
@@ -352,8 +329,6 @@ TML_EXPORT void* crypto_sha512_256_bytes(void* handle) {
 // ============================================================================
 // Public API: Streaming hash (OpenSSL EVP_MD_CTX)
 // ============================================================================
-
-#ifdef TML_HAS_OPENSSL
 
 typedef struct {
     EVP_MD_CTX* ctx;
@@ -454,37 +429,10 @@ TML_EXPORT void crypto_hash_destroy(void* handle) {
     free(hctx);
 }
 
-#else
-TML_EXPORT void* crypto_hash_create(const char* algorithm) {
-    (void)algorithm;
-    return NULL;
-}
-TML_EXPORT void crypto_hash_update_str(void* handle, const char* data) {
-    (void)handle;
-    (void)data;
-}
-TML_EXPORT void crypto_hash_update_bytes(void* handle, void* data_handle) {
-    (void)handle;
-    (void)data_handle;
-}
-TML_EXPORT void* crypto_hash_digest(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_hash_copy(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_hash_destroy(void* handle) {
-    (void)handle;
-}
-#endif
 
 // ============================================================================
 // HMAC Functions (OpenSSL 3.0 EVP_MAC)
 // ============================================================================
-
-#ifdef TML_HAS_OPENSSL
 
 static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t key_len,
                                const uint8_t* data, size_t data_len) {
@@ -531,8 +479,7 @@ static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t
     }
 
     if (EVP_MAC_final(ctx, result->data, &result_len, result_len) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_MAC_CTX_free(ctx);
         EVP_MAC_free(mac);
         return NULL;
@@ -544,17 +491,6 @@ static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t
     return result;
 }
 
-#else
-static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t key_len,
-                               const uint8_t* data, size_t data_len) {
-    (void)algorithm;
-    (void)key;
-    (void)key_len;
-    (void)data;
-    (void)data_len;
-    return NULL;
-}
-#endif
 
 // One-shot HMAC with string key and data
 TML_EXPORT void* crypto_hmac_sha256(const char* key, const char* data) {
@@ -595,8 +531,6 @@ TML_EXPORT void* crypto_hmac_md5(const char* key, const char* data) {
 // ============================================================================
 // Streaming HMAC (OpenSSL 3.0 EVP_MAC)
 // ============================================================================
-
-#ifdef TML_HAS_OPENSSL
 
 typedef struct {
     EVP_MAC_CTX* ctx;
@@ -682,8 +616,7 @@ TML_EXPORT void* crypto_hmac_digest(void* handle) {
         return NULL;
 
     if (EVP_MAC_final(hctx->ctx, result->data, &digest_len, digest_len) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         return NULL;
     }
 
@@ -702,39 +635,9 @@ TML_EXPORT void crypto_hmac_destroy(void* handle) {
     free(hctx);
 }
 
-#else
-TML_EXPORT void* crypto_hmac_create(const char* algorithm, const char* key) {
-    (void)algorithm;
-    (void)key;
-    return NULL;
-}
-TML_EXPORT void* crypto_hmac_create_bytes(const char* algorithm, void* key_handle) {
-    (void)algorithm;
-    (void)key_handle;
-    return NULL;
-}
-TML_EXPORT void crypto_hmac_update_str(void* handle, const char* data) {
-    (void)handle;
-    (void)data;
-}
-TML_EXPORT void crypto_hmac_update_bytes(void* handle, void* data_handle) {
-    (void)handle;
-    (void)data_handle;
-}
-TML_EXPORT void* crypto_hmac_digest(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_hmac_destroy(void* handle) {
-    (void)handle;
-}
-#endif
-
 // ============================================================================
 // Cipher Functions (OpenSSL EVP_CIPHER)
 // ============================================================================
-
-#ifdef TML_HAS_OPENSSL
 
 typedef struct {
     EVP_CIPHER_CTX* ctx;
@@ -902,8 +805,7 @@ TML_EXPORT void* crypto_cipher_get_tag(void* handle) {
     if (!tag)
         return NULL;
     if (EVP_CIPHER_CTX_ctrl(cctx->ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag->data) != 1) {
-        free(tag->data);
-        free(tag);
+        mem_free(tag);
         return NULL;
     }
     tag->length = 16;
@@ -927,53 +829,6 @@ TML_EXPORT void crypto_cipher_destroy(void* handle) {
     free(cctx);
 }
 
-#else
-TML_EXPORT void* crypto_cipher_create(const char* a, void* k, void* iv, int64_t e) {
-    (void)a;
-    (void)k;
-    (void)iv;
-    (void)e;
-    return NULL;
-}
-TML_EXPORT void crypto_cipher_set_aad(void* h, void* a) {
-    (void)h;
-    (void)a;
-}
-TML_EXPORT void crypto_cipher_set_aad_str(void* h, const char* a) {
-    (void)h;
-    (void)a;
-}
-TML_EXPORT void crypto_cipher_set_padding(void* h, int32_t e) {
-    (void)h;
-    (void)e;
-}
-TML_EXPORT void crypto_cipher_update_str(void* h, const char* d, void* o) {
-    (void)h;
-    (void)d;
-    (void)o;
-}
-TML_EXPORT void crypto_cipher_update_bytes(void* h, void* d, void* o) {
-    (void)h;
-    (void)d;
-    (void)o;
-}
-TML_EXPORT int32_t crypto_cipher_finalize(void* h, void* o) {
-    (void)h;
-    (void)o;
-    return 0;
-}
-TML_EXPORT void* crypto_cipher_get_tag(void* h) {
-    (void)h;
-    return NULL;
-}
-TML_EXPORT void crypto_cipher_set_tag(void* h, void* t) {
-    (void)h;
-    (void)t;
-}
-TML_EXPORT void crypto_cipher_destroy(void* h) {
-    (void)h;
-}
-#endif
 
 // ============================================================================
 // Buffer utilities (str_to_bytes, bytes_to_str, concat, slice)
@@ -1088,8 +943,7 @@ TML_EXPORT void* crypto_hex_to_bytes(const char* hex) {
         else if (high >= 'A' && high <= 'F')
             val = (high - 'A' + 10) << 4;
         else {
-            free(buf->data);
-            free(buf);
+            mem_free(buf);
             return NULL;
         }
         if (low >= '0' && low <= '9')
@@ -1099,8 +953,7 @@ TML_EXPORT void* crypto_hex_to_bytes(const char* hex) {
         else if (low >= 'A' && low <= 'F')
             val |= (low - 'A' + 10);
         else {
-            free(buf->data);
-            free(buf);
+            mem_free(buf);
             return NULL;
         }
         buf->data[i / 2] = val;
@@ -1189,8 +1042,7 @@ TML_EXPORT void* crypto_base64_to_bytes(const char* b64) {
         int c = (i < data_len) ? base64_decode_char(b64[i++]) : 0;
         int d = (i < data_len) ? base64_decode_char(b64[i++]) : 0;
         if (a < 0 || b < 0 || c < 0 || d < 0) {
-            free(buf->data);
-            free(buf);
+            mem_free(buf);
             return NULL;
         }
         uint32_t triple = (a << 18) + (b << 12) + (c << 6) + d;
@@ -1255,8 +1107,6 @@ TML_EXPORT void* crypto_base64url_to_bytes(const char* b64url) {
 // Prime number operations (OpenSSL BN)
 // ============================================================================
 
-#ifdef TML_HAS_OPENSSL
-
 TML_EXPORT void* crypto_generate_prime(int64_t bits) {
     BIGNUM* bn = BN_new();
     if (!bn)
@@ -1315,26 +1165,6 @@ TML_EXPORT int32_t crypto_check_prime_rounds(void* handle, int64_t rounds) {
     (void)rounds; // OpenSSL's BN_check_prime uses its own round count
     return crypto_check_prime(handle);
 }
-
-#else
-TML_EXPORT void* crypto_generate_prime(int64_t bits) {
-    (void)bits;
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_safe_prime(int64_t bits) {
-    (void)bits;
-    return NULL;
-}
-TML_EXPORT int32_t crypto_check_prime(void* handle) {
-    (void)handle;
-    return 0;
-}
-TML_EXPORT int32_t crypto_check_prime_rounds(void* handle, int64_t rounds) {
-    (void)handle;
-    (void)rounds;
-    return 0;
-}
-#endif
 
 // ============================================================================
 // Non-cryptographic Fast Hash Functions (FNV-1a, Murmur2)
@@ -1635,8 +1465,6 @@ TML_EXPORT const char* crypto_cipher_mode(const char* name) {
 // FIPS Mode (OpenSSL)
 // ============================================================================
 
-#ifdef TML_HAS_OPENSSL
-
 TML_EXPORT int32_t crypto_fips_mode(void) {
     return EVP_default_properties_is_fips_enabled(NULL) ? 1 : 0;
 }
@@ -1645,37 +1473,15 @@ TML_EXPORT int32_t crypto_set_fips_mode(int32_t enabled) {
     return EVP_default_properties_enable_fips(NULL, enabled) == 1 ? 1 : 0;
 }
 
-#else
-
-TML_EXPORT int32_t crypto_fips_mode(void) {
-    return 0;
-}
-TML_EXPORT int32_t crypto_set_fips_mode(int32_t enabled) {
-    (void)enabled;
-    return 0;
-}
-
-#endif
-
 // ============================================================================
 // Secure Heap (OpenSSL)
 // ============================================================================
-
-#ifdef TML_HAS_OPENSSL
 
 TML_EXPORT int64_t crypto_secure_heap_used(void) {
     if (!CRYPTO_secure_malloc_initialized())
         return 0;
     return (int64_t)CRYPTO_secure_used();
 }
-
-#else
-
-TML_EXPORT int64_t crypto_secure_heap_used(void) {
-    return 0;
-}
-
-#endif
 
 // ============================================================================
 // Engine Support (deprecated in OpenSSL 3.0, but we provide the API)

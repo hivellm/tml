@@ -498,7 +498,7 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
 
             if (found) {
                 std::string impl_func =
-                    "@tml_" + get_suite_prefix() + impl_class + "_" + method_name;
+                    "@" + mangle_impl_method(impl_class, method_name);
                 impl_info.push_back({method_name, impl_func});
             } else {
                 impl_info.push_back({method_name, "null"});
@@ -688,15 +688,7 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
             // Abstract method - should not happen for non-abstract class
             vtable_value += "ptr null";
         } else {
-            // Determine prefix: imported/library classes don't use suite prefix,
-            // local classes do. This prevents name mismatches in vtables where
-            // a local class inherits methods from an imported base class.
-            std::string method_prefix = get_suite_prefix();
-            if (!method_prefix.empty() && vm.impl_class != c.name &&
-                is_library_method(vm.impl_class, vm.name)) {
-                method_prefix = "";
-            }
-            vtable_value += "ptr @tml_" + method_prefix + vm.impl_class + "_" + vm.name;
+            vtable_value += "ptr @" + mangle_impl_method(vm.impl_class, vm.name);
         }
     }
 
@@ -778,7 +770,7 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
 
     // Generate unique constructor name based on parameter types (for overloading)
     // Format: ClassName_new or ClassName_new_Type1_Type2 for overloaded constructors
-    std::string func_name = "@tml_" + get_suite_prefix() + c.name + "_new";
+    std::string func_name = "@" + mangle_impl_method(c.name, "new");
     if (!param_types.empty()) {
         for (const auto& pt : param_types) {
             // Convert LLVM type to simple name for mangling: i32 -> I32, ptr -> ptr, etc.
@@ -899,7 +891,7 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
                 base_ctor_name = default_it->second.llvm_name;
             } else {
                 // Last resort: generate basic name
-                base_ctor_name = "@tml_" + get_suite_prefix() + base_name + "_new";
+                base_ctor_name = "@" + mangle_impl_method(base_name, "new");
             }
         }
 

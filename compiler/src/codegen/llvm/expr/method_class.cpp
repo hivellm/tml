@@ -63,12 +63,8 @@ auto LLVMIRGen::try_gen_class_instance_call(const parser::MethodCallExpr& call,
                     for (const auto& m : parser_class->methods) {
                         if (m.name == method && !m.is_static) {
                             // Generate call to instance method using mangled name
-                            // Only use suite prefix for test-local methods
-                            std::string prefix = is_library_method(current_mangled, method)
-                                                     ? ""
-                                                     : get_suite_prefix();
                             std::string func_name =
-                                "@tml_" + prefix + current_mangled + "_" + method;
+                                "@" + mangle_impl_method(current_mangled, method);
 
                             // Resolve return type with type substitutions for generic params
                             std::string ret_type = "i32"; // Default fallback
@@ -157,10 +153,7 @@ auto LLVMIRGen::try_gen_class_instance_call(const parser::MethodCallExpr& call,
                 for (const auto& m : typed_class.methods) {
                     if (m.sig.name == method && !m.is_static) {
                         // Generate call to instance method
-                        // Only use suite prefix for test-local methods
-                        std::string prefix =
-                            is_library_method(current_mangled, method) ? "" : get_suite_prefix();
-                        std::string func_name = "@tml_" + prefix + current_mangled + "_" + method;
+                        std::string func_name = "@" + mangle_impl_method(current_mangled, method);
                         std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
                         // Use registered function's return type if available (handles value class
@@ -291,10 +284,7 @@ auto LLVMIRGen::try_gen_class_instance_call(const parser::MethodCallExpr& call,
                 for (const auto& m : current_def->methods) {
                     if (m.sig.name == method && !m.is_static) {
                         // Generate call to instance method
-                        // Only use suite prefix for test-local methods
-                        std::string prefix =
-                            is_library_method(current_class, method) ? "" : get_suite_prefix();
-                        std::string func_name = "@tml_" + prefix + current_class + "_" + method;
+                        std::string func_name = "@" + mangle_impl_method(current_class, method);
                         std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
                         // Use registered function's return type if available

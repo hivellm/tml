@@ -14,8 +14,6 @@
 
 #include "crypto_common.h"
 
-#ifdef TML_HAS_OPENSSL
-
 // ============================================================================
 // Internal: signing context wrapper
 // ============================================================================
@@ -513,72 +511,3 @@ TML_EXPORT int32_t crypto_verify_rsa_pss(void* key_handle, const char* data, voi
 
     return (result == 1) ? 1 : 0;
 }
-
-#else /* !TML_HAS_OPENSSL */
-
-// ============================================================================
-// Stubs when OpenSSL is not available
-// ============================================================================
-
-TML_EXPORT void* crypto_signer_create(const char* algorithm, void* key_handle) {
-    (void)algorithm;
-    (void)key_handle;
-    return NULL;
-}
-TML_EXPORT void crypto_signer_update_str(void* handle, const char* data) {
-    (void)handle;
-    (void)data;
-}
-TML_EXPORT void crypto_signer_update_bytes(void* handle, void* buffer_handle) {
-    (void)handle;
-    (void)buffer_handle;
-}
-TML_EXPORT void* crypto_signer_sign(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_signer_destroy(void* handle) {
-    (void)handle;
-}
-
-TML_EXPORT void* crypto_verifier_create(const char* algorithm, void* key_handle) {
-    (void)algorithm;
-    (void)key_handle;
-    return NULL;
-}
-TML_EXPORT void crypto_verifier_update_str(void* handle, const char* data) {
-    (void)handle;
-    (void)data;
-}
-TML_EXPORT void crypto_verifier_update_bytes(void* handle, void* buffer_handle) {
-    (void)handle;
-    (void)buffer_handle;
-}
-TML_EXPORT int32_t crypto_verifier_verify(void* handle, void* sig_buffer_handle) {
-    (void)handle;
-    (void)sig_buffer_handle;
-    return 0;
-}
-TML_EXPORT void crypto_verifier_destroy(void* handle) {
-    (void)handle;
-}
-
-TML_EXPORT void* crypto_sign_rsa_pss(void* key_handle, const char* data, int64_t salt_length,
-                                     const char* mgf1_hash) {
-    (void)key_handle;
-    (void)data;
-    (void)salt_length;
-    (void)mgf1_hash;
-    return NULL;
-}
-TML_EXPORT int32_t crypto_verify_rsa_pss(void* key_handle, const char* data, void* sig_handle,
-                                         int64_t salt_length, const char* mgf1_hash) {
-    (void)key_handle;
-    (void)data;
-    (void)sig_handle;
-    (void)salt_length;
-    (void)mgf1_hash;
-    return 0;
-}
-
-#endif /* TML_HAS_OPENSSL */

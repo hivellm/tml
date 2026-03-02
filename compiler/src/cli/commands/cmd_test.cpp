@@ -244,9 +244,6 @@ int run_test(int argc, char* argv[], bool verbose) {
     testing::TestConfig tc;
     tc.patterns = opts.patterns;
     tc.suite_filters = opts.suite_filters;
-    // v3 test system: each test file gets a fresh QueryContext (no shared state),
-    // so max_per_suite=10 is safe even in coverage mode. The old max_per_suite=1
-    // restriction existed for the old suite-merging system (deleted).
     tc.max_per_suite = 10;
     tc.compile_threads = opts.test_threads;
     tc.exec_concurrent = 0; // auto

@@ -11,8 +11,6 @@
 
 #include "crypto_common.h"
 
-#ifdef TML_HAS_OPENSSL
-
 // ============================================================================
 // Internal helpers
 // ============================================================================
@@ -162,8 +160,7 @@ TML_EXPORT void* crypto_rsa_public_encrypt(void* key_handle, void* data_handle,
     }
 
     if (EVP_PKEY_encrypt(ctx, result->data, &outlen, input->data, (size_t)input->length) <= 0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -215,8 +212,7 @@ TML_EXPORT void* crypto_rsa_public_encrypt_oaep(void* key_handle, void* data_han
     }
 
     if (EVP_PKEY_encrypt(ctx, result->data, &outlen, input->data, (size_t)input->length) <= 0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -267,8 +263,7 @@ TML_EXPORT void* crypto_rsa_private_decrypt(void* key_handle, void* data_handle,
     }
 
     if (EVP_PKEY_decrypt(ctx, result->data, &outlen, input->data, (size_t)input->length) <= 0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -320,8 +315,7 @@ TML_EXPORT void* crypto_rsa_private_decrypt_oaep(void* key_handle, void* data_ha
     }
 
     if (EVP_PKEY_decrypt(ctx, result->data, &outlen, input->data, (size_t)input->length) <= 0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -383,8 +377,7 @@ TML_EXPORT void* crypto_rsa_private_encrypt(void* key_handle, void* data_handle,
     }
 
     if (EVP_PKEY_sign(ctx, result->data, &outlen, input->data, (size_t)input->length) <= 0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -447,8 +440,7 @@ TML_EXPORT void* crypto_rsa_public_decrypt(void* key_handle, void* data_handle,
 
     if (EVP_PKEY_verify_recover(ctx, result->data, &outlen, input->data, (size_t)input->length) <=
         0) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -525,8 +517,7 @@ TML_EXPORT void* crypto_aes_gcm_encrypt(void* key_handle, void* nonce_handle, vo
     /* Encrypt plaintext */
     outlen = 0;
     if (EVP_EncryptUpdate(ctx, result->data, &outlen, data->data, (int)data->length) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -534,8 +525,7 @@ TML_EXPORT void* crypto_aes_gcm_encrypt(void* key_handle, void* nonce_handle, vo
 
     /* Finalize encryption */
     if (EVP_EncryptFinal_ex(ctx, result->data + total_len, &outlen) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -543,8 +533,7 @@ TML_EXPORT void* crypto_aes_gcm_encrypt(void* key_handle, void* nonce_handle, vo
 
     /* Append 16-byte GCM authentication tag */
     if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, result->data + total_len) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -651,8 +640,7 @@ TML_EXPORT void* crypto_aes_gcm_decrypt(void* key_handle, void* nonce_handle, vo
     /* Decrypt ciphertext */
     outlen = 0;
     if (EVP_DecryptUpdate(ctx, result->data, &outlen, data->data, (int)data->length) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -660,8 +648,7 @@ TML_EXPORT void* crypto_aes_gcm_decrypt(void* key_handle, void* nonce_handle, vo
 
     /* Set expected GCM tag before finalization */
     if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag->data) != 1) {
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -669,8 +656,7 @@ TML_EXPORT void* crypto_aes_gcm_decrypt(void* key_handle, void* nonce_handle, vo
     /* Finalize decryption - this verifies the tag */
     if (EVP_DecryptFinal_ex(ctx, result->data + total_len, &outlen) <= 0) {
         /* Authentication failed - tag mismatch */
-        free(result->data);
-        free(result);
+        mem_free(result);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -680,89 +666,3 @@ TML_EXPORT void* crypto_aes_gcm_decrypt(void* key_handle, void* nonce_handle, vo
     EVP_CIPHER_CTX_free(ctx);
     return (void*)result;
 }
-
-#else /* !TML_HAS_OPENSSL */
-
-// ============================================================================
-// Stubs when OpenSSL is not available
-// ============================================================================
-
-TML_EXPORT void* crypto_rsa_public_encrypt(void* key_handle, void* data_handle,
-                                           const char* padding) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)padding;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_rsa_public_encrypt_oaep(void* key_handle, void* data_handle,
-                                                const char* hash, const char* mgf1_hash,
-                                                void* label_handle) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)hash;
-    (void)mgf1_hash;
-    (void)label_handle;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_rsa_private_decrypt(void* key_handle, void* data_handle,
-                                            const char* padding) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)padding;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_rsa_private_decrypt_oaep(void* key_handle, void* data_handle,
-                                                 const char* hash, const char* mgf1_hash,
-                                                 void* label_handle) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)hash;
-    (void)mgf1_hash;
-    (void)label_handle;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_rsa_private_encrypt(void* key_handle, void* data_handle,
-                                            const char* padding) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)padding;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_rsa_public_decrypt(void* key_handle, void* data_handle,
-                                           const char* padding) {
-    (void)key_handle;
-    (void)data_handle;
-    (void)padding;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_aes_gcm_encrypt(void* key_handle, void* nonce_handle, void* data_handle,
-                                        void* aad_handle) {
-    (void)key_handle;
-    (void)nonce_handle;
-    (void)data_handle;
-    (void)aad_handle;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_aes_gcm_get_tag(void* ctx_handle) {
-    (void)ctx_handle;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_aes_gcm_decrypt(void* key_handle, void* nonce_handle, void* data_handle,
-                                        void* aad_handle, void* tag_handle) {
-    (void)key_handle;
-    (void)nonce_handle;
-    (void)data_handle;
-    (void)aad_handle;
-    (void)tag_handle;
-    return NULL;
-}
-
-#endif /* TML_HAS_OPENSSL */

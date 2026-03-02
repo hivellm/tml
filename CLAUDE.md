@@ -1,174 +1,418 @@
 # CLAUDE.md
 
-## Sandbox (`.sandbox/`)
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Sandbox Directory (`.sandbox/`)
 
 Scratch space for temp files, IR dumps, experiments. Gitignored. Use freely, no permission needed.
 
-## Hard Rules
+## ⛔ MANDATORY: Use MCP Tools First ⛔
 
-### Use MCP Tools First
+**YOU MUST USE MCP TOOLS AS YOUR PRIMARY INTERFACE FOR ALL TML OPERATIONS.**
 
-**ALWAYS use `mcp__tml__*` tools** for test/build/run/check/emit-ir/emit-mir/format/lint/docs/cache operations. NEVER use Bash to run `tml.exe` when an MCP tool exists. Only exception: building the **compiler itself** (`scripts\build.bat`).
+This is a HARD REQUIREMENT. The MCP server (`mcp__tml__*`) provides dedicated tools for:
 
-### No `rm` Commands
+- **`mcp__tml__test`** — Running tests (use `path` for specific files, `filter` for name matching, `suite` for module-level filtering like `"core/str"` or `"std/json"`)
+- **`mcp__tml__run`** — Building and running TML source files
+- **`mcp__tml__build`** — Building TML source to executable
+- **`mcp__tml__compile`** — Compiling TML source files
+- **`mcp__tml__check`** — Type checking without compiling
+- **`mcp__tml__emit-ir`** — Emitting LLVM IR for debugging
+- **`mcp__tml__emit-mir`** — Emitting MIR for debugging
+- **`mcp__tml__format`** — Formatting TML source files
+- **`mcp__tml__lint`** — Linting TML source files
+- **`mcp__tml__docs_search`** — Searching TML documentation
+- **`mcp__tml__cache_invalidate`** — Invalidating stale caches
 
-**NEVER run `rm` without explicit user authorization.** No cache deletion, no directory removal. Ask first.
+**Rules:**
 
-### No Repeated Test Runs
+1. **NEVER use Bash/PowerShell** to run `tml.exe test`, `tml.exe build`, `tml.exe run`, etc. when the equivalent MCP tool exists
+2. **NEVER use Bash** to grep test output — use the MCP tool's structured output instead
+3. The ONLY acceptable use of Bash for `tml.exe` is when you need to build the **compiler itself** (`scripts\build.bat`)
+4. MCP tools handle caching, path resolution, and output formatting automatically
 
-Run the test suite **ONCE**. Use `structured: true` for parsed results. If you need to grep output, save to `.sandbox/` and read the file multiple times. Never re-run tests just to filter differently.
+**WHY:** MCP tools are purpose-built for this workflow. They strip ANSI codes, handle Windows path normalization, validate meta caches, and provide clean structured output. Using Bash/PowerShell bypasses all of this and wastes tokens on noisy output.
 
-### Analyze Before Executing
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
-Check existing patterns/conventions before creating files or directories. Look at how similar things were done before. Wrong naming/structure wastes more time than the analysis.
+## ⛔ ABSOLUTE PROHIBITION: NO `rm` COMMANDS ⛔
 
-### Minimize C/C++ Code
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING `rm` COMMANDS WITHOUT EXPLICIT USER AUTHORIZATION.**
 
-The project is migrating to pure TML. Priority order for new implementations:
-1. **Pure TML** (preferred) — memory intrinsics, algorithms in `.tml` files
-2. **`@extern("c")` FFI** (acceptable) — bindings to system libraries
-3. **New C/C++ code** (last resort) — only for OS-level I/O, panic handlers, test harness
+This includes but is not limited to:
 
-C runtime directories marked MIGRATE (`collections/`, `text/`, `math/`, `search/`) must not grow. See [ROADMAP.md](docs/ROADMAP.md).
+- ❌ `rm -rf` on ANY directory
+- ❌ `rm` on cache files (`.test-cache.json`, `.run-cache/`, etc.)
+- ❌ `rm` on backup directories
+- ❌ ANY deletion command without the user typing "yes, delete it" or similar explicit approval
 
-### No Test Circumvention
+**WHY:** The cache backup system exists specifically because you kept deleting caches. DO NOT DELETE ANYTHING. If you think something needs to be deleted, ASK THE USER FIRST.
 
-Never simplify, skip, comment out, or move tests. Fix the compiler/library instead. Write tests incrementally (1-3 at a time), run individually via MCP, fix before writing more.
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
-### Rust-as-Reference IR Methodology
+## ⛔ ABSOLUTE PROHIBITION: Never Run Tests Multiple Times to Filter Output ⛔
 
-When working on codegen (`compiler/src/codegen/`), always compare TML IR against Rust IR. Write equivalent `.rs` and `.tml` files in `.sandbox/`, generate IR from both, compare function-by-function. Log findings in `.rulebook/tasks/optimize-codegen-like-rust/tasks.md`.
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING THE TEST SUITE MULTIPLE TIMES TO GREP/FILTER DIFFERENT PARTS OF THE OUTPUT.**
+
+The test suite takes significant time and CPU. Running it once to get results and then running it AGAIN just to grep for a different pattern is **unacceptable waste of processing and time**.
+
+**Rules:**
+
+1. **Run the test suite ONCE** — save or read the full output
+2. **NEVER pipe test output through grep** and then re-run to pipe through a different grep
+3. **NEVER run tests just to get a summary** if you already ran them and have the output
+4. If you need specific data from test output, read the log file or scroll through the existing output
+5. Use `mcp__tml__test` with `structured: true` to get parsed results in a single call
+6. If the MCP structured output doesn't have what you need, run ONCE via Bash and redirect to a file in `.sandbox/`, then read that file as many times as needed
+
+**WRONG (wastes 2x-5x processing time):**
+
+```bash
+# ❌ Run tests, grep for failures
+tml test --no-cache 2>&1 | grep FAIL
+# ❌ Run tests AGAIN, grep for timing
+tml test --no-cache 2>&1 | grep -E "Slowest|Profile"
+# ❌ Run tests AGAIN, grep for summary
+tml test --no-cache 2>&1 | grep -E "passed|failed"
+```
+
+**CORRECT (run once, read many):**
+
+```bash
+# ✅ Run once, save output
+tml test --no-cache 2>&1 > .sandbox/test_output.log
+# ✅ Read the file for whatever you need
+grep FAIL .sandbox/test_output.log
+grep Profile .sandbox/test_output.log
+```
+
+**WHY:** Each test run recompiles ALL test suites and executes ALL tests. This takes minutes of CPU time. Running it 3 times to grep 3 different patterns wastes 2/3 of the total processing time for zero benefit.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Analyze Before Executing ⛔
+
+**YOU MUST ANALYZE PROJECT PATTERNS AND CONVENTIONS BEFORE EXECUTING ANY TASK.**
+
+This is a HARD REQUIREMENT because rushing to execute tasks without analysis leads to:
+
+- ❌ Wrong folder structures (e.g., creating `archived/` instead of using existing `archive/`)
+- ❌ Wrong naming conventions (e.g., missing date prefixes like `YYYY-MM-DD-task-name`)
+- ❌ Wrong file formats (e.g., not following test patterns)
+- ❌ Wasted tokens fixing your own mistakes
+- ❌ Frustrated users
+
+**BEFORE executing any task that involves project conventions, you MUST:**
+
+1. **Check existing examples first** - Look at how similar tasks were done before
+
+   ```bash
+   # Example: Before archiving a task, check the archive folder structure
+   ls rulebook/tasks/archive/
+   # Learn: Tasks are named YYYY-MM-DD-task-name
+   ```
+
+2. **Read relevant documentation** - Check RULEBOOK.md, AGENTS.md, or related docs
+
+3. **Identify patterns** - Note naming conventions, folder structures, file formats
+
+4. **Only then execute** - After understanding the correct approach
+
+**Examples of tasks that REQUIRE analysis first:**
+
+- Archiving tasks → Check `archive/` folder naming pattern
+- Creating tests → Check existing test file patterns (`use test`, return types, etc.)
+- Creating tasks → Check `rulebook/RULEBOOK.md` for format
+- Adding new modules → Check existing module structures
+
+**WHY:** Executing quickly without analysis causes MORE errors, which requires MORE fixes, which wastes MORE tokens and time. Taking 30 seconds to analyze saves minutes of corrections.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Minimize C and C++ Code ⛔
+
+**The TML project is actively migrating away from C/C++ toward pure TML. You MUST NOT add new C or C++ code unless absolutely necessary.**
+
+This is a HARD REQUIREMENT aligned with the project roadmap (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+### Three-Tier Rule for New Implementations
+
+When implementing new functionality, follow this decision hierarchy:
+
+1. **Pure TML** (STRONGLY PREFERRED) — Use TML's existing memory intrinsics (`ptr_read`, `ptr_write`, `ptr_offset`, `mem_alloc`, `mem_free`, `copy_nonoverlapping`) to implement algorithms directly in `.tml` files. This includes: string operations, collections, formatting, sorting, search algorithms, data structures, math utilities, parsers, serialization.
+
+2. **`@extern("c")` FFI to existing libraries** (ACCEPTABLE) — When calling external system libraries (LLVM, OpenSSL/BCrypt, zlib, libc, OS APIs). Do NOT reimplement what these libraries already provide. Declare `@extern("c")` bindings in TML and call them.
+
+3. **New C/C++ code** (LAST RESORT ONLY) — Only for functionality that genuinely cannot be expressed in TML or as FFI bindings. Examples: OS-level I/O (print, file read/write), panic/abort handlers, test harness DLL entry points.
+
+### What This Means in Practice
+
+**NEVER do this:**
+
+- ❌ Add new `.c` files to `compiler/runtime/` for algorithms that TML can express
+- ❌ Add new `lowlevel` blocks in `.tml` files that call C functions for pure logic (string manipulation, collection operations, math formatting)
+- ❌ Create C wrapper functions when `@extern("c")` to an existing library suffices
+- ❌ Add new C++ code to the compiler for features that could be implemented as TML library code
+- ❌ Use the C runtime as a shortcut instead of implementing properly in TML
+
+**ALWAYS do this:**
+
+- ✅ Implement new algorithms in pure TML using memory intrinsics
+- ✅ Use `@extern("c")` for system APIs, crypto, compression, networking
+- ✅ Keep `compiler/runtime/core/essential.c` as the ONLY essential C runtime (I/O, panic, test harness)
+- ✅ When fixing a bug in existing C runtime code, consider if it's an opportunity to migrate that function to TML
+
+### Current C Code That MUST NOT Grow
+
+| Location                            | Purpose                  | Status                         |
+| ----------------------------------- | ------------------------ | ------------------------------ |
+| `compiler/runtime/core/essential.c` | I/O, panic, test harness | KEEP — essential               |
+| `compiler/runtime/memory/mem.c`     | malloc/free wrappers     | KEEP — OS interface            |
+| `compiler/runtime/collections/`     | List, HashMap, Buffer    | MIGRATE — do not add code here |
+| `compiler/runtime/text/`            | String/Text algorithms   | MIGRATE — do not add code here |
+| `compiler/runtime/math/`            | Number formatting        | MIGRATE — do not add code here |
+| `compiler/runtime/search/`          | BM25, HNSW, distance     | MIGRATE — do not add code here |
+| `lib/std/runtime/`                  | Duplicate C files        | MIGRATE — do not add code here |
+| `lib/test/runtime/`                 | Coverage tracking        | KEEP — lock-free atomics       |
+
+**WHY:** The project is on a path to self-hosting (compiler rewritten in TML). Every new line of C/C++ code is debt that must be rewritten later. Pure TML implementations serve double duty: they work today AND they prepare for self-hosting.
+
+**See also:** [ROADMAP.md](docs/ROADMAP.md) Phase 4 (Runtime Migration), Phase 6 (Self-Hosting)
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
 ## Project Overview
 
-**TML (To Machine Language)** — programming language for LLM code generation. C++ compiler with LLVM IR backend. Source files use `.tml` extension.
-
-### Key Syntax (vs Rust)
-
-| Rust | TML | Reason |
-|------|-----|--------|
-| `<T>` | `[T]` | No comparison conflicts |
-| `fn` / `match` / `trait` | `func` / `when` / `behavior` | Self-documenting |
-| `&&` `\|\|` `!` | `and` `or` `not` | Keywords over symbols |
-| `&T` / `&mut T` | `ref T` / `mut ref T` | Words over symbols |
-| `Option` / `Result` | `Maybe` / `Outcome` | Intent-revealing |
-| `Some`/`None` | `Just`/`Nothing` | Self-documenting |
-| `unsafe` | `lowlevel` | Accurate |
-| `#[...]` | `@...` | Cleaner |
-| `for`/`while`/`loop` | `loop` unified | Single keyword |
-
-### Project Structure
-
-```
-tml/
-├── compiler/           # C++ compiler
-│   ├── src/            # lexer, parser, types, borrow, hir, mir, codegen, query, backend, cli, plugin
-│   ├── include/        # Headers (including plugin ABI)
-│   ├── runtime/        # Essential C runtime (essential.c, mem.c)
-│   └── tests/          # C++ unit tests
-├── lib/                # TML standard libraries
-│   ├── core/           # Core (alloc, iter, slice, simd, fmt, etc.)
-│   ├── std/            # Std (collections, file, json, etc.)
-│   └── test/           # Test framework
-├── docs/               # Language spec (01-OVERVIEW through 14-EXAMPLES)
-├── scripts/            # Build scripts (build.bat, test.bat, clean.bat)
-└── build/              # Output (debug/, release/)
-```
+**TML (To Machine Language)** is a programming language designed for LLM code generation and analysis. Contains: compiler (`/compiler/`), standard library (`/lib/`), and language spec (`/docs/`). Source files use `.tml` extension.
 
 ## Build Commands
 
-**NEVER use cmake directly** — CMakeLists.txt enforces a build token. Always use scripts:
+**⚠️⚠️⚠️ CRITICAL: NEVER USE CMAKE DIRECTLY! ⚠️⚠️⚠️**
+
+**THIS IS A HARD REQUIREMENT - NO EXCEPTIONS:**
+
+- ❌ NEVER run `cmake --build`
+- ❌ NEVER run `cmake -B`
+- ❌ NEVER run any direct cmake commands
+- ❌ NEVER use powershell/cmd to call cmake
+
+**WHY:** Direct cmake calls CORRUPT the build directory, cause silent failures, break incremental compilation, and waste time. The build scripts handle critical environment setup that cmake alone cannot.
+
+**ENFORCED:** The CMakeLists.txt has a build token check that will FAIL with a fatal error if you try to use cmake directly. Only the build scripts pass the required token.
+
+**ALWAYS use the provided scripts:**
 
 ```bash
-# Canonical build command:
-cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat" 2>&1
-
-# Variants:
-scripts\build.bat              # Debug (monolithic ~100MB)
-scripts\build.bat release      # Release
+scripts\build.bat              # Debug build (default, monolithic ~100MB)
+scripts\build.bat release      # Release build
 scripts\build.bat --clean      # Clean build
-scripts\build.bat --tests      # Also build tml_tests.exe
-scripts\build.bat --modular    # Thin launcher + plugin DLLs
+scripts\build.bat --tests      # Also build C++ unit tests (tml_tests.exe)
+scripts\build.bat --modular    # Modular build (thin launcher + plugin DLLs)
 ```
 
-### Modular Build
+**⚠️ EXACT BUILD COMMAND (MANDATORY) ⚠️**
 
-`--modular` produces `tml.exe` (~367KB launcher) + `plugins/` DLLs. Plugin ABI is pure C (`plugin/abi.h`). Compressed plugins (`.dll.zst`) are auto-decompressed.
+```bash
+cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat" 2>&1
+```
+
+### Modular Build (Plugin Architecture)
+
+`--modular` produces thin launcher + plugin DLLs. Key files: `plugin/abi.h` (pure C ABI), `plugin/loader.hpp`, `src/launcher/main_launcher.cpp`, `src/plugin/*_plugin.cpp`.
 
 ## Test Commands
 
-```bash
-# Full suite with coverage:
-cd f:/Node/hivellm/tml && build/debug/bin/tml.exe test --profile --verbose --no-cache --coverage 2>&1
+**⚠️ EXACT TEST + COVERAGE COMMAND (MANDATORY) ⚠️**
 
-# Suite-level filtering (prefer MCP tools):
-mcp__tml__test with suite="core/str"    # Maps to lib/core/tests/str/
-mcp__tml__test with path="file.test.tml" # Individual file
+```bash
+cd f:/Node/hivellm/tml && build/debug/bin/tml.exe test --profile --verbose --no-cache --coverage 2>&1
 ```
 
-**Never delete test caches** (`build/debug/.run-cache/`, `.test-cache/`, `.test-cache.json`). They auto-invalidate on source changes.
-
-### Output Paths
-
-- `build/debug/bin/tml.exe` — Debug compiler
-- `build/release/bin/tml.exe` — Release compiler
-- `build/debug/bin/tml_tests.exe` — C++ unit tests
-
-## Compiler CLI Options
+### Suite-Level Test Filtering
 
 ```bash
-tml build file.tml                    # Query-based pipeline (default)
-tml build file.tml --legacy           # Sequential pipeline (fallback)
-tml build file.tml --crate-type=bin|lib|dylib|rlib
-tml build file.tml --release|-O0|-O1|-O2|-O3|--lto|--debug
-tml build file.tml --no-cache         # Force recompilation
-tml build file.tml --emit-ir|--emit-mir|--emit-header|--time
-tml build file.tml -DDEBUG|-DVERSION=1.0|--define=FEAT
-tml build file.tml --target=x86_64-unknown-linux-gnu
-tml build file.tml --backend=llvm|cranelift  # cranelift is experimental
+# Via MCP (PREFERRED):
+mcp__tml__test with suite="core/str"     # core/str → lib/core/tests/str/
+mcp__tml__test with suite="std/json"     # std/json → lib/std/tests/json/
+```
+
+**CRITICAL: NEVER DELETE TEST CACHES!** (`build/debug/.run-cache/`, `build/debug/.test-cache/`, `.test-cache.json`). They auto-invalidate on source changes.
+
+Output: `build/debug/bin/tml.exe` (debug), `build/release/bin/tml.exe` (release), `build/debug/bin/tml_tests.exe` (C++ tests).
+
+## Key Design Decisions
+
+TML syntax optimized for LLM comprehension — keywords over symbols:
+
+| Rust | TML | Reason |
+|------|-----|--------|
+| `<T>` | `[T]` | `<` conflicts with comparison |
+| `\|x\| expr` | `do(x) expr` | `\|` conflicts with OR |
+| `&&` `\|\|` `!` | `and` `or` `not` | Keywords clearer |
+| `fn` / `match` | `func` / `when` | More explicit |
+| `for`/`while`/`loop` | `loop` unified | Single keyword |
+| `&T` / `&mut T` | `ref T` / `mut ref T` | Words over symbols |
+| `trait` | `behavior` | Self-documenting |
+| `Option`/`Result` | `Maybe`/`Outcome` | Intent clear |
+| `Some`/`None` | `Just`/`Nothing` | Self-documenting |
+| `unsafe` | `lowlevel` | Less scary, accurate |
+| Lifetimes `'a` | Always inferred | No syntax noise |
+
+## Project Structure
+
+```
+tml/
+├── compiler/           # C++ compiler implementation
+│   ├── src/            # lexer/, parser/, types/, borrow/, hir/, mir/, codegen/,
+│   │                   # query/, backend/, cli/ (commands/, builder/, tester/),
+│   │                   # format/, plugin/, launcher/
+│   ├── include/        # Headers (plugin/abi.h, query/, codegen/)
+│   ├── runtime/        # Essential C runtime (essential.c, mem.c)
+│   └── tests/          # C++ unit tests
+├── lib/                # TML standard libraries
+│   ├── core/           # Core (alloc, iter, slice, str, fmt, error)
+│   ├── std/            # Std (collections, file, json, crypto)
+│   └── test/           # Test framework (assert_eq, etc.)
+├── docs/               # Language spec (01-OVERVIEW through 14-EXAMPLES)
+├── scripts/            # Build scripts (build.bat, test.bat, clean.bat)
+└── build/              # Build output (debug/, release/)
 ```
 
 ## Compilation Architecture
 
+Query-based demand-driven pipeline (like rustc):
+
 ```
-Source (.tml) → QueryContext → ReadSource → Tokenize → Parse → Typecheck
-             → Borrowcheck → HirLower → MirBuild → CodegenUnit → LLVM → .obj → LLD → .exe
+Source → QueryContext → ReadSource → Tokenize → Parse → Typecheck
+       → Borrowcheck → HirLower → MirBuild → CodegenUnit → LLVM → .obj → LLD → .exe
 ```
 
-- **Query System**: Memoized stages with dependency tracking, incremental via `.incr-cache/incr.bin`
-- **GREEN path**: No changes → cached IR loaded, pipeline skipped
-- **RED path**: Changed → affected queries recomputed
-- **Embedded LLVM + LLD**: All in-process (no subprocesses)
+Key: memoized queries, incremental compilation (fingerprints in `.incr-cache/incr.bin`), embedded LLVM + LLD (in-process, no subprocesses).
 
 ## Conditional Compilation
 
-```tml
-#if WINDOWS
-func get_home() -> Str { return env::var("USERPROFILE") }
-#elif UNIX
-func get_home() -> Str { return env::var("HOME") }
-#endif
+TML supports `#if`/`#elif`/`#endif`/`#ifdef`/`#ifndef` directives. Predefined symbols: `WINDOWS`, `LINUX`, `MACOS`, `X86_64`, `ARM64`, `DEBUG`, `RELEASE`, `TEST`, etc.
+
+## MANDATORY: Rust-as-Reference IR Methodology
+
+**When fixing codegen bugs or optimizing the TML compiler's LLVM IR output, you MUST use Rust as the reference implementation.**
+
+This is a HARD REQUIREMENT. The TML compiler aims to produce IR of the same quality as `rustc`. Rust's IR is the gold standard for correctness, safety, and optimization.
+
+### Workflow (MUST follow for every codegen task)
+
+1. **Write equivalent code in BOTH languages:**
+   - Create `.sandbox/temp_<feature>.rs` (Rust version)
+   - Create `.sandbox/temp_<feature>.tml` (TML version with equivalent semantics)
+   - Both files must exercise the EXACT same pattern (same struct, same methods, same calls)
+
+2. **Generate IR from both compilers:**
+   ```bash
+   # Rust IR (debug)
+   rustc --edition 2021 --emit=llvm-ir -C opt-level=0 .sandbox/temp_<feature>.rs -o .sandbox/temp_<feature>_rust_debug.ll
+
+   # Rust IR (release)
+   rustc --edition 2021 --emit=llvm-ir -C opt-level=3 .sandbox/temp_<feature>.rs -o .sandbox/temp_<feature>_rust_release.ll
+
+   # TML IR (debug)
+   tml build .sandbox/temp_<feature>.tml --emit-ir --legacy
+   # Then copy: cp build/debug/temp_<feature>.ll .sandbox/temp_<feature>_tml_debug.ll
+
+   # TML IR (release)
+   tml build .sandbox/temp_<feature>.tml --emit-ir --legacy --release
+   # Then copy: cp build/debug/temp_<feature>.ll .sandbox/temp_<feature>_tml_release.ll
+   ```
+
+3. **Compare function-by-function:**
+   - Instruction count (TML must not exceed 2x Rust for equivalent logic)
+   - Type layouts (struct/enum sizes should match)
+   - Alloca count (TML should not have allocas that Rust avoids)
+   - Safety features (overflow checks, null checks)
+   - Call overhead (unnecessary wrappers, extra indirection)
+
+4. **Fix the TML codegen** to match or exceed Rust's quality, then verify with the test suite.
+
+### Key Optimization Targets (from IR comparison)
+
+| Issue | Current TML | Rust Reference | Priority |
+|-------|-------------|---------------|----------|
+| `Maybe[I32]` layout | 16 bytes `{ i32, [1 x i64] }` | 8 bytes `{ i32, i32 }` | HIGH |
+| Struct constructors | alloca+store+load (10 instr) | `insertvalue` (3 instr) | HIGH |
+| Runtime declarations | 500+ lines unconditionally | Only what's used | MEDIUM |
+| Integer arithmetic | `add nsw` (UB on overflow) | Checked with panic | MEDIUM |
+| Exception handling | None | `invoke` + `cleanuppad` | LOW |
+
+### Rulebook Task (Living Document)
+
+Full task details: `rulebook/tasks/optimize-codegen-like-rust/`
+
+**This task is incremental and deferred.** Whenever you discover a codegen inefficiency during ANY work, you MUST update the task's `tasks.md` with the new finding.
+
+**VIOLATION OF THIS METHODOLOGY IS UNACCEPTABLE when working on codegen.**
+
+## Important Development Rules
+
+**NEVER simplify or comment out tests!** Fix the compiler/library, not the test.
+
+### MANDATORY: No Test Circumvention
+
+**This is NON-NEGOTIABLE. You MUST follow these rules:**
+
+1. **NEVER move tests to `pending/` folders** - All tests must live in the main `tests/` directory
+2. **NEVER create placeholder implementations** - Implement the actual functionality
+3. **NEVER simplify test assertions** - Fix the code, not the test
+4. **NEVER create stubs** - Write real implementations
+5. **NEVER comment out failing tests** - Fix the underlying issue
+6. **NEVER skip tests** - Every test must pass
+
+When a test fails:
+- Investigate the root cause in the compiler or library
+- Implement the missing codegen, type checking, or runtime functionality
+- Keep working until the test passes
+- Do NOT invent creative ways to bypass the test
+
+If a test reveals a bug that requires significant work:
+- Create a task in `rulebook/tasks/` to track the fix
+- Fix the bug properly, don't defer it
+- The test stays in place and must pass before committing
+
+### MANDATORY: Incremental Test Development
+
+**This is NON-NEGOTIABLE. You MUST follow this workflow when writing tests:**
+
+1. **Write tests incrementally** - Create 1-3 tests at a time, NOT entire test files at once
+2. **Test immediately after writing** - Run the individual test file before moving to the next
+3. **Fix errors before proceeding** - If a test fails, fix it before writing more tests
+4. **Use individual test execution** - NEVER run full test suite when developing tests
+
+**Correct workflow:**
+```bash
+# Write 1-3 tests in a file
+# Run ONLY that specific test file:
+tml test path/to/specific.test.tml
+# OR use MCP tool: mcp__tml__test with path parameter
+# Fix any errors, then write more tests. Repeat.
 ```
 
-**Predefined symbols**: OS (`WINDOWS`, `LINUX`, `MACOS`, `UNIX`, etc.), Arch (`X86_64`, `ARM64`, `WASM32`, etc.), Width (`PTR_32`/`PTR_64`), Endian, Env (`MSVC`, `GNU`), Mode (`DEBUG`, `RELEASE`, `TEST`).
+**Coverage Updates:** After completing a block of tests, run `tml test --coverage`.
 
 ## Rulebook Integration
 
-Uses [@hivehub/rulebook](https://www.npmjs.com/package/@hivehub/rulebook) v3.2+ for task management and persistent memory.
+Uses [@hivehub/rulebook](https://www.npmjs.com/package/@hivehub/rulebook) v3.2.0+ for task management, persistent memory, and Ralph (autonomous AI iteration loops).
 
-- **Tasks**: `.rulebook/tasks/` — create with `rulebook task create <id>`, validate before commit
-- **Ralph**: Autonomous iteration loops for complex tasks (init → run → fresh context per cycle → quality gates)
-- **Memory**: Save decisions, bugfixes, discoveries via `mcp__rulebook__rulebook_memory_save`. Search at session start via `mcp__rulebook__rulebook_memory_search`.
-- **tasks.md format**: Simple checklists only. No prose, no code, no root cause analysis. Put details in `proposal.md`.
+**Key rules:** Read AGENTS.md first. Use Rulebook tasks for features. Validate before commit. Use Ralph for complex multi-iteration tasks.
 
-## Key Compiler Files
+### Persistent Memory (MANDATORY)
 
-| Area | Key Files |
-|------|-----------|
-| **CLI** | `dispatcher.cpp`, `cmd_build.cpp`, `cmd_test.cpp` |
-| **Builder** | `build.cpp` (query default, legacy fallback), `object_compiler.cpp`, `build_cache.cpp`, `dependency_resolver.cpp` |
-| **Query** | `query_context.hpp/cpp`, `query_key.hpp`, `query_core.cpp`, `query_incr.hpp/cpp` |
-| **Backend** | `llvm_backend.cpp` (LLVM C API), `lld_linker.cpp` (in-process) |
-| **Tester** | `test_runner.cpp`, `suite_execution.cpp`, `discovery.cpp` |
-| **Codegen** | `codegen_backend.hpp`, `llvm_codegen_backend.cpp` |
-| **Plugin** | `plugin/abi.h`, `plugin/loader.cpp`, `*_plugin.cpp` |
+**You MUST actively use memory to preserve context** via `mcp__rulebook__rulebook_memory_*` tools.
+
+- **Save** on: architectural decisions, bugfixes, discoveries, features, errors, session summaries
+- **Search** at: session start, when working on previously-touched code, when needing past context
+
+### tasks.md Format
+
+All `rulebook/tasks/*/tasks.md` must be **simple checklists only** — no prose, no code examples, no root cause analysis. Use `proposal.md` for detailed documentation.
+
+## File Editing Best Practices
+
+Read and edit files **sequentially** (Read file1 → Edit file1 → Read file2 → Edit file2). Never batch parallel reads before edits.

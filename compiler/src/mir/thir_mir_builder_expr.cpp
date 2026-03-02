@@ -62,11 +62,25 @@ auto ThirMirBuilder::build_enum_expr(const thir::ThirEnumExpr& e) -> Value {
 }
 
 auto ThirMirBuilder::build_tuple(const thir::ThirTupleExpr& tuple) -> Value {
+    // Extract element types from context (e.g., return type is ([U8; 4], I64))
+    std::vector<types::TypePtr> context_elem_types;
+    if (context_type_) {
+        if (auto* tup = std::get_if<types::TupleType>(&context_type_->kind)) {
+            context_elem_types = tup->elements;
+        }
+    }
+
     std::vector<Value> elements;
     std::vector<MirTypePtr> element_types;
 
-    for (const auto& elem : tuple.elements) {
-        auto val = build_expr(elem);
+    for (size_t i = 0; i < tuple.elements.size(); ++i) {
+        // Propagate per-element context type
+        auto saved_context = context_type_;
+        if (i < context_elem_types.size()) {
+            context_type_ = context_elem_types[i];
+        }
+        auto val = build_expr(tuple.elements[i]);
+        context_type_ = saved_context;
         elements.push_back(val);
         element_types.push_back(val.type);
     }
@@ -81,12 +95,43 @@ auto ThirMirBuilder::build_tuple(const thir::ThirTupleExpr& tuple) -> Value {
 }
 
 auto ThirMirBuilder::build_array(const thir::ThirArrayExpr& arr) -> Value {
+    // Extract element type from context (e.g., var x: [U8; 4] = [0, 0, 0, 0])
+    types::TypePtr context_elem_src_type;
+    if (context_type_) {
+        if (auto* arr_t = std::get_if<types::ArrayType>(&context_type_->kind)) {
+            context_elem_src_type = arr_t->element;
+        }
+    }
+
+    // Propagate element type context to child expressions
+    auto saved_context = context_type_;
+    if (context_elem_src_type) {
+        context_type_ = context_elem_src_type;
+    }
+
     std::vector<Value> elements;
     for (const auto& elem : arr.elements) {
         elements.push_back(build_expr(elem));
     }
 
-    MirTypePtr element_type = elements.empty() ? make_unit_type() : elements[0].type;
+    context_type_ = saved_context;
+
+    // Determine element type: context > THIR annotations > inferred from elements
+    MirTypePtr element_type;
+    if (context_elem_src_type) {
+        element_type = convert_type(context_elem_src_type);
+    }
+    if (!element_type && arr.element_type) {
+        element_type = convert_type(arr.element_type);
+    }
+    if (!element_type && arr.type) {
+        if (auto* arr_t = std::get_if<types::ArrayType>(&arr.type->kind)) {
+            element_type = convert_type(arr_t->element);
+        }
+    }
+    if (!element_type) {
+        element_type = elements.empty() ? make_unit_type() : elements[0].type;
+    }
     MirTypePtr result_type = make_array_type(element_type, elements.size());
 
     ArrayInitInst inst;
@@ -117,10 +162,40 @@ auto ThirMirBuilder::build_cast(const thir::ThirCastExpr& cast) -> Value {
     auto result_type = convert_type(cast.type);
 
     CastInst inst;
-    inst.kind = CastKind::Bitcast;
     inst.operand = val;
     inst.source_type = val.type;
     inst.target_type = result_type;
+
+    // Determine correct cast kind based on source and target types
+    inst.kind = CastKind::Bitcast; // default fallback
+    if (val.type && result_type) {
+        if (val.type->is_integer() && result_type->is_integer()) {
+            int src_bits = val.type->bit_width();
+            int dst_bits = result_type->bit_width();
+            if (src_bits > dst_bits) {
+                inst.kind = CastKind::Trunc;
+            } else if (src_bits < dst_bits) {
+                inst.kind = val.type->is_signed() ? CastKind::SExt : CastKind::ZExt;
+            }
+        } else if (val.type->is_float() && result_type->is_integer()) {
+            inst.kind = result_type->is_signed() ? CastKind::FPToSI : CastKind::FPToUI;
+        } else if (val.type->is_integer() && result_type->is_float()) {
+            inst.kind = val.type->is_signed() ? CastKind::SIToFP : CastKind::UIToFP;
+        } else if (val.type->is_float() && result_type->is_float()) {
+            int src_bits = val.type->bit_width();
+            int dst_bits = result_type->bit_width();
+            if (src_bits > dst_bits) {
+                inst.kind = CastKind::FPTrunc;
+            } else if (src_bits < dst_bits) {
+                inst.kind = CastKind::FPExt;
+            }
+        } else if (val.type->is_pointer() && result_type->is_integer()) {
+            inst.kind = CastKind::PtrToInt;
+        } else if (val.type->is_integer() && result_type->is_pointer()) {
+            inst.kind = CastKind::IntToPtr;
+        }
+    }
+
     return emit(std::move(inst), result_type, cast.span);
 }
 
@@ -148,7 +223,37 @@ auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
         return const_unit();
     }
 
-    // For non-variable targets (field access, index, etc.), use memory store
+    // For index targets (arr[i] = val), build only GEP without the load.
+    // build_index always does GEP + LOAD, but we need just the GEP pointer for store.
+    if (assign.target->is<thir::ThirIndexExpr>()) {
+        const auto& index = assign.target->as<thir::ThirIndexExpr>();
+        auto object = build_expr(index.object);
+        auto idx = build_expr(index.index);
+        auto result_type = convert_type(index.type);
+
+        GetElementPtrInst gep;
+        gep.base = object;
+        gep.indices = {idx};
+        gep.base_type = object.type;
+        gep.result_type = make_pointer_type(result_type, false);
+
+        if (object.type) {
+            if (auto* arr_type = std::get_if<MirArrayType>(&object.type->kind)) {
+                gep.known_array_size = static_cast<int64_t>(arr_type->size);
+            }
+        }
+
+        Value ptr = emit(std::move(gep), gep.result_type, index.span);
+
+        StoreInst store;
+        store.ptr = ptr;
+        store.value = value;
+        store.value_type = value.type;
+        emit_void(std::move(store), assign.span);
+        return const_unit();
+    }
+
+    // For non-variable targets (field access, etc.), use memory store
     auto target = build_expr(assign.target);
     StoreInst store;
     store.ptr = target;
@@ -166,6 +271,14 @@ auto ThirMirBuilder::build_compound_assign(const thir::ThirCompoundAssignExpr& a
 
         CallInst call;
         call.func_name = assign.operator_method->qualified_name;
+        // Normalize :: to __ to match function definition mangling
+        {
+            size_t pos = 0;
+            while ((pos = call.func_name.find("::", pos)) != std::string::npos) {
+                call.func_name.replace(pos, 2, "__");
+                pos += 2;
+            }
+        }
         call.args = {target, value};
         call.arg_types = {target.type, value.type};
         call.return_type = result_type;

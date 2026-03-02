@@ -488,7 +488,20 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
             field_index = -1;
         }
     } else {
-        if (object_type && object_type->is<types::NamedType>()) {
+        // Unwrap reference/pointer types to get the underlying struct type.
+        // E.g. 'self: ref SomeStruct' has type RefType{inner: NamedType("SomeStruct")}.
+        auto resolved = object_type;
+        if (resolved && resolved->is<types::RefType>()) {
+            resolved = type_env_.resolve(resolved->as<types::RefType>().inner);
+        } else if (resolved && resolved->is<types::PtrType>()) {
+            resolved = type_env_.resolve(resolved->as<types::PtrType>().inner);
+        }
+
+        if (resolved && resolved->is<types::NamedType>()) {
+            type_name = resolved->as<types::NamedType>().name;
+        } else if (resolved && resolved->is<types::ClassType>()) {
+            type_name = resolved->as<types::ClassType>().name;
+        } else if (object_type && object_type->is<types::NamedType>()) {
             type_name = object_type->as<types::NamedType>().name;
         } else if (object_type && object_type->is<types::ClassType>()) {
             type_name = object_type->as<types::ClassType>().name;

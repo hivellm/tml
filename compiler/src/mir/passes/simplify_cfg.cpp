@@ -293,6 +293,61 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
             // Get predecessors of the block being removed
             auto& block_preds = preds[removed_id];
 
+            // Don't remove empty blocks that serve as critical edge splitters
+            // for phi nodes. If the target has phi nodes, check whether any
+            // OTHER empty block also forwards to the same target AND shares a
+            // predecessor with this block. Removing both would create duplicate
+            // predecessor entries in the phi, destroying value selection.
+            //
+            // Example: entry0 -> bb1 (empty) -> bb3, entry0 -> bb2 (empty) -> bb3
+            // phi in bb3: [%0, bb1], [%1, bb2]
+            // Removing bb1 first makes phi: [%0, entry0], [%1, bb2] — looks fine
+            // Then removing bb2 makes phi: [%0, entry0], [%1, entry0] — BROKEN
+            // So we must detect this pattern and preserve BOTH empty blocks.
+            int tgt_idx = get_block_index(func, target_id);
+            if (tgt_idx >= 0) {
+                auto& tgt_block = func.blocks[static_cast<size_t>(tgt_idx)];
+                bool target_has_phi = false;
+                for (const auto& inst : tgt_block.instructions) {
+                    if (std::holds_alternative<PhiInst>(inst.inst)) {
+                        target_has_phi = true;
+                        break;
+                    }
+                }
+
+                if (target_has_phi) {
+                    // Check if another empty block ALSO forwards to target_id
+                    // and shares a predecessor with this block
+                    bool has_sibling_forwarder = false;
+                    for (size_t j = 1; j < func.blocks.size(); ++j) {
+                        if (j == i) continue;
+                        auto& other = func.blocks[j];
+                        if (!other.instructions.empty()) continue;
+                        if (!other.terminator) continue;
+                        auto* other_br = std::get_if<BranchTerm>(&*other.terminator);
+                        if (!other_br || other_br->target != target_id) continue;
+
+                        // This other block also forwards to the same target.
+                        // Check if it shares a predecessor with our block.
+                        auto& other_preds = preds[other.id];
+                        for (uint32_t p1 : block_preds) {
+                            for (uint32_t p2 : other_preds) {
+                                if (p1 == p2) {
+                                    has_sibling_forwarder = true;
+                                    break;
+                                }
+                            }
+                            if (has_sibling_forwarder) break;
+                        }
+                        if (has_sibling_forwarder) break;
+                    }
+
+                    if (has_sibling_forwarder) {
+                        continue; // Preserve critical edge splitter block
+                    }
+                }
+            }
+
             // Update terminators in predecessors to jump directly to target
             for (auto& other_block : func.blocks) {
                 if (!other_block.terminator) {

@@ -843,8 +843,8 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             link_options.link_flags.push_back("-ladvapi32");
             link_options.link_flags.push_back("-luserenv");
         }
-        // Link OpenSSL libraries only when crypto modules are actually used
-        if (has_crypto_modules(registry)) {
+        // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+        {
             auto openssl = find_openssl();
             if (openssl.found) {
                 link_options.link_flags.push_back(
@@ -1225,8 +1225,8 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         link_options.link_flags.push_back("-ladvapi32");
         link_options.link_flags.push_back("-luserenv");
     }
-    // Link OpenSSL libraries only when crypto modules are actually used
-    if (has_crypto_modules(registry)) {
+    // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+    {
         auto openssl = find_openssl();
         if (openssl.found) {
             link_options.link_flags.push_back(

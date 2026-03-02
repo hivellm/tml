@@ -12,8 +12,6 @@
 
 #include "crypto_common.h"
 
-#ifdef TML_HAS_OPENSSL
-
 #include <openssl/decoder.h>
 #include <openssl/encoder.h>
 
@@ -41,9 +39,8 @@ TML_EXPORT void crypto_secret_key_destroy(void* handle) {
     if (key) {
         if (key->data) {
             OPENSSL_cleanse(key->data, key->capacity);
-            free(key->data);
         }
-        free(key);
+        mem_free(key); // single free: tml_create_buffer allocates header+data in one block
     }
 }
 
@@ -54,8 +51,7 @@ TML_EXPORT void* crypto_generate_secret_key(int64_t size) {
     if (!key)
         return NULL;
     if (RAND_bytes(key->data, (int)size) != 1) {
-        free(key->data);
-        free(key);
+        mem_free(key); // single free: tml_create_buffer allocates header+data in one block
         return NULL;
     }
     key->length = size;
@@ -604,164 +600,3 @@ TML_EXPORT void* crypto_generate_dh_key(int64_t bits) {
     EVP_PKEY_CTX_free(ctx);
     return (void*)pkey;
 }
-
-#else /* !TML_HAS_OPENSSL */
-
-// ============================================================================
-// Stubs when OpenSSL is not available
-// ============================================================================
-
-TML_EXPORT void* crypto_secret_key_create(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_secret_key_export(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_secret_key_destroy(void* handle) {
-    (void)handle;
-}
-TML_EXPORT void* crypto_generate_secret_key(int64_t size) {
-    (void)size;
-    return NULL;
-}
-
-TML_EXPORT void* crypto_private_key_from_pem(const char* pem) {
-    (void)pem;
-    return NULL;
-}
-TML_EXPORT void* crypto_private_key_from_pem_encrypted(const char* pem, const char* pass) {
-    (void)pem;
-    (void)pass;
-    return NULL;
-}
-TML_EXPORT void* crypto_private_key_from_der(void* buf) {
-    (void)buf;
-    return NULL;
-}
-TML_EXPORT void* crypto_private_key_from_jwk(const char* jwk) {
-    (void)jwk;
-    return NULL;
-}
-TML_EXPORT const char* crypto_private_key_to_pem(void* handle) {
-    (void)handle;
-    return "";
-}
-TML_EXPORT const char* crypto_private_key_to_pem_encrypted(void* handle, const char* pass,
-                                                           const char* cipher) {
-    (void)handle;
-    (void)pass;
-    (void)cipher;
-    return "";
-}
-TML_EXPORT void* crypto_private_key_to_der(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT const char* crypto_private_key_to_jwk(void* handle) {
-    (void)handle;
-    return "";
-}
-TML_EXPORT void* crypto_private_key_get_public(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT void crypto_private_key_destroy(void* handle) {
-    (void)handle;
-}
-
-TML_EXPORT void* crypto_public_key_from_pem(const char* pem) {
-    (void)pem;
-    return NULL;
-}
-TML_EXPORT void* crypto_public_key_from_der(void* buf) {
-    (void)buf;
-    return NULL;
-}
-TML_EXPORT void* crypto_public_key_from_jwk(const char* jwk) {
-    (void)jwk;
-    return NULL;
-}
-TML_EXPORT const char* crypto_public_key_to_pem(void* handle) {
-    (void)handle;
-    return "";
-}
-TML_EXPORT void* crypto_public_key_to_der(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT const char* crypto_public_key_to_jwk(void* handle) {
-    (void)handle;
-    return "";
-}
-TML_EXPORT void crypto_public_key_destroy(void* handle) {
-    (void)handle;
-}
-
-TML_EXPORT const char* crypto_key_get_type(void* handle) {
-    (void)handle;
-    return "unknown";
-}
-TML_EXPORT int64_t crypto_key_size_bits(void* handle) {
-    (void)handle;
-    return 0;
-}
-TML_EXPORT int32_t crypto_key_equals(void* h1, void* h2) {
-    (void)h1;
-    (void)h2;
-    return 0;
-}
-TML_EXPORT int64_t crypto_rsa_get_modulus_length(void* handle) {
-    (void)handle;
-    return 0;
-}
-TML_EXPORT int64_t crypto_rsa_get_public_exponent(void* handle) {
-    (void)handle;
-    return 0;
-}
-TML_EXPORT const char* crypto_ec_get_curve_name(void* handle) {
-    (void)handle;
-    return "";
-}
-TML_EXPORT const char* crypto_jwk_extract_k(const char* jwk) {
-    (void)jwk;
-    return "";
-}
-
-TML_EXPORT void* crypto_generate_rsa_key(int64_t bits, int64_t exp) {
-    (void)bits;
-    (void)exp;
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_rsa_pss_key(int64_t bits, int64_t exp) {
-    (void)bits;
-    (void)exp;
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_dsa_key(int64_t bits) {
-    (void)bits;
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_ec_key(const char* curve) {
-    (void)curve;
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_ed25519_key(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_ed448_key(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_x25519_key(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_x448_key(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_generate_dh_key(int64_t bits) {
-    (void)bits;
-    return NULL;
-}
-
-#endif /* TML_HAS_OPENSSL */

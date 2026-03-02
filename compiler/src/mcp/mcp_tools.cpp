@@ -845,14 +845,24 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         cmd << " --no-cache";
     }
 
-    // Add fail-fast flag
+    // Add fail-fast / no-fail-fast flag
     auto* fail_fast_param = params.get("fail_fast");
-    if (fail_fast_param != nullptr && fail_fast_param->is_bool() && fail_fast_param->as_bool()) {
-        cmd << " --fail-fast";
+    if (fail_fast_param != nullptr && fail_fast_param->is_bool()) {
+        if (fail_fast_param->as_bool()) {
+            cmd << " --fail-fast";
+        } else {
+            cmd << " --no-fail-fast";
+        }
     }
 
-    // Execute with longer timeout for test suites
-    auto [output, exit_code] = execute_command(cmd.str(), 300);
+    // Timeout: 300s for normal tests, 600s for coverage/full suite
+    auto* cov_check = params.get("coverage");
+    bool is_full_suite = (path_param == nullptr || !path_param->is_string()) &&
+                         (suite_param == nullptr || !suite_param->is_string()) &&
+                         (filter_param == nullptr || !filter_param->is_string());
+    int test_timeout = (cov_check && cov_check->is_bool() && cov_check->as_bool()) ? 600 :
+                       is_full_suite ? 600 : 300;
+    auto [output, exit_code] = execute_command(cmd.str(), test_timeout);
 
     // Check if structured output requested
     auto* structured_param = params.get("structured");
@@ -861,56 +871,68 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         std::stringstream result;
         result << "{";
 
-        // Parse "test result: ok/FAILED. X passed; Y failed" line
+        // Parse v3 coordinator output format:
+        //   "  Tests:   N" / "  Passed:  N" / "  Failed:  N"
+        //   "  Crashed: N" / "  Compile errors: N"
+        //   "FAIL group/name (file) [exit N]"
+        //   "COMPILE ERROR suite: message"
         int total = 0, passed = 0, failed = 0;
         std::vector<std::string> failures;
+
+        auto extract_number = [](const std::string& l, const std::string& key) -> int {
+            auto pos = l.find(key);
+            if (pos == std::string::npos)
+                return -1;
+            auto val_start = pos + key.size();
+            while (val_start < l.size() && l[val_start] == ' ')
+                ++val_start;
+            try {
+                return std::stoi(l.substr(val_start));
+            } catch (...) {
+                return -1;
+            }
+        };
 
         std::istringstream stream(output);
         std::string line;
         while (std::getline(stream, line)) {
-            // Parse result summary
-            if (line.find("test result:") != std::string::npos) {
-                // Extract numbers
-                auto passed_pos = line.find(" passed");
-                if (passed_pos != std::string::npos) {
-                    auto num_start = line.rfind(' ', passed_pos - 1);
-                    if (num_start == std::string::npos)
-                        num_start = line.rfind('.', passed_pos - 1);
-                    if (num_start != std::string::npos) {
-                        try {
-                            passed = std::stoi(line.substr(num_start + 1));
-                        } catch (...) {}
-                    }
-                }
-                auto failed_pos = line.find(" failed");
-                if (failed_pos != std::string::npos) {
-                    auto num_start = line.rfind(' ', failed_pos - 1);
-                    if (num_start == std::string::npos)
-                        num_start = line.rfind(';', failed_pos - 1);
-                    if (num_start != std::string::npos) {
-                        try {
-                            failed = std::stoi(line.substr(num_start + 1));
-                        } catch (...) {}
-                    }
-                }
-                total = passed + failed;
-            }
+            int v;
+            if ((v = extract_number(line, "Passed:")) >= 0)
+                passed = v;
+            if ((v = extract_number(line, "Failed:")) >= 0)
+                failed = v;
+            if ((v = extract_number(line, "Tests:")) >= 0)
+                total = v;
 
-            // Collect failure names
-            if (line.find("FAILED") != std::string::npos ||
-                line.find("FAIL") != std::string::npos) {
-                auto test_pos = line.find("test ");
-                if (test_pos != std::string::npos) {
-                    auto name_start = test_pos + 5;
-                    auto name_end = line.find(" ...", name_start);
-                    if (name_end == std::string::npos)
-                        name_end = line.find(" FAILED", name_start);
-                    if (name_end != std::string::npos) {
-                        failures.push_back(line.substr(name_start, name_end - name_start));
+            // Collect failure details from "FAIL group/name (file)" lines
+            if (line.find("FAIL") != std::string::npos &&
+                line.find("COMPILE") == std::string::npos) {
+                auto fail_pos = line.find("FAIL");
+                if (fail_pos != std::string::npos) {
+                    // Extract everything after "FAIL " until " ("
+                    auto name_start = line.find_first_not_of(' ', fail_pos + 4);
+                    if (name_start != std::string::npos) {
+                        auto paren_pos = line.find(" (", name_start);
+                        auto end_pos = (paren_pos != std::string::npos) ? paren_pos : line.size();
+                        failures.push_back(line.substr(name_start, end_pos - name_start));
+                    }
+                }
+            }
+            // Also collect compile errors as failures
+            if (line.find("COMPILE ERROR") != std::string::npos) {
+                auto colon_pos = line.find("COMPILE ERROR");
+                if (colon_pos != std::string::npos) {
+                    auto name_start = line.find_first_not_of(' ', colon_pos + 13);
+                    if (name_start != std::string::npos) {
+                        failures.push_back("[compile] " + line.substr(name_start));
                     }
                 }
             }
         }
+
+        // If total wasn't explicitly set, derive from passed+failed
+        if (total == 0 && (passed > 0 || failed > 0))
+            total = passed + failed;
 
         result << "\"total\":" << total << ",";
         result << "\"passed\":" << passed << ",";

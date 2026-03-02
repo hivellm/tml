@@ -199,9 +199,9 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     // External function declarations
     // ========================================================================
 
-    // Test functions
+    // Test functions (use original test indices, not sequential)
     for (int i = 0; i < total_tests; ++i) {
-        ir << "declare i32 @tml_test_" << i << "()\n";
+        ir << "declare i32 @tml_test_" << tests[i].index << "()\n";
     }
     ir << "\n";
 
@@ -312,11 +312,12 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     } else {
         ir << "  switch i32 %index, label %invalid [\n";
         for (int i = 0; i < total_tests; ++i) {
-            ir << "    i32 " << i << ", label %test_" << i << "\n";
+            ir << "    i32 " << tests[i].index << ", label %test_" << i << "\n";
         }
         ir << "  ]\n\n";
 
         for (int i = 0; i < total_tests; ++i) {
+            int tidx = tests[i].index; // Original test index for tml_test_N
             auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
             auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
 
@@ -326,15 +327,15 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  %ts_fmt_" << i << " = " << gep_test_start << "\n";
             ir << "  %ts_name_" << i << " = " << gep_name << "\n";
             ir << "  %ts_file_" << i << " = " << gep_file << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %ts_fmt_" << i << ", i32 " << i
+            ir << "  call i32 (i8*, ...) @printf(i8* %ts_fmt_" << i << ", i32 " << tidx
                << ", i8* %ts_name_" << i << ", i8* %ts_file_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
 
             // Record start time
             ir << "  %t0_" << i << " = call i64 @clock()\n";
 
-            // Call test function
-            ir << "  %rc_" << i << " = call i32 @tml_test_" << i << "()\n";
+            // Call test function (use original index for tml_test_N)
+            ir << "  %rc_" << i << " = call i32 @tml_test_" << tidx << "()\n";
 
             // Record end time
             ir << "  %t1_" << i << " = call i64 @clock()\n";
@@ -433,6 +434,7 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
         ir << "  br label %test_0\n\n";
 
         for (int i = 0; i < total_tests; ++i) {
+            int tidx = tests[i].index; // Original test index for tml_test_N
             auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
             auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
 
@@ -456,15 +458,15 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  %at_ts_fmt_" << i << " = " << gep_test_start << "\n";
             ir << "  %at_ts_name_" << i << " = " << gep_name << "\n";
             ir << "  %at_ts_file_" << i << " = " << gep_file << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %at_ts_fmt_" << i << ", i32 " << i
+            ir << "  call i32 (i8*, ...) @printf(i8* %at_ts_fmt_" << i << ", i32 " << tidx
                << ", i8* %at_ts_name_" << i << ", i8* %at_ts_file_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
 
             // Record test start time
             ir << "  %at_t0_" << i << " = call i64 @clock()\n";
 
-            // Call test function
-            ir << "  %at_rc_" << i << " = call i32 @tml_test_" << i << "()\n";
+            // Call test function (use original index for tml_test_N)
+            ir << "  %at_rc_" << i << " = call i32 @tml_test_" << tidx << "()\n";
 
             // Record test end time
             ir << "  %at_t1_" << i << " = call i64 @clock()\n";

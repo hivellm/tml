@@ -796,7 +796,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         // Property access - call getter method instead of direct field access
         const auto& prop_info = prop_it->second;
         std::string getter_name =
-            "@tml_" + get_suite_prefix() + type_name + "_get_" + prop_info.name;
+            "@" + mangle_impl_method(type_name, "get_" + prop_info.name);
 
         std::string result = fresh_reg();
         if (prop_info.is_static) {

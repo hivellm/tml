@@ -291,9 +291,22 @@ error[S009]: private field
    |               ^^^^^^^^ cannot access private field
 ```
 
-## 5. Machine-Readable Diagnostic Format
+## 5. Codegen Errors (C)
 
-### 5.1 Overview
+### C001: @no_mangle with generics
+```
+error[C001]: @no_mangle cannot be used with generic functions
+  --> src/main.tml:2:1
+   |
+ 2 | func identity[T](x: T) -> T {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: generic functions produce multiple instantiations and cannot have a single stable symbol
+```
+
+## 6. Machine-Readable Diagnostic Format
+
+### 6.1 Overview
 
 TML tooling supports structured JSON output for machine consumption via the `--format=json` flag. This is **optional** - the default output is human-readable text format.
 
@@ -308,7 +321,7 @@ tml check src/main.tml --format=json
 tml build --format=json
 ```
 
-### 5.2 JSON Diagnostic Schema
+### 6.2 JSON Diagnostic Schema
 
 ```json
 {
@@ -356,7 +369,7 @@ tml build --format=json
 }
 ```
 
-### 5.3 Field Definitions
+### 6.3 Field Definitions
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
@@ -372,7 +385,7 @@ tml build --format=json
 | `related` | No | Array | Related diagnostic locations |
 | `summary` | Yes | Object | Counts by severity |
 
-### 5.4 Use Cases
+### 6.4 Use Cases
 
 **LLM Integration**: AI models can parse JSON errors and generate fixes:
 ```bash

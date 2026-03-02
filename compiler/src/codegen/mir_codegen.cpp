@@ -148,10 +148,20 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     }
 
     // Collect declared parameter types for all functions (for array-to-slice coercion)
+    // Also convert this/self struct params to pointer types to match the actual
+    // LLVM IR signature (where struct this/self is always passed as ptr).
     func_param_types_.clear();
     for (const auto& func : module.functions) {
         std::vector<mir::MirTypePtr> param_types;
         for (const auto& p : func.params) {
+            if ((p.name == "this" || p.name == "self") && p.type) {
+                std::string llvm_ty = mir_type_to_llvm(p.type);
+                if (llvm_ty.starts_with("%struct.") || llvm_ty.starts_with("%enum.") ||
+                    llvm_ty.starts_with("%class.") || llvm_ty.starts_with("%union.")) {
+                    param_types.push_back(mir::make_ptr_type());
+                    continue;
+                }
+            }
             param_types.push_back(p.type);
         }
         func_param_types_[func.name] = std::move(param_types);
@@ -162,11 +172,13 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         emit_function(func);
     }
 
-    // Emit C entry point wrapper when building an executable.
+    // Emit entry point wrappers.
     // The user's `main` function is emitted as `tml_main` (see emit_function),
-    // and this wrapper provides the @main(i32, ptr) symbol expected by the C runtime.
+    // and these wrappers provide the public entry symbols.
     if (options_.generate_exe_main) {
         emit_main_wrapper(module);
+    } else if (!options_.test_entry_name.empty()) {
+        emit_test_entry_wrapper(module);
     }
 
     // Module identification metadata
@@ -265,10 +277,20 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     }
 
     // Collect declared parameter types for all functions (for array-to-slice coercion)
+    // Also convert this/self struct params to pointer types to match the actual
+    // LLVM IR signature (where struct this/self is always passed as ptr).
     func_param_types_.clear();
     for (const auto& func : module.functions) {
         std::vector<mir::MirTypePtr> param_types;
         for (const auto& p : func.params) {
+            if ((p.name == "this" || p.name == "self") && p.type) {
+                std::string llvm_ty = mir_type_to_llvm(p.type);
+                if (llvm_ty.starts_with("%struct.") || llvm_ty.starts_with("%enum.") ||
+                    llvm_ty.starts_with("%class.") || llvm_ty.starts_with("%union.")) {
+                    param_types.push_back(mir::make_ptr_type());
+                    continue;
+                }
+            }
             param_types.push_back(p.type);
         }
         func_param_types_[func.name] = std::move(param_types);
@@ -283,8 +305,8 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         }
     }
 
-    // Emit C entry point wrapper only in the CGU that contains the `main` function.
-    if (options_.generate_exe_main) {
+    // Emit entry point wrappers for the CGU that contains the `main` function.
+    {
         bool this_cgu_has_main = false;
         for (size_t idx : function_indices) {
             if (module.functions[idx].name == "main") {
@@ -293,7 +315,11 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
             }
         }
         if (this_cgu_has_main) {
-            emit_main_wrapper(module);
+            if (options_.generate_exe_main) {
+                emit_main_wrapper(module);
+            } else if (!options_.test_entry_name.empty()) {
+                emit_test_entry_wrapper(module);
+            }
         }
     }
 
@@ -312,10 +338,9 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
     // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
     std::string decl_name = func.name;
     if (func.name == "main") {
-        if (options_.generate_exe_main)
+        // Always rename main to tml_main; wrappers provide the public entry name
+        if (options_.generate_exe_main || !options_.test_entry_name.empty())
             decl_name = "tml_main";
-        else if (!options_.test_entry_name.empty())
-            decl_name = options_.test_entry_name;
     }
     emit("declare " + ret_type + " @" + quote_func_name(decl_name) + "(");
 
@@ -324,6 +349,13 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
             emit(", ");
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
+        const auto& param_name = func.params[i].name;
+        // Method 'this'/'self' parameters for struct/enum types → ptr
+        if ((param_name == "this" || param_name == "self") &&
+            (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
+             param_type.starts_with("%class.") || param_type.starts_with("%union."))) {
+            param_type = "ptr";
+        }
         if (func.uses_sret && i == 0 && func.original_return_type) {
             std::string orig_ret_type = mir_type_to_llvm(func.original_return_type);
             emit(param_type + " sret(" + orig_ret_type + ")");
@@ -363,6 +395,57 @@ void MirCodegen::emit_main_wrapper(const mir::Module& module) {
         emitln("  %ret = call i32 @tml_main()");
         emitln("  ret i32 %ret");
     }
+    emitln("}");
+    emitln();
+}
+
+void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
+    // Collect @test functions from the module.
+    // Test files have @test annotated functions instead of main.
+    std::vector<const mir::Function*> test_funcs;
+    const mir::Function* main_func = nullptr;
+    for (const auto& func : module.functions) {
+        if (func.name == "main") {
+            main_func = &func;
+        }
+        for (const auto& attr : func.attributes) {
+            if (attr == "test") {
+                test_funcs.push_back(&func);
+                break;
+            }
+        }
+    }
+
+    if (test_funcs.empty() && !main_func) {
+        return;
+    }
+
+    // Generate an i32-returning wrapper that the dispatcher can call.
+    emitln("; Test entry wrapper — calls test functions, returns i32 for dispatcher");
+    emitln("define dllexport i32 @" + quote_func_name(options_.test_entry_name) + "() {");
+    emitln("entry:");
+
+    if (!test_funcs.empty()) {
+        // Call each @test function sequentially
+        for (const auto* tf : test_funcs) {
+            std::string ret_type = mir_type_to_llvm(tf->return_type);
+            if (ret_type == "void") {
+                emitln("  call void @" + quote_func_name(tf->name) + "()");
+            } else {
+                emitln("  call " + ret_type + " @" + quote_func_name(tf->name) + "()");
+            }
+        }
+    } else if (main_func) {
+        // Fallback: call main renamed to tml_main
+        std::string main_ret = mir_type_to_llvm(main_func->return_type);
+        if (main_ret == "void") {
+            emitln("  call void @tml_main()");
+        } else {
+            emitln("  call i32 @tml_main()");
+        }
+    }
+
+    emitln("  ret i32 0");
     emitln("}");
     emitln();
 }
@@ -487,6 +570,25 @@ void MirCodegen::emit_preamble() {
     emitln("fail:");
     emitln("    %msg = getelementptr [28 x i8], ptr @.str.assert_eq_i32, i32 0, i32 0");
     emitln("    call i32 (ptr, ...) @printf(ptr %msg, i32 %a, i32 %b)");
+    emitln("    call void @abort()");
+    emitln("    unreachable");
+    emitln("}");
+    emitln();
+
+    // Assert_eq implementation for strings (ptr) — uses strcmp for content comparison
+    emitln("declare i32 @strcmp(ptr, ptr)");
+    emitln(
+        "@.str.assert_eq_str = private constant [28 x i8] c\"assert_eq failed: %s != %s\\0A\\00\"");
+    emitln("define internal void @assert_eq_str(ptr %a, ptr %b) {");
+    emitln("entry:");
+    emitln("    %cmp = call i32 @strcmp(ptr %a, ptr %b)");
+    emitln("    %eq = icmp eq i32 %cmp, 0");
+    emitln("    br i1 %eq, label %ok, label %fail");
+    emitln("ok:");
+    emitln("    ret void");
+    emitln("fail:");
+    emitln("    %msg = getelementptr [28 x i8], ptr @.str.assert_eq_str, i32 0, i32 0");
+    emitln("    call i32 (ptr, ...) @printf(ptr %msg, ptr %a, ptr %b)");
     emitln("    call void @abort()");
     emitln("    unreachable");
     emitln("}");
@@ -637,6 +739,7 @@ void MirCodegen::emit_function(const mir::Function& func) {
     current_func_ = func.name;
     value_regs_.clear();
     block_labels_.clear();
+    block_exit_labels_.clear();
     value_types_.clear(); // Clear type tracking for new function
 
     // Setup block labels - use block ID, not index
@@ -673,9 +776,16 @@ void MirCodegen::emit_function(const mir::Function& func) {
     }
 
     // Function signature
+    // In suite mode (force_internal_linkage), all user-defined functions get
+    // internal linkage to prevent duplicate symbol errors when multiple test
+    // files in the same suite define the same function names (e.g., main).
+    // The test entry wrapper (tml_test_N) is generated separately with
+    // dllexport linkage — user's main() is just another internal function.
     std::string linkage = "define";
     if (options_.dll_export && func.is_public) {
         linkage = "define dllexport";
+    } else if (options_.force_internal_linkage) {
+        linkage = "define internal";
     }
 
     // Add inline hints for small functions to help LLVM optimizer
@@ -712,10 +822,9 @@ void MirCodegen::emit_function(const mir::Function& func) {
     // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
     std::string emit_name = func.name;
     if (func.name == "main") {
-        if (options_.generate_exe_main)
+        // Always rename main to tml_main; wrappers provide the public entry name
+        if (options_.generate_exe_main || !options_.test_entry_name.empty())
             emit_name = "tml_main";
-        else if (!options_.test_entry_name.empty())
-            emit_name = options_.test_entry_name;
     }
     emit(linkage + " " + ret_type + " @" + quote_func_name(emit_name) + "(");
 
@@ -724,12 +833,23 @@ void MirCodegen::emit_function(const mir::Function& func) {
             emit(", ");
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
+        const auto& param_name = func.params[i].name;
+        // Method 'this'/'self' parameters for struct/enum types must be passed
+        // as ptr (pointer), not by value. The function body uses GEP instructions
+        // that expect a pointer base, so the parameter type must match.
+        if ((param_name == "this" || param_name == "self") &&
+            (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
+             param_type.starts_with("%class.") || param_type.starts_with("%union."))) {
+            param_type = "ptr";
+            // Update value_types_ so instructions correctly see this as ptr
+            value_types_[func.params[i].value_id] = "ptr";
+        }
         // If this function uses sret, the first parameter gets the sret attribute
         if (func.uses_sret && i == 0 && func.original_return_type) {
             std::string orig_ret_type = mir_type_to_llvm(func.original_return_type);
-            emit(param_type + " sret(" + orig_ret_type + ") %" + func.params[i].name);
+            emit(param_type + " sret(" + orig_ret_type + ") %" + param_name);
         } else {
-            emit(param_type + " %" + func.params[i].name);
+            emit(param_type + " %" + param_name);
         }
     }
 
@@ -746,6 +866,10 @@ void MirCodegen::emit_function(const mir::Function& func) {
 
 void MirCodegen::emit_block(const mir::BasicBlock& block) {
     emitln(block.name + ":");
+
+    // Track current block for exit label updates (bounds check injection etc.)
+    current_block_id_ = block.id;
+    block_exit_labels_[block.id] = block.name;
 
     // Emit instructions
     for (const auto& inst : block.instructions) {

@@ -78,7 +78,7 @@ void LLVMIRGen::gen_derive_fromstr_struct(const parser::StructDecl& s) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_from_str";
+    std::string func_name = "@" + mangle_impl_method(type_name, "from_str");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -147,7 +147,7 @@ void LLVMIRGen::gen_derive_fromstr_enum(const parser::EnumDecl& e) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_from_str";
+    std::string func_name = "@" + mangle_impl_method(type_name, "from_str");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {

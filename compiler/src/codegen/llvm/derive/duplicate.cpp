@@ -109,14 +109,7 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
     std::string type_name = s.name;
     std::string llvm_type = "%struct." + type_name;
 
-    // Add suite prefix for test-local types
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_duplicate";
+    std::string func_name = "@" + mangle_impl_method(type_name, "duplicate");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -178,7 +171,7 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            std::string field_dup_func = "@tml_" + suite_prefix + field_type_name + "_duplicate";
+            std::string field_dup_func = "@" + mangle_impl_method(field_type_name, "duplicate");
 
             // Call duplicate and store result
             std::string dup_result = fresh_temp();
@@ -214,14 +207,7 @@ void LLVMIRGen::gen_derive_duplicate_enum(const parser::EnumDecl& e) {
     std::string type_name = e.name;
     std::string llvm_type = "%struct." + type_name;
 
-    // Add suite prefix for test-local types
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_duplicate";
+    std::string func_name = "@" + mangle_impl_method(type_name, "duplicate");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {

@@ -115,15 +115,28 @@ collect_codegen_captures(const parser::Expr& expr,
 }
 
 auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
-    // Generate a unique function name
-    // In suite mode, add prefix to avoid symbol collisions when linking multiple test files
+    // Generate a unique function name with parent function context for debugging.
+    // Produces names like:
+    //   tml_split_closure_0       — inside function `split`
+    //   tml_Str_contains_closure_0 — inside impl method `Str::contains`
+    //   tml_s0_main_closure_0     — inside `main` in test file, suite index 0
+    //   tml_closure_5             — at top level, no parent function
+    std::string parent_prefix;
+    if (!current_func_.empty()) {
+        if (!current_impl_type_.empty()) {
+            parent_prefix = current_impl_type_ + "_" + current_func_ + "_";
+        } else {
+            parent_prefix = current_func_ + "_";
+        }
+    }
+
     std::string suite_prefix = "";
     if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
         current_module_prefix_.empty()) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
     std::string closure_name =
-        "tml_" + suite_prefix + "closure_" + std::to_string(closure_counter_++);
+        "tml_" + suite_prefix + parent_prefix + "closure_" + std::to_string(closure_counter_++);
 
     // Determine parameter types and names first (needed for capture analysis)
     std::vector<std::string> param_llvm_types;

@@ -180,14 +180,10 @@ struct TestOptions {
     bool emit_pipeline = false;             // Emit compilation pipeline stages
     std::string pipeline_output_dir = "";   // Directory for pipeline output
     std::string output_dir = "";            // Output directory for generated files
-    bool new_runner = false;                // Use new coordinator-based test runner
+    bool new_runner = false;                // Deprecated (always true now)
 };
 
-// Parse test command arguments
-TestOptions parse_test_args(int argc, char* argv[], int start_index);
-
-// Run test command
-// Discovers and runs all tests in *.test.tml files
+// Run the test command
 int run_test(int argc, char* argv[], bool verbose);
 
 } // namespace tml::cli
