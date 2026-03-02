@@ -195,10 +195,10 @@ struct GenericArgs {
 /// func static_ref() -> ref[static] Str { ref "hello" }  // Static lifetime
 /// ```
 struct RefType {
-    bool is_mut;                          ///< True for mutable reference (`mut ref T`).
-    TypePtr inner;                        ///< The referenced type.
-    std::optional<std::string> lifetime;  ///< Optional lifetime annotation (e.g., "a", "static").
-    SourceSpan span;                      ///< Source location.
+    bool is_mut;                         ///< True for mutable reference (`mut ref T`).
+    TypePtr inner;                       ///< The referenced type.
+    std::optional<std::string> lifetime; ///< Optional lifetime annotation (e.g., "a", "static").
+    SourceSpan span;                     ///< Source location.
 };
 
 /// Raw pointer type: `*const T` or `*mut T`.

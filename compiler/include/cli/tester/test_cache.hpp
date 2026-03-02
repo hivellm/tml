@@ -58,29 +58,29 @@ namespace tml::cli {
 enum class CachedTestStatus {
     Pass,
     Fail,
-    Error,    // Compilation error
-    Timeout,  // Test timed out
-    Unknown   // Not yet run
+    Error,   // Compilation error
+    Timeout, // Test timed out
+    Unknown  // Not yet run
 };
 
 // Information about a single cached test
 struct CachedTestInfo {
-    std::string file_path;             // Relative path from project root
-    std::string sha512;                // SHA512 hash of the file content
-    std::string suite;                 // Suite this test belongs to
-    std::string last_updated;          // ISO 8601 timestamp
-    std::vector<std::string> test_functions;  // @test functions in this file
+    std::string file_path;                   // Relative path from project root
+    std::string sha512;                      // SHA512 hash of the file content
+    std::string suite;                       // Suite this test belongs to
+    std::string last_updated;                // ISO 8601 timestamp
+    std::vector<std::string> test_functions; // @test functions in this file
     CachedTestStatus last_result = CachedTestStatus::Unknown;
-    int64_t duration_ms = 0;           // Last run duration
-    std::map<std::string, std::string> dependency_hashes;  // Hashes of dependencies
-    bool coverage_enabled = false;     // Whether coverage was enabled
-    bool profile_enabled = false;      // Whether profiling was enabled
+    int64_t duration_ms = 0;                              // Last run duration
+    std::map<std::string, std::string> dependency_hashes; // Hashes of dependencies
+    bool coverage_enabled = false;                        // Whether coverage was enabled
+    bool profile_enabled = false;                         // Whether profiling was enabled
 };
 
 // Cache validation result
 struct CacheValidationResult {
     bool valid = false;
-    std::string reason;  // Why the cache is invalid (if applicable)
+    std::string reason; // Why the cache is invalid (if applicable)
 };
 
 // Test cache manager
@@ -108,15 +108,11 @@ public:
     std::optional<CachedTestInfo> get_cached_info(const std::string& test_file) const;
 
     // Update cache for a test
-    void update(const std::string& test_file,
-                const std::string& sha512,
-                const std::string& suite,
-                const std::vector<std::string>& test_functions,
-                CachedTestStatus result,
+    void update(const std::string& test_file, const std::string& sha512, const std::string& suite,
+                const std::vector<std::string>& test_functions, CachedTestStatus result,
                 int64_t duration_ms,
                 const std::map<std::string, std::string>& dependency_hashes = {},
-                bool coverage_enabled = false,
-                bool profile_enabled = false);
+                bool coverage_enabled = false, bool profile_enabled = false);
 
     // Remove a test from cache
     void remove(const std::string& test_file);
@@ -125,7 +121,9 @@ public:
     void clear();
 
     // Get all cached tests
-    const std::map<std::string, CachedTestInfo>& get_all() const { return tests_; }
+    const std::map<std::string, CachedTestInfo>& get_all() const {
+        return tests_;
+    }
 
     // Get cache statistics
     struct CacheStats {
@@ -143,7 +141,9 @@ public:
     static std::string current_timestamp();
 
     // Get cache version
-    static int get_version() { return CACHE_VERSION; }
+    static int get_version() {
+        return CACHE_VERSION;
+    }
 
     // ========================================================================
     // Backup and Recovery

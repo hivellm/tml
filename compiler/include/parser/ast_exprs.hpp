@@ -397,9 +397,9 @@ struct WhenExpr {
 ///
 /// This allows declaring and initializing the loop variable inline.
 struct LoopVarDecl {
-    std::string name;    ///< Variable name.
-    TypePtr type;        ///< Variable type.
-    SourceSpan span;     ///< Source location.
+    std::string name; ///< Variable name.
+    TypePtr type;     ///< Variable type.
+    SourceSpan span;  ///< Source location.
 };
 
 /// Conditional loop: `loop (condition) { body }`.
@@ -424,11 +424,11 @@ struct LoopVarDecl {
 /// }
 /// ```
 struct LoopExpr {
-    std::optional<std::string> label;      ///< Optional loop label (`'label: loop`).
-    std::optional<LoopVarDecl> loop_var;   ///< Optional loop variable declaration.
-    ExprPtr condition;                     ///< Loop condition (required, must be Bool).
-    ExprPtr body;                          ///< Loop body.
-    SourceSpan span;                       ///< Source location.
+    std::optional<std::string> label;    ///< Optional loop label (`'label: loop`).
+    std::optional<LoopVarDecl> loop_var; ///< Optional loop variable declaration.
+    ExprPtr condition;                   ///< Loop condition (required, must be Bool).
+    ExprPtr body;                        ///< Loop body.
+    SourceSpan span;                     ///< Source location.
 };
 
 /// While loop: `while cond { body }`.

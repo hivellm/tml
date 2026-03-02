@@ -639,9 +639,9 @@ struct HirWhenExpr {
 /// Loop expression: `loop { body }`
 /// Loop variable declaration for `loop (var i: I64 < N) { ... }` syntax.
 struct HirLoopVarDecl {
-    std::string name;    ///< Variable name.
-    HirType type;        ///< Variable type.
-    SourceSpan span;     ///< Source location.
+    std::string name; ///< Variable name.
+    HirType type;     ///< Variable type.
+    SourceSpan span;  ///< Source location.
 };
 
 ///

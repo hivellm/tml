@@ -39,24 +39,24 @@ namespace tml::profiler {
  * @brief Represents a single call frame in the profile
  */
 struct CallFrame {
-    uint32_t id;              // Unique node ID
+    uint32_t id; // Unique node ID
     std::string function_name;
     std::string file_name;
     uint32_t line_number;
     uint32_t column_number;
-    uint32_t parent_id;       // Parent node ID (0 for root)
-    uint64_t self_time_us;    // Time spent in this function (excluding children)
-    uint64_t total_time_us;   // Total time (including children)
-    uint64_t hit_count;       // Number of times this was sampled/called
-    std::vector<uint32_t> children;  // Child node IDs
+    uint32_t parent_id;             // Parent node ID (0 for root)
+    uint64_t self_time_us;          // Time spent in this function (excluding children)
+    uint64_t total_time_us;         // Total time (including children)
+    uint64_t hit_count;             // Number of times this was sampled/called
+    std::vector<uint32_t> children; // Child node IDs
 };
 
 /**
  * @brief A sample point in the profile (for sampling profiler)
  */
 struct Sample {
-    uint32_t node_id;         // Which node was active
-    int64_t timestamp_us;     // Microseconds since profile start
+    uint32_t node_id;     // Which node was active
+    int64_t timestamp_us; // Microseconds since profile start
 };
 
 /**
@@ -73,9 +73,9 @@ struct StackFrame {
 struct ProfileData {
     std::vector<CallFrame> nodes;
     std::vector<Sample> samples;
-    std::vector<int64_t> time_deltas;  // Delta between samples in microseconds
-    int64_t start_time;       // Profile start (microseconds since epoch)
-    int64_t end_time;         // Profile end (microseconds since epoch)
+    std::vector<int64_t> time_deltas; // Delta between samples in microseconds
+    int64_t start_time;               // Profile start (microseconds since epoch)
+    int64_t end_time;                 // Profile end (microseconds since epoch)
 };
 
 // ============================================================================
@@ -115,7 +115,9 @@ public:
     /**
      * @brief Check if profiling is active
      */
-    [[nodiscard]] auto is_active() const -> bool { return active_.load(std::memory_order_relaxed); }
+    [[nodiscard]] auto is_active() const -> bool {
+        return active_.load(std::memory_order_relaxed);
+    }
 
     /**
      * @brief Record function entry (called by instrumented code)
@@ -142,17 +144,14 @@ public:
      * @param line Line number
      * @return Node ID for this function
      */
-    auto register_function(const std::string& func_name,
-                           const std::string& file_name,
+    auto register_function(const std::string& func_name, const std::string& file_name,
                            uint32_t line) -> uint32_t;
 
     /**
      * @brief Get or create a node for a function call
      */
-    auto get_or_create_node(const std::string& func_name,
-                            const std::string& file_name,
-                            uint32_t line,
-                            uint32_t parent_id) -> uint32_t;
+    auto get_or_create_node(const std::string& func_name, const std::string& file_name,
+                            uint32_t line, uint32_t parent_id) -> uint32_t;
 
     /**
      * @brief Export profile data to .cpuprofile format
@@ -178,7 +177,7 @@ private:
     // Profile data (protected by mutex)
     std::mutex mutex_;
     ProfileData data_;
-    std::unordered_map<std::string, uint32_t> node_map_;  // Key: "parent_id:func:file:line"
+    std::unordered_map<std::string, uint32_t> node_map_; // Key: "parent_id:func:file:line"
 
     // Configuration
     std::string output_path_{"profile.cpuprofile"};
@@ -189,10 +188,8 @@ private:
     std::atomic<bool> initialized_{false};
 
     // Helper to generate unique node key
-    static auto make_node_key(uint32_t parent_id,
-                              const std::string& func_name,
-                              const std::string& file_name,
-                              uint32_t line) -> std::string;
+    static auto make_node_key(uint32_t parent_id, const std::string& func_name,
+                              const std::string& file_name, uint32_t line) -> std::string;
 
     // Generate cpuprofile JSON
     [[nodiscard]] auto to_cpuprofile_json() const -> std::string;
@@ -244,16 +241,16 @@ int32_t tml_profiler_is_active(void);
  */
 void tml_profiler_sample(void);
 
-}  // extern "C"
+} // extern "C"
 
 // ============================================================================
 // Instrumentation Macros (for C++ code using the profiler)
 // ============================================================================
 
-#define TML_PROFILE_FUNCTION() \
+#define TML_PROFILE_FUNCTION()                                                                     \
     tml::profiler::ScopedProfiler _profiler_scope_(__FUNCTION__, __FILE__, __LINE__)
 
-#define TML_PROFILE_SCOPE(name) \
+#define TML_PROFILE_SCOPE(name)                                                                    \
     tml::profiler::ScopedProfiler _profiler_scope_(name, __FILE__, __LINE__)
 
 /**
@@ -282,4 +279,4 @@ private:
     bool active_ = false;
 };
 
-}  // namespace tml::profiler
+} // namespace tml::profiler

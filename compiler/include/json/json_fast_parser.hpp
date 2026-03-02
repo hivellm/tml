@@ -10,9 +10,9 @@
 #pragma once
 
 #include "common.hpp"
+
 #include "json/json_error.hpp"
 #include "json/json_value.hpp"
-
 #include <cstdint>
 #include <string_view>
 
@@ -110,11 +110,13 @@ inline uint32_t parse_hex4_swar(const char* p) {
 inline const char* skip_whitespace_simd(const char* p, const char* end) {
     // Handle small inputs without SIMD
     while (p < end && (end - p < 16)) {
-        if (!is_whitespace(*p)) return p;
+        if (!is_whitespace(*p))
+            return p;
         ++p;
     }
 
-    if (p >= end) return p;
+    if (p >= end)
+        return p;
 
     // Create masks for whitespace characters
     __m128i space = _mm_set1_epi8(' ');
@@ -132,8 +134,8 @@ inline const char* skip_whitespace_simd(const char* p, const char* end) {
         __m128i is_carriage = _mm_cmpeq_epi8(chunk, carriage);
 
         // Combine: is any of them?
-        __m128i is_ws = _mm_or_si128(_mm_or_si128(is_space, is_tab),
-                                      _mm_or_si128(is_newline, is_carriage));
+        __m128i is_ws =
+            _mm_or_si128(_mm_or_si128(is_space, is_tab), _mm_or_si128(is_newline, is_carriage));
 
         // Get mask of non-whitespace positions
         int mask = _mm_movemask_epi8(is_ws);
@@ -183,7 +185,8 @@ inline const char* find_string_special_simd(const char* p, const char* end) {
         ++p;
     }
 
-    if (p >= end) return end;
+    if (p >= end)
+        return end;
 
     __m128i quote = _mm_set1_epi8('"');
     __m128i backslash = _mm_set1_epi8('\\');
@@ -207,7 +210,8 @@ inline const char* find_string_special_simd(const char* p, const char* end) {
         if (mask != 0) {
             // Find first special character
             int pos = 0;
-            while (!(mask & (1 << pos))) ++pos;
+            while (!(mask & (1 << pos)))
+                ++pos;
             return p + pos;
         }
 

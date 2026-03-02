@@ -484,6 +484,10 @@ private:
     /// The module currently being built (for adding monomorphized items).
     HirModule* current_module_ = nullptr;
 
+    /// Map from struct name to its AST declaration, used to look up default
+    /// field values when lowering struct literal expressions.
+    std::unordered_map<std::string, const parser::StructDecl*> struct_decl_map_;
+
     /// Current impl self type for resolving 'This'/'Self' types.
     /// Set when lowering impl methods, cleared after.
     std::optional<HirType> current_impl_self_type_ = std::nullopt;
