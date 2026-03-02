@@ -125,6 +125,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc", "fma", "fabs",
+        "copysign", "minnum", "maxnum",
         // Bit manipulation intrinsics
         "ctlz", "cttz", "ctpop", "bswap", "bitreverse",
         // Drop intrinsic - for explicit destruction

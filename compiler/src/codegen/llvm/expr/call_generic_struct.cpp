@@ -214,16 +214,34 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                           ", ptr null, 1");
                                 val = fat2;
                             }
-                            // struct/enum by-value → ptr: definition expects ptr for
-                            // struct/enum params (see impl.cpp:282), so store to temp alloca.
-                            if (actual_type.starts_with("%struct.") ||
-                                actual_type.starts_with("%enum.")) {
-                                std::string temp_alloca = fresh_reg();
-                                emit_line("  " + temp_alloca + " = alloca " + actual_type);
-                                emit_line("  store " + actual_type + " " + val + ", ptr " +
-                                          temp_alloca);
-                                val = temp_alloca;
-                                arg_type = "ptr";
+                            // struct/enum by-value → ptr: definition expects ptr ONLY for
+                            // the first non-self param (see impl.cpp:282). Subsequent struct
+                            // params are passed by value as defined.
+                            // Use registered function info if available, else fall back to i==0.
+                            {
+                                std::string lookup_key = mangled_type_name + "_" + method;
+                                auto fn_it = functions_.find(lookup_key);
+                                bool should_convert = false;
+                                if (fn_it != functions_.end() &&
+                                    i < fn_it->second.param_types.size()) {
+                                    // Use exact registered type: convert only if def expects ptr
+                                    should_convert = fn_it->second.param_types[i] == "ptr" &&
+                                                     (actual_type.starts_with("%struct.") ||
+                                                      actual_type.starts_with("%enum."));
+                                } else {
+                                    // Fallback: only convert first arg (impl.cpp:282 rule)
+                                    should_convert =
+                                        i == 0 && (actual_type.starts_with("%struct.") ||
+                                                   actual_type.starts_with("%enum."));
+                                }
+                                if (should_convert) {
+                                    std::string temp_alloca = fresh_reg();
+                                    emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                                    emit_line("  store " + actual_type + " " + val + ", ptr " +
+                                              temp_alloca);
+                                    val = temp_alloca;
+                                    arg_type = "ptr";
+                                }
                             }
                             typed_args.push_back({arg_type, val});
                         }
@@ -276,16 +294,28 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             std::string val = gen_expr(*call.args[i]);
                             // Function-typed args keep fat pointer { ptr, ptr } — no coercion
                             std::string arg_type = last_expr_type_;
-                            // struct/enum by-value → ptr: definition expects ptr for
-                            // struct/enum params (see impl.cpp:282).
+                            // struct/enum by-value → ptr: definition expects ptr ONLY for
+                            // the first non-self param (see impl.cpp:282). Check registered
+                            // param types first; fall back to i==0 rule.
                             if (arg_type.starts_with("%struct.") ||
                                 arg_type.starts_with("%enum.")) {
-                                std::string temp_alloca = fresh_reg();
-                                emit_line("  " + temp_alloca + " = alloca " + arg_type);
-                                emit_line("  store " + arg_type + " " + val + ", ptr " +
-                                          temp_alloca);
-                                val = temp_alloca;
-                                arg_type = "ptr";
+                                std::string lookup_key = mangled_type_name + "_" + method;
+                                auto fn_it = functions_.find(lookup_key);
+                                bool should_convert = false;
+                                if (fn_it != functions_.end() &&
+                                    i < fn_it->second.param_types.size()) {
+                                    should_convert = fn_it->second.param_types[i] == "ptr";
+                                } else {
+                                    should_convert = (i == 0);
+                                }
+                                if (should_convert) {
+                                    std::string temp_alloca = fresh_reg();
+                                    emit_line("  " + temp_alloca + " = alloca " + arg_type);
+                                    emit_line("  store " + arg_type + " " + val + ", ptr " +
+                                              temp_alloca);
+                                    val = temp_alloca;
+                                    arg_type = "ptr";
+                                }
                             }
                             typed_args.push_back({arg_type, val});
                         }
@@ -808,16 +838,27 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                           ", ptr null, 1");
                                 val = fat2;
                             }
-                            // struct/enum by-value → ptr: definition expects ptr for
-                            // struct/enum params (see impl.cpp:282), so store to temp alloca.
+                            // struct/enum by-value → ptr: only for first non-self param
+                            // (see impl.cpp:282). Use registered param types if available.
                             if (actual_type.starts_with("%struct.") ||
                                 actual_type.starts_with("%enum.")) {
-                                std::string temp_alloca = fresh_reg();
-                                emit_line("  " + temp_alloca + " = alloca " + actual_type);
-                                emit_line("  store " + actual_type + " " + val + ", ptr " +
-                                          temp_alloca);
-                                val = temp_alloca;
-                                arg_type = "ptr";
+                                std::string lk = mangled_type_name + "_" + method;
+                                auto fn_it2 = functions_.find(lk);
+                                bool should_convert = false;
+                                if (fn_it2 != functions_.end() &&
+                                    i < fn_it2->second.param_types.size()) {
+                                    should_convert = fn_it2->second.param_types[i] == "ptr";
+                                } else {
+                                    should_convert = (i == 0);
+                                }
+                                if (should_convert) {
+                                    std::string temp_alloca = fresh_reg();
+                                    emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                                    emit_line("  store " + actual_type + " " + val + ", ptr " +
+                                              temp_alloca);
+                                    val = temp_alloca;
+                                    arg_type = "ptr";
+                                }
                             }
                             typed_args.push_back({arg_type, val});
                         }

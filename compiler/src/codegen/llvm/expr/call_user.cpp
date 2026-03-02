@@ -195,7 +195,7 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         // This handles mutual recursion where called function isn't yet in functions_ map
         // BUT: Don't add suite prefix for library functions (they don't have prefixes)
         bool is_library_function = false;
-        std::string found_mod_name; // Capture module path for mangling
+        std::string found_mod_name;                    // Capture module path for mangling
         std::vector<types::TypePtr> found_param_types; // Capture param types for type encoding
         if (env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
@@ -320,7 +320,8 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 // That set is for tracking ACTUALLY generated methods, not queued ones.
                 // The queue processing in generic.cpp handles deduplication via
                 // processed_impl_methods.
-                std::string mangled_method = mangle_impl_method(type_name, method + behavior_suffix);
+                std::string mangled_method =
+                    mangle_impl_method(type_name, method + behavior_suffix);
                 if (generated_impl_methods_.find(mangled_method) == generated_impl_methods_.end()) {
                     TML_DEBUG_LN("[IMPL_INST] Queueing " << type_name << "::" << method
                                                          << " suffix=" << arg_tml_type
@@ -672,6 +673,40 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         // Otherwise, try to get parameter type from registered functions (codegen's FuncInfo)
         else if (func_it != functions_.end() && i < func_it->second.param_types.size()) {
             expected_type = func_it->second.param_types[i];
+        }
+
+        // ABI fix for Type::method(...) calls (see impl.cpp:282):
+        // The semantic signature says the first struct/enum param is a value type,
+        // but impl.cpp converts it to ptr in the LLVM definition.
+        // Look up the underscore-keyed FuncInfo; if registered param is ptr, alloca+store.
+        if (actual_type.starts_with("%struct.") || actual_type.starts_with("%enum.")) {
+            // Build Type_method key from fn_name like "IoError::new" → "IoError_new"
+            std::string abi_key;
+            size_t sep = fn_name.rfind("::");
+            if (sep != std::string::npos) {
+                std::string method_part = fn_name.substr(sep + 2);
+                std::string type_part;
+                size_t prev_sep = (sep > 0) ? fn_name.rfind("::", sep - 1) : std::string::npos;
+                if (prev_sep != std::string::npos) {
+                    type_part = fn_name.substr(prev_sep + 2, sep - prev_sep - 2);
+                } else {
+                    type_part = fn_name.substr(0, sep);
+                }
+                abi_key = type_part + "_" + method_part;
+            }
+            if (!abi_key.empty()) {
+                auto abi_it = functions_.find(abi_key);
+                if (abi_it != functions_.end() && i < abi_it->second.param_types.size() &&
+                    abi_it->second.param_types[i] == "ptr") {
+                    // Definition expects ptr — store struct to alloca and pass the pointer
+                    std::string tmp = fresh_reg();
+                    emit_line("  " + tmp + " = alloca " + actual_type);
+                    emit_line("  store " + actual_type + " " + val + ", ptr " + tmp);
+                    val = tmp;
+                    actual_type = "ptr";
+                    expected_type = "ptr";
+                }
+            }
         }
 
         // Insert type conversion if needed

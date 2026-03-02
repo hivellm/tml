@@ -280,8 +280,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (call.callee->is<parser::PathExpr>()) {
         const auto& pe = call.callee->as<parser::PathExpr>();
         if (pe.path.segments.size() == 2 && pe.path.segments[0] == "TypeId" &&
-            pe.path.segments[1] == "of" && pe.generics.has_value() &&
-            !pe.generics->args.empty()) {
+            pe.path.segments[1] == "of" && pe.generics.has_value() && !pe.generics->args.empty()) {
             // Extract type argument (e.g., I32 from TypeId::of[I32]())
             std::string type_name_for_hash = "unknown";
             const auto& first_arg = pe.generics->args[0];
@@ -1903,6 +1902,30 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 }
                             }
                             ctor_name = "@" + mangle_impl_method(class_name, method_name);
+                        }
+                    }
+
+                    // struct/enum → ptr ABI fix for constructor args (see impl.cpp:282)
+                    // Definition side converts first non-self struct/enum param to ptr.
+                    // Look up the registered function info to get expected param types.
+                    {
+                        auto abi_it = functions_.find(ctor_key);
+                        if (abi_it == functions_.end())
+                            abi_it = functions_.find(class_name + "_new");
+                        if (abi_it != functions_.end()) {
+                            const auto& expected_params = abi_it->second.param_types;
+                            for (size_t i = 0; i < args.size() && i < expected_params.size(); ++i) {
+                                if (expected_params[i] == "ptr" &&
+                                    (arg_types[i].find("%struct.") == 0 ||
+                                     arg_types[i].find("%enum.") == 0)) {
+                                    std::string tmp = fresh_reg();
+                                    emit_line("  " + tmp + " = alloca " + arg_types[i]);
+                                    emit_line("  store " + arg_types[i] + " " + args[i] + ", ptr " +
+                                              tmp);
+                                    args[i] = tmp;
+                                    arg_types[i] = "ptr";
+                                }
+                            }
                         }
                     }
 

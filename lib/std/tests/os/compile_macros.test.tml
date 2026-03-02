@@ -19,6 +19,6 @@ func test_dirname_macro() -> I32 {
 @test
 func test_line_macro() -> I32 {
     let line: I32 = __LINE__
-    assert(line == 27, "__LINE__ should be 27")
+    assert(line == 21, "__LINE__ should be 21")
     return 0
 }
