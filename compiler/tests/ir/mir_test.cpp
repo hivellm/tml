@@ -1210,8 +1210,8 @@ TEST(EscapeAnalysisTest, ArgEscape) {
     call_inst.type = tml::mir::make_unit_type();
     tml::mir::Value arg_val{alloca_inst.result,
                             tml::mir::make_pointer_type(tml::mir::make_i32_type())};
-    call_inst.inst =
-        tml::mir::CallInst{"some_func", {arg_val}, {arg_val.type}, tml::mir::make_unit_type(), std::nullopt};
+    call_inst.inst = tml::mir::CallInst{
+        "some_func", {arg_val}, {arg_val.type}, tml::mir::make_unit_type(), std::nullopt};
     entry.instructions.push_back(call_inst);
 
     entry.terminator = tml::mir::ReturnTerm{std::nullopt};
@@ -1253,8 +1253,8 @@ TEST(EscapeAnalysisTest, HeapAllocationTracking) {
     entry.instructions.push_back(size_const);
 
     tml::mir::Value size_val{size_const.result, tml::mir::make_i64_type()};
-    alloc_call.inst =
-        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
+    alloc_call.inst = tml::mir::CallInst{
+        "alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
     entry.instructions.push_back(alloc_call);
 
     // return 42 (allocation not returned, doesn't escape)
@@ -1398,8 +1398,8 @@ TEST(StackPromotionTest, PromoteHeapAllocation) {
     heap_alloc.result = func.fresh_value();
     heap_alloc.type = tml::mir::make_ptr_type();
     tml::mir::Value size_val{size_const.result, tml::mir::make_i64_type()};
-    heap_alloc.inst =
-        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
+    heap_alloc.inst = tml::mir::CallInst{
+        "alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
     entry.instructions.push_back(heap_alloc);
 
     tml::mir::InstructionData ret_const;
@@ -1541,7 +1541,8 @@ TEST(InliningTest, SimpleInlining) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1595,7 +1596,8 @@ TEST(InliningTest, InlineAttributeRespected) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"must_inline", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"must_inline", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1648,7 +1650,8 @@ TEST(InliningTest, NoInlineAttributeRespected) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"never_inline_me", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"never_inline_me", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1679,7 +1682,8 @@ TEST(InliningTest, GetDecisionNoDefinition) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"undefined_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"undefined_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1733,7 +1737,8 @@ TEST(InliningTest, TooLargeFunction) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"large_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"large_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1788,7 +1793,8 @@ TEST(InliningTest, OptimizationLevelZero) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
+    call_inst.inst =
+        tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1809,12 +1815,12 @@ TEST(InliningTest, OptimizationLevelZero) {
 // Phase 3 Optimization Pass Tests
 // ============================================================================
 
-#include "mir/passes/peephole.hpp"
 #include "mir/passes/block_merge.hpp"
 #include "mir/passes/dead_arg_elim.hpp"
 #include "mir/passes/early_cse.hpp"
 #include "mir/passes/load_store_opt.hpp"
 #include "mir/passes/loop_rotate.hpp"
+#include "mir/passes/peephole.hpp"
 
 TEST(PeepholeTest, PassName) {
     tml::mir::PeepholePass pass;
@@ -1860,7 +1866,8 @@ TEST(PeepholeTest, AddZero) {
     add_inst.inst = binary;
     entry.instructions.push_back(add_inst);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{add_inst.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{add_inst.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -1910,7 +1917,8 @@ TEST(PeepholeTest, MulOne) {
     mul_inst.inst = binary;
     entry.instructions.push_back(mul_inst);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{mul_inst.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{mul_inst.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -1959,7 +1967,8 @@ TEST(PeepholeTest, MulZero) {
     mul_inst.inst = binary;
     entry.instructions.push_back(mul_inst);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{mul_inst.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{mul_inst.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2004,7 +2013,8 @@ TEST(BlockMergeTest, MergeTwoBlocks) {
     block1.name = "exit";
     block1.predecessors.push_back(0);
 
-    block1.terminator = tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
+    block1.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(block1);
 
     mir.functions.push_back(func);
@@ -2049,7 +2059,8 @@ TEST(DeadArgElimTest, UnusedParameter) {
     const_42.inst = tml::mir::ConstantInst{tml::mir::ConstInt{42, true, 32}};
     entry.instructions.push_back(const_42);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2115,7 +2126,8 @@ TEST(EarlyCSETest, DuplicateExpression) {
     add2.inst = binary2;
     entry.instructions.push_back(add2);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{add2.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{add2.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2165,7 +2177,8 @@ TEST(LoadStoreOptTest, RedundantLoad) {
     tml::mir::InstructionData store_inst;
     store_inst.result = 0;
     tml::mir::StoreInst store;
-    store.ptr = tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
+    store.ptr =
+        tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
     store.value = tml::mir::Value{const_42.result, tml::mir::make_i32_type()};
     store_inst.inst = store;
     entry.instructions.push_back(store_inst);
@@ -2175,7 +2188,8 @@ TEST(LoadStoreOptTest, RedundantLoad) {
     load1.result = func.fresh_value();
     load1.type = tml::mir::make_i32_type();
     tml::mir::LoadInst load_i1;
-    load_i1.ptr = tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
+    load_i1.ptr =
+        tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
     load_i1.result_type = tml::mir::make_i32_type();
     load1.inst = load_i1;
     entry.instructions.push_back(load1);
@@ -2185,12 +2199,14 @@ TEST(LoadStoreOptTest, RedundantLoad) {
     load2.result = func.fresh_value();
     load2.type = tml::mir::make_i32_type();
     tml::mir::LoadInst load_i2;
-    load_i2.ptr = tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
+    load_i2.ptr =
+        tml::mir::Value{alloca_inst.result, tml::mir::make_pointer_type(tml::mir::make_i32_type())};
     load_i2.result_type = tml::mir::make_i32_type();
     load2.inst = load_i2;
     entry.instructions.push_back(load2);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{load2.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{load2.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2266,7 +2282,8 @@ TEST(LoopRotateTest, SimpleLoop) {
     ret_const.inst = tml::mir::ConstantInst{tml::mir::ConstInt{0, true, 32}};
     exit.instructions.push_back(ret_const);
 
-    exit.terminator = tml::mir::ReturnTerm{tml::mir::Value{ret_const.result, tml::mir::make_i32_type()}};
+    exit.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{ret_const.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(exit);
 
     mir.functions.push_back(func);
@@ -2283,8 +2300,8 @@ TEST(LoopRotateTest, SimpleLoop) {
 // ============================================================================
 
 #include "mir/passes/const_hoist.hpp"
-#include "mir/passes/simplify_select.hpp"
 #include "mir/passes/merge_returns.hpp"
+#include "mir/passes/simplify_select.hpp"
 
 TEST(ConstHoistTest, PassName) {
     tml::mir::ConstantHoistPass pass;
@@ -2342,7 +2359,8 @@ TEST(ConstHoistTest, HoistLargeConstant) {
     exit.id = 2;
     exit.name = "exit";
     exit.predecessors.push_back(1);
-    exit.terminator = tml::mir::ReturnTerm{tml::mir::Value{large_const.result, tml::mir::make_i64_type()}};
+    exit.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{large_const.result, tml::mir::make_i64_type()}};
     func.blocks.push_back(exit);
 
     mir.functions.push_back(func);
@@ -2405,7 +2423,8 @@ TEST(SimplifySelectTest, SelectTrueCondition) {
     select_inst.inst = sel;
     entry.instructions.push_back(select_inst);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{select_inst.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{select_inst.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2450,12 +2469,13 @@ TEST(SimplifySelectTest, SelectSameValue) {
     tml::mir::SelectInst sel;
     sel.condition = tml::mir::Value{cond.result, tml::mir::make_bool_type()};
     sel.true_val = tml::mir::Value{const_42.result, tml::mir::make_i32_type()};
-    sel.false_val = tml::mir::Value{const_42.result, tml::mir::make_i32_type()};  // Same!
+    sel.false_val = tml::mir::Value{const_42.result, tml::mir::make_i32_type()}; // Same!
     sel.result_type = tml::mir::make_i32_type();
     select_inst.inst = sel;
     entry.instructions.push_back(select_inst);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{select_inst.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{select_inst.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
@@ -2512,7 +2532,8 @@ TEST(MergeReturnsTest, MultipleReturns) {
     const_1.inst = tml::mir::ConstantInst{tml::mir::ConstInt{1, true, 32}};
     ret1.instructions.push_back(const_1);
 
-    ret1.terminator = tml::mir::ReturnTerm{tml::mir::Value{const_1.result, tml::mir::make_i32_type()}};
+    ret1.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{const_1.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(ret1);
 
     // Second return block
@@ -2527,7 +2548,8 @@ TEST(MergeReturnsTest, MultipleReturns) {
     const_2.inst = tml::mir::ConstantInst{tml::mir::ConstInt{2, true, 32}};
     ret2.instructions.push_back(const_2);
 
-    ret2.terminator = tml::mir::ReturnTerm{tml::mir::Value{const_2.result, tml::mir::make_i32_type()}};
+    ret2.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{const_2.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(ret2);
 
     mir.functions.push_back(func);
@@ -2539,7 +2561,7 @@ TEST(MergeReturnsTest, MultipleReturns) {
 
     // Pass should merge returns and add a unified exit block
     EXPECT_TRUE(changed);
-    EXPECT_GT(mir.functions[0].blocks.size(), original_blocks);  // New exit block added
+    EXPECT_GT(mir.functions[0].blocks.size(), original_blocks); // New exit block added
 }
 
 TEST(MergeReturnsTest, SingleReturn) {
@@ -2561,7 +2583,8 @@ TEST(MergeReturnsTest, SingleReturn) {
     const_42.inst = tml::mir::ConstantInst{tml::mir::ConstInt{42, true, 32}};
     entry.instructions.push_back(const_42);
 
-    entry.terminator = tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
+    entry.terminator =
+        tml::mir::ReturnTerm{tml::mir::Value{const_42.result, tml::mir::make_i32_type()}};
     func.blocks.push_back(entry);
     mir.functions.push_back(func);
 
