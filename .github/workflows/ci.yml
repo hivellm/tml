@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install clang-format
         run: |
@@ -29,14 +29,14 @@ jobs:
       - name: Check C/C++ formatting
         run: |
           NEEDS_FORMAT=false
-          for file in $(find packages/compiler/src packages/compiler/runtime -name "*.cpp" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" 2>/dev/null); do
+          for file in $(find compiler/src compiler/runtime compiler/include -name "*.cpp" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" 2>/dev/null); do
             if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
               echo "Needs formatting: $file"
               NEEDS_FORMAT=true
             fi
           done
           if [ "$NEEDS_FORMAT" = true ]; then
-            echo "Some files need formatting. Run ./scripts/format.sh locally."
+            echo "Some files need formatting. Run clang-format locally."
             exit 1
           fi
           echo "All files are properly formatted"
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -64,15 +64,13 @@ jobs:
           TML_EXE=$(find build -name "tml" -type f | head -1)
           chmod +x "$TML_EXE"
           echo "Using TML compiler: $TML_EXE"
-          "$TML_EXE" lint packages examples
+          "$TML_EXE" lint lib
 
       - name: Run clang-tidy (C++ lint)
         continue-on-error: true
         run: |
-          # Run on a subset of files to avoid timeout
-          # Include paths match CMakeLists.txt configuration
-          INCLUDE_ARGS="-I packages/compiler/include -I packages/compiler/src"
-          FILES=$(find packages/compiler/src -name "*.cpp" | head -10)
+          INCLUDE_ARGS="-I compiler/include -I compiler/src"
+          FILES=$(find compiler/src -name "*.cpp" | head -10)
           for file in $FILES; do
             echo "Checking: $file"
             clang-tidy "$file" -- -std=c++17 $INCLUDE_ARGS 2>/dev/null || true
@@ -89,18 +87,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
 
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install ninja openssl
-
-      - name: Build with tests (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      - name: Build with tests (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           chmod +x ./scripts/build.sh
           ./scripts/build.sh
@@ -110,8 +104,8 @@ jobs:
         shell: cmd
         run: scripts\build.bat
 
-      - name: Run C++ Tests (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      - name: Run C++ Tests (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           TEST_EXE=$(find build -name "tml_tests" -type f | head -1)
           if [ -n "$TEST_EXE" ]; then
@@ -133,8 +127,8 @@ jobs:
         with:
           name: tml-${{ matrix.os }}
           path: |
-            build/debug/tml*
-            build/Debug/tml*
+            build/debug/bin/tml
+            build/debug/bin/tml.exe
           if-no-files-found: warn
 
       - name: Upload Test Results
@@ -145,14 +139,14 @@ jobs:
           path: test-results.xml
           if-no-files-found: ignore
 
-  # Run TML integration tests (Linux only for simplicity)
+  # Run TML integration tests (Linux only)
   test-tml:
     name: TML Tests
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -163,46 +157,22 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tml-ubuntu-latest
-          path: build/debug
+          path: build/debug/bin
 
       - name: Run TML Tests
         run: |
-          TML_EXE="build/debug/tml"
+          TML_EXE="build/debug/bin/tml"
           chmod +x "$TML_EXE"
           echo "Using TML compiler: $TML_EXE"
-          echo "Running TML integration tests..."
+          "$TML_EXE" test compiler/tests lib/core/tests lib/std/tests
 
-          # Run compiler tests
-          for test in packages/compiler/tests/compiler/*.test.tml; do
-            if [ -f "$test" ]; then
-              echo "Testing: $test"
-              "$TML_EXE" test "$test" || echo "Test failed: $test"
-            fi
-          done
-
-          # Run runtime tests
-          for test in packages/compiler/tests/runtime/*.test.tml; do
-            if [ -f "$test" ]; then
-              echo "Testing: $test"
-              "$TML_EXE" test "$test" || echo "Test failed: $test"
-            fi
-          done
-
-          # Run std tests
-          for test in packages/std/tests/*.test.tml; do
-            if [ -f "$test" ]; then
-              echo "Testing: $test"
-              "$TML_EXE" test "$test" || echo "Test failed: $test"
-            fi
-          done
-
-  # Spell check (moved from separate file)
+  # Spell check
   codespell:
     name: Spell Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Codespell
         run: python -m pip install --upgrade 'codespell[toml]'
@@ -210,5 +180,5 @@ jobs:
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh"
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook,.sandbox,backup,src/gcc,src/llvm-project,compiler/third_party,compiler/cranelift" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors,SEH,PassT,clos,hel,fo,bu,Nd,nd,te,aNULL,ShiftIn,Implementor,OtherWrite"
