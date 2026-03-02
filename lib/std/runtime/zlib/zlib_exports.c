@@ -10,7 +10,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>   // For debug fprintf
+#include <stdio.h> // For debug fprintf
 #include <stdlib.h>
 #include <string.h>
 
@@ -449,8 +449,8 @@ void* zstd_dict_train_test(void) {
 // Each Buffer struct has a single field 'handle' which is a TmlBuffer*.
 void* zstd_dict_train(void* samples_handle, int64_t dict_size) {
     // Immediate debug output
-    fprintf(stderr, "[ZSTD_TRAIN] ENTER: samples=%p dict_size=%lld\n",
-            samples_handle, (long long)dict_size);
+    fprintf(stderr, "[ZSTD_TRAIN] ENTER: samples=%p dict_size=%lld\n", samples_handle,
+            (long long)dict_size);
     fflush(stderr);
 
     if (!samples_handle || dict_size <= 0)
@@ -483,7 +483,7 @@ void* zstd_dict_train(void* samples_handle, int64_t dict_size) {
         TmlBuffer* buf = (TmlBuffer*)(*buffer_struct_ptr);
         if (!buf || !buf->data || buf->len == 0) {
             free(samples);
-            return NULL;  // Invalid sample, can't train
+            return NULL; // Invalid sample, can't train
         }
         samples[i] = buf;
     }

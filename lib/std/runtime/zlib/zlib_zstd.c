@@ -587,7 +587,7 @@ struct ZstdDict {
     ZSTD_CDict* cdict;
     ZSTD_DDict* ddict;
     uint32_t dict_id;
-    uint8_t* raw_data;     // Store raw dictionary data for to_buffer()
+    uint8_t* raw_data; // Store raw dictionary data for to_buffer()
     size_t raw_data_len;
 };
 

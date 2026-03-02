@@ -12,9 +12,10 @@
 #endif
 
 #include "crypto_internal.h"
-#include <windows.h>
+
 #include <bcrypt.h>
 #include <stdio.h>
+#include <windows.h>
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -33,16 +34,15 @@ typedef struct {
 } CipherAlgorithmInfo;
 
 static const CipherAlgorithmInfo CIPHER_ALGORITHMS[] = {
-    { "aes-128-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 16, 16, 16, false },
-    { "aes-192-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 24, 16, 16, false },
-    { "aes-256-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 32, 16, 16, false },
-    { "aes-128-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 16, 12, 16, true },
-    { "aes-192-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 24, 12, 16, true },
-    { "aes-256-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 32, 12, 16, true },
-    { "aes-128-ccm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CCM, 16, 12, 16, true },
-    { "aes-256-ccm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CCM, 32, 12, 16, true },
-    { NULL, NULL, NULL, 0, 0, 0, false }
-};
+    {"aes-128-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 16, 16, 16, false},
+    {"aes-192-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 24, 16, 16, false},
+    {"aes-256-cbc", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CBC, 32, 16, 16, false},
+    {"aes-128-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 16, 12, 16, true},
+    {"aes-192-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 24, 12, 16, true},
+    {"aes-256-gcm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM, 32, 12, 16, true},
+    {"aes-128-ccm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CCM, 16, 12, 16, true},
+    {"aes-256-ccm", BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_CCM, 32, 12, 16, true},
+    {NULL, NULL, NULL, 0, 0, 0, false}};
 
 static const CipherAlgorithmInfo* find_cipher_algorithm(const char* name) {
     for (const CipherAlgorithmInfo* info = CIPHER_ALGORITHMS; info->name != NULL; info++) {
@@ -66,7 +66,7 @@ struct TmlCipherContext {
     size_t iv_len;
     uint8_t* aad;
     size_t aad_len;
-    uint8_t tag[16];  // GCM/CCM auth tag
+    uint8_t tag[16]; // GCM/CCM auth tag
     size_t tag_len;
     bool is_encrypt;
     bool is_aead;
@@ -82,13 +82,17 @@ struct TmlCipherContext {
 TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* key, size_t key_len,
                                         const uint8_t* iv, size_t iv_len, bool encrypt) {
     const CipherAlgorithmInfo* info = find_cipher_algorithm(algorithm);
-    if (!info) return NULL;
+    if (!info)
+        return NULL;
 
-    if (key_len != info->key_size) return NULL;
-    if (iv_len != info->iv_size && info->iv_size > 0) return NULL;
+    if (key_len != info->key_size)
+        return NULL;
+    if (iv_len != info->iv_size && info->iv_size > 0)
+        return NULL;
 
     TmlCipherContext* ctx = (TmlCipherContext*)calloc(1, sizeof(TmlCipherContext));
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
 
     strncpy(ctx->algorithm, algorithm, sizeof(ctx->algorithm) - 1);
     ctx->is_encrypt = encrypt;
@@ -97,25 +101,15 @@ TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* ke
     ctx->tag_len = 16;
 
     // Open algorithm provider
-    NTSTATUS status = BCryptOpenAlgorithmProvider(
-        &ctx->alg_handle,
-        info->bcrypt_alg,
-        NULL,
-        0
-    );
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&ctx->alg_handle, info->bcrypt_alg, NULL, 0);
     if (!BCRYPT_SUCCESS(status)) {
         free(ctx);
         return NULL;
     }
 
     // Set chaining mode
-    status = BCryptSetProperty(
-        ctx->alg_handle,
-        BCRYPT_CHAINING_MODE,
-        (PBYTE)info->chaining_mode,
-        (ULONG)(wcslen(info->chaining_mode) + 1) * sizeof(WCHAR),
-        0
-    );
+    status = BCryptSetProperty(ctx->alg_handle, BCRYPT_CHAINING_MODE, (PBYTE)info->chaining_mode,
+                               (ULONG)(wcslen(info->chaining_mode) + 1) * sizeof(WCHAR), 0);
     if (!BCRYPT_SUCCESS(status)) {
         BCryptCloseAlgorithmProvider(ctx->alg_handle, 0);
         free(ctx);
@@ -124,14 +118,8 @@ TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* ke
 
     // Get key object size
     DWORD result_size;
-    status = BCryptGetProperty(
-        ctx->alg_handle,
-        BCRYPT_OBJECT_LENGTH,
-        (PBYTE)&ctx->key_object_size,
-        sizeof(DWORD),
-        &result_size,
-        0
-    );
+    status = BCryptGetProperty(ctx->alg_handle, BCRYPT_OBJECT_LENGTH, (PBYTE)&ctx->key_object_size,
+                               sizeof(DWORD), &result_size, 0);
     if (!BCRYPT_SUCCESS(status)) {
         BCryptCloseAlgorithmProvider(ctx->alg_handle, 0);
         free(ctx);
@@ -147,15 +135,8 @@ TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* ke
     }
 
     // Generate key from raw bytes
-    status = BCryptGenerateSymmetricKey(
-        ctx->alg_handle,
-        &ctx->key_handle,
-        ctx->key_object,
-        ctx->key_object_size,
-        (PUCHAR)key,
-        (ULONG)key_len,
-        0
-    );
+    status = BCryptGenerateSymmetricKey(ctx->alg_handle, &ctx->key_handle, ctx->key_object,
+                                        ctx->key_object_size, (PUCHAR)key, (ULONG)key_len, 0);
     if (!BCRYPT_SUCCESS(status)) {
         free(ctx->key_object);
         BCryptCloseAlgorithmProvider(ctx->alg_handle, 0);
@@ -179,7 +160,8 @@ TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* ke
 
     ctx->output = tml_buffer_create(1024);
     if (!ctx->output) {
-        if (ctx->iv) free(ctx->iv);
+        if (ctx->iv)
+            free(ctx->iv);
         BCryptDestroyKey(ctx->key_handle);
         free(ctx->key_object);
         BCryptCloseAlgorithmProvider(ctx->alg_handle, 0);
@@ -192,9 +174,11 @@ TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* ke
 }
 
 void cipher_context_set_aad(TmlCipherContext* ctx, const uint8_t* aad, size_t aad_len) {
-    if (!ctx || !ctx->is_aead || !aad || aad_len == 0) return;
+    if (!ctx || !ctx->is_aead || !aad || aad_len == 0)
+        return;
 
-    if (ctx->aad) free(ctx->aad);
+    if (ctx->aad)
+        free(ctx->aad);
     ctx->aad = (uint8_t*)malloc(aad_len);
     if (ctx->aad) {
         memcpy(ctx->aad, aad, aad_len);
@@ -203,21 +187,25 @@ void cipher_context_set_aad(TmlCipherContext* ctx, const uint8_t* aad, size_t aa
 }
 
 void cipher_context_set_padding(TmlCipherContext* ctx, bool enabled) {
-    if (ctx) ctx->padding_enabled = enabled;
+    if (ctx)
+        ctx->padding_enabled = enabled;
 }
 
 size_t cipher_context_update(TmlCipherContext* ctx, const uint8_t* input, size_t input_len,
-                            uint8_t* output, size_t output_size) {
-    if (!ctx || !input || input_len == 0) return 0;
+                             uint8_t* output, size_t output_size) {
+    if (!ctx || !input || input_len == 0)
+        return 0;
 
     // For AEAD modes, we accumulate data and process in finalize
     tml_buffer_append(ctx->output, input, input_len);
-    return 0;  // No output until finalize for simplicity
+    return 0; // No output until finalize for simplicity
 }
 
-size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t output_size, bool* success) {
+size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t output_size,
+                               bool* success) {
     if (!ctx || !success) {
-        if (success) *success = false;
+        if (success)
+            *success = false;
         return 0;
     }
 
@@ -238,38 +226,22 @@ size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t ou
         auth_info.cbTag = (ULONG)ctx->tag_len;
 
         // Allocate output buffer
-        size_t out_len = ctx->output->len + 16;  // Extra for potential padding
+        size_t out_len = ctx->output->len + 16; // Extra for potential padding
         uint8_t* out_buf = (uint8_t*)malloc(out_len);
-        if (!out_buf) return 0;
+        if (!out_buf)
+            return 0;
 
         if (ctx->is_encrypt) {
             auth_info.dwFlags = 0;
 
-            status = BCryptEncrypt(
-                ctx->key_handle,
-                ctx->output->data,
-                (ULONG)ctx->output->len,
-                &auth_info,
-                NULL, 0,  // IV handled in auth_info
-                out_buf,
-                (ULONG)out_len,
-                &result_len,
-                0
-            );
+            status = BCryptEncrypt(ctx->key_handle, ctx->output->data, (ULONG)ctx->output->len,
+                                   &auth_info, NULL, 0, // IV handled in auth_info
+                                   out_buf, (ULONG)out_len, &result_len, 0);
         } else {
             auth_info.dwFlags = 0;
 
-            status = BCryptDecrypt(
-                ctx->key_handle,
-                ctx->output->data,
-                (ULONG)ctx->output->len,
-                &auth_info,
-                NULL, 0,
-                out_buf,
-                (ULONG)out_len,
-                &result_len,
-                0
-            );
+            status = BCryptDecrypt(ctx->key_handle, ctx->output->data, (ULONG)ctx->output->len,
+                                   &auth_info, NULL, 0, out_buf, (ULONG)out_len, &result_len, 0);
         }
 
         if (BCRYPT_SUCCESS(status)) {
@@ -283,45 +255,30 @@ size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t ou
     } else {
         // CBC mode
         DWORD flags = ctx->padding_enabled ? BCRYPT_BLOCK_PADDING : 0;
-        size_t out_len = ctx->output->len + 16;  // Block padding
+        size_t out_len = ctx->output->len + 16; // Block padding
         uint8_t* out_buf = (uint8_t*)malloc(out_len);
-        if (!out_buf) return 0;
+        if (!out_buf)
+            return 0;
 
         uint8_t* iv_copy = NULL;
         if (ctx->iv && ctx->iv_len > 0) {
             iv_copy = (uint8_t*)malloc(ctx->iv_len);
-            if (iv_copy) memcpy(iv_copy, ctx->iv, ctx->iv_len);
+            if (iv_copy)
+                memcpy(iv_copy, ctx->iv, ctx->iv_len);
         }
 
         if (ctx->is_encrypt) {
-            status = BCryptEncrypt(
-                ctx->key_handle,
-                ctx->output->data,
-                (ULONG)ctx->output->len,
-                NULL,
-                iv_copy,
-                (ULONG)ctx->iv_len,
-                out_buf,
-                (ULONG)out_len,
-                &result_len,
-                flags
-            );
+            status = BCryptEncrypt(ctx->key_handle, ctx->output->data, (ULONG)ctx->output->len,
+                                   NULL, iv_copy, (ULONG)ctx->iv_len, out_buf, (ULONG)out_len,
+                                   &result_len, flags);
         } else {
-            status = BCryptDecrypt(
-                ctx->key_handle,
-                ctx->output->data,
-                (ULONG)ctx->output->len,
-                NULL,
-                iv_copy,
-                (ULONG)ctx->iv_len,
-                out_buf,
-                (ULONG)out_len,
-                &result_len,
-                flags
-            );
+            status = BCryptDecrypt(ctx->key_handle, ctx->output->data, (ULONG)ctx->output->len,
+                                   NULL, iv_copy, (ULONG)ctx->iv_len, out_buf, (ULONG)out_len,
+                                   &result_len, flags);
         }
 
-        if (iv_copy) free(iv_copy);
+        if (iv_copy)
+            free(iv_copy);
 
         if (BCRYPT_SUCCESS(status)) {
             if (output && output_size >= result_len) {
@@ -337,18 +294,21 @@ size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t ou
 }
 
 TmlBuffer* cipher_context_get_tag(TmlCipherContext* ctx) {
-    if (!ctx || !ctx->is_aead) return NULL;
+    if (!ctx || !ctx->is_aead)
+        return NULL;
     return tml_buffer_from_data(ctx->tag, ctx->tag_len);
 }
 
 void cipher_context_set_tag(TmlCipherContext* ctx, const uint8_t* tag, size_t tag_len) {
-    if (!ctx || !ctx->is_aead || !tag || tag_len > 16) return;
+    if (!ctx || !ctx->is_aead || !tag || tag_len > 16)
+        return;
     memcpy(ctx->tag, tag, tag_len);
     ctx->tag_len = tag_len;
 }
 
 void cipher_context_destroy(TmlCipherContext* ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     if (ctx->key_handle) {
         BCryptDestroyKey(ctx->key_handle);
@@ -379,22 +339,21 @@ void cipher_context_destroy(TmlCipherContext* ctx) {
 // ============================================================================
 
 void* crypto_cipher_create(const char* algorithm, TmlBuffer* key, TmlBuffer* iv, int encrypt) {
-    if (!key) return NULL;
-    return cipher_context_create(
-        algorithm,
-        key->data, key->len,
-        iv ? iv->data : NULL, iv ? iv->len : 0,
-        encrypt != 0
-    );
+    if (!key)
+        return NULL;
+    return cipher_context_create(algorithm, key->data, key->len, iv ? iv->data : NULL,
+                                 iv ? iv->len : 0, encrypt != 0);
 }
 
 void crypto_cipher_set_aad(void* ctx, TmlBuffer* aad) {
-    if (!ctx || !aad) return;
+    if (!ctx || !aad)
+        return;
     cipher_context_set_aad((TmlCipherContext*)ctx, aad->data, aad->len);
 }
 
 void crypto_cipher_set_aad_str(void* ctx, const char* aad) {
-    if (!ctx || !aad) return;
+    if (!ctx || !aad)
+        return;
     cipher_context_set_aad((TmlCipherContext*)ctx, (const uint8_t*)aad, strlen(aad));
 }
 
@@ -403,25 +362,29 @@ void crypto_cipher_set_padding(void* ctx, bool enabled) {
 }
 
 void crypto_cipher_update_str(void* ctx, const char* data, TmlBuffer* output) {
-    if (!ctx || !data) return;
+    if (!ctx || !data)
+        return;
     TmlCipherContext* c = (TmlCipherContext*)ctx;
     tml_buffer_append(c->output, (const uint8_t*)data, strlen(data));
 }
 
 void crypto_cipher_update_bytes(void* ctx, TmlBuffer* data, TmlBuffer* output) {
-    if (!ctx || !data) return;
+    if (!ctx || !data)
+        return;
     TmlCipherContext* c = (TmlCipherContext*)ctx;
     tml_buffer_append(c->output, data->data, data->len);
 }
 
 bool crypto_cipher_finalize(void* ctx, TmlBuffer* output) {
-    if (!ctx || !output) return false;
+    if (!ctx || !output)
+        return false;
 
     TmlCipherContext* c = (TmlCipherContext*)ctx;
-    size_t max_out = c->output->len + 32;  // Extra for padding/tag
+    size_t max_out = c->output->len + 32; // Extra for padding/tag
 
     uint8_t* out_buf = (uint8_t*)malloc(max_out);
-    if (!out_buf) return false;
+    if (!out_buf)
+        return false;
 
     bool success = false;
     size_t out_len = cipher_context_finalize(c, out_buf, max_out, &success);
@@ -440,7 +403,8 @@ TmlBuffer* crypto_cipher_get_tag(void* ctx) {
 }
 
 void crypto_cipher_set_tag(void* ctx, TmlBuffer* tag) {
-    if (!tag) return;
+    if (!tag)
+        return;
     cipher_context_set_tag((TmlCipherContext*)ctx, tag->data, tag->len);
 }
 

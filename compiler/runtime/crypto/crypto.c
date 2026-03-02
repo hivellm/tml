@@ -9,7 +9,6 @@
 #include "crypto_common.h"
 
 #include <limits.h>
-
 #include <openssl/rand.h>
 
 // ============================================================================
@@ -284,7 +283,6 @@ static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
     return result;
 }
 
-
 // ============================================================================
 // Public API: One-shot hash functions
 // ============================================================================
@@ -429,7 +427,6 @@ TML_EXPORT void crypto_hash_destroy(void* handle) {
     free(hctx);
 }
 
-
 // ============================================================================
 // HMAC Functions (OpenSSL 3.0 EVP_MAC)
 // ============================================================================
@@ -490,7 +487,6 @@ static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t
     EVP_MAC_free(mac);
     return result;
 }
-
 
 // One-shot HMAC with string key and data
 TML_EXPORT void* crypto_hmac_sha256(const char* key, const char* data) {
@@ -828,7 +824,6 @@ TML_EXPORT void crypto_cipher_destroy(void* handle) {
         EVP_CIPHER_CTX_free(cctx->ctx);
     free(cctx);
 }
-
 
 // ============================================================================
 // Buffer utilities (str_to_bytes, bytes_to_str, concat, slice)
