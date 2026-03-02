@@ -246,7 +246,8 @@ impl BufWriter {
     /// The data is buffered and only written to disk when the buffer
     /// exceeds capacity, or when [`flush`] / [`close`] is called.
     pub func write(mut this, data: Str) {
-        this._buffer = this._buffer + data
+        let new_buf: Str = this._buffer + data
+        this._buffer = new_buf
         this._total_written = this._total_written + data.len()
         if this._buffer.len() >= this._capacity {
             this.flush()
@@ -354,7 +355,8 @@ impl LineWriter {
                 this._buffer = ""
             }
         } else {
-            this._buffer = this._buffer + data
+            let new_buf: Str = this._buffer + data
+            this._buffer = new_buf
         }
     }
 

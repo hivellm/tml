@@ -406,11 +406,7 @@ char* path_join(const char* base, const char* child) {
         return NULL;
 
     memcpy(result, base, base_len);
-#ifdef _WIN32
-    result[base_len] = '\\';
-#else
     result[base_len] = '/';
-#endif
     memcpy(result + base_len + 1, child, child_len);
     result[base_len + 1 + child_len] = '\0';
 

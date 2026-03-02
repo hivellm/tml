@@ -833,11 +833,37 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                     emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                               enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
+                                    // Widen integer type if declared field type is wider than
+                                    // inferred (e.g., literal 42 → i32, but field is I64 → i64).
+                                    // Only sext when widening; never truncate or cast structs.
+                                    auto int_bits = [](const std::string& t) -> int {
+                                        if (t.size() > 1 && t[0] == 'i' &&
+                                            std::isdigit(static_cast<unsigned char>(t[1])))
+                                            return std::stoi(t.substr(1));
+                                        return -1;
+                                    };
+                                    std::string store_type = last_expr_type_;
+                                    std::string store_val = payload;
+                                    if (has_payload && variant.tuple_fields.has_value() &&
+                                        !variant.tuple_fields->empty()) {
+                                        std::string decl_type =
+                                            llvm_type(*variant.tuple_fields->at(0));
+                                        int src_bits = int_bits(store_type);
+                                        int dst_bits = int_bits(decl_type);
+                                        if (!decl_type.empty() && decl_type != store_type &&
+                                            src_bits > 0 && dst_bits > src_bits) {
+                                            std::string coerced = fresh_reg();
+                                            emit_line("  " + coerced + " = sext " + store_type +
+                                                      " " + store_val + " to " + decl_type);
+                                            store_val = coerced;
+                                            store_type = decl_type;
+                                        }
+                                    }
                                     std::string payload_typed_ptr = fresh_reg();
                                     emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
                                               payload_ptr + " to ptr");
-                                    emit_line("  store " + last_expr_type_ + " " + payload +
-                                              ", ptr " + payload_typed_ptr);
+                                    emit_line("  store " + store_type + " " + store_val + ", ptr " +
+                                              payload_typed_ptr);
                                 }
                             } else {
                                 // Multi-arg variant: store each field into a tuple in the payload
@@ -928,11 +954,36 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                     emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                               enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
+                                    // Widen integer type if declared field type is wider than
+                                    // inferred (e.g., literal 42 → i32, but field is I64 → i64).
+                                    // Only sext when widening; never truncate or cast structs.
+                                    auto int_bits = [](const std::string& t) -> int {
+                                        if (t.size() > 1 && t[0] == 'i' &&
+                                            std::isdigit(static_cast<unsigned char>(t[1])))
+                                            return std::stoi(t.substr(1));
+                                        return -1;
+                                    };
+                                    std::string store_type = last_expr_type_;
+                                    std::string store_val = payload;
+                                    if (!payload_types.empty()) {
+                                        std::string decl_type =
+                                            llvm_type_from_semantic(payload_types[0]);
+                                        int src_bits = int_bits(store_type);
+                                        int dst_bits = int_bits(decl_type);
+                                        if (!decl_type.empty() && decl_type != store_type &&
+                                            src_bits > 0 && dst_bits > src_bits) {
+                                            std::string coerced = fresh_reg();
+                                            emit_line("  " + coerced + " = sext " + store_type +
+                                                      " " + store_val + " to " + decl_type);
+                                            store_val = coerced;
+                                            store_type = decl_type;
+                                        }
+                                    }
                                     std::string payload_typed_ptr = fresh_reg();
                                     emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
                                               payload_ptr + " to ptr");
-                                    emit_line("  store " + last_expr_type_ + " " + payload +
-                                              ", ptr " + payload_typed_ptr);
+                                    emit_line("  store " + store_type + " " + store_val + ", ptr " +
+                                              payload_typed_ptr);
                                 }
                             } else {
                                 // Multi-arg variant: store each field
@@ -1188,10 +1239,35 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                           enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
+                                // Widen integer type if declared field type is wider than
+                                // inferred (e.g., literal 42 → i32, but field is I64 → i64).
+                                // Only sext when widening; never truncate or cast structs.
+                                auto int_bits = [](const std::string& t) -> int {
+                                    if (t.size() > 1 && t[0] == 'i' &&
+                                        std::isdigit(static_cast<unsigned char>(t[1])))
+                                        return std::stoi(t.substr(1));
+                                    return -1;
+                                };
+                                std::string store_type = last_expr_type_;
+                                std::string store_val = payload;
+                                if (has_payload && variant.tuple_fields.has_value() &&
+                                    !variant.tuple_fields->empty()) {
+                                    std::string decl_type = llvm_type(*variant.tuple_fields->at(0));
+                                    int src_bits = int_bits(store_type);
+                                    int dst_bits = int_bits(decl_type);
+                                    if (!decl_type.empty() && decl_type != store_type &&
+                                        src_bits > 0 && dst_bits > src_bits) {
+                                        std::string coerced = fresh_reg();
+                                        emit_line("  " + coerced + " = sext " + store_type + " " +
+                                                  store_val + " to " + decl_type);
+                                        store_val = coerced;
+                                        store_type = decl_type;
+                                    }
+                                }
                                 std::string payload_typed_ptr = fresh_reg();
                                 emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
                                           payload_ptr + " to ptr");
-                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                emit_line("  store " + store_type + " " + store_val + ", ptr " +
                                           payload_typed_ptr);
                             }
                         } else {
@@ -1285,10 +1361,35 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 emit_line("  " + payload_ptr + " = getelementptr inbounds " +
                                           enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
+                                // Widen integer type if declared field type is wider than
+                                // inferred (e.g., literal 42 → i32, but field is I64 → i64).
+                                // Only sext when widening; never truncate or cast structs.
+                                auto int_bits = [](const std::string& t) -> int {
+                                    if (t.size() > 1 && t[0] == 'i' &&
+                                        std::isdigit(static_cast<unsigned char>(t[1])))
+                                        return std::stoi(t.substr(1));
+                                    return -1;
+                                };
+                                std::string store_type = last_expr_type_;
+                                std::string store_val = payload;
+                                if (!payload_types.empty()) {
+                                    std::string decl_type =
+                                        llvm_type_from_semantic(payload_types[0]);
+                                    int src_bits = int_bits(store_type);
+                                    int dst_bits = int_bits(decl_type);
+                                    if (!decl_type.empty() && decl_type != store_type &&
+                                        src_bits > 0 && dst_bits > src_bits) {
+                                        std::string coerced = fresh_reg();
+                                        emit_line("  " + coerced + " = sext " + store_type + " " +
+                                                  store_val + " to " + decl_type);
+                                        store_val = coerced;
+                                        store_type = decl_type;
+                                    }
+                                }
                                 std::string payload_typed_ptr = fresh_reg();
                                 emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
                                           payload_ptr + " to ptr");
-                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                emit_line("  store " + store_type + " " + store_val + ", ptr " +
                                           payload_typed_ptr);
                             }
                         } else {

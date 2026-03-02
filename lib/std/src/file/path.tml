@@ -202,16 +202,19 @@ impl Path {
     /// Replace the file extension with a new one
     pub func with_extension(path: Str, new_ext: Str) -> Str {
         let parent: Str = Path::parent(path)
-        let filename: Str = Path::filename(path)
         let stem: Str = Path::file_stem(path)
 
-        // Build new filename with new extension
-        let new_filename: Str = if new_ext.len() == 0 {
-            stem
-        } else if new_ext.slice(0, 1) == "." {
-            stem + new_ext
+        // Build new filename with new extension.
+        // Prepend "." if the caller didn't include it (e.g. "md" → ".md").
+        var new_filename: Str = ""
+        if new_ext.len() == 0 {
+            new_filename = stem
         } else {
-            stem + "." + new_ext
+            var dotted_ext: Str = new_ext
+            if new_ext.slice(0, 1) != "." {
+                dotted_ext = "." + new_ext
+            }
+            new_filename = stem + dotted_ext
         }
 
         // Join parent with new filename
