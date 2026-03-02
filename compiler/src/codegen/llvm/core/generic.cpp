@@ -337,6 +337,13 @@ void LLVMIRGen::generate_pending_instantiations() {
         // Track processed methods to avoid duplicate lookups (expensive module searches)
         std::unordered_set<std::string> processed_impl_methods;
 
+        // Save module context — impl method instantiation may need to set module context
+        // for intra-module call resolution (e.g., Arena::alloc_raw calling align_up needs
+        // current_module_name_="core::arena" so the qualified lookup finds the mangled name).
+        auto saved_module_prefix = current_module_prefix_;
+        auto saved_module_name = current_module_name_;
+        auto saved_submodule = current_submodule_name_;
+
         while (!pending_impl_method_instantiations_.empty()) {
             auto pending = std::move(pending_impl_method_instantiations_);
             pending_impl_method_instantiations_.clear();
@@ -357,10 +364,12 @@ void LLVMIRGen::generate_pending_instantiations() {
                 // Only check generated_impl_methods_output_ which tracks ACTUALLY generated
                 // methods. Don't check generated_impl_methods_ here - that's for queue
                 // deduplication only.
-                std::string generated_key = "tml_" + pim.mangled_type_name + "_" + pim.method_name;
+                std::string method_name_full = pim.method_name;
                 if (!pim.method_type_suffix.empty()) {
-                    generated_key += "__" + pim.method_type_suffix;
+                    method_name_full += "__" + pim.method_type_suffix;
                 }
+                std::string generated_key =
+                    mangle_impl_method(pim.mangled_type_name, method_name_full);
                 if (generated_impl_methods_output_.count(generated_key) > 0) {
                     processed_impl_methods.insert(method_key);
                     continue;
@@ -499,6 +508,29 @@ void LLVMIRGen::generate_pending_instantiations() {
                             current_associated_types_[binding.name] = resolved;
                         }
 
+                        // Set module context for intra-module call resolution.
+                        // Look up which module defines this type so that calls within
+                        // the method body (e.g., Arena::alloc_raw calling align_up) can
+                        // resolve the qualified name in the functions_ map.
+                        if (pim.is_library_type && env_.module_registry()) {
+                            const auto& all_modules = env_.module_registry()->get_all_modules();
+                            for (const auto& [mn, mod] : all_modules) {
+                                if (mod.structs.count(pim.base_type_name) > 0 ||
+                                    mod.enums.count(pim.base_type_name) > 0 ||
+                                    mod.internal_structs.count(pim.base_type_name) > 0) {
+                                    current_module_name_ = mn;
+                                    std::string prefix = mn;
+                                    size_t pos = 0;
+                                    while ((pos = prefix.find("::", pos)) != std::string::npos) {
+                                        prefix.replace(pos, 2, "_");
+                                        pos += 1;
+                                    }
+                                    current_module_prefix_ = prefix;
+                                    break;
+                                }
+                            }
+                        }
+
                         // Find the method in the impl block and generate it
                         for (const auto& m : impl.methods) {
                             if (m.name == pim.method_name) {
@@ -511,7 +543,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                             }
                         }
 
-                        // Restore associated types
+                        // Restore module context and associated types
+                        current_module_name_ = saved_module_name;
+                        current_module_prefix_ = saved_module_prefix;
                         current_associated_types_ = saved_associated_types;
                     }
                 }
@@ -735,6 +769,22 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 current_associated_types_[binding.name] = resolved;
                             }
 
+                            // Set module context for intra-module call resolution.
+                            // When a library method (e.g., Arena::alloc_raw) calls another
+                            // function in the same module (e.g., align_up), the call-site
+                            // lookup uses current_module_name_ to build the qualified name
+                            // (e.g., "core::arena::align_up") for functions_ map lookup.
+                            {
+                                std::string prefix = mod_name;
+                                size_t pos = 0;
+                                while ((pos = prefix.find("::", pos)) != std::string::npos) {
+                                    prefix.replace(pos, 2, "_");
+                                    pos += 1;
+                                }
+                                current_module_name_ = mod_name;
+                                current_module_prefix_ = prefix;
+                            }
+
                             // Find the method
                             for (size_t mi = 0; mi < impl_decl.methods.size(); ++mi) {
                                 const auto& method_decl = impl_decl.methods[mi];
@@ -748,7 +798,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 }
                             }
 
-                            // Restore associated types
+                            // Restore module context and associated types
+                            current_module_name_ = saved_module_name;
+                            current_module_prefix_ = saved_module_prefix;
                             current_associated_types_ = saved_associated_types;
 
                             if (found)
@@ -959,9 +1011,8 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
     size_t vtable_idx = 0;
     for (const auto& method : c.methods) {
         if (method.is_virtual || method.is_abstract) {
-            // Do NOT use suite prefix for generic class method instantiations
-            // These are library methods shared across all test files in a suite
-            std::string method_func_name = "@tml_" + mangled + "_" + method.name;
+            // Use mangled name for generic class method instantiations
+            std::string method_func_name = "@" + mangle_impl_method(mangled, method.name);
             vtable_func_names.push_back(method_func_name);
             vtable_methods.push_back({method.name, mangled, mangled, vtable_idx++});
         }

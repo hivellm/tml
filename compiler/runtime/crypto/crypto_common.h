@@ -85,8 +85,6 @@ static inline char* tml_strdup(const char* s) {
 // OpenSSL includes (when TML_HAS_OPENSSL is defined)
 // ============================================================================
 
-#ifdef TML_HAS_OPENSSL
-
 #include <openssl/bio.h>
 #include <openssl/bn.h>
 #include <openssl/core_names.h>
@@ -131,7 +129,5 @@ static inline char* tml_bio_to_str(BIO* bio) {
     result[len] = '\0';
     return result;
 }
-
-#endif /* TML_HAS_OPENSSL */
 
 #endif /* TML_CRYPTO_COMMON_H */

@@ -140,7 +140,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
 
                 // Check if this type has a Drop implementation
                 // Look for drop method in impl blocks or generated functions
-                std::string drop_fn_name = "tml_" + type_name + "_drop";
+                std::string drop_fn_name = mangle_impl_method(type_name, "drop");
                 bool has_drop = generated_functions_.count("@" + drop_fn_name) > 0 ||
                                 generated_impl_methods_.count(drop_fn_name) > 0;
 
@@ -181,7 +181,7 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
 
                 if (has_drop) {
                     // Generate the drop function name
-                    std::string drop_fn = "@tml_" + type_name + "_drop";
+                    std::string drop_fn = "@" + drop_fn_name;
 
                     // Store the value to get a pointer (drop functions take pointers)
                     std::string temp_alloca = fresh_reg();

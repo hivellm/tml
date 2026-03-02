@@ -116,14 +116,7 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
     std::string type_name = s.name;
     std::string llvm_type = "%struct." + type_name;
 
-    // Add suite prefix for test-local types
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_hash";
+    std::string func_name = "@" + mangle_impl_method(type_name, "hash");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -211,7 +204,7 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            std::string field_hash_func = "@tml_" + suite_prefix + field_type_name + "_hash";
+            std::string field_hash_func = "@" + mangle_impl_method(field_type_name, "hash");
             field_hash = fresh_temp();
             type_defs_buffer_ << "  " << field_hash << " = call i64 " << field_hash_func << "(ptr "
                               << field_ptr << ")\n";
@@ -250,14 +243,7 @@ void LLVMIRGen::gen_derive_hash_enum(const parser::EnumDecl& e) {
     std::string type_name = e.name;
     std::string llvm_type = "%struct." + type_name;
 
-    // Add suite prefix for test-local types
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_hash";
+    std::string func_name = "@" + mangle_impl_method(type_name, "hash");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {

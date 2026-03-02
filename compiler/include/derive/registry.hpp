@@ -21,26 +21,26 @@ enum class DerivableTrait {
     Ord,        // Total ordering: cmp(this, other: ref Self) -> Ordering
 
     // Cloning traits
-    Duplicate,  // Field-by-field clone: duplicate(this) -> Self
-    Copy,       // Marker trait, implies Duplicate (bitwise copy)
+    Duplicate, // Field-by-field clone: duplicate(this) -> Self
+    Copy,      // Marker trait, implies Duplicate (bitwise copy)
 
     // Utility traits
-    Hash,       // Hash computation: hash(this) -> I64
-    Default,    // Default construction: default() -> Self (static)
+    Hash,    // Hash computation: hash(this) -> I64
+    Default, // Default construction: default() -> Self (static)
 
     // String representation traits
-    Debug,      // Debug string: debug_string(this) -> Str
-    Display,    // User-friendly string: to_string(this) -> Str
+    Debug,   // Debug string: debug_string(this) -> Str
+    Display, // User-friendly string: to_string(this) -> Str
 
     // Parsing traits
-    FromStr,    // Parse from string: from_str(s: Str) -> Outcome[Self, Str] (static)
+    FromStr, // Parse from string: from_str(s: Str) -> Outcome[Self, Str] (static)
 
     // Serialization traits
     Serialize,   // Serialize to JSON: to_json(this) -> Str
     Deserialize, // Deserialize from JSON: from_json(s: Str) -> Outcome[Self, Str] (static)
 
     // Reflection
-    Reflect     // Reflection: type_info(), runtime_type_info(), variant_name(), variant_tag()
+    Reflect // Reflection: type_info(), runtime_type_info(), variant_name(), variant_tag()
 };
 
 /// Parse a trait name string to DerivableTrait enum
@@ -134,9 +134,8 @@ inline bool is_marker_trait(DerivableTrait trait) {
 
 /// Get the set of all derivable trait names for error messages
 inline std::unordered_set<std::string> all_derivable_trait_names() {
-    return {"PartialEq", "Eq",        "PartialOrd",  "Ord",    "Duplicate",
-            "Copy",      "Hash",      "Default",     "Debug",  "Display",
-            "FromStr",   "Serialize", "Deserialize", "Reflect"};
+    return {"PartialEq", "Eq",    "PartialOrd", "Ord",     "Duplicate", "Copy",        "Hash",
+            "Default",   "Debug", "Display",    "FromStr", "Serialize", "Deserialize", "Reflect"};
 }
 
 } // namespace tml::derive

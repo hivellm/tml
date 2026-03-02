@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "tml": {
-      "command": "./build/debug/bin/tml_mcp.exe",
-      "args": []
-    },
     "rulebook": {
       "command": "npx",
       "args": [

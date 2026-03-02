@@ -108,23 +108,8 @@ Loader::~Loader() {
 void Loader::discover_paths() {
     auto exe = exe_dir();
 
-    // Primary: plugins/ next to the executable
-    plugins_dir_ = exe / "plugins";
-
-    // Override via environment variable
-#ifdef _MSC_VER
-    char* env = nullptr;
-    size_t env_len = 0;
-    _dupenv_s(&env, &env_len, "PLUGIN_DIR");
-#else
-    const char* env = std::getenv("PLUGIN_DIR");
-#endif
-    if (env && *env) {
-        plugins_dir_ = fs::path(env);
-    }
-#ifdef _MSC_VER
-    free(env);
-#endif
+    // Plugins live at ../plugins/ relative to exe (build/debug/plugins/ when exe is in bin/)
+    plugins_dir_ = exe.parent_path() / "plugins";
 
     // Cache directory: cache/plugins/ next to executable
     cache_dir_ = exe / "cache" / "plugins";
@@ -354,7 +339,8 @@ auto Loader::compute_file_hash(const fs::path& path) -> std::string {
         for (size_t i = 0; i < got; ++i) {
             crc ^= static_cast<uint8_t>(buf[i]);
             for (int j = 0; j < 8; ++j)
-                crc = (crc >> 1) ^ (0x82F63B78 & static_cast<uint32_t>(-(static_cast<int32_t>(crc & 1))));
+                crc = (crc >> 1) ^
+                      (0x82F63B78 & static_cast<uint32_t>(-(static_cast<int32_t>(crc & 1))));
         }
         size -= got;
     }

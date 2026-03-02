@@ -85,6 +85,8 @@ struct SuiteRunResult {
     bool compile_ok = true;
     bool cached = false; // True if result came from cache
     std::string compile_error;
+    std::string process_stderr; // stderr from subprocess execution (for crash diagnostics)
+    std::vector<std::pair<std::string, std::string>> per_file_compile_errors; // {file, error}
     int64_t compile_time_us = 0;
     int64_t exec_time_us = 0;
     std::vector<CoordinatorTestResult> tests;

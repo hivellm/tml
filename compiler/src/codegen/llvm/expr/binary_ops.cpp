@@ -380,16 +380,26 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         return 0;
     };
 
-    // Helper to extend integer to target type
-    auto extend_int = [&](std::string& val, const std::string& from_type,
+    // Helper to coerce integer to target type (widening or narrowing)
+    auto coerce_int = [&](std::string& val, const std::string& from_type,
                           const std::string& to_type, bool is_unsigned_val) {
         if (from_type == to_type)
             return;
+        int from_size = int_type_size(from_type);
+        int to_size = int_type_size(to_type);
+        if (from_size <= 0 || to_size <= 0)
+            return;
         std::string conv = fresh_reg();
-        if (is_unsigned_val) {
-            emit_line("  " + conv + " = zext " + from_type + " " + val + " to " + to_type);
+        if (from_size < to_size) {
+            // Widening: sext (signed) or zext (unsigned)
+            if (is_unsigned_val) {
+                emit_line("  " + conv + " = zext " + from_type + " " + val + " to " + to_type);
+            } else {
+                emit_line("  " + conv + " = sext " + from_type + " " + val + " to " + to_type);
+            }
         } else {
-            emit_line("  " + conv + " = sext " + from_type + " " + val + " to " + to_type);
+            // Narrowing: trunc
+            emit_line("  " + conv + " = trunc " + from_type + " " + val + " to " + to_type);
         }
         val = conv;
     };
@@ -458,10 +468,10 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         if (left_size > 0 && right_size > 0 && left_size != right_size) {
             // Promote smaller to larger
             if (left_size > right_size) {
-                extend_int(right, right_type, left_type, right_unsigned);
+                coerce_int(right, right_type, left_type, right_unsigned);
                 right_type = left_type;
             } else {
-                extend_int(left, left_type, right_type, left_unsigned);
+                coerce_int(left, left_type, right_type, left_unsigned);
                 left_type = right_type;
             }
         }
@@ -572,6 +582,12 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     // show that using `a & b` exercises `BitAnd::bitand`.
     auto emit_operator_coverage = [&](const std::string& trait_name, const std::string& method) {
         emit_coverage(trait_name + "::" + method);
+        // Also emit concrete type coverage (e.g., "I32::add" alongside "Add::add")
+        if (left_semantic) {
+            if (auto* prim = std::get_if<types::PrimitiveType>(&left_semantic->kind)) {
+                emit_coverage(types::primitive_kind_to_string(prim->kind) + "::" + method);
+            }
+        }
     };
 
     switch (bin.op) {

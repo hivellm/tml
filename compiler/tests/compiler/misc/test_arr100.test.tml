@@ -1,0 +1,9 @@
+func arr100() -> I32 {
+    let arr: [I32; 100] = [0; 100]
+    return arr[0]
+}
+
+@test
+func test_arr100() {
+    assert_eq(arr100(), 0)
+}

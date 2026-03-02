@@ -538,6 +538,38 @@ Install all optional deps with vcpkg:
 vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-linux, arm64-osx
 ```
 
+### Ninja (Recommended for Faster Builds)
+
+The build system automatically detects and uses [Ninja](https://ninja-build.org/) when available, providing **2–5x faster builds** compared to the default MSBuild generator.
+
+| Build type | MSBuild | Ninja | Speedup |
+|-----------|---------|-------|---------|
+| Incremental (no-op) | ~10.7s | ~4.6s | **2.3x** |
+| Clean build | ~34s | ~6.7s | **~5x** |
+
+**Install Ninja:**
+
+```bash
+# Via pip (recommended — works everywhere)
+pip install ninja
+
+# Via winget (Windows)
+winget install Ninja-build.Ninja
+
+# Via apt (Linux)
+sudo apt install ninja-build
+
+# Via Homebrew (macOS)
+brew install ninja
+```
+
+The build script (`scripts/build.bat`) will automatically:
+1. Detect `ninja.exe` in your PATH
+2. Initialize the MSVC environment via `vcvars64.bat` if `cl.exe` is not already in PATH
+3. Fall back to MSBuild if Ninja or MSVC are not available
+
+> **Tip:** For best results on Windows, run builds from a **Developer Command Prompt for VS** or let the script auto-detect Visual Studio via `vswhere`.
+
 ### Build
 
 ```bash

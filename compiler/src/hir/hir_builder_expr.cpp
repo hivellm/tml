@@ -42,6 +42,8 @@ TML_MODULE("compiler")
 #include "hir/hir_builder.hpp"
 #include "lexer/token.hpp"
 
+#include <algorithm>
+
 namespace tml::hir {
 
 // ============================================================================
@@ -488,7 +490,20 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
             field_index = -1;
         }
     } else {
-        if (object_type && object_type->is<types::NamedType>()) {
+        // Unwrap reference/pointer types to get the underlying struct type.
+        // E.g. 'self: ref SomeStruct' has type RefType{inner: NamedType("SomeStruct")}.
+        auto resolved = object_type;
+        if (resolved && resolved->is<types::RefType>()) {
+            resolved = type_env_.resolve(resolved->as<types::RefType>().inner);
+        } else if (resolved && resolved->is<types::PtrType>()) {
+            resolved = type_env_.resolve(resolved->as<types::PtrType>().inner);
+        }
+
+        if (resolved && resolved->is<types::NamedType>()) {
+            type_name = resolved->as<types::NamedType>().name;
+        } else if (resolved && resolved->is<types::ClassType>()) {
+            type_name = resolved->as<types::ClassType>().name;
+        } else if (object_type && object_type->is<types::NamedType>()) {
             type_name = object_type->as<types::NamedType>().name;
         } else if (object_type && object_type->is<types::ClassType>()) {
             type_name = object_type->as<types::ClassType>().name;
@@ -653,10 +668,45 @@ auto HirBuilder::lower_struct_expr(const parser::StructExpr& struct_expr) -> Hir
         }
     }
 
-    // Lower fields
+    // Lower fields — inject default values for fields omitted from the literal
     std::vector<std::pair<std::string, HirExprPtr>> fields;
+
+    // Build set of explicitly-provided field names
+    std::unordered_set<std::string> provided_names;
+    for (const auto& [name, _] : struct_expr.fields) {
+        provided_names.insert(name);
+    }
+
+    // Lower explicitly-provided fields
     for (const auto& [name, value] : struct_expr.fields) {
         fields.emplace_back(name, lower_expr(*value));
+    }
+
+    // Inject defaults for fields not provided, in declaration order.
+    // This ensures the downstream MIR codegen sees all fields and emits
+    // correct insertvalue indices without uninitialized (undef) fields.
+    auto decl_it = struct_decl_map_.find(struct_name);
+    if (decl_it != struct_decl_map_.end()) {
+        for (const auto& field : decl_it->second->fields) {
+            if (provided_names.count(field.name) == 0 && field.default_value.has_value()) {
+                fields.emplace_back(field.name, lower_expr(**field.default_value));
+            }
+        }
+    }
+
+    // Sort fields into declaration order so indices match the struct layout
+    if (decl_it != struct_decl_map_.end()) {
+        std::unordered_map<std::string, size_t> field_order;
+        for (size_t k = 0; k < decl_it->second->fields.size(); ++k) {
+            field_order[decl_it->second->fields[k].name] = k;
+        }
+        std::stable_sort(fields.begin(), fields.end(), [&](const auto& a, const auto& b) {
+            auto ia = field_order.find(a.first);
+            auto ib = field_order.find(b.first);
+            size_t oa = (ia != field_order.end()) ? ia->second : SIZE_MAX;
+            size_t ob = (ib != field_order.end()) ? ib->second : SIZE_MAX;
+            return oa < ob;
+        });
     }
 
     // Lower base (struct update syntax)

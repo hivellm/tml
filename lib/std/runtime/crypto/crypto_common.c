@@ -5,9 +5,10 @@
  */
 
 #include "crypto_internal.h"
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 // ============================================================================
 // Buffer Management
@@ -15,7 +16,8 @@
 
 TmlBuffer* tml_buffer_create(size_t size) {
     TmlBuffer* buf = (TmlBuffer*)malloc(sizeof(TmlBuffer));
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
     buf->data = (uint8_t*)malloc(size > 0 ? size : 1);
     if (!buf->data) {
@@ -31,7 +33,8 @@ TmlBuffer* tml_buffer_create(size_t size) {
 
 TmlBuffer* tml_buffer_from_data(const uint8_t* data, size_t len) {
     TmlBuffer* buf = tml_buffer_create(len);
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
     if (data && len > 0) {
         memcpy(buf->data, data, len);
@@ -40,7 +43,8 @@ TmlBuffer* tml_buffer_from_data(const uint8_t* data, size_t len) {
 }
 
 TmlBuffer* tml_buffer_from_string(const char* str) {
-    if (!str) return tml_buffer_create(0);
+    if (!str)
+        return tml_buffer_create(0);
     size_t len = strlen(str);
     return tml_buffer_from_data((const uint8_t*)str, len);
 }
@@ -68,12 +72,14 @@ size_t tml_buffer_len(TmlBuffer* buf) {
 }
 
 void tml_buffer_resize(TmlBuffer* buf, size_t new_len) {
-    if (!buf) return;
+    if (!buf)
+        return;
 
     if (new_len > buf->capacity) {
         size_t new_capacity = new_len * 2;
         uint8_t* new_data = (uint8_t*)realloc(buf->data, new_capacity);
-        if (!new_data) return;
+        if (!new_data)
+            return;
         buf->data = new_data;
         buf->capacity = new_capacity;
     }
@@ -81,7 +87,8 @@ void tml_buffer_resize(TmlBuffer* buf, size_t new_len) {
 }
 
 void tml_buffer_append(TmlBuffer* buf, const uint8_t* data, size_t len) {
-    if (!buf || !data || len == 0) return;
+    if (!buf || !data || len == 0)
+        return;
 
     size_t old_len = buf->len;
     tml_buffer_resize(buf, old_len + len);
@@ -89,7 +96,8 @@ void tml_buffer_append(TmlBuffer* buf, const uint8_t* data, size_t len) {
 }
 
 TmlBuffer* tml_buffer_slice(TmlBuffer* buf, size_t offset, size_t len) {
-    if (!buf || offset >= buf->len) return tml_buffer_create(0);
+    if (!buf || offset >= buf->len)
+        return tml_buffer_create(0);
 
     size_t actual_len = (offset + len > buf->len) ? (buf->len - offset) : len;
     return tml_buffer_from_data(buf->data + offset, actual_len);
@@ -98,7 +106,8 @@ TmlBuffer* tml_buffer_slice(TmlBuffer* buf, size_t offset, size_t len) {
 TmlBuffer* tml_buffer_concat(TmlBuffer* a, TmlBuffer* b) {
     size_t total = (a ? a->len : 0) + (b ? b->len : 0);
     TmlBuffer* result = tml_buffer_create(total);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     size_t offset = 0;
     if (a && a->len > 0) {
@@ -114,7 +123,8 @@ TmlBuffer* tml_buffer_concat(TmlBuffer* a, TmlBuffer* b) {
 TmlBuffer* crypto_concat_buffers3(TmlBuffer* a, TmlBuffer* b, TmlBuffer* c) {
     size_t total = (a ? a->len : 0) + (b ? b->len : 0) + (c ? c->len : 0);
     TmlBuffer* result = tml_buffer_create(total);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     size_t offset = 0;
     if (a && a->len > 0) {
@@ -144,13 +154,15 @@ static const char HEX_CHARS[] = "0123456789abcdef";
 char* crypto_bytes_to_hex(TmlBuffer* data) {
     if (!data || data->len == 0) {
         char* empty = (char*)malloc(1);
-        if (empty) empty[0] = '\0';
+        if (empty)
+            empty[0] = '\0';
         return empty;
     }
 
     size_t hex_len = data->len * 2 + 1;
     char* hex = (char*)malloc(hex_len);
-    if (!hex) return NULL;
+    if (!hex)
+        return NULL;
 
     for (size_t i = 0; i < data->len; i++) {
         hex[i * 2] = HEX_CHARS[(data->data[i] >> 4) & 0x0F];
@@ -161,21 +173,27 @@ char* crypto_bytes_to_hex(TmlBuffer* data) {
 }
 
 static int hex_char_to_int(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
     return -1;
 }
 
 TmlBuffer* crypto_hex_to_bytes(const char* hex) {
-    if (!hex) return NULL;
+    if (!hex)
+        return NULL;
 
     size_t hex_len = strlen(hex);
-    if (hex_len % 2 != 0) return NULL;  // Invalid hex string
+    if (hex_len % 2 != 0)
+        return NULL; // Invalid hex string
 
     size_t byte_len = hex_len / 2;
     TmlBuffer* buf = tml_buffer_create(byte_len);
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
     for (size_t i = 0; i < byte_len; i++) {
         int high = hex_char_to_int(hex[i * 2]);
@@ -200,25 +218,33 @@ static const char BASE64URL_CHARS[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 static int base64_char_to_int(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+' || c == '-') return 62;
-    if (c == '/' || c == '_') return 63;
-    if (c == '=') return 0;  // Padding
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+' || c == '-')
+        return 62;
+    if (c == '/' || c == '_')
+        return 63;
+    if (c == '=')
+        return 0; // Padding
     return -1;
 }
 
 char* crypto_bytes_to_base64(TmlBuffer* data) {
     if (!data || data->len == 0) {
         char* empty = (char*)malloc(1);
-        if (empty) empty[0] = '\0';
+        if (empty)
+            empty[0] = '\0';
         return empty;
     }
 
     size_t output_len = 4 * ((data->len + 2) / 3) + 1;
     char* output = (char*)malloc(output_len);
-    if (!output) return NULL;
+    if (!output)
+        return NULL;
 
     size_t i, j;
     for (i = 0, j = 0; i < data->len; i += 3, j += 4) {
@@ -238,19 +264,25 @@ char* crypto_bytes_to_base64(TmlBuffer* data) {
 }
 
 TmlBuffer* crypto_base64_to_bytes(const char* b64) {
-    if (!b64) return NULL;
+    if (!b64)
+        return NULL;
 
     size_t input_len = strlen(b64);
-    if (input_len == 0) return tml_buffer_create(0);
-    if (input_len % 4 != 0) return NULL;  // Invalid base64
+    if (input_len == 0)
+        return tml_buffer_create(0);
+    if (input_len % 4 != 0)
+        return NULL; // Invalid base64
 
     size_t padding = 0;
-    if (input_len > 0 && b64[input_len - 1] == '=') padding++;
-    if (input_len > 1 && b64[input_len - 2] == '=') padding++;
+    if (input_len > 0 && b64[input_len - 1] == '=')
+        padding++;
+    if (input_len > 1 && b64[input_len - 2] == '=')
+        padding++;
 
     size_t output_len = (input_len / 4) * 3 - padding;
     TmlBuffer* buf = tml_buffer_create(output_len);
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
     size_t i, j;
     for (i = 0, j = 0; i < input_len; i += 4) {
@@ -266,21 +298,27 @@ TmlBuffer* crypto_base64_to_bytes(const char* b64) {
 
         uint32_t triple = (a << 18) | (b << 12) | (c << 6) | d;
 
-        if (j < output_len) buf->data[j++] = (triple >> 16) & 0xFF;
-        if (j < output_len) buf->data[j++] = (triple >> 8) & 0xFF;
-        if (j < output_len) buf->data[j++] = triple & 0xFF;
+        if (j < output_len)
+            buf->data[j++] = (triple >> 16) & 0xFF;
+        if (j < output_len)
+            buf->data[j++] = (triple >> 8) & 0xFF;
+        if (j < output_len)
+            buf->data[j++] = triple & 0xFF;
     }
     return buf;
 }
 
 char* crypto_bytes_to_base64url(TmlBuffer* data) {
     char* b64 = crypto_bytes_to_base64(data);
-    if (!b64) return NULL;
+    if (!b64)
+        return NULL;
 
     // Convert + to -, / to _, remove padding
     for (char* p = b64; *p; p++) {
-        if (*p == '+') *p = '-';
-        else if (*p == '/') *p = '_';
+        if (*p == '+')
+            *p = '-';
+        else if (*p == '/')
+            *p = '_';
     }
 
     // Remove trailing '='
@@ -293,7 +331,8 @@ char* crypto_bytes_to_base64url(TmlBuffer* data) {
 }
 
 TmlBuffer* crypto_base64url_to_bytes(const char* b64url) {
-    if (!b64url) return NULL;
+    if (!b64url)
+        return NULL;
 
     size_t input_len = strlen(b64url);
 
@@ -302,13 +341,16 @@ TmlBuffer* crypto_base64url_to_bytes(const char* b64url) {
     size_t padded_len = input_len + padding;
 
     char* padded = (char*)malloc(padded_len + 1);
-    if (!padded) return NULL;
+    if (!padded)
+        return NULL;
 
     // Copy and convert - to +, _ to /
     for (size_t i = 0; i < input_len; i++) {
         char c = b64url[i];
-        if (c == '-') c = '+';
-        else if (c == '_') c = '/';
+        if (c == '-')
+            c = '+';
+        else if (c == '_')
+            c = '/';
         padded[i] = c;
     }
 
@@ -334,12 +376,14 @@ TmlBuffer* crypto_str_to_bytes(const char* str) {
 char* crypto_bytes_to_str(TmlBuffer* data) {
     if (!data || data->len == 0) {
         char* empty = (char*)malloc(1);
-        if (empty) empty[0] = '\0';
+        if (empty)
+            empty[0] = '\0';
         return empty;
     }
 
     char* str = (char*)malloc(data->len + 1);
-    if (!str) return NULL;
+    if (!str)
+        return NULL;
 
     memcpy(str, data->data, data->len);
     str[data->len] = '\0';
@@ -351,8 +395,10 @@ char* crypto_bytes_to_str(TmlBuffer* data) {
 // ============================================================================
 
 bool crypto_timing_safe_equal(TmlBuffer* a, TmlBuffer* b) {
-    if (!a || !b) return false;
-    if (a->len != b->len) return false;
+    if (!a || !b)
+        return false;
+    if (a->len != b->len)
+        return false;
 
     volatile uint8_t result = 0;
     for (size_t i = 0; i < a->len; i++) {
@@ -362,12 +408,14 @@ bool crypto_timing_safe_equal(TmlBuffer* a, TmlBuffer* b) {
 }
 
 bool crypto_timing_safe_equal_str(const char* a, const char* b) {
-    if (!a || !b) return false;
+    if (!a || !b)
+        return false;
 
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
 
-    if (len_a != len_b) return false;
+    if (len_a != len_b)
+        return false;
 
     volatile uint8_t result = 0;
     for (size_t i = 0; i < len_a; i++) {
@@ -383,21 +431,26 @@ bool crypto_timing_safe_equal_str(const char* a, const char* b) {
 char* crypto_jwk_extract_k(const char* jwk) {
     // Simple JSON parsing for "k" field
     // Format: {..., "k": "base64url_value", ...}
-    if (!jwk) return NULL;
+    if (!jwk)
+        return NULL;
 
     const char* k_start = strstr(jwk, "\"k\"");
-    if (!k_start) return NULL;
+    if (!k_start)
+        return NULL;
 
     k_start = strchr(k_start + 3, '"');
-    if (!k_start) return NULL;
-    k_start++;  // Skip opening quote
+    if (!k_start)
+        return NULL;
+    k_start++; // Skip opening quote
 
     const char* k_end = strchr(k_start, '"');
-    if (!k_end) return NULL;
+    if (!k_end)
+        return NULL;
 
     size_t len = k_end - k_start;
     char* result = (char*)malloc(len + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     memcpy(result, k_start, len);
     result[len] = '\0';
@@ -412,17 +465,15 @@ char* format_uuid(const uint8_t* bytes) {
     // UUID format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
     // where y is 8, 9, a, or b
     char* uuid = (char*)malloc(37);
-    if (!uuid) return NULL;
+    if (!uuid)
+        return NULL;
 
-    snprintf(uuid, 37,
-        "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        (bytes[6] & 0x0F) | 0x40,  // Version 4
-        bytes[7],
-        (bytes[8] & 0x3F) | 0x80,  // Variant 1
-        bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+    snprintf(uuid, 37, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+             (bytes[6] & 0x0F) | 0x40, // Version 4
+             bytes[7],
+             (bytes[8] & 0x3F) | 0x80, // Variant 1
+             bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
 
     return uuid;
 }
@@ -433,7 +484,8 @@ char* format_uuid(const uint8_t* bytes) {
 
 TmlList* tml_list_create(size_t initial_capacity) {
     TmlList* list = (TmlList*)malloc(sizeof(TmlList));
-    if (!list) return NULL;
+    if (!list)
+        return NULL;
 
     list->items = (char**)malloc(sizeof(char*) * initial_capacity);
     if (!list->items) {
@@ -457,12 +509,14 @@ void tml_list_destroy(TmlList* list) {
 }
 
 void tml_list_push(TmlList* list, const char* item) {
-    if (!list || !item) return;
+    if (!list || !item)
+        return;
 
     if (list->len >= list->capacity) {
         size_t new_capacity = list->capacity * 2;
         char** new_items = (char**)realloc(list->items, sizeof(char*) * new_capacity);
-        if (!new_items) return;
+        if (!new_items)
+            return;
         list->items = new_items;
         list->capacity = new_capacity;
     }

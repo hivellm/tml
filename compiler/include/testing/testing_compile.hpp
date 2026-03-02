@@ -24,6 +24,14 @@ struct CompileResult {
     std::string exe_path;
     std::string error_message;
     int64_t compile_time_us = 0;
+
+    /// Per-file errors for resilient suite compilation.
+    /// When a single file fails, remaining files still compile and link.
+    struct FileError {
+        std::string file_path;
+        std::string error;
+    };
+    std::vector<FileError> per_file_errors;
 };
 
 /// Configuration for the compilation pipeline.

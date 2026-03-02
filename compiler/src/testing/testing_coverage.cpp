@@ -4,7 +4,7 @@ TML_MODULE("test")
 //!
 //! Scans library source files, extracts function definitions,
 //! compares against runtime coverage data, and generates reports.
-//! Zero dependency on cli/tester/. Part of the v3 independent test system.
+//! Zero dependency on the old test system. Part of the v3 independent test system.
 
 #include "testing/testing_coverage.hpp"
 

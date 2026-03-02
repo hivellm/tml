@@ -41,7 +41,7 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
 
     if (is_value) {
         // Direct dispatch for @value classes - no vtable lookup
-        std::string func_name = "@tml_" + get_suite_prefix() + class_name + "_" + method_name;
+        std::string func_name = "@" + mangle_impl_method(class_name, method_name);
 
         // Call the method directly
         std::string result = fresh_reg();
@@ -296,7 +296,7 @@ auto LLVMIRGen::gen_base_expr(const parser::BaseExpr& base) -> std::string {
 
     if (base.is_method_call) {
         // Generate direct (non-virtual) call to base class method
-        std::string func_name = "@tml_" + get_suite_prefix() + base_class + "_" + base.member;
+        std::string func_name = "@" + mangle_impl_method(base_class, base.member);
 
         // Cast this to base class type (embedded at field 1 after vtable)
         std::string base_ptr = fresh_reg();
@@ -431,7 +431,7 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
             }
         } else {
             // Last resort: generate basic name
-            ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
+            ctor_name = "@" + mangle_impl_method(class_name, "new");
         }
     }
 
@@ -459,7 +459,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
     // Generate getter if present
     if (prop.has_getter) {
-        std::string getter_name = "@tml_" + get_suite_prefix() + c.name + "_get_" + prop.name;
+        std::string getter_name = "@" + mangle_impl_method(c.name, "get_" + prop.name);
 
         // Getter signature: (this: ptr) -> PropertyType
         std::string sig;
@@ -530,7 +530,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
     // Generate setter if present
     if (prop.has_setter) {
-        std::string setter_name = "@tml_" + get_suite_prefix() + c.name + "_set_" + prop.name;
+        std::string setter_name = "@" + mangle_impl_method(c.name, "set_" + prop.name);
 
         // Setter signature: (this: ptr, value: PropertyType) -> void
         std::string sig;
@@ -744,7 +744,7 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
         if (impl_class.empty()) {
             hot_value += "ptr null";
         } else {
-            hot_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.hot_methods[i];
+            hot_value += "ptr @" + mangle_impl_method(impl_class, split.hot_methods[i]);
         }
     }
     if (split.hot_methods.empty()) {
@@ -771,8 +771,7 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
             if (impl_class.empty()) {
                 cold_value += "ptr null";
             } else {
-                cold_value +=
-                    "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.cold_methods[i];
+                cold_value += "ptr @" + mangle_impl_method(impl_class, split.cold_methods[i]);
             }
         }
         cold_value += " }";
@@ -934,7 +933,7 @@ auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class,
 
     SpeculativeDevirtInfo info;
     info.expected_type = receiver_class;
-    info.direct_call_target = "@tml_" + get_suite_prefix() + receiver_class + "_" + method_name;
+    info.direct_call_target = "@" + mangle_impl_method(receiver_class, method_name);
     info.confidence = frequency;
 
     return info;

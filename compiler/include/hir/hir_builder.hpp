@@ -339,6 +339,18 @@ private:
     auto lower_array_pattern(const parser::ArrayPattern& pattern, HirType expected_type)
         -> HirPatternPtr;
 
+    /// Recursively register all bindings from a pattern in the scope and type environment.
+    ///
+    /// This handles all pattern types (ident, tuple, struct, enum, etc.) by walking
+    /// the pattern tree and registering each IdentPattern binding with its correct type.
+    /// Without this, variables bound via tuple/struct destructuring would not be
+    /// found during expression lowering, defaulting to unit type.
+    ///
+    /// @param pattern The AST pattern to walk
+    /// @param type The type being destructured by this pattern
+    /// @param span Source location for error reporting
+    void register_pattern_bindings(const parser::Pattern& pattern, HirType type, SourceSpan span);
+
     // ========================================================================
     // Type Resolution
     // ========================================================================
@@ -471,6 +483,10 @@ private:
 
     /// The module currently being built (for adding monomorphized items).
     HirModule* current_module_ = nullptr;
+
+    /// Map from struct name to its AST declaration, used to look up default
+    /// field values when lowering struct literal expressions.
+    std::unordered_map<std::string, const parser::StructDecl*> struct_decl_map_;
 
     /// Current impl self type for resolving 'This'/'Self' types.
     /// Set when lowering impl methods, cleared after.

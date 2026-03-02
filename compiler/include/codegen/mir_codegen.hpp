@@ -50,13 +50,14 @@ namespace tml::codegen {
 
 /// Options for MIR-to-LLVM code generation.
 struct MirCodegenOptions {
-    bool emit_comments = true;      ///< Include source comments in IR.
-    bool dll_export = false;        ///< Add dllexport for Windows DLLs.
-    bool coverage_enabled = false;  ///< Disable inlining for coverage builds.
-    bool generate_exe_main = false; ///< Emit @main(argc,argv) C entry point
-                                    ///< (renames user `main` to `tml_main`).
-    std::string test_entry_name;    ///< When non-empty, rename test main to this
-                                    ///< (e.g. "tml_test_0") instead of @main.
+    bool emit_comments = true;           ///< Include source comments in IR.
+    bool dll_export = false;             ///< Add dllexport for Windows DLLs.
+    bool coverage_enabled = false;       ///< Disable inlining for coverage builds.
+    bool generate_exe_main = false;      ///< Emit @main(argc,argv) C entry point
+                                         ///< (renames user `main` to `tml_main`).
+    bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
+    std::string test_entry_name;         ///< When non-empty, rename test main to this
+                                         ///< (e.g. "tml_test_0") instead of @main.
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
 };
 
@@ -83,7 +84,8 @@ private:
     MirCodegenOptions options_;
     std::stringstream output_;
     int temp_counter_ = 0;
-    int spill_counter_ = 0; // Counter for struct-to-ptr spill allocas
+    int spill_counter_ = 0;        // Counter for struct-to-ptr spill allocas
+    int bounds_check_counter_ = 0; // Dedicated counter for bc.panic.N / bc.ok.N labels
 
     // Current function context
     std::string current_func_;
@@ -97,8 +99,21 @@ private:
     // Struct name to field types mapping (for type coercion in struct init)
     std::unordered_map<std::string, std::vector<std::string>> struct_field_types_;
 
-    // Block index to LLVM label mapping
+    // Value ID to spill alloca register mapping.
+    // When a GEP spills an aggregate (array/struct) SSA value to an alloca for
+    // mutation, the spill alloca is recorded here. Subsequent reads of that value
+    // (e.g., in TupleInit) should reload from the alloca to pick up mutations.
+    std::unordered_map<mir::ValueId, std::string> value_spill_allocas_;
+
+    // Block index to LLVM label mapping (entry label for each MIR block)
     std::unordered_map<uint32_t, std::string> block_labels_;
+
+    // Block index to actual exit LLVM label (updated when bounds checks split blocks)
+    // Used by phi nodes to reference the correct predecessor label.
+    std::unordered_map<uint32_t, std::string> block_exit_labels_;
+
+    // Current MIR block ID being emitted (for tracking exit labels)
+    uint32_t current_block_id_ = 0;
 
     // Fallback label for missing block targets (set to first return block)
     std::string fallback_label_;
@@ -139,6 +154,7 @@ private:
     void emit_function(const mir::Function& func);
     void emit_function_declaration(const mir::Function& func);
     void emit_main_wrapper(const mir::Module& module);
+    void emit_test_entry_wrapper(const mir::Module& module);
     void emit_block(const mir::BasicBlock& block);
     void emit_instruction(const mir::InstructionData& inst);
     void emit_terminator(const mir::Terminator& term);

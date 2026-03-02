@@ -1,0 +1,72 @@
+// Tests for std::http::status — 1xx and 2xx status codes
+use test::{assert, assert_eq}
+use std::http::status::Status
+
+@test
+func test_1xx_informational_codes() -> I32 {
+    assert_eq(Status::CONTINUE().code(), 100 as I32, "CONTINUE code")
+    assert_eq(Status::SWITCHING_PROTOCOLS().code(), 101 as I32, "SWITCHING_PROTOCOLS code")
+    assert_eq(Status::PROCESSING().code(), 102 as I32, "PROCESSING code")
+    assert_eq(Status::EARLY_HINTS().code(), 103 as I32, "EARLY_HINTS code")
+    return 0
+}
+
+@test
+func test_2xx_success_codes() -> I32 {
+    assert_eq(Status::OK().code(), 200 as I32, "OK code")
+    assert_eq(Status::CREATED().code(), 201 as I32, "CREATED code")
+    assert_eq(Status::ACCEPTED().code(), 202 as I32, "ACCEPTED code")
+    assert_eq(Status::NON_AUTHORITATIVE_INFORMATION().code(), 203 as I32, "NON_AUTHORITATIVE code")
+    assert_eq(Status::NO_CONTENT().code(), 204 as I32, "NO_CONTENT code")
+    assert_eq(Status::RESET_CONTENT().code(), 205 as I32, "RESET_CONTENT code")
+    assert_eq(Status::PARTIAL_CONTENT().code(), 206 as I32, "PARTIAL_CONTENT code")
+    assert_eq(Status::MULTI_STATUS().code(), 207 as I32, "MULTI_STATUS code")
+    assert_eq(Status::ALREADY_REPORTED().code(), 208 as I32, "ALREADY_REPORTED code")
+    assert_eq(Status::IM_USED().code(), 226 as I32, "IM_USED code")
+    return 0
+}
+
+@test
+func test_1xx_2xx_reasons() -> I32 {
+    assert_eq(Status::CONTINUE().reason(), "Continue", "100 reason")
+    assert_eq(Status::SWITCHING_PROTOCOLS().reason(), "Switching Protocols", "101 reason")
+    assert_eq(Status::PROCESSING().reason(), "Processing", "102 reason")
+    assert_eq(Status::EARLY_HINTS().reason(), "Early Hints", "103 reason")
+    assert_eq(Status::ACCEPTED().reason(), "Accepted", "202 reason")
+    assert_eq(Status::NON_AUTHORITATIVE_INFORMATION().reason(), "Non-Authoritative Information", "203 reason")
+    assert_eq(Status::NO_CONTENT().reason(), "No Content", "204 reason")
+    assert_eq(Status::RESET_CONTENT().reason(), "Reset Content", "205 reason")
+    assert_eq(Status::PARTIAL_CONTENT().reason(), "Partial Content", "206 reason")
+    assert_eq(Status::MULTI_STATUS().reason(), "Multi-Status", "207 reason")
+    assert_eq(Status::ALREADY_REPORTED().reason(), "Already Reported", "208 reason")
+    assert_eq(Status::IM_USED().reason(), "IM Used", "226 reason")
+    return 0
+}
+
+@test
+func test_1xx_is_informational() -> I32 {
+    assert(Status::CONTINUE().is_informational(), "100 informational")
+    assert(Status::SWITCHING_PROTOCOLS().is_informational(), "101 informational")
+    assert(Status::PROCESSING().is_informational(), "102 informational")
+    assert(Status::EARLY_HINTS().is_informational(), "103 informational")
+    assert(not Status::CONTINUE().is_success(), "100 not success")
+    assert(not Status::CONTINUE().is_redirect(), "100 not redirect")
+    assert(not Status::CONTINUE().is_client_error(), "100 not client error")
+    assert(not Status::CONTINUE().is_server_error(), "100 not server error")
+    return 0
+}
+
+@test
+func test_2xx_is_success() -> I32 {
+    assert(Status::OK().is_success(), "200 success")
+    assert(Status::CREATED().is_success(), "201 success")
+    assert(Status::ACCEPTED().is_success(), "202 success")
+    assert(Status::NON_AUTHORITATIVE_INFORMATION().is_success(), "203 success")
+    assert(Status::NO_CONTENT().is_success(), "204 success")
+    assert(Status::RESET_CONTENT().is_success(), "205 success")
+    assert(Status::PARTIAL_CONTENT().is_success(), "206 success")
+    assert(Status::MULTI_STATUS().is_success(), "207 success")
+    assert(Status::ALREADY_REPORTED().is_success(), "208 success")
+    assert(Status::IM_USED().is_success(), "226 success")
+    return 0
+}

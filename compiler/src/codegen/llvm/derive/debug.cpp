@@ -61,24 +61,22 @@ static bool has_derive_debug(const parser::EnumDecl& e) {
     return false;
 }
 
-/// Get the appropriate to_string function for a primitive type
-/// Phase 45: All types use TML Display behavior impls
-static std::string get_to_string_func(const std::string& llvm_type) {
-    if (llvm_type == "i1") {
-        return "tml_Bool_to_string";
-    } else if (llvm_type == "i8") {
-        return "tml_I8_to_string";
-    } else if (llvm_type == "i16") {
-        return "tml_I16_to_string";
-    } else if (llvm_type == "i32") {
-        return "tml_I32_to_string";
-    } else if (llvm_type == "i64" || llvm_type == "i128") {
-        return "tml_I64_to_string";
-    } else if (llvm_type == "float") {
-        return "tml_F32_to_string";
-    } else if (llvm_type == "double") {
-        return "tml_F64_to_string";
-    }
+/// Map LLVM type to TML type name for to_string dispatch
+static std::string llvm_type_to_tml_name(const std::string& llvm_type) {
+    if (llvm_type == "i1")
+        return "Bool";
+    if (llvm_type == "i8")
+        return "I8";
+    if (llvm_type == "i16")
+        return "I16";
+    if (llvm_type == "i32")
+        return "I32";
+    if (llvm_type == "i64" || llvm_type == "i128")
+        return "I64";
+    if (llvm_type == "float")
+        return "F32";
+    if (llvm_type == "double")
+        return "F64";
     return "";
 }
 
@@ -114,7 +112,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@" + mangle_impl_method(type_name, "debug_string");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -229,7 +227,8 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
             type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
                               << field_ptr << "\n";
 
-            std::string to_string_func = get_to_string_func(field.llvm_type);
+            std::string tml_type = llvm_type_to_tml_name(field.llvm_type);
+            std::string to_string_func = mangle_impl_method(tml_type, "to_string");
             value_str = fresh_temp();
 
             // Phase 45: All primitives use TML Display, taking native types directly
@@ -253,7 +252,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
             }
 
             std::string field_debug_func =
-                "@tml_" + suite_prefix + field_type_name + "_debug_string";
+                "@" + mangle_impl_method(field_type_name, "debug_string");
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = call ptr " << field_debug_func << "(ptr "
                               << field_ptr << ")\n";
@@ -308,7 +307,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@" + mangle_impl_method(type_name, "debug_string");
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {

@@ -293,6 +293,68 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
             // Get predecessors of the block being removed
             auto& block_preds = preds[removed_id];
 
+            // Don't remove empty blocks that serve as critical edge splitters
+            // for phi nodes. If the target has phi nodes, check whether any
+            // OTHER empty block also forwards to the same target AND shares a
+            // predecessor with this block. Removing both would create duplicate
+            // predecessor entries in the phi, destroying value selection.
+            //
+            // Example: entry0 -> bb1 (empty) -> bb3, entry0 -> bb2 (empty) -> bb3
+            // phi in bb3: [%0, bb1], [%1, bb2]
+            // Removing bb1 first makes phi: [%0, entry0], [%1, bb2] — looks fine
+            // Then removing bb2 makes phi: [%0, entry0], [%1, entry0] — BROKEN
+            // So we must detect this pattern and preserve BOTH empty blocks.
+            int tgt_idx = get_block_index(func, target_id);
+            if (tgt_idx >= 0) {
+                auto& tgt_block = func.blocks[static_cast<size_t>(tgt_idx)];
+                bool target_has_phi = false;
+                for (const auto& inst : tgt_block.instructions) {
+                    if (std::holds_alternative<PhiInst>(inst.inst)) {
+                        target_has_phi = true;
+                        break;
+                    }
+                }
+
+                if (target_has_phi) {
+                    // Removing this empty forwarder block replaces its phi entry with
+                    // entries from each of its predecessors. If ANY of those predecessors
+                    // already appears in the target's phi (as an existing incoming block),
+                    // removal would create duplicate predecessor entries, destroying value
+                    // selection. This catches both the original sibling-forwarder case AND
+                    // the cross-pass case where a sibling was already removed and the
+                    // target phi now contains entries from this block's predecessors.
+                    //
+                    // Example cross-pass destruction:
+                    //   Pass 1: remove bb1 (empty->bb3) -> phi: [%0, entry0], [%1, bb2]
+                    //   Pass 2: try to remove bb2 (empty->bb3):
+                    //           entry0 already in phi -> would create [%0,entry0],[%1,entry0]
+                    //           -> BROKEN. Fix: skip removal.
+                    bool would_create_duplicate = false;
+
+                    std::unordered_set<uint32_t> phi_predecessor_ids;
+                    for (const auto& inst : tgt_block.instructions) {
+                        if (const auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                            for (const auto& [val, from_block] : phi->incoming) {
+                                if (from_block != removed_id) {
+                                    phi_predecessor_ids.insert(from_block);
+                                }
+                            }
+                        }
+                    }
+
+                    for (uint32_t pred_id : block_preds) {
+                        if (phi_predecessor_ids.count(pred_id)) {
+                            would_create_duplicate = true;
+                            break;
+                        }
+                    }
+
+                    if (would_create_duplicate) {
+                        continue; // Preserve critical edge splitter block
+                    }
+                }
+            }
+
             // Update terminators in predecessors to jump directly to target
             for (auto& other_block : func.blocks) {
                 if (!other_block.terminator) {

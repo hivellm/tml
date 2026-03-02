@@ -173,8 +173,11 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     std::string method_name = type_name + "_" + method.name;
 
+    // Generate mangled LLVM symbol name (includes module path for library types)
+    std::string func_llvm_name = mangle_impl_method(type_name, method.name);
+
     // Skip if already generated (can happen with re-exports across modules)
-    std::string llvm_name = "@tml_" + method_name;
+    std::string llvm_name = "@" + func_llvm_name;
     if (generated_functions_.count(llvm_name)) {
         return;
     }
@@ -209,6 +212,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     size_t param_start = 0;
     bool is_instance_method = false;
     bool is_mut_this = false;
+    bool is_ref_this = false;
     if (!method.params.empty()) {
         const auto& first_param = method.params[0];
         std::string first_name = get_param_name(first_param);
@@ -218,6 +222,11 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             // Check if 'mut this'/'mut self' - need to pass by pointer for mutation
             if (first_param.pattern && first_param.pattern->is<parser::IdentPattern>()) {
                 is_mut_this = first_param.pattern->as<parser::IdentPattern>().is_mut;
+            }
+            // Check if 'this: ref This' - reference type requires pointer passing
+            // Only for non-mut 'this' — 'mut this' already uses ptr with is_ptr_to_value
+            if (!is_mut_this && first_param.type && first_param.type->is<parser::RefType>()) {
+                is_ref_this = true;
             }
         }
     }
@@ -233,8 +242,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         std::string llvm_type = llvm_type_name(type_name);
         if (llvm_type[0] != '%') {
             // Primitive type (i32, i64, i1, float, double, etc.)
-            if (is_mut_this) {
-                // For 'mut this', pass by pointer so changes propagate back to caller
+            if (is_mut_this || is_ref_this) {
+                // For 'mut this' or 'this: ref This', pass by pointer
                 this_type = "ptr";
                 this_inner_type = llvm_type; // Remember the actual type for load/store
             } else {
@@ -254,6 +263,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     }
 
     // Add remaining parameters
+    // Note: For the first param (when it's NOT this/self and is a struct type),
+    // we use ptr instead of the concrete struct type. This matches method-syntax
+    // calling convention where the receiver is always passed as ptr.
+    // Example: ManuallyDrop::into_inner(slot: ManuallyDrop[T])
     for (size_t i = param_start; i < method.params.size(); ++i) {
         if (!params.empty()) {
             params += ", ";
@@ -264,14 +277,17 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
             param_type = "{ ptr, ptr }";
         }
+        // For the first param (i == 0 when !is_instance_method), if it's a struct/enum,
+        // use ptr. This is the "receiver-like" param for method-syntax calls.
+        if (i == 0 && !is_instance_method &&
+            (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+            param_type = "ptr";
+        }
         std::string param_name = get_param_name(method.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
         param_types_vec.push_back(param_type);
     }
-
-    // Function signature
-    std::string func_llvm_name = "tml_" + type_name + "_" + method.name;
 
     // Register function in functions_ map for lookup
     // This is critical for suite mode where method calls look up functions by name
@@ -285,7 +301,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     if (options_.lazy_library_defs && !options_.library_ir_only &&
         !current_module_prefix_.empty()) {
         pending_library_methods_["@" + func_llvm_name] = {
-            type_name, &method, current_module_prefix_, current_submodule_name_};
+            type_name, &method, current_module_prefix_, current_module_name_,
+            current_submodule_name_};
         current_func_.clear();
         current_impl_type_.clear();
         return;
@@ -430,7 +447,15 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             }
         }
 
-        if (!this_inner_type.empty()) {
+        if (is_ref_this && !this_inner_type.empty()) {
+            // For 'this: ref This' on primitive types, %this is a reference (pointer).
+            // Register as ptr type WITHOUT is_ptr_to_value — the deref operator (*this)
+            // will do the actual load. gen_ident returns the pointer as-is.
+            locals_["this"] = VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
+            if (this_param_name == "self") {
+                locals_["self"] = VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
+            }
+        } else if (!this_inner_type.empty()) {
             // For 'mut this'/'mut self' on primitive types, %this is a pointer to the value
             // Mark is_ptr_to_value so gen_ident will load from %this
             locals_["this"] =
@@ -459,10 +484,24 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         std::string param_name = get_param_name(method.params[i], i);
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*method.params[i].type, {});
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + param_type);
-        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+
+        // First non-this/self struct/enum param is passed as ptr (see signature loop).
+        // Copy from ptr into a local alloca so field access (GEP) works correctly.
+        if (i == 0 && !is_instance_method &&
+            (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+            // Load the struct from the ptr, store into alloca
+            std::string alloca_reg = fresh_reg();
+            std::string loaded_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_type);
+            emit_line("  " + loaded_reg + " = load " + param_type + ", ptr %" + param_name);
+            emit_line("  store " + param_type + " " + loaded_reg + ", ptr " + alloca_reg);
+            locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+        } else {
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_type);
+            emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+            locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+        }
     }
 
     // Destructure tuple pattern parameters
@@ -639,7 +678,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     if (!method_type_suffix.empty()) {
         method_name_for_key += "__" + method_type_suffix;
     }
-    std::string generated_key = "tml_" + mangled_type_name + "_" + method_name_for_key;
+    std::string generated_key = mangle_impl_method(mangled_type_name, method_name_for_key);
     std::string llvm_name = "@" + generated_key;
 
     // Prevent duplicate function generation - this can happen when the same method
@@ -813,20 +852,19 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             param_type = "{ ptr, ptr }";
         }
+        // For non-instance methods, the first param (e.g., ManuallyDrop::into_inner(slot))
+        // is passed as ptr from call sites (method syntax), so accept ptr in signature
+        if (i == param_start && !is_instance_method &&
+            (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+            param_type = "ptr";
+        }
         std::string param_name = get_param_name(method.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
     }
 
-    // DEBUG: trace final params for into_inner
-    // Function signature - only use suite prefix for test-local types
-    // Library types (from imported modules) don't use suite prefix since they're shared
-    std::string suite_prefix = "";
-    if (!is_library_type) {
-        // Test-local type - use suite prefix for isolation
-        suite_prefix = get_suite_prefix();
-    }
-    std::string func_llvm_name = "tml_" + suite_prefix + mangled_type_name + "_" + full_method_name;
+    // Function signature - use mangled name for both library and local types
+    std::string func_llvm_name = mangle_impl_method(mangled_type_name, full_method_name);
 
     // Register the function in functions_ so call sites can find it
     // This is crucial for suite mode where multiple test files may call this method
@@ -840,6 +878,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
         std::string pt = llvm_type_from_semantic(resolved_param);
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             pt = "{ ptr, ptr }";
+        }
+        // Match signature: non-instance first struct/enum param → ptr
+        if (i == param_start && !is_instance_method &&
+            (pt.find("%struct.") == 0 || pt.find("%enum.") == 0)) {
+            pt = "ptr";
         }
         param_types_vec.push_back(pt);
     }
@@ -914,10 +957,22 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             param_type = "{ ptr, ptr }";
         }
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + param_type);
-        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, resolved_param, std::nullopt};
+        // For non-instance methods, first struct/enum param arrives as ptr (from call site).
+        // Load the struct value from the ptr and store into a local alloca.
+        if (i == param_start && !is_instance_method &&
+            (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+            std::string alloca_reg = fresh_reg();
+            std::string loaded_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_type);
+            emit_line("  " + loaded_reg + " = load " + param_type + ", ptr %" + param_name);
+            emit_line("  store " + param_type + " " + loaded_reg + ", ptr " + alloca_reg);
+            locals_[param_name] = VarInfo{alloca_reg, param_type, resolved_param, std::nullopt};
+        } else {
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_type);
+            emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+            locals_[param_name] = VarInfo{alloca_reg, param_type, resolved_param, std::nullopt};
+        }
     }
 
     // Destructure tuple pattern parameters (generic method instantiation)

@@ -157,6 +157,14 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
 
     current_module_ = &module;
 
+    // Build struct declaration map for default field value injection
+    struct_decl_map_.clear();
+    for (const auto& decl : ast_module.decls) {
+        if (const auto* s = std::get_if<parser::StructDecl>(&decl->kind)) {
+            struct_decl_map_[s->name] = s;
+        }
+    }
+
     // Lower all declarations
     for (const auto& decl : ast_module.decls) {
         std::visit(
@@ -468,9 +476,12 @@ auto HirBuilder::lower_impl(const parser::ImplDecl& impl_decl) -> HirImpl {
     // Set the context for resolving 'This'/'Self' types in method parameters
     current_impl_self_type_ = hir_impl.self_type;
 
-    // Methods
+    // Methods - mangle names with type prefix to avoid collisions
+    // e.g., Button::draw -> Button__draw, matching CallInst resolution
     for (const auto& method : impl_decl.methods) {
         hir_impl.methods.push_back(lower_function(method));
+        auto& hir_method = hir_impl.methods.back();
+        hir_method.mangled_name = hir_impl.type_name + "__" + hir_method.name;
     }
 
     // Clear the context
@@ -800,6 +811,21 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
         types::TypePtr ret =
             func.return_type ? resolve_type(*func.return_type) : types::make_unit();
         return types::make_func(std::move(params), ret);
+    } else if (type.is<parser::ImplBehaviorType>()) {
+        const auto& impl_b = type.as<parser::ImplBehaviorType>();
+        std::string behavior_name;
+        if (!impl_b.behavior.segments.empty()) {
+            behavior_name = impl_b.behavior.segments.back();
+        }
+        std::vector<types::TypePtr> type_args;
+        if (impl_b.generics) {
+            for (const auto& arg : impl_b.generics->args) {
+                if (arg.is_type()) {
+                    type_args.push_back(resolve_type(*arg.as_type()));
+                }
+            }
+        }
+        return types::make_impl_behavior(behavior_name, std::move(type_args));
     }
 
     return types::make_unit();

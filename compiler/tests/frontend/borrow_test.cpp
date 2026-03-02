@@ -82,8 +82,7 @@ protected:
                     break;
                 }
             }
-            EXPECT_TRUE(has_suggestions)
-                << "At least one error should have suggestions";
+            EXPECT_TRUE(has_suggestions) << "At least one error should have suggestions";
         }
     }
 };
@@ -530,5 +529,6 @@ TEST_F(BorrowCheckerTest, AssignNotMutableHasSuggestions) {
             let x: I32 = 42
             x = 10  // Not mutable
         }
-    )", BorrowErrorCode::AssignNotMutable);
+    )",
+                                BorrowErrorCode::AssignNotMutable);
 }

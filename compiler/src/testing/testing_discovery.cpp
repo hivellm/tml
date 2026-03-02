@@ -3,7 +3,7 @@ TML_MODULE("test")
 //! # Independent Test Discovery
 //!
 //! Reimplements test file discovery and suite grouping from scratch,
-//! with zero dependency on cli/tester/. Part of the v3 independent test system.
+//! with zero dependency on the old test system. Part of the v3 independent test system.
 
 #include "testing/testing_discovery.hpp"
 
@@ -11,7 +11,6 @@ TML_MODULE("test")
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <map>
 
 namespace fs = std::filesystem;
@@ -21,25 +20,6 @@ namespace tml::testing {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/// Count @test directives in a TML source file.
-static int count_test_directives(const std::string& file_path) {
-    std::ifstream file(file_path);
-    if (!file.is_open())
-        return 1;
-
-    int count = 0;
-    std::string line;
-    while (std::getline(file, line)) {
-        auto pos = line.find_first_not_of(" \t");
-        if (pos == std::string::npos)
-            continue;
-        if (line.compare(pos, 5, "@test") == 0) {
-            count++;
-        }
-    }
-    return count > 0 ? count : 1;
-}
 
 /// Extract a module group from a file path.
 ///
@@ -172,7 +152,9 @@ std::vector<TestFileInfo> discover_tests(const std::string& root_dir) {
                         info.file_path = path_str;
                         info.test_name = extract_test_name(path);
                         info.group = extract_group(path);
-                        info.test_count = count_test_directives(path_str);
+                        // Defer counting @test directives — reading every file during
+                        // discovery is expensive. Set to 1; actual count happens at compile time.
+                        info.test_count = 1;
                         results.push_back(std::move(info));
                     }
                 }

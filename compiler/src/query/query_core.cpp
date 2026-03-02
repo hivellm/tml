@@ -549,7 +549,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
     };
 
     for (const auto& decl : parsed.module->decls) {
-        if (decl->is<parser::StructDecl>()) {
+        if (decl->is<parser::UnionDecl>()) {
+            // Unions are only supported in the AST codegen path (gen_union_decl).
+            // Force AST codegen by setting has_local_generics = true.
+            has_local_generics = true;
+            break;
+        } else if (decl->is<parser::StructDecl>()) {
             if (!decl->as<parser::StructDecl>().generics.empty()) {
                 has_local_generics = true;
                 break;
@@ -631,6 +636,10 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         } else if (!ctx.options().generate_exe_main) {
             codegen_opts.test_entry_name = "tml_test_entry";
         }
+        // Force internal linkage when compiling as part of a suite (same as AST path).
+        if (!ctx.options().generate_exe_main) {
+            codegen_opts.force_internal_linkage = true;
+        }
 #ifdef _WIN32
         codegen_opts.target_triple = "x86_64-pc-windows-msvc";
 #else
@@ -689,6 +698,11 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         if (!ctx.options().generate_exe_main) {
             llvm_gen_options.generate_dll_entry = true;
             llvm_gen_options.suite_test_index = ctx.options().test_entry_index;
+            // Force internal linkage when compiling as part of a suite.
+            // Multiple test files in the same suite each emit library function
+            // definitions; internal linkage prevents duplicate symbol errors
+            // at link time.
+            llvm_gen_options.force_internal_linkage = true;
         }
 
         codegen::LLVMIRGen llvm_gen(*tc.env, llvm_gen_options);

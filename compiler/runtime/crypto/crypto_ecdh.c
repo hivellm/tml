@@ -15,8 +15,6 @@
 
 #include "crypto_common.h"
 
-#ifdef TML_HAS_OPENSSL
-
 #include <openssl/obj_mac.h>
 
 // ============================================================================
@@ -132,8 +130,7 @@ static TmlBuffer* ecdh_derive_secret(EVP_PKEY* our_key, EVP_PKEY* peer_key) {
     }
 
     if (EVP_PKEY_derive(ctx, buf->data, &secret_len) <= 0) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         EVP_PKEY_CTX_free(ctx);
         return NULL;
     }
@@ -287,8 +284,7 @@ TML_EXPORT void* crypto_ecdh_get_public_key(void* handle, const char* format) {
         if (!buf)
             return NULL;
         if (EVP_PKEY_get_raw_public_key(ecdh->pkey, buf->data, &pub_len) != 1) {
-            free(buf->data);
-            free(buf);
+            mem_free(buf);
             return NULL;
         }
         buf->length = (int64_t)pub_len;
@@ -306,8 +302,7 @@ TML_EXPORT void* crypto_ecdh_get_public_key(void* handle, const char* format) {
         return NULL;
     if (EVP_PKEY_get_octet_string_param(ecdh->pkey, OSSL_PKEY_PARAM_PUB_KEY, buf->data, pub_len,
                                         &pub_len) != 1) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         return NULL;
     }
     buf->length = (int64_t)pub_len;
@@ -332,8 +327,7 @@ TML_EXPORT void* crypto_ecdh_get_private_key(void* handle) {
         if (!buf)
             return NULL;
         if (EVP_PKEY_get_raw_private_key(ecdh->pkey, buf->data, &priv_len) != 1) {
-            free(buf->data);
-            free(buf);
+            mem_free(buf);
             return NULL;
         }
         buf->length = (int64_t)priv_len;
@@ -574,8 +568,7 @@ TML_EXPORT void* crypto_ecdh_convert_key(void* key_handle, const char* curve, co
     }
 
     if (EC_POINT_point2oct(group, point, form, out->data, out_len, NULL) == 0) {
-        free(out->data);
-        free(out);
+        mem_free(out);
         EC_POINT_free(point);
         EC_GROUP_free(group);
         return NULL;
@@ -660,8 +653,7 @@ TML_EXPORT void* crypto_x25519_generate_private(void) {
     }
 
     if (EVP_PKEY_get_raw_private_key(pkey, buf->data, &priv_len) != 1) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         EVP_PKEY_free(pkey);
         return NULL;
     }
@@ -692,8 +684,7 @@ TML_EXPORT void* crypto_x25519_public_from_private(void* priv_handle) {
     }
 
     if (EVP_PKEY_get_raw_public_key(pkey, buf->data, &pub_len) != 1) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         EVP_PKEY_free(pkey);
         return NULL;
     }
@@ -720,8 +711,7 @@ TML_EXPORT void* crypto_x448_generate_private(void) {
     }
 
     if (EVP_PKEY_get_raw_private_key(pkey, buf->data, &priv_len) != 1) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         EVP_PKEY_free(pkey);
         return NULL;
     }
@@ -752,8 +742,7 @@ TML_EXPORT void* crypto_x448_public_from_private(void* priv_handle) {
     }
 
     if (EVP_PKEY_get_raw_public_key(pkey, buf->data, &pub_len) != 1) {
-        free(buf->data);
-        free(buf);
+        mem_free(buf);
         EVP_PKEY_free(pkey);
         return NULL;
     }
@@ -793,82 +782,3 @@ TML_EXPORT int32_t crypto_is_curve_supported(const char* curve_name) {
 
     return 0;
 }
-
-#else /* !TML_HAS_OPENSSL */
-
-// ============================================================================
-// Stubs when OpenSSL is not available
-// ============================================================================
-
-TML_EXPORT void* crypto_ecdh_create(const char* curve_name) {
-    (void)curve_name;
-    return NULL;
-}
-TML_EXPORT void crypto_ecdh_generate_keys(void* handle) {
-    (void)handle;
-}
-TML_EXPORT void* crypto_ecdh_get_public_key(void* handle, const char* format) {
-    (void)handle;
-    (void)format;
-    return NULL;
-}
-TML_EXPORT void* crypto_ecdh_get_private_key(void* handle) {
-    (void)handle;
-    return NULL;
-}
-TML_EXPORT int32_t crypto_ecdh_set_public_key(void* handle, void* key_handle) {
-    (void)handle;
-    (void)key_handle;
-    return 0;
-}
-TML_EXPORT int32_t crypto_ecdh_set_private_key(void* handle, void* key_handle) {
-    (void)handle;
-    (void)key_handle;
-    return 0;
-}
-TML_EXPORT void* crypto_ecdh_compute_secret(void* handle, void* other_public_handle) {
-    (void)handle;
-    (void)other_public_handle;
-    return NULL;
-}
-TML_EXPORT void crypto_ecdh_destroy(void* handle) {
-    (void)handle;
-}
-TML_EXPORT void* crypto_ecdh_convert_key(void* key_handle, const char* curve, const char* from_fmt,
-                                         const char* to_fmt) {
-    (void)key_handle;
-    (void)curve;
-    (void)from_fmt;
-    (void)to_fmt;
-    return NULL;
-}
-TML_EXPORT void* crypto_x25519(void* priv_handle, void* pub_handle) {
-    (void)priv_handle;
-    (void)pub_handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_x448(void* priv_handle, void* pub_handle) {
-    (void)priv_handle;
-    (void)pub_handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_x25519_generate_private(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_x25519_public_from_private(void* priv_handle) {
-    (void)priv_handle;
-    return NULL;
-}
-TML_EXPORT void* crypto_x448_generate_private(void) {
-    return NULL;
-}
-TML_EXPORT void* crypto_x448_public_from_private(void* priv_handle) {
-    (void)priv_handle;
-    return NULL;
-}
-TML_EXPORT int32_t crypto_is_curve_supported(const char* curve_name) {
-    (void)curve_name;
-    return 0;
-}
-
-#endif /* TML_HAS_OPENSSL */

@@ -1,0 +1,62 @@
+// Tests for std::http::status — 3xx redirection codes
+use test::{assert, assert_eq}
+use std::http::status::Status
+
+@test
+func test_3xx_redirect_codes() -> I32 {
+    assert_eq(Status::MULTIPLE_CHOICES().code(), 300 as I32, "MULTIPLE_CHOICES")
+    assert_eq(Status::MOVED_PERMANENTLY().code(), 301 as I32, "MOVED_PERMANENTLY")
+    assert_eq(Status::FOUND().code(), 302 as I32, "FOUND")
+    assert_eq(Status::SEE_OTHER().code(), 303 as I32, "SEE_OTHER")
+    assert_eq(Status::NOT_MODIFIED().code(), 304 as I32, "NOT_MODIFIED")
+    assert_eq(Status::USE_PROXY().code(), 305 as I32, "USE_PROXY")
+    assert_eq(Status::TEMPORARY_REDIRECT().code(), 307 as I32, "TEMPORARY_REDIRECT")
+    assert_eq(Status::PERMANENT_REDIRECT().code(), 308 as I32, "PERMANENT_REDIRECT")
+    return 0
+}
+
+@test
+func test_3xx_reasons() -> I32 {
+    assert_eq(Status::MULTIPLE_CHOICES().reason(), "Multiple Choices", "300 reason")
+    assert_eq(Status::MOVED_PERMANENTLY().reason(), "Moved Permanently", "301 reason")
+    assert_eq(Status::FOUND().reason(), "Found", "302 reason")
+    assert_eq(Status::SEE_OTHER().reason(), "See Other", "303 reason")
+    assert_eq(Status::NOT_MODIFIED().reason(), "Not Modified", "304 reason")
+    assert_eq(Status::USE_PROXY().reason(), "Use Proxy", "305 reason")
+    assert_eq(Status::TEMPORARY_REDIRECT().reason(), "Temporary Redirect", "307 reason")
+    assert_eq(Status::PERMANENT_REDIRECT().reason(), "Permanent Redirect", "308 reason")
+    return 0
+}
+
+@test
+func test_3xx_is_redirect() -> I32 {
+    assert(Status::MULTIPLE_CHOICES().is_redirect(), "300 redirect")
+    assert(Status::MOVED_PERMANENTLY().is_redirect(), "301 redirect")
+    assert(Status::FOUND().is_redirect(), "302 redirect")
+    assert(Status::SEE_OTHER().is_redirect(), "303 redirect")
+    assert(Status::NOT_MODIFIED().is_redirect(), "304 redirect")
+    assert(Status::USE_PROXY().is_redirect(), "305 redirect")
+    assert(Status::TEMPORARY_REDIRECT().is_redirect(), "307 redirect")
+    assert(Status::PERMANENT_REDIRECT().is_redirect(), "308 redirect")
+    return 0
+}
+
+@test
+func test_redirect_with_body() -> I32 {
+    assert(Status::TEMPORARY_REDIRECT().is_redirect_with_body(), "307 preserves body")
+    assert(Status::PERMANENT_REDIRECT().is_redirect_with_body(), "308 preserves body")
+    assert(not Status::MOVED_PERMANENTLY().is_redirect_with_body(), "301 no body")
+    assert(not Status::FOUND().is_redirect_with_body(), "302 no body")
+    assert(not Status::SEE_OTHER().is_redirect_with_body(), "303 no body")
+    return 0
+}
+
+@test
+func test_is_empty() -> I32 {
+    assert(Status::NO_CONTENT().is_empty(), "204 empty")
+    assert(Status::RESET_CONTENT().is_empty(), "205 empty")
+    assert(Status::NOT_MODIFIED().is_empty(), "304 empty")
+    assert(not Status::OK().is_empty(), "200 not empty")
+    assert(not Status::NOT_FOUND().is_empty(), "404 not empty")
+    return 0
+}

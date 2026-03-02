@@ -775,10 +775,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string crypto_extra_flags;
                 {
                     auto openssl = find_openssl();
+                    // Always pass -DTML_HAS_OPENSSL=1 - stubs have been removed
+                    crypto_extra_flags = "-DTML_HAS_OPENSSL=1";
                     if (openssl.found) {
-                        crypto_extra_flags = "-DTML_HAS_OPENSSL=1 -I\"" +
-                                             to_forward_slashes(openssl.include_dir.string()) +
-                                             "\"";
+                        crypto_extra_flags +=
+                            " -I\"" + to_forward_slashes(openssl.include_dir.string()) + "\"";
                     }
                 }
                 fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
@@ -1197,6 +1198,14 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 objects.push_back(fs::absolute(log_same_dir));
                 log_found = true;
             }
+            // Check lib/ subdirectory (CMake outputs to build/debug/lib/)
+            if (!log_found) {
+                auto log_lib_subdir = profiler_lib_dir / "lib" / log_lib_name;
+                if (fs::exists(log_lib_subdir)) {
+                    objects.push_back(fs::absolute(log_lib_subdir));
+                    log_found = true;
+                }
+            }
             // Search build cache directory (CMake puts libs in cache/*/Debug/)
             if (!log_found) {
                 auto cache_base = profiler_lib_dir.parent_path() / "cache";
@@ -1306,6 +1315,14 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 auto same_dir = search_lib_dir / search_core_name;
                 if (fs::exists(same_dir)) {
                     objects.push_back(fs::absolute(same_dir));
+                    core_found = true;
+                }
+            }
+            if (!core_found) {
+                // Check lib/ subdirectory (CMake outputs to build/debug/lib/)
+                auto lib_dir = search_lib_dir / "lib" / search_core_name;
+                if (fs::exists(lib_dir)) {
+                    objects.push_back(fs::absolute(lib_dir));
                     core_found = true;
                 }
             }

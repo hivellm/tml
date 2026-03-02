@@ -921,7 +921,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
             } else {
                 // All other primitives: call @tml_<Type>_<method>(<llvm_type> %val)
                 std::string type_name = types::primitive_kind_to_string(prim.kind);
-                std::string fn_name = "@tml_" + type_name + "_" + method;
+                std::string fn_name = "@" + mangle_impl_method(type_name, method);
                 inner_str = fresh_reg();
                 emit_line("  " + inner_str + " = call ptr " + fn_name + "(" + inner_llvm_type +
                           " " + just_val + ")");

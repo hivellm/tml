@@ -26,6 +26,15 @@ static std::string get_param_name(const parser::FuncParam& param, size_t param_i
     return "_anon";
 }
 
+// Check if a function has the @no_mangle decorator.
+static bool has_no_mangle(const parser::FuncDecl& func) {
+    for (const auto& dec : func.decorators) {
+        if (dec.name == "no_mangle")
+            return true;
+    }
+    return false;
+}
+
 void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
     // Skip generic functions - they are instantiated on demand
     if (!func.generics.empty()) {
@@ -70,25 +79,52 @@ void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
         param_types_vec.push_back(param_type);
     }
 
-    // Build function name with module prefix and suite prefix
-    std::string full_func_name = func.name;
-    if (!current_module_prefix_.empty()) {
-        full_func_name = current_module_prefix_ + "_" + func.name;
+    // @no_mangle: use the bare function name without any mangling or prefixes.
+    // The symbol is emitted exactly as written by the user.
+    bool no_mangle = has_no_mangle(func);
+    std::string full_func_name;
+    std::string suite_prefix;
+
+    if (no_mangle) {
+        full_func_name = func.name;
+        // No suite prefix, no tml_ prefix — bare name
+    } else {
+        // Resolve semantic parameter types for type-encoded mangling (Phase 3)
+        std::vector<types::TypePtr> semantic_params;
+        for (const auto& param : func.params) {
+            semantic_params.push_back(resolve_parser_type_with_subs(*param.type, {}));
+        }
+
+        // Build function name with module prefix, suite prefix, and type encoding.
+        // Phase 2: Hierarchical path encoding (N<len><seg>...E)
+        // Phase 3: Parameter type suffix (_<type codes>) for disambiguation
+        full_func_name = mangle_tml_symbol(current_module_name_, func.name, semantic_params);
+
+        // In suite mode, local functions (no module prefix) get a suite prefix
+        // to avoid collisions between test files compiled into the same DLL.
+        if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+            current_module_prefix_.empty()) {
+            suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+        }
     }
 
-    // In suite mode, local functions (no module prefix) get a suite prefix
-    // to avoid collisions between test files compiled into the same DLL.
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
-    // Register function in functions_ map
+    // Register function in functions_ map.
+    // @no_mangle functions use bare name without tml_ prefix.
+    std::string llvm_symbol =
+        no_mangle ? ("@" + full_func_name) : ("@tml_" + suite_prefix + full_func_name);
     std::string func_type = ret_type + " (" + param_types + ")";
-    FuncInfo func_info{"@tml_" + suite_prefix + full_func_name, func_type, ret_type,
-                       param_types_vec};
-    functions_[func.name] = func_info;
+    FuncInfo func_info{llvm_symbol, func_type, ret_type, param_types_vec};
+
+    // Only register the bare short name for local (non-module) functions.
+    // BUG FIX (mirrors gen_function_def_impl): multiple library modules can have
+    // functions with the same short name (e.g., core::str::repeat and
+    // core::iter::sources::repeat::repeat). Registering the bare name for library
+    // functions causes the last-registered one to win, corrupting call-site types
+    // in suite mode. Local functions (current_module_prefix_ empty) may still
+    // register the bare name so that forward references within the same file work.
+    if (current_module_prefix_.empty()) {
+        functions_[func.name] = func_info;
+    }
 
     // Also register semantic return type in func_return_types_ for infer_expr_type
     // This enables forward reference resolution (calling a function defined later in the file)
@@ -101,14 +137,9 @@ void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
 
     // Register with module-qualified name for cross-module calls
     if (!current_module_prefix_.empty()) {
-        // Convert prefix to :: format (core_unicode -> core::unicode)
-        std::string qualified_name = current_module_prefix_;
-        size_t pos = 0;
-        while ((pos = qualified_name.find("_", pos)) != std::string::npos) {
-            qualified_name.replace(pos, 1, "::");
-            pos += 2;
-        }
-        qualified_name += "::" + func.name;
+        // Use current_module_name_ (:: separated) directly — avoids the ambiguous
+        // underscore-to-double-colon conversion that broke modules with _ in their names.
+        std::string qualified_name = current_module_name_ + "::" + func.name;
         functions_[qualified_name] = func_info;
 
         // Also register with short key (e.g., "unicode::is_alphabetic")
@@ -131,9 +162,20 @@ void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
 }
 
 void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
+    // @no_mangle + generics is an error: generic functions produce multiple
+    // instantiations and cannot have a single stable symbol name.
+    if (has_no_mangle(func) && !func.generics.empty()) {
+        report_error("@no_mangle cannot be used with generic functions", func.span);
+        return;
+    }
+
     // Defer generic functions - they will be instantiated when called
     if (!func.generics.empty()) {
         pending_generic_funcs_[func.name] = &func;
+        // Track module origin for hierarchical mangling of instantiations (Phase 4)
+        if (!current_module_name_.empty()) {
+            generic_func_modules_[func.name] = current_module_name_;
+        }
         return;
     }
 
@@ -432,25 +474,38 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     current_ret_type_ = ret_type;
     current_func_is_async_ = func.is_async;
 
-    // Build function name with module prefix if generating code for an imported module
-    std::string full_func_name = func.name;
-    if (!current_module_prefix_.empty()) {
-        full_func_name = current_module_prefix_ + "_" + func.name;
-    }
+    // @no_mangle: use the bare function name without any mangling or prefixes.
+    bool no_mangle = has_no_mangle(func);
+    std::string full_func_name;
+    std::string suite_prefix;
 
-    // In suite mode, add unique prefix to avoid symbol collisions when linking multiple
-    // test files into a single DLL. Each test file gets a unique suite_test_index.
-    // IMPORTANT: Only add prefix to test-local functions (not library/imported module functions)
-    // Library functions (those with current_module_prefix_) should NOT have suite prefix
-    // because they're shared across all tests in the suite.
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    if (no_mangle) {
+        full_func_name = func.name;
+    } else {
+        // Resolve semantic parameter types for type-encoded mangling (Phase 3)
+        std::vector<types::TypePtr> semantic_params;
+        for (const auto& param : func.params) {
+            semantic_params.push_back(resolve_parser_type_with_subs(*param.type, {}));
+        }
+
+        // Build function name using hierarchical mangling + type encoding for library functions.
+        // For local (non-module) functions, mangle_tml_symbol returns the bare name unchanged.
+        full_func_name = mangle_tml_symbol(current_module_name_, func.name, semantic_params);
+
+        // In suite mode, add unique prefix to avoid symbol collisions when linking multiple
+        // test files into a single DLL. Each test file gets a unique suite_test_index.
+        // IMPORTANT: Only add prefix to test-local functions (not library/imported module
+        // functions) Library functions (those with current_module_prefix_) should NOT have suite
+        // prefix because they're shared across all tests in the suite.
+        if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+            current_module_prefix_.empty()) {
+            suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+        }
     }
 
     // Skip if this function was already generated (handles duplicates in directory modules)
-    std::string llvm_name = "@tml_" + suite_prefix + full_func_name;
+    std::string llvm_name =
+        no_mangle ? ("@" + full_func_name) : ("@tml_" + suite_prefix + full_func_name);
     if (generated_functions_.count(llvm_name)) {
         // Warn if a file-level function collides with a module-imported function.
         // This can happen when e.g. test function "test_assert_str_empty" collides with
@@ -468,8 +523,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Register function for first-class function support
     // The registration key uses the original name for lookups within this test file
     std::string func_type = ret_type + " (" + param_types + ")";
-    FuncInfo func_info{"@tml_" + suite_prefix + full_func_name, func_type, ret_type,
-                       param_types_vec};
+    FuncInfo func_info{llvm_name, func_type, ret_type, param_types_vec};
 
     // Only register the bare short name for local (non-module) functions.
     // For library modules, the short name would shadow local functions with
@@ -482,18 +536,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         functions_[func.name] = func_info;
     }
 
-    // Also register with module-qualified name for cross-module calls
-    // When module A calls module B's function, the lookup uses "B::func" or "B_func"
+    // Also register with module-qualified name for cross-module calls.
+    // Use current_module_name_ (:: separated) directly — avoids ambiguous _ → :: hack.
     if (!current_module_prefix_.empty()) {
-        // Register with :: separator (e.g., "core::unicode::is_grapheme_extend_nonascii")
-        std::string qualified_name = current_module_prefix_;
-        // Replace _ back to :: for the lookup key
-        size_t pos = 0;
-        while ((pos = qualified_name.find("_", pos)) != std::string::npos) {
-            qualified_name.replace(pos, 1, "::");
-            pos += 2;
-        }
-        qualified_name += "::" + func.name;
+        std::string qualified_name = current_module_name_ + "::" + func.name;
         functions_[qualified_name] = func_info;
 
         // Also register with just the last segment of module path
@@ -521,9 +567,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     }
 
     // Function signature with optimization attributes
-    // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
-    // In suite mode, add unique prefix to avoid symbol collisions
-    std::string func_llvm_name = "tml_" + suite_prefix + full_func_name;
+    // @no_mangle: bare name, always external linkage
+    // Normal: tml_ prefix + suite prefix + mangled name
+    std::string func_llvm_name =
+        no_mangle ? full_func_name : ("tml_" + suite_prefix + full_func_name);
     // Public functions, main, and @should_panic tests get external linkage
     // @should_panic tests need external linkage because they're called via function pointer
     bool has_should_panic = false;
@@ -539,8 +586,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Only @should_panic tests need external linkage (called via function pointer).
     // In library_ir_only mode, all functions need external linkage so they can be
     // linked from test objects that only have `declare` stubs.
+    // @no_mangle always gets external linkage — the whole point is FFI visibility.
     std::string linkage =
-        (options_.library_ir_only || (!options_.force_internal_linkage && func.name == "main") ||
+        (no_mangle || options_.library_ir_only ||
+         (!options_.force_internal_linkage && func.name == "main") ||
          (func.vis == parser::Visibility::Public && !options_.force_internal_linkage) ||
          has_should_panic)
             ? ""
@@ -563,8 +612,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // actually referenced. This applies to BOTH library_decls_only and full modes.
     if (options_.lazy_library_defs && !options_.library_ir_only &&
         !current_module_prefix_.empty()) {
-        pending_library_funcs_["@" + func_llvm_name] = {&func, current_module_prefix_,
-                                                        current_submodule_name_};
+        pending_library_funcs_["@" + func_llvm_name] = {
+            &func, current_module_prefix_, current_module_name_, current_submodule_name_};
         current_func_.clear();
         return;
     }
@@ -593,6 +642,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         dbg_attr = " !dbg !" + std::to_string(func_scope_id);
     }
 
+    // Emit TML source name comment for IR readability
+    if (!current_module_name_.empty()) {
+        emit_line("; " + current_module_name_ + "::" + func.name);
+    }
     emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params +
               ")" + attrs + dbg_attr + " {");
     emit_line("entry:");

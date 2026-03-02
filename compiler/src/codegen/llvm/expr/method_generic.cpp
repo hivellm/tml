@@ -169,11 +169,18 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                             }
 
                             if (func_sig) {
-                                // Generate the call to the concrete impl method
-                                // Only use suite prefix for test-local methods, not library methods
-                                std::string prefix = is_lib_type ? "" : get_suite_prefix();
-                                std::string fn_name =
-                                    "@tml_" + prefix + concrete_type_name + "_" + method;
+                                // Generate the call to the concrete impl method.
+                                // Look up in functions_ first to get the correct LLVM name,
+                                // which may include a suite prefix (e.g., s0_CountUp_next)
+                                // that get_suite_prefix() doesn't return in library context.
+                                std::string fn_name;
+                                std::string method_lookup = concrete_type_name + "_" + method;
+                                auto fn_it = functions_.find(method_lookup);
+                                if (fn_it != functions_.end()) {
+                                    fn_name = fn_it->second.llvm_name;
+                                } else {
+                                    fn_name = "@" + mangle_impl_method(concrete_type_name, method);
+                                }
 
                                 // Build arguments
                                 std::vector<std::pair<std::string, std::string>> typed_args;
@@ -228,6 +235,21 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                                                 types::substitute_type(param_type, behavior_subs);
                                         }
                                         arg_type = llvm_type_from_semantic(param_type);
+                                    }
+                                    // struct/enum → ptr ABI fix (see impl.cpp:282)
+                                    // i+1 because typed_args[0] is 'this'
+                                    if (fn_it != functions_.end() &&
+                                        (i + 1) < fn_it->second.param_types.size()) {
+                                        const auto& expected = fn_it->second.param_types[i + 1];
+                                        if (expected == "ptr" && (arg_type.find("%struct.") == 0 ||
+                                                                  arg_type.find("%enum.") == 0)) {
+                                            std::string temp = fresh_reg();
+                                            emit_line("  " + temp + " = alloca " + arg_type);
+                                            emit_line("  store " + arg_type + " " + val + ", ptr " +
+                                                      temp);
+                                            val = temp;
+                                            arg_type = "ptr";
+                                        }
                                     }
                                     typed_args.push_back({arg_type, val});
                                 }
@@ -327,9 +349,15 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                 TML_DEBUG_LN("[METHOD 4b] func_sig found: " << (func_sig ? "yes" : "no"));
 
                 if (func_sig) {
-                    // Only use suite prefix for test-local functions, not library methods
-                    std::string prefix = is_from_library ? "" : get_suite_prefix();
-                    std::string fn_name = "@tml_" + prefix + concrete_type_name + "_" + method;
+                    // Look up in functions_ first for correct LLVM name (suite prefix).
+                    std::string fn_name;
+                    std::string method_lookup2 = concrete_type_name + "_" + method;
+                    auto fn_it2 = functions_.find(method_lookup2);
+                    if (fn_it2 != functions_.end()) {
+                        fn_name = fn_it2->second.llvm_name;
+                    } else {
+                        fn_name = "@" + mangle_impl_method(concrete_type_name, method);
+                    }
 
                     std::vector<std::pair<std::string, std::string>> typed_args;
                     std::string this_val = receiver;
@@ -382,6 +410,20 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                         std::string arg_type = "i32";
                         if (i + 1 < func_sig->params.size()) {
                             arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                        }
+                        // struct/enum → ptr ABI fix (see impl.cpp:282)
+                        // i+1 because typed_args[0] is 'this'
+                        if (fn_it2 != functions_.end() &&
+                            (i + 1) < fn_it2->second.param_types.size()) {
+                            const auto& expected = fn_it2->second.param_types[i + 1];
+                            if (expected == "ptr" &&
+                                (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
+                                std::string temp = fresh_reg();
+                                emit_line("  " + temp + " = alloca " + arg_type);
+                                emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                                val = temp;
+                                arg_type = "ptr";
+                            }
                         }
                         typed_args.push_back({arg_type, val});
                     }

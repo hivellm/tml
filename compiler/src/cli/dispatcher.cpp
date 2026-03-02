@@ -24,6 +24,7 @@ TML_MODULE("compiler")
 //!   ├─ cache          → run_cache()
 //!   ├─ build-all      → run_parallel_build()
 //!   ├─ mcp            → cmd_mcp()
+//!   ├─ demangle       → run_demangle()
 //!   └─ add/update/rm  → package management
 //! ```
 //!
@@ -58,7 +59,6 @@ TML_MODULE("compiler")
 #include "commands/cmd_pkg.hpp"
 #include "commands/cmd_rlib.hpp"
 #include "commands/cmd_test.hpp"
-#include "commands/cmd_test_v2.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
 #include "utils.hpp"
@@ -120,7 +120,7 @@ int tml_main(int argc, char* argv[]) {
     }
 
     // For test commands: suppress metadata module logging unless explicitly verbose
-    if ((command == "test" || command == "test-v2") && !verbose && log_config.filter_spec.empty()) {
+    if (command == "test" && !verbose && log_config.filter_spec.empty()) {
         log_config.filter_spec = "meta=off";
     }
 
@@ -568,10 +568,6 @@ int tml_main(int argc, char* argv[]) {
         return run_test(argc, argv, verbose);
     }
 
-    if (command == "test-v2") {
-        return run_test_v2(argc, argv, verbose);
-    }
-
     if (command == "cache") {
         return run_cache(argc, argv);
     }
@@ -629,6 +625,68 @@ int tml_main(int argc, char* argv[]) {
             args.push_back(argv[i]);
         }
         return cmd_mcp(args);
+    }
+
+    if (command == "demangle") {
+        if (argc < 3) {
+            std::cerr << "Usage: tml demangle <symbol>\n";
+            std::cerr << "Example: tml demangle N4core3str3lenE_S\n";
+            return 1;
+        }
+        std::string symbol = argv[2];
+        // Strip @tml_ prefix if present
+        if (symbol.starts_with("@tml_"))
+            symbol = symbol.substr(5);
+        else if (symbol.starts_with("tml_"))
+            symbol = symbol.substr(4);
+        else if (symbol.starts_with("@"))
+            symbol = symbol.substr(1);
+
+        // Decode N...E hierarchical path
+        if (symbol.starts_with("N")) {
+            std::string result;
+            size_t pos = 1; // skip 'N'
+            bool first = true;
+            while (pos < symbol.size() && symbol[pos] != 'E') {
+                // Read length
+                size_t len_start = pos;
+                while (pos < symbol.size() && std::isdigit(static_cast<unsigned char>(symbol[pos])))
+                    pos++;
+                if (pos == len_start)
+                    break; // no digits found
+                size_t seg_len = std::stoul(symbol.substr(len_start, pos - len_start));
+                if (pos + seg_len > symbol.size())
+                    break;
+                if (!first)
+                    result += "::";
+                result += symbol.substr(pos, seg_len);
+                pos += seg_len;
+                first = false;
+            }
+            // Skip 'E'
+            if (pos < symbol.size() && symbol[pos] == 'E')
+                pos++;
+            // Append type suffix if present
+            if (pos < symbol.size()) {
+                result += " [suffix: " + symbol.substr(pos) + "]";
+            }
+            std::cout << result << "\n";
+        } else {
+            // Not mangled (local function or @no_mangle)
+            // Strip generic hash suffix if present
+            auto hash_pos = symbol.rfind("_h");
+            auto dunder = symbol.find("__");
+            if (dunder != std::string::npos) {
+                std::string name = symbol.substr(0, dunder);
+                std::string type_args = symbol.substr(dunder + 2);
+                if (hash_pos != std::string::npos && hash_pos > dunder)
+                    type_args = type_args.substr(0, hash_pos - dunder - 2);
+                std::cout << name << "[" << type_args << "]\n";
+            } else {
+                std::cout << symbol << "\n";
+            }
+        }
+        return 0;
     }
 
     TML_LOG_ERROR("cli",

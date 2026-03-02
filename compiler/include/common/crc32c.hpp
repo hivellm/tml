@@ -63,8 +63,7 @@ inline constexpr uint32_t CRC32C_TABLE[256] = {
     0xE310539E, 0x117BD09D, 0x022B2369, 0xF040A06A, 0x248AC481, 0xD6E14782, 0xC5B1B476, 0x37DA3775,
     0x69C90B51, 0x9BA28852, 0x88F27BA6, 0x7A99F8A5, 0xAE539C4E, 0x5C381F4D, 0x4F68ECB9, 0xBD036FBA,
     0xF34E94F1, 0x012517F2, 0x1275E406, 0xE01E6705, 0x34D403EE, 0xC6BF80ED, 0xD5EF7319, 0x2784F01A,
-    0x7997CC3E, 0x8BFC4F3D, 0x98ACBCC9, 0x6AC73FCA, 0xBE0D5B21, 0x4C66D822, 0x5F362BD6, 0xAD5DA8D5
-};
+    0x7997CC3E, 0x8BFC4F3D, 0x98ACBCC9, 0x6AC73FCA, 0xBE0D5B21, 0x4C66D822, 0x5F362BD6, 0xAD5DA8D5};
 
 // ============================================================================
 // CRC32C Functions
@@ -109,7 +108,8 @@ inline constexpr uint32_t CRC32C_TABLE[256] = {
 [[nodiscard]] inline std::string crc32c_hex(const void* data, size_t len) {
     uint32_t hash = crc32c(data, len);
     // Combine hash with size for reduced collision probability
-    uint64_t combined = (static_cast<uint64_t>(hash) << 32) | static_cast<uint64_t>(len & 0xFFFFFFFF);
+    uint64_t combined =
+        (static_cast<uint64_t>(hash) << 32) | static_cast<uint64_t>(len & 0xFFFFFFFF);
 
     char hex[17];
     static constexpr char HEX_CHARS[] = "0123456789abcdef";

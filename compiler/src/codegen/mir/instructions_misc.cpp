@@ -82,6 +82,16 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
             } else if (src_type == "double" && tgt_type == "float") {
                 cast_name = "fptrunc";
             }
+        } else if (src_is_int && tgt_is_int && src_type != tgt_type) {
+            // Safety net: auto-correct int-to-int casts based on width
+            int src_bits = std::stoi(src_type.substr(1));
+            int tgt_bits = std::stoi(tgt_type.substr(1));
+            if (tgt_bits < src_bits) {
+                cast_name = "trunc";
+            } else if (tgt_bits > src_bits) {
+                // Default to zext; sext would need signed info from MIR
+                cast_name = (i.kind == mir::CastKind::SExt) ? "sext" : "zext";
+            }
         }
 
         emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " + operand + " to " +
@@ -111,14 +121,25 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
             }
             std::string val = get_value_reg(i.incoming[j].first);
             uint32_t block_id = i.incoming[j].second;
-            auto label_it = block_labels_.find(block_id);
+            // Use the exit label for the predecessor block. Bounds check injection
+            // can split a MIR block into multiple LLVM blocks (e.g., if.then1 ->
+            // bc.panic.N + bc.ok.N). The phi must reference the actual LLVM block
+            // that branches to this merge point (bc.ok.N), not the original entry
+            // label (if.then1).
             std::string label;
-            if (label_it != block_labels_.end()) {
-                label = label_it->second;
+            auto exit_it = block_exit_labels_.find(block_id);
+            if (exit_it != block_exit_labels_.end()) {
+                label = exit_it->second;
             } else {
-                label = "MISSING_BLOCK_" + std::to_string(block_id);
-                TML_LOG_WARN("codegen", "[CODEGEN] PHI references block "
-                                            << block_id << " which is not in block_labels_");
+                // Fall back to entry label
+                auto label_it = block_labels_.find(block_id);
+                if (label_it != block_labels_.end()) {
+                    label = label_it->second;
+                } else {
+                    label = "MISSING_BLOCK_" + std::to_string(block_id);
+                    TML_LOG_WARN("codegen", "[CODEGEN] PHI references block "
+                                                << block_id << " which is not in block_labels_");
+                }
             }
             emit("[ " + val + ", %" + label + " ]");
         }
@@ -350,6 +371,18 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
             elem_ptr = mir::make_i32_type();
         }
         std::string elem_type = mir_type_to_llvm(elem_ptr);
+
+        // If this element is an array type that was spilled to an alloca for
+        // mutation (e.g., var arr: [U8; 4] with subsequent arr[i] = x), reload
+        // from the spill alloca so the mutations are included in the tuple.
+        if (!elem_type.empty() && elem_type[0] == '[') {
+            auto spill_it = value_spill_allocas_.find(i.elements[j].id);
+            if (spill_it != value_spill_allocas_.end()) {
+                std::string reloaded = "%reload" + std::to_string(temp_counter_++);
+                emitln("    " + reloaded + " = load " + elem_type + ", ptr " + spill_it->second);
+                elem_val = reloaded;
+            }
+        }
 
         std::string elem_ptr_reg = "%gep" + std::to_string(temp_counter_++);
         emitln("    " + elem_ptr_reg + " = getelementptr inbounds " + tuple_type + ", ptr " +

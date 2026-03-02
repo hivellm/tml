@@ -1,0 +1,15 @@
+func arr_loop() -> I32 {
+    let arr: [I32; 100] = [0; 100]
+    var i: I32 = 0
+    var sum: I32 = 0
+    loop (i < 100) {
+        sum = sum + arr[i]
+        i = i + 1
+    }
+    return sum
+}
+
+@test
+func test_arr_loop2() {
+    assert_eq(arr_loop(), 0)
+}

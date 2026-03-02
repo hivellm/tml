@@ -33,6 +33,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
                                     : method == "checked_sub" ? "CheckedSub"
                                                               : "CheckedMul";
         emit_coverage(behavior_name + "::" + method);
+        emit_coverage(types::primitive_kind_to_string(kind) + "::" + method);
         if (call.args.empty()) {
             report_error(method + "() requires an argument", call.span, "C015");
             return "0";
@@ -117,6 +118,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
 
     if (method == "checked_div" && is_integer) {
         emit_coverage("CheckedDiv::checked_div");
+        emit_coverage(types::primitive_kind_to_string(kind) + "::checked_div");
         if (call.args.empty()) {
             report_error("checked_div() requires an argument", call.span, "C015");
             return "0";
@@ -186,6 +188,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
 
     if (method == "checked_rem" && is_integer) {
         emit_coverage("CheckedRem::checked_rem");
+        emit_coverage(types::primitive_kind_to_string(kind) + "::checked_rem");
         if (call.args.empty()) {
             report_error("checked_rem() requires an argument", call.span, "C015");
             return "0";
@@ -250,6 +253,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
 
     if (method == "checked_neg" && is_integer) {
         emit_coverage("CheckedNeg::checked_neg");
+        emit_coverage(types::primitive_kind_to_string(kind) + "::checked_neg");
         // For signed: overflow only when value == MIN
         // For unsigned: overflow unless value == 0
         std::vector<types::TypePtr> maybe_type_args = {inner_type};
@@ -335,6 +339,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
     // hash() -> I64
     if (method == "hash") {
         emit_coverage("Hash::hash");
+        emit_coverage(types::primitive_kind_to_string(kind) + "::hash");
         std::string result = fresh_reg();
         if (kind == types::PrimitiveKind::Bool) {
             emit_line("  " + result + " = zext i1 " + receiver + " to i64");
@@ -492,6 +497,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
     // checked_shl / checked_shr: check if shift amount >= bit width
     if (is_integer && (method == "checked_shl" || method == "checked_shr")) {
         emit_coverage("overflow::" + method);
+        emit_coverage(types::primitive_kind_to_string(kind) + "::" + method);
 
         if (call.args.empty()) {
             report_error(method + "() requires one argument", call.span, "C015");
@@ -609,11 +615,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         } else {
             // Library functions have no suite prefix; local functions use suite prefix.
             // Primitive type impl methods (Str, Char, etc.) are always from the library,
-            // so we skip the suite prefix for them regardless of how they were found.
-            bool is_library_primitive = is_imported || kind == types::PrimitiveKind::Str ||
-                                        kind == types::PrimitiveKind::Char;
-            std::string prefix = is_library_primitive ? "" : get_suite_prefix();
-            fn_name = "@tml_" + prefix + type_name + "_" + method;
+            fn_name = "@" + mangle_impl_method(type_name, method);
         }
 
         // Check if method has 'mut this' - indicated by first param being a mut ref
@@ -650,6 +652,18 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
             std::string arg_type = "i32"; // default fallback
             if (i + 1 < func_sig->params.size()) {
                 arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+            }
+            // struct/enum → ptr ABI fix (see impl.cpp:282)
+            if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+                const auto& expected = method_it->second.param_types[i + 1];
+                if (expected == "ptr" &&
+                    (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
+                    std::string temp = fresh_reg();
+                    emit_line("  " + temp + " = alloca " + arg_type);
+                    emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                    val = temp;
+                    arg_type = "ptr";
+                }
             }
             typed_args.push_back({arg_type, val});
         }

@@ -273,6 +273,41 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
+    // ============ TypeId::of[T]() INLINE EXPANSION ============
+    // TypeId::of[T]() wraps the type_id[T]() intrinsic. Since the generic function
+    // cannot be monomorphized by the lazy library system, inline it here: compute
+    // the FNV-1a hash of the type name and construct a TypeId struct directly.
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& pe = call.callee->as<parser::PathExpr>();
+        if (pe.path.segments.size() == 2 && pe.path.segments[0] == "TypeId" &&
+            pe.path.segments[1] == "of" && pe.generics.has_value() && !pe.generics->args.empty()) {
+            // Extract type argument (e.g., I32 from TypeId::of[I32]())
+            std::string type_name_for_hash = "unknown";
+            const auto& first_arg = pe.generics->args[0];
+            if (first_arg.is_type()) {
+                std::unordered_map<std::string, types::TypePtr> empty_subs;
+                types::TypePtr type_arg =
+                    resolve_parser_type_with_subs(*first_arg.as_type(), empty_subs);
+                type_name_for_hash = mangle_type(type_arg);
+            }
+            // FNV-1a hash (same as type_id intrinsic in intrinsics.cpp)
+            uint64_t hash = 14695981039346656037ULL;
+            for (char c : type_name_for_hash) {
+                hash ^= static_cast<uint64_t>(c);
+                hash *= 1099511628211ULL;
+            }
+            // Construct TypeId { id: hash } inline
+            // TypeId is defined as struct { id: I64 } → %struct.TypeId = type { i64 }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = insertvalue %struct.TypeId zeroinitializer, i64 " +
+                      std::to_string(hash) + ", 0");
+            // Track coverage for the of function
+            emit_coverage("TypeId::of");
+            last_expr_type_ = "%struct.TypeId";
+            return result;
+        }
+    }
+
     // ============ PRIMITIVE TYPE STATIC METHODS ============
     // Handle Type::default() calls for primitive types
     if (call.callee->is<parser::PathExpr>()) {
@@ -1840,7 +1875,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         } else {
                             // Last resort: generate name with parameter type suffixes
                             // (must match gen_class_constructor_instantiation naming)
-                            ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
+                            std::string method_name = "new";
                             if (!arg_types.empty()) {
                                 for (const auto& at : arg_types) {
                                     std::string type_suffix = at;
@@ -1863,7 +1898,32 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                     else if (type_suffix.find("ptr") != std::string::npos ||
                                              type_suffix.find("%") != std::string::npos)
                                         type_suffix = "ptr";
-                                    ctor_name += "_" + type_suffix;
+                                    method_name += "_" + type_suffix;
+                                }
+                            }
+                            ctor_name = "@" + mangle_impl_method(class_name, method_name);
+                        }
+                    }
+
+                    // struct/enum → ptr ABI fix for constructor args (see impl.cpp:282)
+                    // Definition side converts first non-self struct/enum param to ptr.
+                    // Look up the registered function info to get expected param types.
+                    {
+                        auto abi_it = functions_.find(ctor_key);
+                        if (abi_it == functions_.end())
+                            abi_it = functions_.find(class_name + "_new");
+                        if (abi_it != functions_.end()) {
+                            const auto& expected_params = abi_it->second.param_types;
+                            for (size_t i = 0; i < args.size() && i < expected_params.size(); ++i) {
+                                if (expected_params[i] == "ptr" &&
+                                    (arg_types[i].find("%struct.") == 0 ||
+                                     arg_types[i].find("%enum.") == 0)) {
+                                    std::string tmp = fresh_reg();
+                                    emit_line("  " + tmp + " = alloca " + arg_types[i]);
+                                    emit_line("  store " + arg_types[i] + " " + args[i] + ", ptr " +
+                                              tmp);
+                                    args[i] = tmp;
+                                    arg_types[i] = "ptr";
                                 }
                             }
                         }
@@ -1929,7 +1989,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                 // Generate mangled function name
                 std::string mangled_func =
-                    "@tml_" + get_suite_prefix() + class_name + "_" + method_name + type_suffix;
+                    "@" + mangle_impl_method(class_name, method_name + type_suffix);
 
                 // Queue the instantiation for later (after current function)
                 if (generated_functions_.find(mangled_func) == generated_functions_.end()) {

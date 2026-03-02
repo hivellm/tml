@@ -40,7 +40,7 @@
 //! ```
 
 use core::intrinsics::{ptr_read, ptr_write}
-use std::events::emitter::EventEmitter
+use std::events::EventEmitter
 
 // ============================================================================
 // Memory helpers

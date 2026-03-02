@@ -193,11 +193,38 @@ if "%ENABLE_CRANELIFT_BACKEND%"=="ON" (
 set "CMAKE_BUILD_TYPE=Debug"
 if /i "%BUILD_TYPE%"=="release" set "CMAKE_BUILD_TYPE=Release"
 
+:: Detect Ninja for faster builds (requires cl.exe in PATH — run from Developer Prompt)
+set "CMAKE_GENERATOR_ARGS="
+set "USE_NINJA=0"
+where ninja.exe >nul 2>&1
+if %errorlevel%==0 (
+    where cl.exe >nul 2>&1
+    if !errorlevel!==0 (
+        set "USE_NINJA=1"
+    ) else (
+        :: Try to initialize MSVC environment automatically
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+            if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" (
+                call "%%i\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+                where cl.exe >nul 2>&1
+                if !errorlevel!==0 set "USE_NINJA=1"
+            )
+        )
+    )
+)
+if "!USE_NINJA!"=="1" (
+    echo Generator:   Ninja ^(fast^)
+    set "CMAKE_GENERATOR_ARGS=-G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
+) else (
+    echo Generator:   MSBuild ^(default^)
+)
+
 :: Configure CMake
 echo Configuring CMake...
 cd /d "%CACHE_DIR%"
 
 cmake "%ROOT_DIR%\compiler" ^
+    %CMAKE_GENERATOR_ARGS% ^
     -DTML_BUILD_TOKEN=tml_script_build_2026 ^
     -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^

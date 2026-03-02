@@ -759,7 +759,8 @@ protected:
     // Helper to check if an expression is a literal with specific value
     template <typename T>
     auto is_literal_with_value(const tml::hir::HirExpr& expr, T expected) -> bool {
-        if (!expr.is<tml::hir::HirLiteralExpr>()) return false;
+        if (!expr.is<tml::hir::HirLiteralExpr>())
+            return false;
         const auto& lit = expr.as<tml::hir::HirLiteralExpr>();
         if (auto* val = std::get_if<T>(&lit.value)) {
             return *val == expected;
@@ -1201,6 +1202,7 @@ TEST_F(HirOptimizationTest, MultipleOptimizationRounds) {
 // ============================================================================
 
 #include "hir/hir_serialize.hpp"
+
 #include <sstream>
 
 class HirSerializationTest : public HirTest {};
