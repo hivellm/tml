@@ -860,8 +860,9 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
     bool is_full_suite = (path_param == nullptr || !path_param->is_string()) &&
                          (suite_param == nullptr || !suite_param->is_string()) &&
                          (filter_param == nullptr || !filter_param->is_string());
-    int test_timeout = (cov_check && cov_check->is_bool() && cov_check->as_bool()) ? 600 :
-                       is_full_suite ? 600 : 300;
+    int test_timeout = (cov_check && cov_check->is_bool() && cov_check->as_bool()) ? 600
+                       : is_full_suite                                             ? 600
+                                                                                   : 300;
     auto [output, exit_code] = execute_command(cmd.str(), test_timeout);
 
     // Check if structured output requested

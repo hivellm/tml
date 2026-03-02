@@ -635,9 +635,12 @@ int tml_main(int argc, char* argv[]) {
         }
         std::string symbol = argv[2];
         // Strip @tml_ prefix if present
-        if (symbol.starts_with("@tml_")) symbol = symbol.substr(5);
-        else if (symbol.starts_with("tml_")) symbol = symbol.substr(4);
-        else if (symbol.starts_with("@")) symbol = symbol.substr(1);
+        if (symbol.starts_with("@tml_"))
+            symbol = symbol.substr(5);
+        else if (symbol.starts_with("tml_"))
+            symbol = symbol.substr(4);
+        else if (symbol.starts_with("@"))
+            symbol = symbol.substr(1);
 
         // Decode N...E hierarchical path
         if (symbol.starts_with("N")) {
@@ -649,16 +652,20 @@ int tml_main(int argc, char* argv[]) {
                 size_t len_start = pos;
                 while (pos < symbol.size() && std::isdigit(static_cast<unsigned char>(symbol[pos])))
                     pos++;
-                if (pos == len_start) break; // no digits found
+                if (pos == len_start)
+                    break; // no digits found
                 size_t seg_len = std::stoul(symbol.substr(len_start, pos - len_start));
-                if (pos + seg_len > symbol.size()) break;
-                if (!first) result += "::";
+                if (pos + seg_len > symbol.size())
+                    break;
+                if (!first)
+                    result += "::";
                 result += symbol.substr(pos, seg_len);
                 pos += seg_len;
                 first = false;
             }
             // Skip 'E'
-            if (pos < symbol.size() && symbol[pos] == 'E') pos++;
+            if (pos < symbol.size() && symbol[pos] == 'E')
+                pos++;
             // Append type suffix if present
             if (pos < symbol.size()) {
                 result += " [suffix: " + symbol.substr(pos) + "]";

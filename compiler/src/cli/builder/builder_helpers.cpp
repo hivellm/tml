@@ -778,9 +778,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                     // Always pass -DTML_HAS_OPENSSL=1 - stubs have been removed
                     crypto_extra_flags = "-DTML_HAS_OPENSSL=1";
                     if (openssl.found) {
-                        crypto_extra_flags += " -I\"" +
-                                              to_forward_slashes(openssl.include_dir.string()) +
-                                              "\"";
+                        crypto_extra_flags +=
+                            " -I\"" + to_forward_slashes(openssl.include_dir.string()) + "\"";
                     }
                 }
                 fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
