@@ -218,11 +218,11 @@ auto MemoryLeakCheckPass::get_block_name(const Function& func, uint32_t block_id
 auto MemoryLeakCheckPass::is_heap_allocation(const Instruction& inst) const -> bool {
     if (auto* call = std::get_if<CallInst>(&inst)) {
         const auto& name = call->func_name;
-        // Standard allocation functions
-        if (name == "malloc" || name == "calloc" || name == "realloc" || name == "alloc" ||
-            name == "tml_alloc" || name == "heap_alloc" ||
-            name.find("::create") != std::string::npos || name.find("::new") != std::string::npos ||
-            name.find("_create") != std::string::npos || name.find("_new") != std::string::npos) {
+        // Only flag explicit heap allocation functions. Constructor patterns like
+        // `::create` and `_new` are NOT flagged — sealed class factory methods
+        // return values on the stack and don't necessarily heap-allocate.
+        if (name == "malloc" || name == "calloc" || name == "realloc" || name == "tml_alloc" ||
+            name == "heap_alloc" || name == "mem_alloc") {
             return true;
         }
     }

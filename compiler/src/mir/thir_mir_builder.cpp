@@ -259,6 +259,16 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
         return make_struct_type(named.name);
     }
 
+    if (type->is<types::ClassType>()) {
+        const auto& cls = type->as<types::ClassType>();
+        // Classes (including sealed classes) are struct-like value types in MIR.
+        // Check if this class name is actually an enum (defensive), else make struct.
+        if (env_.lookup_enum(cls.name)) {
+            return make_enum_type(cls.name);
+        }
+        return make_struct_type(cls.name);
+    }
+
     // impl Behavior types are opaque — lower to pointer (fat pointer in future)
     if (type->is<types::ImplBehaviorType>()) {
         return make_pointer_type(make_i8_type(), false);
@@ -445,6 +455,91 @@ void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
         if (let.type) {
             context_type_ = let.type;
         }
+
+        // Fast path for array let-bindings: use an alloca-backed variable.
+        // This avoids large SSA aggregate values in registers (e.g., [100 x i32])
+        // which crash LLVM's x86 SelectionDAG when stored inside loops.
+        //
+        // For zero-initialized arrays (e.g., `[0; 100]`), we detect the pattern
+        // early and emit just the alloca + zeroinitializer store, completely
+        // bypassing the ArrayInitInst path (which would emit: alloca, load, then
+        // our alloca, store-of-aggregate — a double-alloca that triggers LLVM crash).
+        if (let.pattern && let.pattern->is<thir::ThirBindingPattern>()) {
+            const auto& bp = let.pattern->as<thir::ThirBindingPattern>();
+
+            // Check if init is an array repeat expression with a zero literal
+            bool is_zero_array_repeat = false;
+            MirTypePtr array_type_direct = nullptr;
+            if ((*let.init)->is<thir::ThirArrayRepeatExpr>()) {
+                const auto& repeat = (*let.init)->as<thir::ThirArrayRepeatExpr>();
+                if (repeat.value && repeat.value->is<thir::ThirLiteralExpr>()) {
+                    const auto& lit = repeat.value->as<thir::ThirLiteralExpr>();
+                    bool zero = std::visit(
+                        [](const auto& v) -> bool {
+                            using T = std::decay_t<decltype(v)>;
+                            if constexpr (std::is_same_v<T, int64_t>)
+                                return v == 0;
+                            else if constexpr (std::is_same_v<T, uint64_t>)
+                                return v == 0;
+                            else if constexpr (std::is_same_v<T, double>)
+                                return v == 0.0;
+                            else if constexpr (std::is_same_v<T, bool>)
+                                return !v;
+                            else
+                                return false;
+                        },
+                        lit.value);
+                    if (zero) {
+                        MirTypePtr elem_type = convert_type(repeat.value->type());
+                        if (elem_type) {
+                            array_type_direct = make_array_type(elem_type, repeat.count);
+                            is_zero_array_repeat = true;
+                        }
+                    }
+                }
+            }
+
+            if (is_zero_array_repeat && array_type_direct) {
+                // Create zero-initialized alloca directly — no ArrayInitInst needed.
+                // The AllocaInst codegen emits `store [N x T] zeroinitializer` inline,
+                // avoiding the double-alloca (alloca+load+alloca+store) that crashes LLVM.
+                auto ptr_type = make_pointer_type(array_type_direct, bp.is_mut);
+                AllocaInst alloca;
+                alloca.alloc_type = array_type_direct;
+                alloca.name = bp.name;
+                alloca.is_volatile = let.is_volatile;
+                alloca.zero_init = true;
+                auto alloca_val = emit(std::move(alloca), ptr_type);
+                ctx_.variables[bp.name] = alloca_val;
+                ctx_.mut_struct_vars.insert(bp.name);
+                context_type_ = saved_context;
+                return;
+            }
+
+            // Non-zero or non-repeat array init: build the expr, then alloca-back.
+            auto init_val = build_expr(*let.init);
+            context_type_ = saved_context;
+            if (init_val.type && init_val.type->is_array()) {
+                auto ptr_type = make_pointer_type(init_val.type, bp.is_mut);
+                AllocaInst alloca;
+                alloca.alloc_type = init_val.type;
+                alloca.name = bp.name;
+                alloca.is_volatile = let.is_volatile;
+                auto alloca_val = emit(std::move(alloca), ptr_type);
+                StoreInst store;
+                store.ptr = alloca_val;
+                store.value = init_val;
+                store.value_type = init_val.type;
+                emit_void(std::move(store));
+                ctx_.variables[bp.name] = alloca_val;
+                ctx_.mut_struct_vars.insert(bp.name);
+                return;
+            }
+
+            build_pattern_binding(let.pattern, init_val);
+            return;
+        }
+
         auto init_val = build_expr(*let.init);
         context_type_ = saved_context;
         build_pattern_binding(let.pattern, init_val);
@@ -562,6 +657,20 @@ auto ThirMirBuilder::build_var(const thir::ThirVarExpr& var) -> Value {
         mir::ConstantInst const_inst;
         const_inst.value = func_ref;
         return emit(std::move(const_inst), func_type);
+    }
+
+    // For mutable array variables stored via alloca, emit a load to get the current value.
+    // The variable holds an alloca pointer; reading the variable should produce the array value.
+    if (ctx_.mut_struct_vars.count(var.name) > 0 && result.type) {
+        if (auto* ptr_type = std::get_if<MirPointerType>(&result.type->kind)) {
+            MirTypePtr pointee = ptr_type->pointee;
+            if (pointee && pointee->is_array()) {
+                LoadInst load;
+                load.ptr = result;
+                load.result_type = pointee;
+                return emit(std::move(load), pointee);
+            }
+        }
     }
 
     return result;
@@ -722,7 +831,34 @@ auto ThirMirBuilder::build_field(const thir::ThirFieldExpr& field) -> Value {
 }
 
 auto ThirMirBuilder::build_index(const thir::ThirIndexExpr& index) -> Value {
-    auto object = build_expr(index.object);
+    // For alloca-backed array variables (both mutable and immutable), use the
+    // alloca pointer directly for GEP to avoid spilling the large SSA aggregate
+    // value to a fresh alloca on every access (especially in loops).
+    Value object;
+    MirTypePtr base_type;
+    bool using_alloca_ptr = false;
+
+    if (index.object && index.object->is<thir::ThirVarExpr>()) {
+        const auto& var = index.object->as<thir::ThirVarExpr>();
+        if (ctx_.mut_struct_vars.count(var.name) > 0) {
+            Value alloca_ptr = get_variable(var.name);
+            if (alloca_ptr.type) {
+                if (auto* ptr_t = std::get_if<MirPointerType>(&alloca_ptr.type->kind)) {
+                    if (ptr_t->pointee && ptr_t->pointee->is_array()) {
+                        object = alloca_ptr;
+                        base_type = ptr_t->pointee;
+                        using_alloca_ptr = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!using_alloca_ptr) {
+        object = build_expr(index.object);
+        base_type = object.type;
+    }
+
     auto idx = build_expr(index.index);
     auto result_type = convert_type(index.type);
 
@@ -736,8 +872,8 @@ auto ThirMirBuilder::build_index(const thir::ThirIndexExpr& index) -> Value {
         }
     }
     if (!result_type || is_void) {
-        if (object.type) {
-            if (auto* arr = std::get_if<MirArrayType>(&object.type->kind)) {
+        if (base_type) {
+            if (auto* arr = std::get_if<MirArrayType>(&base_type->kind)) {
                 result_type = arr->element;
             }
         }
@@ -746,11 +882,11 @@ auto ThirMirBuilder::build_index(const thir::ThirIndexExpr& index) -> Value {
     GetElementPtrInst gep;
     gep.base = object;
     gep.indices = {idx};
-    gep.base_type = object.type;
+    gep.base_type = base_type;
     gep.result_type = make_pointer_type(result_type, false);
 
-    if (object.type) {
-        if (auto* arr_type = std::get_if<MirArrayType>(&object.type->kind)) {
+    if (base_type) {
+        if (auto* arr_type = std::get_if<MirArrayType>(&base_type->kind)) {
             gep.known_array_size = static_cast<int64_t>(arr_type->size);
         }
     }
@@ -835,56 +971,247 @@ auto ThirMirBuilder::build_block(const thir::ThirBlockExpr& block) -> Value {
 }
 
 auto ThirMirBuilder::build_loop(const thir::ThirLoopExpr& loop) -> Value {
-    auto header = create_block("loop.header");
-    auto body = create_block("loop.body");
-    auto exit = create_block("loop.exit");
+    uint32_t entry_block = ctx_.current_block;
+    uint32_t header_block = create_block("loop.header");
+    uint32_t body_block = create_block("loop.body");
+    uint32_t exit_block = create_block("loop.exit");
 
-    BuildContext::LoopContext lc;
-    lc.header_block = header;
-    lc.exit_block = exit;
-    ctx_.loop_stack.push(std::move(lc));
+    // Save pre-loop variable values for phi node creation
+    auto pre_loop_vars = ctx_.variables;
 
-    emit_branch(header);
-    switch_to_block(header);
+    emit_branch(header_block);
+    switch_to_block(header_block);
 
-    auto cond = build_expr(loop.condition);
-    emit_cond_branch(cond, body, exit);
+    // Create phi nodes for scalar pre-loop variables so the condition can see
+    // updated values on each iteration (SSA loop-carried dependences).
+    // Skip:
+    //   1. Array-valued variables — large aggregates that cause stack overflow
+    //      when phi'd as values (400-byte phi nodes).
+    //   2. Alloca-backed variables (mut_struct_vars) — these hold a constant
+    //      alloca pointer that never changes across iterations. Creating a phi
+    //      for them would produce a self-referential phi (%vN = phi [%v2, entry],
+    //      [%vN, body]) which LLVM rejects. The GEP for array indexing reads
+    //      from the alloca pointer directly via mut_struct_vars.
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+        // Skip aggregate array values — cannot be safely phi'd as SSA values
+        if (var_value.type && var_value.type->is_array())
+            continue;
+        // Skip alloca-backed variables — pointer is constant, needs no phi
+        if (ctx_.mut_struct_vars.count(var_name) > 0)
+            continue;
 
-    switch_to_block(body);
-    (void)build_expr(loop.body);
-    if (!is_terminated()) {
-        emit_branch(header);
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
     }
 
+    // Save header-block variable snapshot for use at the exit block
+    auto header_vars = ctx_.variables;
+
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
+
+    // Evaluate condition using phi values
+    auto cond = build_expr(loop.condition);
+    emit_cond_branch(cond, body_block, exit_block);
+
+    // Body
+    switch_to_block(body_block);
+    ctx_.push_drop_scope();
+    (void)build_expr(loop.body);
+    emit_scope_drops();
+    ctx_.pop_drop_scope();
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi back-edges with the values updated during the body
+    if (!is_terminated()) {
+        auto* header = ctx_.current_func->get_block(header_block);
+        if (header) {
+            for (auto& inst : header->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        emit_branch(header_block);
+    }
+
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
+    switch_to_block(exit_block);
     ctx_.loop_stack.pop();
-    switch_to_block(exit);
+
+    // Update variables at exit with header values (condition-false path),
+    // merging with any break-source values via phi nodes if needed
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            set_variable(var_name, header_val);
+        } else {
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+                exit_phi.incoming.push_back({header_val, header_block});
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                set_variable(var_name, header_val);
+            }
+        }
+    }
+
     return const_unit();
 }
 
 auto ThirMirBuilder::build_while(const thir::ThirWhileExpr& while_expr) -> Value {
-    auto header = create_block("while.header");
-    auto body = create_block("while.body");
-    auto exit = create_block("while.exit");
+    uint32_t entry_block = ctx_.current_block;
+    uint32_t header_block = create_block("while.header");
+    uint32_t body_block = create_block("while.body");
+    uint32_t exit_block = create_block("while.exit");
 
-    BuildContext::LoopContext lc;
-    lc.header_block = header;
-    lc.exit_block = exit;
-    ctx_.loop_stack.push(std::move(lc));
+    // Save pre-loop variable values for phi node creation
+    auto pre_loop_vars = ctx_.variables;
 
-    emit_branch(header);
-    switch_to_block(header);
+    emit_branch(header_block);
+    switch_to_block(header_block);
 
-    auto cond = build_expr(while_expr.condition);
-    emit_cond_branch(cond, body, exit);
+    // Create phi nodes for scalar pre-loop variables so the condition sees
+    // updated values on each iteration. Skip:
+    //   1. Array-valued variables — large aggregates causing stack overflow.
+    //   2. Alloca-backed variables (mut_struct_vars) — constant alloca pointer,
+    //      creating a phi would yield a self-referential phi that LLVM rejects.
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+        if (var_value.type && var_value.type->is_array())
+            continue;
+        if (ctx_.mut_struct_vars.count(var_name) > 0)
+            continue;
 
-    switch_to_block(body);
-    (void)build_expr(while_expr.body);
-    if (!is_terminated()) {
-        emit_branch(header);
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
     }
 
+    // Save header-block variable snapshot for use at the exit block
+    auto header_vars = ctx_.variables;
+
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
+
+    // Evaluate condition using phi values
+    auto cond = build_expr(while_expr.condition);
+    emit_cond_branch(cond, body_block, exit_block);
+
+    // Body
+    switch_to_block(body_block);
+    ctx_.push_drop_scope();
+    (void)build_expr(while_expr.body);
+    emit_scope_drops();
+    ctx_.pop_drop_scope();
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi back-edges with the values updated during the body
+    if (!is_terminated()) {
+        auto* header = ctx_.current_func->get_block(header_block);
+        if (header) {
+            for (auto& inst : header->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        emit_branch(header_block);
+    }
+
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
+    switch_to_block(exit_block);
     ctx_.loop_stack.pop();
-    switch_to_block(exit);
+
+    // Update variables at exit with header values (condition-false path),
+    // merging with any break-source values via phi nodes if needed
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            set_variable(var_name, header_val);
+        } else {
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+                exit_phi.incoming.push_back({header_val, header_block});
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                set_variable(var_name, header_val);
+            }
+        }
+    }
+
     return const_unit();
 }
 
@@ -942,16 +1269,25 @@ auto ThirMirBuilder::build_return(const thir::ThirReturnExpr& ret) -> Value {
 }
 
 auto ThirMirBuilder::build_break(const thir::ThirBreakExpr& /*brk*/) -> Value {
-    if (!ctx_.loop_stack.empty()) {
-        emit_branch(ctx_.loop_stack.top().exit_block);
-    }
+    if (ctx_.loop_stack.empty())
+        return const_unit();
+
+    emit_scope_drops();
+
+    auto& loop_ctx = ctx_.loop_stack.top();
+    // Record current variable values so the exit block can build phi nodes
+    loop_ctx.break_sources.push_back({ctx_.current_block, ctx_.variables});
+
+    emit_branch(loop_ctx.exit_block);
     return const_unit();
 }
 
 auto ThirMirBuilder::build_continue(const thir::ThirContinueExpr& /*cont*/) -> Value {
-    if (!ctx_.loop_stack.empty()) {
-        emit_branch(ctx_.loop_stack.top().header_block);
-    }
+    if (ctx_.loop_stack.empty())
+        return const_unit();
+
+    emit_scope_drops();
+    emit_branch(ctx_.loop_stack.top().header_block);
     return const_unit();
 }
 

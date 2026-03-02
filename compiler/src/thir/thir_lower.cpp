@@ -917,8 +917,20 @@ auto ThirLower::resolve_method(const hir::HirMethodCallExpr& call) -> ResolvedMe
         resolved.qualified_name = named.name + "::" + call.method_name;
     }
 
+    // ClassType receivers (sealed classes, open classes) also need type-qualified names.
+    // Class method definitions are mangled as ClassName__method, so we must prefix.
+    if (lookup_type && lookup_type->is<types::ClassType>()) {
+        auto& cls = lookup_type->as<types::ClassType>();
+        resolved.qualified_name = cls.name + "::" + call.method_name;
+    }
+
     // Try to resolve via trait solver — check all behaviors the type implements
     // for a method with this name
+    auto has_type_qualified_name = [&]() -> bool {
+        return (lookup_type &&
+                (lookup_type->is<types::NamedType>() || lookup_type->is<types::ClassType>()));
+    };
+
     auto* behaviors = env_->get_behavior_list();
     if (behaviors) {
         for (const auto& [bname, bdef] : *behaviors) {
@@ -939,7 +951,7 @@ auto ThirLower::resolve_method(const hir::HirMethodCallExpr& call) -> ResolvedMe
                     // Keep qualified_name based on concrete type (TypeName::method)
                     // since function definitions are mangled as TypeName__method.
                     // Only override if we don't already have a type-prefixed name.
-                    if (!(lookup_type && lookup_type->is<types::NamedType>())) {
+                    if (!has_type_qualified_name()) {
                         resolved.qualified_name = bname + "::" + call.method_name;
                     }
                     break;

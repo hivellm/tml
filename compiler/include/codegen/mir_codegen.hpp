@@ -50,9 +50,9 @@ namespace tml::codegen {
 
 /// Options for MIR-to-LLVM code generation.
 struct MirCodegenOptions {
-    bool emit_comments = true;      ///< Include source comments in IR.
-    bool dll_export = false;        ///< Add dllexport for Windows DLLs.
-    bool coverage_enabled = false;  ///< Disable inlining for coverage builds.
+    bool emit_comments = true;           ///< Include source comments in IR.
+    bool dll_export = false;             ///< Add dllexport for Windows DLLs.
+    bool coverage_enabled = false;       ///< Disable inlining for coverage builds.
     bool generate_exe_main = false;      ///< Emit @main(argc,argv) C entry point
                                          ///< (renames user `main` to `tml_main`).
     bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
@@ -84,7 +84,8 @@ private:
     MirCodegenOptions options_;
     std::stringstream output_;
     int temp_counter_ = 0;
-    int spill_counter_ = 0; // Counter for struct-to-ptr spill allocas
+    int spill_counter_ = 0;        // Counter for struct-to-ptr spill allocas
+    int bounds_check_counter_ = 0; // Dedicated counter for bc.panic.N / bc.ok.N labels
 
     // Current function context
     std::string current_func_;
@@ -97,6 +98,12 @@ private:
 
     // Struct name to field types mapping (for type coercion in struct init)
     std::unordered_map<std::string, std::vector<std::string>> struct_field_types_;
+
+    // Value ID to spill alloca register mapping.
+    // When a GEP spills an aggregate (array/struct) SSA value to an alloca for
+    // mutation, the spill alloca is recorded here. Subsequent reads of that value
+    // (e.g., in TupleInit) should reload from the alloca to pick up mutations.
+    std::unordered_map<mir::ValueId, std::string> value_spill_allocas_;
 
     // Block index to LLVM label mapping (entry label for each MIR block)
     std::unordered_map<uint32_t, std::string> block_labels_;

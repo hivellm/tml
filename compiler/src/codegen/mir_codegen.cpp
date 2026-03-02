@@ -71,6 +71,7 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     value_regs_.clear();
     value_types_.clear();
     struct_field_types_.clear();
+    value_spill_allocas_.clear();
     block_labels_.clear();
     emitted_types_.clear();
     string_constants_.clear();
@@ -198,6 +199,7 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     value_regs_.clear();
     value_types_.clear();
     struct_field_types_.clear();
+    value_spill_allocas_.clear();
     block_labels_.clear();
     emitted_types_.clear();
     string_constants_.clear();
@@ -740,12 +742,44 @@ void MirCodegen::emit_function(const mir::Function& func) {
     value_regs_.clear();
     block_labels_.clear();
     block_exit_labels_.clear();
-    value_types_.clear(); // Clear type tracking for new function
+    value_types_.clear();      // Clear type tracking for new function
+    bounds_check_counter_ = 0; // Reset per-function (see pre-scan below)
 
     // Setup block labels - use block ID, not index
     for (const auto& blk : func.blocks) {
         block_labels_[blk.id] = blk.name;
     }
+
+    // Pre-scan: populate block_exit_labels_ before any block is emitted.
+    // Bounds check injection in emit_instruction() splits MIR blocks into
+    // multiple LLVM blocks (block -> bc.panic.N + bc.ok.N). Phi nodes in
+    // earlier blocks reference later blocks by ID, so they need to know the
+    // correct exit label (bc.ok.N) before those blocks are processed.
+    // We use bounds_check_counter_ (separate from temp_counter_) so the scan
+    // predicts labels accurately without simulating all temp_counter_ uses.
+    {
+        int bc_scan = 0;
+        for (const auto& blk : func.blocks) {
+            block_exit_labels_[blk.id] = blk.name; // default: entry label
+            for (const auto& inst : blk.instructions) {
+                std::visit(
+                    [&](const auto& i) {
+                        using T = std::decay_t<decltype(i)>;
+                        if constexpr (std::is_same_v<T, mir::GetElementPtrInst>) {
+                            if (i.needs_bounds_check && i.known_array_size >= 0 &&
+                                !i.indices.empty()) {
+                                // This GEP will emit bc.panic.N + bc.ok.N and update exit label
+                                std::string ok = "bc.ok." + std::to_string(bc_scan++);
+                                block_exit_labels_[blk.id] = ok;
+                            }
+                        }
+                    },
+                    inst.inst);
+            }
+        }
+    }
+    // Reset bounds_check_counter_ so actual emission matches the pre-scan values
+    bounds_check_counter_ = 0;
 
     // Find fallback label for missing block targets
     // Prefer first block with a return terminator, otherwise use last block
@@ -867,9 +901,10 @@ void MirCodegen::emit_function(const mir::Function& func) {
 void MirCodegen::emit_block(const mir::BasicBlock& block) {
     emitln(block.name + ":");
 
-    // Track current block for exit label updates (bounds check injection etc.)
+    // Track current block ID for exit label updates (bounds check injection etc.)
+    // NOTE: block_exit_labels_[block.id] was pre-populated in emit_function() pre-scan.
+    // We do NOT reset it here to avoid overwriting the pre-scanned exit label.
     current_block_id_ = block.id;
-    block_exit_labels_[block.id] = block.name;
 
     // Emit instructions
     for (const auto& inst : block.instructions) {

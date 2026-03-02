@@ -52,7 +52,15 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 std::string volatile_kw = i.is_volatile ? "volatile " : "";
-                emitln("    " + result_reg + " = load " + volatile_kw + type_str + ", ptr " + ptr);
+                // Array loads need align 16 to match the alignment of array allocas.
+                bool is_array_load = type_ptr && type_ptr->is_array();
+                if (is_array_load) {
+                    emitln("    " + result_reg + " = load " + volatile_kw + type_str + ", ptr " +
+                           ptr + ", align 16");
+                } else {
+                    emitln("    " + result_reg + " = load " + volatile_kw + type_str + ", ptr " +
+                           ptr);
+                }
                 // Track the loaded value's type for method call receiver handling
                 value_types_[inst.result] = type_str;
 
@@ -65,14 +73,37 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 std::string volatile_kw = i.is_volatile ? "volatile " : "";
-                emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr);
+                // Array stores need align 16 to match the alignment of array allocas
+                // and prevent LLVM backend crashes with SIMD aggregate stores.
+                bool is_array_store = type_ptr && type_ptr->is_array();
+                if (is_array_store) {
+                    emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr +
+                           ", align 16");
+                } else {
+                    emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr);
+                }
 
             } else if constexpr (std::is_same_v<T, mir::AllocaInst>) {
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    ; ALLOCA: result_id=" + std::to_string(inst.result) +
                        " reg=" + result_reg + " type=" + type_str);
-                emitln("    " + result_reg + " = alloca " + type_str);
+                // Array allocas need explicit alignment to prevent LLVM backend crashes
+                // when storing/loading aggregate values (SIMD instructions require alignment).
+                bool is_array_alloc = type_ptr && type_ptr->is_array();
+                if (is_array_alloc) {
+                    emitln("    " + result_reg + " = alloca " + type_str + ", align 16");
+                } else {
+                    emitln("    " + result_reg + " = alloca " + type_str);
+                }
+                // If zero_init is set, emit a zeroinitializer store immediately after the
+                // alloca. This avoids a separate large aggregate SSA store instruction
+                // (e.g., 'store [100 x i32] %v1, ptr %v2') that crashes LLVM's x86
+                // backend for large arrays (SelectionDAG can't handle 400-byte aggregates).
+                if (i.zero_init && is_array_alloc) {
+                    emitln("    store " + type_str + " zeroinitializer, ptr " + result_reg +
+                           ", align 16");
+                }
                 // Track alloca as pointer type for method call receiver handling
                 if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "ptr";
@@ -130,6 +161,9 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     std::string spill_reg = "%arr_spill" + std::to_string(temp_counter_++);
                     emitln("    " + spill_reg + " = alloca " + spill_type);
                     emitln("    store " + spill_type + " " + base + ", ptr " + spill_reg);
+                    // Track the spill so later reads of this value ID (e.g., in
+                    // TupleInit) reload from the alloca and pick up any mutations.
+                    value_spill_allocas_[i.base.id] = spill_reg;
                     base = spill_reg;
                 }
 
@@ -137,7 +171,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 if (i.needs_bounds_check && i.known_array_size >= 0 && !i.indices.empty()) {
                     std::string idx_val = get_value_reg(i.indices[0]);
                     std::string size_str = std::to_string(i.known_array_size);
-                    std::string label_id = std::to_string(temp_counter_++);
+                    // Use bounds_check_counter_ (not temp_counter_) so that the pre-scan
+                    // in emit_function() can predict bc.ok.N labels without simulating
+                    // all temp_counter_ uses. This enables correct phi predecessor labels.
+                    std::string label_id = std::to_string(bounds_check_counter_++);
 
                     // Get the actual type of the index (might be i32 or i64)
                     mir::MirTypePtr idx_type_ptr = i.indices[0].type;
@@ -197,8 +234,18 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
                 emit("    " + result_reg + " = getelementptr inbounds " + type_str + ", ptr " +
                      base);
+                // For array types [N x T], LLVM GEP requires two indices:
+                //   index 0: dereference the pointer-to-array (always 0)
+                //   index N: select element N within the array
+                // With only one index, the GEP steps over entire arrays (N * sizeof(array)),
+                // causing out-of-bounds reads/writes for any non-zero index.
+                if (!type_str.empty() && type_str[0] == '[') {
+                    emit(", i64 0");
+                }
                 for (const auto& idx : i.indices) {
-                    emit(", i32 " + get_value_reg(idx));
+                    mir::MirTypePtr idx_type_ptr = idx.type;
+                    std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i64";
+                    emit(", " + idx_type + " " + get_value_reg(idx));
                 }
                 emitln();
                 // GEP result is always a pointer
@@ -486,7 +533,7 @@ void MirCodegen::emit_extract_value_inst(const mir::ExtractValueInst& i,
     auto vt_it = value_types_.find(i.aggregate.id);
     bool agg_is_ptr = (vt_it != value_types_.end() && vt_it->second == "ptr");
     if (agg_is_ptr && (agg_type.starts_with("%struct.") || agg_type.starts_with("%enum.") ||
-                        agg_type.starts_with("%class.") || agg_type.starts_with("%union."))) {
+                       agg_type.starts_with("%class.") || agg_type.starts_with("%union."))) {
         // Aggregate is a pointer to a struct — emit GEP + load instead of extractvalue
         std::string gep_reg = new_temp();
         emit("    " + gep_reg + " = getelementptr inbounds " + agg_type + ", ptr " + agg);
@@ -838,7 +885,14 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             if (declared_param_types && j < declared_param_types->size()) {
                 auto& param_type = (*declared_param_types)[j];
                 if (param_type) {
+                    // MirPointerType: typed pointer (make_pointer_type)
+                    // MirPrimitiveType{Ptr}: raw opaque pointer (make_ptr_type)
                     expects_ptr = std::holds_alternative<mir::MirPointerType>(param_type->kind);
+                    if (!expects_ptr) {
+                        if (auto* prim = std::get_if<mir::MirPrimitiveType>(&param_type->kind)) {
+                            expects_ptr = (prim->kind == mir::PrimitiveType::Ptr);
+                        }
+                    }
                 }
             }
             if (!expects_ptr) {

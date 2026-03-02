@@ -182,7 +182,12 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.verbose = verbose;
             qopts.coverage = config.coverage;
             qopts.optimization_level = config.optimization_level;
-            qopts.incremental = !config.no_cache && !config.coverage;
+            // Disable incremental cache for multi-file suites: each file is
+            // compiled with a unique test_entry_index (tml_test_N), but incremental
+            // cache entries were saved with index 0. Reusing them would produce
+            // duplicate tml_test_0 symbols when multiple files are linked together.
+            bool is_multi_file_suite = suite.tests.size() > 1;
+            qopts.incremental = !config.no_cache && !config.coverage && !is_multi_file_suite;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
