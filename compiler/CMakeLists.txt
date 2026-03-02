@@ -1519,6 +1519,7 @@ add_library(tml_cli STATIC
     src/testing/testing_discovery.cpp
     src/testing/testing_compile.cpp
     src/testing/testing_coverage.cpp
+    src/testing/testing_reporter.cpp
     # Linter modules
     src/cli/linter/config.cpp
     src/cli/linter/linter_discovery.cpp

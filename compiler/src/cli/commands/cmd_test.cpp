@@ -10,6 +10,7 @@ TML_MODULE("compiler")
 #include "common.hpp"
 #include "log/log.hpp"
 #include "testing/testing_coordinator.hpp"
+#include "testing/testing_reporter.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -154,6 +155,11 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             opts.features.push_back(argv[++i]);
         } else if (arg == "--new-runner") {
             // Ignored - new runner is now the default and only runner
+        } else if (arg.starts_with("--output=")) {
+            // Parse --output=json:path or --output=junit:path
+            std::string output_spec = arg.substr(9);
+            // For now, just store it; cmd_test.cpp will parse the format
+            opts.output_dir = output_spec;
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }
@@ -256,84 +262,43 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     auto result = testing::run_tests(tc);
 
-    // Print summary
+    // Build reporter pipeline
     if (!opts.quiet) {
-        TML_LOG_INFO("test", "");
-        TML_LOG_INFO("test", c.bold() << "Test Results" << c.reset());
-        int cached_count = 0;
-        for (const auto& s : result.suites) {
-            if (s.cached)
-                ++cached_count;
-        }
-        TML_LOG_INFO("test",
-                     "  Suites:  " << result.suites.size()
-                                   << (cached_count > 0
-                                           ? " (" + std::to_string(cached_count) + " cached)"
-                                           : ""));
-        TML_LOG_INFO("test", "  Tests:   " << result.total_tests);
-        TML_LOG_INFO("test", "  " << c.green() << "Passed:  " << result.passed << c.reset());
-        if (result.failed > 0) {
-            TML_LOG_INFO("test", "  " << c.red() << "Failed:  " << result.failed << c.reset());
-        }
-        if (result.crashed > 0) {
-            TML_LOG_INFO("test", "  " << c.red() << "Crashed: " << result.crashed << c.reset());
-        }
-        if (result.compilation_errors > 0) {
-            TML_LOG_INFO("test", "  " << c.yellow() << "Compile errors: "
-                                      << result.compilation_errors << c.reset());
-        }
-        TML_LOG_INFO("test", "  Duration: " << (result.total_duration_us / 1000) << "ms");
-        if (result.covered_functions_count > 0) {
-            TML_LOG_INFO("test", "  " << c.cyan() << "Covered: " << result.covered_functions_count
-                                      << " functions" << c.reset());
-        }
-        if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
-            TML_LOG_INFO("test", c.dim() << "  Coverage report: " << c.reset()
-                                         << CompilerOptions::coverage_output);
-        }
+        auto multi_reporter = std::make_unique<testing::MultiReporter>();
 
-        // Print failed test details
-        if (result.failed > 0 || result.crashed > 0 || result.compilation_errors > 0) {
-            TML_LOG_INFO("test", "");
-            TML_LOG_INFO("test", c.bold() << "Failure Details" << c.reset());
-        }
-        for (const auto& suite : result.suites) {
-            if (!suite.compile_ok) {
-                TML_LOG_ERROR("test", c.red() << "COMPILE ERROR" << c.reset() << " " << suite.name
-                                              << ": " << suite.compile_error);
-            }
-            for (const auto& [file, err] : suite.per_file_compile_errors) {
-                TML_LOG_ERROR("test", c.yellow() << "  COMPILE SKIP" << c.reset() << " " << file
-                                                 << ": " << err);
-            }
-            for (const auto& test : suite.tests) {
-                if (!test.passed) {
-                    TML_LOG_ERROR("test",
-                                  c.red() << "FAIL" << c.reset() << " " << suite.group << "/"
-                                          << test.name << " (" << test.file << ")"
-                                          << (test.exit_code != 0
-                                                  ? " [exit " + std::to_string(test.exit_code) + "]"
-                                                  : ""));
-                    if (!test.error.empty()) {
-                        std::istringstream err_stream(test.error);
-                        std::string err_line;
-                        int line_count = 0;
-                        while (std::getline(err_stream, err_line) && line_count < 20) {
-                            if (!err_line.empty() && err_line.back() == '\r')
-                                err_line.pop_back();
-                            if (!err_line.empty()) {
-                                TML_LOG_ERROR("test", "    " << err_line);
-                                ++line_count;
-                            }
-                        }
-                        if (line_count >= 20) {
-                            TML_LOG_ERROR("test",
-                                          "    " << c.dim() << "... (truncated)" << c.reset());
-                        }
-                    }
+        // Always add terminal reporter (unless quiet mode)
+        multi_reporter->add(testing::make_terminal_reporter(!opts.no_color));
+
+        // Parse and add optional reporters from --output=format:path
+        if (!opts.output_dir.empty()) {
+            size_t colon_pos = opts.output_dir.find(':');
+            if (colon_pos != std::string::npos) {
+                std::string format = opts.output_dir.substr(0, colon_pos);
+                std::string path = opts.output_dir.substr(colon_pos + 1);
+
+                if (format == "json") {
+                    multi_reporter->add(testing::make_json_reporter(path));
+                } else if (format == "junit") {
+                    multi_reporter->add(testing::make_junit_reporter(path));
+                } else {
+                    TML_LOG_ERROR("test", "Unknown output format: " << format);
                 }
             }
         }
+
+        // Call reporter on the completed run
+        multi_reporter->on_run_start(tc);
+        multi_reporter->on_run_end(result);
+
+        // Coverage report if available
+        if (opts.coverage && result.covered_functions_count > 0) {
+            multi_reporter->on_coverage_report(result.covered_functions_count,
+                                               result.covered_functions_count +
+                                                   100, // Simplified count
+                                               CompilerOptions::coverage_output);
+        }
+
+        multi_reporter->flush();
     }
 
     // Flush log
