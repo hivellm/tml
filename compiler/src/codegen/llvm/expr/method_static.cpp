@@ -433,13 +433,12 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                     behavior_suffix = "__" + arg_tml_types[0];
                 }
 
-                std::string fn_name = "@tml_" + (is_library_type ? "" : get_suite_prefix()) +
-                                      type_name + "_" + method + behavior_suffix;
+                std::string fn_name = "@" + mangle_impl_method(type_name, method + behavior_suffix);
 
                 // Queue method instantiation for library types
                 if (is_library_type) {
                     std::string mangled_method_name =
-                        "tml_" + type_name + "_" + method + behavior_suffix;
+                        mangle_impl_method(type_name, method + behavior_suffix);
                     if (generated_impl_methods_.find(mangled_method_name) ==
                         generated_impl_methods_.end()) {
                         // For TryFrom/From, pass the argument type as method_type_suffix
@@ -464,6 +463,23 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 auto fn_info_it = functions_.find(method_key);
                 if (fn_info_it != functions_.end() && !fn_info_it->second.ret_type.empty()) {
                     ret_type = fn_info_it->second.ret_type;
+                }
+
+                // struct/enum → ptr ABI fix (see impl.cpp:282)
+                if (fn_info_it != functions_.end()) {
+                    for (size_t i = 0;
+                         i < typed_args.size() && i < fn_info_it->second.param_types.size(); ++i) {
+                        const auto& expected = fn_info_it->second.param_types[i];
+                        auto& [at, av] = typed_args[i];
+                        if (expected == "ptr" &&
+                            (at.find("%struct.") == 0 || at.find("%enum.") == 0)) {
+                            std::string temp = fresh_reg();
+                            emit_line("  " + temp + " = alloca " + at);
+                            emit_line("  store " + at + " " + av + ", ptr " + temp);
+                            av = temp;
+                            at = "ptr";
+                        }
+                    }
                 }
 
                 std::string args_str;

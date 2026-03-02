@@ -217,10 +217,10 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     if (!named.type_args.empty()) {
         mangled_type_name = mangle_struct_name(named.name, named.type_args);
 
-        // If the library already emitted methods using the unmangled base name
+        // If the library already emitted methods using the base type name
         // (e.g., tml_BTreeMap_insert from gen_impl_method), use the base name
         // so user code calls the existing function instead of a non-existent mangled one.
-        std::string base_fn_check = "@tml_" + named.name + "_" + method;
+        std::string base_fn_check = "@" + mangle_impl_method(named.name, method);
         if (mangled_type_name != named.name && generated_functions_.count(base_fn_check) > 0) {
             mangled_type_name = named.name;
         }
@@ -229,7 +229,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         if (!method_type_suffix.empty()) {
             method_for_key += "__" + method_type_suffix;
         }
-        std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method_for_key;
+        std::string mangled_method_name = mangle_impl_method(mangled_type_name, method_for_key);
 
         // Check locally defined impls first
         auto impl_it = pending_generic_impls_.find(named.name);
@@ -450,7 +450,8 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         }
 
         std::string full_method_for_key = method + "__" + method_type_suffix;
-        std::string mangled_method_name = "tml_" + mangled_type_name + "_" + full_method_for_key;
+        std::string mangled_method_name =
+            mangle_impl_method(mangled_type_name, full_method_for_key);
 
         if (generated_impl_methods_.find(mangled_method_name) == generated_impl_methods_.end()) {
             pending_impl_method_instantiations_.push_back(
@@ -496,7 +497,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         }
 
         if (is_imported) {
-            std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
+            std::string mangled_method_name = mangle_impl_method(mangled_type_name, method);
             if (generated_impl_methods_.find(mangled_method_name) ==
                 generated_impl_methods_.end()) {
                 pending_impl_method_instantiations_.push_back(
@@ -526,16 +527,9 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
         }
         if (fn_name.empty()) {
-            // Primitive types (Str, I32, etc.) always have impl methods from library
-            // modules, never from local test code, so never add suite prefix.
-            bool is_primitive_type =
-                (named.name == "Str" || named.name == "I8" || named.name == "I16" ||
-                 named.name == "I32" || named.name == "I64" || named.name == "U8" ||
-                 named.name == "U16" || named.name == "U32" || named.name == "U64" ||
-                 named.name == "F32" || named.name == "F64" || named.name == "Bool" ||
-                 named.name == "Char");
-            std::string prefix = (is_imported || is_primitive_type) ? "" : get_suite_prefix();
-            fn_name = "@tml_" + prefix + mangled_type_name + "_" + full_method_name;
+            // Use mangle_impl_method which handles module path lookup for library types
+            // and suite prefix for local types automatically.
+            fn_name = "@" + mangle_impl_method(mangled_type_name, full_method_name);
         }
     }
 
@@ -590,6 +584,12 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
     std::vector<std::pair<std::string, std::string>> typed_args;
     std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
+
+    // No special by-value struct handling needed here.
+    // All struct params (including non-this/self like ManuallyDrop::into_inner(slot))
+    // are passed as ptr in both the call site and the function definition.
+    // The function body loads the struct from the ptr if needed (see impl.cpp).
+
     typed_args.push_back({this_arg_type, impl_receiver_val});
 
     for (size_t i = 0; i < call.args.size(); ++i) {
@@ -665,6 +665,19 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                     emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
                     val = fat_alloca;
                 }
+            }
+        }
+        // struct/enum → ptr ABI fix (see impl.cpp:282)
+        // i+1 because typed_args[0] is 'this'
+        if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+            const auto& expected_def = method_it->second.param_types[i + 1];
+            if (expected_def == "ptr" &&
+                (expected_type.find("%struct.") == 0 || expected_type.find("%enum.") == 0)) {
+                std::string temp = fresh_reg();
+                emit_line("  " + temp + " = alloca " + expected_type);
+                emit_line("  store " + expected_type + " " + val + ", ptr " + temp);
+                val = temp;
+                expected_type = "ptr";
             }
         }
         typed_args.push_back({expected_type, val});
@@ -767,9 +780,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     if (method_it != functions_.end()) {
         fn_name = method_it->second.llvm_name;
     } else {
-        // Only use suite prefix for test-local functions, not library methods
-        std::string prefix = is_from_library ? "" : get_suite_prefix();
-        fn_name = "@tml_" + prefix + named2.name + "_" + method;
+        fn_name = "@" + mangle_impl_method(named2.name, method);
     }
     std::string impl_receiver_val;
 
@@ -826,8 +837,14 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
 
     std::vector<std::pair<std::string, std::string>> typed_args;
     // For primitive types, pass the value with the correct type
-    // For structs/enums, pass as pointer
+    // For structs/enums, pass as pointer (unless first param is by-value)
     std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
+
+    // NOTE: Struct/enum this/self is ALWAYS passed by pointer (ptr), regardless of
+    // whether the semantic type is RefType (mut this) or NamedType (immutable this).
+    // The function definition always emits `ptr %this` for struct types.
+    // Do NOT load the struct value and pass by value — that creates a type mismatch.
+
     typed_args.push_back({this_arg_type, impl_receiver_val});
 
     for (size_t i = 0; i < call.args.size(); ++i) {
@@ -883,6 +900,19 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
                     emit_line("  store i64 " + std::to_string(array_size) + ", ptr " + len_field);
                     val = fat_alloca;
                 }
+            }
+        }
+        // struct/enum → ptr ABI fix (see impl.cpp:282)
+        // i+1 because typed_args[0] is 'this'
+        if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+            const auto& expected_def = method_it->second.param_types[i + 1];
+            if (expected_def == "ptr" &&
+                (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
+                std::string temp = fresh_reg();
+                emit_line("  " + temp + " = alloca " + arg_type);
+                emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                val = temp;
+                arg_type = "ptr";
             }
         }
         typed_args.push_back({arg_type, val});

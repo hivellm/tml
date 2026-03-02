@@ -94,74 +94,6 @@ suite_filters_to_patterns(const std::vector<std::string>& suite_filters) {
     return patterns;
 }
 
-/// Parse NDJSON stdout into a SuiteRunResult.
-static SuiteRunResult parse_ndjson_output(const std::string& stdout_data, const Suite& suite,
-                                          int64_t exec_time_us) {
-
-    SuiteRunResult result;
-    result.name = suite.name;
-    result.group = suite.group;
-    result.test_count = static_cast<int>(suite.tests.size());
-    result.exec_time_us = exec_time_us;
-
-    // Pre-fill test results from suite metadata
-    result.tests.resize(suite.tests.size());
-    for (int i = 0; i < static_cast<int>(suite.tests.size()); ++i) {
-        result.tests[i].index = i;
-        result.tests[i].name = suite.tests[i].test_name;
-        result.tests[i].file = suite.tests[i].file_path;
-    }
-
-    // Parse each NDJSON line
-    std::istringstream stream(stdout_data);
-    std::string line;
-    while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r')
-            line.pop_back();
-        if (line.empty())
-            continue;
-
-        auto parsed = parse_json_event(line);
-        if (!parsed.ok)
-            continue;
-
-        std::visit(
-            [&](auto&& ev) {
-                using T = std::decay_t<decltype(ev)>;
-                if constexpr (std::is_same_v<T, TestPassEvent>) {
-                    if (ev.index >= 0 && ev.index < static_cast<int>(result.tests.size())) {
-                        result.tests[ev.index].passed = true;
-                        result.tests[ev.index].duration_us = ev.duration_us;
-                        result.passed++;
-                    }
-                } else if constexpr (std::is_same_v<T, TestFailEvent>) {
-                    if (ev.index >= 0 && ev.index < static_cast<int>(result.tests.size())) {
-                        result.tests[ev.index].passed = false;
-                        result.tests[ev.index].exit_code = ev.exit_code;
-                        result.tests[ev.index].error = ev.error;
-                        result.tests[ev.index].duration_us = ev.duration_us;
-                        result.failed++;
-                    }
-                } else if constexpr (std::is_same_v<T, TestCrashEvent>) {
-                    if (ev.index >= 0 && ev.index < static_cast<int>(result.tests.size())) {
-                        result.tests[ev.index].passed = false;
-                        result.tests[ev.index].error = "CRASH: " + ev.signal;
-                        result.tests[ev.index].duration_us = ev.duration_us;
-                        result.crashed++;
-                    }
-                } else if constexpr (std::is_same_v<T, TestTimeoutEvent>) {
-                    if (ev.index >= 0 && ev.index < static_cast<int>(result.tests.size())) {
-                        result.tests[ev.index].passed = false;
-                        result.tests[ev.index].error = "TIMEOUT";
-                    }
-                }
-            },
-            parsed.event);
-    }
-
-    return result;
-}
-
 // ============================================================================
 // Execution phase
 // ============================================================================
@@ -177,18 +109,28 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
     int max_concurrent = config.exec_concurrent;
     if (max_concurrent <= 0) {
-        max_concurrent = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+        // Cap at 4 concurrent test processes to avoid CPU saturation.
+        // Each test process compiles + runs, consuming significant CPU.
+        // Users can override with --test-threads=N.
+        int hw = static_cast<int>(std::thread::hardware_concurrency());
+        max_concurrent = std::max(1, std::min(4, hw / 2));
     }
 
-    // Build list of suites that compiled successfully
+    // Build list of per-test work items for crash isolation.
+    // Each test runs as its own subprocess using --test-index=N.
+    // This prevents a crashing test from killing other tests in the same suite.
     struct ExecWork {
         int suite_index;
+        int test_index; // index within suite (for --test-index=N)
         std::string exe_path;
     };
     std::vector<ExecWork> pending;
     for (int i = 0; i < static_cast<int>(compile_results.size()); ++i) {
         if (compile_results[i].success) {
-            pending.push_back({i, compile_results[i].exe_path});
+            auto& suite = suites[i];
+            for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
+                pending.push_back({i, t, compile_results[i].exe_path});
+            }
         } else {
             auto& r = results[i];
             r.name = suites[i].name;
@@ -200,10 +142,26 @@ execute_suites_parallel(const std::vector<Suite>& suites,
         }
     }
 
-    // Fill compile times for successful suites
+    // Initialize result structures for successful suites
     for (int i = 0; i < static_cast<int>(compile_results.size()); ++i) {
         if (compile_results[i].success) {
-            results[i].compile_time_us = compile_results[i].compile_time_us;
+            auto& r = results[i];
+            auto& suite = suites[i];
+            r.name = suite.name;
+            r.group = suite.group;
+            r.test_count = static_cast<int>(suite.tests.size());
+            r.compile_ok = true;
+            r.compile_time_us = compile_results[i].compile_time_us;
+            r.tests.resize(suite.tests.size());
+            for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
+                r.tests[t].index = t;
+                r.tests[t].name = suite.tests[t].test_name;
+                r.tests[t].file = suite.tests[t].file_path;
+            }
+            // Propagate per-file compile errors
+            for (const auto& pfe : compile_results[i].per_file_errors) {
+                r.per_file_compile_errors.push_back({pfe.file_path, pfe.error});
+            }
         }
     }
 
@@ -213,9 +171,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             .count();
     };
 
-    // Launch and poll subprocesses
+    // Launch and poll subprocesses (one per test for crash isolation)
     struct RunningProc {
         int suite_index;
+        int test_index;
         Process proc;
         std::string accumulated_stdout;
         std::string accumulated_stderr;
@@ -235,7 +194,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
             ProcessOptions opts;
             opts.exe_path = work.exe_path;
-            opts.args = {"--run-all"};
+            opts.args = {"--test-index=" + std::to_string(work.test_index)};
             opts.timeout = std::chrono::seconds(config.timeout_seconds);
 
             // Coverage: tell subprocess to write covered functions to a file
@@ -243,29 +202,29 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                 auto cov_dir = fs::current_path() / "build" / "coverage";
                 std::error_code ec;
                 fs::create_directories(cov_dir, ec);
-                opts.env["TML_COVERAGE_FILE"] = (cov_dir / ("cov_" + suite.name + ".txt")).string();
+                opts.env["TML_COVERAGE_FILE"] =
+                    (cov_dir /
+                     ("cov_" + suite.name + "_t" + std::to_string(work.test_index) + ".txt"))
+                        .string();
 
                 // Redirect LLVM profraw files to build/coverage/profraw/
-                // to prevent default.profraw from landing in the project root
                 auto profraw_dir = cov_dir / "profraw";
                 fs::create_directories(profraw_dir, ec);
                 opts.env["LLVM_PROFILE_FILE"] =
-                    (profraw_dir / (suite.name + "-%p%m.profraw")).string();
+                    (profraw_dir /
+                     (suite.name + "_t" + std::to_string(work.test_index) + "-%p%m.profraw"))
+                        .string();
             }
-
-            TML_LOG_DEBUG("test", "Launching subprocess: " << suite.name);
 
             auto proc = Process::launch(opts);
             if (proc) {
-                running.push_back({work.suite_index, std::move(*proc), "", "", now_us()});
+                running.push_back(
+                    {work.suite_index, work.test_index, std::move(*proc), "", "", now_us()});
             } else {
                 auto& r = results[work.suite_index];
-                r.name = suite.name;
-                r.group = suite.group;
-                r.test_count = static_cast<int>(suite.tests.size());
-                r.compile_ok = true;
-                r.compile_error = "Failed to launch subprocess";
-                r.failed = r.test_count;
+                r.tests[work.test_index].passed = false;
+                r.tests[work.test_index].error = "Failed to launch subprocess";
+                r.failed++;
             }
         }
 
@@ -293,68 +252,91 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
                 int64_t exec_us = now_us() - it->start_us;
                 auto proc_result = it->proc.wait(std::chrono::milliseconds(100));
-                // Merge any remaining stderr from wait()
                 if (!proc_result.stderr_output.empty())
                     it->accumulated_stderr += proc_result.stderr_output;
 
-                auto& suite = suites[it->suite_index];
+                int si = it->suite_index;
+                int ti = it->test_index;
+                auto& sr = results[si];
+                auto& test_result = sr.tests[ti];
 
-                results[it->suite_index] =
-                    parse_ndjson_output(it->accumulated_stdout, suite, exec_us);
-                auto& sr = results[it->suite_index];
-                sr.compile_time_us = compile_results[it->suite_index].compile_time_us;
-
-                // Propagate per-file compile errors
-                for (const auto& pfe : compile_results[it->suite_index].per_file_errors) {
-                    sr.per_file_compile_errors.push_back({pfe.file_path, pfe.error});
-                }
-
-                // Propagate stderr for diagnostics
-                if (!it->accumulated_stderr.empty()) {
-                    sr.process_stderr = it->accumulated_stderr;
-                }
-
-                // When process crashed (non-zero exit, no NDJSON events parsed),
-                // propagate stderr to all failed tests so the user sees WHY it failed.
-                if (proc_result.exit_code != 0) {
-                    for (auto& t : sr.tests) {
-                        if (!t.passed && t.error.empty()) {
-                            t.exit_code = proc_result.exit_code;
-                            if (!it->accumulated_stderr.empty()) {
-                                t.error = it->accumulated_stderr;
-                            } else {
-                                t.error = "Process exited with code " +
-                                          std::to_string(proc_result.exit_code);
+                // Parse NDJSON from this single-test subprocess.
+                // The subprocess emits test_pass/test_fail with the test's index.
+                bool got_event = false;
+                std::istringstream stream(it->accumulated_stdout);
+                std::string line;
+                while (std::getline(stream, line)) {
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    if (line.empty())
+                        continue;
+                    auto parsed = parse_json_event(line);
+                    if (!parsed.ok)
+                        continue;
+                    std::visit(
+                        [&](auto&& ev) {
+                            using T = std::decay_t<decltype(ev)>;
+                            if constexpr (std::is_same_v<T, TestPassEvent>) {
+                                test_result.passed = true;
+                                test_result.duration_us = ev.duration_us;
+                                sr.passed++;
+                                got_event = true;
+                            } else if constexpr (std::is_same_v<T, TestFailEvent>) {
+                                test_result.passed = false;
+                                test_result.exit_code = ev.exit_code;
+                                test_result.error = ev.error;
+                                test_result.duration_us = ev.duration_us;
+                                sr.failed++;
+                                got_event = true;
+                            } else if constexpr (std::is_same_v<T, TestCrashEvent>) {
+                                test_result.passed = false;
+                                test_result.error = "CRASH: " + ev.signal;
+                                test_result.duration_us = ev.duration_us;
+                                sr.crashed++;
+                                got_event = true;
+                            } else if constexpr (std::is_same_v<T, TestTimeoutEvent>) {
+                                test_result.passed = false;
+                                test_result.error = "TIMEOUT";
+                                got_event = true;
                             }
-                        }
-                    }
-                    // If no tests were reported at all, this was a process crash
-                    if (sr.passed == 0 && sr.failed == 0 && sr.crashed == 0) {
-                        sr.crashed = sr.test_count;
-                        sr.failed = 0;
+                        },
+                        parsed.event);
+                }
+
+                // Process crashed or timed out without emitting NDJSON events
+                if (!got_event) {
+                    if (proc_result.timed_out) {
+                        test_result.passed = false;
+                        test_result.error = "TIMEOUT";
+                        sr.failed++;
+                    } else if (proc_result.exit_code != 0) {
+                        test_result.passed = false;
+                        test_result.exit_code = proc_result.exit_code;
+                        test_result.error = !it->accumulated_stderr.empty()
+                                                ? it->accumulated_stderr
+                                                : "Process crashed with exit code " +
+                                                      std::to_string(proc_result.exit_code);
+                        sr.crashed++;
+                    } else {
+                        // exit 0 but no events — treat as pass (shouldn't happen normally)
+                        test_result.passed = true;
+                        sr.passed++;
                     }
                 }
 
-                if (proc_result.timed_out) {
-                    sr.failed = sr.test_count;
-                    for (auto& t : sr.tests) {
-                        if (!t.passed && t.error.empty())
-                            t.error = "TIMEOUT (suite-level)";
-                    }
-                }
+                // Accumulate exec time for the suite
+                sr.exec_time_us += exec_us;
 
-                if (config.fail_fast && (sr.failed > 0 || sr.crashed > 0)) {
+                // fail_fast only triggers on assertion failures, not crashes.
+                // Crashes are isolated per-test and shouldn't stop the whole run.
+                if (config.fail_fast && !test_result.passed && sr.failed > 0) {
                     should_stop.store(true, std::memory_order_relaxed);
                 }
 
-                TML_LOG_DEBUG("test", "Suite done: " << suite.name << " (passed=" << sr.passed
-                                                     << " failed=" << sr.failed
-                                                     << " crashed=" << sr.crashed << ")");
-
-                // Read coverage data from subprocess output file
+                // Read coverage data from per-test output file
                 if (config.coverage && out_covered) {
-                    auto cov_file =
-                        fs::current_path() / "build" / "coverage" / ("cov_" + suite.name + ".txt");
+                    auto cov_file = fs::current_path() / "build" / "coverage" /
+                                    ("cov_" + suites[si].name + "_t" + std::to_string(ti) + ".txt");
                     if (fs::exists(cov_file)) {
                         std::ifstream in(cov_file);
                         std::string func_name;
@@ -496,6 +478,8 @@ TestRunResult run_tests(const TestConfig& config) {
     // Suites whose previous exe can be reused (source unchanged, but failed last time)
     std::vector<Suite> reuse_exe_suites;
     std::vector<std::string> reuse_exe_paths; // parallel to reuse_exe_suites
+    // Cache source hashes to avoid recomputing in step 8
+    std::map<std::string, std::vector<std::string>> suite_source_hashes;
 
     if (use_cache) {
         for (auto& suite : suites) {
@@ -504,6 +488,8 @@ TestRunResult run_tests(const TestConfig& config) {
             for (const auto& t : suite.tests)
                 file_paths.push_back(t.file_path);
             auto source_hashes = TestResultCache::compute_source_hashes(file_paths);
+            // Store for reuse in step 8
+            suite_source_hashes[suite.name] = source_hashes;
 
             if (cache.is_cached(suite.name, source_hashes, flags_hash)) {
                 const auto* entry = cache.get(suite.name);
@@ -614,11 +600,19 @@ TestRunResult run_tests(const TestConfig& config) {
             auto& suite = uncached_suites[i];
             auto& sr = exec_results[i];
 
-            std::vector<std::string> file_paths;
-            file_paths.reserve(suite.tests.size());
-            for (const auto& t : suite.tests)
-                file_paths.push_back(t.file_path);
-            auto source_hashes = TestResultCache::compute_source_hashes(file_paths);
+            // Reuse source hashes computed in step 5b (avoid re-reading all files)
+            std::vector<std::string> source_hashes;
+            auto hash_it = suite_source_hashes.find(suite.name);
+            if (hash_it != suite_source_hashes.end()) {
+                source_hashes = std::move(hash_it->second);
+            } else {
+                // Fallback: compute if not cached (shouldn't happen normally)
+                std::vector<std::string> file_paths;
+                file_paths.reserve(suite.tests.size());
+                for (const auto& t : suite.tests)
+                    file_paths.push_back(t.file_path);
+                source_hashes = TestResultCache::compute_source_hashes(file_paths);
+            }
 
             SuiteCacheEntry entry;
             entry.source_hashes = std::move(source_hashes);

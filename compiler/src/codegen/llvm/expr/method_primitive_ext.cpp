@@ -615,11 +615,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         } else {
             // Library functions have no suite prefix; local functions use suite prefix.
             // Primitive type impl methods (Str, Char, etc.) are always from the library,
-            // so we skip the suite prefix for them regardless of how they were found.
-            bool is_library_primitive = is_imported || kind == types::PrimitiveKind::Str ||
-                                        kind == types::PrimitiveKind::Char;
-            std::string prefix = is_library_primitive ? "" : get_suite_prefix();
-            fn_name = "@tml_" + prefix + type_name + "_" + method;
+            fn_name = "@" + mangle_impl_method(type_name, method);
         }
 
         // Check if method has 'mut this' - indicated by first param being a mut ref
@@ -656,6 +652,18 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
             std::string arg_type = "i32"; // default fallback
             if (i + 1 < func_sig->params.size()) {
                 arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+            }
+            // struct/enum → ptr ABI fix (see impl.cpp:282)
+            if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+                const auto& expected = method_it->second.param_types[i + 1];
+                if (expected == "ptr" &&
+                    (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
+                    std::string temp = fresh_reg();
+                    emit_line("  " + temp + " = alloca " + arg_type);
+                    emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                    val = temp;
+                    arg_type = "ptr";
+                }
             }
             typed_args.push_back({arg_type, val});
         }

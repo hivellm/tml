@@ -156,24 +156,17 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                     }
 
                     // Generate the monomorphized call
-                    // Don't add suite prefix for library-internal types (they're defined in library
-                    // code) If func_sig exists, it's an exported function - check if type is local
-                    // If func_sig doesn't exist, it's a library-internal function - never use suite
-                    // prefix
-                    bool is_library_internal = !func_sig;
                     // A type is truly local only if its impl block exists in
                     // pending_generic_impls_ (defined in the current file). Having it in
                     // pending_generic_structs_ is not sufficient — it could have been
                     // registered from a library module's source during a previous
                     // instantiation pass.
                     bool has_local_impl = pending_generic_impls_.count(type_name) > 0;
-                    bool is_local_type = !is_library_internal && has_local_impl;
-                    std::string prefix = is_local_type ? get_suite_prefix() : "";
-                    std::string fn_name_call = "@tml_" + prefix + mangled_type_name + "_" + method;
+                    std::string fn_name_call = "@" + mangle_impl_method(mangled_type_name, method);
 
                     if (func_sig) {
                         // Request impl method instantiation
-                        std::string mangled_method = "tml_" + mangled_type_name + "_" + method;
+                        std::string mangled_method = mangle_impl_method(mangled_type_name, method);
                         if (generated_impl_methods_.find(mangled_method) ==
                             generated_impl_methods_.end()) {
                             // Create type_subs using actual generic param names from func sig
@@ -221,6 +214,17 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                           ", ptr null, 1");
                                 val = fat2;
                             }
+                            // struct/enum by-value → ptr: definition expects ptr for
+                            // struct/enum params (see impl.cpp:282), so store to temp alloca.
+                            if (actual_type.starts_with("%struct.") ||
+                                actual_type.starts_with("%enum.")) {
+                                std::string temp_alloca = fresh_reg();
+                                emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                                emit_line("  store " + actual_type + " " + val + ", ptr " +
+                                          temp_alloca);
+                                val = temp_alloca;
+                                arg_type = "ptr";
+                            }
                             typed_args.push_back({arg_type, val});
                         }
 
@@ -248,7 +252,7 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                     } else {
                         // No func_sig found - this is likely an internal (non-exported) function
                         // Request instantiation for internal library type
-                        std::string mangled_method = "tml_" + mangled_type_name + "_" + method;
+                        std::string mangled_method = mangle_impl_method(mangled_type_name, method);
                         if (generated_impl_methods_.find(mangled_method) ==
                             generated_impl_methods_.end()) {
                             // Create type_subs with default generic name "T"
@@ -272,6 +276,17 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             std::string val = gen_expr(*call.args[i]);
                             // Function-typed args keep fat pointer { ptr, ptr } — no coercion
                             std::string arg_type = last_expr_type_;
+                            // struct/enum by-value → ptr: definition expects ptr for
+                            // struct/enum params (see impl.cpp:282).
+                            if (arg_type.starts_with("%struct.") ||
+                                arg_type.starts_with("%enum.")) {
+                                std::string temp_alloca = fresh_reg();
+                                emit_line("  " + temp_alloca + " = alloca " + arg_type);
+                                emit_line("  store " + arg_type + " " + val + ", ptr " +
+                                          temp_alloca);
+                                val = temp_alloca;
+                                arg_type = "ptr";
+                            }
                             typed_args.push_back({arg_type, val});
                         }
 
@@ -715,7 +730,7 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
 
                     if (func_sig || local_method_decl) {
                         // Request impl method instantiation
-                        std::string mangled_method = "tml_" + mangled_type_name + "_" + method;
+                        std::string mangled_method = mangle_impl_method(mangled_type_name, method);
                         if (generated_impl_methods_.find(mangled_method) ==
                             generated_impl_methods_.end()) {
                             bool is_local = impl_it != pending_generic_impls_.end();
@@ -793,6 +808,17 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                           ", ptr null, 1");
                                 val = fat2;
                             }
+                            // struct/enum by-value → ptr: definition expects ptr for
+                            // struct/enum params (see impl.cpp:282), so store to temp alloca.
+                            if (actual_type.starts_with("%struct.") ||
+                                actual_type.starts_with("%enum.")) {
+                                std::string temp_alloca = fresh_reg();
+                                emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                                emit_line("  store " + actual_type + " " + val + ", ptr " +
+                                          temp_alloca);
+                                val = temp_alloca;
+                                arg_type = "ptr";
+                            }
                             typed_args.push_back({arg_type, val});
                         }
 
@@ -815,9 +841,7 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                         if (method_it != functions_.end()) {
                             fn_name_call = method_it->second.llvm_name;
                         } else {
-                            // Only use suite prefix for test-local functions, not library types
-                            std::string prefix = is_imported ? "" : get_suite_prefix();
-                            fn_name_call = "@tml_" + prefix + mangled_type_name + "_" + method;
+                            fn_name_call = "@" + mangle_impl_method(mangled_type_name, method);
                         }
 
                         std::string args_str;

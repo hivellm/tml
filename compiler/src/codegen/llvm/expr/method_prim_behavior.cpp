@@ -351,9 +351,7 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
         if (method_it != functions_.end()) {
             fn_name = method_it->second.llvm_name;
         } else {
-            // Only use suite prefix for test-local functions, not library methods
-            std::string prefix = is_from_library ? "" : get_suite_prefix();
-            fn_name = "@tml_" + prefix + receiver_type_name + "_" + method;
+            fn_name = "@" + mangle_impl_method(receiver_type_name, method);
         }
         std::string recv_llvm_ty = llvm_type_from_semantic(receiver_type);
 
@@ -366,6 +364,18 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
             std::string arg_type = "i32";
             if (i + 1 < func_sig->params.size()) {
                 arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+            }
+            // struct/enum → ptr ABI fix (see impl.cpp:282)
+            if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+                const auto& expected = method_it->second.param_types[i + 1];
+                if (expected == "ptr" &&
+                    (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
+                    std::string temp = fresh_reg();
+                    emit_line("  " + temp + " = alloca " + arg_type);
+                    emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                    val = temp;
+                    arg_type = "ptr";
+                }
             }
             typed_args.push_back({arg_type, val});
         }

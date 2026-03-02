@@ -147,125 +147,168 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     std::string deps_cache = to_fwd_slashes(deps_dir.string());
     bool verbose = config.verbose;
 
-    // For each test file in the suite, compile via QueryContext
+    // Parallel per-file compilation within the suite
+    // Each file gets its own QueryContext (thread-safe by design)
+    struct FileCompileResult {
+        bool success = false;
+        fs::path object_file;
+        std::string error_message;
+        std::string file_path;
+        std::set<std::string> link_libs;
+        std::shared_ptr<types::ModuleRegistry> registry;
+        std::shared_ptr<parser::Module> parsed_module;
+    };
+
+    std::vector<FileCompileResult> file_results(suite.tests.size());
+    std::atomic<int> next_file{0};
+    int hw = static_cast<int>(std::thread::hardware_concurrency());
+    int num_compile_threads = std::max(1, std::min(4, hw / 2));
+    num_compile_threads = std::min(num_compile_threads, static_cast<int>(suite.tests.size()));
+
+    auto file_worker = [&]() {
+        while (true) {
+            int i = next_file.fetch_add(1, std::memory_order_relaxed);
+            if (i >= static_cast<int>(suite.tests.size()))
+                break;
+
+            const auto& test = suite.tests[i];
+            auto file_path = test.file_path;
+            auto module_name = test.test_name;
+            auto& fr = file_results[i];
+            fr.file_path = file_path;
+
+            // Setup QueryOptions
+            query::QueryOptions qopts;
+            qopts.verbose = verbose;
+            qopts.coverage = config.coverage;
+            qopts.optimization_level = config.optimization_level;
+            qopts.incremental = !config.no_cache && !config.coverage;
+            qopts.generate_exe_main = false;
+            qopts.test_entry_index = static_cast<int>(i);
+
+            auto source_dir = fs::path(file_path).parent_path();
+            if (source_dir.empty())
+                source_dir = fs::current_path();
+            qopts.source_directory = source_dir.string();
+
+            // Create QueryContext and compile
+            query::QueryContext qctx(qopts);
+
+            if (qopts.incremental) {
+                auto build_dir = cli::build::get_build_dir(false);
+                qctx.load_incremental_cache(build_dir);
+            }
+
+            auto codegen_result = qctx.codegen_unit(file_path, module_name);
+
+            if (!codegen_result.success) {
+                std::string err = codegen_result.error_message;
+                if (err.empty()) {
+                    auto tc_r = qctx.cache().lookup<query::TypecheckResult>(
+                        query::TypecheckModuleKey{file_path, module_name});
+                    if (tc_r && !tc_r->success && !tc_r->errors.empty())
+                        err = tc_r->errors[0];
+                    auto pr = qctx.cache().lookup<query::ParseModuleResult>(
+                        query::ParseModuleKey{file_path, module_name});
+                    if (pr && !pr->success && !pr->errors.empty())
+                        err = pr->errors[0];
+                }
+                TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
+                fr.error_message = err;
+                continue;
+            }
+
+            // Save incremental cache
+            if (qopts.incremental) {
+                auto build_dir = cli::build::get_build_dir(false);
+                qctx.save_incremental_cache(build_dir);
+            }
+
+            // Compile IR string to object
+            auto obj_path = cache_dir / (suite.name + "_test_" + std::to_string(i) +
+                                         cli::get_object_extension());
+
+            cli::ObjectCompileOptions obj_opts;
+            obj_opts.optimization_level = config.optimization_level;
+            obj_opts.verbose = verbose;
+            obj_opts.coverage = config.coverage;
+
+            if (codegen_result.has_object_file()) {
+                fr.object_file = codegen_result.object_file;
+                fr.success = true;
+            } else {
+                auto obj_result = cli::compile_ir_string_to_object(codegen_result.llvm_ir, obj_path,
+                                                                   g_clang_path, obj_opts);
+                if (!obj_result.success) {
+                    TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": "
+                                                              << obj_result.error_message);
+                    fr.error_message = obj_result.error_message;
+                    continue;
+                }
+                fr.object_file = obj_result.object_file;
+                fr.success = true;
+            }
+
+            // Collect link libraries
+            fr.link_libs.insert(codegen_result.link_libs.begin(), codegen_result.link_libs.end());
+
+            // Extract registry and parsed module
+            auto tc = qctx.cache().lookup<query::TypecheckResult>(
+                query::TypecheckModuleKey{file_path, module_name});
+            if (tc && tc->success && tc->registry) {
+                fr.registry = tc->registry;
+            }
+            auto parsed = qctx.cache().lookup<query::ParseModuleResult>(
+                query::ParseModuleKey{file_path, module_name});
+            if (parsed && parsed->success && parsed->module) {
+                fr.parsed_module = parsed->module;
+            }
+        }
+    };
+
+    // Launch parallel file compilation
+    if (num_compile_threads <= 1) {
+        file_worker();
+    } else {
+        std::vector<std::thread> threads;
+        threads.reserve(num_compile_threads);
+        for (int t = 0; t < num_compile_threads; ++t) {
+            threads.emplace_back(file_worker);
+        }
+        for (auto& t : threads) {
+            t.join();
+        }
+    }
+
+    // Merge results from parallel compilation
     std::vector<fs::path> all_object_files;
     std::set<std::string> all_link_libs;
     std::shared_ptr<types::ModuleRegistry> registry;
-    // Keep a shared_ptr alive for the parsed module
     std::shared_ptr<parser::Module> parsed_module_holder;
-
-    // Track which test indices compiled successfully (for dispatcher generation)
     std::set<size_t> compiled_indices;
 
-    for (size_t i = 0; i < suite.tests.size(); ++i) {
-        const auto& test = suite.tests[i];
-        auto file_path = test.file_path;
-        auto module_name = test.test_name;
-
-        // Setup QueryOptions
-        query::QueryOptions qopts;
-        qopts.verbose = verbose;
-        qopts.coverage = config.coverage;
-        qopts.optimization_level = config.optimization_level;
-        // Coverage mode MUST disable incremental cache: the GREEN path would
-        // reuse cached IR compiled without tml_cover_func() instrumentation,
-        // causing library functions to show 0% coverage despite tests passing.
-        qopts.incremental = !config.no_cache && !config.coverage;
-        // v3 test system: generate tml_test_N entry instead of @main
-        // (the NDJSON dispatcher provides @main and calls these entries)
-        qopts.generate_exe_main = false;
-        qopts.test_entry_index = static_cast<int>(i);
-
-        auto source_dir = fs::path(file_path).parent_path();
-        if (source_dir.empty())
-            source_dir = fs::current_path();
-        qopts.source_directory = source_dir.string();
-
-        // Create QueryContext and compile
-        query::QueryContext qctx(qopts);
-
-        if (qopts.incremental) {
-            auto build_dir = cli::build::get_build_dir(false);
-            qctx.load_incremental_cache(build_dir);
-        }
-
-        auto codegen_result = qctx.codegen_unit(file_path, module_name);
-
-        if (!codegen_result.success) {
-            // Log the error but continue compiling remaining files in the suite.
-            // This prevents a single failing file from aborting all tests in the suite.
-            std::string err = codegen_result.error_message;
-            if (err.empty()) {
-                auto tc_r = qctx.cache().lookup<query::TypecheckResult>(
-                    query::TypecheckModuleKey{file_path, module_name});
-                if (tc_r && !tc_r->success && !tc_r->errors.empty())
-                    err = tc_r->errors[0];
-                auto pr = qctx.cache().lookup<query::ParseModuleResult>(
-                    query::ParseModuleKey{file_path, module_name});
-                if (pr && !pr->success && !pr->errors.empty())
-                    err = pr->errors[0];
-            }
-            TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
-            result.per_file_errors.push_back({file_path, err});
-            continue;
-        }
-
-        // Save incremental cache
-        if (qopts.incremental) {
-            auto build_dir = cli::build::get_build_dir(false);
-            qctx.save_incremental_cache(build_dir);
-        }
-
-        // Compile IR string to object
-        auto obj_path =
-            cache_dir / (suite.name + "_test_" + std::to_string(i) + cli::get_object_extension());
-
-        cli::ObjectCompileOptions obj_opts;
-        obj_opts.optimization_level = config.optimization_level;
-        obj_opts.verbose = verbose;
-        obj_opts.coverage = config.coverage;
-
-        cli::ObjectCompileResult obj_result;
-        if (codegen_result.has_object_file()) {
-            // Cranelift backend: object file already produced
-            all_object_files.push_back(codegen_result.object_file);
+    for (size_t i = 0; i < file_results.size(); ++i) {
+        auto& fr = file_results[i];
+        if (fr.success) {
+            all_object_files.push_back(fr.object_file);
+            all_link_libs.insert(fr.link_libs.begin(), fr.link_libs.end());
             compiled_indices.insert(i);
-        } else {
-            obj_result = cli::compile_ir_string_to_object(codegen_result.llvm_ir, obj_path,
-                                                          g_clang_path, obj_opts);
-
-            if (!obj_result.success) {
-                TML_LOG_ERROR("test",
-                              "  [compile] SKIP " << file_path << ": " << obj_result.error_message);
-                result.per_file_errors.push_back({file_path, obj_result.error_message});
-                continue;
-            }
-            all_object_files.push_back(obj_result.object_file);
-            compiled_indices.insert(i);
-        }
-
-        // Collect link libraries
-        all_link_libs.insert(codegen_result.link_libs.begin(), codegen_result.link_libs.end());
-
-        // Merge registry from each test file (different files may import different modules)
-        auto tc = qctx.cache().lookup<query::TypecheckResult>(
-            query::TypecheckModuleKey{file_path, module_name});
-        if (tc && tc->success && tc->registry) {
-            if (!registry) {
-                registry = tc->registry;
-            } else {
-                // Merge: add all modules from this test's registry into the accumulated one
-                for (const auto& [mod_path, mod_info] : tc->registry->get_all_modules()) {
-                    if (!registry->has_module(mod_path)) {
-                        registry->register_module(mod_path, mod_info);
+            if (fr.registry) {
+                if (!registry) {
+                    registry = fr.registry;
+                } else {
+                    for (const auto& [mod_path, mod_info] : fr.registry->get_all_modules()) {
+                        if (!registry->has_module(mod_path)) {
+                            registry->register_module(mod_path, mod_info);
+                        }
                     }
                 }
             }
-        }
-        auto parsed = qctx.cache().lookup<query::ParseModuleResult>(
-            query::ParseModuleKey{file_path, module_name});
-        if (parsed && parsed->success && parsed->module) {
-            parsed_module_holder = parsed->module;
+            if (fr.parsed_module) {
+                parsed_module_holder = fr.parsed_module;
+            }
+        } else {
+            result.per_file_errors.push_back({fr.file_path, fr.error_message});
         }
     }
 
@@ -449,7 +492,8 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     int num_threads = config.num_threads;
     if (num_threads <= 0) {
-        num_threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+        int hw2 = static_cast<int>(std::thread::hardware_concurrency());
+        num_threads = std::max(1, std::min(4, hw2 / 2));
     }
     num_threads = std::min(num_threads, static_cast<int>(suites.size()));
 
