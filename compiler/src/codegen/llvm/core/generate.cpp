@@ -954,8 +954,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     std::string func_llvm_name = mangle_impl_method(type_name, full_method_name);
 
                     // For functions_ lookup key, use the flat name pattern
-                    std::string method_key =
-                        suite_prefix + type_name + "_" + full_method_name;
+                    std::string method_key = suite_prefix + type_name + "_" + full_method_name;
                     current_func_ = method_key;
                     current_impl_type_ = type_name; // Track impl self type for 'this' access
                     locals_.clear();
@@ -1017,8 +1016,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             } else {
                                 param_type = "ptr";
                             }
-                        } else if (i == 0 &&
-                                   (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+                        } else if (i == 0 && (param_type.find("%struct.") == 0 ||
+                                              param_type.find("%enum.") == 0)) {
                             // First non-this/self struct/enum param is passed as ptr
                             // (matches calling convention from method-syntax calls)
                             param_type = "ptr";
@@ -1036,20 +1035,20 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     // Also register under the flat key without suite prefix
                     // This is needed because call sites may look up the method by
                     // its unprefixed flat name from library context
-                    std::string unprefixed_key =
-                        type_name + "_" + full_method_name;
+                    std::string unprefixed_key = type_name + "_" + full_method_name;
                     if (functions_.find(unprefixed_key) == functions_.end()) {
                         functions_[unprefixed_key] = finfo;
                     }
 
                     // Generate function
                     emit_line("");
-                    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" +
-                              params + ") #0 {");
+                    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params +
+                              ") #0 {");
                     emit_line("entry:");
 
                     // Register params in locals
-                    // Track whether this method has 'mut this' or 'this: ref This' for body generation
+                    // Track whether this method has 'mut this' or 'this: ref This' for body
+                    // generation
                     bool method_has_mut_this = false;
                     bool method_has_ref_this = false;
                     for (size_t i = 0; i < method.params.size(); ++i) {
@@ -1104,10 +1103,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 // (reference). Register as ptr type WITHOUT is_ptr_to_value,
                                 // so gen_ident returns the pointer as-is. The deref operator
                                 // (*this) will do the actual load.
-                                locals_["this"] = VarInfo{"%" + param_name, "ptr",
-                                                          semantic_type, std::nullopt, false};
-                                locals_["self"] = VarInfo{"%" + param_name, "ptr",
-                                                          semantic_type, std::nullopt, false};
+                                locals_["this"] = VarInfo{"%" + param_name, "ptr", semantic_type,
+                                                          std::nullopt, false};
+                                locals_["self"] = VarInfo{"%" + param_name, "ptr", semantic_type,
+                                                          std::nullopt, false};
                             } else if (method_has_mut_this) {
                                 // For 'mut this' on primitives, the parameter is a ptr.
                                 // Register with the inner primitive type and is_ptr_to_value=true
@@ -1125,7 +1124,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                                           semantic_type, std::nullopt};
                             }
                         } else if (i == 0 && (param_name != "this" && param_name != "self") &&
-                                   (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
+                                   (param_type.find("%struct.") == 0 ||
+                                    param_type.find("%enum.") == 0)) {
                             // First non-this/self struct/enum param is passed as ptr.
                             // Copy from ptr into local alloca so field access (GEP) works.
                             types::TypePtr semantic_type = std::make_shared<types::Type>();
@@ -1133,8 +1133,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             std::string alloca_reg = fresh_reg();
                             std::string loaded_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
-                            emit_line("  " + loaded_reg + " = load " + param_type + ", ptr %" + param_name);
-                            emit_line("  store " + param_type + " " + loaded_reg + ", ptr " + alloca_reg);
+                            emit_line("  " + loaded_reg + " = load " + param_type + ", ptr %" +
+                                      param_name);
+                            emit_line("  store " + param_type + " " + loaded_reg + ", ptr " +
+                                      alloca_reg);
                             locals_[param_name] =
                                 VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
                         } else {

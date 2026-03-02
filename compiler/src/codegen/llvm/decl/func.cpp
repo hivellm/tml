@@ -29,7 +29,8 @@ static std::string get_param_name(const parser::FuncParam& param, size_t param_i
 // Check if a function has the @no_mangle decorator.
 static bool has_no_mangle(const parser::FuncDecl& func) {
     for (const auto& dec : func.decorators) {
-        if (dec.name == "no_mangle") return true;
+        if (dec.name == "no_mangle")
+            return true;
     }
     return false;
 }
@@ -109,8 +110,8 @@ void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
 
     // Register function in functions_ map.
     // @no_mangle functions use bare name without tml_ prefix.
-    std::string llvm_symbol = no_mangle ? ("@" + full_func_name)
-                                        : ("@tml_" + suite_prefix + full_func_name);
+    std::string llvm_symbol =
+        no_mangle ? ("@" + full_func_name) : ("@tml_" + suite_prefix + full_func_name);
     std::string func_type = ret_type + " (" + param_types + ")";
     FuncInfo func_info{llvm_symbol, func_type, ret_type, param_types_vec};
 
@@ -493,9 +494,9 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
         // In suite mode, add unique prefix to avoid symbol collisions when linking multiple
         // test files into a single DLL. Each test file gets a unique suite_test_index.
-        // IMPORTANT: Only add prefix to test-local functions (not library/imported module functions)
-        // Library functions (those with current_module_prefix_) should NOT have suite prefix
-        // because they're shared across all tests in the suite.
+        // IMPORTANT: Only add prefix to test-local functions (not library/imported module
+        // functions) Library functions (those with current_module_prefix_) should NOT have suite
+        // prefix because they're shared across all tests in the suite.
         if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
             current_module_prefix_.empty()) {
             suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
@@ -503,8 +504,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     }
 
     // Skip if this function was already generated (handles duplicates in directory modules)
-    std::string llvm_name = no_mangle ? ("@" + full_func_name)
-                                      : ("@tml_" + suite_prefix + full_func_name);
+    std::string llvm_name =
+        no_mangle ? ("@" + full_func_name) : ("@tml_" + suite_prefix + full_func_name);
     if (generated_functions_.count(llvm_name)) {
         // Warn if a file-level function collides with a module-imported function.
         // This can happen when e.g. test function "test_assert_str_empty" collides with
@@ -568,8 +569,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Function signature with optimization attributes
     // @no_mangle: bare name, always external linkage
     // Normal: tml_ prefix + suite prefix + mangled name
-    std::string func_llvm_name = no_mangle ? full_func_name
-                                           : ("tml_" + suite_prefix + full_func_name);
+    std::string func_llvm_name =
+        no_mangle ? full_func_name : ("tml_" + suite_prefix + full_func_name);
     // Public functions, main, and @should_panic tests get external linkage
     // @should_panic tests need external linkage because they're called via function pointer
     bool has_should_panic = false;
@@ -611,9 +612,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // actually referenced. This applies to BOTH library_decls_only and full modes.
     if (options_.lazy_library_defs && !options_.library_ir_only &&
         !current_module_prefix_.empty()) {
-        pending_library_funcs_["@" + func_llvm_name] = {&func, current_module_prefix_,
-                                                        current_module_name_,
-                                                        current_submodule_name_};
+        pending_library_funcs_["@" + func_llvm_name] = {
+            &func, current_module_prefix_, current_module_name_, current_submodule_name_};
         current_func_.clear();
         return;
     }

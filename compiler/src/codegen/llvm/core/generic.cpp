@@ -368,7 +368,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                 if (!pim.method_type_suffix.empty()) {
                     method_name_full += "__" + pim.method_type_suffix;
                 }
-                std::string generated_key = mangle_impl_method(pim.mangled_type_name, method_name_full);
+                std::string generated_key =
+                    mangle_impl_method(pim.mangled_type_name, method_name_full);
                 if (generated_impl_methods_output_.count(generated_key) > 0) {
                     processed_impl_methods.insert(method_key);
                     continue;

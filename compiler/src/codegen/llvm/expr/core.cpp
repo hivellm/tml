@@ -621,12 +621,12 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
                 std::string str_result = fresh_reg();
                 if (expr_type == "float") {
                     std::string func = "@" + mangle_impl_method("F32", "to_string");
-                    emit_line("  " + str_result + " = call ptr " + func + "(float " +
-                              expr_val + ")");
+                    emit_line("  " + str_result + " = call ptr " + func + "(float " + expr_val +
+                              ")");
                 } else {
                     std::string func = "@" + mangle_impl_method("F64", "to_string");
-                    emit_line("  " + str_result + " = call ptr " + func + "(double " +
-                              expr_val + ")");
+                    emit_line("  " + str_result + " = call ptr " + func + "(double " + expr_val +
+                              ")");
                 }
                 segment_strs.push_back(str_result);
             } else if (expr_type == "i1") {
@@ -730,12 +730,10 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
             std::string str_result = fresh_reg();
             if (expr_type == "float") {
                 std::string func = "@" + mangle_impl_method("F32", "to_string");
-                emit_line("  " + str_result + " = call ptr " + func + "(float " + expr_val +
-                          ")");
+                emit_line("  " + str_result + " = call ptr " + func + "(float " + expr_val + ")");
             } else {
                 std::string func = "@" + mangle_impl_method("F64", "to_string");
-                emit_line("  " + str_result + " = call ptr " + func + "(double " + expr_val +
-                          ")");
+                emit_line("  " + str_result + " = call ptr " + func + "(double " + expr_val + ")");
             }
             return str_result;
         } else if (expr_type == "i1") {
@@ -759,7 +757,8 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         const std::string& text = std::get<std::string>(first_segment.content);
         std::string const_name = add_string_literal(text);
         std::string text_val = fresh_reg();
-        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + const_name + ")");
+        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + const_name +
+                  ")");
         emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     } else {
@@ -767,7 +766,8 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         const auto& expr_ptr = std::get<parser::ExprPtr>(first_segment.content);
         std::string str_val = convert_expr_to_str(expr_ptr);
         std::string text_val = fresh_reg();
-        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + str_val + ")");
+        emit_line("  " + text_val + " = call %struct.Text " + text_from_fn + "(ptr " + str_val +
+                  ")");
         emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     }

@@ -276,7 +276,8 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                 }
 
                 // Build mangled symbol name with hierarchical path + type encoding
-                std::string symbol = "tml_" + mangle_tml_symbol(module_name, func_name, func_sig.params);
+                std::string symbol =
+                    "tml_" + mangle_tml_symbol(module_name, func_name, func_sig.params);
                 if (!emitted.insert(symbol).second) {
                     continue;
                 }
@@ -1256,7 +1257,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                                 parts.push_back(suffix.substr(pos, next - pos));
                                 pos = next + 2;
                             }
-                            for (size_t gi = 0; gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
+                            for (size_t gi = 0;
+                                 gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
                                 auto type_arg = parse_mangled_type_string(parts[gi]);
                                 if (type_arg) {
                                     current_type_subs_[impl_block.generics[gi].name] = type_arg;
@@ -1385,7 +1387,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                                     parts.push_back(suffix.substr(pos, next - pos));
                                     pos = next + 2;
                                 }
-                                for (size_t gi = 0; gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
+                                for (size_t gi = 0;
+                                     gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
                                     auto type_arg = parse_mangled_type_string(parts[gi]);
                                     if (type_arg) {
                                         current_type_subs_[impl_block.generics[gi].name] = type_arg;
@@ -1525,8 +1528,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     // Skip over N<len><name> segments until we hit an uppercase letter
                     // that starts a type name (not part of a module segment).
                     // Actually, simpler: look for the pattern Type__TypeArg_method directly.
-                    // The function names are like: StackNode__I32_new (no module prefix for internal)
-                    // or N3std4sync5stack22StackNode__I32_new for module-prefixed ones.
+                    // The function names are like: StackNode__I32_new (no module prefix for
+                    // internal) or N3std4sync5stack22StackNode__I32_new for module-prefixed ones.
                     // For now, just handle the simple non-prefixed case.
                 }
 
@@ -1549,14 +1552,16 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                             bool has_method = false;
                             std::string available_methods;
                             for (const auto& m : impl_block.methods) {
-                                if (!available_methods.empty()) available_methods += ", ";
+                                if (!available_methods.empty())
+                                    available_methods += ", ";
                                 available_methods += m.name;
                                 if (m.name == method_name) {
                                     has_method = true;
                                 }
                             }
                             if (has_method) {
-                                std::string mangled_method = mangle_impl_method(mangled_type, method_name);
+                                std::string mangled_method =
+                                    mangle_impl_method(mangled_type, method_name);
                                 if (generated_impl_methods_output_.count(mangled_method) == 0) {
                                     // Build type_subs from the type arg
                                     std::unordered_map<std::string, types::TypePtr> type_subs;
@@ -1571,10 +1576,10 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                                         /*is_library_type=*/true});
                                     generated_impl_methods_.insert(mangled_method);
                                     queued_recovery = true;
-                                    TML_LOG_DEBUG("codegen",
-                                        "[LAZY_LIB] Recovery: queued " << base_type << "::"
-                                        << method_name << " for instantiation (type_arg="
-                                        << type_arg_str << ")");
+                                    TML_LOG_DEBUG("codegen", "[LAZY_LIB] Recovery: queued "
+                                                                 << base_type << "::" << method_name
+                                                                 << " for instantiation (type_arg="
+                                                                 << type_arg_str << ")");
                                 }
                             }
                         }
@@ -1613,8 +1618,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                 auto recovery_refs = collect_refs(recovery_ir);
                 std::unordered_set<std::string> recovery_worklist;
                 for (const auto& name : recovery_refs) {
-                    if (!generated.count(name) &&
-                        (pending_library_methods_.count(name) || pending_library_funcs_.count(name))) {
+                    if (!generated.count(name) && (pending_library_methods_.count(name) ||
+                                                   pending_library_funcs_.count(name))) {
                         recovery_worklist.insert(name);
                     }
                 }
@@ -1626,7 +1631,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                         output_.str("");
                         output_.clear();
                         for (const auto& fn : recovery_worklist) {
-                            if (generated.count(fn)) continue;
+                            if (generated.count(fn))
+                                continue;
                             generated.insert(fn);
                             auto method_it = pending_library_methods_.find(fn);
                             if (method_it != pending_library_methods_.end()) {
@@ -1657,9 +1663,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                         output_ << rnd_ir_saved << extra_ir;
                         auto extra_refs = collect_refs(extra_ir);
                         for (const auto& name : extra_refs) {
-                            if (!generated.count(name) &&
-                                (pending_library_methods_.count(name) ||
-                                 pending_library_funcs_.count(name))) {
+                            if (!generated.count(name) && (pending_library_methods_.count(name) ||
+                                                           pending_library_funcs_.count(name))) {
                                 next.insert(name);
                             }
                         }

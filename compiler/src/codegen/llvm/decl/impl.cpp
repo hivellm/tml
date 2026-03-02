@@ -451,11 +451,9 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             // For 'this: ref This' on primitive types, %this is a reference (pointer).
             // Register as ptr type WITHOUT is_ptr_to_value — the deref operator (*this)
             // will do the actual load. gen_ident returns the pointer as-is.
-            locals_["this"] =
-                VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
+            locals_["this"] = VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
             if (this_param_name == "self") {
-                locals_["self"] =
-                    VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
+                locals_["self"] = VarInfo{"%this", "ptr", impl_semantic_type, std::nullopt, false};
             }
         } else if (!this_inner_type.empty()) {
             // For 'mut this'/'mut self' on primitive types, %this is a pointer to the value

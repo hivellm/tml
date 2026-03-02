@@ -54,13 +54,20 @@ static bool has_derive_serialize(const parser::EnumDecl& e) {
 
 /// Map LLVM type to TML type name for to_string dispatch
 static std::string llvm_type_to_tml_name(const std::string& llvm_type) {
-    if (llvm_type == "i1") return "Bool";
-    if (llvm_type == "i8") return "I8";
-    if (llvm_type == "i16") return "I16";
-    if (llvm_type == "i32") return "I32";
-    if (llvm_type == "i64" || llvm_type == "i128") return "I64";
-    if (llvm_type == "float") return "F32";
-    if (llvm_type == "double") return "F64";
+    if (llvm_type == "i1")
+        return "Bool";
+    if (llvm_type == "i8")
+        return "I8";
+    if (llvm_type == "i16")
+        return "I16";
+    if (llvm_type == "i32")
+        return "I32";
+    if (llvm_type == "i64" || llvm_type == "i128")
+        return "I64";
+    if (llvm_type == "float")
+        return "F32";
+    if (llvm_type == "double")
+        return "F64";
     return "";
 }
 

@@ -508,7 +508,8 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
                 }
 
                 if (generated_impl_methods_.find(func_llvm_name) == generated_impl_methods_.end()) {
-                    std::string inst_base = base_type_name.empty() ? field_type_name : base_type_name;
+                    std::string inst_base =
+                        base_type_name.empty() ? field_type_name : base_type_name;
                     std::unordered_map<std::string, types::TypePtr> empty_subs;
                     pending_impl_method_instantiations_.push_back(
                         PendingImplMethod{field_type_name, "drop", empty_subs, inst_base, "",
@@ -920,7 +921,8 @@ void LLVMIRGen::ensure_enum_drop_function(const std::string& enum_type_name) {
                     }
 
                     std::string mangled_drop_key = mangle_impl_method(mangled, "drop");
-                    if (generated_impl_methods_.find(mangled_drop_key) == generated_impl_methods_.end()) {
+                    if (generated_impl_methods_.find(mangled_drop_key) ==
+                        generated_impl_methods_.end()) {
                         std::string bn = mangled;
                         auto sp = mangled.find("__");
                         if (sp != std::string::npos)

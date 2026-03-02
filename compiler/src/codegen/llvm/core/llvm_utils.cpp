@@ -177,7 +177,7 @@ auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
 }
 
 auto LLVMIRGen::mangle_tml_symbol(const std::string& module_name,
-                                   const std::string& func_name) const -> std::string {
+                                  const std::string& func_name) const -> std::string {
     // Hierarchical Itanium-inspired mangling for TML library functions.
     // Produces N<len><seg>...<len><seg>E encoding that is unambiguous even when
     // module names contain underscores.
@@ -197,7 +197,8 @@ auto LLVMIRGen::mangle_tml_symbol(const std::string& module_name,
     size_t pos = 0;
     while (pos <= module_name.size()) {
         size_t sep = module_name.find("::", pos);
-        if (sep == std::string::npos) sep = module_name.size();
+        if (sep == std::string::npos)
+            sep = module_name.size();
         std::string seg = module_name.substr(pos, sep - pos);
         if (!seg.empty()) {
             result += std::to_string(seg.size()) + seg;
@@ -211,7 +212,7 @@ auto LLVMIRGen::mangle_tml_symbol(const std::string& module_name,
 }
 
 auto LLVMIRGen::mangle_tml_symbol(const std::string& module_name, const std::string& func_name,
-                                   const std::vector<types::TypePtr>& param_types) const
+                                  const std::vector<types::TypePtr>& param_types) const
     -> std::string {
     // Build the base mangled name (hierarchical path encoding)
     std::string result = mangle_tml_symbol(module_name, func_name);
@@ -229,27 +230,45 @@ auto LLVMIRGen::mangle_tml_symbol(const std::string& module_name, const std::str
 }
 
 auto LLVMIRGen::mangle_type_code(const types::TypePtr& type) -> std::string {
-    if (!type) return "v"; // void/unknown → unit
+    if (!type)
+        return "v"; // void/unknown → unit
 
     if (type->is<types::PrimitiveType>()) {
         switch (type->as<types::PrimitiveType>().kind) {
-            case types::PrimitiveKind::I8:    return "a";
-            case types::PrimitiveKind::I16:   return "s";
-            case types::PrimitiveKind::I32:   return "i";
-            case types::PrimitiveKind::I64:   return "l";
-            case types::PrimitiveKind::I128:  return "x";
-            case types::PrimitiveKind::U8:    return "h";
-            case types::PrimitiveKind::U16:   return "t";
-            case types::PrimitiveKind::U32:   return "j";
-            case types::PrimitiveKind::U64:   return "m";
-            case types::PrimitiveKind::U128:  return "y";
-            case types::PrimitiveKind::F32:   return "f";
-            case types::PrimitiveKind::F64:   return "d";
-            case types::PrimitiveKind::Bool:  return "b";
-            case types::PrimitiveKind::Char:  return "c";
-            case types::PrimitiveKind::Str:   return "S";
-            case types::PrimitiveKind::Unit:  return "v";
-            case types::PrimitiveKind::Never: return "z";
+        case types::PrimitiveKind::I8:
+            return "a";
+        case types::PrimitiveKind::I16:
+            return "s";
+        case types::PrimitiveKind::I32:
+            return "i";
+        case types::PrimitiveKind::I64:
+            return "l";
+        case types::PrimitiveKind::I128:
+            return "x";
+        case types::PrimitiveKind::U8:
+            return "h";
+        case types::PrimitiveKind::U16:
+            return "t";
+        case types::PrimitiveKind::U32:
+            return "j";
+        case types::PrimitiveKind::U64:
+            return "m";
+        case types::PrimitiveKind::U128:
+            return "y";
+        case types::PrimitiveKind::F32:
+            return "f";
+        case types::PrimitiveKind::F64:
+            return "d";
+        case types::PrimitiveKind::Bool:
+            return "b";
+        case types::PrimitiveKind::Char:
+            return "c";
+        case types::PrimitiveKind::Str:
+            return "S";
+        case types::PrimitiveKind::Unit:
+            return "v";
+        case types::PrimitiveKind::Never:
+            return "z";
         }
     }
 
@@ -371,13 +390,27 @@ auto LLVMIRGen::find_module_for_type(const std::string& type_name) const -> std:
     // e.g., I32::eq → tml_N4core3I322eqE (stable, no suite prefix dependency)
     static const std::unordered_map<std::string, std::string> builtin_modules = {
         // Primitive types
-        {"I8", "core"},    {"I16", "core"},   {"I32", "core"},   {"I64", "core"},
-        {"I128", "core"},  {"U8", "core"},    {"U16", "core"},   {"U32", "core"},
-        {"U64", "core"},   {"U128", "core"},  {"F32", "core"},   {"F64", "core"},
-        {"Bool", "core"},  {"Char", "core"},  {"Str", "core"},   {"Never", "core"},
+        {"I8", "core"},
+        {"I16", "core"},
+        {"I32", "core"},
+        {"I64", "core"},
+        {"I128", "core"},
+        {"U8", "core"},
+        {"U16", "core"},
+        {"U32", "core"},
+        {"U64", "core"},
+        {"U128", "core"},
+        {"F32", "core"},
+        {"F64", "core"},
+        {"Bool", "core"},
+        {"Char", "core"},
+        {"Str", "core"},
+        {"Never", "core"},
         // Built-in enums (defined in type system, not in .tml files)
-        {"Maybe", "core"},     {"Outcome", "core"},
-        {"Ordering", "core"},  {"Poll", "core"},
+        {"Maybe", "core"},
+        {"Outcome", "core"},
+        {"Ordering", "core"},
+        {"Poll", "core"},
         {"ControlFlow", "core"},
     };
     auto prim_it = builtin_modules.find(type_name);
@@ -422,7 +455,7 @@ auto LLVMIRGen::find_module_for_type(const std::string& type_name) const -> std:
 }
 
 auto LLVMIRGen::mangle_impl_method(const std::string& type_name,
-                                    const std::string& method_name) const -> std::string {
+                                   const std::string& method_name) const -> std::string {
     std::string module = find_module_for_type(type_name);
     if (!module.empty()) {
         // Library type: use Itanium-style encoding with module path + type + method

@@ -771,8 +771,7 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
             if (impl_class.empty()) {
                 cold_value += "ptr null";
             } else {
-                cold_value +=
-                    "ptr @" + mangle_impl_method(impl_class, split.cold_methods[i]);
+                cold_value += "ptr @" + mangle_impl_method(impl_class, split.cold_methods[i]);
             }
         }
         cold_value += " }";

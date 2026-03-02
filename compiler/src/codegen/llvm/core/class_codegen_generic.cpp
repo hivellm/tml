@@ -276,8 +276,7 @@ void LLVMIRGen::gen_generic_class_static_method(
     current_type_subs_ = type_subs;
 
     // Function name with proper mangling
-    std::string func_name =
-        "@" + mangle_impl_method(c.name, method.name + method_suffix);
+    std::string func_name = "@" + mangle_impl_method(c.name, method.name + method_suffix);
 
     // Build parameter list with type substitution
     std::vector<std::string> param_types;

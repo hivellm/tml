@@ -497,8 +497,7 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
             }
 
             if (found) {
-                std::string impl_func =
-                    "@" + mangle_impl_method(impl_class, method_name);
+                std::string impl_func = "@" + mangle_impl_method(impl_class, method_name);
                 impl_info.push_back({method_name, impl_func});
             } else {
                 impl_info.push_back({method_name, "null"});
