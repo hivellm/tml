@@ -1,6 +1,6 @@
 # Tasks: Rewrite Test System
 
-**Status**: In Progress (87%) — Coverage at 77.7% (4386/5647), target 80%+
+**Status**: In Progress (91%) — Phase 6 Reporter System complete (6.1.1-6.1.6, 6.1.9, 6.1.11)
 
 ### Progress Log
 - **??%** (pending) — Fixed 2 compiler/runtime bugs: (1) double destroy+drop codegen in method.cpp (mark_var_consumed on .destroy()), (2) argon2 DLL threading crash in crypto_kdf.c (threads=1 + mem_free fix). All 26 kdf tests now pass, 0 memory leaks.
@@ -126,21 +126,21 @@
 - [x] 5b.27 Fix coverage HTML Test Suites overview: aggregate by group, use test_count, sort descending
 - [x] 5b.28 Root cause analysis of 44 modules at 0% coverage: categorized as stub tests (10), no tests (7), disabled tests (4), runtime crashes (23+)
 - [x] 5b.29 Fix coverage instrumentation for inlined primitives: method_primitive_ext.cpp (hash, checked_add/sub/mul/div/rem/neg, checked_shl/shr) and binary_ops.cpp (all arithmetic/bitwise operators) now emit concrete type names (e.g., "I32::add") alongside trait names (e.g., "Add::add")
-- [ ] 5b.30 **MANDATORY**: Coverage must reach 80%+ (currently 77.7%, 4386/5647) — need ~131 more covered functions
+- [x] 5b.30 Coverage reached 81.0% (4575/5647) — target 80%+ achieved
 
 ## Phase 6: Reporter System (Multi-Format, Catch2-Inspired)
 
-- [ ] 6.1.1 Create `reporter.hpp` — ITestReporter abstract interface with ~12 event methods (on_run_start/end, on_suite_start/end, on_test_start/pass/fail/crash/timeout/skip, on_coverage_report)
-- [ ] 6.1.2 Implement MultiReporter — broadcasts events to all registered reporters simultaneously (Catch2 pattern)
-- [ ] 6.1.3 Implement TerminalReporter — colored vitest-style output with progress indicator, suite grouping, failure details, summary
-- [ ] 6.1.4 TerminalReporter: cross-platform ANSI — Win: SetConsoleMode(ENABLE_VIRTUAL_TERMINAL_PROCESSING), detect isatty/TERM/WT_SESSION/COLORTERM. Fall back to plain text when piped.
-- [ ] 6.1.5 Implement JsonReporter — NDJSON to file, one JSON object per event (--output=json)
-- [ ] 6.1.6 Implement JunitXmlReporter — JUnit-compatible XML for CI (GitHub Actions, Jenkins) (--output=junit)
-- [ ] 6.1.7 Implement CoverageHtmlReporter — function coverage HTML report with per-module tables
-- [ ] 6.1.8 Implement CoverageJsonReporter — function coverage JSON at build/coverage/coverage.json
-- [ ] 6.1.9 Implement profile statistics — --profile: compilation time per suite, execution time per suite, total phase breakdown
-- [ ] 6.1.10 Implement leak detection reporting — per-file memory leak table (if leak detection enabled)
-- [ ] 6.1.11 Add --output=terminal|json|junit CLI flag, support multiple simultaneous: --output=terminal --output=json:results.json
+- [x] 6.1.1 Create `reporter.hpp` — ITestReporter abstract interface with ~12 event methods (on_run_start/end, on_suite_start/end, on_test_start/pass/fail/crash/timeout/skip, on_coverage_report)
+- [x] 6.1.2 Implement MultiReporter — broadcasts events to all registered reporters simultaneously (Catch2 pattern)
+- [x] 6.1.3 Implement TerminalReporter — colored vitest-style output with progress indicator, suite grouping, failure details, summary
+- [x] 6.1.4 TerminalReporter: cross-platform ANSI — Win: SetConsoleMode(ENABLE_VIRTUAL_TERMINAL_PROCESSING), detect isatty/TERM/WT_SESSION/COLORTERM. Fall back to plain text when piped.
+- [x] 6.1.5 Implement JsonReporter — NDJSON to file, one JSON object per event (--output=json)
+- [x] 6.1.6 Implement JunitXmlReporter — JUnit-compatible XML for CI (GitHub Actions, Jenkins) (--output=junit)
+- [ ] 6.1.7 Implement CoverageHtmlReporter — function coverage HTML report with per-module tables (deferred — already exists in testing_coverage.cpp)
+- [ ] 6.1.8 Implement CoverageJsonReporter — function coverage JSON at build/coverage/coverage.json (deferred — already exists in testing_coverage.cpp)
+- [x] 6.1.9 Implement profile statistics — --profile: compilation time per suite, execution time per suite, total phase breakdown
+- [ ] 6.1.10 Implement leak detection reporting — per-file memory leak table (if leak detection enabled) (deferred)
+- [x] 6.1.11 Add --output=terminal|json|junit CLI flag, support multiple simultaneous: --output=terminal --output=json:results.json
 
 ## Phase 7: Cross-Platform Validation
 

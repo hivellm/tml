@@ -7,6 +7,10 @@
         "@hivehub/rulebook@latest",
         "mcp-server"
       ]
+    },
+    "tml": {
+      "command": "./build/debug/bin/tml_mcp.exe",
+      "args": []
     }
   }
 }
