@@ -449,7 +449,83 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
     coerce_operand(left, left_type);
     coerce_operand(right, right_type);
 
-    if (is_comparison) {
+    // Check if the operand type is a tuple/aggregate: "{ i32, i32, ... }"
+    bool is_tuple_type =
+        type_str.size() > 4 && type_str.starts_with("{ ") && type_str.ends_with(" }");
+
+    if (is_comparison && is_tuple_type && (i.op == mir::BinOp::Eq || i.op == mir::BinOp::Ne)) {
+        // Tuple element-by-element comparison.
+        // LLVM icmp/fcmp do not support aggregate types, so we must spill
+        // both operands to allocas and compare each element individually.
+
+        // Parse element types from "{ i32, i64, double }" -> ["i32","i64","double"]
+        std::vector<std::string> elem_types;
+        std::string inner = type_str.substr(2, type_str.size() - 4); // strip "{ " and " }"
+        size_t pos = 0;
+        while (pos < inner.size()) {
+            size_t comma = inner.find(", ", pos);
+            if (comma == std::string::npos) {
+                elem_types.push_back(inner.substr(pos));
+                break;
+            }
+            elem_types.push_back(inner.substr(pos, comma - pos));
+            pos = comma + 2;
+        }
+
+        // Spill both tuple values to allocas so we can GEP into elements
+        std::string left_alloca = new_temp();
+        emitln("    " + left_alloca + " = alloca " + type_str);
+        emitln("    store " + type_str + " " + left + ", ptr " + left_alloca);
+
+        std::string right_alloca = new_temp();
+        emitln("    " + right_alloca + " = alloca " + type_str);
+        emitln("    store " + type_str + " " + right + ", ptr " + right_alloca);
+
+        // Compare each element, ANDing results together
+        std::string running = "1"; // start with true (i1 literal)
+        for (size_t idx = 0; idx < elem_types.size(); ++idx) {
+            const std::string& et = elem_types[idx];
+            std::string idx_str = std::to_string(idx);
+
+            std::string lp = new_temp();
+            emitln("    " + lp + " = getelementptr inbounds " + type_str + ", ptr " + left_alloca +
+                   ", i32 0, i32 " + idx_str);
+            std::string lv = new_temp();
+            emitln("    " + lv + " = load " + et + ", ptr " + lp);
+
+            std::string rp = new_temp();
+            emitln("    " + rp + " = getelementptr inbounds " + type_str + ", ptr " + right_alloca +
+                   ", i32 0, i32 " + idx_str);
+            std::string rv = new_temp();
+            emitln("    " + rv + " = load " + et + ", ptr " + rp);
+
+            std::string cmp = new_temp();
+            if (et == "double" || et == "float") {
+                emitln("    " + cmp + " = fcmp oeq " + et + " " + lv + ", " + rv);
+            } else {
+                emitln("    " + cmp + " = icmp eq " + et + " " + lv + ", " + rv);
+            }
+
+            std::string combined = new_temp();
+            emitln("    " + combined + " = and i1 " + running + ", " + cmp);
+            running = combined;
+        }
+
+        // For Ne, invert the equality result
+        if (i.op == mir::BinOp::Ne) {
+            std::string neg = new_temp();
+            emitln("    " + neg + " = xor i1 " + running + ", 1");
+            // Alias result_reg to neg
+            emitln("    " + result_reg + " = and i1 " + neg + ", 1"); // identity to bind result_reg
+        } else {
+            emitln("    " + result_reg + " = and i1 " + running +
+                   ", 1"); // identity to bind result_reg
+        }
+
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "i1";
+        }
+    } else if (is_comparison) {
         std::string pred = get_cmp_predicate(i.op, is_float, is_signed);
         if (is_float) {
             emitln("    " + result_reg + " = fcmp " + pred + " " + type_str + " " + left + ", " +
@@ -956,8 +1032,10 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
                                     const mir::InstructionData& inst) {
     (void)value_id; // May be used for future enhancements
 
-    // Get the function pointer value (the parameter register)
-    std::string func_ptr = "%" + param_name;
+    // Function types are represented as fat pointers: { func_ptr, env_ptr }
+    // where env_ptr is null for non-capturing closures / plain function pointers.
+    // We must extract both components and branch on env_ptr nullness.
+    std::string fat_ptr = "%" + param_name;
 
     // Extract function type info
     const auto& mir_func_type = std::get<mir::MirFunctionType>(func_type->kind);
@@ -972,31 +1050,69 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     std::string ret_type =
         mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type) : "void";
 
-    // Build function type signature for opaque pointer indirect calls
-    // Modern LLVM requires: call ret_type (param_types) %func_ptr(args)
-    std::string func_sig_types;
-    for (size_t j = 0; j < param_types.size(); ++j) {
-        if (j > 0)
-            func_sig_types += ", ";
-        func_sig_types += param_types[j];
-    }
-    std::string func_sig = ret_type + " (" + func_sig_types + ")";
+    // Extract function pointer and environment pointer from the fat pointer
+    std::string fn_ptr = new_temp();
+    std::string env_ptr = new_temp();
+    emitln("    " + fn_ptr + " = extractvalue { ptr, ptr } " + fat_ptr + ", 0");
+    emitln("    " + env_ptr + " = extractvalue { ptr, ptr } " + fat_ptr + ", 1");
 
-    // Build argument list
-    std::string args_str;
+    // Pre-compute argument values and types (used in both branches)
+    std::vector<std::string> arg_vals;
+    std::vector<std::string> arg_types;
     for (size_t j = 0; j < i.args.size(); ++j) {
-        if (j > 0)
-            args_str += ", ";
-        std::string arg = get_value_reg(i.args[j]);
-        std::string arg_type = j < param_types.size() ? param_types[j] : "i64";
-        args_str += arg_type + " " + arg;
+        arg_vals.push_back(get_value_reg(i.args[j]));
+        arg_types.push_back(j < param_types.size() ? param_types[j] : "i64");
     }
 
-    // Emit the indirect call with explicit function type (required for opaque pointer IR)
+    // Check if env is null to determine calling convention
+    std::string is_null = new_temp();
+    emitln("    " + is_null + " = icmp eq ptr " + env_ptr + ", null");
+
+    std::string id = std::to_string(temp_counter_++);
+    std::string label_thin = "fp_thin" + id;
+    std::string label_fat = "fp_fat" + id;
+    std::string label_merge = "fp_merge" + id;
+
+    emitln("    br i1 " + is_null + ", label %" + label_thin + ", label %" + label_fat);
+
+    // Thin call path (no env — plain function pointer or non-capturing closure)
+    emitln(label_thin + ":");
+    std::string thin_args;
+    for (size_t j = 0; j < arg_vals.size(); ++j) {
+        if (j > 0)
+            thin_args += ", ";
+        thin_args += arg_types[j] + " " + arg_vals[j];
+    }
+    std::string thin_result;
     if (ret_type == "void") {
-        emitln("    call " + func_sig + " " + func_ptr + "(" + args_str + ")");
+        emitln("    call void " + fn_ptr + "(" + thin_args + ")");
     } else {
-        emitln("    " + result_reg + " = call " + func_sig + " " + func_ptr + "(" + args_str + ")");
+        thin_result = new_temp();
+        emitln("    " + thin_result + " = call " + ret_type + " " + fn_ptr + "(" + thin_args + ")");
+    }
+    emitln("    br label %" + label_merge);
+
+    // Fat call path (env non-null — capturing closure, env as first arg)
+    emitln(label_fat + ":");
+    std::string fat_args = "ptr " + env_ptr;
+    for (size_t j = 0; j < arg_vals.size(); ++j) {
+        fat_args += ", ";
+        fat_args += arg_types[j] + " " + arg_vals[j];
+    }
+    std::string fat_result;
+    if (ret_type == "void") {
+        emitln("    call void " + fn_ptr + "(" + fat_args + ")");
+    } else {
+        fat_result = new_temp();
+        emitln("    " + fat_result + " = call " + ret_type + " " + fn_ptr + "(" + fat_args + ")");
+    }
+    emitln("    br label %" + label_merge);
+
+    // Merge block
+    emitln(label_merge + ":");
+    if (ret_type != "void") {
+        emitln("    " + result_reg + " = phi " + ret_type + " [ " + thin_result + ", %" +
+               label_thin + " ], [ " + fat_result + ", %" + label_fat + " ]");
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = ret_type;
         }

@@ -590,6 +590,74 @@ void LLVMIRGen::unify_types(const parser::Type& pattern, const types::TypePtr& c
 // ============ LLVM Type to Semantic Type ============
 // Converts common LLVM type strings back to semantic types
 
+// Helper: Convert a TML mangled type name segment to a semantic type.
+// Handles primitives (I32, Str, Bool, ...) and nested generics (Maybe__I32).
+static types::TypePtr parse_mangled_type_segment(const std::string& s) {
+    if (s == "I8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (s == "I16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I128")
+        return types::make_primitive(types::PrimitiveKind::I128);
+    if (s == "U8")
+        return types::make_primitive(types::PrimitiveKind::U8);
+    if (s == "U16")
+        return types::make_primitive(types::PrimitiveKind::U16);
+    if (s == "U32")
+        return types::make_primitive(types::PrimitiveKind::U32);
+    if (s == "U64")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "U128")
+        return types::make_primitive(types::PrimitiveKind::U128);
+    if (s == "F32")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "Unit")
+        return types::make_unit();
+    if (s == "Usize")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "Isize")
+        return types::make_primitive(types::PrimitiveKind::I64);
+
+    // Nested generic (e.g., Maybe__I32 inside another mangled name)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        std::vector<types::TypePtr> type_args;
+        size_t pos = 0;
+        while (pos < arg_str.size()) {
+            auto next_delim = arg_str.find("__", pos);
+            std::string arg_part;
+            if (next_delim == std::string::npos) {
+                arg_part = arg_str.substr(pos);
+                pos = arg_str.size();
+            } else {
+                arg_part = arg_str.substr(pos, next_delim - pos);
+                pos = next_delim + 2;
+            }
+            type_args.push_back(parse_mangled_type_segment(arg_part));
+        }
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{base, "", std::move(type_args)};
+        return t;
+    }
+
+    // Simple named type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 auto LLVMIRGen::semantic_type_from_llvm(const std::string& llvm_type) -> types::TypePtr {
     // Primitive types
     if (llvm_type == "i8")
@@ -613,14 +681,11 @@ auto LLVMIRGen::semantic_type_from_llvm(const std::string& llvm_type) -> types::
     if (llvm_type == "void" || llvm_type == "{}")
         return types::make_unit();
 
-    // For struct types like %struct.TypeName, extract the type name
+    // For struct types like %struct.TypeName or %struct.Empty__I32,
+    // extract and parse the mangled type name into a structured semantic type.
     if (llvm_type.substr(0, 8) == "%struct.") {
         std::string type_name = llvm_type.substr(8);
-        // Check if it's a mangled generic type (contains "__")
-        // For now, just create a simple NamedType
-        auto result = std::make_shared<types::Type>();
-        result->kind = types::NamedType{type_name, "", {}};
-        return result;
+        return parse_mangled_type_segment(type_name);
     }
 
     // Default: return I32

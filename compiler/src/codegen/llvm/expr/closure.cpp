@@ -282,9 +282,17 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // This handles closures like `do() { this.value = Just(f()) }` where the body is
     // a block with only statements (assignment) — should return void, not the RHS type.
     if (!block_terminated_) {
-        if (last_expr_type_ == "void" || ret_type == "void") {
-            ret_type = "void";
-            emit_line("  ret void");
+        bool body_is_void = (last_expr_type_ == "void");
+        bool ret_is_void = (ret_type == "void");
+        bool ret_is_unit_struct = (ret_type == "{}"); // Unit as data type (empty struct)
+        if (body_is_void || ret_is_void || ret_is_unit_struct) {
+            if (ret_is_unit_struct) {
+                // Unit return type declared as "{}" (empty struct): emit zeroinitializer
+                emit_line("  ret {} zeroinitializer");
+            } else {
+                ret_type = "void";
+                emit_line("  ret void");
+            }
         } else {
             emit_line("  ret " + ret_type + " " + body_val);
         }

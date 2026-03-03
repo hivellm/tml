@@ -326,55 +326,113 @@ auto HirMirBuilder::build_cast(const hir::HirCastExpr& cast) -> Value {
 // ============================================================================
 
 auto HirMirBuilder::build_closure(const hir::HirClosureExpr& closure) -> Value {
-    // Closures in HIR have explicit captures
-    // Generate a closure instruction that captures values from the environment
+    // Closures in HIR have explicit captures and a body expression.
+    // We must:
+    // 1. Create a synthetic function for the closure body
+    // 2. Build the body within that function
+    // 3. Add it to the module
+    // 4. Emit a ClosureInitInst that creates the { func_ptr, env_ptr } fat pointer
 
-    MirTypePtr result_type = convert_type(closure.type);
-
-    // Generate unique name for the closure function
-    static uint32_t closure_counter = 0;
-    std::string func_name = "__closure_" + std::to_string(closure_counter++);
-
-    // Build captured values
-    std::vector<std::pair<std::string, Value>> captured_values;
-    std::vector<std::pair<std::string, MirTypePtr>> capture_types;
-
-    for (const auto& cap : closure.captures) {
-        // Get the value from the enclosing scope
-        Value cap_value = get_variable(cap.name);
-        MirTypePtr cap_type = convert_type(cap.type);
-
-        // If captured by reference, take address; if by move, use value directly
-        if (!cap.by_move && !cap.is_mut) {
-            // Captured by shared reference - in MIR we just use the value
-            captured_values.push_back({cap.name, cap_value});
-            capture_types.push_back({cap.name, cap_type});
-        } else if (!cap.by_move && cap.is_mut) {
-            // Captured by mutable reference - need pointer
-            captured_values.push_back({cap.name, cap_value});
-            capture_types.push_back({cap.name, make_pointer_type(cap_type, true)});
-        } else {
-            // Captured by move - take ownership
-            captured_values.push_back({cap.name, cap_value});
-            capture_types.push_back({cap.name, cap_type});
-        }
-    }
-
-    // Build function type from closure signature
+    // Build parameter types from HIR closure params
     std::vector<MirTypePtr> param_types;
     for (const auto& param : closure.params) {
         param_types.push_back(convert_type(param.second));
     }
 
-    // Get return type from the function type
-    MirTypePtr func_type = result_type;
+    // Determine return type from the closure's function type
+    MirTypePtr return_type = make_unit_type();
+    auto result_type = convert_type(closure.type);
+    if (auto* ft = std::get_if<MirFunctionType>(&result_type->kind)) {
+        if (ft->return_type) {
+            return_type = ft->return_type;
+        }
+    }
 
-    // Create ClosureInitInst
+    // Generate unique name for the closure function
+    static uint32_t closure_counter = 0;
+    std::string func_name = "__closure_" + std::to_string(closure_counter++);
+
+    // Create the closure function
+    Function closure_func;
+    closure_func.name = func_name;
+    closure_func.return_type = return_type;
+
+    // Add parameters
+    ValueId value_id = 0;
+    for (size_t i = 0; i < closure.params.size(); ++i) {
+        std::string param_name = closure.params[i].first;
+        closure_func.params.push_back({param_name, param_types[i], value_id});
+        value_id++;
+    }
+
+    // Create entry block
+    closure_func.blocks.emplace_back();
+    closure_func.blocks[0].id = 0;
+    closure_func.blocks[0].name = "entry";
+    closure_func.next_block_id = 1;
+    closure_func.next_value_id = value_id;
+
+    // Save current builder context
+    auto saved_func = ctx_.current_func;
+    auto saved_block = ctx_.current_block;
+    auto saved_vars = ctx_.variables;
+
+    // Switch to the closure function context
+    ctx_.current_func = &closure_func;
+    ctx_.current_block = 0;
+    ctx_.variables.clear();
+
+    // Bind parameters to variables
+    for (size_t i = 0; i < closure.params.size(); ++i) {
+        Value param_val;
+        param_val.id = closure_func.params[i].value_id;
+        param_val.type = param_types[i];
+        ctx_.variables[closure.params[i].first] = param_val;
+    }
+
+    // Build the closure body
+    Value body_val = build_expr(closure.body);
+
+    // Add return if not already terminated
+    if (!is_terminated()) {
+        if (!return_type->is_unit()) {
+            emit_return(body_val);
+        } else {
+            emit_return();
+        }
+    }
+
+    // Restore context
+    ctx_.current_func = saved_func;
+    ctx_.current_block = saved_block;
+    ctx_.variables = saved_vars;
+
+    // Add closure function to module
+    module_.functions.push_back(std::move(closure_func));
+
+    // Build captured values for the ClosureInitInst
+    std::vector<std::pair<std::string, Value>> captured_values;
+    std::vector<std::pair<std::string, MirTypePtr>> capture_types;
+
+    for (const auto& cap : closure.captures) {
+        Value cap_value = get_variable(cap.name);
+        MirTypePtr cap_type = convert_type(cap.type);
+
+        if (!cap.by_move && cap.is_mut) {
+            captured_values.push_back({cap.name, cap_value});
+            capture_types.push_back({cap.name, make_pointer_type(cap_type, true)});
+        } else {
+            captured_values.push_back({cap.name, cap_value});
+            capture_types.push_back({cap.name, cap_type});
+        }
+    }
+
+    // Emit ClosureInitInst to create the fat pointer { func_ptr, env_ptr }
     ClosureInitInst inst;
     inst.func_name = func_name;
     inst.captures = std::move(captured_values);
     inst.cap_types = std::move(capture_types);
-    inst.func_type = func_type;
+    inst.func_type = result_type;
     inst.result_type = result_type;
 
     return emit(inst, result_type, closure.span);

@@ -168,6 +168,23 @@ static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_ty
                             substitutions);
         return;
     }
+
+    // FuncType param vs ClosureType arg: closures are compatible with func types
+    if (param_type->is<FuncType>() && arg_type->is<ClosureType>()) {
+        const auto& param_func = param_type->as<FuncType>();
+        const auto& arg_closure = arg_type->as<ClosureType>();
+        // Match parameter types
+        if (param_func.params.size() == arg_closure.params.size()) {
+            for (size_t i = 0; i < param_func.params.size(); ++i) {
+                extract_type_params(param_func.params[i], arg_closure.params[i], type_params,
+                                    substitutions);
+            }
+        }
+        // Match return type
+        extract_type_params(param_func.return_type, arg_closure.return_type, type_params,
+                            substitutions);
+        return;
+    }
 }
 
 auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypePtr {

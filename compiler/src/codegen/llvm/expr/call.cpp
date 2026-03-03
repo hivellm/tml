@@ -1762,6 +1762,29 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
         }
 
+        // If some generic parameters couldn't be inferred from arguments,
+        // try to infer from the return type using the expected type annotation context.
+        // For example: `let e: Empty[I32] = empty()` — T can't be inferred from args (none),
+        // but can be inferred from the return type Empty[T] matched against Empty[I32].
+        {
+            bool has_unbound = false;
+            for (const auto& g : gen_func.generics) {
+                if (bindings.find(g.name) == bindings.end()) {
+                    has_unbound = true;
+                    break;
+                }
+            }
+            if (has_unbound && !expected_enum_type_.empty() && gen_func.return_type.has_value()) {
+                // Parse expected_enum_type_ to semantic type for unification.
+                // expected_enum_type_ is like "%struct.Empty__I32" — extract the mangled name
+                // and convert to a semantic type via semantic_type_from_llvm.
+                types::TypePtr expected_ret = semantic_type_from_llvm(expected_enum_type_);
+                if (expected_ret) {
+                    unify_types(**gen_func.return_type, expected_ret, generic_names, bindings);
+                }
+            }
+        }
+
         // Extract inferred type args in the order of generic parameters
         std::vector<types::TypePtr> inferred_type_args;
         for (const auto& g : gen_func.generics) {

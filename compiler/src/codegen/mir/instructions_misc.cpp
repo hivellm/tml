@@ -587,8 +587,7 @@ void MirCodegen::emit_closure_init_inst(const mir::ClosureInitInst& i,
                                         const mir::InstructionData& inst) {
     // Closure initialization: create fat pointer { func_ptr, env_ptr }
     // First insertvalue: set function pointer to @closure_name
-    std::string tmp1 = "%tmp" + std::to_string(temp_counter_++);
-    std::string tmp2 = "%tmp" + std::to_string(temp_counter_++);
+    std::string tmp1 = new_temp();
     emitln("    " + tmp1 + " = insertvalue { ptr, ptr } undef, ptr @" + i.func_name + ", 0");
 
     // Second insertvalue: set environment pointer (null for non-capturing closures)
@@ -598,8 +597,8 @@ void MirCodegen::emit_closure_init_inst(const mir::ClosureInitInst& i,
         // For now, just use null (non-capturing case)
         env_ptr = "null";
     }
-    emitln("    " + tmp2 + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + env_ptr + ", 1");
-    emitln("    " + result_reg + " = " + tmp2);
+    emitln("    " + result_reg + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + env_ptr +
+           ", 1");
 
     // Mark the result type as function type (fat pointer)
     // CRITICAL: This must be done so that when CallInst looks up the argument type,

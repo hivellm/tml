@@ -9,12 +9,78 @@ TML_MODULE("codegen_x86")
 //! - Struct field lookup
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "parser/parser.hpp"
 #include "types/module.hpp"
 
 #include <iostream>
 #include <unordered_set>
 
 namespace tml::codegen {
+
+// Helper: Recursively match a parser type pattern against a concrete semantic type
+// to extract type parameter bindings for where-clause resolution in type inference.
+// For example: where F = func() -> T, with F -> func()->I32 derives T -> I32.
+static void infer_match_where_pattern(const parser::Type& pattern, const types::TypePtr& concrete,
+                                      std::unordered_map<std::string, types::TypePtr>& type_subs) {
+    if (!concrete)
+        return;
+    if (!pattern.is<parser::NamedType>())
+        return;
+    const auto& named = pattern.as<parser::NamedType>();
+    if (named.path.segments.empty())
+        return;
+    const std::string& name = named.path.segments.back();
+    bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
+    if (!has_type_args) {
+        // Simple name like "T" — add mapping if not already present
+        if (type_subs.find(name) == type_subs.end()) {
+            type_subs[name] = concrete;
+        }
+    } else if (concrete->is<types::NamedType>()) {
+        // Generic type like Maybe[T] — recurse into type args
+        const auto& concrete_named = concrete->as<types::NamedType>();
+        if (concrete_named.name == name) {
+            const auto& pattern_args = named.generics->args;
+            size_t min_args = std::min(pattern_args.size(), concrete_named.type_args.size());
+            for (size_t i = 0; i < min_args; ++i) {
+                if (pattern_args[i].is_type() && concrete_named.type_args[i]) {
+                    const auto& pt = pattern_args[i].as_type();
+                    if (pt) {
+                        infer_match_where_pattern(*pt, concrete_named.type_args[i], type_subs);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper: Resolve where clause type equalities to derive additional type substitutions
+// for type inference. Mirrors resolve_impl_where_clause in method_impl.cpp.
+static void infer_resolve_where_clause(const parser::WhereClause& where_clause,
+                                       std::unordered_map<std::string, types::TypePtr>& type_subs) {
+    for (const auto& [lhs, rhs] : where_clause.type_equalities) {
+        if (!lhs || !rhs || !lhs->is<parser::NamedType>())
+            continue;
+        const auto& lhs_name = lhs->as<parser::NamedType>().path.segments.back();
+        auto sub_it = type_subs.find(lhs_name);
+        if (sub_it == type_subs.end() || !sub_it->second)
+            continue;
+        const auto& concrete = sub_it->second;
+        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
+            const auto& pat = rhs->as<parser::FuncType>();
+            const auto& con = concrete->as<types::FuncType>();
+            if (pat.return_type && con.return_type) {
+                infer_match_where_pattern(*pat.return_type, con.return_type, type_subs);
+            }
+            for (size_t pi = 0; pi < pat.params.size() && pi < con.params.size(); ++pi) {
+                if (pat.params[pi] && con.params[pi]) {
+                    infer_match_where_pattern(*pat.params[pi], con.params[pi], type_subs);
+                }
+            }
+        }
+    }
+}
 
 // Helper: infer semantic type from method call, tuple, array, index, cast expressions
 auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::TypePtr {
@@ -381,6 +447,74 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
                             type_subs[assoc_key] = item_type;
                             type_subs["Item"] = item_type;
                         }
+                    }
+                }
+            }
+
+            // Resolve where clause type equalities to derive additional type subs.
+            // For example: `impl[F, T] Iterator for RepeatWith[F] where F = func() -> T`
+            // With F already mapped to func() -> I32, this derives T -> I32.
+            {
+                auto local_impl_it = pending_generic_impls_.find(named.name);
+                if (local_impl_it != pending_generic_impls_.end()) {
+                    const auto& local_impl = *local_impl_it->second;
+                    if (local_impl.where_clause) {
+                        infer_resolve_where_clause(*local_impl.where_clause, type_subs);
+                    }
+                } else if (env_.module_registry()) {
+                    // For imported types, search module source for impl with where clause
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto struct_it2 = mod.structs.find(named.name);
+                        if (struct_it2 == mod.structs.end() || mod.source_code.empty())
+                            continue;
+                        // Parse module AST to find impl with where clause
+                        const parser::Module* parsed_mod_ptr = nullptr;
+                        parser::Module local_parsed_mod;
+                        if (GlobalASTCache::should_cache(mod_name)) {
+                            parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
+                        }
+                        if (!parsed_mod_ptr) {
+                            auto source =
+                                lexer::Source::from_string(mod.source_code, mod.file_path);
+                            lexer::Lexer lex(source);
+                            auto tokens = lex.tokenize();
+                            if (lex.has_errors())
+                                continue;
+                            parser::Parser mod_parser(std::move(tokens));
+                            auto module_name_stem = mod_name;
+                            if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
+                                module_name_stem = module_name_stem.substr(pos + 2);
+                            }
+                            auto parse_result = mod_parser.parse_module(module_name_stem);
+                            if (!std::holds_alternative<parser::Module>(parse_result))
+                                continue;
+                            local_parsed_mod = std::get<parser::Module>(std::move(parse_result));
+                            if (GlobalASTCache::should_cache(mod_name)) {
+                                GlobalASTCache::instance().put(mod_name,
+                                                               std::move(local_parsed_mod));
+                                parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
+                            } else {
+                                parsed_mod_ptr = &local_parsed_mod;
+                            }
+                        }
+                        if (!parsed_mod_ptr)
+                            continue;
+                        for (const auto& decl : parsed_mod_ptr->decls) {
+                            if (!decl->is<parser::ImplDecl>())
+                                continue;
+                            const auto& imp = decl->as<parser::ImplDecl>();
+                            if (!imp.self_type || !imp.self_type->is<parser::NamedType>())
+                                continue;
+                            const auto& target = imp.self_type->as<parser::NamedType>();
+                            if (target.path.segments.empty() ||
+                                target.path.segments.back() != named.name)
+                                continue;
+                            if (!imp.where_clause)
+                                continue;
+                            infer_resolve_where_clause(*imp.where_clause, type_subs);
+                        }
+                        break;
                     }
                 }
             }

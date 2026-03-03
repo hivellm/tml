@@ -717,9 +717,13 @@ auto MirBuilder::build_closure(const parser::ClosureExpr& closure) -> Value {
     auto func_type = std::make_shared<MirType>();
     func_type->kind = MirFunctionType{param_types, return_type};
 
-    // Return a pointer to the closure function
-    // In a full implementation, this would also include captured variables
-    return const_unit(); // For now, return unit; full impl would return function pointer
+    // Emit a ClosureInitInst to create the fat pointer { func_ptr, env_ptr }
+    ClosureInitInst inst;
+    inst.func_name = closure_name;
+    inst.func_type = func_type;
+    inst.result_type = func_type;
+
+    return emit(inst, func_type);
 }
 
 auto MirBuilder::build_await(const parser::AwaitExpr& await_expr) -> Value {
