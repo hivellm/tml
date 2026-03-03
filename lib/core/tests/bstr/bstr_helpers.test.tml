@@ -1,0 +1,24 @@
+use test::{assert, assert_eq}
+use core::bstr
+
+@test
+func test_is_ascii_whitespace() -> I32 {
+    // Space (32) is whitespace
+    let result: Bool = bstr::is_ascii_whitespace(32 as U8)
+    assert(result, "space is whitespace")
+    // 'A' (65) is not whitespace
+    let result2: Bool = bstr::is_ascii_whitespace(65 as U8)
+    assert(not result2, "A is not whitespace")
+    return 0
+}
+
+@test
+func test_to_ascii_lowercase_byte() -> I32 {
+    // A (65) -> a (97)
+    let result: U8 = bstr::to_ascii_lowercase_byte(65 as U8)
+    assert_eq(result as I32, 97)
+    // Already lowercase - unchanged
+    let result2: U8 = bstr::to_ascii_lowercase_byte(97 as U8)
+    assert_eq(result2 as I32, 97)
+    return 0
+}

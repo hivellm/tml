@@ -97,7 +97,7 @@ pub func ends_with(bytes: Slice[U8], suffix: Slice[U8]) -> Bool {
 // ============================================================================
 
 /// Returns `true` if the byte is ASCII whitespace.
-func is_ascii_whitespace(b: U8) -> Bool {
+pub func is_ascii_whitespace(b: U8) -> Bool {
     return b == 32   // space
         or b == 9    // tab
         or b == 10   // newline
@@ -106,7 +106,7 @@ func is_ascii_whitespace(b: U8) -> Bool {
 }
 
 /// Converts an ASCII uppercase letter to lowercase.
-func to_ascii_lowercase_byte(b: U8) -> U8 {
+pub func to_ascii_lowercase_byte(b: U8) -> U8 {
     if b >= 65 and b <= 90 {  // 'A' to 'Z'
         return b + 32
     }

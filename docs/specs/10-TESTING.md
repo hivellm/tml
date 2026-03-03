@@ -369,45 +369,137 @@ func test_add_external() {
 # Run all
 tml test
 
-# Filter by name
+# Filter by file path substring
 tml test test_add
-tml test "test_*"
+tml test "str"
 
-# Filter by module
-tml test --module math
+# Filter by suite/module
+tml test --suite=core/str
+tml test --suite=std/json
+
+# List available suites
+tml test --list-suites
 
 # Verbose
 tml test --verbose
 
-# List only
-tml test --list
+# Profile (per-suite timing)
+tml test --profile
 
-# Timeout
-tml test --timeout 30s
+# Timeout (seconds per suite, default: 300)
+tml test --timeout=30s
 
-# Retry on failure
-tml test --retries 3
+# Stop on first failure
+tml test --fail-fast
 
-# Report
-tml test --format junit --output results.xml
+# Skip test cache
+tml test --no-cache
+
+# Output format
+tml test --output=junit:results.xml
+tml test --output=json:results.ndjson
 ```
 
 ## 10. Output
 
 ```
-   Running tests for myproject v1.0.0
+ TML Tests
 
-running 24 tests
-test math::test_add ........................ ok (0.1ms)
-test math::test_subtract ................... ok (0.1ms)
-test math::prop_commutative [1000 samples] . ok (42ms)
-test io::test_file_read .................... ok (5ms)
-test io::test_file_write ................... ok (3ms)
+ core/str
+   ✓ basic.test.tml              (23ms)
+   ✓ slice.test.tml              (18ms)
+   ✓ split.test.tml              (14ms)
 
-test result: ok. 24 passed; 0 failed; 0 skipped
-   finished in 0.45s
+ Tests  253 passed | 0 failed
+ Suites  21 passed | 0 failed | 0 cached
+ Duration 1.2s
+```
 
-   Coverage: 87.3% (threshold: 80%)
+## 11. Test System Architecture
+
+### 11.1 Subprocess Model (Go-Inspired)
+
+The TML test runner uses a **subprocess model** where each test suite compiles to a
+standalone EXE and runs as an isolated child process. Results stream back to the
+coordinator via NDJSON (newline-delimited JSON) on stdout.
+
+```
+Coordinator (tml.exe)
+  │
+  ├── Discovery: find all *.test.tml files
+  ├── Grouping:  pack N files into suites (default max=8 per suite)
+  │
+  ├── Compilation phase (parallel, std::thread pool)
+  │     ├── Suite 1 → test_suite_abc123.exe
+  │     ├── Suite 2 → test_suite_def456.exe
+  │     └── Suite N → ...
+  │
+  └── Execution phase (parallel, async subprocess polling)
+        ├── Launch Suite 1 subprocess → read NDJSON events
+        ├── Launch Suite 2 subprocess → read NDJSON events
+        └── Aggregate results → terminal/JSON/JUnit output
+```
+
+**Benefits over the previous in-process DLL model:**
+- **Crash isolation**: a crashing test doesn't kill the coordinator
+- **No coverage hangs**: each subprocess writes coverage via `TML_COVERAGE_FILE` env var
+- **True parallelism**: subprocesses run concurrently with non-blocking poll loop
+- **Timeout enforcement**: `Process::wait(timeout_ms)` per suite
+
+### 11.2 NDJSON Protocol
+
+Each test suite EXE emits one JSON object per line on stdout:
+
+```json
+{"event":"suite_start","suite":"core/str/basic.test.tml","test_count":12}
+{"event":"test_start","name":"test_split_basic","index":0}
+{"event":"test_pass","name":"test_split_basic","duration_ms":0}
+{"event":"test_start","name":"test_split_empty","index":1}
+{"event":"test_fail","name":"test_split_empty","duration_ms":1,"message":"assertion failed: expected [] but got [\"\"]"}
+{"event":"suite_end","passed":11,"failed":1,"duration_ms":23}
+```
+
+Events: `suite_start`, `test_start`, `test_pass`, `test_fail`, `test_crash`,
+`test_timeout`, `test_skip`, `coverage`, `suite_end`
+
+### 11.3 Test Cache (Go Model)
+
+Suite results are cached using CRC32C content hashing:
+
+- **Cache key**: CRC32C of all `.tml` source files in the suite (sorted) + compiler binary hash + flags hash
+- **Cache pass rule**: only suites where ALL tests pass are stored (Go model)
+- **Cache location**: `build/debug/.new-test-cache.json`
+- **Cold run**: full compilation + execution (~5–6 minutes for full suite)
+- **Warm run**: cache hit skips both compilation and execution (~65ms for full suite — 107x speedup)
+- **Bypass**: `tml test --no-cache` forces full recompilation
+
+### 11.4 Coverage System
+
+Coverage uses **function-level instrumentation** (not LLVM profiling):
+
+- The compiler injects calls to `tml_cover_func(module_name, func_name)` at function entry
+- Each test suite subprocess writes its coverage data to a temp file via `TML_COVERAGE_FILE` env var
+- The coordinator reads all temp files after execution and aggregates into a merged set
+- Full suite coverage generates three reports:
+  - `build/coverage/coverage.html` — interactive HTML with 5 tabs (Overview, Module Coverage, Priorities, Uncovered, Test Suites)
+  - `build/coverage/coverage.json` — machine-readable JSON for CI
+  - `build/coverage/coverage.jsonl` — NDJSON for streaming parsers
+- Partial runs (`--suite` or path filter) only show console output — no HTML/JSON saved
+- **Zero guard**: zero covered functions = fatal error, no reports written
+- **Regression guard**: new run must not drop below previous coverage percentage
+
+### 11.5 Reporter System
+
+The reporter system uses a Catch2-inspired multi-reporter pattern:
+
+- **MultiReporter**: broadcasts all events to all registered reporters simultaneously
+- **TerminalReporter**: colored vitest-style output, ANSI cross-platform (Win: `SetConsoleMode`, detect `isatty`/`WT_SESSION`)
+- **JsonReporter**: NDJSON to file, one JSON object per event
+- **JunitXmlReporter**: JUnit-compatible XML for CI systems (GitHub Actions, Jenkins)
+
+Multiple reporters can run simultaneously:
+```bash
+tml test --output=terminal --output=junit:ci.xml --output=json:results.ndjson
 ```
 
 ---

@@ -1,0 +1,29 @@
+// Tests for RangeInclusive iterator (1..=5 style ranges)
+use test::{assert, assert_eq}
+use core::ops::range::RangeInclusive
+use core::iter
+
+@test
+func test_range_inclusive_basic() -> I32 {
+    let mut r: RangeInclusive[I32] = RangeInclusive { start: 1, end: 3, exhausted: false }
+    assert_eq(r.next().unwrap(), 1, "first element is 1")
+    assert_eq(r.next().unwrap(), 2, "second element is 2")
+    assert_eq(r.next().unwrap(), 3, "third element is 3 (inclusive)")
+    assert(r.next().is_nothing(), "no more elements after 3")
+    return 0
+}
+
+@test
+func test_range_inclusive_single() -> I32 {
+    let mut r: RangeInclusive[I32] = RangeInclusive { start: 5, end: 5, exhausted: false }
+    assert_eq(r.next().unwrap(), 5, "single-element range yields one value")
+    assert(r.next().is_nothing(), "exhausted after single element")
+    return 0
+}
+
+@test
+func test_range_inclusive_empty() -> I32 {
+    let mut r: RangeInclusive[I32] = RangeInclusive { start: 5, end: 3, exhausted: false }
+    assert(r.next().is_nothing(), "empty range (start > end) yields nothing")
+    return 0
+}

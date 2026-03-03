@@ -154,64 +154,84 @@ tml run --watch
 
 ### 2.4 tml test — Tests
 
+The test system uses a **subprocess model** (Go-inspired): each test suite compiles to an EXE
+and runs as a subprocess. Results stream back as NDJSON events to the coordinator.
+This isolates crashes, enables true parallelism, and eliminates coverage hangs.
+
 ```bash
 # All tests
 tml test
 
-# Filter by file path
-tml test add              # tests containing "add"
+# Filter by file path substring
+tml test add              # test files containing "add" in their path
 tml test --filter "test_*"
 
 # Filter by suite/module
-tml test --suite=core/str         # all core::str tests
-tml test --suite=std/json         # all std::json tests
-tml test --list-suites            # show available suites
+tml test --suite=core/str         # all core::str tests  (maps to lib/core/tests/str/)
+tml test --suite=std/json         # all std::json tests  (maps to lib/std/tests/json/)
+tml test --list-suites            # show available suites with file and test counts
 
-# Parallel
-tml test --test-threads=4
+# Parallel (default: CPU core count)
+tml test --test-threads=4         # compilation threads
+tml test --exec-threads=8         # execution threads (parallel subprocess count)
 
-# Coverage
+# Coverage (no hangs — subprocess model writes coverage files via env var)
 tml test --coverage
-tml test --coverage --coverage-output=coverage.html
+tml test --coverage --suite=core/str   # partial run: console only, no HTML/JSON saved
 
-# Memory leak detection (enabled by default)
-tml test --no-check-leaks    # Disable leak checking
+# Output formats (multiple simultaneous)
+tml test --output=terminal           # colored terminal (default)
+tml test --output=json               # NDJSON to stdout
+tml test --output=json:results.ndjson  # NDJSON to file
+tml test --output=junit              # JUnit XML to stdout
+tml test --output=junit:results.xml  # JUnit XML to file
+tml test --output=terminal --output=junit:ci.xml  # both at once
 
-# Verbose
-tml test --verbose
-
-# Show per-test timing profile
+# Profile (per-suite compilation + execution timing)
 tml test --profile
 
 # Stop on first failure
 tml test --fail-fast
 
-# Timeout (seconds)
+# Timeout per suite (seconds, default: 300)
 tml test --timeout=30
 
 # No color output
 tml test --no-color
 
-# Skip build cache
+# Skip test cache (force full recompilation of all suites)
 tml test --no-cache
 ```
 
+**Test cache (Go model):** Results are cached per-suite using CRC32C content hashing.
+Only suites where ALL tests pass are cached. Cache is stored at
+`build/debug/.new-test-cache.json`. Warm runs skip both compilation and execution.
+
 Output:
 ```
- TML Tests v0.1.0
+ TML Tests
 
- Running 65 test files...
-
- + compiler (42 tests)
-   ✓ arithmetic.test.tml (12ms)
-   ✓ control_flow.test.tml (8ms)
-   ✓ functions.test.tml (15ms)
+ core/str
+   ✓ basic.test.tml                    (23ms)
+   ✓ slice.test.tml                    (18ms)
    ...
 
- Tests 65 passed (65)
- Duration 3.45s
+ core/fmt
+   ✓ fmt_helpers.test.tml              (31ms)
+   ...
 
- All tests passed!
+ Tests  1114 passed | 0 failed | 0 skipped
+ Suites 1114 passed | 0 failed | 10 cached
+ Duration 5.6s
+```
+
+**Cache artifacts:**
+```
+build/debug/
+├── .new-test-cache.json    # suite-level pass/fail cache (CRC32C content hashes)
+├── .incr-cache/            # incremental compilation cache (shared with build)
+└── bin/
+    └── test-exe-cache/     # compiled test suite EXEs (reused across runs)
 ```
 
 ### 2.5 tml test --bench — Benchmarks
