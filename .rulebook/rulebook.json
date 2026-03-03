@@ -1,7 +1,7 @@
 {
-  "version": "3.4.2",
-  "installedAt": "2026-02-27T10:54:02.751Z",
-  "updatedAt": "2026-02-27T12:26:48.857Z",
+  "version": "4.1.0",
+  "installedAt": "2026-02-27T12:26:48.777Z",
+  "updatedAt": "2026-03-03T17:06:49.552Z",
   "projectId": "tml",
   "mode": "full",
   "features": {
@@ -51,7 +51,16 @@
     "defaultTasks": [
       "parallel-test-execution",
       "coverage-migration"
-    ]
+    ],
+    "parallel": {
+      "enabled": false,
+      "maxWorkers": 3
+    },
+    "planCheckpoint": {
+      "enabled": false,
+      "autoApproveAfterSeconds": 0,
+      "requireApprovalForStories": "all"
+    }
   },
   "skills": {
     "enabled": [

@@ -5,7 +5,9 @@
       "args": [
         "-y",
         "@hivehub/rulebook@latest",
-        "mcp-server"
+        "mcp-server",
+        "--project-root",
+        "F:\\Node\\hivellm\\tml"
       ]
     },
     "tml": {
