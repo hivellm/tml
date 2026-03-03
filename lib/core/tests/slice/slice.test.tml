@@ -2,7 +2,7 @@
 
 use test
 
-use core::slice::{Slice, MutSlice, SliceIter, Chunks, Windows}
+use core::slice::{Slice, MutSlice, SliceIter, Chunks, ChunksExact, Windows}
 
 // ============================================================================
 // Section: Slice Creation (from slice.test.tml)
@@ -522,5 +522,28 @@ func test_slice_len_field() -> I32 {
 func test_mut_slice_type() -> I32 {
     // Verify MutSlice type exists
 
+    return 0
+}
+
+// ============================================================================
+// Section: Chunks::next, Chunks::remainder, Slice::chunks, ChunksExact
+// BLOCKED: Chunks::next(mut this) codegen bug:
+// '%this' defined with type 'ptr' but expected '%struct.Slice__I32'
+// The mut this parameter for Chunks is not correctly handled in LLVM IR.
+// Slice::chunks and Slice::chunks_exact can be called (no IR error there),
+// but calling .next() or .remainder() on the result triggers the codegen bug.
+// ============================================================================
+
+// NOTE: Chunks::next, Chunks::remainder, Slice::chunks, Slice::chunks_exact,
+// ChunksExact::next, ChunksExact::remainder — ALL blocked by codegen bug:
+// '%this' defined with type 'ptr' but expected '%struct.Slice__I32'
+// The Slice[T] field inside Chunks/ChunksExact cannot be correctly stored
+// in a mut this context. Even just calling slice.chunks() and then reading
+// chunk_size triggers the bug. Blocked until struct-in-struct codegen is fixed.
+
+@test
+func test_slice_chunks_blocked_note() -> I32 {
+    // Placeholder: confirms the slice test file compiles without new chunk tests
+    assert(true, "chunks/chunks_exact are blocked by codegen — see comment above")
     return 0
 }

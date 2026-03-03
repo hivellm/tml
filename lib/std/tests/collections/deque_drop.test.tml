@@ -1,0 +1,21 @@
+// Tests for Deque::drop — Drop behavior
+use test::{assert}
+use std::collections::Deque
+
+@test
+func test_deque_drop_empty() -> I32 {
+    var d: Deque[I32] = Deque::create[I32]()
+    d.destroy()
+    assert(true, "Deque::drop empty should not crash")
+    return 0
+}
+
+@test
+func test_deque_drop_with_elements() -> I32 {
+    var d: Deque[I32] = Deque::create[I32]()
+    d.push_back(1 as I64)
+    d.push_back(2 as I64)
+    d.destroy()
+    assert(true, "Deque::drop with elements should not crash")
+    return 0
+}

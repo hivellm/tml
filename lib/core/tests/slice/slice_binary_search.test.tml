@@ -1,0 +1,56 @@
+// Tests for Slice::binary_search, binary_search_by, binary_search_by_key
+use test
+
+use core::slice::Slice
+
+@test
+func test_binary_search_found() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    atomic_store(ptr_offset(ptr, 8), 5)
+    atomic_store(ptr_offset(ptr, 12), 7)
+    atomic_store(ptr_offset(ptr, 16), 9)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+    let result: Outcome[I64, I64] = slice.binary_search(ref 5)
+    assert(result.is_ok(), "should find 5")
+    assert_eq(result.unwrap(), 2, "5 is at index 2")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_binary_search_not_found() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    atomic_store(ptr_offset(ptr, 8), 5)
+    atomic_store(ptr_offset(ptr, 12), 7)
+    atomic_store(ptr_offset(ptr, 16), 9)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+    let result: Outcome[I64, I64] = slice.binary_search(ref 4)
+    assert(result.is_err(), "should not find 4")
+    assert_eq(result.unwrap_err(), 2, "4 would be inserted at index 2")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_binary_search_first_element() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+    let result: Outcome[I64, I64] = slice.binary_search(ref 10)
+    assert(result.is_ok(), "should find first element")
+    assert_eq(result.unwrap(), 0, "10 is at index 0")
+
+    dealloc(ptr)
+    return 0
+}

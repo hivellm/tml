@@ -59,5 +59,16 @@ func test_wrapping_duplicate() -> I32 {
     return 0
 }
 
-// Note: Wrapping::eq, partial_cmp, cmp, default tests deferred —
-// ref-passing on generic structs needs investigation
+// =============================================================================
+// NOTE: Wrapping::default(), eq(), partial_cmp(), cmp() — ALL BLOCKED
+//
+// default() — calls Default::default() through trait dispatch → @tml_Default_default
+//             (undefined symbol). Same trait-dispatch codegen bug as other generics.
+//
+// eq(), partial_cmp(), cmp() — `ref` parameter field access codegen bug:
+//   The IR stores `ptr %other` into `alloca ptr %t130`, then uses GEP on %t130
+//   (the alloca address) instead of %other (the pointed-to struct). This reads the
+//   low 32 bits of the pointer address as the field value instead of the actual
+//   field. All three fail at runtime because comparisons produce wrong results.
+//   Root cause: ref parameter stored in alloca; GEP uses alloca address not deref.
+// =============================================================================

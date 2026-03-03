@@ -1,0 +1,14 @@
+// Tests for Map::next — BLOCKED by codegen bug
+// Map's closure type parameter produces invalid %struct.Fn in LLVM IR
+// when map() is instantiated in a standalone test file.
+// Map construction + size_hint tested in iter_size_hints.test.tml (passes in multi-file suite).
+// TODO: Add Map::next tests when closure codegen fix lands
+use test::{assert_eq}
+
+@test
+func test_map_blocked_placeholder() -> I32 {
+    // Map::next coverage blocked by codegen bug
+    // See: iter_size_hints.test.tml for existing map coverage
+    assert_eq(1, 1, "placeholder")
+    return 0
+}

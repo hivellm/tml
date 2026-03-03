@@ -1,0 +1,71 @@
+// Tests for Filter adapter — covers Filter::next
+use test::{assert, assert_eq}
+use core::iter::adapters::filter::{Filter, filter}
+
+// Simple iterator for testing
+type CountUp {
+    current: I32,
+    max: I32
+}
+
+impl Iterator for CountUp {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_filter_basic() -> I32 {
+    // Filter elements > 2 from [0, 1, 2, 3, 4]
+    let mut iter: Filter[CountUp, func(ref I32) -> Bool] = filter(
+        CountUp { current: 0, max: 5 },
+        do(x: ref I32) -> Bool { *x > 2 }
+    )
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 3, "first match is 3")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 4, "second match is 4")
+    let v3: Maybe[I32] = iter.next()
+    assert(v3.is_nothing(), "no more matches")
+    return 0
+}
+
+@test
+func test_filter_none_match() -> I32 {
+    // Filter with predicate that rejects everything
+    let mut iter: Filter[CountUp, func(ref I32) -> Bool] = filter(
+        CountUp { current: 0, max: 3 },
+        do(x: ref I32) -> Bool { *x > 100 }
+    )
+
+    let v1: Maybe[I32] = iter.next()
+    assert(v1.is_nothing(), "no elements match")
+    return 0
+}
+
+@test
+func test_filter_all_match() -> I32 {
+    // Filter with predicate that accepts everything
+    let mut iter: Filter[CountUp, func(ref I32) -> Bool] = filter(
+        CountUp { current: 0, max: 3 },
+        do(x: ref I32) -> Bool { *x >= 0 }
+    )
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "first")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 1, "second")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 2, "third")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+    return 0
+}

@@ -61,3 +61,48 @@ func test_tls_google_peer_cert_pem() -> I32 {
     stream.shutdown()
     0
 }
+
+// ============================================================================
+// write_str, raw_ssl_handle
+// NOTE: TlsStream::read and TlsStream::write(ref [U8]) are blocked by the
+// fixed-array-to-ref-slice codegen bug ([T; N] cast to ref [T] generates [0 x i8]).
+// write_str(Str) works because Str is not a fixed array.
+// ============================================================================
+
+@test
+func test_tls_google_write_str() -> I32 {
+    let ip: Ipv4Addr = dns::lookup("google.com").unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::None())
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
+
+    let request: Str = "GET / HTTP/1.0\r\nHost: google.com\r\n\r\n"
+    let result = stream.write_str(request)
+    assert(result.is_ok(), "write_str should succeed on connected TLS stream")
+
+    stream.shutdown()
+    0
+}
+
+@test
+func test_tls_google_raw_ssl_handle() -> I32 {
+    let ip: Ipv4Addr = dns::lookup("google.com").unwrap()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(ip, 443 as U16))
+    let tcp: TcpStream = TcpStream::connect(addr).unwrap()
+    let ctx: TlsContext = TlsContext::client().unwrap()
+    ctx.set_verify_mode(TlsVerifyMode::None())
+    let raw: RawSocket = tcp.into_raw_socket()
+    let fd: I64 = raw.handle
+    let stream: TlsStream = TlsStream::connect(ctx, fd, "google.com").unwrap()
+
+    let ssl_ptr = stream.raw_ssl_handle()
+    let addr_val: I64 = ssl_ptr as I64
+    assert(addr_val != 0 as I64, "raw_ssl_handle should return non-null SSL pointer")
+
+    stream.shutdown()
+    0
+}

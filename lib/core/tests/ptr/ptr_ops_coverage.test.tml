@@ -1,0 +1,58 @@
+// Tests for uncovered ptr/ops free functions:
+// read, write (free fn wrappers), swap_nonoverlapping
+// NOTE: copy_mut, copy_nonoverlapping_mut blocked — memmove codegen passes
+//       RawMutPtr struct where ptr expected
+// NOTE: read_unaligned, write_unaligned, read_volatile, write_volatile
+//       blocked — underlying RawPtr methods not emitted
+use test::{assert, assert_eq}
+use core::ptr::ops
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+
+// === read / write free functions ===
+
+@test
+func test_read_write_free_fn_i64() -> I32 {
+    let p: *Unit = alloc(8)
+    let addr: I64 = p as I64
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(addr)
+    ops::write[I64](ptr, 42 as I64)
+    let val: I64 = ops::read[I64](ptr.as_const())
+    assert_eq(val, 42 as I64, "write then read free fn I64")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_read_write_free_fn_i32() -> I32 {
+    let p: *Unit = alloc(4)
+    let addr: I64 = p as I64
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(addr)
+    ops::write[I32](ptr, 123)
+    let val: I32 = ops::read[I32](ptr.as_const())
+    assert_eq(val, 123, "write then read free fn I32")
+    dealloc(p)
+    return 0
+}
+
+// === swap_nonoverlapping ===
+
+@test
+func test_swap_nonoverlapping() -> I32 {
+    let pa: *Unit = alloc(16)
+    let pb: *Unit = alloc(16)
+    let a: RawMutPtr[I64] = RawMutPtr::from_addr(pa as I64)
+    let b: RawMutPtr[I64] = RawMutPtr::from_addr(pb as I64)
+    a.write(10 as I64)
+    a.add(1 as I64).write(20 as I64)
+    b.write(30 as I64)
+    b.add(1 as I64).write(40 as I64)
+    ops::swap_nonoverlapping[I64](a, b, 2 as I64)
+    assert_eq(a.read(), 30 as I64, "swap a[0] should be 30")
+    assert_eq(a.add(1 as I64).read(), 40 as I64, "swap a[1] should be 40")
+    assert_eq(b.read(), 10 as I64, "swap b[0] should be 10")
+    assert_eq(b.add(1 as I64).read(), 20 as I64, "swap b[1] should be 20")
+    dealloc(pa)
+    dealloc(pb)
+    return 0
+}

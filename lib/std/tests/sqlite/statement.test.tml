@@ -219,3 +219,16 @@ func test_data_count() -> I32 {
     db.close()
     return 0
 }
+
+// --- Statement::raw_handle ---
+
+@test
+func test_statement_raw_handle() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let stmt: Statement = db.prepare("SELECT 1").unwrap()
+    let handle: *Unit = stmt.raw_handle()
+    assert(handle as I64 != 0, "raw_handle should not be null")
+    stmt.finalize()
+    db.close()
+    return 0
+}

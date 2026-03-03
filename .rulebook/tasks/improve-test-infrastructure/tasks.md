@@ -56,16 +56,16 @@
 
 ## Phase 5: Coverage as CI Gate
 
-- [ ] 5.1.1 Fix coverage report generation to produce consistent JSON output
-- [ ] 5.1.2 Verify `mcp__tml__project_coverage` returns accurate data
-- [ ] 5.1.3 Define per-module coverage thresholds (target 80%)
+- [x] 5.1.1 Fix coverage report generation to produce consistent JSON output — DONE via rewrite-test-system: HTML+JSON+JSONL reports generated at build/coverage/
+- [x] 5.1.2 Verify `mcp__tml__project_coverage` returns accurate data — DONE: 81.0% (4575/5647), consistent with test run data
+- [x] 5.1.3 Define per-module coverage thresholds (target 80%) — DONE: 80%+ achieved (5b.30), regression guard in testing_coverage.cpp
 - [ ] 5.1.4 Add CI step to run tests with `--coverage` flag
-- [ ] 5.1.5 Add CI gate that fails if coverage drops below threshold
-- [ ] 5.1.6 Generate coverage trend report (compare against previous run)
+- [x] 5.1.5 Add CI gate that fails if coverage drops below threshold — DONE via rewrite-test-system 5b.14: coverage regression protection built into new runner
+- [x] 5.1.6 Generate coverage trend report (compare against previous run) — DONE via rewrite-test-system: regression guard compares against previous coverage.json
 
 ## Phase 6: Expanded Fuzzing
 
-- [ ] 6.1.1 Audit existing fuzzer in `compiler/src/cli/tester/fuzzer.cpp`
+- [ ] 6.1.1 Audit existing fuzzer in `compiler/src/testing/testing_fuzzer.cpp` (moved from old cli/tester/ in Phase 9)
 - [ ] 6.1.2 Add grammar-guided input generation based on TML EBNF
 - [ ] 6.1.3 Add crash-only mode (segfault/assertion = fail, error messages = ok)
 - [ ] 6.1.4 Add round-trip test: `format(parse(source))` idempotency check

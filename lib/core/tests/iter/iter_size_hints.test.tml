@@ -14,7 +14,10 @@ use core::iter::adapters::map::{Map, map}
 use core::iter::sources::once::{Once, once}
 use core::iter::sources::once_with::{OnceWith, once_with}
 use core::iter::sources::repeat_n::{RepeatN, repeat_n}
-use core::iter::sources::legacy::{EmptyI32, empty_i32, OnceI32, once_i32, RepeatNI32, repeat_n_i32}
+use core::iter::sources::legacy::{
+    EmptyI32, empty_i32, OnceI32, once_i32, RepeatNI32, repeat_n_i32,
+    EmptyI64, empty_i64, OnceI64, once_i64, RepeatNI64, repeat_n_i64,
+}
 
 // A custom iterator with a known exact size_hint
 type SizedIter {
@@ -376,5 +379,50 @@ func test_repeat_n_i32_size_hint() -> I32 {
     let iter: RepeatNI32 = repeat_n_i32(99, 4)
     let hint: (I64, Maybe[I64]) = iter.size_hint()
     assert_eq(hint.0, 4 as I64, "repeat_n_i32(4): lo = 4")
+    return 0
+}
+
+// ============================================================================
+// Legacy I64 iterator size_hint tests (EmptyI64, OnceI64, RepeatNI64)
+// ============================================================================
+
+@test
+func test_empty_i64_size_hint() -> I32 {
+    let iter: EmptyI64 = empty_i64()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "empty_i64: lo = 0")
+    return 0
+}
+
+@test
+func test_once_i64_size_hint_fresh() -> I32 {
+    let iter: OnceI64 = once_i64(42 as I64)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 1 as I64, "once_i64: lo = 1")
+    return 0
+}
+
+@test
+func test_once_i64_size_hint_exhausted() -> I32 {
+    let mut iter: OnceI64 = once_i64(42 as I64)
+    iter.next()
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "once_i64 after next: lo = 0")
+    return 0
+}
+
+@test
+func test_repeat_n_i64_size_hint() -> I32 {
+    let iter: RepeatNI64 = repeat_n_i64(99 as I64, 5 as I64)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 5 as I64, "repeat_n_i64(5): lo = 5")
+    return 0
+}
+
+@test
+func test_repeat_n_i64_size_hint_zero() -> I32 {
+    let iter: RepeatNI64 = repeat_n_i64(99 as I64, 0 as I64)
+    let hint: (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(hint.0, 0 as I64, "repeat_n_i64(0): lo = 0")
     return 0
 }

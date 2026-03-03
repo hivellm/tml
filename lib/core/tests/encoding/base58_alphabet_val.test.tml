@@ -1,0 +1,45 @@
+use test
+use core::encoding::base58
+
+@test
+func test_alphabet_val_digits() -> I32 {
+    // '1' (49) -> 0, '9' (57) -> 8
+    assert_eq(base58::alphabet_val(49), 0)
+    assert_eq(base58::alphabet_val(57), 8)
+    0
+}
+
+@test
+func test_alphabet_val_uppercase() -> I32 {
+    // 'A' (65) -> 9, 'H' (72) -> 16
+    assert_eq(base58::alphabet_val(65), 9)
+    assert_eq(base58::alphabet_val(72), 16)
+    // 'J' (74) -> 17, 'N' (78) -> 21 (skip I=73)
+    assert_eq(base58::alphabet_val(74), 17)
+    assert_eq(base58::alphabet_val(78), 21)
+    // 'P' (80) -> 22, 'Z' (90) -> 32 (skip O=79)
+    assert_eq(base58::alphabet_val(80), 22)
+    assert_eq(base58::alphabet_val(90), 32)
+    0
+}
+
+@test
+func test_alphabet_val_lowercase() -> I32 {
+    // 'a' (97) -> 33, 'k' (107) -> 43
+    assert_eq(base58::alphabet_val(97), 33)
+    assert_eq(base58::alphabet_val(107), 43)
+    // 'm' (109) -> 44, 'z' (122) -> 57 (skip l=108)
+    assert_eq(base58::alphabet_val(109), 44)
+    assert_eq(base58::alphabet_val(122), 57)
+    0
+}
+
+@test
+func test_alphabet_val_invalid() -> I32 {
+    // '0' (48), 'I' (73), 'O' (79), 'l' (108) are invalid
+    assert_eq(base58::alphabet_val(48), -1)
+    assert_eq(base58::alphabet_val(73), -1)
+    assert_eq(base58::alphabet_val(79), -1)
+    assert_eq(base58::alphabet_val(108), -1)
+    0
+}

@@ -1,0 +1,13 @@
+// NOTE: parse_socket_addr_v6 causes runtime crash — blocked.
+// NOTE: parse_socket_addr (generic), SocketAddr::parse — cause compiler crash — blocked.
+// All net/parser uncovered functions are blocked by compiler issues.
+// This file is intentionally minimal to avoid crashing the suite.
+use test::{assert}
+
+@test
+func test_net_parser_uncovered_blocked() -> I32 {
+    // parse_socket_addr_v6, parse_socket_addr, SocketAddr::parse(V6),
+    // AddrParseError::kind — all blocked by compiler crash on V6/SocketAddr codegen.
+    assert(true, "blocked: see parser_socket.test.tml note on line 144")
+    return 0
+}

@@ -222,23 +222,31 @@ cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat" 2>&1
 
 ## Test Commands
 
-**⚠️ EXACT TEST + COVERAGE COMMAND (MANDATORY) ⚠️**
+**⚠️ USE MCP TOOLS — NOT BASH — FOR ALL TEST OPERATIONS ⚠️**
 
+The new test system (`compiler/src/testing/`) uses a subprocess-based architecture (Go model):
+- Each test suite compiles to an EXE and runs as a subprocess
+- NDJSON protocol streams results from subprocess to coordinator
+- Coverage via `TML_COVERAGE_FILE` env var — no LLVM profiling, no hangs
+
+**Via MCP (MANDATORY):**
+```
+mcp__tml__test                                     # full suite
+mcp__tml__test with suite="core/str"               # core/str → lib/core/tests/str/
+mcp__tml__test with suite="std/json"               # std/json → lib/std/tests/json/
+mcp__tml__test with path="lib/core/tests/str/basic.test.tml"  # single file
+mcp__tml__test with coverage=true, no_cache=true   # coverage run (no hangs)
+mcp__tml__test with structured=true                # parsed JSON results
+```
+
+**Bash fallback (only when MCP tool times out — run ONCE, save to file):**
 ```bash
 cd f:/Node/hivellm/tml && build/debug/bin/tml.exe test --profile --verbose --no-cache --coverage 2>&1
 ```
 
-### Suite-Level Test Filtering
+**CRITICAL: NEVER DELETE TEST CACHES!** (`build/debug/.new-test-cache.json`, `build/debug/.incr-cache/`). They auto-invalidate on source changes.
 
-```bash
-# Via MCP (PREFERRED):
-mcp__tml__test with suite="core/str"     # core/str → lib/core/tests/str/
-mcp__tml__test with suite="std/json"     # std/json → lib/std/tests/json/
-```
-
-**CRITICAL: NEVER DELETE TEST CACHES!** (`build/debug/.run-cache/`, `build/debug/.test-cache/`, `.test-cache.json`). They auto-invalidate on source changes.
-
-Output: `build/debug/bin/tml.exe` (debug), `build/release/bin/tml.exe` (release), `build/debug/bin/tml_tests.exe` (C++ tests).
+Output: `build/debug/bin/tml.exe` (debug), `build/release/bin/tml.exe` (release), `build/debug/bin/tml_tests.exe` (C++ unit tests).
 
 ## Key Design Decisions
 
@@ -264,11 +272,11 @@ TML syntax optimized for LLM comprehension — keywords over symbols:
 tml/
 ├── compiler/           # C++ compiler implementation
 │   ├── src/            # lexer/, parser/, types/, borrow/, hir/, mir/, codegen/,
-│   │                   # query/, backend/, cli/ (commands/, builder/, tester/),
-│   │                   # format/, plugin/, launcher/
-│   ├── include/        # Headers (plugin/abi.h, query/, codegen/)
+│   │                   # query/, backend/, cli/ (commands/, builder/),
+│   │                   # testing/ (new test system), format/, plugin/, launcher/
+│   ├── include/        # Headers (plugin/abi.h, query/, codegen/, testing/)
 │   ├── runtime/        # Essential C runtime (essential.c, mem.c)
-│   └── tests/          # C++ unit tests
+│   └── tests/          # C++ unit tests (process, protocol, dispatcher, cache)
 ├── lib/                # TML standard libraries
 │   ├── core/           # Core (alloc, iter, slice, str, fmt, error)
 │   ├── std/            # Std (collections, file, json, crypto)

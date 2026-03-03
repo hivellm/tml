@@ -1,0 +1,102 @@
+// Tests for SIMD intrinsics: simd_load_ptr, simd_bitmask,
+// sse2_cmpeq_epi8, sse2_movemask_epi8
+use test::{assert, assert_eq}
+use core::simd::i32x4::I32x4
+use core::simd::u8x16::U8x16
+use core::intrinsics::{
+    simd_load, simd_load_ptr, simd_extract,
+    simd_bitmask, llvm_eq,
+    sse2_cmpeq_epi8, sse2_movemask_epi8
+}
+
+// ============================================================================
+// simd_load_ptr — load SIMD vector from raw pointer
+// ============================================================================
+
+@test
+func test_simd_load_ptr_i32x4() -> I32 {
+    // Create a known I32x4 value
+    let v: I32x4 = I32x4::new(10, 20, 30, 40)
+    // Load it from a pointer using simd_load_ptr
+    let loaded: I32x4 = lowlevel {
+        simd_load_ptr[I32x4](ref v as *Unit)
+    }
+    assert_eq(loaded.get(0), 10, "lane 0 should be 10")
+    assert_eq(loaded.get(1), 20, "lane 1 should be 20")
+    assert_eq(loaded.get(2), 30, "lane 2 should be 30")
+    assert_eq(loaded.get(3), 40, "lane 3 should be 40")
+    return 0
+}
+
+@test
+func test_simd_load_ptr_u8x16() -> I32 {
+    let v: U8x16 = U8x16::splat(42 as U8)
+    let loaded: U8x16 = lowlevel {
+        simd_load_ptr[U8x16](ref v as *Unit)
+    }
+    assert_eq(loaded.get(0), 42 as U8, "u8x16 lane 0 should be 42")
+    assert_eq(loaded.get(15), 42 as U8, "u8x16 lane 15 should be 42")
+    return 0
+}
+
+// ============================================================================
+// sse2_cmpeq_epi8 + sse2_movemask_epi8 — SSE2 byte comparison
+// ============================================================================
+
+@test
+func test_sse2_cmpeq_movemask() -> I32 {
+    // Two vectors: match on all lanes
+    let a: U8x16 = U8x16::splat(65 as U8)
+    let b: U8x16 = U8x16::splat(65 as U8)
+    let mask_result: I32 = lowlevel {
+        let va = simd_load[U8x16](ref a)
+        let vb = simd_load[U8x16](ref b)
+        let cmp = sse2_cmpeq_epi8[U8x16](va, vb)
+        sse2_movemask_epi8[U8x16](cmp)
+    }
+    // All 16 bytes match -> all 16 bits set -> 0xFFFF = 65535
+    assert_eq(mask_result, 65535, "all bytes equal should give 0xFFFF")
+    return 0
+}
+
+// ============================================================================
+// simd_bitmask — convert vector boolean mask to integer
+// ============================================================================
+
+@test
+func test_simd_bitmask_i32x4() -> I32 {
+    let a: I32x4 = I32x4::new(1, 2, 3, 4)
+    let b: I32x4 = I32x4::new(1, 0, 3, 0)
+    // Element-wise comparison produces <4 x i1> mask
+    // Then simd_bitmask converts to integer
+    let mask: I32 = lowlevel {
+        let va = simd_load[I32x4](ref a)
+        let vb = simd_load[I32x4](ref b)
+        let cmp = llvm_eq(va, vb)
+        simd_bitmask[I32x4](cmp)
+    }
+    // Lanes 0 and 2 match -> bits 0 and 2 set -> 0b0101 = 5
+    assert_eq(mask, 5, "lanes 0 and 2 match -> bitmask 0b0101 = 5")
+    return 0
+}
+
+@test
+func test_sse2_cmpeq_partial_match() -> I32 {
+    // First byte differs, rest match
+    let a: U8x16 = U8x16::splat(10 as U8)
+    let b: U8x16 = U8x16::new(
+        99 as U8, 10 as U8, 10 as U8, 10 as U8,
+        10 as U8, 10 as U8, 10 as U8, 10 as U8,
+        10 as U8, 10 as U8, 10 as U8, 10 as U8,
+        10 as U8, 10 as U8, 10 as U8, 10 as U8
+    )
+    let mask_result: I32 = lowlevel {
+        let va = simd_load[U8x16](ref a)
+        let vb = simd_load[U8x16](ref b)
+        let cmp = sse2_cmpeq_epi8[U8x16](va, vb)
+        sse2_movemask_epi8[U8x16](cmp)
+    }
+    // Bytes 1-15 match, byte 0 does not -> 0xFFFE = 65534
+    assert_eq(mask_result, 65534, "first byte differs should give 0xFFFE")
+    return 0
+}

@@ -1,4 +1,7 @@
 // Tests for json/serialize — to_json and from_json for primitive types
+// NOTE: List::to_json, List::from_json, HashMap::to_json, HashMap::from_json are
+// blocked by codegen bug: generic ToJson/FromJson trait impls on parameterized types
+// return () instead of the correct return types.
 use test
 use std::json::{Json, parse}
 use std::json::Json
@@ -121,3 +124,4 @@ func test_f32_to_json() -> I32 {
     assert(s.len() > 0, "F32 to_json should produce output")
     0
 }
+

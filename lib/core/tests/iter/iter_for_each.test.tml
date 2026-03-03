@@ -1,0 +1,24 @@
+// Tests for Iterator::for_each
+use test::{assert, assert_eq}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_for_each_basic() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    let mut sum: I32 = 0
+    iter.for_each(do(v: I32) -> Unit {
+        sum = sum + v
+    })
+    assert_eq(sum, 10, "for_each should sum 0+1+2+3+4=10")
+    return 0
+}

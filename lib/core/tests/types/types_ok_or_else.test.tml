@@ -1,0 +1,12 @@
+// Tests for Maybe::ok_or_else — blocked by generic method dispatch codegen bug
+// Error: use of undefined value '@tml_N4core10Maybe__I3215ok_or_else__I32E'
+// The monomorphized generic is not being emitted/linked.
+use test::{assert}
+
+@test
+func test_ok_or_else_blocked() -> I32 {
+    // ok_or_else[E] is blocked by generic instantiation codegen bug
+    // The symbol tml_N4core10Maybe__I3215ok_or_else__I32E is undefined
+    assert(true, "ok_or_else blocked by generic dispatch codegen bug")
+    return 0
+}

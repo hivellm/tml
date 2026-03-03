@@ -4,7 +4,17 @@
 - [suite-merging-investigation.md](suite-merging-investigation.md) - Full findings on the %struct.This/%struct.T and toowned_assoc bugs
 - [this-parameter-conventions.md](this-parameter-conventions.md) - How `this`/`self` parameter types are determined in codegen
 
-## Key Findings (2026-03-01)
+## Key Findings
+
+### Generic Inference: FuncType vs ClosureType Mismatch (2026-03-03) -- FIXED
+- `extract_type_params()` in both `expr_call_method.cpp` and `expr_call.cpp` only matched `FuncType` against `FuncType`
+- Closures return `ClosureType` from `check_closure()` (types_checker.cpp:247), not `FuncType`
+- When method signature has `func() -> U` and arg is closure `do() -> I32`, type param `U` was never extracted
+- Fix: Added FuncType-vs-ClosureType matching case in both `extract_type_params` functions
+- Affected: `map_or_else[U]`, any method with generic U inferred from closure params
+- Key insight: impl-level generics (T) + method-level generics (U) combine in type_params as ["T","U"]
+  - Position 0 maps to receiver type_args[0] correctly
+  - Position 1+ must be inferred from args via `extract_type_params`
 
 ### Old Suite System %struct.This/%struct.T: DEFUNCT
 - The old tester (`compiler/src/cli/tester/`) is deleted

@@ -1,4 +1,12 @@
 // Tests for core::fmt::traits - FmtError, Alignment, Sign
+// NOTE: Write::write_char and Write::write_fmt are BLOCKED by behavior default
+// method dispatch codegen bug: the Str argument is passed as i32 (global address)
+// but the function signature expects ptr. The call site generates:
+//   @tml_WriteCounter_write_fmt(ptr %this, i32 @.str.1)
+// instead of:
+//   @tml_WriteCounter_write_fmt(ptr %this, ptr @.str.1)
+// Root cause: default behavior methods call write_str(s) where s passes through
+// the behavior vtable dispatch with wrong type for string arguments.
 use test::{assert, assert_eq}
 use core::fmt::traits::{FmtError, Alignment, Sign}
 

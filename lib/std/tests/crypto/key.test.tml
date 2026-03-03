@@ -646,3 +646,30 @@ func test_keypair_to_jwk() -> I32 {
     kp.destroy()
     return 0
 }
+
+// --- SecretKey::drop and PrivateKey::drop ---
+
+@test
+func test_secret_key_drop_explicit() -> I32 {
+    // SecretKey::drop is called via scope exit
+    let mut key: SecretKey = generate_key(16 as I64).unwrap()
+    // key goes out of scope, drop called
+    assert(true, "SecretKey::drop via scope should not crash")
+    return 0
+}
+
+@test
+func test_private_key_drop_explicit() -> I32 {
+    // PrivateKey::drop is called via scope exit
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let result = generate_ec_key_pair(ref opts)
+    when result {
+        Err(_) => { assert(true, "ec gen may fail") },
+        Ok(kp) => {
+            // kp.private_key goes out of scope, PrivateKey::drop called
+            let _ = kp.private_key.key_type()
+        },
+    }
+    assert(true, "PrivateKey::drop via scope should not crash")
+    return 0
+}

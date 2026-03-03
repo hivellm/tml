@@ -1,0 +1,27 @@
+// Tests for Maybe::inspect — closure with ref parameter returning Unit
+use test::{assert, assert_eq}
+
+@test
+func test_inspect_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let mut seen: I32 = 0
+    let r: Maybe[I32] = x.inspect(do(v: ref I32) -> Unit {
+        seen = *v
+    })
+    assert(r.is_just(), "inspect should return the original Maybe")
+    assert_eq(r.unwrap(), 42, "inspect should preserve the value")
+    assert_eq(seen, 42, "inspect closure should have run")
+    return 0
+}
+
+@test
+func test_inspect_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let mut seen: I32 = 0
+    let r: Maybe[I32] = x.inspect(do(v: ref I32) -> Unit {
+        seen = 99
+    })
+    assert(r.is_nothing(), "inspect on Nothing should return Nothing")
+    assert_eq(seen, 0, "inspect closure should not run on Nothing")
+    return 0
+}

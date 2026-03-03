@@ -1,9 +1,30 @@
-// Tests for Maybe::also — blocked by generic method monomorphization
-// also[U] does not emit function body even when U=T
-use test::{assert}
+// Tests for Maybe::also
+use test::{assert, assert_eq}
 
 @test
-func test_maybe_also_placeholder() -> I32 {
-    assert(true, "Maybe::also blocked by generic method codegen")
+func test_also_just_just() -> I32 {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I32] = Just(99)
+    let r: Maybe[I32] = x.also(y)
+    assert(r.is_just(), "also Just+Just should return Just")
+    assert_eq(r.unwrap(), 99, "also should return the second value")
+    return 0
+}
+
+@test
+func test_also_just_nothing() -> I32 {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.also(y)
+    assert(r.is_nothing(), "also Just+Nothing should return Nothing")
+    return 0
+}
+
+@test
+func test_also_nothing_just() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(99)
+    let r: Maybe[I32] = x.also(y)
+    assert(r.is_nothing(), "also Nothing+Just should return Nothing")
     return 0
 }

@@ -106,3 +106,17 @@ func test_x509_chain_min_verify_chain() -> I32 {
     cert.destroy()
     return 0
 }
+
+// --- X509CertMin::drop (Drop impl) ---
+
+@test
+func test_x509_cert_min_drop() -> I32 {
+    // Let X509CertMin go out of scope without explicit destroy — exercises Drop impl
+    {
+        let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+        let pk = cert.public_key()
+        assert(pk.size_bits() > (0 as I64), "public key has positive size")
+        // cert goes out of scope here, drop is called automatically
+    }
+    return 0
+}

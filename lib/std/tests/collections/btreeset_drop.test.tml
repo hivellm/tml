@@ -1,0 +1,35 @@
+// Tests for BTreeSet::drop — Drop behavior triggered by scope exit
+use test::{assert, assert_eq}
+use std::collections::BTreeSet
+
+@test
+func test_btreeset_drop_empty() -> I32 {
+    // drop is called implicitly when BTreeSet goes out of scope
+    var s: BTreeSet = BTreeSet::create()
+    s.destroy()
+    assert(true, "BTreeSet::drop (via destroy) should not crash")
+    return 0
+}
+
+@test
+func test_btreeset_drop_with_elements() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(1)
+    s.insert(2)
+    s.insert(3)
+    s.destroy()
+    assert(true, "BTreeSet::drop with elements should not crash")
+    return 0
+}
+
+@test
+func test_btreeset_scope_drop() -> I32 {
+    // BTreeSet goes out of scope here — drop called implicitly
+    {
+        var s: BTreeSet = BTreeSet::create()
+        s.insert(10)
+        s.insert(20)
+    }
+    assert(true, "BTreeSet scope drop should not crash")
+    return 0
+}

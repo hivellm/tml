@@ -1,0 +1,100 @@
+// Tests for SocketAddrV4 and SocketAddrV6 uncovered methods
+use test
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+use std::net::socket::{SocketAddrV4, SocketAddrV6}
+
+// =============================================================================
+// SocketAddrV4::hash
+// =============================================================================
+
+@test
+func test_socket_addr_v4_hash_consistent() -> I32 {
+    let addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 8080 as U16)
+    let h1: I64 = addr.hash()
+    let h2: I64 = addr.hash()
+    assert_eq(h1, h2, "hash should be consistent")
+    return 0
+}
+
+@test
+func test_socket_addr_v4_hash_different_ports() -> I32 {
+    let addr1: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let addr2: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 443 as U16)
+    let h1: I64 = addr1.hash()
+    let h2: I64 = addr2.hash()
+    assert(h1 != h2, "different ports should hash differently")
+    return 0
+}
+
+// NOTE: SocketAddrV4::to_string() BLOCKED — Display::fmt generates undefined symbol
+// @tml_..._to_string. The Display impl calls ip.fmt(f) + port.to_string() through
+// Formatter which isn't being monomorphized for SocketAddrV4.
+// NOTE: SocketAddrV4::debug_string() BLOCKED — same trait dispatch issue.
+
+// =============================================================================
+// SocketAddrV4::duplicate
+// =============================================================================
+
+@test
+func test_socket_addr_v4_duplicate() -> I32 {
+    let addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 9000 as U16)
+    let copy: SocketAddrV4 = addr.duplicate()
+    assert_eq(copy.port() as I32, 9000, "duplicate should have same port")
+    return 0
+}
+
+// =============================================================================
+// SocketAddrV6::ip and set_ip
+// =============================================================================
+
+@test
+func test_socket_addr_v6_ip() -> I32 {
+    let ip: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: SocketAddrV6 = SocketAddrV6::new(ip, 8080 as U16, 0 as U32, 0 as U32)
+    let got: Ipv6Addr = addr.ip()
+    assert(got.is_loopback(), "ip() should return LOCALHOST which is loopback")
+    return 0
+}
+
+@test
+func test_socket_addr_v6_set_ip() -> I32 {
+    let ip1: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let ip2: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    var addr: SocketAddrV6 = SocketAddrV6::new(ip1, 80 as U16, 0 as U32, 0 as U32)
+    addr.set_ip(ip2)
+    let got: Ipv6Addr = addr.ip()
+    assert(got.is_unspecified(), "set_ip should update the IP address")
+    return 0
+}
+
+// NOTE: SocketAddrV6::to_string() BLOCKED — same Display::fmt undefined symbol issue as V4.
+// NOTE: SocketAddrV6::debug_string() BLOCKED — same trait dispatch issue.
+
+// =============================================================================
+// SocketAddrV6::hash
+// =============================================================================
+
+@test
+func test_socket_addr_v6_hash_consistent() -> I32 {
+    let addr: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 8080 as U16, 0 as U32, 0 as U32)
+    let h1: I64 = addr.hash()
+    let h2: I64 = addr.hash()
+    assert_eq(h1, h2, "hash should be consistent")
+    return 0
+}
+
+@test
+func test_socket_addr_v6_duplicate() -> I32 {
+    let addr: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 7777 as U16, 1 as U32, 2 as U32)
+    let copy: SocketAddrV6 = addr.duplicate()
+    assert_eq(copy.port() as I32, 7777, "duplicate should have same port")
+    assert_eq(copy.flow_info() as I32, 1, "duplicate should have same flow_info")
+    assert_eq(copy.scope_id() as I32, 2, "duplicate should have same scope_id")
+    return 0
+}
+
+// NOTE: SocketAddrV4::partial_cmp, cmp, eq — BLOCKED
+// eq(this, other: ref SocketAddrV4) has same alloca-GEP codegen bug as Wrapping::eq:
+// IR uses alloca ptr address for GEP instead of dereferencing the pointer.
+// SocketAddrV6::partial_cmp, cmp, eq — same issue.
+// SocketAddrV6::eq — same alloca-GEP bug.

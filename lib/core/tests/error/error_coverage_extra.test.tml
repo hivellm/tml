@@ -1,0 +1,36 @@
+// Tests for uncovered error module functions:
+// Error::description on different types, ChainedError::source
+use test::{assert, assert_eq}
+use core::error::{SimpleError, ParseError, IoError, IoErrorKind, ChainedError}
+
+// === Error::description on IoError ===
+
+@test
+func test_io_error_description() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    let desc: Str = err.description()
+    assert_eq(desc, "entity not found", "IoError description defaults to to_string")
+    return 0
+}
+
+// === Error::description on ParseError with position ===
+
+@test
+func test_parse_error_with_pos_description() -> I32 {
+    let err = ParseError::with_position("bad char", 3)
+    let desc: Str = err.description()
+    assert_eq(desc, "parse error at position 3: bad char", "ParseError description with position")
+    return 0
+}
+
+// === ChainedError display and debug ===
+
+@test
+func test_chained_error_debug() -> I32 {
+    let inner = SimpleError::new("root")
+    let chained = ChainedError::new("context", inner)
+    let dbg: Str = chained.debug_string()
+    assert(dbg.contains("ChainedError"), "debug should contain ChainedError")
+    assert(dbg.contains("root"), "debug should contain cause message")
+    return 0
+}

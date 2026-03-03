@@ -1,0 +1,40 @@
+use test::{assert, assert_eq}
+use test::e2e::server::{TcpTestServer, UdpTestServer}
+use test::e2e::client::{TcpTestClient, UdpTestClient}
+use test::e2e::response::E2eResult
+
+@test
+func test_tcp_client_timeout() -> I32 {
+    let server: TcpTestServer = TcpTestServer::new().unwrap()
+    let c: TcpTestClient = TcpTestClient::new(server.addr())
+    let c2: TcpTestClient = c.timeout(3000)
+    let c3: TcpTestClient = c2.send_byte(65)
+    let c4: TcpTestClient = c3.expect_n(1)
+    let result: E2eResult = c4.run(ref server)
+    assert(result.ok(), result.error_msg())
+    0
+}
+
+@test
+func test_tcp_client_nodelay() -> I32 {
+    let server: TcpTestServer = TcpTestServer::new().unwrap()
+    let c: TcpTestClient = TcpTestClient::new(server.addr())
+    let c2: TcpTestClient = c.nodelay(true)
+    let c3: TcpTestClient = c2.send_byte(66)
+    let c4: TcpTestClient = c3.expect_n(1)
+    let result: E2eResult = c4.run(ref server)
+    assert(result.ok(), result.error_msg())
+    0
+}
+
+@test
+func test_udp_client_timeout() -> I32 {
+    let server: UdpTestServer = UdpTestServer::new().unwrap()
+    let c: UdpTestClient = UdpTestClient::new(server.addr())
+    let c2: UdpTestClient = c.timeout(3000)
+    let c3: UdpTestClient = c2.send_byte(67)
+    let c4: UdpTestClient = c3.expect_n(1)
+    let result: E2eResult = c4.run(ref server)
+    assert(result.ok(), result.error_msg())
+    0
+}

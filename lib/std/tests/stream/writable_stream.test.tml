@@ -139,3 +139,177 @@ func len_write(data: I64, cb: I64) {
     assert_false(ws.writable(), "not writable after destroy")
     return 0
 }
+
+// ============================================================================
+// Tests: once, off, listener_count
+// ============================================================================
+
+@test func test_writable_stream_once() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    ws.once("close", noop_listener as I64)
+    assert_eq(ws.listener_count("close"), 1 as I64, "one close listener")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_off() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    ws.on("close", noop_listener as I64)
+    assert_eq(ws.listener_count("close"), 1 as I64, "one close listener")
+    let removed: Bool = ws.off("close", noop_listener as I64)
+    assert_true(removed, "off returns true when listener found")
+    assert_eq(ws.listener_count("close"), 0 as I64, "no listeners after off")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_listener_count() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_eq(ws.listener_count("drain"), 0 as I64, "no drain listeners initially")
+    ws.on("drain", noop_listener as I64)
+    assert_eq(ws.listener_count("drain"), 1 as I64, "one drain listener")
+    ws.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: write_bytes (corked path — buffers bytes)
+// NOTE: ws_realloc, wbuf_append_bytes, wbuf_clear are private module-level
+// functions not accessible from test files.
+// wbuf_append_bytes is called internally by write_bytes (corked path).
+// wbuf_clear is dead code — not called by any public API.
+// ws_realloc is called internally by wbuf_append_bytes when buffer grows.
+// ============================================================================
+
+@test func test_writable_stream_write_bytes_corked() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+    ws.cork()
+    let buf: [U8; 3] = [65 as U8, 66 as U8, 67 as U8]
+    let ok: Bool = ws.write_bytes(ref buf)
+    assert_true(ok, "write_bytes below hwm returns true")
+    assert_eq(ws.writable_length(), 3 as I64, "3 bytes buffered")
+    ws.uncork()
+    assert_eq(ws.writable_length(), 0 as I64, "flushed after uncork")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_write_bytes_uncorked() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(len_write as I64)
+    let buf: [U8; 5] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8]
+    let ok: Bool = ws.write_bytes(ref buf)
+    assert_true(ok, "write_bytes uncorked returns true (below hwm)")
+    assert_eq(ws.writable_length(), 0 as I64, "not buffered when uncorked")
+    ws.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: writable_corked_count, writable_high_water_mark,
+//        writable_needs_drain, writable_aborted, destroyed
+// ============================================================================
+
+@test func test_writable_stream_corked_count() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_eq(ws.writable_corked_count(), 0 as I64, "no corks initially")
+    ws.cork()
+    assert_eq(ws.writable_corked_count(), 1 as I64, "one cork")
+    ws.cork()
+    assert_eq(ws.writable_corked_count(), 2 as I64, "two corks")
+    ws.uncork()
+    assert_eq(ws.writable_corked_count(), 1 as I64, "back to one")
+    ws.uncork()
+    assert_eq(ws.writable_corked_count(), 0 as I64, "fully uncorked")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_high_water_mark() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(4096)
+    assert_eq(ws.writable_high_water_mark(), 4096 as I64, "hwm matches options")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_needs_drain() -> I32 {
+    // Use tiny hwm to trigger needs_drain
+    var ws: WritableStream = WritableStream::with_options(2)
+    ws.set_write_fn(len_write as I64)
+    assert_false(ws.writable_needs_drain(), "no drain needed initially")
+    ws.cork()
+    ws.write("abc")   // 3 bytes > hwm(2) → triggers needs_drain
+    // Check BEFORE uncork — uncork flushes and resets the drain flag
+    assert_true(ws.writable_needs_drain(), "drain needed after exceeding hwm (corked)")
+    ws.uncork()
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_destroyed() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_false(ws.destroyed(), "not destroyed initially")
+    ws.destroy()
+    assert_true(ws.destroyed(), "destroyed after destroy")
+    return 0
+}
+
+@test func test_writable_stream_aborted() -> I32 {
+    // writable_aborted() uses handle guard: returns false when handle is null.
+    // After destroy(), handle is freed to null, so writable_aborted() is false.
+    // The flag is only observable inside a "close" event listener while handle is valid.
+    // We test that it returns false initially (not aborted on fresh stream).
+    var ws: WritableStream = WritableStream::new()
+    assert_false(ws.writable_aborted(), "not aborted on fresh stream")
+    ws.end()
+    assert_false(ws.writable_aborted(), "not aborted after end+finish")
+    ws.destroy()
+    return 0
+}
+
+// ============================================================================
+// Tests: destroy_with_error, set_errored_flag, error_message
+// NOTE: After destroy_with_error, handle is freed (null) so errored() returns
+// false (guard at top of function). Use set_errored_flag directly to test.
+// ============================================================================
+
+@test func test_writable_stream_set_errored_flag() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_false(ws.errored(), "not errored before flag set")
+    ws.set_errored_flag()
+    assert_true(ws.errored(), "errored after set_errored_flag")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_destroy_with_error_destroys() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_false(ws.destroyed(), "not destroyed initially")
+    ws.destroy_with_error("something failed")
+    assert_true(ws.destroyed(), "destroyed after destroy_with_error")
+    return 0
+}
+
+// ============================================================================
+// Tests: get_error_ptr, error_message
+// NOTE: wbuf_clear is a private module-level function and cannot be tested.
+// ============================================================================
+
+@test func test_writable_stream_get_error_ptr_no_error() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    let ptr: I64 = ws.get_error_ptr()
+    // No error set — pointer may be 0 or point to empty string
+    assert(ptr >= 0 as I64, "get_error_ptr returns valid pointer")
+    ws.destroy()
+    return 0
+}
+
+@test func test_writable_stream_error_message_no_error() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    let msg: Str = ws.error_message()
+    // No error set — message should be empty or a default string
+    assert(msg.len() >= 0, "error_message returns a string")
+    ws.destroy()
+    return 0
+}

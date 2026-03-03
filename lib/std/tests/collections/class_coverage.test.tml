@@ -1,6 +1,6 @@
 // Tests targeting uncovered class_collections functions
 use test
-use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack}
+use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, Vec, LinkedList}
 
 // =============================================================================
 // ArrayList uncovered methods
@@ -172,5 +172,289 @@ func test_queue_contains() -> I32 {
     assert(q.contains(10 as I64), "contains should find element")
     assert(not q.contains(99 as I64), "contains should not find missing element")
     q.destroy()
+    return 0
+}
+
+// =============================================================================
+// HashSet set operations: union_with, intersection, difference
+// =============================================================================
+
+@test
+func test_hashset_union_with() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(2 as I64)
+    s2.add(3 as I64)
+    let u: HashSet[I64] = s1.union_with(ref s2)
+    assert(u.contains(1 as I64), "union should contain 1")
+    assert(u.contains(2 as I64), "union should contain 2")
+    assert(u.contains(3 as I64), "union should contain 3")
+    s1.destroy()
+    s2.destroy()
+    u.destroy()
+    return 0
+}
+
+@test
+func test_hashset_intersection() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    s1.add(3 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(2 as I64)
+    s2.add(3 as I64)
+    s2.add(4 as I64)
+    let inter: HashSet[I64] = s1.intersection(ref s2)
+    assert(inter.contains(2 as I64), "intersection should contain 2")
+    assert(inter.contains(3 as I64), "intersection should contain 3")
+    assert(not inter.contains(1 as I64), "intersection should not contain 1")
+    assert(not inter.contains(4 as I64), "intersection should not contain 4")
+    s1.destroy()
+    s2.destroy()
+    inter.destroy()
+    return 0
+}
+
+@test
+func test_hashset_difference() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    s1.add(3 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(2 as I64)
+    let diff: HashSet[I64] = s1.difference(ref s2)
+    assert(diff.contains(1 as I64), "difference should contain 1")
+    assert(diff.contains(3 as I64), "difference should contain 3")
+    assert(not diff.contains(2 as I64), "difference should not contain 2")
+    s1.destroy()
+    s2.destroy()
+    diff.destroy()
+    return 0
+}
+
+// =============================================================================
+// Vec methods: dedup, remove_all, sort, extend, append
+// =============================================================================
+
+@test
+func test_vec_dedup() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(1 as I64)
+    v.push(1 as I64)
+    v.push(2 as I64)
+    v.push(2 as I64)
+    v.push(3 as I64)
+    v.dedup()
+    assert_eq(v.len(), 3 as I64, "dedup should remove consecutive duplicates")
+    assert_eq(v.get(0 as I64), 1 as I64, "first element after dedup")
+    assert_eq(v.get(1 as I64), 2 as I64, "second element after dedup")
+    assert_eq(v.get(2 as I64), 3 as I64, "third element after dedup")
+    v.destroy()
+    return 0
+}
+
+@test
+func test_vec_remove_all() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(1 as I64)
+    v.push(2 as I64)
+    v.push(1 as I64)
+    v.push(3 as I64)
+    v.remove_all(1 as I64)
+    assert_eq(v.len(), 2 as I64, "remove_all should remove all occurrences")
+    assert_eq(v.get(0 as I64), 2 as I64, "first remaining element")
+    assert_eq(v.get(1 as I64), 3 as I64, "second remaining element")
+    v.destroy()
+    return 0
+}
+
+@test
+func test_vec_sort() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(3 as I64)
+    v.push(1 as I64)
+    v.push(2 as I64)
+    v.sort()
+    assert_eq(v.get(0 as I64), 1 as I64, "sorted first element")
+    assert_eq(v.get(1 as I64), 2 as I64, "sorted second element")
+    assert_eq(v.get(2 as I64), 3 as I64, "sorted third element")
+    v.destroy()
+    return 0
+}
+
+@test
+func test_vec_extend() -> I32 {
+    var v1: Vec[I64] = Vec::new[I64]()
+    v1.push(1 as I64)
+    v1.push(2 as I64)
+    var v2: Vec[I64] = Vec::new[I64]()
+    v2.push(3 as I64)
+    v2.push(4 as I64)
+    v1.extend(ref v2)
+    assert_eq(v1.len(), 4 as I64, "extend should append elements")
+    assert_eq(v1.get(2 as I64), 3 as I64, "extended element 0")
+    assert_eq(v1.get(3 as I64), 4 as I64, "extended element 1")
+    v1.destroy()
+    v2.destroy()
+    return 0
+}
+
+@test
+func test_vec_append() -> I32 {
+    var v1: Vec[I64] = Vec::new[I64]()
+    v1.push(1 as I64)
+    var v2: Vec[I64] = Vec::new[I64]()
+    v2.push(2 as I64)
+    v2.push(3 as I64)
+    v1.append(v2)
+    assert_eq(v1.len(), 3 as I64, "append should consume other vec")
+    assert_eq(v1.get(1 as I64), 2 as I64, "appended element 0")
+    assert_eq(v1.get(2 as I64), 3 as I64, "appended element 1")
+    v1.destroy()
+    return 0
+}
+
+// =============================================================================
+// Drop implementations — exercised by letting values go out of scope
+// Drop is invoked automatically when local vars leave scope without destroy
+// =============================================================================
+
+@test
+func test_arraylist_drop() -> I32 {
+    let list: ArrayList[I32] = ArrayList::create()
+    list.add(1 as I32)
+    list.add(2 as I32)
+    // list.drop() called implicitly when function returns
+    assert_eq(list.count(), 2 as I64, "list has 2 elements before drop")
+    return 0
+}
+
+@test
+func test_hashset_drop() -> I32 {
+    let s: HashSet[I64] = HashSet::create()
+    s.add(10 as I64)
+    // s.drop() called implicitly
+    assert(s.contains(10 as I64), "set contains element before drop")
+    return 0
+}
+
+@test
+func test_queue_drop() -> I32 {
+    let q: Queue[I32] = Queue::create()
+    q.add(5 as I32)
+    // q.drop() called implicitly
+    assert_eq(q.count(), 1 as I64, "queue has 1 element before drop")
+    return 0
+}
+
+@test
+func test_stack_drop() -> I32 {
+    let s: Stack[I32] = Stack::create()
+    s.add(7 as I32)
+    // s.drop() called implicitly
+    assert_eq(s.count(), 1 as I64, "stack has 1 element before drop")
+    return 0
+}
+
+@test
+func test_vec_drop() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(42 as I64)
+    // v.drop() called implicitly
+    assert_eq(v.len(), 1 as I64, "vec has 1 element before drop")
+    return 0
+}
+
+// =============================================================================
+// HashSet set operations: symmetric_difference, is_subset, is_superset, is_disjoint
+// =============================================================================
+
+@test
+func test_hashset_symmetric_difference() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    s1.add(3 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(2 as I64)
+    s2.add(3 as I64)
+    s2.add(4 as I64)
+    let sym: HashSet[I64] = s1.symmetric_difference(ref s2)
+    assert(sym.contains(1 as I64), "sym diff should contain 1")
+    assert(sym.contains(4 as I64), "sym diff should contain 4")
+    assert(not sym.contains(2 as I64), "sym diff should not contain 2")
+    assert(not sym.contains(3 as I64), "sym diff should not contain 3")
+    s1.destroy()
+    s2.destroy()
+    sym.destroy()
+    return 0
+}
+
+@test
+func test_hashset_is_subset() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(1 as I64)
+    s2.add(2 as I64)
+    s2.add(3 as I64)
+    assert(s1.is_subset(ref s2), "s1 should be subset of s2")
+    assert(not s2.is_subset(ref s1), "s2 should not be subset of s1")
+    s1.destroy()
+    s2.destroy()
+    return 0
+}
+
+@test
+func test_hashset_is_superset() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    s1.add(3 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(1 as I64)
+    s2.add(2 as I64)
+    assert(s1.is_superset(ref s2), "s1 should be superset of s2")
+    assert(not s2.is_superset(ref s1), "s2 should not be superset of s1")
+    s1.destroy()
+    s2.destroy()
+    return 0
+}
+
+@test
+func test_hashset_is_disjoint() -> I32 {
+    var s1: HashSet[I64] = HashSet::create()
+    s1.add(1 as I64)
+    s1.add(2 as I64)
+    var s2: HashSet[I64] = HashSet::create()
+    s2.add(3 as I64)
+    s2.add(4 as I64)
+    var s3: HashSet[I64] = HashSet::create()
+    s3.add(2 as I64)
+    s3.add(5 as I64)
+    assert(s1.is_disjoint(ref s2), "s1 and s2 should be disjoint")
+    assert(not s1.is_disjoint(ref s3), "s1 and s3 should not be disjoint")
+    s1.destroy()
+    s2.destroy()
+    s3.destroy()
+    return 0
+}
+
+// =============================================================================
+// LinkedList::drop — exercised by letting value go out of scope
+// =============================================================================
+
+@test
+func test_linkedlist_drop() -> I32 {
+    let list: LinkedList[I64] = LinkedList::create()
+    list.add(1 as I64)
+    list.add(2 as I64)
+    // list.drop() called implicitly when function returns
+    assert_eq(list.count(), 2 as I64, "list has 2 elements before drop")
     return 0
 }

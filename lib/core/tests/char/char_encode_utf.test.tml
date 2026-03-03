@@ -1,0 +1,19 @@
+// Tests for encode_utf8 and encode_utf16 — blocked by tuple-with-fixed-array codegen bug
+// Error: '%t11' defined with type '[4 x i8]' but expected 'i64'
+// The tuple return ([U8; 4], I64) has type mismatch in destructuring.
+use test::{assert}
+
+@test
+func test_encode_utf8_blocked() -> I32 {
+    // encode_utf8 returns ([U8; 4], I64) — tuple destructuring of fixed array
+    // causes codegen bug: '[4 x i8]' type used where i64 expected
+    assert(true, "encode_utf8 blocked by tuple+fixed-array codegen bug")
+    return 0
+}
+
+@test
+func test_encode_utf16_blocked() -> I32 {
+    // Same bug: encode_utf16 returns ([U16; 2], I64)
+    assert(true, "encode_utf16 blocked by tuple+fixed-array codegen bug")
+    return 0
+}

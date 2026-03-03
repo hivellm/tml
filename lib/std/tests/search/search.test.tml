@@ -621,6 +621,19 @@ func test_bm25_destroy_null_safe() -> I32 {
     return 0
 }
 
+@test
+func test_bm25_drop() -> I32 {
+    // Let Bm25Index go out of scope without explicit destroy — exercises Drop impl
+    {
+        var idx = Bm25Index.create()
+        idx.add_text(0, "drop test document")
+        idx.build()
+        assert_eq(idx.size(), 1, "should have 1 document before drop")
+        // idx goes out of scope here, drop is called automatically
+    }
+    return 0
+}
+
 // ============================================================================
 // HNSW: Index Lifecycle Tests
 // ============================================================================
@@ -888,6 +901,33 @@ func test_tfidf_destroy_null_safe() -> I32 {
 // ============================================================================
 // HNSW: End-to-End TF-IDF + HNSW Pipeline
 // ============================================================================
+
+@test
+func test_hnsw_drop() -> I32 {
+    // Let HnswIndex go out of scope without explicit destroy — exercises Drop impl
+    {
+        var idx = HnswIndex.create(3)
+        var v0: [F32; 3] = [1.0, 0.0, 0.0]
+        idx.insert(0, &v0)
+        assert_eq(idx.size(), 1, "should have 1 vector before drop")
+        // idx goes out of scope here, drop is called automatically
+    }
+    return 0
+}
+
+@test
+func test_tfidf_drop() -> I32 {
+    // Let TfIdfVectorizer go out of scope without explicit destroy — exercises Drop impl
+    {
+        var vec = TfIdfVectorizer.create(32)
+        vec.add_document(0, "alpha beta gamma")
+        vec.add_document(1, "delta epsilon zeta")
+        vec.build()
+        assert(vec.is_built(), "vectorizer should be built")
+        // vec goes out of scope here, drop is called automatically
+    }
+    return 0
+}
 
 @test
 func test_tfidf_hnsw_pipeline() -> I32 {

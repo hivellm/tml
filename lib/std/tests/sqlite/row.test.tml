@@ -147,3 +147,53 @@ func test_row_decltype() -> I32 {
     db.close()
     return 0
 }
+
+@test
+func test_row_table_name() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE items (id INTEGER, name TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO items VALUES (1, 'foo')").unwrap()
+    let stmt = db.prepare("SELECT id, name FROM items").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    let tname: Str = row.table_name(0)
+    assert_eq(tname, "items", "table_name col 0 should be items")
+    let tname1: Str = row.table_name(1)
+    assert_eq(tname1, "items", "table_name col 1 should be items")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_origin_name() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE things (item_id INTEGER, label TEXT)").unwrap()
+    let _: I32 = db.exec("INSERT INTO things VALUES (42, 'bar')").unwrap()
+    let stmt = db.prepare("SELECT item_id, label FROM things").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    let oname: Str = row.origin_name(0)
+    assert_eq(oname, "item_id", "origin_name col 0 should be item_id")
+    let oname1: Str = row.origin_name(1)
+    assert_eq(oname1, "label", "origin_name col 1 should be label")
+    stmt.finalize()
+    db.close()
+    return 0
+}
+
+@test
+func test_row_database_name() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let _: I32 = db.exec("CREATE TABLE data (x INTEGER)").unwrap()
+    let _: I32 = db.exec("INSERT INTO data VALUES (1)").unwrap()
+    let stmt = db.prepare("SELECT x FROM data").unwrap()
+    assert(stmt.step(), "should have row")
+    let row = stmt.get_row()
+    let dbname: Str = row.database_name(0)
+    // In-memory database is named "main"
+    assert_eq(dbname, "main", "database_name should be main")
+    stmt.finalize()
+    db.close()
+    return 0
+}

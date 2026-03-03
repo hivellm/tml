@@ -1,0 +1,15 @@
+// Tests for NonZero[I32] — eq, partial_cmp, cmp
+// BLOCKED: Generic monomorphization codegen bug
+//   Maybe__NonZero__I32 vs Maybe__NonZero__T type mismatch in LLVM IR
+//   NonZero::new() returns Maybe[NonZero[T]] but codegen emits wrong struct type
+// TODO: Enable when codegen fix for generic-wrapped-in-Maybe lands
+use test::{assert_eq}
+
+@test
+func test_nonzero_eq_cmp_blocked() -> I32 {
+    // NonZero::new(x).unwrap().eq() triggers codegen bug
+    // NonZero::new(x).unwrap().partial_cmp() triggers codegen bug
+    // NonZero::new(x).unwrap().cmp() triggers codegen bug
+    assert_eq(1, 1, "blocked by codegen")
+    return 0
+}

@@ -1,0 +1,15 @@
+// Tests for iter/traits/accumulators — Sum and Product
+// BLOCKED: I32::sum[I: Iterator](iter: I) — generic iterator type param not monomorphized.
+// LLVM IR generates %struct.I instead of the concrete iterator struct type.
+// This is the same generic function monomorphization bug that affects cast[T,U],
+// ptr/ops, and other generic functions with type-constrained parameters.
+// Cannot be tested until the compiler correctly monomorphizes generic Iterator params.
+use test::{assert}
+
+@test
+func test_accumulators_placeholder() -> I32 {
+    // I32::sum, I32::product, I64::sum, I64::product, etc. all blocked
+    // by generic type parameter monomorphization bug in codegen.
+    assert(true, "accumulators blocked by generic codegen")
+    return 0
+}

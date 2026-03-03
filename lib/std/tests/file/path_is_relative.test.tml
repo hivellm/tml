@@ -1,0 +1,39 @@
+// Tests for Path::is_relative
+use test::{assert}
+use std::file::Path
+
+@test
+func test_is_relative_relative_path() -> I32 {
+    assert(Path::is_relative("home/user/file.txt"), "relative path should return true")
+    return 0
+}
+
+@test
+func test_is_relative_absolute_unix() -> I32 {
+    assert(not Path::is_relative("/home/user/file.txt"), "absolute unix path should return false")
+    return 0
+}
+
+@test
+func test_is_relative_absolute_windows() -> I32 {
+    assert(not Path::is_relative("C:/Users/user/file.txt"), "Windows absolute path should return false")
+    return 0
+}
+
+@test
+func test_is_relative_dot_relative() -> I32 {
+    assert(Path::is_relative("./foo/bar"), "dot-relative path is relative")
+    return 0
+}
+
+@test
+func test_is_relative_empty() -> I32 {
+    assert(Path::is_relative(""), "empty path is relative")
+    return 0
+}
+
+@test
+func test_is_relative_just_filename() -> I32 {
+    assert(Path::is_relative("file.txt"), "bare filename is relative")
+    return 0
+}

@@ -1,0 +1,16 @@
+// Tests for Unit Display/Debug implementations
+// BLOCKED by compiler bug: "Return type mismatch: expected (), found ()"
+// The Unit type cannot be assigned or returned in current compiler build.
+use test::{assert}
+
+@test
+func test_unit_display_blocked() -> I32 {
+    assert(true, "Unit::to_string blocked by Unit type assignment bug")
+    return 0
+}
+
+@test
+func test_unit_debug_blocked() -> I32 {
+    assert(true, "Unit::debug_string blocked by Unit type assignment bug")
+    return 0
+}

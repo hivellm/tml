@@ -1,0 +1,11 @@
+// Tests for HmacDigest::drop
+// Drop is triggered when value goes out of scope (no explicit destroy())
+use test::{assert}
+use std::crypto::hmac::{hmac_sha256, HmacDigest}
+
+@test
+func test_hmac_digest_drop() -> I32 {
+    // Let HmacDigest go out of scope — triggers HmacDigest::drop
+    let _d: HmacDigest = hmac_sha256("key", "message")
+    return 0
+}

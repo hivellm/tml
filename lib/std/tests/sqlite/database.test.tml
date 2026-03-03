@@ -135,3 +135,25 @@ func test_savepoint_rollback_to() -> I32 {
     db.close()
     return 0
 }
+
+// --- Database::open_readonly ---
+
+@test
+func test_open_readonly_nonexistent_fails() -> I32 {
+    // open_readonly on a path that does not exist should return an error
+    let result = Database::open_readonly("/nonexistent/path/that/does/not/exist.db")
+    assert(result.is_err(), "open_readonly on nonexistent path should fail")
+    return 0
+}
+
+// --- Database::filename ---
+
+@test
+func test_filename_in_memory() -> I32 {
+    let db: Database = Database::open_in_memory().unwrap()
+    let name: Str = db.filename()
+    // SQLite returns empty string for in-memory databases
+    assert_eq(name, "", "in-memory database filename should be empty")
+    db.close()
+    return 0
+}

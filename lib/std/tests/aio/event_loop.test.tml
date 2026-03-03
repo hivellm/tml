@@ -1,6 +1,7 @@
 use test::{assert, assert_eq}
 use std::aio::event_loop::EventLoop
 use std::aio::timer_wheel::TimerId
+use std::net::sys::RawSocket
 
 @test
 func test_event_loop_create_destroy() -> I32 {
@@ -152,6 +153,69 @@ func test_event_loop_deregister() -> I32 {
     // Test deregister on non-existent token (should be no-op)
     el.deregister(999)
 
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_stop() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    // Call stop — should set running to false
+    el.stop()
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_run_stops_immediately() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    // run() exits immediately when there are no sources, timers, or callbacks
+    el.run()
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_set_immediate() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    // Schedule an immediate with callback=0 (no-op function pointer) and user_data=42
+    let id: I64 = el.set_immediate(0, 42)
+    assert(id >= 0, "set_immediate should return a non-negative id")
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_clear_immediate() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    // Schedule then clear an immediate
+    let id: I64 = el.set_immediate(0, 99)
+    el.clear_immediate(id)
+    // Clear with invalid id should be no-op
+    el.clear_immediate(-1)
+    el.clear_immediate(9999)
+    el.destroy()
+    return 0
+}
+
+@test
+func test_event_loop_register() -> I32 {
+    let mut el: EventLoop = EventLoop::new()
+    // Create a real TCP socket so we have a valid handle to register
+    let sock_result = RawSocket::tcp()
+    if sock_result.is_err() {
+        // If socket creation fails (unlikely), skip
+        el.destroy()
+        return 0
+    }
+    let sock = sock_result.unwrap()
+    // Register socket with the event loop (READABLE = 1)
+    let token: U32 = el.register(sock.handle, 1 as U32)
+    // Token starts at 0, so first token is 0
+    assert_eq(el.sources_count, 1 as I64, "should have 1 source after register")
+    // Deregister before destroying
+    el.deregister(token)
+    let _ = sock.close()
     el.destroy()
     return 0
 }

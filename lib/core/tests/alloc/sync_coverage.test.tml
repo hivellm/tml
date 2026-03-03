@@ -1,4 +1,9 @@
 // Tests for alloc/sync — uncovered: new, get, strong_count, is_unique, sync() free fn
+//
+// BLOCKED:
+//   Sync::from_raw — requires private SyncInner[T] type, not accessible from test files
+//   Sync::fmt (to_string) — undefined symbol for trait-bounded generic Display/Debug impls
+//   Sync::fmt_debug (debug_string) — same codegen bug as Shared::fmt_debug
 use test
 use core::alloc::sync::{Sync, sync}
 

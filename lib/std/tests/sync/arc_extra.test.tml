@@ -1,0 +1,29 @@
+// Tests for sync/Arc uncovered: Arc::try_unwrap
+use test::{assert, assert_eq}
+use std::sync::{Arc, Weak}
+
+@test
+func test_arc_try_unwrap_success() -> I32 {
+    // try_unwrap succeeds when strong_count == 1
+    let arc: Arc[I32] = Arc::new(99)
+    let r: Outcome[I32, Arc[I32]] = arc.try_unwrap()
+    assert(r.is_ok(), "try_unwrap with 1 strong ref should succeed")
+    let val: I32 = r.unwrap()
+    assert_eq(val, 99, "try_unwrap should return the inner value")
+    return 0
+}
+
+@test
+func test_arc_try_unwrap_fail() -> I32 {
+    // try_unwrap fails when strong_count > 1
+    let arc1: Arc[I32] = Arc::new(42)
+    let arc2: Arc[I32] = arc1.duplicate()
+    let r: Outcome[I32, Arc[I32]] = arc1.try_unwrap()
+    assert(r.is_err(), "try_unwrap with 2 strong refs should fail")
+    return 0
+}
+
+// NOTE: Arc::ptr_eq — BLOCKED: static method on generic type not emitted (undefined symbol)
+// NOTE: Arc::get_mut — BLOCKED: returns Maybe[mut ref T], ref codegen issue
+// NOTE: Arc::deref — BLOCKED: same ref return type issue
+// NOTE: Weak::upgrade, Weak::ptr_eq — BLOCKED: Weak__T not monomorphized to Weak__I32

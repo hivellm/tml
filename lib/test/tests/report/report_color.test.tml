@@ -1,7 +1,8 @@
 // Tests for report module — color functions SKIPPED
 // The color print functions (print_colored, print_green, print_red, print_yellow, print_bold)
-// use ANSI_* module-level constants that fail during codegen.
-// These functions cannot be tested until const codegen from imported modules is fixed.
+// use ANSI_* module-level constants that fail during codegen when imported across modules:
+//   "Unknown variable: ANSI_GREEN" — const values from imported modules are not resolved.
+// These functions cannot be tested until cross-module const resolution is fixed.
 use test::{assert}
 
 @test

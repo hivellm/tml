@@ -343,3 +343,13 @@ func test_hmac_long_key() -> I32 {
     mac.destroy()
     return 0
 }
+
+// --- HmacDigest::drop ---
+
+@test
+func test_hmac_digest_drop() -> I32 {
+    let mut mac: HmacDigest = hmac_sha256("key", "message")
+    // Explicitly destroy to invoke drop — no crash expected
+    mac.destroy()
+    return 0
+}

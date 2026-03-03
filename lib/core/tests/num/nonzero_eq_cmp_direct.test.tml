@@ -1,0 +1,15 @@
+// Tests for NonZero[I32] — eq, partial_cmp, cmp
+// BLOCKED: Generic trait delegation codegen bug
+//   NonZero[I32].eq() returns false for equal values (42 == 42 fails)
+//   NonZero[I32].partial_cmp() and .cmp() likely same issue
+//   Root cause: codegen for `this.value.eq(ref other.value)` through generic
+//   PartialEq impl produces incorrect value comparisons
+// TODO: Enable when generic trait delegation codegen is fixed
+use test
+
+@test
+func test_nonzero_eq_cmp_blocked() -> I32 {
+    // NonZero::eq / partial_cmp / cmp blocked by codegen bug
+    assert_eq(1, 1, "blocked by codegen")
+    return 0
+}

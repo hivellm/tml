@@ -1,0 +1,27 @@
+use test
+use std::sync::condvar::Condvar
+use std::sync::mutex::{Mutex, MutexGuard}
+
+@test
+func test_condvar_wait_timeout_ms_expires() -> I32 {
+    // wait_timeout_ms should return with timed_out=true when nobody signals
+    var cv: Condvar = Condvar::new()
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let result: (MutexGuard[I32], Bool) = cv.wait_timeout_ms(guard, 1 as U64)
+    let timed_out: Bool = result.1
+    assert(timed_out, "should time out when nobody signals")
+    return 0
+}
+
+@test
+func test_condvar_wait_while_false_predicate() -> I32 {
+    // wait_while with predicate that immediately returns false should return immediately
+    var cv: Condvar = Condvar::new()
+    let mutex: Mutex[I32] = Mutex::new(10)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let guard2: MutexGuard[I32] = cv.wait_while(guard, do(val: ref I32) -> Bool {
+        return false
+    })
+    return 0
+}

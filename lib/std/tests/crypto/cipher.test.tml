@@ -549,3 +549,32 @@ func test_get_auth_tag_non_aead_fails() -> I32 {
     iv.destroy()
     return 0
 }
+
+// --- Cipher::drop ---
+
+@test
+func test_cipher_drop() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
+    cipher.update("drop test")
+    // Explicitly destroy to invoke drop — no crash expected
+    cipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+// --- Decipher::drop ---
+
+@test
+func test_decipher_drop() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
+    // Explicitly destroy to invoke drop — no crash expected
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}

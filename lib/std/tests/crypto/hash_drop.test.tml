@@ -1,0 +1,18 @@
+// Tests for Digest::drop and Hash::drop
+// Drop is triggered when values go out of scope (no explicit destroy())
+use test::{assert}
+use std::crypto::hash::{sha256, sha512, Hash, HashAlgorithm, Digest}
+
+@test
+func test_digest_drop() -> I32 {
+    // Let Digest go out of scope — triggers Digest::drop
+    let _d: Digest = sha256("drop test")
+    return 0
+}
+
+@test
+func test_hash_drop() -> I32 {
+    // Let Hash go out of scope — triggers Hash::drop
+    let _h: Hash = Hash::create(HashAlgorithm::Sha256)
+    return 0
+}

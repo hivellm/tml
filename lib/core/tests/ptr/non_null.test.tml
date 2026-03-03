@@ -96,3 +96,27 @@ func test_non_null_from_const_unchecked() -> I32 {
     assert_eq(nn.addr(), 6000 as I64, "from_const_unchecked should preserve addr")
     return 0
 }
+
+@test
+func test_non_null_new_null_returns_nothing() -> I32 {
+    let null_ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0 as I64)
+    let result: Maybe[NonNull[I64]] = NonNull::new(null_ptr)
+    assert(result.is_nothing(), "NonNull::new with null ptr should return Nothing")
+    return 0
+}
+
+@test
+func test_non_null_new_non_null_returns_just() -> I32 {
+    let raw: RawMutPtr[I64] = RawMutPtr::from_addr(4096 as I64)
+    let result: Maybe[NonNull[I64]] = NonNull::new(raw)
+    assert(result.is_just(), "NonNull::new with non-null ptr should return Just")
+    return 0
+}
+
+// NOTE: NonNull::as_ref and NonNull::as_mut are blocked by codegen bug:
+// ir error: '%t368' defined with type 'i32' but expected 'ptr' — ref T return
+// from lowlevel { ptr_as_ref[T](...) } generates incorrect IR.
+
+// NOTE: NonNull::copy_from and NonNull::copy_from_nonoverlapping are blocked by codegen bug:
+// ir error: use of undefined value '@tml_memcpy' — the memmove/memcpy intrinsics are not
+// being declared in the generated IR module when called via NonNull.

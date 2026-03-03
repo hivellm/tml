@@ -455,3 +455,24 @@ func test_sha256_base64_empty() -> I32 {
     d.destroy()
     return 0
 }
+
+// --- Digest::drop ---
+
+@test
+func test_digest_drop() -> I32 {
+    let mut d: Digest = sha256("drop test")
+    // Explicitly destroy to invoke drop — no crash expected
+    d.destroy()
+    return 0
+}
+
+// --- Hash::drop ---
+
+@test
+func test_hash_drop() -> I32 {
+    let h: Hash = Hash::create(HashAlgorithm::Sha256)
+    h.update("drop test")
+    // Explicitly destroy to invoke drop — no crash expected
+    h.destroy()
+    return 0
+}

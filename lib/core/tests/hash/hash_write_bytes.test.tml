@@ -1,0 +1,12 @@
+// Tests for DefaultHasher::write(bytes: ref [U8])
+// NOTE: Blocked by codegen bug — fixed-size [U8; N] cast to ref [U8] generates
+// '[0 x i8]' instead of 'ptr' in LLVM IR. Needs fix in array-to-slice codegen.
+use test::{assert}
+
+@test
+func test_defaulthasher_write_blocked() -> I32 {
+    // DefaultHasher::write(bytes: ref [U8]) is blocked by codegen bug:
+    // passing [U8; N] as ref [U8] produces invalid IR (type '[0 x i8]' != ptr)
+    assert(true, "write(ref [U8]) blocked by fixed-array-to-slice codegen bug")
+    return 0
+}

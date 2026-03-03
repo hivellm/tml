@@ -1,0 +1,62 @@
+// Tests for Drop impls on all 7 zlib stream types
+// Drop is called when the value goes out of scope (no explicit destroy())
+use test::{assert}
+use std::zlib::stream::{Deflate, DeflateRaw, Gzip, Inflate, InflateRaw, Gunzip, Unzip}
+use std::zlib::error::ZlibError
+
+@test
+func test_deflate_drop() -> I32 {
+    let r: Outcome[Deflate, ZlibError] = Deflate::new()
+    assert(r.is_ok(), "Deflate::new should succeed")
+    let _d: Deflate = r.unwrap()
+    // _d goes out of scope here — Drop::drop is called automatically
+    return 0
+}
+
+@test
+func test_deflate_raw_drop() -> I32 {
+    let r: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    assert(r.is_ok(), "DeflateRaw::new should succeed")
+    let _d: DeflateRaw = r.unwrap()
+    return 0
+}
+
+@test
+func test_gzip_drop() -> I32 {
+    let r: Outcome[Gzip, ZlibError] = Gzip::new()
+    assert(r.is_ok(), "Gzip::new should succeed")
+    let _g: Gzip = r.unwrap()
+    return 0
+}
+
+@test
+func test_inflate_drop() -> I32 {
+    let r: Outcome[Inflate, ZlibError] = Inflate::new()
+    assert(r.is_ok(), "Inflate::new should succeed")
+    let _i: Inflate = r.unwrap()
+    return 0
+}
+
+@test
+func test_inflate_raw_drop() -> I32 {
+    let r: Outcome[InflateRaw, ZlibError] = InflateRaw::new()
+    assert(r.is_ok(), "InflateRaw::new should succeed")
+    let _i: InflateRaw = r.unwrap()
+    return 0
+}
+
+@test
+func test_gunzip_drop() -> I32 {
+    let r: Outcome[Gunzip, ZlibError] = Gunzip::new()
+    assert(r.is_ok(), "Gunzip::new should succeed")
+    let _g: Gunzip = r.unwrap()
+    return 0
+}
+
+@test
+func test_unzip_drop() -> I32 {
+    let r: Outcome[Unzip, ZlibError] = Unzip::new()
+    assert(r.is_ok(), "Unzip::new should succeed")
+    let _u: Unzip = r.unwrap()
+    return 0
+}

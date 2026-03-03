@@ -291,3 +291,121 @@ func pipe_write_cb(data: I64, cb: I64) {
     rs.destroy()
     return 0
 }
+
+// ============================================================================
+// Tests: set_errored_flag and destroy_with_error
+// NOTE: rbuf_clear is a private module-level function (func rbuf_clear(h: I64))
+// that is never called by any public API and cannot be accessed from test files.
+// It is dead code — uncoverable from tests.
+//
+// NOTE on errored() after destroy_with_error:
+//   destroy_with_error calls set_errored_flag() then destroy().
+//   destroy() frees the handle and sets handle = null.
+//   errored() returns false when handle == null (guard at start of function).
+//   So errored() cannot be observed as true after a full destroy_with_error.
+//   Use set_errored_flag() directly (before destroy) to observe the flag.
+// ============================================================================
+
+@test func test_readable_stream_set_errored_flag_direct() -> I32 {
+    // set_errored_flag() directly — check before destroy frees the handle
+    var rs: ReadableStream = ReadableStream::new()
+    assert_false(rs.errored(), "not errored before flag set")
+    rs.set_errored_flag()
+    assert_true(rs.errored(), "errored after set_errored_flag")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_destroy_with_error_destroys() -> I32 {
+    // destroy_with_error should mark the stream as destroyed
+    var rs: ReadableStream = ReadableStream::new()
+    assert_false(rs.destroyed(), "not destroyed initially")
+    rs.destroy_with_error("test error")
+    assert_true(rs.destroyed(), "destroyed after destroy_with_error")
+    return 0
+}
+
+@test func test_readable_stream_destroy_with_error_is_idempotent() -> I32 {
+    // Second call to destroy_with_error on already-destroyed stream is a no-op
+    var rs: ReadableStream = ReadableStream::new()
+    rs.destroy_with_error("first error")
+    rs.destroy_with_error("second error")
+    assert_true(rs.destroyed(), "still destroyed after second destroy_with_error")
+    return 0
+}
+
+// ============================================================================
+// Tests: emitter_once, emitter_off, emitter_has_listeners, once, off,
+//        emit, listener_count, set_read_fn
+// ============================================================================
+
+@test func test_readable_stream_emitter_once() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.emitter_once("data", noop_listener as I64)
+    let has: Bool = rs.emitter_has_listeners("data")
+    assert_true(has, "emitter_has_listeners after emitter_once")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_emitter_off() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.emitter_on("data", noop_listener as I64)
+    let removed: Bool = rs.emitter_off("data", noop_listener as I64)
+    assert_true(removed, "emitter_off should return true when listener found")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_emitter_has_listeners_none() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    let has: Bool = rs.emitter_has_listeners("data")
+    assert_false(has, "no listeners initially")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_once() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.once("data", noop_listener as I64)
+    let count: I64 = rs.listener_count("data")
+    assert(count > 0 as I64, "once adds a listener")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_off() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.on("data", noop_listener as I64)
+    let removed: Bool = rs.off("data", noop_listener as I64)
+    assert_true(removed, "off should return true when listener removed")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_emit() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.on("data", noop_listener as I64)
+    let emitted: Bool = rs.emit("data", 0 as I64)
+    assert_true(emitted, "emit returns true when there are listeners")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_listener_count() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_eq(rs.listener_count("data"), 0 as I64, "no listeners initially")
+    rs.on("data", noop_listener as I64)
+    assert_eq(rs.listener_count("data"), 1 as I64, "one listener after on")
+    rs.destroy()
+    return 0
+}
+
+@test func test_readable_stream_set_read_fn() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.set_read_fn(noop_listener as I64)
+    let fn_ptr: I64 = rs.get_read_fn()
+    assert_eq(fn_ptr, noop_listener as I64, "set_read_fn stores the function pointer")
+    rs.destroy()
+    return 0
+}

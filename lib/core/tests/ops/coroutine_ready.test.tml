@@ -22,3 +22,29 @@ func test_from_iter_new() -> I32 {
     assert(true, "FromIter::new should construct without crash")
     return 0
 }
+
+@test
+func test_ready_resume_yields_value() -> I32 {
+    var r: Ready[I32] = Ready::new(42)
+    let state: CoroutineState[I32, Unit] = r.resume()
+    assert(state.is_yielded(), "first resume should yield")
+    return 0
+}
+
+@test
+func test_ready_resume_then_complete() -> I32 {
+    var r: Ready[I32] = Ready::new(99)
+    let s1: CoroutineState[I32, Unit] = r.resume()
+    assert(s1.is_yielded(), "first resume yields")
+    let s2: CoroutineState[I32, Unit] = r.resume()
+    assert(s2.is_complete(), "second resume is complete")
+    return 0
+}
+
+@test
+func test_ready_exhausted_resume() -> I32 {
+    var r: Ready[I32] = Ready::exhausted()
+    let state: CoroutineState[I32, Unit] = r.resume()
+    assert(state.is_complete(), "exhausted Ready::resume is complete immediately")
+    return 0
+}

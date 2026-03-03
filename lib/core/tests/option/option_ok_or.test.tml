@@ -1,11 +1,20 @@
-// Tests for Maybe::ok_or — blocked by generic param codegen
-// ok_or[E] fails: %struct.E not monomorphized
-// flatten fails: Maybe[Maybe[T]] struct size mismatch
-// iter fails: MaybeIter[T] unsized type allocation
-use test::{assert}
+// Tests for Maybe::ok_or and Maybe::ok_or_else
+use test::{assert, assert_eq}
 
 @test
-func test_maybe_ok_or_placeholder() -> I32 {
-    assert(true, "Maybe::ok_or blocked by generic codegen")
+func test_ok_or_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let r: Outcome[I32, Str] = x.ok_or("missing")
+    assert(r.is_ok(), "ok_or on Just should return Ok")
+    assert_eq(r.unwrap(), 42, "ok_or on Just should preserve value")
+    return 0
+}
+
+@test
+func test_ok_or_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: Outcome[I32, Str] = x.ok_or("missing")
+    assert(r.is_err(), "ok_or on Nothing should return Err")
+    assert_eq(r.unwrap_err(), "missing", "ok_or on Nothing should use error value")
     return 0
 }

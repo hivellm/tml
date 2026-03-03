@@ -102,3 +102,35 @@ func test_to_owned_f64() -> I32 {
     assert(y < 3.15, "F64 to_owned should preserve value")
     return 0
 }
+
+@test
+func test_maybe_to_owned_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let y: Maybe[I32] = x.to_owned()
+    assert(y.is_just(), "Maybe::to_owned Just should remain Just")
+    return 0
+}
+
+@test
+func test_maybe_to_owned_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = x.to_owned()
+    assert(y.is_nothing(), "Maybe::to_owned Nothing should remain Nothing")
+    return 0
+}
+
+@test
+func test_outcome_to_owned_ok() -> I32 {
+    let x: Outcome[I32, I32] = Ok(99)
+    let y: Outcome[I32, I32] = x.to_owned()
+    assert(y.is_ok(), "Outcome::to_owned Ok should remain Ok")
+    return 0
+}
+
+@test
+func test_outcome_to_owned_err() -> I32 {
+    let x: Outcome[I32, I32] = Err(7)
+    let y: Outcome[I32, I32] = x.to_owned()
+    assert(y.is_err(), "Outcome::to_owned Err should remain Err")
+    return 0
+}

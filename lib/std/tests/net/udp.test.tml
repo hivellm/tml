@@ -310,6 +310,8 @@ func test_udp_builder_full_chain() -> I32 {
     0
 }
 
+// NOTE: UdpSocket::as_raw_socket returns ref RawSocket — blocked by GEP codegen bug:
+// "base element of getelementptr must be sized" when calling methods on ref struct return.
 // NOTE: UdpSocket timeout tests (set_read_timeout, set_write_timeout,
 // read_timeout, write_timeout) are BLOCKED by a codegen bug with
 // Maybe[Duration] — compiler generates Maybe__I32 instead of Maybe__Duration.

@@ -91,3 +91,15 @@ func test_nested_routes() -> I32 {
     router.destroy()
     return 0
 }
+
+@test
+func test_route_match_destroy() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/hello", 42)
+    let m = router.find("GET", "/hello")
+    assert(m.found, "should find /hello")
+    assert_eq(m.handler_id, 42, "handler_id should be 42")
+    m.destroy()
+    router.destroy()
+    return 0
+}

@@ -1,0 +1,18 @@
+// Tests for Empty[T] iterator (generic version)
+use test::{assert, assert_eq}
+use core::iter::sources::empty::{Empty, empty}
+
+@test
+func test_empty_next_returns_nothing() -> I32 {
+    let mut e: Empty[I32] = empty()
+    assert(e.next().is_nothing(), "empty iterator next is Nothing")
+    return 0
+}
+
+@test
+func test_empty_size_hint() -> I32 {
+    let e: Empty[I32] = empty()
+    let hint: (I64, Maybe[I64]) = e.size_hint()
+    assert_eq(hint.0, 0 as I64, "empty size_hint lo = 0")
+    return 0
+}

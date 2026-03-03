@@ -164,3 +164,12 @@ func test_timer_wheel_len() -> I32 {
     tw.destroy()
     return 0
 }
+
+// --- TimerId::invalid ---
+
+@test
+func test_timer_id_invalid() -> I32 {
+    let id: TimerId = TimerId::invalid()
+    assert(not id.is_valid(), "invalid() should return an invalid TimerId")
+    return 0
+}

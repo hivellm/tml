@@ -119,3 +119,16 @@ func test_captures_multiple_groups() -> I32 {
     re.destroy()
     return 0
 }
+
+// --- Captures::drop ---
+
+@test
+func test_captures_drop() -> I32 {
+    let re: Regex = Regex::new("(\\d+)")
+    let cap: Captures = re.captures("abc 42 def")
+    assert(cap.matched(), "should match")
+    // Explicitly destroy to invoke drop — no crash expected
+    cap.destroy()
+    re.destroy()
+    return 0
+}

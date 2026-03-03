@@ -227,3 +227,8 @@ func test_array_first_last_large() -> I32 {
     assert(l.is_just(), "last() should be Just")
     return 0
 }
+
+// NOTE: Array::get_mut, first_mut, last_mut — BLOCKED
+// Type mismatch: expected Maybe[mut ref I32], found ()
+// Maybe[mut ref T] generic with mutable reference inside returns () from typechecker.
+// Same root cause as NonNull::as_mut, RefCell::borrow_mut — mutable ref in Maybe not supported.

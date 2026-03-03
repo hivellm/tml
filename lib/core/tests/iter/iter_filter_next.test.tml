@@ -1,0 +1,67 @@
+// Tests for Filter::next — explicit coverage for the next method
+use test
+use core::iter::adapters::filter::{Filter, filter}
+
+// Simple iterator for testing
+type RangeIter {
+    current: I32,
+    max: I32
+}
+
+impl Iterator for RangeIter {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_filter_next_finds_match() -> I32 {
+    // Filter yields only even numbers from [0..6]
+    let mut f: Filter[RangeIter, func(ref I32) -> Bool] = filter(
+        RangeIter { current: 0, max: 6 },
+        do(x: ref I32) -> Bool { *x % 2 == 0 }
+    )
+
+    let a: Maybe[I32] = f.next()
+    assert_eq(a.unwrap(), 0, "first even is 0")
+    let b: Maybe[I32] = f.next()
+    assert_eq(b.unwrap(), 2, "second even is 2")
+    let c: Maybe[I32] = f.next()
+    assert_eq(c.unwrap(), 4, "third even is 4")
+    let d: Maybe[I32] = f.next()
+    assert(d.is_nothing(), "no more evens")
+    return 0
+}
+
+@test
+func test_filter_next_empty_source() -> I32 {
+    // Filter over an empty iterator
+    let mut f: Filter[RangeIter, func(ref I32) -> Bool] = filter(
+        RangeIter { current: 5, max: 5 },
+        do(x: ref I32) -> Bool { true }
+    )
+
+    let a: Maybe[I32] = f.next()
+    assert(a.is_nothing(), "empty source yields Nothing")
+    return 0
+}
+
+@test
+func test_filter_next_no_match() -> I32 {
+    // Filter with predicate that matches nothing
+    let mut f: Filter[RangeIter, func(ref I32) -> Bool] = filter(
+        RangeIter { current: 0, max: 3 },
+        do(x: ref I32) -> Bool { *x > 100 }
+    )
+
+    let a: Maybe[I32] = f.next()
+    assert(a.is_nothing(), "nothing matches predicate")
+    return 0
+}

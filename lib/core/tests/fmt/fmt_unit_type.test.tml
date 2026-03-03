@@ -1,5 +1,5 @@
 // Tests for Unit Display/Debug — blocked by compiler Unit type assignment bug
-// "let u: Unit = ()" gives "Type mismatch: expected (), found ()"
+// "let u: Unit = ()" gives "Return type mismatch: expected (), found ()"
 use test::{assert}
 
 @test

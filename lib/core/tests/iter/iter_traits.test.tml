@@ -78,3 +78,59 @@ func test_advance_by_too_many() -> I32 {
     assert(r.is_err(), "advance_by past end should fail")
     return 0
 }
+
+// --- last ---
+
+@test
+func test_last_basic() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I32] = iter.last()
+    assert(r.is_just(), "last should return Just on non-empty")
+    assert_eq(r.unwrap(), 4, "last element of 0..5 is 4")
+    return 0
+}
+
+@test
+func test_last_empty() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 0 }
+    let r: Maybe[I32] = iter.last()
+    assert(r.is_nothing(), "last on empty iterator is Nothing")
+    return 0
+}
+
+// --- nth ---
+
+@test
+func test_nth_basic() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 10 }
+    let r: Maybe[I32] = iter.nth(3 as I64)
+    assert(r.is_just(), "nth(3) should find element")
+    assert_eq(r.unwrap(), 3, "nth(3) of 0..10 is 3")
+    return 0
+}
+
+@test
+func test_nth_zero() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I32] = iter.nth(0 as I64)
+    assert(r.is_just(), "nth(0) should return first element")
+    assert_eq(r.unwrap(), 0, "nth(0) is 0")
+    return 0
+}
+
+@test
+func test_nth_out_of_bounds() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 3 }
+    let r: Maybe[I32] = iter.nth(10 as I64)
+    assert(r.is_nothing(), "nth past end is Nothing")
+    return 0
+}
+
+// NOTE: for_each(do(v: I32) {}) — blocked by closure call codegen bug:
+// passing closure struct as i32 (type mismatch in LLVM IR)
+
+// NOTE: position, all, any, find, reduce, for_each, fold, try_fold, find_map,
+// max_by, min_by — ALL blocked by closure call codegen bug:
+// closure struct ({ ptr, ptr }) is passed where i32 expected in LLVM IR.
+// These methods take func(Item) or func(Item) -> Bool closures and cannot
+// be called from test files until the closure ABI bug is fixed.

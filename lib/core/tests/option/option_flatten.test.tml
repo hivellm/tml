@@ -1,0 +1,28 @@
+// Tests for Maybe::flatten
+use test::{assert, assert_eq}
+
+@test
+func test_flatten_just_just() -> I32 {
+    let x: Maybe[Maybe[I32]] = Just(Just(42))
+    let r: Maybe[I32] = x.flatten()
+    assert(r.is_just(), "flatten Just(Just(42)) should be Just")
+    assert_eq(r.unwrap(), 42, "flatten should unwrap inner value")
+    return 0
+}
+
+@test
+func test_flatten_just_nothing() -> I32 {
+    let inner: Maybe[I32] = Nothing
+    let x: Maybe[Maybe[I32]] = Just(inner)
+    let r: Maybe[I32] = x.flatten()
+    assert(r.is_nothing(), "flatten Just(Nothing) should be Nothing")
+    return 0
+}
+
+@test
+func test_flatten_nothing() -> I32 {
+    let x: Maybe[Maybe[I32]] = Nothing
+    let r: Maybe[I32] = x.flatten()
+    assert(r.is_nothing(), "flatten Nothing should be Nothing")
+    return 0
+}

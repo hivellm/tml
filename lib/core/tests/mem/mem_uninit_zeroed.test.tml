@@ -1,10 +1,43 @@
-// Tests for MaybeUninit::uninit and zeroed — blocked by codegen
-// MaybeUninit::uninit() -> maybe_uninit_create intrinsic returns i32 but expects struct type
-// zeroed[T]() -> mem_zeroed intrinsic has same issue
-use test::{assert}
+// Tests for MaybeUninit and zeroed
+// Note: MaybeUninit::uninit() is blocked by codegen bug (maybe_uninit_create intrinsic
+// returns i32 but expects struct type). Only MaybeUninit::new and zeroed are testable.
+use test::{assert, assert_eq}
+use core::mem::{MaybeUninit, zeroed}
 
 @test
-func test_maybe_uninit_placeholder() -> I32 {
-    assert(true, "MaybeUninit::uninit blocked by intrinsic return type mismatch")
+func test_maybe_uninit_new_and_assume_init() -> I32 {
+    let m: MaybeUninit[I32] = MaybeUninit::new(42)
+    let v: I32 = m.assume_init()
+    assert_eq(v, 42, "MaybeUninit::new(42) assume_init should be 42")
+    return 0
+}
+
+@test
+func test_maybe_uninit_write_then_read() -> I32 {
+    var m: MaybeUninit[I32] = MaybeUninit::new(0)
+    m.write(99)
+    let v: I32 = m.assume_init()
+    assert_eq(v, 99, "MaybeUninit::write(99) assume_init should be 99")
+    return 0
+}
+
+@test
+func test_zeroed_i32() -> I32 {
+    let x: I32 = zeroed[I32]()
+    assert_eq(x, 0, "zeroed[I32] should be 0")
+    return 0
+}
+
+@test
+func test_zeroed_i64() -> I32 {
+    let x: I64 = zeroed[I64]()
+    assert_eq(x, 0 as I64, "zeroed[I64] should be 0")
+    return 0
+}
+
+@test
+func test_zeroed_bool() -> I32 {
+    let x: Bool = zeroed[Bool]()
+    assert(x == false, "zeroed[Bool] should be false")
     return 0
 }

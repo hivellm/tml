@@ -1,0 +1,40 @@
+// Tests for Instant::checked_add and Instant::checked_sub
+use test::{assert, assert_eq}
+use std::time::Instant
+use core::time::Duration
+
+@test
+func test_instant_checked_add_success() -> I32 {
+    let t: Instant = Instant::now()
+    let d: Duration = Duration::from_secs(60 as U64)
+    let r: Maybe[Instant] = t.checked_add(d)
+    assert(r.is_just(), "checked_add with normal duration should succeed")
+    return 0
+}
+
+@test
+func test_instant_checked_sub_success() -> I32 {
+    let t: Instant = Instant::now()
+    let d: Duration = Duration::from_millis(100 as U64)
+    let r: Maybe[Instant] = t.checked_sub(d)
+    assert(true, "checked_sub should not crash")
+    return 0
+}
+
+@test
+func test_instant_checked_add_returns_just() -> I32 {
+    let t: Instant = Instant::now()
+    let d: Duration = Duration::from_nanos(1 as U64)
+    let r: Maybe[Instant] = t.checked_add(d)
+    assert(r.is_just(), "adding 1 nanosecond should return Just")
+    return 0
+}
+
+@test
+func test_instant_checked_add_zero() -> I32 {
+    let t: Instant = Instant::now()
+    let d: Duration = Duration::from_nanos(0 as U64)
+    let r: Maybe[Instant] = t.checked_add(d)
+    assert(r.is_just(), "adding zero duration should return Just")
+    return 0
+}

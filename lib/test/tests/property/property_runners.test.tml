@@ -1,0 +1,24 @@
+use test::property::*
+use test::assertions::*
+use std::random::Rng
+
+@test
+func test_prop_test_always_passes() -> Outcome[(), Str] {
+    // Property that always returns true should succeed
+    prop_test("always_true", 10, do(rng: mut ref Rng) -> Bool {
+        return true
+    })
+    Ok(())
+}
+
+@test
+func test_prop_test_stats_all_pass() -> Outcome[(), Str] {
+    // Run prop_test_stats with a property that always passes
+    let stats = prop_test_stats("stats_pass", 10, 3, do(rng: mut ref Rng) -> Bool {
+        return true
+    })
+    assert_eq(stats.total_tests, 30, "10 iterations x 3 runs = 30")
+    assert_eq(stats.passed, 30, "all should pass")
+    assert_eq(stats.failed, 0, "none should fail")
+    Ok(())
+}

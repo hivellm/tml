@@ -40,3 +40,17 @@ func test_unconfigured_returns_default() -> I32 {
     mock.destroy()
     0
 }
+
+@test
+func test_mock_context_drop() -> I32 {
+    // Create MockContext and let it go out of scope without explicit destroy
+    // This exercises the Drop impl (MockContext::drop)
+    {
+        let mock = MockContext::new()
+        mock.when_called("action", "arg", "ok")
+        let result = mock.call_str("action", "arg")
+        assert_eq(result, "ok")
+        // mock goes out of scope here, drop is called
+    }
+    0
+}

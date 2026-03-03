@@ -1,0 +1,17 @@
+// Tests for error chain:
+// ChainedError::source
+// NOTE: error_chain() / ErrorChain::next() crash (SEGFAULT) due to
+//       dyn Error trait object vtable dispatch codegen bug
+use test::{assert, assert_eq}
+use core::error::{SimpleError, ChainedError}
+
+// === ChainedError::source (returns Maybe[ref dyn Error]) ===
+
+@test
+func test_chained_error_source_is_just() -> I32 {
+    let inner = SimpleError::new("root cause")
+    let chained = ChainedError::new("outer", inner)
+    let src = chained.source()
+    assert(src.is_just(), "ChainedError source should be Just")
+    return 0
+}

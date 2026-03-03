@@ -1,0 +1,42 @@
+// Tests for Slice::from_raw and MutSlice::from_raw
+use test
+
+use core::slice::{Slice, MutSlice}
+
+@test
+func test_slice_from_raw() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+    assert_eq(slice.len(), 3, "from_raw should set len")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_mutslice_from_raw() -> I32 {
+    let ptr: *Unit = alloc(8)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+
+    let mut slice: MutSlice[I32] = MutSlice::from_raw(ptr, 2)
+    assert_eq(slice.len(), 2, "MutSlice::from_raw should set len")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_from_raw_empty() -> I32 {
+    let ptr: *Unit = alloc(4)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 0)
+    assert(slice.is_empty(), "from_raw with len=0 should be empty")
+
+    dealloc(ptr)
+    return 0
+}

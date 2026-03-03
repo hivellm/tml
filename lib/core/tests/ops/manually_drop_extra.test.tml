@@ -1,0 +1,27 @@
+use test::{assert, assert_eq}
+use core::ops::drop::ManuallyDrop
+
+@test
+func test_manually_drop_into_inner() -> I32 {
+    let md: ManuallyDrop[I32] = ManuallyDrop::new(42)
+    let val: I32 = ManuallyDrop::into_inner(md)
+    assert_eq(val, 42, "into_inner should extract the value")
+    0
+}
+
+@test
+func test_manually_drop_take() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(99)
+    let val: I32 = ManuallyDrop::take(mut ref md)
+    assert_eq(val, 99, "take should extract the value")
+    0
+}
+
+@test
+func test_manually_drop_drop_method() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(77)
+    ManuallyDrop::drop(mut ref md)
+    // After drop, the inner value is considered dropped
+    // We just verify it doesn't crash
+    0
+}

@@ -1,4 +1,4 @@
-// Tests for alloc/shared — uncovered: is_unique, shared() free function
+// Tests for alloc/shared — uncovered: is_unique, shared() free function, from_raw, fmt
 use test
 use core::alloc::shared::{Shared, shared}
 
@@ -16,3 +16,6 @@ func test_shared_free_function() -> I32 {
     assert_eq(s.strong_count(), 1, "shared() should have refcount 1")
     return 0
 }
+
+// NOTE: Shared::fmt (to_string) and Shared::fmt_debug (debug_string) are both blocked by
+// codegen bug — undefined symbol for trait-bounded generic Display/Debug impls on Shared[T]

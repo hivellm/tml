@@ -1,0 +1,44 @@
+// Tests for uncovered mpsc functions: Receiver::is_empty, Receiver::len
+// NOTE: Sender::try_send, Sender::duplicate — BLOCKED by Sender struct codegen bug.
+// NOTE: Receiver::recv_timeout — BLOCKED by Maybe[Duration] codegen bug.
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+@test
+func test_receiver_is_empty_true() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    assert(rx.is_empty(), "empty channel should be empty")
+    return 0
+}
+
+@test
+func test_receiver_is_empty_false() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+    let _ = tx.send(7)
+    assert(not rx.is_empty(), "channel with message should not be empty")
+    return 0
+}
+
+@test
+func test_receiver_len_zero() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    assert_eq(rx.len(), 0 as I64, "empty channel len should be 0")
+    return 0
+}
+
+@test
+func test_receiver_len_after_send() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+    let _ = tx.send(1)
+    let _ = tx.send(2)
+    assert_eq(rx.len(), 2 as I64, "len should be 2 after two sends")
+    return 0
+}

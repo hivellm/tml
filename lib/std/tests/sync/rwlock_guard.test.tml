@@ -1,6 +1,8 @@
 // Tests for sync/rwlock - guard methods (.get()/.get_mut())
 // NOTE: Deref (*guard) on generic guard types triggers a codegen bug.
 // Use .get()/.get_mut() instead of *guard.
+// NOTE: RwLockReadGuard::deref, RwLockWriteGuard::deref, RwLockWriteGuard::deref_mut
+// are blocked — these require explicit .deref()/.deref_mut() calls but cause hang/crash.
 use test
 use std::sync::rwlock::RwLock
 

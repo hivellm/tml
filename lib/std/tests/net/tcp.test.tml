@@ -144,3 +144,48 @@ func test_tcp_stream_into_raw_socket() -> I32 {
 // read_timeout, write_timeout) and connect_timeout are BLOCKED by a
 // codegen bug with Maybe[Duration] — the compiler generates Maybe__I32
 // instead of Maybe__Duration. Tracked as known issue.
+
+// ============================================================================
+// TcpStream: write_str
+// ============================================================================
+
+@test
+func test_tcp_stream_write_str() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept()
+    assert(accept_result.is_ok(), "accept should succeed")
+
+    let r = client.write_str("hello tcp")
+    assert(r.is_ok(), "write_str should succeed")
+    let n: I64 = r.unwrap()
+    assert(n > 0 as I64, "write_str should write some bytes")
+    0
+}
+
+// ============================================================================
+// TcpStream: write_n
+// ============================================================================
+
+@test
+func test_tcp_stream_write_n() -> I32 {
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener: TcpListener = TcpListener::bind(addr).unwrap()
+    let local: SocketAddr = listener.local_addr().unwrap()
+    let client: TcpStream = TcpStream::connect(local).unwrap()
+    let accept_result = listener.accept()
+    assert(accept_result.is_ok(), "accept should succeed")
+
+    let buf: [U8; 4] = [65, 66, 67, 68]
+    let r = client.write_n(ref buf, 3 as I64)
+    assert(r.is_ok(), "write_n should succeed")
+    let n: I64 = r.unwrap()
+    assert(n > 0 as I64, "write_n should write some bytes")
+    0
+}
+
+// NOTE: TcpListener::as_raw_socket and TcpStream::as_raw_socket return ref RawSocket
+// — blocked by the GEP codegen bug: "base element of getelementptr must be sized"
+// when accessing fields on a ref-returned struct. Same bug as UdpSocket::as_raw_socket.

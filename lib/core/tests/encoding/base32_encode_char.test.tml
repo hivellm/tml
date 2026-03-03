@@ -1,0 +1,20 @@
+use test
+use core::encoding::base32
+
+@test
+func test_encode_char_letters() -> I32 {
+    // A=0, B=1, ..., Z=25
+    assert_eq(base32::encode_char(0) as I32, 65)   // 'A'
+    assert_eq(base32::encode_char(1) as I32, 66)   // 'B'
+    assert_eq(base32::encode_char(25) as I32, 90)  // 'Z'
+    0
+}
+
+@test
+func test_encode_char_digits() -> I32 {
+    // 2=26, 3=27, ..., 7=31
+    assert_eq(base32::encode_char(26) as I32, 50)  // '2'
+    assert_eq(base32::encode_char(27) as I32, 51)  // '3'
+    assert_eq(base32::encode_char(31) as I32, 55)  // '7'
+    0
+}

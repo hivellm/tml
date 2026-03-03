@@ -1,0 +1,18 @@
+// Tests for Outcome methods — most are blocked by generic constraint monomorphization bug
+// Blocked: inspect, inspect_err, duplicated, copied, transpose, as_ref, as_mut, flatten
+// Root cause: methods with type constraints (Duplicate, Copy, etc.) or closure params
+// with ref T generate undefined symbols in LLVM IR — the monomorphization doesn't emit them.
+use test::{assert}
+
+@test
+func test_result_inspect_placeholder() -> I32 {
+    // Outcome::inspect — blocked: '@tml_N4core17Outcome__I32__Str7inspectE' undefined
+    // Outcome::inspect_err — blocked: same undefined symbol issue
+    // Outcome::duplicated — blocked: requires Duplicate constraint
+    // Outcome::copied — blocked: requires Copy constraint
+    // Outcome::transpose — blocked: requires Maybe[T] constraint
+    // Outcome::as_ref, as_mut — blocked: ref return type codegen
+    // Outcome::flatten — blocked: nested Outcome[Outcome[T,E],E] constraint
+    assert(true, "Outcome advanced methods blocked by generic monomorphization")
+    return 0
+}

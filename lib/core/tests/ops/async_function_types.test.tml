@@ -1,0 +1,59 @@
+// Tests for ReadyFuture, PendingFuture, LazyFuture constructors
+use test::{assert, assert_eq}
+use core::ops::async_function::{ReadyFuture, PendingFuture, Poll, IntoFuture}
+
+// === PendingFuture::new ===
+
+@test
+func test_pending_future_new() -> I32 {
+    let pf: PendingFuture[I32] = PendingFuture::new()
+    // PendingFuture is just a marker type with Unit field
+    // If it constructs without error, it works
+    assert(true, "PendingFuture::new constructed")
+    return 0
+}
+
+// === ReadyFuture::new ===
+
+@test
+func test_ready_future_new() -> I32 {
+    let rf: ReadyFuture[I32] = ReadyFuture::new(42)
+    // ReadyFuture wraps value in Maybe[T] = Just(value)
+    assert(true, "ReadyFuture::new constructed")
+    return 0
+}
+
+// === ReadyFuture::into_future (IntoFuture impl) ===
+
+@test
+func test_ready_future_into_future() -> I32 {
+    let rf: ReadyFuture[I32] = ReadyFuture::new(99)
+    let rf2: ReadyFuture[I32] = rf.into_future()
+    assert(true, "ReadyFuture::into_future returned self")
+    return 0
+}
+
+// === Poll::map ===
+// NOTE: LazyFuture::new blocked — LazyFuture__I32__T vs LazyFuture__I32__I32
+//       generic monomorphization codegen bug (two type params)
+
+func double(x: I32) -> I32 {
+    return x * 2
+}
+
+@test
+func test_poll_map_ready() -> I32 {
+    let p: Poll[I32] = Poll::Ready(21)
+    let mapped: Poll[I32] = p.map[I32](double)
+    assert(mapped.is_ready(), "map Ready should be Ready")
+    assert_eq(mapped.to_string(), "Ready(42)", "map should double value")
+    return 0
+}
+
+@test
+func test_poll_map_pending() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    let mapped: Poll[I32] = p.map[I32](double)
+    assert(mapped.is_pending(), "map Pending should be Pending")
+    return 0
+}

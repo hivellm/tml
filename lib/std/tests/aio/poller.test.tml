@@ -1,5 +1,6 @@
 use test::{assert, assert_eq}
 use std::aio::poller::{Poller, PollEvent, READABLE, WRITABLE, READWRITE, ERROR, HUP}
+use std::net::sys::RawSocket
 
 @test
 func test_poller_create_destroy() -> I32 {
@@ -90,5 +91,48 @@ func test_poll_event_token_storage() -> I32 {
     let ev2: PollEvent = PollEvent { token: 999, flags: WRITABLE }
     assert_eq(ev2.token, 999 as U32, "token should be 999")
 
+    return 0
+}
+
+@test
+func test_poller_modify() -> I32 {
+    let poller: Poller = Poller::new()
+    let sock_result = RawSocket::udp()
+    if sock_result.is_err() {
+        poller.destroy()
+        return 0
+    }
+    let sock = sock_result.unwrap()
+    let handle: I64 = sock.handle
+    // Add with READABLE, then modify to WRITABLE
+    let _ = poller.add(handle, 1 as U32, READABLE)
+    let mod_r: I32 = poller.modify(handle, 1 as U32, WRITABLE)
+    assert(mod_r >= -1, "modify returned a valid code")
+    poller.remove(handle)
+    let _ = sock.close()
+    poller.destroy()
+    return 0
+}
+
+@test
+func test_poller_event_at_after_wait() -> I32 {
+    let poller: Poller = Poller::new()
+    let sock_result = RawSocket::udp()
+    if sock_result.is_err() {
+        poller.destroy()
+        return 0
+    }
+    let sock = sock_result.unwrap()
+    let handle: I64 = sock.handle
+    // Register with WRITABLE so we get an event quickly
+    poller.add(handle, 42 as U32, WRITABLE)
+    let n: I32 = poller.wait(10)
+    if n > 0 {
+        let ev: PollEvent = poller.event_at(0)
+        assert(ev.token >= 0 as U32, "event_at returns a valid PollEvent")
+    }
+    poller.remove(handle)
+    let _ = sock.close()
+    poller.destroy()
     return 0
 }

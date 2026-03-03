@@ -1,0 +1,48 @@
+// Tests for Slice::get_mut and MutSlice::get_mut
+use test
+
+use core::slice::{Slice, MutSlice}
+
+@test
+func test_slice_get_mut_valid() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let mut slice: Slice[I32] = Slice::from_raw(ptr, 3)
+    let r = slice.get_mut(1)
+    assert(r.is_just(), "get_mut(1) should return Just")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_get_mut_out_of_bounds() -> I32 {
+    let ptr: *Unit = alloc(8)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+
+    let mut slice: Slice[I32] = Slice::from_raw(ptr, 2)
+    let r = slice.get_mut(5)
+    assert(r.is_nothing(), "get_mut out of bounds should return Nothing")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_mutslice_get_mut_valid() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 100)
+    atomic_store(ptr_offset(ptr, 4), 200)
+    atomic_store(ptr_offset(ptr, 8), 300)
+
+    let mut slice: MutSlice[I32] = MutSlice::from_raw(ptr, 3)
+    let r = slice.get_mut(0)
+    assert(r.is_just(), "MutSlice get_mut(0) should return Just")
+
+    dealloc(ptr)
+    return 0
+}

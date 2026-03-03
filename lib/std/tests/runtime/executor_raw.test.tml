@@ -1,0 +1,12 @@
+use test
+use std::runtime::executor::Executor
+
+@test
+func test_executor_raw_handle() -> I32 {
+    let exec: Executor = Executor::new()
+    let handle: *Unit = exec.raw()
+    // raw() should return a non-null pointer
+    assert(handle as I64 != 0, "executor raw handle should be non-null")
+    exec.destroy()
+    0
+}

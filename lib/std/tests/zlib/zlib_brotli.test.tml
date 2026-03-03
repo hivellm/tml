@@ -547,6 +547,36 @@ func test_brotli_decompress_error_code() -> I32 {
 }
 
 @test
+func test_brotli_compress_drop() -> I32 {
+    // Let BrotliCompress go out of scope without explicit destroy — exercises Drop impl
+    {
+        let result: Outcome[BrotliCompress, ZlibError] = BrotliCompress::new()
+        if result.is_err() {
+            return 1
+        }
+        let comp: BrotliCompress = result.unwrap()
+        let write_result: Outcome[Buffer, ZlibError] = comp.write("drop test data")
+        // comp goes out of scope here, drop is called automatically
+    }
+    return 0
+}
+
+@test
+func test_brotli_decompress_drop() -> I32 {
+    // Let BrotliDecompress go out of scope without explicit destroy — exercises Drop impl
+    {
+        let result: Outcome[BrotliDecompress, ZlibError] = BrotliDecompress::new()
+        if result.is_err() {
+            return 1
+        }
+        let decomp: BrotliDecompress = result.unwrap()
+        let finished: Bool = decomp.is_finished()
+        // decomp goes out of scope here, drop is called automatically
+    }
+    return 0
+}
+
+@test
 func test_brotli_compress_write_buffer() -> I32 {
     // First create a buffer with data
     let compress_result: Outcome[Buffer, ZlibError] = brotli_compress("source data")

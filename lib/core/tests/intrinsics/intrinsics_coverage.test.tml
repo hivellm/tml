@@ -1,0 +1,80 @@
+// Coverage tests for missing intrinsics: minnum, maxnum
+// Array intrinsics (slice_get_mut, array_as_ptr, array_as_mut_ptr,
+// array_offset_ptr, array_offset_mut_ptr) tested indirectly via array ops.
+//
+// BLOCKED BY CODEGEN BUG (generic intrinsic monomorphization):
+//   cast[T, U]           — generates %struct.T/%struct.U instead of concrete types
+//   volatile_read[T]     — same bug: %struct.T in call signature
+//   volatile_write[T]    — same bug: %struct.T in call signature
+//   atomic_cmpxchg[T]    — same bug: uses %struct.T for expected/desired values
+//   atomic_xor[T]        — setup uses volatile_write which is broken
+// All of the above fail with: "invalid type for function argument"
+// Root cause: generic parameter monomorphization for intrinsics does not substitute
+// concrete types into IR function signatures.
+use test::{assert, assert_eq}
+use core::intrinsics::{
+    minnum, maxnum,
+}
+
+// ============================================================================
+// minnum and maxnum
+// ============================================================================
+
+@test
+func test_minnum_f32() -> I32 {
+    let a: F32 = 3.5 as F32
+    let b: F32 = 7.2 as F32
+    let m: F32 = minnum[F32](a, b)
+    assert(m < 4.0 as F32, "minnum(3.5, 7.2) should be 3.5")
+    return 0
+}
+
+@test
+func test_maxnum_f32() -> I32 {
+    let a: F32 = 3.5 as F32
+    let b: F32 = 7.2 as F32
+    let m: F32 = maxnum[F32](a, b)
+    assert(m > 6.0 as F32, "maxnum(3.5, 7.2) should be 7.2")
+    return 0
+}
+
+@test
+func test_minnum_f64() -> I32 {
+    let a: F64 = -1.5
+    let b: F64 = 2.5
+    let m: F64 = minnum[F64](a, b)
+    assert(m < 0.0, "minnum(-1.5, 2.5) should be -1.5")
+    return 0
+}
+
+@test
+func test_maxnum_f64() -> I32 {
+    let a: F64 = -1.5
+    let b: F64 = 2.5
+    let m: F64 = maxnum[F64](a, b)
+    assert(m > 2.0, "maxnum(-1.5, 2.5) should be 2.5")
+    return 0
+}
+
+// ============================================================================
+// Array intrinsics via array operations
+// slice_get_mut, array_as_ptr, array_as_mut_ptr, array_offset_ptr,
+// array_offset_mut_ptr are all internal intrinsics used by Array/Slice ops.
+// They are exercised indirectly through normal array indexing and mutation.
+// ============================================================================
+
+@test
+func test_array_intrinsics_via_array_ops() -> I32 {
+    // Array indexing and slicing internally use array_as_ptr, array_offset_ptr,
+    // slice_get_mut, etc. We exercise them via normal array operations.
+    var arr: [I32; 4] = [1, 2, 3, 4]
+    // Direct indexing (uses array_as_ptr + array_offset_ptr internally)
+    assert_eq(arr[0], 1, "arr[0] = 1")
+    assert_eq(arr[3], 4, "arr[3] = 4")
+    // Mutation (uses array_as_mut_ptr + array_offset_mut_ptr internally)
+    arr[1] = 99
+    assert_eq(arr[1], 99, "arr[1] after mutation = 99")
+    arr[2] = 77
+    assert_eq(arr[2], 77, "arr[2] after mutation = 77")
+    return 0
+}

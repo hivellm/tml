@@ -1,0 +1,28 @@
+// Tests for intrinsics::slice_get_mut via mutable array indexing
+use test::{assert, assert_eq}
+
+@test
+func test_slice_get_mut_via_array() -> I32 {
+    var arr: [I32; 3] = [10, 20, 30]
+    // Mutable array indexing internally uses slice_get_mut
+    arr[0] = 100
+    arr[2] = 300
+    assert_eq(arr[0], 100, "arr[0] should be 100 after mutation")
+    assert_eq(arr[1], 20, "arr[1] should remain 20")
+    assert_eq(arr[2], 300, "arr[2] should be 300 after mutation")
+    return 0
+}
+
+@test
+func test_slice_get_mut_all_elements() -> I32 {
+    var arr: [I64; 5] = [1, 2, 3, 4, 5]
+    // Mutate all elements
+    arr[0] = 10
+    arr[1] = 20
+    arr[2] = 30
+    arr[3] = 40
+    arr[4] = 50
+    assert_eq(arr[0], 10 as I64, "arr[0] should be 10")
+    assert_eq(arr[4], 50 as I64, "arr[4] should be 50")
+    return 0
+}
