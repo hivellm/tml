@@ -674,6 +674,35 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
+    // 4a2. Inline codegen for eq/ne on Str (PrimitiveKind::Str — skipped above
+    //      because it is neither signed/unsigned/float/bool, but needs the same
+    //      treatment — e.g. inside Outcome[T, Str]::eq body)
+    // =========================================================================
+    if (receiver_type_name == "Str" && (method == "eq" || method == "ne") &&
+        call.args.size() == 1) {
+        emit_coverage("Str::" + method);
+        std::string other_ref = gen_expr(*call.args[0]);
+        std::string other = fresh_reg();
+        emit_line("  " + other + " = load ptr, ptr " + other_ref);
+        std::string receiver_val = receiver;
+        if (receiver_was_ref) {
+            receiver_val = fresh_reg();
+            emit_line("  " + receiver_val + " = load ptr, ptr " + receiver);
+        }
+        std::string cmp_result = fresh_reg();
+        emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + receiver_val + ", ptr " + other +
+                  ")");
+        std::string result = fresh_reg();
+        if (method == "eq") {
+            emit_line("  " + result + " = icmp eq i32 " + cmp_result + ", 0");
+        } else {
+            emit_line("  " + result + " = icmp ne i32 " + cmp_result + ", 0");
+        }
+        last_expr_type_ = "i1";
+        return result;
+    }
+
+    // =========================================================================
     // 4b. Bounded generic dispatch (delegated to method_generic.cpp)
     // =========================================================================
     if (auto r =
