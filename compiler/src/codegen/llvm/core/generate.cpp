@@ -1244,6 +1244,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         static const std::unordered_map<std::string, std::string> behavior_source =
                             {
                                 {"Iterator", "core/src/iter/traits/iterator"},
+                                {"DoubleEndedIterator", "core/src/iter/traits/double_ended"},
                                 {"IntoIterator", "core/src/iter/traits/into_iterator"},
                                 {"FromIterator", "core/src/iter/traits/from_iterator"},
                                 {"Display", "core/src/fmt/traits"},

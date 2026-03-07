@@ -714,6 +714,15 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
     std::string ret_type = llvm_type_from_semantic(return_type);
 
+    // If return type resolved to 'ptr' (may be an unresolved associated type like
+    // Maybe[This::Item]) but the function is already registered in functions_ with
+    // a concrete return type (e.g., %struct.Maybe__I32 from generate_default_method),
+    // use the registered type to avoid calling convention mismatches.
+    if (ret_type == "ptr" && method_it != functions_.end() && !method_it->second.ret_type.empty() &&
+        method_it->second.ret_type != "ptr") {
+        ret_type = method_it->second.ret_type;
+    }
+
     std::string args_str;
     for (size_t i = 0; i < typed_args.size(); ++i) {
         if (i > 0)
@@ -1030,6 +1039,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         return_type = types::substitute_type(return_type, type_subs);
     }
     std::string ret_type = llvm_type_from_semantic(return_type);
+
     std::string args_str;
     for (size_t i = 0; i < typed_args.size(); ++i) {
         if (i > 0)
