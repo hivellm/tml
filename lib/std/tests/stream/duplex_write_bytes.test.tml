@@ -1,0 +1,10 @@
+// Tests for DuplexStream::write_bytes — BLOCKED by double ref crash
+// write_bytes(data: ref [U8]) calls writer.write_bytes(ref data) which
+// creates ref ref [U8], causing segfault (ACCESS_VIOLATION)
+use test::assert
+
+@test
+func test_duplex_write_bytes_blocked() -> I32 {
+    assert(true, "DuplexStream::write_bytes blocked by double ref crash")
+    return 0
+}

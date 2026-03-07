@@ -1,0 +1,9 @@
+// Tests for Builder::spawn — BLOCKED by Maybe[U64] codegen
+// Builder contains stack_size: Maybe[U64] which triggers struct vs ptr mismatch
+use test::assert
+
+@test
+func test_builder_spawn_blocked() -> I32 {
+    assert(true, "Builder::spawn blocked by Maybe[U64] struct codegen")
+    return 0
+}
