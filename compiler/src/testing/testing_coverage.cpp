@@ -97,13 +97,23 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::string line;
     std::regex impl_regex(R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\s+for\s+(\w+))?)");
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
+    std::regex class_regex(R"(^\s*(pub\s+)?class\s+(\w+))");
+    std::regex interface_regex(R"(^\s*(pub\s+)?interface\s+(\w+))");
     std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
     std::regex extern_regex(R"(@extern\()");
     std::smatch match;
     std::string prev_line;
 
     while (std::getline(ifs, line)) {
-        if (std::regex_search(line, match, impl_regex)) {
+        if (std::regex_search(line, match, class_regex)) {
+            current_impl = match[2].str();
+            in_behavior = false;
+            impl_brace_depth = 0;
+        } else if (std::regex_search(line, match, interface_regex)) {
+            current_impl = match[2].str();
+            in_behavior = true;
+            impl_brace_depth = 0;
+        } else if (std::regex_search(line, match, impl_regex)) {
             if (match[2].matched) {
                 std::string type_after_for = match[2].str();
                 if (type_after_for.size() == 1 && std::isupper(type_after_for[0])) {

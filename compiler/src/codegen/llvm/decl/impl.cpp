@@ -673,6 +673,13 @@ void LLVMIRGen::gen_impl_method_instantiation(
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
     const std::vector<parser::GenericParam>& impl_generics, const std::string& method_type_suffix,
     bool is_library_type, const std::string& base_type_name) {
+    // Skip method-level generic methods without a concrete type suffix.
+    // Without a suffix, type params (e.g. T) remain unresolved and produce
+    // `alloca %struct.T` in the IR — an unsized type that LLVM rejects.
+    if (!method.generics.empty() && method_type_suffix.empty()) {
+        return;
+    }
+
     // Build full method name and check if already generated
     std::string method_name_for_key = method.name;
     if (!method_type_suffix.empty()) {

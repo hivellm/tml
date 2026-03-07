@@ -1110,6 +1110,12 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
                     // Second pass: generate the methods
                     for (const auto& method : impl.methods) {
+                        // Skip generic methods - they are instantiated on demand when called
+                        // with concrete types. Emitting the uninstantiated template would use
+                        // %struct.T (unsized opaque type) which LLVM rejects.
+                        if (!method.generics.empty()) {
+                            continue;
+                        }
                         // In lazy mode, also process private methods so they can be
                         // generated on demand when public methods reference them.
                         // Without lazy mode, only public methods are needed (private

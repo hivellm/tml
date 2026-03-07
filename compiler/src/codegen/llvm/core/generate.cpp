@@ -1179,12 +1179,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             locals_[param_name] =
                                 VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
                         } else {
+                            // Resolve semantic type from annotation so field access (GEP) and
+                            // method dispatch work for ref/ptr parameters (e.g. other: ref TypeId)
+                            types::TypePtr param_sem_type = nullptr;
+                            if (method.params[i].type) {
+                                param_sem_type = resolve_parser_type_with_subs(
+                                    *method.params[i].type, current_type_subs_);
+                            }
                             std::string alloca_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
                             emit_line("  store " + param_type + " %" + param_name + ", ptr " +
                                       alloca_reg);
                             locals_[param_name] =
-                                VarInfo{alloca_reg, param_type, nullptr, std::nullopt};
+                                VarInfo{alloca_reg, param_type, param_sem_type, std::nullopt};
                         }
                     }
 

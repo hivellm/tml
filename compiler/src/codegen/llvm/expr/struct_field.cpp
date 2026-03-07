@@ -166,6 +166,34 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             is_ssa_struct_value =
                 it->second.is_direct_param && it->second.type.find("%struct.") == 0;
 
+            // Handle ref/ptr parameters: resolve the actual struct type from semantic type
+            // and load the pointer from the alloca (e.g., other: ref TypeId -> load + GEP)
+            if (struct_type == "ptr" && ident.name != "this" && ident.name != "self" &&
+                it->second.semantic_type) {
+                types::TypePtr sem_type = it->second.semantic_type;
+                if (sem_type->is<types::RefType>()) {
+                    const auto& ref = sem_type->as<types::RefType>();
+                    types::TypePtr resolved_inner = ref.inner;
+                    if (!current_type_subs_.empty()) {
+                        resolved_inner = apply_type_substitutions(ref.inner, current_type_subs_);
+                    }
+                    struct_type = llvm_type_from_semantic(resolved_inner);
+                    std::string loaded_ptr = fresh_reg();
+                    emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                    struct_ptr = loaded_ptr;
+                } else if (sem_type->is<types::PtrType>()) {
+                    const auto& ptr = sem_type->as<types::PtrType>();
+                    types::TypePtr resolved_inner = ptr.inner;
+                    if (!current_type_subs_.empty()) {
+                        resolved_inner = apply_type_substitutions(ptr.inner, current_type_subs_);
+                    }
+                    struct_type = llvm_type_from_semantic(resolved_inner);
+                    std::string loaded_ptr = fresh_reg();
+                    emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                    struct_ptr = loaded_ptr;
+                }
+            }
+
             // Special handling for 'this' in impl methods
             if (ident.name == "this" && !current_impl_type_.empty()) {
                 // 'this' is a pointer to the impl type
