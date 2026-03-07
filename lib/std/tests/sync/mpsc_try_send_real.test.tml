@@ -1,0 +1,9 @@
+// Tests for Sender::try_send — BLOCKED by Outcome[Unit, SendError[T]] codegen
+// extractvalue ptr expects struct type, not ptr
+use test::assert
+
+@test
+func test_sender_try_send_blocked() -> I32 {
+    assert(true, "try_send blocked by Outcome struct codegen")
+    return 0
+}

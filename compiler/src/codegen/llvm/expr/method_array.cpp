@@ -6,15 +6,20 @@ TML_MODULE("codegen_x86")
 //!
 //! ## Methods
 //!
-//! | Method     | Signature            | Description              |
-//! |------------|----------------------|--------------------------|
-//! | `len`      | `() -> I64`          | Returns N (compile-time) |
-//! | `is_empty` | `() -> Bool`         | Returns N == 0           |
-//! | `get`      | `(I64) -> T`         | Element at index         |
-//! | `first`    | `() -> T`            | First element            |
-//! | `last`     | `() -> T`            | Last element             |
-//! | `eq`, `ne` | `([T; N]) -> Bool`   | Element-wise comparison  |
-//! | `cmp`      | `([T; N]) -> Ordering`| Lexicographic compare   |
+//! | Method      | Signature                 | Description              |
+//! |-------------|---------------------------|--------------------------|
+//! | `len`       | `() -> I64`               | Returns N (compile-time) |
+//! | `is_empty`  | `() -> Bool`              | Returns N == 0           |
+//! | `get`       | `(I64) -> Maybe[ref T]`   | Element ref at index     |
+//! | `get_mut`   | `(I64) -> Maybe[mut ref T]`| Mutable element ref     |
+//! | `first`     | `() -> Maybe[ref T]`      | First element ref        |
+//! | `first_mut` | `() -> Maybe[mut ref T]`  | Mutable first ref        |
+//! | `last`      | `() -> Maybe[ref T]`      | Last element ref         |
+//! | `last_mut`  | `() -> Maybe[mut ref T]`  | Mutable last ref         |
+//! | `each_ref`  | `() -> [ref T; N]`        | Array of refs            |
+//! | `each_mut`  | `() -> [mut ref T; N]`    | Array of mut refs        |
+//! | `eq`, `ne`  | `([T; N]) -> Bool`        | Element-wise comparison  |
+//! | `cmp`       | `([T; N]) -> Ordering`    | Lexicographic compare    |
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "types/module.hpp"
@@ -277,6 +282,134 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         std::string result = fresh_reg();
         emit_line("  " + result + " = load " + maybe_type + ", ptr " + maybe_ptr);
         last_expr_type_ = maybe_type;
+        return result;
+    }
+
+    // get_mut(index) returns Maybe[mut ref T] — same IR as get() since mut ref T is ptr
+    if (method == "get_mut") {
+        emit_coverage("Array::get_mut");
+        if (call.args.empty()) {
+            report_error("get_mut requires an index argument", call.span, "C015");
+            return "0";
+        }
+
+        std::string index = gen_expr(*call.args[0]);
+        std::string index_i64 = fresh_reg();
+        if (last_expr_type_ == "i64") {
+            index_i64 = index;
+        } else {
+            emit_line("  " + index_i64 + " = sext i32 " + index + " to i64");
+        }
+
+        // Bounds check
+        std::string below_zero = fresh_reg();
+        emit_line("  " + below_zero + " = icmp slt i64 " + index_i64 + ", 0");
+        std::string above_max = fresh_reg();
+        emit_line("  " + above_max + " = icmp sge i64 " + index_i64 + ", " +
+                  std::to_string(arr_size));
+        std::string out_of_bounds = fresh_reg();
+        emit_line("  " + out_of_bounds + " = or i1 " + below_zero + ", " + above_max);
+
+        std::string label_oob = "oob_" + std::to_string(label_counter_++);
+        std::string label_ok = "ok_" + std::to_string(label_counter_++);
+        std::string label_end = "end_" + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + out_of_bounds + ", label %" + label_oob + ", label %" + label_ok);
+
+        // Out of bounds: return Nothing (null)
+        emit_line(label_oob + ":");
+        current_block_ = label_oob;
+        emit_line("  br label %" + label_end);
+
+        // In bounds: return Just(elem_ptr)
+        emit_line(label_ok + ":");
+        current_block_ = label_ok;
+        std::string elem_ptr = fresh_reg();
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                  arr_ptr + ", i64 0, i64 " + index_i64);
+        emit_line("  br label %" + label_end);
+
+        // Merge: nullable Maybe[mut ref T] = ptr (null or elem_ptr)
+        emit_line(label_end + ":");
+        current_block_ = label_end;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi ptr [ null, %" + label_oob + " ], [ " + elem_ptr + ", %" +
+                  label_ok + " ]");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // first_mut() returns Maybe[mut ref T]
+    if (method == "first_mut") {
+        emit_coverage("Array::first_mut");
+        if (arr_size == 0) {
+            last_expr_type_ = "ptr";
+            return "null";
+        }
+        std::string elem_ptr = fresh_reg();
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                  arr_ptr + ", i64 0, i64 0");
+        last_expr_type_ = "ptr";
+        return elem_ptr;
+    }
+
+    // last_mut() returns Maybe[mut ref T]
+    if (method == "last_mut") {
+        emit_coverage("Array::last_mut");
+        if (arr_size == 0) {
+            last_expr_type_ = "ptr";
+            return "null";
+        }
+        std::string elem_ptr = fresh_reg();
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                  arr_ptr + ", i64 0, i64 " + std::to_string(arr_size - 1));
+        last_expr_type_ = "ptr";
+        return elem_ptr;
+    }
+
+    // each_ref() returns Array[ref T, N] — array of pointers to each element
+    if (method == "each_ref") {
+        emit_coverage("Array::each_ref");
+        std::string ptr_array_type = "[" + std::to_string(arr_size) + " x ptr]";
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + ptr_array_type);
+
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string slot_ptr = fresh_reg();
+            emit_line("  " + slot_ptr + " = getelementptr inbounds " + ptr_array_type + ", ptr " +
+                      result_ptr + ", i64 0, i64 " + std::to_string(i));
+            emit_line("  store ptr " + elem_ptr + ", ptr " + slot_ptr);
+        }
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + ptr_array_type + ", ptr " + result_ptr);
+        last_expr_type_ = ptr_array_type;
+        return result;
+    }
+
+    // each_mut() returns Array[mut ref T, N] — same IR as each_ref
+    if (method == "each_mut") {
+        emit_coverage("Array::each_mut");
+        std::string ptr_array_type = "[" + std::to_string(arr_size) + " x ptr]";
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + ptr_array_type);
+
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string slot_ptr = fresh_reg();
+            emit_line("  " + slot_ptr + " = getelementptr inbounds " + ptr_array_type + ", ptr " +
+                      result_ptr + ", i64 0, i64 " + std::to_string(i));
+            emit_line("  store ptr " + elem_ptr + ", ptr " + slot_ptr);
+        }
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + ptr_array_type + ", ptr " + result_ptr);
+        last_expr_type_ = ptr_array_type;
         return result;
     }
 

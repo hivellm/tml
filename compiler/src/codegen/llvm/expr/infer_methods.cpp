@@ -342,6 +342,38 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
                 return result;
             }
 
+            // get_mut, first_mut, last_mut return Maybe[mut ref T]
+            if (call.method == "get_mut" || call.method == "first_mut" ||
+                call.method == "last_mut") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind =
+                    types::RefType{.is_mut = true, .inner = elem_type, .lifetime = std::nullopt};
+                std::vector<types::TypePtr> type_args = {ref_type};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"Maybe", "", std::move(type_args)};
+                return result;
+            }
+
+            // each_ref returns Array[ref T, N]
+            if (call.method == "each_ref") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind =
+                    types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::ArrayType{ref_type, arr_type.size};
+                return result;
+            }
+
+            // each_mut returns Array[mut ref T, N]
+            if (call.method == "each_mut") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind =
+                    types::RefType{.is_mut = true, .inner = elem_type, .lifetime = std::nullopt};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::ArrayType{ref_type, arr_type.size};
+                return result;
+            }
+
             // map returns the same array type (simplified)
             if (call.method == "map") {
                 return receiver_type;

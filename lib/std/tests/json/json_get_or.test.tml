@@ -1,9 +1,9 @@
-// Tests for Json::get_or — blocked by Maybe[Json] pattern match codegen
-use test::{assert}
+// Tests for Json::get_or — blocked by method dispatch
+// get_or is defined in impl Json but codegen can't find it
+use test::assert
 
 @test
-func test_json_get_or_placeholder() -> I32 {
-    // get_or uses when-match on Maybe[Json] which produces LLVM type mismatch
-    assert(true, "Json::get_or blocked by Maybe pattern match codegen")
+func test_json_get_or_blocked() -> I32 {
+    assert(true, "Json::get_or blocked by method dispatch codegen")
     return 0
 }

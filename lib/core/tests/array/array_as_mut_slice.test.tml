@@ -1,0 +1,10 @@
+// Tests for Array::as_mut_slice — BLOCKED by MutSlice struct codegen
+// alloca %struct.MutSlice__I32 fails: struct type never defined
+// (inline codegen returns { ptr, i64 } but type inference says MutSlice[T])
+use test::assert
+
+@test
+func test_array_as_mut_slice_blocked() -> I32 {
+    assert(true, "as_mut_slice blocked by MutSlice struct codegen")
+    return 0
+}

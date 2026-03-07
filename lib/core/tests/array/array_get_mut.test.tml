@@ -1,0 +1,52 @@
+// Tests for Array::get_mut, first_mut, last_mut
+use test::{assert}
+
+@test
+func test_array_get_mut_in_bounds() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let elem = arr.get_mut(1)
+    assert(elem.is_just(), "get_mut(1) should return Just")
+    return 0
+}
+
+@test
+func test_array_get_mut_out_of_bounds() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let elem = arr.get_mut(5)
+    assert(elem.is_nothing(), "get_mut(5) should return Nothing")
+    let neg = arr.get_mut(-1)
+    assert(neg.is_nothing(), "get_mut(-1) should return Nothing")
+    return 0
+}
+
+@test
+func test_array_first_mut() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let first = arr.first_mut()
+    assert(first.is_just(), "first_mut should return Just")
+    return 0
+}
+
+@test
+func test_array_last_mut() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let last = arr.last_mut()
+    assert(last.is_just(), "last_mut should return Just")
+    return 0
+}
+
+@test
+func test_array_first_mut_empty() -> I32 {
+    let mut arr: [I32; 0] = []
+    let first = arr.first_mut()
+    assert(first.is_nothing(), "first_mut on empty should return Nothing")
+    return 0
+}
+
+@test
+func test_array_last_mut_empty() -> I32 {
+    let mut arr: [I32; 0] = []
+    let last = arr.last_mut()
+    assert(last.is_nothing(), "last_mut on empty should return Nothing")
+    return 0
+}
