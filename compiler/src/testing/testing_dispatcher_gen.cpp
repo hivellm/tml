@@ -362,7 +362,7 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  call i32 (i8*, ...) @printf(i8* %tp_fmt_" << i << ", i32 " << i << ", i64 %us_"
                << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
-            ir << "  ret i32 0\n\n";
+            ir << "  br label %exit_pass\n\n";
 
             // Fail
             ir << "fail_" << i << ":\n";
@@ -373,14 +373,39 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
                << ", i8* %tf_name_" << i << ", i8* %tf_file_" << i << ", i32 %rc_" << i
                << ", i64 %us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
-            ir << "  ret i32 1\n\n";
+            ir << "  br label %exit_fail\n\n";
         }
 
         ir << "invalid:\n";
         auto gep_error = gep_str(".str.error", "ERROR: invalid test index %d\n");
         ir << "  %err = " << gep_error << "\n";
         ir << "  call i32 (i8*, ...) @printf(i8* %err, i32 %index)\n";
-        ir << "  ret i32 99\n";
+        ir << "  ret i32 99\n\n";
+
+        // Common exit blocks with coverage write epilogue
+        auto gep_cov_env_single = gep_str(".str.cov_env", "TML_COVERAGE_FILE");
+
+        ir << "exit_pass:\n";
+        ir << "  %sp_cov_ptr = " << gep_cov_env_single << "\n";
+        ir << "  %sp_cov_file = call i8* @getenv(i8* %sp_cov_ptr)\n";
+        ir << "  %sp_cov_nn = icmp ne i8* %sp_cov_file, null\n";
+        ir << "  br i1 %sp_cov_nn, label %sp_write_cov, label %sp_ret\n\n";
+        ir << "sp_write_cov:\n";
+        ir << "  call void @tml_coverage_write_file(i8* %sp_cov_file)\n";
+        ir << "  br label %sp_ret\n\n";
+        ir << "sp_ret:\n";
+        ir << "  ret i32 0\n\n";
+
+        ir << "exit_fail:\n";
+        ir << "  %sf_cov_ptr = " << gep_cov_env_single << "\n";
+        ir << "  %sf_cov_file = call i8* @getenv(i8* %sf_cov_ptr)\n";
+        ir << "  %sf_cov_nn = icmp ne i8* %sf_cov_file, null\n";
+        ir << "  br i1 %sf_cov_nn, label %sf_write_cov, label %sf_ret\n\n";
+        ir << "sf_write_cov:\n";
+        ir << "  call void @tml_coverage_write_file(i8* %sf_cov_file)\n";
+        ir << "  br label %sf_ret\n\n";
+        ir << "sf_ret:\n";
+        ir << "  ret i32 1\n";
     }
     ir << "}\n\n";
 
