@@ -88,6 +88,8 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::vector<std::string> functions;
     std::string current_impl;
     bool in_behavior = false;
+    bool in_class = false;     // class methods have no coverage instrumentation
+    bool in_interface = false; // interface methods have no coverage instrumentation
     int impl_brace_depth = 0;
 
     std::ifstream ifs(file);
@@ -108,10 +110,14 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         if (std::regex_search(line, match, class_regex)) {
             current_impl = match[2].str();
             in_behavior = false;
+            in_class = true;
+            in_interface = false;
             impl_brace_depth = 0;
         } else if (std::regex_search(line, match, interface_regex)) {
             current_impl = match[2].str();
             in_behavior = true;
+            in_class = false;
+            in_interface = true;
             impl_brace_depth = 0;
         } else if (std::regex_search(line, match, impl_regex)) {
             if (match[2].matched) {
@@ -125,10 +131,14 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 current_impl = match[1].str();
             }
             in_behavior = false;
+            in_class = false;
+            in_interface = false;
             impl_brace_depth = 0;
         } else if (std::regex_search(line, match, behavior_regex)) {
             current_impl = match[2].str();
             in_behavior = true;
+            in_class = false;
+            in_interface = false;
             impl_brace_depth = 0;
         }
 
@@ -142,6 +152,8 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             if (impl_brace_depth <= 0) {
                 current_impl.clear();
                 in_behavior = false;
+                in_class = false;
+                in_interface = false;
                 impl_brace_depth = 0;
             }
         }
@@ -161,6 +173,16 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 continue;
             }
             if (in_behavior && line.find('{') == std::string::npos) {
+                prev_line = line;
+                continue;
+            }
+            // Skip class/interface methods — no coverage instrumentation in codegen
+            if (in_class || in_interface) {
+                prev_line = line;
+                continue;
+            }
+            // Skip Drop::drop — auto-called by runtime, never instrumented
+            if (func_name == "drop") {
                 prev_line = line;
                 continue;
             }
