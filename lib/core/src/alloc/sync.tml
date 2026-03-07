@@ -315,14 +315,14 @@ impl[T] Drop for Sync[T] {
 }
 
 impl[T] Display for Sync[T] where T: Display {
-    func fmt(this) -> Str {
-        return this.get().fmt()
+    pub func to_string(this) -> Str {
+        return this.get().to_string()
     }
 }
 
 impl[T] Debug for Sync[T] where T: Debug {
-    func fmt_debug(this) -> Str {
-        return "Sync(strong={this.strong_count()}, {this.get().fmt_debug()})"
+    pub func debug_string(this) -> Str {
+        return "Sync(strong=" + this.strong_count().to_string() + ", " + this.get().debug_string() + ")"
     }
 }
 

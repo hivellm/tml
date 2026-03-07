@@ -122,16 +122,14 @@ impl Hash for SocketAddrV4 {
 }
 
 impl Display for SocketAddrV4 {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        this.ip.fmt(f)
-        f.write_str(":")
-        f.write_str(this.port.to_string())
+    pub func to_string(this) -> Str {
+        this.ip.to_string() + ":" + (this.port as I64).to_string()
     }
 }
 
 impl Debug for SocketAddrV4 {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }
 
@@ -209,17 +207,14 @@ impl Hash for SocketAddrV6 {
 }
 
 impl Display for SocketAddrV6 {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        f.write_str("[")
-        this.ip.fmt(f)
-        f.write_str("]:")
-        f.write_str(this.port.to_string())
+    pub func to_string(this) -> Str {
+        "[" + this.ip.to_string() + "]:" + (this.port as I64).to_string()
     }
 }
 
 impl Debug for SocketAddrV6 {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }
 
@@ -301,13 +296,13 @@ impl Hash for SocketAddr {
 }
 
 impl Display for SocketAddr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        this.inner.fmt(f)
+    pub func to_string(this) -> Str {
+        this.inner.to_string()
     }
 }
 
 impl Debug for SocketAddr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }
