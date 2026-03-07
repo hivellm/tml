@@ -1,0 +1,94 @@
+// Tests for Ipv4Addr/Ipv6Addr/SocketAddr eq, cmp, hash
+// NOTE: to_string()/fmt blocked by Display trait dispatch codegen
+use test::{assert, assert_eq}
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+use std::net::socket::{SocketAddrV4, SocketAddrV6, SocketAddr}
+
+// === Ipv4Addr::eq ===
+
+@test
+func test_ipv4_eq_same() -> I32 {
+    let a: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+    let b: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+    assert(a.eq(ref b), "same ipv4 should be equal")
+    return 0
+}
+
+@test
+func test_ipv4_eq_different() -> I32 {
+    let a: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+    let b: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    assert(not a.eq(ref b), "different ipv4 should not be equal")
+    return 0
+}
+
+// === SocketAddrV4::partial_cmp ===
+
+@test
+func test_socketaddrv4_partial_cmp_equal() -> I32 {
+    let a: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let b: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let cmp_result = a.partial_cmp(ref b)
+    assert(cmp_result.is_just(), "partial_cmp should return Just")
+    assert(cmp_result.unwrap().is_equal(), "same addrs should be Equal")
+    return 0
+}
+
+@test
+func test_socketaddrv4_partial_cmp_less() -> I32 {
+    let a: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let b: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 443 as U16)
+    let cmp_result = a.partial_cmp(ref b)
+    assert(cmp_result.is_just(), "partial_cmp should return Just")
+    assert(cmp_result.unwrap().is_less(), "lower port should be Less")
+    return 0
+}
+
+// === Ipv6Addr::eq ===
+
+@test
+func test_ipv6_eq_same() -> I32 {
+    let a: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let b: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(a.eq(ref b), "same ipv6 should be equal")
+    return 0
+}
+
+@test
+func test_ipv6_eq_different() -> I32 {
+    let a: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let b: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    assert(not a.eq(ref b), "different ipv6 should not be equal")
+    return 0
+}
+
+// === SocketAddrV6::eq ===
+
+@test
+func test_socketaddrv6_eq() -> I32 {
+    let a: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 80 as U16, 0 as U32, 0 as U32)
+    let b: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 80 as U16, 0 as U32, 0 as U32)
+    assert(a.eq(ref b), "same v6 addr should be equal")
+    return 0
+}
+
+// === SocketAddr::eq, hash ===
+
+@test
+func test_socketaddr_eq() -> I32 {
+    let a: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16))
+    let b: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16))
+    assert(a.eq(ref b), "same socket addr should be equal")
+    return 0
+}
+
+@test
+func test_socketaddr_hash() -> I32 {
+    let a: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16))
+    let h: I64 = a.hash()
+    let h2: I64 = a.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// NOTE: SocketAddr::V6 constructor blocked — is_ipv6() returns false (codegen bug)

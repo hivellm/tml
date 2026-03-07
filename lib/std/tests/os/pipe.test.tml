@@ -1,0 +1,33 @@
+// Tests for std::os::pipe — anonymous pipe creation and close
+use test::{assert}
+use std::os::pipe
+
+@test
+func test_pipe_create() -> I32 {
+    let result = pipe::create()
+    assert(result.is_ok(), "pipe create should succeed")
+    let p = result.unwrap()
+    assert(p.read_fd != 0, "read_fd should be non-zero")
+    assert(p.write_fd != 0, "write_fd should be non-zero")
+    assert(p.read_fd != p.write_fd, "read and write fds should differ")
+    p.close()
+    return 0
+}
+
+@test
+func test_pipe_close_read() -> I32 {
+    let p = pipe::create().unwrap()
+    p.close_read()
+    // write_fd should still be valid; close it
+    p.close_write()
+    return 0
+}
+
+@test
+func test_pipe_close_write() -> I32 {
+    let p = pipe::create().unwrap()
+    p.close_write()
+    // read_fd should still be valid; close it
+    p.close_read()
+    return 0
+}

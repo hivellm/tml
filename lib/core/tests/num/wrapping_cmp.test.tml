@@ -1,0 +1,55 @@
+// Tests for Wrapping[T] — default, eq, partial_cmp, cmp
+use test::{assert, assert_eq}
+use core::num::wrapping::Wrapping
+
+@test
+func test_wrapping_eq_same() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(42)
+    let b: Wrapping[I32] = Wrapping::new(42)
+    assert(a.eq(ref b), "equal wrappings should be eq")
+    return 0
+}
+
+@test
+func test_wrapping_eq_different() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(10)
+    let b: Wrapping[I32] = Wrapping::new(20)
+    assert(not a.eq(ref b), "different wrappings should not be eq")
+    return 0
+}
+
+@test
+func test_wrapping_cmp_less() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(5)
+    let b: Wrapping[I32] = Wrapping::new(10)
+    let ord = a.cmp(ref b)
+    assert(ord.is_less(), "5 should be less than 10")
+    return 0
+}
+
+@test
+func test_wrapping_cmp_greater() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(20)
+    let b: Wrapping[I32] = Wrapping::new(5)
+    let ord = a.cmp(ref b)
+    assert(ord.is_greater(), "20 should be greater than 5")
+    return 0
+}
+
+@test
+func test_wrapping_cmp_equal() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(7)
+    let b: Wrapping[I32] = Wrapping::new(7)
+    let ord = a.cmp(ref b)
+    assert(ord.is_equal(), "equal values should be Equal")
+    return 0
+}
+
+@test
+func test_wrapping_partial_cmp() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(3)
+    let b: Wrapping[I32] = Wrapping::new(8)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    return 0
+}

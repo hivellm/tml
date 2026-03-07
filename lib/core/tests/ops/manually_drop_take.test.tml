@@ -1,21 +1,20 @@
 // Tests for ManuallyDrop::take and ManuallyDrop::drop
-// BLOCKED by generic intrinsic codegen bug:
-// ManuallyDrop::take uses lowlevel { ptr_read(ref slot.value) }
-// which generates %struct.T instead of concrete type I64/I32.
-// ManuallyDrop::drop uses lowlevel { drop_in_place(ref mut slot.value) }
-// which has the same monomorphization issue.
-use test::{assert}
+use test::{assert, assert_eq}
+use core::ops::drop::ManuallyDrop
 
 @test
-func test_manually_drop_take_blocked() -> I32 {
-    // ManuallyDrop::take blocked by ptr_read[T] codegen bug
-    assert(true, "ManuallyDrop::take blocked by generic intrinsic codegen bug")
+func test_manually_drop_take() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(42)
+    let val: I32 = ManuallyDrop::take(mut ref md)
+    assert_eq(val, 42, "take should extract the value")
     return 0
 }
 
 @test
-func test_manually_drop_drop_blocked() -> I32 {
-    // ManuallyDrop::drop blocked by drop_in_place[T] codegen bug
-    assert(true, "ManuallyDrop::drop blocked by generic intrinsic codegen bug")
+func test_manually_drop_drop() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(77)
+    ManuallyDrop::drop(mut ref md)
+    // After drop, the inner value is considered dropped
+    // We just verify it doesn't crash
     return 0
 }

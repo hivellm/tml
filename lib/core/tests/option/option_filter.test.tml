@@ -4,7 +4,7 @@ use test::{assert, assert_eq}
 @test
 func test_filter_just_passes() -> I32 {
     let x: Maybe[I32] = Just(4)
-    let r: Maybe[I32] = x.filter(do(v: ref I32) -> Bool { return *v > 0 })
+    let r: Maybe[I32] = x.filter(do(v) v > 0)
     assert(r.is_just(), "filter should keep value when predicate is true")
     assert_eq(r.unwrap(), 4, "filter should preserve original value")
     return 0
@@ -13,7 +13,7 @@ func test_filter_just_passes() -> I32 {
 @test
 func test_filter_just_fails() -> I32 {
     let x: Maybe[I32] = Just(3)
-    let r: Maybe[I32] = x.filter(do(v: ref I32) -> Bool { return *v > 10 })
+    let r: Maybe[I32] = x.filter(do(v) v > 10)
     assert(r.is_nothing(), "filter should remove value when predicate is false")
     return 0
 }
@@ -21,7 +21,7 @@ func test_filter_just_fails() -> I32 {
 @test
 func test_filter_nothing() -> I32 {
     let x: Maybe[I32] = Nothing
-    let r: Maybe[I32] = x.filter(do(v: ref I32) -> Bool { return *v > 0 })
+    let r: Maybe[I32] = x.filter(do(v) v > 0)
     assert(r.is_nothing(), "filter on Nothing should return Nothing")
     return 0
 }

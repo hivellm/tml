@@ -1,0 +1,13 @@
+// Tests for Chunks, ChunksExact, Windows iterators
+// BLOCKED: Maybe[Slice[T]] codegen — is_nothing() generates null ptr check on struct value
+// BLOCKED: Slice method receiver codegen — value-type `this` passed as ptr
+// Keeping as documentation of what's blocked
+use test::{assert}
+
+@test
+func test_slice_chunks_placeholder() -> I32 {
+    // Chunks::next, ChunksExact::next, Windows::next all return Maybe[Slice[T]]
+    // which triggers: '%t28' defined with type 'Maybe__Slice__I32' but expected 'ptr'
+    assert(true, "chunks/windows blocked by Maybe[Slice[T]] codegen")
+    return 0
+}

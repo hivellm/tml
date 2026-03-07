@@ -1,0 +1,42 @@
+// Tests for Maybe::ok_or_else and Maybe::map_or_else
+use test::{assert, assert_eq}
+
+@test
+func test_ok_or_else_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let r: Outcome[I32, Str] = x.ok_or_else(do() -> Str { return "missing" })
+    assert(r.is_ok(), "ok_or_else on Just should return Ok")
+    assert_eq(r.unwrap(), 42, "ok_or_else on Just should preserve value")
+    return 0
+}
+
+@test
+func test_ok_or_else_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: Outcome[I32, Str] = x.ok_or_else(do() -> Str { return "not found" })
+    assert(r.is_err(), "ok_or_else on Nothing should return Err")
+    assert_eq(r.unwrap_err(), "not found", "ok_or_else should call error function")
+    return 0
+}
+
+@test
+func test_map_or_else_just() -> I32 {
+    let x: Maybe[I32] = Just(5)
+    let result: I32 = x.map_or_else(
+        do() -> I32 { return 0 },
+        do(v: I32) -> I32 { return v * 10 }
+    )
+    assert_eq(result, 50, "map_or_else on Just should apply f")
+    return 0
+}
+
+@test
+func test_map_or_else_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let result: I32 = x.map_or_else(
+        do() -> I32 { return 99 },
+        do(v: I32) -> I32 { return v * 10 }
+    )
+    assert_eq(result, 99, "map_or_else on Nothing should call default_fn")
+    return 0
+}

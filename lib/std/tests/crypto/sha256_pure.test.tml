@@ -1,0 +1,50 @@
+// Tests for pure TML sha256 implementation (sha256_impl.tml)
+use test::{assert, assert_eq}
+use std::crypto::sha256_impl::{sha256_hex, sha256_digest}
+
+@test
+func test_sha256_hex_empty() -> I32 {
+    let hex: Str = sha256_hex("")
+    // SHA-256 of empty string is well-known
+    assert_eq(hex, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 of empty string")
+    return 0
+}
+
+@test
+func test_sha256_hex_hello() -> I32 {
+    let hex: Str = sha256_hex("hello")
+    // SHA-256 of "hello"
+    assert_eq(hex, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256 of hello")
+    return 0
+}
+
+@test
+func test_sha256_hex_length() -> I32 {
+    let hex: Str = sha256_hex("test data")
+    assert_eq(hex.len(), 64 as I64, "SHA-256 hex should be 64 chars")
+    return 0
+}
+
+@test
+func test_sha256_digest_length() -> I32 {
+    let digest: Str = sha256_digest("hello")
+    // digest is 32 raw bytes as a Str (binary data)
+    assert_eq(digest.len(), 32 as I64, "SHA-256 digest should be 32 bytes")
+    return 0
+}
+
+@test
+func test_sha256_hex_deterministic() -> I32 {
+    let h1: Str = sha256_hex("deterministic test")
+    let h2: Str = sha256_hex("deterministic test")
+    assert_eq(h1, h2, "SHA-256 should be deterministic")
+    return 0
+}
+
+@test
+func test_sha256_hex_different_inputs() -> I32 {
+    let h1: Str = sha256_hex("input1")
+    let h2: Str = sha256_hex("input2")
+    assert(h1 != h2, "different inputs should produce different hashes")
+    return 0
+}

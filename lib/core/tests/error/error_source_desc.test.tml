@@ -1,0 +1,43 @@
+// Tests for Error::source, Error::description, BoxedError
+use test::{assert, assert_eq}
+use core::error::{SimpleError, BoxedError}
+
+@test
+func test_simple_error_source_nothing() -> I32 {
+    let err: SimpleError = SimpleError::new("oops")
+    let src = err.source()
+    assert(src.is_nothing(), "SimpleError source should be Nothing")
+    return 0
+}
+
+@test
+func test_simple_error_description() -> I32 {
+    let err: SimpleError = SimpleError::new("desc test")
+    let d: Str = err.description()
+    assert_eq(d, "desc test", "description should match message")
+    return 0
+}
+
+@test
+func test_boxed_error_from_message() -> I32 {
+    let boxed: BoxedError = BoxedError::from_message("custom msg")
+    assert_eq(boxed.to_string(), "custom msg", "from_message should work")
+    return 0
+}
+
+@test
+func test_boxed_error_debug() -> I32 {
+    let boxed: BoxedError = BoxedError::from_message("test")
+    let dbg: Str = boxed.debug_string()
+    assert(dbg.contains("BoxedError"), "debug should contain type name")
+    assert(dbg.contains("test"), "debug should contain message")
+    return 0
+}
+
+@test
+func test_boxed_error_source_nothing() -> I32 {
+    let boxed: BoxedError = BoxedError::from_message("err")
+    let src = boxed.source()
+    assert(src.is_nothing(), "BoxedError source should be Nothing")
+    return 0
+}

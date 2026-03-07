@@ -1,0 +1,73 @@
+// Tests for std::os::signal — signal constants and register/check/raise cycle
+use test::{assert, assert_eq}
+use std::os::signal
+
+// === Signal constants ===
+
+@test
+func test_signal_sigint_value() -> I32 {
+    assert_eq(signal::SIGINT(), 2, "SIGINT should be 2")
+    return 0
+}
+
+@test
+func test_signal_sigterm_value() -> I32 {
+    assert_eq(signal::SIGTERM(), 15, "SIGTERM should be 15")
+    return 0
+}
+
+@test
+func test_signal_sighup_value() -> I32 {
+    assert_eq(signal::SIGHUP(), 1, "SIGHUP should be 1")
+    return 0
+}
+
+@test
+func test_signal_sigusr1_value() -> I32 {
+    assert_eq(signal::SIGUSR1(), 10, "SIGUSR1 should be 10")
+    return 0
+}
+
+@test
+func test_signal_sigusr2_value() -> I32 {
+    assert_eq(signal::SIGUSR2(), 12, "SIGUSR2 should be 12")
+    return 0
+}
+
+@test
+func test_signal_sigalrm_value() -> I32 {
+    assert_eq(signal::SIGALRM(), 14, "SIGALRM should be 14")
+    return 0
+}
+
+// === Register / check / reset ===
+// NOTE: SIGUSR1/SIGUSR2 don't exist on Windows, so we use SIGTERM (15)
+// for register/check/reset tests. raise_signal(SIGTERM) is risky
+// (could terminate), so raise tests are omitted on Windows.
+
+@test
+func test_signal_register_check() -> I32 {
+    // Register for SIGTERM, check before raise should be false
+    let reg: Bool = signal::register(signal::SIGTERM())
+    assert(reg, "register should succeed")
+    let before: Bool = signal::check(signal::SIGTERM())
+    assert(not before, "check before any signal should be false")
+    signal::reset(signal::SIGTERM())
+    return 0
+}
+
+@test
+func test_signal_ignore() -> I32 {
+    let ok: Bool = signal::ignore(signal::SIGTERM())
+    assert(ok, "ignore should succeed")
+    signal::reset(signal::SIGTERM())
+    return 0
+}
+
+@test
+func test_signal_reset() -> I32 {
+    signal::register(signal::SIGTERM())
+    let ok: Bool = signal::reset(signal::SIGTERM())
+    assert(ok, "reset should succeed")
+    return 0
+}
