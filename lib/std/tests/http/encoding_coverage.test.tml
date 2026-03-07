@@ -1,0 +1,50 @@
+// Tests for HTTP encoding — compress, decompress, accepted_encodings
+use test::{assert, assert_eq, assert_true}
+use std::http::encoding::{compress, decompress, accepted_encodings}
+use core::str
+
+@test
+func test_accepted_encodings() -> I32 {
+    let enc: Str = accepted_encodings()
+    assert_true(str::contains(enc, "gzip"), "should contain gzip")
+    assert_true(str::contains(enc, "deflate"), "should contain deflate")
+    assert_true(str::contains(enc, "br"), "should contain br")
+    assert_true(str::contains(enc, "zstd"), "should contain zstd")
+    return 0
+}
+
+@test
+func test_compress_decompress_gzip() -> I32 {
+    let data: Str = "hello world"
+    let compressed = compress("gzip", data)
+    assert_true(compressed.is_ok(), "gzip compress should succeed")
+    let decompressed = decompress("gzip", compressed.unwrap())
+    assert_true(decompressed.is_ok(), "gzip decompress should succeed")
+    assert_eq(decompressed.unwrap(), "hello world", "roundtrip should match")
+    return 0
+}
+
+@test
+func test_compress_decompress_deflate() -> I32 {
+    let data: Str = "test data for deflate"
+    let compressed = compress("deflate", data)
+    assert_true(compressed.is_ok(), "deflate compress should succeed")
+    let decompressed = decompress("deflate", compressed.unwrap())
+    assert_true(decompressed.is_ok(), "deflate decompress should succeed")
+    assert_eq(decompressed.unwrap(), "test data for deflate", "roundtrip should match")
+    return 0
+}
+
+@test
+func test_compress_unsupported() -> I32 {
+    let result = compress("unknown", "data")
+    assert_true(result.is_err(), "unsupported encoding should fail")
+    return 0
+}
+
+@test
+func test_decompress_unsupported() -> I32 {
+    let result = decompress("unknown", "data")
+    assert_true(result.is_err(), "unsupported encoding should fail")
+    return 0
+}

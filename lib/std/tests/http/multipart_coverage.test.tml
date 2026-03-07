@@ -1,0 +1,48 @@
+// Tests for HTTP MultipartBuilder
+use test::{assert, assert_eq, assert_true}
+use std::http::multipart::MultipartBuilder
+use core::str
+
+@test
+func test_multipart_new() -> I32 {
+    let mb: MultipartBuilder = MultipartBuilder::new()
+    let ct: Str = mb.content_type()
+    assert_true(str::contains(ct, "multipart/form-data"), "content type starts correct")
+    assert_true(str::contains(ct, "boundary="), "contains boundary")
+    mb.destroy()
+    return 0
+}
+
+@test
+func test_multipart_with_boundary() -> I32 {
+    let mb: MultipartBuilder = MultipartBuilder::with_boundary("myboundary")
+    let ct: Str = mb.content_type()
+    assert_true(str::contains(ct, "myboundary"), "custom boundary in content type")
+    mb.destroy()
+    return 0
+}
+
+@test
+func test_multipart_add_field_and_build() -> I32 {
+    let mb: MultipartBuilder = MultipartBuilder::with_boundary("TESTBOUND")
+    mb.add_field("username", "alice")
+    let body: Str = mb.build()
+    assert_true(str::contains(body, "--TESTBOUND"), "boundary present")
+    assert_true(str::contains(body, "name=\"username\""), "field name present")
+    assert_true(str::contains(body, "alice"), "field value present")
+    assert_true(str::contains(body, "--TESTBOUND--"), "closing boundary")
+    mb.destroy()
+    return 0
+}
+
+@test
+func test_multipart_add_file_and_build() -> I32 {
+    let mb: MultipartBuilder = MultipartBuilder::with_boundary("FB")
+    mb.add_file("upload", "photo.jpg", "image/jpeg", "BINARYDATA")
+    let body: Str = mb.build()
+    assert_true(str::contains(body, "filename=\"photo.jpg\""), "filename present")
+    assert_true(str::contains(body, "Content-Type: image/jpeg"), "content type present")
+    assert_true(str::contains(body, "BINARYDATA"), "file data present")
+    mb.destroy()
+    return 0
+}

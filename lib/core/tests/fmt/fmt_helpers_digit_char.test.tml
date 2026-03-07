@@ -1,0 +1,20 @@
+// Tests for digit_char coverage — exercises i64_digit_char and u64_digit_char
+// through their public callers (i64_to_str, u64_to_str)
+use test::{assert, assert_eq}
+use core::fmt::helpers::{i64_to_str, u64_to_str}
+
+@test
+func test_i64_single_digits_cover_digit_char() -> I32 {
+    assert_eq(i64_to_str(0 as I64), "0", "i64 digit 0")
+    assert_eq(i64_to_str(5 as I64), "5", "i64 digit 5")
+    assert_eq(i64_to_str(9 as I64), "9", "i64 digit 9")
+    return 0
+}
+
+@test
+func test_u64_single_digits_cover_digit_char() -> I32 {
+    assert_eq(u64_to_str(0 as U64), "0", "u64 digit 0")
+    assert_eq(u64_to_str(7 as U64), "7", "u64 digit 7")
+    assert_eq(u64_to_str(9 as U64), "9", "u64 digit 9")
+    return 0
+}

@@ -1,0 +1,117 @@
+// Tests for uncovered TransformStream methods
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::transform::TransformStream
+
+func noop_listener(data: I64) {}
+
+@test
+func test_transform_with_options() -> I32 {
+    var ts: TransformStream = TransformStream::with_options(2048, 2048)
+    assert_true(ts.readable(), "readable")
+    assert_true(ts.writable(), "writable")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_readable_flowing() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_false(ts.readable_flowing(), "not flowing initially")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_readable_ended() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_false(ts.readable_ended(), "not ended initially")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_readable_high_water_mark() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    let hwm: I64 = ts.readable_high_water_mark()
+    assert(hwm > 0 as I64, "readable HWM positive")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_readable_did_read() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_false(ts.readable_did_read(), "false initially")
+    ts.write("x")
+    ts.read(1)
+    assert_true(ts.readable_did_read(), "true after read")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_pause_resume() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.pause()
+    assert_true(ts.is_paused(), "paused")
+    ts.resume()
+    assert_false(ts.is_paused(), "resumed")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_writable_state() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_eq(ts.writable_length(), 0 as I64, "writable length 0")
+    assert_false(ts.writable_finished(), "not finished")
+    assert_false(ts.writable_ended(), "not ended")
+    assert_false(ts.writable_corked(), "not corked")
+    assert_eq(ts.writable_corked_count(), 0 as I64, "corked count 0")
+    let hwm: I64 = ts.writable_high_water_mark()
+    assert(hwm > 0 as I64, "writable HWM positive")
+    assert_false(ts.writable_needs_drain(), "no drain needed")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_cork_uncork() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.cork()
+    assert_true(ts.writable_corked(), "corked")
+    ts.uncork()
+    assert_false(ts.writable_corked(), "uncorked")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_events() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.on("data", noop_listener as I64)
+    ts.once("end", noop_listener as I64)
+    ts.off("data", noop_listener as I64)
+    ts.emit("custom", 0 as I64)
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_closed_destroyed_errored() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    assert_false(ts.closed(), "not closed")
+    assert_false(ts.destroyed(), "not destroyed")
+    assert_false(ts.errored(), "not errored")
+    assert_eq(ts.error_message(), "", "no error message")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_destroy_with_error() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.destroy_with_error("transform error")
+    assert_true(ts.destroyed(), "destroyed")
+    return 0
+}

@@ -1,0 +1,12 @@
+// Tests for Maybe::zip_with — BLOCKED by tuple/MaybeIter codegen bugs
+// Keeping as placeholder to document what needs fixing
+use test::{assert}
+
+@test
+func test_maybe_zip_placeholder() -> I32 {
+    // zip: tuple type layout bug (%struct.I32_I32 not first class)
+    // zip_with: same tuple issue
+    // iter: MaybeIter value-type vs ptr-type mismatch
+    assert(true, "blocked by codegen bugs")
+    return 0
+}

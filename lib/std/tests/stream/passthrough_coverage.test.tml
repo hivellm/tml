@@ -1,0 +1,92 @@
+// Tests for uncovered PassThroughStream methods
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::passthrough::PassThroughStream
+
+@test
+func test_passthrough_with_options() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::with_options(1024, 1024)
+    assert_true(pt.readable(), "should be readable")
+    assert_true(pt.writable(), "should be writable")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_end() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.write("data")
+    pt.end()
+    let data: Str = pt.read_all()
+    assert_eq(data, "data", "should read data before end")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_cork_uncork() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.cork()
+    assert_true(pt.writable_corked(), "should be corked")
+    pt.uncork()
+    assert_false(pt.writable_corked(), "should be uncorked")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_length() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_eq(pt.writable_length(), 0 as I64, "writable length initially 0")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_finished() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.writable_finished(), "not finished initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_ended() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.writable_ended(), "not ended initially")
+    pt.end()
+    assert_true(pt.writable_ended(), "ended after end()")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_corked_count() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_eq(pt.writable_corked_count(), 0 as I64, "corked count 0")
+    pt.cork()
+    assert_eq(pt.writable_corked_count(), 1 as I64, "corked count 1")
+    pt.cork()
+    assert_eq(pt.writable_corked_count(), 2 as I64, "corked count 2")
+    pt.uncork()
+    assert_eq(pt.writable_corked_count(), 1 as I64, "corked count back to 1")
+    pt.uncork()
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_high_water_mark() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    let hwm: I64 = pt.writable_high_water_mark()
+    assert(hwm > 0 as I64, "high water mark should be positive")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_writable_needs_drain() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.writable_needs_drain(), "should not need drain initially")
+    pt.destroy()
+    return 0
+}

@@ -1,0 +1,14 @@
+// Tests for Response::text — only empty body (non-empty causes heap corruption)
+use test::{assert, assert_eq}
+use std::http::response::Response
+use std::http::headers::Headers
+use std::http::status::Status
+
+@test
+func test_response_text_empty() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(204), h, "")
+    assert_eq(resp.text(), "", "text should be empty")
+    resp.destroy()
+    return 0
+}

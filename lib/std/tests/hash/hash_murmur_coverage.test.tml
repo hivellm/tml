@@ -1,0 +1,27 @@
+// Tests for murmur2_64 and Hash64::to_i64
+use test::{assert, assert_true}
+use std::hash::{murmur2_64, Hash64}
+
+@test
+func test_murmur2_64_deterministic() -> I32 {
+    let h1: Hash64 = murmur2_64("hello", 0 as U64)
+    let h2: Hash64 = murmur2_64("hello", 0 as U64)
+    assert_true(h1.to_hex() == h2.to_hex(), "same input produces same hash")
+    return 0
+}
+
+@test
+func test_hash64_to_i64() -> I32 {
+    let h: Hash64 = murmur2_64("test", 42 as U64)
+    let val: I64 = h.to_i64()
+    assert_true(val != 0 as I64, "hash should be non-zero for non-empty input")
+    return 0
+}
+
+@test
+func test_murmur2_64_different_seeds() -> I32 {
+    let h1: Hash64 = murmur2_64("data", 1 as U64)
+    let h2: Hash64 = murmur2_64("data", 2 as U64)
+    assert_true(h1.to_hex() != h2.to_hex(), "different seeds produce different hashes")
+    return 0
+}

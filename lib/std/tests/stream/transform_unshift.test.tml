@@ -1,0 +1,25 @@
+// Tests for TransformStream::unshift and end_with_data
+use test::{assert, assert_eq, assert_true}
+use std::stream::transform::TransformStream
+
+@test
+func test_transform_unshift() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.write("hello")
+    let first: Str = ts.read(2)
+    assert_eq(first, "he", "read first 2")
+    ts.unshift("YY")
+    let second: Str = ts.read(4)
+    assert_eq(second, "YYll", "unshift prepends YY")
+    ts.destroy()
+    return 0
+}
+
+@test
+func test_transform_end_with_data() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.end_with_data("final")
+    assert_true(ts.writable_ended(), "ended after end_with_data")
+    ts.destroy()
+    return 0
+}

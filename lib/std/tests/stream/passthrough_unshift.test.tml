@@ -1,0 +1,16 @@
+// Tests for PassThroughStream::unshift
+use test::{assert, assert_eq}
+use std::stream::passthrough::PassThroughStream
+
+@test
+func test_passthrough_unshift() -> I32 {
+    var ps: PassThroughStream = PassThroughStream::new()
+    ps.write("abcdef")
+    let first: Str = ps.read(3)
+    assert_eq(first, "abc", "read first 3")
+    ps.unshift("ZZ")
+    let second: Str = ps.read(4)
+    assert_eq(second, "ZZde", "unshift prepends ZZ")
+    ps.destroy()
+    return 0
+}

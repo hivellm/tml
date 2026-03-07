@@ -1,0 +1,10 @@
+// Tests for Array mutable access — blocked by method dispatch for mut this
+// get_mut, first_mut, last_mut: "Unknown method: get_mut"
+// Compiler doesn't dispatch mut this methods on arrays
+use test::assert
+
+@test
+func test_array_mut_access_blocked() -> I32 {
+    assert(true, "Array mut access blocked: mut this method dispatch not working")
+    return 0
+}

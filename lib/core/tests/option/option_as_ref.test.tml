@@ -1,0 +1,19 @@
+// Tests for Maybe::as_ref
+use test::{assert, assert_eq, assert_true, assert_false}
+
+@test
+func test_maybe_as_ref_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let r: Maybe[ref I32] = x.as_ref()
+    assert_true(r.is_just(), "as_ref on Just should be Just")
+    assert_eq(*r.unwrap(), 42, "as_ref value should be 42")
+    return 0
+}
+
+@test
+func test_maybe_as_ref_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: Maybe[ref I32] = x.as_ref()
+    assert_true(r.is_nothing(), "as_ref on Nothing should be Nothing")
+    return 0
+}

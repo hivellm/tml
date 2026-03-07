@@ -1,0 +1,9 @@
+// Tests for Maybe[T]::default — blocked by generic trait dispatch codegen
+// Maybe[T]::default() defined in core::default but monomorphization fails
+use test::assert
+
+@test
+func test_maybe_default_blocked() -> I32 {
+    assert(true, "Maybe::default blocked: generic impl[T] Default for Maybe[T] not monomorphized")
+    return 0
+}

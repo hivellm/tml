@@ -1,0 +1,164 @@
+// Tests for uncovered DuplexStream methods
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::duplex::DuplexStream
+
+func noop_listener(data: I64) {}
+
+@test
+func test_duplex_with_options() -> I32 {
+    var ds: DuplexStream = DuplexStream::with_options(2048, 2048)
+    assert_true(ds.readable(), "readable")
+    assert_true(ds.writable(), "writable")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_with_half_open() -> I32 {
+    var ds: DuplexStream = DuplexStream::with_half_open(true)
+    assert_true(ds.allow_half_open_enabled(), "half open enabled")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_pause_resume() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.pause()
+    assert_true(ds.is_paused(), "paused after pause()")
+    ds.resume()
+    assert_false(ds.is_paused(), "not paused after resume()")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_readable_flowing() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.readable_flowing(), "not flowing initially")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_readable_ended() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.readable_ended(), "not ended initially")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_readable_high_water_mark() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    let hwm: I64 = ds.readable_high_water_mark()
+    assert(hwm > 0 as I64, "readable HWM should be positive")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_readable_did_read() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.readable_did_read(), "false initially")
+    ds.push("abc")
+    ds.read(3)
+    assert_true(ds.readable_did_read(), "true after read")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_cork_uncork() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.cork()
+    assert_true(ds.writable_corked(), "corked")
+    assert_eq(ds.writable_corked_count(), 1 as I64, "count 1")
+    ds.uncork()
+    assert_false(ds.writable_corked(), "uncorked")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_writable_finished() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.writable_finished(), "not finished")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_writable_ended() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.writable_ended(), "not ended")
+    ds.end()
+    assert_true(ds.writable_ended(), "ended after end()")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_writable_high_water_mark() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    let hwm: I64 = ds.writable_high_water_mark()
+    assert(hwm > 0 as I64, "HWM positive")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_writable_needs_drain() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.writable_needs_drain(), "no drain needed")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_once_off_emit() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.once("test", noop_listener as I64)
+    ds.off("test", noop_listener as I64)
+    ds.emit("custom", 42 as I64)
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_closed_destroyed_errored() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.closed(), "not closed")
+    assert_false(ds.destroyed(), "not destroyed")
+    assert_false(ds.errored(), "not errored")
+    assert_eq(ds.error_message(), "", "no error")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_end_with_data() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.push("before")
+    ds.end_with_data("after")
+    let data: Str = ds.read_all()
+    assert_eq(data, "before", "push data read")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_destroy_with_error() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.destroy_with_error("test err")
+    assert_true(ds.destroyed(), "destroyed")
+    return 0
+}
+
+@test
+func test_duplex_allow_half_open() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.allow_half_open_enabled(), "default is false")
+    ds.destroy()
+    return 0
+}

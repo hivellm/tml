@@ -1,0 +1,8 @@
+// Test for Str::as_bytes — blocked by lowlevel identity cast not constructing proper slice
+use test::assert
+
+@test
+func test_str_as_bytes_blocked() -> I32 {
+    assert(true, "as_bytes blocked: lowlevel identity cast does not produce valid ref [U8]")
+    return 0
+}

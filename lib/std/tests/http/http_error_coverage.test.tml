@@ -1,0 +1,112 @@
+// Tests for uncovered HttpErrorKind constructors and HttpError factory methods
+use test::{assert, assert_eq}
+use std::http::error::{HttpErrorKind, HttpError}
+
+// --- HttpErrorKind constructors ---
+
+@test
+func test_http_error_kind_body_too_large() -> I32 {
+    assert_eq(HttpErrorKind::BodyTooLarge().raw(), 8, "BodyTooLarge is 8")
+    return 0
+}
+
+@test
+func test_http_error_kind_encoding_error() -> I32 {
+    assert_eq(HttpErrorKind::EncodingError().raw(), 9, "EncodingError is 9")
+    return 0
+}
+
+@test
+func test_http_error_kind_protocol_error() -> I32 {
+    assert_eq(HttpErrorKind::ProtocolError().raw(), 10, "ProtocolError is 10")
+    return 0
+}
+
+@test
+func test_http_error_kind_already_sent() -> I32 {
+    assert_eq(HttpErrorKind::AlreadySent().raw(), 11, "AlreadySent is 11")
+    return 0
+}
+
+@test
+func test_http_error_kind_invalid_status_code() -> I32 {
+    assert_eq(HttpErrorKind::InvalidStatusCode().raw(), 12, "InvalidStatusCode is 12")
+    return 0
+}
+
+@test
+func test_http_error_kind_invalid_header() -> I32 {
+    assert_eq(HttpErrorKind::InvalidHeader().raw(), 13, "InvalidHeader is 13")
+    return 0
+}
+
+@test
+func test_http_error_kind_invalid_payload() -> I32 {
+    assert_eq(HttpErrorKind::InvalidPayload().raw(), 14, "InvalidPayload is 14")
+    return 0
+}
+
+@test
+func test_http_error_kind_route_error() -> I32 {
+    assert_eq(HttpErrorKind::RouteError().raw(), 15, "RouteError is 15")
+    return 0
+}
+
+@test
+func test_http_error_kind_hook_error() -> I32 {
+    assert_eq(HttpErrorKind::HookError().raw(), 16, "HookError is 16")
+    return 0
+}
+
+// --- HttpError factory methods ---
+
+@test
+func test_http_error_connection_failed() -> I32 {
+    let err: HttpError = HttpError::connection_failed("conn refused")
+    assert_eq(err.kind().raw(), HttpErrorKind::ConnectionFailed().raw(), "kind matches")
+    assert_eq(err.msg(), "conn refused", "message matches")
+    return 0
+}
+
+@test
+func test_http_error_tls_error() -> I32 {
+    let err: HttpError = HttpError::tls_error("cert invalid")
+    assert_eq(err.kind().raw(), HttpErrorKind::TlsError().raw(), "kind matches")
+    assert_eq(err.msg(), "cert invalid", "message matches")
+    return 0
+}
+
+@test
+func test_http_error_invalid_response() -> I32 {
+    let err: HttpError = HttpError::invalid_response("bad json")
+    assert_eq(err.kind().raw(), HttpErrorKind::InvalidResponse().raw(), "kind matches")
+    return 0
+}
+
+@test
+func test_http_error_too_many_redirects() -> I32 {
+    let err: HttpError = HttpError::too_many_redirects("max 10")
+    assert_eq(err.kind().raw(), HttpErrorKind::TooManyRedirects().raw(), "kind matches")
+    return 0
+}
+
+@test
+func test_http_error_body_too_large() -> I32 {
+    let err: HttpError = HttpError::body_too_large("exceeds 1MB")
+    assert_eq(err.kind().raw(), HttpErrorKind::BodyTooLarge().raw(), "kind matches")
+    return 0
+}
+
+@test
+func test_http_error_encoding_error() -> I32 {
+    let err: HttpError = HttpError::encoding_error("bad gzip")
+    assert_eq(err.kind().raw(), HttpErrorKind::EncodingError().raw(), "kind matches")
+    return 0
+}
+
+@test
+func test_http_error_protocol_error() -> I32 {
+    let err: HttpError = HttpError::protocol_error("bad request")
+    assert_eq(err.kind().raw(), HttpErrorKind::ProtocolError().raw(), "kind matches")
+    return 0
+}

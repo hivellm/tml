@@ -1,0 +1,36 @@
+// Tests for Outcome::as_ref and Outcome::as_mut
+use test::{assert, assert_eq, assert_true}
+
+@test
+func test_outcome_as_ref_ok() -> I32 {
+    let x: Outcome[I32, I32] = Ok(42)
+    let r: Outcome[ref I32, ref I32] = x.as_ref()
+    assert_true(r.is_ok(), "as_ref on Ok should be Ok")
+    assert_eq(*r.unwrap(), 42, "as_ref value should be 42")
+    return 0
+}
+
+@test
+func test_outcome_as_ref_err() -> I32 {
+    let x: Outcome[I32, I32] = Err(99)
+    let r: Outcome[ref I32, ref I32] = x.as_ref()
+    assert_true(r.is_err(), "as_ref on Err should be Err")
+    return 0
+}
+
+@test
+func test_outcome_as_mut_ok() -> I32 {
+    var x: Outcome[I32, I32] = Ok(10)
+    let r: Outcome[mut ref I32, mut ref I32] = x.as_mut()
+    assert_true(r.is_ok(), "as_mut on Ok should be Ok")
+    assert_eq(*r.unwrap(), 10, "as_mut value should be 10")
+    return 0
+}
+
+@test
+func test_outcome_as_mut_err() -> I32 {
+    var x: Outcome[I32, I32] = Err(55)
+    let r: Outcome[mut ref I32, mut ref I32] = x.as_mut()
+    assert_true(r.is_err(), "as_mut on Err should be Err")
+    return 0
+}

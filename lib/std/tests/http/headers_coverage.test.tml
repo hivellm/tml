@@ -1,0 +1,82 @@
+// Tests for Headers — new, set, has, remove, len, is_empty, destroy
+// get() and convenience accessors are blocked by Str reconstruction from raw ptr
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::http::headers::Headers
+
+@test
+func test_headers_new_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_true(h.is_empty(), "new headers should be empty")
+    assert_eq(h.len(), 0 as I64, "len should be 0")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_set_increases_len() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Content-Type", "text/html")
+    assert_eq(h.len(), 1 as I64, "len should be 1 after set")
+    assert_false(h.is_empty(), "should not be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_has() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("X-Custom", "value")
+    assert_true(h.has("X-Custom"), "should have X-Custom")
+    assert_true(h.has("x-custom"), "case-insensitive lookup")
+    assert_false(h.has("X-Missing"), "should not have X-Missing")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_set_overwrite() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Host", "example.com")
+    h.set("Host", "other.com")
+    assert_eq(h.len(), 1 as I64, "overwrite should not increase len")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_remove() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("A", "1")
+    h.set("B", "2")
+    assert_eq(h.len(), 2 as I64, "len should be 2")
+    h.remove("A")
+    assert_eq(h.len(), 1 as I64, "len should be 1 after remove")
+    assert_false(h.has("A"), "A should be gone")
+    assert_true(h.has("B"), "B should remain")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_remove_nonexistent() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("X", "1")
+    h.remove("Y")
+    assert_eq(h.len(), 1 as I64, "removing nonexistent key should not change len")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_multiple_set() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("A", "1")
+    h.set("B", "2")
+    h.set("C", "3")
+    assert_eq(h.len(), 3 as I64, "should have 3 headers")
+    assert_true(h.has("a"), "should have a (lowercase)")
+    assert_true(h.has("B"), "should have B")
+    assert_true(h.has("c"), "should have c")
+    h.destroy()
+    return 0
+}

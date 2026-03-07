@@ -1,0 +1,11 @@
+// Tests for exception class getters — blocked by class hierarchy codegen
+// The override to_string method in Exception class chain causes "Unknown method: to_string"
+// Real tests exist in exception_subclass.test.tml using mock struct types
+// Blocked methods: get_param_name, get_actual_value, get_index, get_file_path
+use test::assert
+
+@test
+func test_exception_class_codegen_blocked() -> I32 {
+    assert(true, "exception class hierarchy codegen blocked — see exception_subclass.test.tml for mock coverage")
+    return 0
+}

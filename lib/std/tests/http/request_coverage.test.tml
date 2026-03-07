@@ -1,0 +1,130 @@
+// Tests for HTTP Request — constructors, builder methods, accessors
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::http::request::Request
+use std::http::method::Method
+use std::http::version::HttpVersion
+
+@test
+func test_request_get() -> I32 {
+    let req: Request = Request::get("http://example.com/api")
+    assert_eq(req.method().to_string(), "GET", "should be GET")
+    assert_eq(req.url(), "http://example.com/api", "url should match")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_post() -> I32 {
+    let req: Request = Request::post("http://example.com/data")
+    assert_eq(req.method().to_string(), "POST", "should be POST")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_put_delete_patch() -> I32 {
+    let r1: Request = Request::put("http://x.com")
+    assert_eq(r1.method().to_string(), "PUT", "should be PUT")
+    r1.destroy()
+
+    let r2: Request = Request::delete("http://x.com")
+    assert_eq(r2.method().to_string(), "DELETE", "should be DELETE")
+    r2.destroy()
+
+    let r3: Request = Request::patch("http://x.com")
+    assert_eq(r3.method().to_string(), "PATCH", "should be PATCH")
+    r3.destroy()
+    return 0
+}
+
+@test
+func test_request_head_options() -> I32 {
+    let r1: Request = Request::head("http://x.com")
+    assert_eq(r1.method().to_string(), "HEAD", "should be HEAD")
+    r1.destroy()
+
+    let r2: Request = Request::options("http://x.com")
+    assert_eq(r2.method().to_string(), "OPTIONS", "should be OPTIONS")
+    r2.destroy()
+    return 0
+}
+
+@test
+func test_request_body_data() -> I32 {
+    let req: Request = Request::post("http://x.com")
+    assert_eq(req.body_data(), "", "body should be empty initially")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_version_default() -> I32 {
+    let req: Request = Request::get("http://x.com")
+    assert_eq(req.http_version().to_string(), "HTTP/1.1", "default version HTTP/1.1")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_timeout() -> I32 {
+    let req: Request = Request::get("http://x.com").timeout(5000 as I64)
+    assert_eq(req.get_timeout(), 5000 as I64, "timeout should be 5000")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_has_body() -> I32 {
+    let get_req: Request = Request::get("http://x.com")
+    assert_false(get_req.has_body(), "GET should not have body")
+    get_req.destroy()
+
+    let post_req: Request = Request::post("http://x.com")
+    assert_true(post_req.has_body(), "POST should have body")
+    post_req.destroy()
+    return 0
+}
+
+@test
+func test_request_is_idempotent() -> I32 {
+    let get_req: Request = Request::get("http://x.com")
+    assert_true(get_req.is_idempotent(), "GET is idempotent")
+    get_req.destroy()
+
+    let post_req: Request = Request::post("http://x.com")
+    assert_false(post_req.is_idempotent(), "POST is not idempotent")
+    post_req.destroy()
+    return 0
+}
+
+@test
+func test_request_is_safe() -> I32 {
+    let get_req: Request = Request::get("http://x.com")
+    assert_true(get_req.is_safe(), "GET is safe")
+    get_req.destroy()
+
+    let del_req: Request = Request::delete("http://x.com")
+    assert_false(del_req.is_safe(), "DELETE is not safe")
+    del_req.destroy()
+    return 0
+}
+
+@test
+func test_request_is_secure() -> I32 {
+    let http_req: Request = Request::get("http://x.com")
+    assert_false(http_req.is_secure(), "http is not secure")
+    http_req.destroy()
+
+    let https_req: Request = Request::get("https://x.com")
+    assert_true(https_req.is_secure(), "https is secure")
+    https_req.destroy()
+    return 0
+}
+
+@test
+func test_request_port() -> I32 {
+    let req: Request = Request::get("http://example.com:8080/path")
+    assert_eq(req.port(), 8080 as I64, "port should be 8080")
+    req.destroy()
+    return 0
+}

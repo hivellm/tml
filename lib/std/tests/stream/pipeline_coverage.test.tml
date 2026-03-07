@@ -1,0 +1,89 @@
+// Tests for uncovered pipeline functions
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::readable_stream::ReadableStream
+use std::stream::writable_stream::WritableStream
+use std::stream::transform::TransformStream
+use std::stream::duplex::DuplexStream
+use std::stream::pipeline::{pipeline_transform, finished_readable, finished_writable, is_readable, is_writable, is_errored_readable, is_errored_writable, duplex_pair}
+
+func noop_cb(data: I64) {}
+func pass_transform(data: I64, duplex_ptr: I64) {
+    let chunk: Str = data as Str
+    let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+    ds.push(chunk)
+}
+
+@test
+func test_is_readable() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_true(is_readable(ref rs), "new stream is readable")
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_is_writable() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_true(is_writable(ref ws), "new stream is writable")
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_is_errored_readable() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    assert_false(is_errored_readable(ref rs), "not errored initially")
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_is_errored_writable() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_false(is_errored_writable(ref ws), "not errored initially")
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_finished_readable_closed() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.destroy()
+    // After destroy, stream is closed — finished_readable calls callback immediately
+    finished_readable(mut ref rs, noop_cb as I64)
+    return 0
+}
+
+@test
+func test_finished_writable_closed() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    ws.end()
+    ws.destroy()
+    finished_writable(mut ref ws, noop_cb as I64)
+    return 0
+}
+
+@test
+func test_duplex_pair() -> I32 {
+    var dp: DuplexStream = duplex_pair()
+    assert_true(dp.readable(), "duplex pair readable")
+    assert_true(dp.writable(), "duplex pair writable")
+    dp.destroy()
+    return 0
+}
+
+@test
+func test_pipeline_transform() -> I32 {
+    var src: ReadableStream = ReadableStream::new()
+    src.push("hello")
+    src.push_eof()
+    var ts: TransformStream = TransformStream::new()
+    var dest: WritableStream = WritableStream::new()
+
+    pipeline_transform(mut ref src, mut ref ts, mut ref dest, noop_cb as I64)
+
+    src.destroy()
+    ts.destroy()
+    dest.destroy()
+    return 0
+}

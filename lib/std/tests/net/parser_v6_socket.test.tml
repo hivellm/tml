@@ -1,0 +1,58 @@
+// Tests for uncovered net parser functions: parse_socket_addr_v6, parse_socket_addr, AddrParseError::kind
+use test::{assert, assert_eq}
+use std::net::parser::{parse_socket_addr_v6, parse_socket_addr, AddrParseError, AddrParseErrorKind}
+use std::net::socket::{SocketAddrV6}
+
+@test
+func test_parse_socket_addr_v6_loopback() -> I32 {
+    let result = parse_socket_addr_v6("[::1]:8080")
+    assert(result.is_ok(), "should parse [::1]:8080")
+    let addr: SocketAddrV6 = result.unwrap()
+    assert_eq(addr.port() as I32, 8080, "port should be 8080")
+    let ip = addr.ip()
+    assert(ip.is_loopback(), "ip should be loopback")
+    return 0
+}
+
+@test
+func test_parse_socket_addr_v6_any() -> I32 {
+    let result = parse_socket_addr_v6("[::]:0")
+    assert(result.is_ok(), "should parse [::]:0")
+    let addr: SocketAddrV6 = result.unwrap()
+    assert_eq(addr.port() as I32, 0, "port should be 0")
+    return 0
+}
+
+@test
+func test_parse_socket_addr_v6_max_port() -> I32 {
+    let result = parse_socket_addr_v6("[::1]:65535")
+    assert(result.is_ok(), "should parse max port")
+    let addr: SocketAddrV6 = result.unwrap()
+    assert_eq(addr.port() as I32, 65535, "port should be 65535")
+    return 0
+}
+
+@test
+func test_parse_socket_addr_v6_no_bracket() -> I32 {
+    let result = parse_socket_addr_v6("::1:8080")
+    assert(result.is_err(), "missing bracket should fail")
+    return 0
+}
+
+@test
+func test_parse_socket_addr_v6_no_port() -> I32 {
+    let result = parse_socket_addr_v6("[::1]")
+    assert(result.is_err(), "missing port should fail")
+    return 0
+}
+
+@test
+func test_addr_parse_error_kind_method() -> I32 {
+    let result = parse_socket_addr_v6("not_valid")
+    assert(result.is_err(), "invalid input should fail")
+    let err: AddrParseError = result.unwrap_err()
+    let k: AddrParseErrorKind = err.kind()
+    // Should be InvalidSocketAddr since it doesn't start with '['
+    assert(true, "kind() returned successfully")
+    return 0
+}

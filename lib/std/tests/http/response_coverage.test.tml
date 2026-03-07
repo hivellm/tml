@@ -1,0 +1,58 @@
+// Tests for HTTP Response — constructor and status accessors
+// Response::parse and text() crash due to Str memory management in headers
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::http::response::Response
+use std::http::headers::Headers
+use std::http::status::Status
+
+@test
+func test_response_new_200() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(200), h, "")
+    assert_eq(resp.status().code(), 200, "status should be 200")
+    assert_true(resp.is_ok(), "200 is ok")
+    assert_false(resp.is_redirect(), "200 not redirect")
+    assert_false(resp.is_client_error(), "200 not client error")
+    assert_false(resp.is_server_error(), "200 not server error")
+    resp.destroy()
+    return 0
+}
+
+@test
+func test_response_redirect() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(301), h, "")
+    assert_true(resp.is_redirect(), "301 is redirect")
+    assert_false(resp.is_ok(), "301 not ok")
+    resp.destroy()
+    return 0
+}
+
+@test
+func test_response_client_error() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(404), h, "")
+    assert_true(resp.is_client_error(), "404 is client error")
+    assert_false(resp.is_ok(), "404 not ok")
+    resp.destroy()
+    return 0
+}
+
+@test
+func test_response_server_error() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(500), h, "")
+    assert_true(resp.is_server_error(), "500 is server error")
+    assert_false(resp.is_ok(), "500 not ok")
+    resp.destroy()
+    return 0
+}
+
+@test
+func test_response_version() -> I32 {
+    let h: Headers = Headers::new()
+    let resp: Response = Response::new(Status::new(200), h, "")
+    assert_eq(resp.version().to_string(), "HTTP/1.1", "default version")
+    resp.destroy()
+    return 0
+}

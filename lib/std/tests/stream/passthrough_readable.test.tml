@@ -1,0 +1,104 @@
+// Tests for uncovered PassThroughStream readable-side + event methods
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::passthrough::PassThroughStream
+
+func noop_listener(data: I64) {}
+
+@test
+func test_passthrough_readable_flowing() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.readable_flowing(), "not flowing initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_readable_ended() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.readable_ended(), "not ended initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_readable_high_water_mark() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    let hwm: I64 = pt.readable_high_water_mark()
+    assert(hwm > 0 as I64, "readable HWM should be positive")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_readable_did_read() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.readable_did_read(), "did_read false initially")
+    pt.write("abc")
+    pt.read(3)
+    assert_true(pt.readable_did_read(), "did_read true after read")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_is_paused() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.is_paused(), "not paused initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_pause_resume() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.pause()
+    assert_true(pt.is_paused(), "paused after pause()")
+    pt.resume()
+    assert_false(pt.is_paused(), "not paused after resume()")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_on_off() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.on("data", noop_listener as I64)
+    pt.off("data", noop_listener as I64)
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_once() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.once("end", noop_listener as I64)
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_closed_destroyed() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.closed(), "not closed initially")
+    assert_false(pt.destroyed(), "not destroyed initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_errored() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    assert_false(pt.errored(), "not errored initially")
+    assert_eq(pt.error_message(), "", "no error message initially")
+    pt.destroy()
+    return 0
+}
+
+@test
+func test_passthrough_destroy_with_error() -> I32 {
+    var pt: PassThroughStream = PassThroughStream::new()
+    pt.destroy_with_error("test error")
+    // After destroy, internal state is freed — just exercise the code path
+    assert_true(pt.destroyed(), "destroyed after destroy_with_error")
+    return 0
+}

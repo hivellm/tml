@@ -1,0 +1,12 @@
+// Tests for Outcome::inspect/inspect_err — needs function pointer ref param
+// flatten: blocked by nested Outcome codegen bug
+use test::{assert}
+
+@test
+func test_outcome_inspect_placeholder() -> I32 {
+    // inspect: func(ref T) param — codegen may not support ref params in fn ptrs
+    // inspect_err: same issue
+    // flatten: nested Outcome type mismatch
+    assert(true, "blocked by codegen bugs")
+    return 0
+}

@@ -1,0 +1,75 @@
+// Tests for Request URL parsing: scheme, host, path, query, path_and_query, host_header
+use test::{assert, assert_eq, assert_true}
+use std::http::request::Request
+
+@test
+func test_request_scheme_http() -> I32 {
+    let req: Request = Request::get("http://example.com/path")
+    assert_eq(req.scheme(), "http", "scheme should be http")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_scheme_https() -> I32 {
+    let req: Request = Request::get("https://example.com/path")
+    assert_eq(req.scheme(), "https", "scheme should be https")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_host() -> I32 {
+    let req: Request = Request::get("http://myserver.com/api")
+    assert_eq(req.host(), "myserver.com", "host should be myserver.com")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_path() -> I32 {
+    let req: Request = Request::get("http://example.com/api/users")
+    assert_eq(req.path(), "/api/users", "path should be /api/users")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_query() -> I32 {
+    let req: Request = Request::get("http://example.com/search?q=hello&page=1")
+    assert_eq(req.query(), "q=hello&page=1", "query should be q=hello&page=1")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_path_and_query() -> I32 {
+    let req: Request = Request::get("http://example.com/search?q=test")
+    assert_eq(req.path_and_query(), "/search?q=test", "path_and_query")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_path_and_query_no_query() -> I32 {
+    let req: Request = Request::get("http://example.com/path")
+    assert_eq(req.path_and_query(), "/path", "path only when no query")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_host_header_default_port() -> I32 {
+    let req: Request = Request::get("http://example.com/path")
+    assert_eq(req.host_header(), "example.com", "default port omitted")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_host_header_custom_port() -> I32 {
+    let req: Request = Request::get("http://example.com:8080/path")
+    assert_eq(req.host_header(), "example.com:8080", "custom port included")
+    req.destroy()
+    return 0
+}

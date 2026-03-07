@@ -1,0 +1,32 @@
+// Tests for DuplexStream::readable_aborted, writable_aborted, unshift
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::duplex::DuplexStream
+
+@test
+func test_duplex_readable_aborted_initially_false() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.readable_aborted(), "readable not aborted initially")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_writable_aborted_initially_false() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.writable_aborted(), "writable not aborted initially")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_unshift_pushes_data_back() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.push("hello")
+    let first: Str = ds.read(2)
+    assert_eq(first, "he", "read first 2 bytes")
+    ds.unshift("XX")
+    let second: Str = ds.read(4)
+    assert_eq(second, "XXll", "unshift prepends data")
+    ds.destroy()
+    return 0
+}
