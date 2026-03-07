@@ -1,0 +1,48 @@
+// Tests for StepBy iterator adapter
+use test
+use core::iter::adapters::step_by::{StepBy, step_by}
+
+type StepCounter { current: I32, max: I32 }
+impl Iterator for StepCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_step_by_2() -> I32 {
+    // 0,1,2,3,4,5,6,7,8,9 stepped by 2 → 0,2,4,6,8
+    var iter: StepBy[StepCounter] = step_by(StepCounter { current: 0, max: 10 }, 2)
+    assert_eq(iter.next().unwrap(), 0, "step 2 → 0")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert_eq(iter.next().unwrap(), 4, "4")
+    assert_eq(iter.next().unwrap(), 6, "6")
+    assert_eq(iter.next().unwrap(), 8, "8")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_step_by_1() -> I32 {
+    // step 1 = same as original iterator
+    var iter: StepBy[StepCounter] = step_by(StepCounter { current: 0, max: 4 }, 1)
+    assert_eq(iter.next().unwrap(), 0, "step 1 → 0")
+    assert_eq(iter.next().unwrap(), 1, "1")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert_eq(iter.next().unwrap(), 3, "3")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_step_by_larger_than_length() -> I32 {
+    // step 10 from length 4 → yields only first element
+    var iter: StepBy[StepCounter] = step_by(StepCounter { current: 0, max: 4 }, 10)
+    assert_eq(iter.next().unwrap(), 0, "step 10 → only 0")
+    assert(iter.next().is_nothing(), "no more elements")
+    return 0
+}

@@ -1,0 +1,40 @@
+// Tests for Take iterator adapter
+use test
+use core::iter::adapters::take::{Take, take}
+
+type TakeCounter { current: I32, max: I32 }
+impl Iterator for TakeCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_take_basic() -> I32 {
+    var iter: Take[TakeCounter] = take(TakeCounter { current: 0, max: 10 }, 3)
+    assert_eq(iter.next().unwrap(), 0, "take 3 → 0")
+    assert_eq(iter.next().unwrap(), 1, "1")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert(iter.next().is_nothing(), "stops after 3")
+    return 0
+}
+
+@test
+func test_take_zero() -> I32 {
+    var iter: Take[TakeCounter] = take(TakeCounter { current: 5, max: 10 }, 0)
+    assert(iter.next().is_nothing(), "take 0 → nothing")
+    return 0
+}
+
+@test
+func test_take_more_than_length() -> I32 {
+    var iter: Take[TakeCounter] = take(TakeCounter { current: 0, max: 2 }, 100)
+    assert_eq(iter.next().unwrap(), 0, "take 100 from len 2 → 0")
+    assert_eq(iter.next().unwrap(), 1, "1")
+    assert(iter.next().is_nothing(), "naturally exhausted at 2")
+    return 0
+}

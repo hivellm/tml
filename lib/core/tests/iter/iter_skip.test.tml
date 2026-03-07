@@ -1,0 +1,41 @@
+// Tests for Skip iterator adapter
+use test
+use core::iter::adapters::skip::{Skip, skip}
+
+type SkipCounter { current: I32, max: I32 }
+impl Iterator for SkipCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_skip_basic() -> I32 {
+    var iter: Skip[SkipCounter] = skip(SkipCounter { current: 0, max: 5 }, 2)
+    assert_eq(iter.next().unwrap(), 2, "skip 2 → first is 2")
+    assert_eq(iter.next().unwrap(), 3, "3")
+    assert_eq(iter.next().unwrap(), 4, "4")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_skip_zero() -> I32 {
+    var iter: Skip[SkipCounter] = skip(SkipCounter { current: 10, max: 13 }, 0)
+    assert_eq(iter.next().unwrap(), 10, "skip 0 → first is 10")
+    assert_eq(iter.next().unwrap(), 11, "11")
+    assert_eq(iter.next().unwrap(), 12, "12")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_skip_all() -> I32 {
+    var iter: Skip[SkipCounter] = skip(SkipCounter { current: 0, max: 3 }, 10)
+    assert(iter.next().is_nothing(), "skip more than length → nothing")
+    return 0
+}
