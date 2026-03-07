@@ -1072,11 +1072,18 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
             // If not found via lookup_enum, search all modules
             // This handles cases where we're generating code for a module's functions
-            // but the enum is defined in that module (not imported to main file)
+            // but the enum is defined in that module (not imported to main file).
+            // Also check internal_enums for private enums like BorrowState.
             for (const auto& [mod_path, mod] : env_.get_all_modules()) {
                 auto enum_it = mod.enums.find(enum_name);
                 if (enum_it != mod.enums.end()) {
                     if (auto result = gen_path_enum_constructor(enum_name, enum_it->second)) {
+                        return *result;
+                    }
+                }
+                auto internal_it = mod.internal_enums.find(enum_name);
+                if (internal_it != mod.internal_enums.end()) {
+                    if (auto result = gen_path_enum_constructor(enum_name, internal_it->second)) {
                         return *result;
                     }
                 }

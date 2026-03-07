@@ -713,6 +713,12 @@ void ModuleBinaryWriter::write_module(const Module& module, uint64_t source_hash
         write_enum_def(def);
     }
 
+    // Internal enums
+    write_u32(static_cast<uint32_t>(module.internal_enums.size()));
+    for (const auto& [name, def] : module.internal_enums) {
+        write_enum_def(def);
+    }
+
     // Behaviors
     write_u32(static_cast<uint32_t>(module.behaviors.size()));
     for (const auto& [name, def] : module.behaviors) {

@@ -922,11 +922,6 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             } else if (decl->is<parser::EnumDecl>()) {
                 const auto& enum_decl = decl->as<parser::EnumDecl>();
 
-                // Only include public enums
-                if (enum_decl.vis != parser::Visibility::Public) {
-                    continue;
-                }
-
                 // Convert variants
                 std::vector<std::pair<std::string, std::vector<TypePtr>>> variants;
                 for (const auto& variant : enum_decl.variants) {
@@ -961,9 +956,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                  .variants = std::move(variants),
                                  .span = enum_decl.span};
 
-                mod.enums[enum_decl.name] = std::move(enum_def);
-                TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module "
-                                                          << module_path);
+                // Store in appropriate map based on visibility
+                if (enum_decl.vis == parser::Visibility::Public) {
+                    mod.enums[enum_decl.name] = std::move(enum_def);
+                    TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module "
+                                                              << module_path);
+                } else {
+                    // Store internal enums for use by the module's own impl methods
+                    mod.internal_enums[enum_decl.name] = std::move(enum_def);
+                    TML_DEBUG_LN("[MODULE] Registered internal enum: "
+                                 << enum_decl.name << " in module " << module_path);
+                }
             } else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl_decl = decl->as<parser::ImplDecl>();
 

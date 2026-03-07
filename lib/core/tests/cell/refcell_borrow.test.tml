@@ -1,14 +1,32 @@
-// Tests for RefCell borrow and try_borrow methods
-// BLOCKED: BorrowState enum codegen type mismatch
-// LLVM IR error: i32 vs %struct.BorrowState in store instruction
-// Revisit when enum variant codegen for pattern matching is fixed.
+// Tests for RefCell::borrow and borrow_mut
+// NOTE: try_borrow/try_borrow_mut blocked by nullable-ptr optimization bug for Maybe[Ref[T]]
 use test::{assert, assert_eq}
 use core::cell::ref_cell::RefCell
 
 @test
-func test_refcell_borrow_placeholder() -> I32 {
+func test_refcell_borrow_reads_value() -> I32 {
     var cell: RefCell[I32] = RefCell::new(42)
-    let old: I32 = cell.replace(100)
-    assert_eq(old, 42, "replace works as borrow alternative")
+    let r = cell.borrow()
+    let v: ref I32 = r.get()
+    assert_eq(*v, 42, "borrow should read stored value")
+    return 0
+}
+
+@test
+func test_refcell_borrow_mut_reads_value() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(7)
+    let rm = cell.borrow_mut()
+    let v: mut ref I32 = rm.get_mut()
+    assert_eq(*v, 7, "borrow_mut should read stored value")
+    return 0
+}
+
+@test
+func test_refcell_borrow_mut_mutates() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(10)
+    let rm = cell.borrow_mut()
+    let v: mut ref I32 = rm.get_mut()
+    *v = 99
+    assert_eq(*v, 99, "borrow_mut allows mutation through ref")
     return 0
 }

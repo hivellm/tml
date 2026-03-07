@@ -68,12 +68,18 @@ auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDe
         }
         // Fallback: search all modules for the enum
         // This is necessary when library code is re-parsed during codegen
-        // and the import context isn't available
+        // and the import context isn't available.
+        // Also search internal_enums so private enums (e.g. BorrowState) are
+        // accessible when generating the module's own impl methods.
         const auto& all_modules = module_registry_->get_all_modules();
         for (const auto& [mod_name, mod] : all_modules) {
             auto enum_it = mod.enums.find(name);
             if (enum_it != mod.enums.end()) {
                 return enum_it->second;
+            }
+            auto internal_it = mod.internal_enums.find(name);
+            if (internal_it != mod.internal_enums.end()) {
+                return internal_it->second;
             }
         }
     }

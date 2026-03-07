@@ -71,9 +71,11 @@ struct Module {
     std::unordered_map<std::string, FuncSig> functions;          ///< Function definitions.
     std::unordered_map<std::string, StructDef> structs;          ///< Public struct definitions.
     std::unordered_map<std::string, StructDef> internal_structs; ///< Internal struct definitions.
-    std::unordered_map<std::string, EnumDef> enums;              ///< Enum definitions.
-    std::unordered_map<std::string, BehaviorDef> behaviors;      ///< Behavior definitions.
-    std::unordered_map<std::string, TypePtr> type_aliases;       ///< Type aliases.
+    std::unordered_map<std::string, EnumDef> enums;              ///< Public enum definitions.
+    std::unordered_map<std::string, EnumDef>
+        internal_enums; ///< Internal (private) enum definitions.
+    std::unordered_map<std::string, BehaviorDef> behaviors; ///< Behavior definitions.
+    std::unordered_map<std::string, TypePtr> type_aliases;  ///< Type aliases.
     std::unordered_map<std::string, std::vector<std::string>>
         type_alias_generics;                                 ///< Generic params for type aliases.
     std::unordered_map<std::string, std::string> submodules; ///< Submodule name -> path.

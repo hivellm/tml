@@ -1,8 +1,23 @@
-// Tests for RefCell::borrow, try_borrow — blocked by BorrowState enum codegen
-use test::{assert}
+// Tests for RefCell::borrow — state changes after borrow/borrow_mut
+// NOTE: try_borrow/try_borrow_mut blocked by nullable-ptr optimization for Maybe[Ref[T]]
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
 
 @test
-func test_ref_cell_borrow_placeholder() -> I32 {
-    assert(true, "RefCell::borrow blocked by enum codegen")
+func test_refcell_borrow_after_new() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(5)
+    let r = cell.borrow()
+    let v: ref I32 = r.get()
+    assert_eq(*v, 5, "borrow after new returns initial value")
+    return 0
+}
+
+@test
+func test_refcell_borrow_mut_after_replace() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(1)
+    cell.replace(50)
+    let rm = cell.borrow_mut()
+    let v: mut ref I32 = rm.get_mut()
+    assert_eq(*v, 50, "borrow_mut sees value after replace")
     return 0
 }

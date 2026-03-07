@@ -722,6 +722,13 @@ Module ModuleBinaryReader::read_module() {
         module.enums[def.name] = std::move(def);
     }
 
+    // Internal enums
+    uint32_t internal_enum_count = read_u32();
+    for (uint32_t i = 0; i < internal_enum_count && !has_error_; ++i) {
+        EnumDef def = read_enum_def();
+        module.internal_enums[def.name] = std::move(def);
+    }
+
     // Behaviors
     uint32_t behavior_count = read_u32();
     for (uint32_t i = 0; i < behavior_count && !has_error_; ++i) {
