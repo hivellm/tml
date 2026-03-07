@@ -62,11 +62,13 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
             resolve_parser_type_with_subs(*var_decl.type, current_type_subs_);
         std::string var_type = llvm_type_from_semantic(semantic_type);
 
-        // Allocate and initialize to 0
+        // Allocate and initialize to zero/null
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + var_type);
         if (var_type != "{}") {
-            emit_line("  store " + var_type + " 0, ptr " + alloca_reg);
+            // Use "null" for pointer types, "0" for integer/struct types
+            std::string zero_val = (var_type == "ptr") ? "null" : "0";
+            emit_line("  store " + var_type + " " + zero_val + ", ptr " + alloca_reg);
         }
 
         // Register in locals_

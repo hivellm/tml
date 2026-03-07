@@ -524,7 +524,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         return result;
     }
 
-    // contains(value) -> Bool
+    // contains(value: ref U) -> Bool
     if (method == "contains") {
         emit_coverage("Maybe::contains");
         if (call.args.empty()) {
@@ -532,6 +532,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
+        std::string cmp_arg_type = last_expr_type_;
 
         std::string is_just = fresh_reg();
         emit_line("  " + is_just + " = icmp eq i32 " + tag_val + ", 0");
@@ -546,16 +547,30 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         current_block_ = is_just_label;
         std::string just_val = extract_just_value();
 
+        // The argument is `ref U` so cmp_val is a pointer — dereference it
+        // to get the actual value for comparison.
+        std::string derefed_val = cmp_val;
+        if (cmp_arg_type == "ptr" && inner_llvm_type != "ptr") {
+            derefed_val = fresh_reg();
+            emit_line("  " + derefed_val + " = load " + inner_llvm_type + ", ptr " + cmp_val);
+        }
+
         std::string values_eq = fresh_reg();
         if (inner_llvm_type == "ptr") {
             // Direct strcmp — Str is never null
+            // When arg is also ptr (ref Str), load the pointer first
+            std::string str_val = cmp_val;
+            if (cmp_arg_type == "ptr") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = load ptr, ptr " + cmp_val);
+            }
             std::string cmp_result = fresh_reg();
             emit_line("  " + cmp_result + " = call i32 @strcmp(ptr " + just_val + ", ptr " +
-                      cmp_val + ")");
+                      str_val + ")");
             emit_line("  " + values_eq + " = icmp eq i32 " + cmp_result + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + inner_llvm_type + " " + just_val + ", " +
-                      cmp_val);
+                      derefed_val);
         }
         emit_line("  br label %" + end_label);
 

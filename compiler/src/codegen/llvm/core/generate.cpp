@@ -1495,12 +1495,6 @@ auto LLVMIRGen::generate(const parser::Module& module)
         }
     }
 
-    // Pre-register coverage output file string if needed (before emitting string constants)
-    std::string coverage_output_str;
-    if (options_.coverage_enabled && !options_.coverage_output_file.empty()) {
-        coverage_output_str = add_string_literal(options_.coverage_output_file);
-    }
-
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 
@@ -1818,11 +1812,6 @@ auto LLVMIRGen::generate(const parser::Module& module)
             test_idx++;
         }
 
-        // Print coverage report if enabled
-        // In suite mode (coverage_quiet=true), the test runner handles printing
-        // after all tests complete, so we don't print here
-        emit_coverage_report_calls(coverage_output_str, true);
-
         // Write coverage data to file for EXE mode subprocess communication
         // When running under EXE mode, write covered functions to file specified by env var
         emit_line("  %cov_file_env = call ptr @getenv(ptr @.tml_cov_file_env)");
@@ -1867,10 +1856,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             } else {
                 emit_line("  %ret = call i32 @" + tml_main_fn + "()");
             }
-            // Print coverage report if enabled
-            // In suite mode (coverage_quiet=true), the test runner handles printing
-            // after all tests complete, so we don't print here
-            emit_coverage_report_calls(coverage_output_str, true);
+
             emit_line("  ret i32 " + std::string(main_returns_void ? "0" : "%ret"));
             emit_line("}");
         } else {
@@ -1885,8 +1871,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             } else {
                 emit_line("  %ret = call i32 @" + tml_main_fn + "()");
             }
-            // Print coverage report if enabled
-            emit_coverage_report_calls(coverage_output_str, false);
+
             emit_line("  ret i32 " + std::string(main_returns_void ? "0" : "%ret"));
             emit_line("}");
         }

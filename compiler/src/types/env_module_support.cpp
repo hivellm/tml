@@ -830,10 +830,11 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
 
-                // Include public functions and @extern functions (even non-public).
-                // @extern functions need to be registered so codegen can emit
-                // proper 'declare' statements and use correct return types.
-                if (func.vis != parser::Visibility::Public && !func.extern_abi.has_value()) {
+                // Include public functions, @extern functions, and lowlevel functions
+                // (even non-public). These need to be registered so codegen can emit
+                // proper 'declare' statements and use correct return/param types.
+                if (func.vis != parser::Visibility::Public && !func.extern_abi.has_value() &&
+                    !func.is_unsafe) {
                     continue;
                 }
 

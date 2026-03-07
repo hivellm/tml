@@ -515,6 +515,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (ref.inner) {
             receiver_type = ref.inner;
             receiver_was_ref = true;
+            // For primitive inner types, load the value now so all dispatch steps
+            // get the loaded value instead of a pointer
+            if (receiver_type->is<types::PrimitiveType>()) {
+                std::string prim_ty = llvm_type_from_semantic(receiver_type);
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + prim_ty + ", ptr " + receiver);
+                receiver = loaded;
+                receiver_was_ref = false; // Already loaded
+            }
         }
     }
 

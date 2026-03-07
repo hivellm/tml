@@ -222,6 +222,15 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                                     }
                                 }
 
+                                // For primitive types (I32, Bool, etc.), the concrete
+                                // function takes the value by value, not by pointer.
+                                // e.g., I32::forward_checked(i32 %this, i64 %count)
+                                if (sub_it != current_type_subs_.end() &&
+                                    sub_it->second->is<types::PrimitiveType>()) {
+                                    this_type = llvm_type_from_semantic(sub_it->second);
+                                    this_val = receiver;
+                                }
+
                                 typed_args.push_back({this_type, this_val});
 
                                 // Add remaining arguments with type substitution
@@ -347,7 +356,6 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                 }
 
                 TML_DEBUG_LN("[METHOD 4b] func_sig found: " << (func_sig ? "yes" : "no"));
-
                 if (func_sig) {
                     // Look up in functions_ first for correct LLVM name (suite prefix).
                     std::string fn_name;
@@ -389,19 +397,15 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                         }
                     }
 
-                    // Determine 'this' type based on func_sig first param
-                    // For instance methods (self/this), struct types are always passed as ptr
-                    // Only primitives are passed by value
+                    // Determine 'this' type from the concrete substituted type,
+                    // NOT from func_sig->params[0] which may resolve Self to the
+                    // calling impl's type (e.g., RangeInclusive[I32] instead of I32).
                     std::string this_type = "ptr";
-                    if (!func_sig->params.empty()) {
-                        auto first_param_type = func_sig->params[0];
-                        std::string llvm_first = llvm_type_from_semantic(first_param_type);
-                        // Primitives (i8, i16, i32, etc.) are passed by value
-                        // Structs/classes (%struct.X, %class.X) are passed by ptr
-                        if (llvm_first[0] != '%') {
-                            this_type = llvm_first; // primitive
-                        }
-                        // else keep as "ptr" for structs
+                    if (sub_it != current_type_subs_.end() &&
+                        sub_it->second->is<types::PrimitiveType>()) {
+                        // Primitive types are passed by value
+                        this_type = llvm_type_from_semantic(sub_it->second);
+                        this_val = receiver;
                     }
                     typed_args.push_back({this_type, this_val});
 

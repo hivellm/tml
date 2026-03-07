@@ -613,7 +613,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                         emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
                     }
 
-                    locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
+                    locals_[var_name] =
+                        VarInfo{alloca_reg, var_type, semantic_var_type, std::nullopt};
 
                     // Register for drop if type implements Drop
                     std::string type_name = extract_type_name_for_drop(var_type);

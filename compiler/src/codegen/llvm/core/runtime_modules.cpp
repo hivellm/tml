@@ -275,19 +275,38 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                     params_str += llvm_type_from_semantic(func_sig.params[i]);
                 }
 
-                // Build mangled symbol name with hierarchical path + type encoding
-                std::string symbol =
-                    "tml_" + mangle_tml_symbol(module_name, func_name, func_sig.params);
+                // Lowlevel functions map directly to C functions with tml_ prefix.
+                // Use flat name (not hierarchical mangling) to match the C symbol.
+                std::string symbol = "tml_" + func_name;
                 if (!emitted.insert(symbol).second) {
                     continue;
                 }
 
-                // Also register in declared_externals_ so gen_func_decl
+                // For C ABI compatibility: C functions returning bool use i32, not i1
+                std::string abi_ret_type = llvm_ret_type;
+                bool promoted_bool = false;
+                if (abi_ret_type == "i1") {
+                    abi_ret_type = "i32";
+                    promoted_bool = true;
+                }
+
+                // Register in declared_externals_ so gen_func_decl
                 // won't re-emit the same symbol later
                 declared_externals_.insert(symbol);
+                declared_externals_.insert(func_name);
 
                 // Emit declaration with tml_ prefix
-                emit_line("declare " + llvm_ret_type + " @" + symbol + "(" + params_str + ")");
+                emit_line("declare " + abi_ret_type + " @" + symbol + "(" + params_str + ")");
+
+                // Register in functions_ so call sites find the correct symbol
+                std::vector<std::string> param_types_vec;
+                for (size_t i = 0; i < func_sig.params.size(); ++i) {
+                    param_types_vec.push_back(llvm_type_from_semantic(func_sig.params[i]));
+                }
+                std::string func_type = abi_ret_type + " (" + params_str + ")";
+                functions_[func_name] =
+                    FuncInfo{"@" + symbol, func_type, abi_ret_type, param_types_vec,
+                             false,        "",        promoted_bool};
             }
         }
     }
@@ -322,6 +341,12 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             "std::text",
             "core::fmt::impls",
             "core::fmt::helpers",
+            // Builtin enum impl sources — Maybe[T], Outcome[T,E], etc. are
+            // always available as types, but their method bodies live in these
+            // modules.  Without them the generic instantiation search at
+            // generic.cpp:554 cannot find the source to emit method bodies.
+            "core::option",
+            "core::result",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))

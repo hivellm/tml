@@ -679,6 +679,52 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                         }
                     }
                 }
+
+                // If still empty, try matching ref/mut ref NamedType[T] params against
+                // ref/mut ref NamedType[X] args (e.g., ManuallyDrop::take(mut ref md))
+                if (type_subs.empty() && !generic_names.empty()) {
+                    for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+                        auto param_type = func_sig->params[i];
+                        if (!param_type)
+                            continue;
+
+                        // Unwrap RefType from param
+                        types::TypePtr param_inner = param_type;
+                        if (param_type->is<types::RefType>()) {
+                            param_inner = param_type->as<types::RefType>().inner;
+                        }
+                        if (!param_inner || !param_inner->is<types::NamedType>())
+                            continue;
+                        const auto& param_named = param_inner->as<types::NamedType>();
+                        if (param_named.type_args.empty())
+                            continue;
+
+                        // Get arg type and unwrap RefType
+                        auto arg_type = infer_expr_type(*call.args[i]);
+                        if (!arg_type)
+                            continue;
+                        types::TypePtr arg_inner = arg_type;
+                        if (arg_type->is<types::RefType>()) {
+                            arg_inner = arg_type->as<types::RefType>().inner;
+                        }
+                        if (!arg_inner || !arg_inner->is<types::NamedType>())
+                            continue;
+                        const auto& arg_named = arg_inner->as<types::NamedType>();
+
+                        if (arg_named.name == param_named.name && !arg_named.type_args.empty() &&
+                            arg_named.type_args.size() == param_named.type_args.size()) {
+                            for (size_t j = 0;
+                                 j < generic_names.size() && j < arg_named.type_args.size(); ++j) {
+                                type_subs[generic_names[j]] = arg_named.type_args[j];
+                            }
+                            if (!type_subs.empty()) {
+                                mangled_type_name =
+                                    type_name + "__" + mangle_type(arg_named.type_args[0]);
+                            }
+                            break;
+                        }
+                    }
+                }
             }
 
             // Fallback: If func_sig is null but we have arguments and a single type parameter,

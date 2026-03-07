@@ -117,9 +117,6 @@ void LLVMIRGen::init_runtime_catalog() {
 
     // --- Coverage (conditional, but registered for completeness) ---
     add("tml_cover_func", "declare void @tml_cover_func(ptr)");
-    add("print_coverage_report", "declare void @print_coverage_report()");
-    add("write_coverage_json", "declare void @write_coverage_json(ptr)");
-    add("write_coverage_html", "declare void @write_coverage_html(ptr)");
 
     // --- Debug intrinsics ---
     add("llvm.dbg.declare",
@@ -465,13 +462,9 @@ void LLVMIRGen::emit_runtime_decls() {
     // Force-require conditional categories based on imports
     if (options_.coverage_enabled) {
         require_runtime_decl("tml_cover_func");
-        require_runtime_decl("print_coverage_report");
-        require_runtime_decl("write_coverage_json");
-        require_runtime_decl("write_coverage_html");
+        require_runtime_decl("tml_coverage_write_file");
         declared_externals_.insert("tml_cover_func");
-        declared_externals_.insert("print_coverage_report");
-        declared_externals_.insert("write_coverage_json");
-        declared_externals_.insert("write_coverage_html");
+        declared_externals_.insert("tml_coverage_write_file");
     }
 
     if (options_.emit_debug_info) {

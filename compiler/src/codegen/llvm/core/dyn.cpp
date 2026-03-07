@@ -416,16 +416,10 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
          !trait_method.where_clause->type_equalities.empty()))
         return false;
 
-    // Skip methods with function pointer parameters
-    bool has_func_ptr_param = false;
-    for (const auto& param : trait_method.params) {
-        if (param.type && param.type->is<parser::FuncType>()) {
-            has_func_ptr_param = true;
-            break;
-        }
-    }
-    if (has_func_ptr_param)
-        return false;
+    // NOTE: FuncType parameters (closures) are now supported.
+    // resolve_parser_type_with_subs correctly maps func(T) -> types::FuncType,
+    // llvm_type_from_semantic maps FuncType -> "{ ptr, ptr }" (fat pointer),
+    // and gen_block handles indirect calls through { ptr, ptr } locals.
 
     std::string method_name = type_name + "_" + trait_method.name;
     std::string func_llvm_name = mangle_impl_method(type_name, trait_method.name);

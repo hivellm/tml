@@ -172,6 +172,15 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 auto local_it = locals_.find(ident.name);
                 if (local_it != locals_.end()) {
                     struct_ptr = local_it->second.reg;
+                    // If the local is a ref/mut ref parameter (LLVM type "ptr"),
+                    // the alloca stores a pointer TO the struct, not the struct itself.
+                    // We need to load the pointer before GEP-ing into the struct fields.
+                    if (local_it->second.type == "ptr" && base_type &&
+                        base_type->is<types::RefType>()) {
+                        std::string loaded_ptr = fresh_reg();
+                        emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                        struct_ptr = loaded_ptr;
+                    }
                 }
             } else if (field_expr.object->is<parser::UnaryExpr>()) {
                 // Handle (*ptr).field - dereferenced pointer field access

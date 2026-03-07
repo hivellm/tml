@@ -861,10 +861,6 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
         lld_opts.extra_flags.push_back("/EXPORT:tml_set_output_suppressed");
         // Coverage functions - only exported when coverage is enabled
         if (CompilerOptions::coverage) {
-            lld_opts.extra_flags.push_back("/EXPORT:tml_print_coverage_report");
-            lld_opts.extra_flags.push_back("/EXPORT:print_coverage_report");
-            lld_opts.extra_flags.push_back("/EXPORT:write_coverage_html");
-            lld_opts.extra_flags.push_back("/EXPORT:write_coverage_json");
             lld_opts.extra_flags.push_back("/EXPORT:tml_cover_func");
             lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_count");
             lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_name");

@@ -149,10 +149,25 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         message(STATUS "MemorySanitizer enabled")
     endif()
 elseif(MSVC)
+    # Strip CMake's default /EHsc and /Zi flags to avoid D9025 override warnings.
+    # CMake injects these for MSVC, but we want /EHa and /Z7 instead.
+    foreach(flag_var CMAKE_CXX_FLAGS CMAKE_C_FLAGS
+        CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
+        CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_RELWITHDEBINFO
+        CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_C_FLAGS_MINSIZEREL)
+        if(${flag_var})
+            string(REGEX REPLACE "/EH[a-z]+" "" ${flag_var} "${${flag_var}}")
+            string(REGEX REPLACE "/Z[iI7]" "" ${flag_var} "${${flag_var}}")
+            string(STRIP "${${flag_var}}" ${flag_var})
+        endif()
+    endforeach()
+
     # /EHa enables asynchronous exception handling so __try/__except can catch
     # hardware exceptions (ACCESS_VIOLATION, etc.) across DLL boundaries.
     # Without /EHa, SEH only catches C++ exceptions (the default /EHsc mode).
-    add_compile_options(/W4 /WX /utf-8 /FS /EHa)
+    # /W4 is CXX-only to avoid conflict with tml_runtime's target-specific /W3 for C files.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/W4> /WX /utf-8 /FS /EHa)
 
     # Parallel compilation: /MP uses all available CPU cores to compile .cpp files
     # simultaneously instead of serially. With 366 source files this is a significant
@@ -834,7 +849,6 @@ target_link_libraries(tml_json_runtime PUBLIC tml_json)
 target_include_directories(tml_json_runtime PUBLIC include src)
 if(MSVC)
     target_compile_options(tml_json_runtime PRIVATE
-        /W3
         $<$<CONFIG:Debug>:/Od>
         $<$<NOT:$<CONFIG:Debug>>:/O2>
     )
@@ -864,7 +878,6 @@ target_link_libraries(tml_search_runtime PUBLIC tml_search)
 target_include_directories(tml_search_runtime PUBLIC include src)
 if(MSVC)
     target_compile_options(tml_search_runtime PRIVATE
-        /W3
         $<$<CONFIG:Debug>:/Od>
         $<$<NOT:$<CONFIG:Debug>>:/O2>
     )
@@ -1041,7 +1054,6 @@ if(TML_BUILD_ZLIB_RUNTIME)
         # C compiler flags
         if(MSVC)
             target_compile_options(tml_zlib_runtime PRIVATE
-                /W3
                 $<$<CONFIG:Debug>:/Od>
                 $<$<NOT:$<CONFIG:Debug>>:/O2>
             )
@@ -1077,7 +1089,6 @@ target_include_directories(tml_profiler PUBLIC include src)
 target_link_libraries(tml_profiler PUBLIC tml_log)
 if(MSVC)
     target_compile_options(tml_profiler PRIVATE
-        /W3
         $<$<CONFIG:Debug>:/Od>
         $<$<NOT:$<CONFIG:Debug>>:/O2>
     )

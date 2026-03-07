@@ -157,24 +157,40 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 const auto& param_type = func_sig->params[p_idx];
                 if (param_type && param_type->is<types::NamedType>()) {
                     const auto& param_named = param_type->as<types::NamedType>();
-                    for (size_t ta_idx = 0; ta_idx < param_named.type_args.size(); ++ta_idx) {
-                        const auto& ta = param_named.type_args[ta_idx];
-                        if (ta && ta->is<types::NamedType>()) {
-                            const auto& ta_named = ta->as<types::NamedType>();
-                            if (ta_named.name == type_param) {
-                                // Only infer if we haven't already inferred this type param
-                                if (type_subs.find(type_param) == type_subs.end()) {
-                                    auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
-                                    if (arg_type && arg_type->is<types::NamedType>()) {
-                                        const auto& arg_named = arg_type->as<types::NamedType>();
-                                        if (ta_idx < arg_named.type_args.size()) {
-                                            auto inferred = arg_named.type_args[ta_idx];
-                                            if (inferred) {
-                                                type_subs[type_param] = inferred;
-                                                if (!method_type_suffix.empty()) {
-                                                    method_type_suffix += "_";
+                    // Case 1: Bare type parameter — param IS the type param (e.g., err: E)
+                    if (param_named.name == type_param && param_named.type_args.empty()) {
+                        if (type_subs.find(type_param) == type_subs.end()) {
+                            auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
+                            if (arg_type) {
+                                type_subs[type_param] = arg_type;
+                                if (!method_type_suffix.empty()) {
+                                    method_type_suffix += "_";
+                                }
+                                method_type_suffix += mangle_type(arg_type);
+                            }
+                        }
+                    }
+                    // Case 2: Type param inside generic type args (e.g., Maybe[U])
+                    else {
+                        for (size_t ta_idx = 0; ta_idx < param_named.type_args.size(); ++ta_idx) {
+                            const auto& ta = param_named.type_args[ta_idx];
+                            if (ta && ta->is<types::NamedType>()) {
+                                const auto& ta_named = ta->as<types::NamedType>();
+                                if (ta_named.name == type_param) {
+                                    if (type_subs.find(type_param) == type_subs.end()) {
+                                        auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
+                                        if (arg_type && arg_type->is<types::NamedType>()) {
+                                            const auto& arg_named =
+                                                arg_type->as<types::NamedType>();
+                                            if (ta_idx < arg_named.type_args.size()) {
+                                                auto inferred = arg_named.type_args[ta_idx];
+                                                if (inferred) {
+                                                    type_subs[type_param] = inferred;
+                                                    if (!method_type_suffix.empty()) {
+                                                        method_type_suffix += "_";
+                                                    }
+                                                    method_type_suffix += mangle_type(inferred);
                                                 }
-                                                method_type_suffix += mangle_type(inferred);
                                             }
                                         }
                                     }
@@ -557,10 +573,14 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         }
     } else if (call.receiver->is<parser::FieldExpr>()) {
         // For field expressions:
+        // - For primitive types: pass the loaded value (not the field pointer)
         // - For ptr types: use loaded pointer value
         // - For struct fields: use field pointer directly (mutations in place)
         // - Otherwise: spill struct to stack for method call
-        if (last_expr_type_ == "ptr") {
+        if (is_primitive_impl) {
+            // Primitive methods take `this` by value — use the loaded value
+            impl_receiver_val = receiver;
+        } else if (last_expr_type_ == "ptr") {
             impl_receiver_val = receiver;
         } else if (!receiver_ptr.empty()) {
             impl_receiver_val = receiver_ptr;
@@ -609,6 +629,11 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             if (param_type_resolved->is<types::FuncType>()) {
                 expected_type = "{ ptr, ptr }";
             }
+        }
+        // Fallback: when func_sig is unavailable (e.g., default behavior methods like
+        // for_each, map, filter), use the registered LLVM param types from functions_
+        else if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
+            expected_type = method_it->second.param_types[i + 1];
         }
         if (actual_type != expected_type) {
             bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
@@ -810,10 +835,14 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         }
     } else if (call.receiver->is<parser::FieldExpr>()) {
         // For field expressions:
+        // - For primitive types: pass the loaded value (not the field pointer)
         // - For ptr types: use loaded pointer value
         // - For struct fields: use field pointer directly (mutations in place)
         // - Otherwise: spill struct to stack for method call
-        if (last_expr_type_ == "ptr") {
+        if (is_primitive_impl) {
+            // Primitive methods take `this` by value — use the loaded value
+            impl_receiver_val = receiver;
+        } else if (last_expr_type_ == "ptr") {
             impl_receiver_val = receiver;
         } else if (!receiver_ptr.empty()) {
             impl_receiver_val = receiver_ptr;

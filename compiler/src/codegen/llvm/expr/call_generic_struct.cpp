@@ -709,6 +709,36 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                     }
                                 }
                             }
+
+                            // Case 4: param is ref/mut ref NamedType[T] and arg is
+                            // ref/mut ref NamedType[X] — unwrap RefType and match inner
+                            // (e.g., ManuallyDrop::take(mut ref md) where
+                            // md: ManuallyDrop[I32], param: mut ref ManuallyDrop[T])
+                            if (type_subs.empty() && param_type->is<types::RefType>()) {
+                                const auto& param_ref = param_type->as<types::RefType>();
+                                // Get inner type of the argument — unwrap RefType if present
+                                types::TypePtr arg_inner = arg_type;
+                                if (arg_type->is<types::RefType>()) {
+                                    arg_inner = arg_type->as<types::RefType>().inner;
+                                }
+                                if (arg_inner && param_ref.inner &&
+                                    arg_inner->is<types::NamedType>() &&
+                                    param_ref.inner->is<types::NamedType>()) {
+                                    const auto& arg_named = arg_inner->as<types::NamedType>();
+                                    const auto& param_named =
+                                        param_ref.inner->as<types::NamedType>();
+                                    if (arg_named.name == param_named.name &&
+                                        !arg_named.type_args.empty() &&
+                                        arg_named.type_args.size() ==
+                                            param_named.type_args.size()) {
+                                        for (size_t j = 0; j < generic_names.size() &&
+                                                           j < arg_named.type_args.size();
+                                             ++j) {
+                                            type_subs[generic_names[j]] = arg_named.type_args[j];
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Update mangled type name from inferred type_subs

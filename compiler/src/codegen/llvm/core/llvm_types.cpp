@@ -115,6 +115,10 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return result;
     }
 
+    // Function types: closures/function pointers are fat pointers { fn_ptr, env_ptr }
+    if (name == "Fn")
+        return "{ ptr, ptr }";
+
     // Ptr[T] syntax in TML uses NamedType "Ptr" - it should be a pointer type
     if (name == "Ptr")
         return "ptr";
@@ -754,6 +758,12 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // current_impl_type_ is set by gen_impl_method() and generate_default_method().
         if ((named.name == "This" || named.name == "Self") && !current_impl_type_.empty()) {
             return llvm_type_name(current_impl_type_);
+        }
+
+        // Function types mangled as "Fn" end up as NamedType("Fn") after type
+        // substitution in generic instantiation. Map back to fat pointer.
+        if (named.name == "Fn") {
+            return "{ ptr, ptr }";
         }
 
         return "%struct." + named.name;

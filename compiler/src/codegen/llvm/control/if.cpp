@@ -240,7 +240,7 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
             emit_line("  " + converted + " = zext i1 " + true_val + " to i32");
             emit_line("  store i32 " + converted + ", ptr " + result_ptr);
         } else {
-            emit_line("  store " + true_type + " " + true_val + ", ptr " + result_ptr);
+            emit_store(true_type, true_val, result_ptr);
         }
         // Drop Str temps created within this branch
         if (temp_drops_.size() > temps_before_true) {
@@ -275,7 +275,7 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
             emit_line("  " + converted + " = zext i1 " + false_val + " to i32");
             emit_line("  store i32 " + converted + ", ptr " + result_ptr);
         } else {
-            emit_line("  store " + false_type + " " + false_val + ", ptr " + result_ptr);
+            emit_store(false_type, false_val, result_ptr);
         }
         // Drop Str temps created within this branch
         if (temp_drops_.size() > temps_before_false) {

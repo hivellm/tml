@@ -445,14 +445,10 @@ void* zstd_dict_train_test(void) {
 }
 
 // TML: zstd_dict_train(samples_handle, dict_size) -> *Unit
-// The samples_handle is a TmlList* containing pointers to Buffer structs.
-// Each Buffer struct has a single field 'handle' which is a TmlBuffer*.
+// The samples_handle is a TmlList* header for List[Buffer].
+// TML List stores Buffer values by value. Buffer = { handle: *Unit }
+// where handle is a TmlBuffer*. So data[i] IS the TmlBuffer* directly.
 void* zstd_dict_train(void* samples_handle, int64_t dict_size) {
-    // Immediate debug output
-    fprintf(stderr, "[ZSTD_TRAIN] ENTER: samples=%p dict_size=%lld\n", samples_handle,
-            (long long)dict_size);
-    fflush(stderr);
-
     if (!samples_handle || dict_size <= 0)
         return NULL;
 
@@ -460,35 +456,24 @@ void* zstd_dict_train(void* samples_handle, int64_t dict_size) {
     if (!list->data || list->len == 0)
         return NULL;
 
-    // In TML, List[Buffer] stores pointers to heap-allocated Buffer structs.
-    // The list->data array contains int64_t values, each being a pointer to a Buffer struct.
-    // Buffer struct = { handle: *Unit } where handle points to TmlBuffer.
-    int64_t* data = (int64_t*)list->data;
+    // List[Buffer] stores Buffer structs by value. Buffer = { handle: *Unit }.
+    // Each element is 8 bytes (a pointer). data[i] is the TmlBuffer* handle directly.
+    void** data = (void**)list->data;
     size_t num_samples = (size_t)list->len;
 
-    // Build array of TmlBuffer* pointers by extracting the handle from each Buffer struct
     TmlBuffer** samples = (TmlBuffer**)malloc(num_samples * sizeof(TmlBuffer*));
     if (!samples)
         return NULL;
 
     for (size_t i = 0; i < num_samples; i++) {
-        // data[i] is a pointer to a Buffer struct (which contains a handle field)
-        // The Buffer struct has handle as its first (and only) field
-        void** buffer_struct_ptr = (void**)data[i];
-        if (!buffer_struct_ptr) {
-            free(samples);
-            return NULL;
-        }
-        // The handle is the first field of the Buffer struct
-        TmlBuffer* buf = (TmlBuffer*)(*buffer_struct_ptr);
+        TmlBuffer* buf = (TmlBuffer*)data[i];
         if (!buf || !buf->data || buf->len == 0) {
             free(samples);
-            return NULL; // Invalid sample, can't train
+            return NULL;
         }
         samples[i] = buf;
     }
 
-    // Call the internal training function
     ZstdDict* dict = zstd_dict_train_impl(samples, num_samples, (size_t)dict_size);
 
     free(samples);

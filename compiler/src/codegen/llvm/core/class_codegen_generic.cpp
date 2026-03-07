@@ -236,10 +236,8 @@ void LLVMIRGen::gen_class_method_instantiation(
     if (!block_terminated_) {
         if (ret_type == "void") {
             emit_line("  ret void");
-        } else if (ret_type == "i64" || ret_type == "i32" || ret_type == "i1") {
-            emit_line("  ret " + ret_type + " 0");
         } else {
-            emit_line("  ret " + ret_type + " zeroinitializer");
+            emit_line("  ret " + ret_type + " " + llvm_zero_value(ret_type));
         }
     }
     emit_line("}");

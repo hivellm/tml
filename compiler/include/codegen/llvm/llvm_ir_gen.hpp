@@ -1346,15 +1346,29 @@ private:
     void emit(const std::string& code);
     void emit_line(const std::string& code);
 
+    /// Returns the correct LLVM zero literal for a given type.
+    /// ptr → "null", float/double → "0.0", struct types → "zeroinitializer", else → "0"
+    static auto llvm_zero_value(const std::string& llvm_type) -> std::string {
+        if (llvm_type == "ptr")
+            return "null";
+        if (llvm_type == "float" || llvm_type == "double")
+            return "0.0";
+        if (!llvm_type.empty() && llvm_type[0] == '{')
+            return "zeroinitializer";
+        return "0";
+    }
+
+    /// Emit a store, normalizing the value if it's a raw "0" to match the type.
+    void emit_store(const std::string& type, const std::string& value, const std::string& ptr_reg) {
+        std::string val = value;
+        if (val == "0" && type == "ptr")
+            val = "null";
+        emit_line("  store " + type + " " + val + ", ptr " + ptr_reg);
+    }
+
     /// Emits coverage instrumentation for a function call.
     /// Only emits if coverage_enabled is true. Tracks function calls for coverage reporting.
     void emit_coverage(const std::string& func_name);
-
-    /// Emits coverage report calls at program exit (print_coverage_report, write_coverage_html).
-    /// @param coverage_output_str The string literal for coverage output file (empty if not set).
-    /// @param check_quiet If true, only emits if coverage_quiet is false (suite mode suppression).
-    void emit_coverage_report_calls(const std::string& coverage_output_str,
-                                    bool check_quiet = false);
 
     /// Returns suite prefix (e.g., "s0_") when in suite mode, empty string otherwise.
     /// Used to avoid symbol collisions when multiple test files are linked into one DLL.

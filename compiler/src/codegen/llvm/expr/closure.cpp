@@ -222,9 +222,18 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     auto saved_entry_allocas = std::move(entry_allocas_);
     auto saved_alloca_marker = alloca_hoisting_marker_;
     bool saved_alloca_hoisting = alloca_hoisting_active_;
+    // Save drop state — closure must not emit drops for parent scope variables
+    auto saved_drop_scopes = std::move(drop_scopes_);
+    auto saved_consumed_vars = consumed_vars_;
+    auto saved_temp_drops = std::move(temp_drops_);
+    auto saved_pending_str_temps = std::move(pending_str_temps_);
     entry_allocas_.clear();
     alloca_hoisting_marker_.clear();
     alloca_hoisting_active_ = false;
+    drop_scopes_.clear();
+    consumed_vars_.clear();
+    temp_drops_.clear();
+    pending_str_temps_.clear();
 
     // Start new function — closure is an independent scope
     locals_.clear();
@@ -318,6 +327,11 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     entry_allocas_ = std::move(saved_entry_allocas);
     alloca_hoisting_marker_ = saved_alloca_marker;
     alloca_hoisting_active_ = saved_alloca_hoisting;
+    // Restore drop state
+    drop_scopes_ = std::move(saved_drop_scopes);
+    consumed_vars_ = saved_consumed_vars;
+    temp_drops_ = std::move(saved_temp_drops);
+    pending_str_temps_ = std::move(saved_pending_str_temps);
 
     // Add closure function to module-level code
     module_functions_.push_back(closure_code);

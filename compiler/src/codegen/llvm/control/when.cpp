@@ -1218,7 +1218,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 store_type = "i32";
             }
 
-            emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
+            emit_store(store_type, store_value, result_ptr);
             // Drop Str temps created within this arm
             if (temp_drops_.size() > temps_before_arm) {
                 for (auto it = temp_drops_.begin() + static_cast<ptrdiff_t>(temps_before_arm);
