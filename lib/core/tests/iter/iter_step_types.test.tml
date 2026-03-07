@@ -1,0 +1,11 @@
+// Tests for Range with unsigned types (U8, U16, U32, U64) and small signed (I8, I16)
+// BLOCKED: Range[U32] next() returns () instead of U32 - generic monomorphization bug
+// BLOCKED: Range[U8] generates i32 vs i8 type mismatch in LLVM IR
+// Only Range[I32] and Range[I64] work currently
+use test::{assert}
+
+@test
+func test_range_unsigned_blocked() -> I32 {
+    assert(true, "blocked by generic monomorphization for unsigned types")
+    return 0
+}

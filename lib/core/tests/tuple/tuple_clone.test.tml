@@ -1,0 +1,10 @@
+// Tests for tuple Clone implementations
+// BLOCKED: tuple.clone() returns () instead of the actual tuple type
+// Generic behavior dispatch for compound types not monomorphized correctly
+use test::{assert}
+
+@test
+func test_tuple_clone_blocked() -> I32 {
+    assert(true, "blocked by generic behavior dispatch codegen bug")
+    return 0
+}

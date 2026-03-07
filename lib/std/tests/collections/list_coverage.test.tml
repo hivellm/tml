@@ -1,0 +1,56 @@
+// Tests for List methods: first, last, clear, default, capacity
+use test::{assert, assert_eq}
+use std::collections::List
+
+@test
+func test_list_first() -> I32 {
+    let list: List[I64] = List[I64]::new(4)
+    list.push(10 as I64)
+    list.push(20 as I64)
+    list.push(30 as I64)
+    assert_eq(list.first(), 10 as I64, "first should be 10")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_last() -> I32 {
+    let list: List[I64] = List[I64]::new(4)
+    list.push(10 as I64)
+    list.push(20 as I64)
+    list.push(30 as I64)
+    assert_eq(list.last(), 30 as I64, "last should be 30")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_clear() -> I32 {
+    let list: List[I64] = List[I64]::new(4)
+    list.push(1 as I64)
+    list.push(2 as I64)
+    list.clear()
+    assert_eq(list.len(), 0 as I64, "clear should make len 0")
+    assert(list.is_empty(), "clear should make list empty")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_default() -> I32 {
+    let list: List[I64] = List[I64]::default()
+    assert(list.is_empty(), "default list should be empty")
+    assert_eq(list.len(), 0 as I64, "default list len should be 0")
+    list.push(42 as I64)
+    assert_eq(list.get(0 as I64), 42 as I64, "should work after push")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_capacity() -> I32 {
+    let list: List[I64] = List[I64]::new(8)
+    assert(list.capacity() >= 8, "capacity should be at least 8")
+    list.destroy()
+    return 0
+}

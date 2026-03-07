@@ -1,0 +1,91 @@
+use test::{assert_eq, assert_true}
+use std::events::EventEmitter
+use core::intrinsics::{ptr_read, ptr_write}
+
+// Each listener increments the counter at the data address.
+func inc_listener(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func inc2(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func inc3(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func inc4(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+func inc5(data: I64) {
+    let count: I64 = lowlevel { ptr_read[I64](data as *I64) }
+    lowlevel { ptr_write[I64](data as *I64, count + 1) }
+}
+
+/// Adding 5+ listeners to the same event forces la_push to exceed its
+/// initial capacity of 8 slots (each listener occupies 2 slots: fn_ptr + is_once).
+/// The 5th listener triggers ev_realloc inside la_push.
+@test
+func test_realloc_triggered_by_many_listeners() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    emitter.on("data", inc_listener as I64)
+    emitter.on("data", inc2 as I64)
+    emitter.on("data", inc3 as I64)
+    emitter.on("data", inc4 as I64)
+    // This 5th listener exceeds initial capacity (8 slots / 2 per listener = 4 max)
+    // and triggers ev_realloc.
+    emitter.on("data", inc5 as I64)
+
+    assert_eq(emitter.listener_count("data"), 5 as I64, "5 listeners registered")
+    assert_eq(emitter.total_listeners(), 5 as I64, "total is 5")
+
+    let fired: Bool = emitter.emit("data", state as I64)
+    assert_true(fired, "emit returns true")
+
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 5 as I64, "all 5 listeners called")
+
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}
+
+/// Verify that after realloc, further listeners can still be added and fire correctly.
+@test
+func test_realloc_then_add_more() -> I32 {
+    let state: *Unit = lowlevel { mem_alloc(8 as I64) }
+    lowlevel { ptr_write[I64](state as *I64, 0 as I64) }
+
+    var emitter = EventEmitter::new()
+    // Add 5 to trigger first realloc (capacity 8 -> 16 slots)
+    emitter.on("evt", inc_listener as I64)
+    emitter.on("evt", inc2 as I64)
+    emitter.on("evt", inc3 as I64)
+    emitter.on("evt", inc4 as I64)
+    emitter.on("evt", inc5 as I64)
+
+    // Add 4 more (total 9 listeners = 18 slots, triggers second realloc 16 -> 32)
+    emitter.on("evt", inc_listener as I64)
+    emitter.on("evt", inc2 as I64)
+    emitter.on("evt", inc3 as I64)
+    emitter.on("evt", inc4 as I64)
+
+    assert_eq(emitter.listener_count("evt"), 9 as I64, "9 listeners after double realloc")
+
+    emitter.emit("evt", state as I64)
+    let count: I64 = lowlevel { ptr_read[I64](state as *I64) }
+    assert_eq(count, 9 as I64, "all 9 listeners called")
+
+    emitter.destroy()
+    lowlevel { mem_free(state) }
+    return 0
+}

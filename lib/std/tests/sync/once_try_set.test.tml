@@ -1,0 +1,23 @@
+// Tests for Once::try_set_completed
+use test::{assert}
+use std::sync::Once
+
+@test
+func test_once_try_set_completed() -> I32 {
+    var once: Once = Once::new()
+    assert(not once.is_completed(), "not completed initially")
+    let success: Bool = once.try_set_completed()
+    assert(success, "first try_set_completed should succeed")
+    assert(once.is_completed(), "should be completed after try_set")
+    return 0
+}
+
+@test
+func test_once_try_set_completed_twice() -> I32 {
+    var once: Once = Once::new()
+    let first: Bool = once.try_set_completed()
+    assert(first, "first should succeed")
+    let second: Bool = once.try_set_completed()
+    assert(not second, "second should fail")
+    return 0
+}

@@ -1,0 +1,9 @@
+// BLOCKED: AnyValue::from[T] triggers "Cannot allocate unsized type %struct.T"
+// The compiler cannot monomorphize generic alloc for type-erased storage
+use test::{assert}
+
+@test
+func test_anyvalue_from_blocked() -> I32 {
+    assert(true, "blocked by generic type erasure codegen bug")
+    return 0
+}

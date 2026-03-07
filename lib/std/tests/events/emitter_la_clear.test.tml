@@ -1,0 +1,28 @@
+use test::{assert_eq}
+use std::events::EventEmitter
+use std::events
+
+func noop(data: I64) {}
+
+/// Exercises la_clear by calling it on the internal listener array
+/// obtained through EventEmitter's HashMap. la_clear is a module-level
+/// helper that resets array length to 0 without deallocating.
+@test
+func test_la_clear_via_event_array() -> I32 {
+    var emitter = EventEmitter::new()
+    emitter.on("data", noop as I64)
+    emitter.on("data", noop as I64)
+    assert_eq(emitter.listener_count("data"), 2 as I64, "2 listeners before clear")
+
+    // Get the internal listener array handle for "data"
+    let arr_handle: I64 = emitter.events.get("data")
+
+    // Call la_clear on it
+    events::la_clear(arr_handle)
+
+    // listener_count reads la_len, which should now be 0
+    assert_eq(emitter.listener_count("data"), 0 as I64, "0 after la_clear")
+
+    emitter.destroy()
+    return 0
+}

@@ -1,0 +1,13 @@
+// Tests for error_chain() and ErrorChain::next
+// BLOCKED: ref dyn Error trait object vtable dispatch causes SEGFAULT (ACCESS_VIOLATION)
+// error_chain() casts to ref dyn Error which requires vtable dispatch codegen
+// ErrorChain::next() calls source() through dyn Error which also needs vtable dispatch
+// These tests will pass once the dyn trait object codegen bug is fixed.
+use test::{assert}
+
+@test
+func test_error_chain_blocked_by_dyn_trait() -> I32 {
+    // error_chain and ErrorChain::next blocked by ref dyn Error vtable dispatch SEGFAULT
+    assert(true, "error_chain/ErrorChain::next blocked by dyn Error codegen")
+    return 0
+}

@@ -1,0 +1,56 @@
+// Tests for MutSlice::is_sorted
+use test::{assert, assert_eq}
+use core::slice::{Slice, MutSlice}
+
+@test
+func test_is_sorted_ascending() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+    atomic_store(ptr_offset(ptr, 3), 4)
+    atomic_store(ptr_offset(ptr, 4), 5)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 5 }
+    assert(s.is_sorted(), "ascending should be sorted")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_sorted_unsorted() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 3)
+    atomic_store(ptr_offset(ptr, 1), 1)
+    atomic_store(ptr_offset(ptr, 2), 2)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    assert(not s.is_sorted(), "unsorted should not be sorted")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_sorted_single() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 42)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 1 }
+    assert(s.is_sorted(), "single element is sorted")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_sorted_empty() -> I32 {
+    let ptr: *Unit = alloc(4)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 0 }
+    assert(s.is_sorted(), "empty is sorted")
+
+    dealloc(ptr)
+    return 0
+}

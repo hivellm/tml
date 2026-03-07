@@ -1,0 +1,71 @@
+// Tests for atomic intrinsics: atomic_load, atomic_store, atomic_add, atomic_sub, atomic_and, atomic_or
+use test::{assert, assert_eq}
+use core::intrinsics::{atomic_load, atomic_store, atomic_add, atomic_sub, atomic_and, atomic_or}
+
+@test
+func test_atomic_store_load_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 0
+    atomic_store[I32](p, 42)
+    let val: I32 = atomic_load[I32](p)
+    assert_eq(val, 42, "atomic store/load I32")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_atomic_add_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 0
+    atomic_store[I32](p, 10)
+    let old: I32 = atomic_add[I32](p, 5)
+    assert_eq(old, 10, "atomic_add returns old value")
+    let current: I32 = atomic_load[I32](p)
+    assert_eq(current, 15, "after atomic_add, value is 15")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_atomic_sub_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 0
+    atomic_store[I32](p, 100)
+    let old: I32 = atomic_sub[I32](p, 30)
+    assert_eq(old, 100, "atomic_sub returns old value")
+    let current: I32 = atomic_load[I32](p)
+    assert_eq(current, 70, "after atomic_sub, value is 70")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_atomic_and_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 0
+    atomic_store[I32](p, 0xFF)
+    let old: I32 = atomic_and[I32](p, 0x0F)
+    assert_eq(old, 0xFF, "atomic_and returns old value")
+    let current: I32 = atomic_load[I32](p)
+    assert_eq(current, 0x0F, "after atomic_and, value is 0x0F")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_atomic_or_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 0
+    atomic_store[I32](p, 0xF0)
+    let old: I32 = atomic_or[I32](p, 0x0F)
+    assert_eq(old, 0xF0, "atomic_or returns old value")
+    let current: I32 = atomic_load[I32](p)
+    assert_eq(current, 0xFF, "after atomic_or, value is 0xFF")
+    dealloc(ptr)
+    return 0
+}

@@ -1,0 +1,11 @@
+// Tests for thread::Thread::unpark
+use test::{assert}
+use std::thread
+
+@test
+func test_unpark_current_thread() -> I32 {
+    let t: thread::Thread = thread::current()
+    t.unpark()
+    assert(true, "unpark current thread should not crash")
+    return 0
+}

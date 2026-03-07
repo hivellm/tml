@@ -1,0 +1,39 @@
+// Tests for Range[I32] iterator (0..n style ranges)
+use test::{assert, assert_eq}
+use core::ops::range::Range
+use core::iter
+
+@test
+func test_range_basic() -> I32 {
+    var r: Range[I32] = Range { start: 0, end: 3 }
+    assert_eq(r.next().unwrap(), 0, "first element is 0")
+    assert_eq(r.next().unwrap(), 1, "second element is 1")
+    assert_eq(r.next().unwrap(), 2, "third element is 2")
+    assert(r.next().is_nothing(), "no more after end")
+    return 0
+}
+
+@test
+func test_range_empty() -> I32 {
+    var r: Range[I32] = Range { start: 5, end: 5 }
+    assert(r.next().is_nothing(), "empty range start==end")
+    return 0
+}
+
+@test
+func test_range_single() -> I32 {
+    var r: Range[I32] = Range { start: 10, end: 11 }
+    assert_eq(r.next().unwrap(), 10, "single element")
+    assert(r.next().is_nothing(), "done")
+    return 0
+}
+
+@test
+func test_range_negative() -> I32 {
+    var r: Range[I32] = Range { start: -2, end: 1 }
+    assert_eq(r.next().unwrap(), -2, "neg first")
+    assert_eq(r.next().unwrap(), -1, "neg second")
+    assert_eq(r.next().unwrap(), 0, "zero")
+    assert(r.next().is_nothing(), "done")
+    return 0
+}

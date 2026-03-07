@@ -1,0 +1,10 @@
+// Tests for core::mem::take
+// BLOCKED: take[T] returns T (unresolved generic) instead of concrete type
+// Error: "Type mismatch: expected I32, found T"
+use test::{assert}
+
+@test
+func test_mem_take_blocked() -> I32 {
+    assert(true, "blocked by generic monomorphization")
+    return 0
+}

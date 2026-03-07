@@ -1,0 +1,33 @@
+// Tests for Shared::from_raw
+// SharedInner is private, so we test from_raw by extracting the raw ptr from
+// an existing Shared and re-wrapping it.
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+use core::mem::{mem_alloc, mem_free, size_of}
+
+@test
+func test_shared_from_raw_via_alloc() -> I32 {
+    // We cannot import SharedInner directly, but we know its layout:
+    //   { value: T, strong_count: I32 }
+    // For T=I32, that's { I32, I32 } = 8 bytes
+    let size: I64 = 8
+    let raw: *Unit = mem_alloc(size)
+    assert(raw != null, "allocation should succeed")
+
+    // Write value=42 at offset 0, strong_count=1 at offset 4
+    let val_ptr: *I32 = raw as *I32
+    lowlevel { *val_ptr = 42 }
+
+    // strong_count is 4 bytes after value
+    let count_ptr: *I32 = (raw as I64 + 4) as *I32
+    lowlevel { *count_ptr = 1 }
+
+    // Now wrap with from_raw — the ptr type is *SharedInner[I32]
+    // which is structurally { value: I32, strong_count: I32 }
+    // We cast our raw *Unit to the right type
+    let s: Shared[I32] = Shared::from_raw(raw as *Unit)
+    assert_eq(s.get(), 42, "from_raw should wrap the value")
+    assert_eq(s.strong_count(), 1, "from_raw should have count 1")
+    // Drop will free the memory via decrement_count -> mem_free
+    return 0
+}

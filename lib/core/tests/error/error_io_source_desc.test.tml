@@ -1,0 +1,37 @@
+// Tests for remaining error coverage:
+// - IoError::source (default — returns Nothing)
+// - IoError::description for various kinds
+// - ParseError::source (default — returns Nothing)
+// - ParseError::description delegates to to_string
+use test::{assert, assert_eq}
+use core::error::{IoError, IoErrorKind, ParseError}
+
+// === IoError::source (inherited default behavior — returns Nothing) ===
+
+@test
+func test_io_error_source_nothing() -> I32 {
+    let err = IoError::new(IoErrorKind::ConnectionRefused)
+    let src = err.source()
+    assert(src.is_nothing(), "IoError source should be Nothing (no underlying cause)")
+    return 0
+}
+
+// === IoError::description for with_message variant ===
+
+@test
+func test_io_error_description_connection_refused() -> I32 {
+    let err = IoError::new(IoErrorKind::ConnectionRefused)
+    let desc: Str = err.description()
+    assert_eq(desc, "connection refused", "IoError description equals to_string")
+    return 0
+}
+
+// === ParseError::description without position ===
+
+@test
+func test_parse_error_description_no_pos() -> I32 {
+    let err = ParseError::new("eof reached")
+    let desc: Str = err.description()
+    assert_eq(desc, "parse error: eof reached", "ParseError description = to_string")
+    return 0
+}

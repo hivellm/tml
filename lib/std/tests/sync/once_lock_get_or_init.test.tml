@@ -1,0 +1,16 @@
+// Tests for OnceLock::get_or_init — previously blocked by closure+ref codegen bug
+use test::{assert, assert_eq}
+use std::sync::once::OnceLock
+
+@test
+func test_once_lock_get_or_init_initializes() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    assert(not lock.is_initialized(), "should not be initialized initially")
+
+    let val: ref I32 = lock.get_or_init(do() -> I32 {
+        return 42
+    })
+    assert(lock.is_initialized(), "should be initialized after get_or_init")
+    assert_eq(*val, 42, "get_or_init should return 42")
+    return 0
+}

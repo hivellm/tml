@@ -1,0 +1,23 @@
+// Tests for Pool[T] — with_doubling and clear
+use test::{assert, assert_eq}
+use core::pool::{Pool, GrowthPolicy, PoolStats}
+
+@test
+func test_pool_with_doubling() -> I32 {
+    var pool: Pool[I32] = Pool::with_doubling[I32](8)
+    assert_eq(pool.capacity(), 8, "with_doubling initial capacity should be 8")
+    assert_eq(pool.available(), 8, "all should be available")
+    assert_eq(pool.in_use(), 0, "none in use")
+    return 0
+}
+
+@test
+func test_pool_clear() -> I32 {
+    var pool: Pool[I32] = Pool::new[I32](4, GrowthPolicy::Doubling)
+    assert_eq(pool.capacity(), 4, "capacity before clear")
+    pool.clear()
+    assert_eq(pool.capacity(), 0, "capacity after clear should be 0")
+    assert_eq(pool.available(), 0, "available after clear should be 0")
+    assert_eq(pool.in_use(), 0, "in_use after clear should be 0")
+    return 0
+}

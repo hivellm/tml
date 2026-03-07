@@ -1,0 +1,14 @@
+// Tests for RefCell::take
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_refcell_take() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(42)
+    let taken: I32 = cell.take()
+    assert_eq(taken, 42, "take should return the stored value")
+    // After take, default I32 (0) should be in its place
+    let v: mut ref I32 = cell.get_mut()
+    assert_eq(*v, 0, "after take, cell should contain default (0)")
+    return 0
+}

@@ -1,0 +1,58 @@
+// Tests for reflection intrinsics: field_count, variant_count
+// BLOCKED: field_name (returns empty string), field_type_id (returns 0),
+//          field_offset (returns 0 for all fields) -- codegen not implemented
+use test::{assert, assert_eq}
+use core::intrinsics::{field_count, variant_count}
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+type Rect {
+    x: I32,
+    y: I32,
+    w: I32,
+    h: I32
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@test
+func test_field_count_point() -> I32 {
+    let count: I64 = field_count[Point]()
+    assert_eq(count, 2 as I64, "Point has 2 fields")
+    return 0
+}
+
+@test
+func test_field_count_rect() -> I32 {
+    let count: I64 = field_count[Rect]()
+    assert_eq(count, 4 as I64, "Rect has 4 fields")
+    return 0
+}
+
+@test
+func test_field_count_primitive() -> I32 {
+    let count: I64 = field_count[I32]()
+    assert_eq(count, 0 as I64, "I32 has 0 fields")
+    return 0
+}
+
+@test
+func test_variant_count_color() -> I32 {
+    let count: I64 = variant_count[Color]()
+    assert_eq(count, 3 as I64, "Color has 3 variants")
+    return 0
+}
+
+@test
+func test_variant_count_struct() -> I32 {
+    let count: I64 = variant_count[Point]()
+    assert_eq(count, 0 as I64, "Point struct has 0 variants")
+    return 0
+}

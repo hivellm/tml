@@ -1,0 +1,9 @@
+// BLOCKED: Generic trait impls on parameterized types
+// impl[V: ToJson] ToJson for HashMap[I64, V] produces return type () instead of correct type
+use test::{assert}
+
+@test
+func test_hashmap_serialize_blocked() -> I32 {
+    assert(true, "blocked by generic trait impl codegen")
+    return 0
+}

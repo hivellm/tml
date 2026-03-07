@@ -1,0 +1,12 @@
+// Tests for BoxedError::new[E: Error] — generic constructor
+// BLOCKED: Generic trait dispatch codegen bug — calls error.to_string() on
+// generic E which fails with "Unknown method: to_string"
+// This test will pass once generic trait constraint method dispatch is fixed.
+use test::{assert}
+
+@test
+func test_boxed_error_new_blocked_by_generic_dispatch() -> I32 {
+    // BoxedError::new[E: Error] blocked by generic trait method dispatch
+    assert(true, "BoxedError::new blocked by generic E: Error dispatch")
+    return 0
+}

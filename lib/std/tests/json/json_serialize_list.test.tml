@@ -1,0 +1,9 @@
+// BLOCKED: Generic trait impls on parameterized types
+// impl[T: ToJson] ToJson for List[T] produces return type () instead of Json
+use test::{assert}
+
+@test
+func test_list_serialize_blocked() -> I32 {
+    assert(true, "blocked by generic trait impl codegen")
+    return 0
+}

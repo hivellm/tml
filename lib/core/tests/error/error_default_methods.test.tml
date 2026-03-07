@@ -1,0 +1,40 @@
+// Tests for Error behavior default methods: source() and description()
+// These are the default implementations in the Error behavior itself.
+// We define a custom error type that uses the defaults (empty impl Error body).
+use test::{assert, assert_eq}
+use core::error::Error
+
+type TestError {
+    msg: Str
+}
+
+impl Display for TestError {
+    pub func to_string(this) -> Str {
+        return this.msg
+    }
+}
+
+impl Debug for TestError {
+    pub func debug_string(this) -> Str {
+        return "TestError(" + this.msg + ")"
+    }
+}
+
+// Empty impl — uses default source() and description()
+impl Error for TestError {}
+
+@test
+func test_default_source_returns_nothing() -> I32 {
+    let err = TestError { msg: "custom error" }
+    let src = err.source()
+    assert(src.is_nothing(), "default source() should return Nothing")
+    return 0
+}
+
+@test
+func test_default_description_returns_to_string() -> I32 {
+    let err = TestError { msg: "custom message" }
+    let desc: Str = err.description()
+    assert_eq(desc, "custom message", "default description() should return to_string()")
+    return 0
+}

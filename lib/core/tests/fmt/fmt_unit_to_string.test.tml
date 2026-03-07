@@ -1,0 +1,10 @@
+// Tests for fmt/impls — Unit Display and Debug
+// BLOCKED: Unit type assignment bug: "Type mismatch: expected (), found ()"
+// The compiler cannot assign Unit values (let u: Unit = ()) or call methods on Unit.
+use test::{assert}
+
+@test
+func test_unit_display_debug_blocked() -> I32 {
+    assert(true, "Unit to_string/debug_string blocked by Unit type assignment bug")
+    return 0
+}

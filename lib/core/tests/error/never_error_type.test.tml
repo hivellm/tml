@@ -1,0 +1,23 @@
+// Tests for NeverError type — verifies it can be used in Outcome type
+// NeverError::to_string and NeverError::debug_string call unreachable()
+// and cannot actually be invoked, so we can only test the type at compile time.
+use test::{assert, assert_eq}
+use core::error::NeverError
+
+@test
+func test_never_error_in_outcome_ok() -> I32 {
+    let result: Outcome[I32, NeverError] = Ok(42)
+    when result {
+        Ok(val) => assert_eq(val, 42, "Ok value preserved with NeverError"),
+        Err(_) => assert(false, "should never reach Err branch")
+    }
+    return 0
+}
+
+@test
+func test_never_error_unwrap_ok() -> I32 {
+    let result: Outcome[I32, NeverError] = Ok(99)
+    let val = result.unwrap()
+    assert_eq(val, 99, "unwrap Ok with NeverError is safe")
+    return 0
+}

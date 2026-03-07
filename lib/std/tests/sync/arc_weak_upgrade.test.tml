@@ -1,0 +1,14 @@
+// Tests for Weak::upgrade — the 1 uncovered function in sync/Arc
+// Previously blocked by Maybe[Arc[T]] codegen bug
+use test::{assert, assert_eq}
+use std::sync::{Arc, Weak}
+
+@test
+func test_weak_upgrade_succeeds() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    let weak: Weak[I32] = arc.downgrade()
+
+    let upgraded: Maybe[Arc[I32]] = weak.upgrade()
+    assert(upgraded.is_just(), "upgrade should succeed while Arc exists")
+    return 0
+}

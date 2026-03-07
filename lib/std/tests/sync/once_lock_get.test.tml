@@ -1,0 +1,20 @@
+// Tests for OnceLock::get — previously blocked by Maybe[ref T] codegen bug
+use test::{assert, assert_eq}
+use std::sync::once::OnceLock
+
+@test
+func test_once_lock_get_empty() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    let result: Maybe[ref I32] = lock.get()
+    assert(result.is_nothing(), "get on empty OnceLock should be Nothing")
+    return 0
+}
+
+@test
+func test_once_lock_get_after_set() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(42)
+    let result: Maybe[ref I32] = lock.get()
+    assert(result.is_just(), "get after set should be Just")
+    return 0
+}

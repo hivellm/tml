@@ -1,0 +1,49 @@
+// Edge case tests for Shared and Sync — try_unwrap on non-unique, increment/decrement
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+use core::alloc::sync::Sync
+
+@test
+func test_shared_try_unwrap_not_unique() -> I32 {
+    var s: Shared[I32] = Shared::new(42)
+    let s2: Shared[I32] = s.duplicate()
+    // try_unwrap should return Nothing when not unique
+    let result: Maybe[I32] = s.try_unwrap()
+    assert(result.is_nothing(), "try_unwrap on non-unique should return Nothing")
+    // s2 still holds a reference, value still accessible
+    assert_eq(s2.get(), 42, "remaining clone still has value")
+    return 0
+}
+
+@test
+func test_sync_try_unwrap_not_unique() -> I32 {
+    var s: Sync[I32] = Sync::new(77)
+    let s2: Sync[I32] = s.duplicate()
+    // try_unwrap should return Nothing when not unique
+    let result: Maybe[I32] = s.try_unwrap()
+    assert(result.is_nothing(), "try_unwrap on non-unique should return Nothing")
+    assert_eq(s2.get(), 77, "remaining clone still has value")
+    return 0
+}
+
+@test
+func test_shared_increment_decrement_count() -> I32 {
+    let s: Shared[I32] = Shared::new(99)
+    assert_eq(s.strong_count(), 1, "initial count = 1")
+    s.increment_count()
+    assert_eq(s.strong_count(), 2, "after increment count = 2")
+    s.decrement_count()
+    assert_eq(s.strong_count(), 1, "after decrement count = 1")
+    return 0
+}
+
+@test
+func test_sync_increment_decrement_count() -> I32 {
+    let s: Sync[I32] = Sync::new(55)
+    assert_eq(s.strong_count(), 1, "initial count = 1")
+    s.increment_count()
+    assert_eq(s.strong_count(), 2, "after increment count = 2")
+    s.decrement_count()
+    assert_eq(s.strong_count(), 1, "after decrement count = 1")
+    return 0
+}

@@ -1,0 +1,22 @@
+// Tests for RefCell::get_mut, RefCell::default, RefMut::replace
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_refcell_get_mut() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(10)
+    let v: mut ref I32 = cell.get_mut()
+    *v = 42
+    let r = cell.borrow()
+    assert_eq(*r.get(), 42, "get_mut should allow direct mutation")
+    return 0
+}
+
+@test
+func test_refcell_default() -> I32 {
+    let cell: RefCell[I32] = RefCell::default[I32]()
+    let r = cell.borrow()
+    assert_eq(*r.get(), 0, "default RefCell[I32] should hold 0")
+    return 0
+}
+

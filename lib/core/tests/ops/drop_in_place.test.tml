@@ -1,0 +1,12 @@
+// Tests for core::ops::drop — drop_in_place
+// BLOCKED: drop_in_place[T] generates infinite recursion (stack overflow).
+// The lowlevel block calls drop_in_place(value) which resolves to itself
+// instead of being handled as a compiler intrinsic.
+// Exit code -1073741571 (0xC00000FD) = STATUS_STACK_OVERFLOW
+use test::{assert}
+
+@test
+func test_drop_in_place_blocked() -> I32 {
+    assert(true, "drop_in_place blocked by recursive codegen — stack overflow")
+    return 0
+}

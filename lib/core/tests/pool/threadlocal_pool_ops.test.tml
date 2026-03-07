@@ -1,0 +1,51 @@
+// Tests for ThreadLocalPool[T] — acquire, release, grow_by, clear
+//
+// BLOCKED: ThreadLocalPool::acquire hits codegen bug:
+//   "invalid getelementptr indices" — GEP on opaque ptr type for List[Ptr[T]].pop()
+// Functions blocked: acquire, release (release requires acquire to work)
+//
+// grow_by and clear do NOT require acquire and can be tested.
+
+use test::{assert, assert_eq}
+use core::pool::{ThreadLocalPool, PoolStats}
+
+@test
+func test_threadlocal_grow_by() -> I32 {
+    var pool: ThreadLocalPool[I32] = ThreadLocalPool::new[I32](4)
+    assert_eq(pool.available(), 4, "initial available = 4")
+    pool.grow_by(8)
+    assert_eq(pool.available(), 12, "after grow_by(8), available = 12")
+    let s: PoolStats = pool.stats()
+    assert_eq(s.grows, 2, "2 grow operations (initial + grow_by)")
+    assert_eq(s.capacity, 12, "capacity updated to 12")
+    return 0
+}
+
+@test
+func test_threadlocal_grow_by_zero() -> I32 {
+    var pool: ThreadLocalPool[I32] = ThreadLocalPool::new[I32](4)
+    pool.grow_by(0)
+    assert_eq(pool.available(), 4, "grow_by(0) should not change available")
+    return 0
+}
+
+@test
+func test_threadlocal_grow_by_negative() -> I32 {
+    var pool: ThreadLocalPool[I32] = ThreadLocalPool::new[I32](4)
+    pool.grow_by(-1)
+    assert_eq(pool.available(), 4, "grow_by(-1) should not change available")
+    return 0
+}
+
+@test
+func test_threadlocal_clear() -> I32 {
+    var pool: ThreadLocalPool[I32] = ThreadLocalPool::new[I32](8)
+    assert_eq(pool.available(), 8, "initial available = 8")
+    pool.clear()
+    assert_eq(pool.available(), 0, "after clear, available = 0")
+    assert_eq(pool.in_use(), 0, "after clear, in_use = 0")
+    let s: PoolStats = pool.stats()
+    assert_eq(s.capacity, 0, "after clear, capacity = 0")
+    assert_eq(s.grows, 0, "after clear, grows reset to 0")
+    return 0
+}

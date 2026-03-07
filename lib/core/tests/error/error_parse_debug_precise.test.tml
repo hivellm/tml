@@ -1,0 +1,43 @@
+// Tests for ParseError debug_string precise output for both branches:
+// - without position (Nothing branch)
+// - with position (Just branch)
+// Also covers ParseError::with_position more precisely
+// NOTE: test_parse_error_debug_with_position_precise fails in suite mode
+//       (suite-bundling codegen bug corrupts Maybe[I64] Just branch output)
+//       Passes individually: tml test lib/core/tests/error/error_parse_debug_precise.test.tml
+use test::{assert, assert_eq}
+use core::error::ParseError
+
+// === ParseError debug_string with Nothing position ===
+
+@test
+func test_parse_error_debug_no_position_precise() -> I32 {
+    let err = ParseError::new("unexpected token")
+    let dbg: Str = err.debug_string()
+    assert(dbg.contains("ParseError"), "debug should contain type name")
+    assert(dbg.contains("unexpected token"), "debug should contain message")
+    assert(dbg.contains("Nothing"), "debug should contain Nothing for position")
+    return 0
+}
+
+// === ParseError debug_string with Just position ===
+
+@test
+func test_parse_error_debug_with_position_precise() -> I32 {
+    let err = ParseError::with_position("invalid char", 7)
+    let dbg: Str = err.debug_string()
+    assert(dbg.contains("ParseError"), "debug should contain type name")
+    assert(dbg.contains("invalid char"), "debug should contain message")
+    assert(dbg.contains("Just(7)"), "debug should contain Just(7) for position")
+    return 0
+}
+
+// === ParseError to_string with position — precise output ===
+
+@test
+func test_parse_error_display_with_position_precise() -> I32 {
+    let err = ParseError::with_position("bad digit", 5)
+    let s: Str = err.to_string()
+    assert_eq(s, "parse error at position 5: bad digit", "ParseError display with position")
+    return 0
+}

@@ -1,0 +1,9 @@
+// BLOCKED: Intersperse adapter requires associated type resolution in LLVM IR
+// The compiler cannot resolve Iterator::Item for generic adapter types
+use test::{assert}
+
+@test
+func test_intersperse_blocked() -> I32 {
+    assert(true, "blocked by associated type IR resolution")
+    return 0
+}

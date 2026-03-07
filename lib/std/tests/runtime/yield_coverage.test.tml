@@ -1,0 +1,12 @@
+// Tests for yield_poll free function
+use test::{assert}
+use std::runtime::sleep::PollResult
+use std::runtime::yield_now::{YieldState, yield_poll}
+
+@test
+func test_yield_poll_pending() -> I32 {
+    var state: YieldState = YieldState::new()
+    let r: PollResult = yield_poll(mut ref state)
+    assert(r.is_pending(), "first yield_poll should be Pending")
+    return 0
+}

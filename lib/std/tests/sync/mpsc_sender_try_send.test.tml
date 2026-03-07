@@ -1,0 +1,39 @@
+// Tests for Sender::try_send — covers the unbounded channel try_send method
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver, SendError}
+
+@test
+func test_try_send_succeeds() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+
+    // try_send on unbounded channel should succeed
+    let send_result: Outcome[Unit, SendError[I32]] = tx.try_send(42)
+    assert(send_result.is_ok(), "try_send on open channel should succeed")
+
+    let recv_result = rx.recv()
+    assert(recv_result.is_ok(), "recv should get the try_sent value")
+    assert_eq(recv_result.unwrap(), 42, "should receive 42")
+    return 0
+}
+
+@test
+func test_try_send_multiple() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+
+    let r1: Outcome[Unit, SendError[I32]] = tx.try_send(10)
+    let r2: Outcome[Unit, SendError[I32]] = tx.try_send(20)
+    let r3: Outcome[Unit, SendError[I32]] = tx.try_send(30)
+
+    assert(r1.is_ok(), "first try_send should succeed")
+    assert(r2.is_ok(), "second try_send should succeed")
+    assert(r3.is_ok(), "third try_send should succeed")
+
+    assert_eq(rx.recv().unwrap(), 10, "first recv should be 10")
+    assert_eq(rx.recv().unwrap(), 20, "second recv should be 20")
+    assert_eq(rx.recv().unwrap(), 30, "third recv should be 30")
+    return 0
+}

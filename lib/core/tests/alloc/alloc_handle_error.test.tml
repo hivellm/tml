@@ -1,0 +1,14 @@
+// Tests for handle_alloc_error — coverage for uncovered global utility
+use test::{assert, assert_eq}
+use core::alloc::{Layout}
+use core::alloc::global::handle_alloc_error
+
+@test
+func test_handle_alloc_error_does_not_crash() -> I32 {
+    // handle_alloc_error prints an error message and returns (does not abort).
+    // We just need to call it to cover the code path.
+    let layout: Layout = Layout::from_size_align_unchecked(1024, 8)
+    handle_alloc_error(layout)
+    // If we get here, the function returned successfully
+    return 0
+}

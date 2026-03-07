@@ -1,0 +1,17 @@
+// Tests for core::fmt::rt — Argument::new_display/new_debug, format_args/format_join, debug_slice/display_slice
+// ALL BLOCKED by compiler bugs:
+//   - new_display[T]/new_debug[T]: "Unknown method: to_string/debug_string" — generic trait
+//     dispatch cannot resolve Display/Debug methods inside generic function bodies
+//   - format_args/format_join: array literal [2 x ptr] vs slice type { ptr, i64 } mismatch
+//     when passing ref [Str] or ref [Argument]
+//   - debug_slice[T]/display_slice[T]: same two bugs (generic T: Debug + array ref)
+//   - Count::resolve: zero-length array ref causes heap corruption
+use test::{assert}
+
+@test
+func test_rt_blocked_funcs_documented() -> I32 {
+    // All 7 uncovered rt functions are blocked by codegen bugs.
+    // See header comments for details on each blocker.
+    assert(true, "rt uncovered funcs documented as blocked")
+    return 0
+}

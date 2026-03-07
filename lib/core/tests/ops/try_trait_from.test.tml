@@ -1,0 +1,34 @@
+// Tests for core::ops::try_trait — from_output, from_residual (Try + FromResidual impls)
+// PARTIALLY BLOCKED:
+//   - Outcome::from_output/from_residual: codegen produces Outcome__I32__E instead of
+//     Outcome__I32__Str or Outcome__I32__I32 — generic E not resolved in Try impl
+//   - Maybe::from_residual: codegen emits void param for Unit type — invalid LLVM IR
+//   - FromResidual impls: same root cause as above (generic E, void Unit)
+use test::{assert, assert_eq}
+use core::ops::try_trait::{ControlFlow}
+
+// === Maybe Try: from_output ===
+
+@test
+func test_maybe_from_output() -> I32 {
+    let m: Maybe[I32] = Maybe::from_output(42)
+    when m {
+        Just(v) => assert_eq(v, 42, "from_output should produce Just(42)"),
+        Nothing => assert(false, "from_output should not produce Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_maybe_from_output_i64() -> I32 {
+    let m: Maybe[I64] = Maybe::from_output(100 as I64)
+    assert(m.is_just(), "from_output I64 should produce Just")
+    return 0
+}
+
+@test
+func test_maybe_from_output_bool() -> I32 {
+    let m: Maybe[Bool] = Maybe::from_output(true)
+    assert(m.is_just(), "from_output Bool should produce Just")
+    return 0
+}

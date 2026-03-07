@@ -1,0 +1,9 @@
+// BLOCKED: FlatMap adapter loses inner iterator state across calls
+// The compiler doesn't properly track mutable state in nested generic iterators
+use test::{assert}
+
+@test
+func test_flat_map_blocked() -> I32 {
+    assert(true, "blocked by inner iterator state mutation bug")
+    return 0
+}

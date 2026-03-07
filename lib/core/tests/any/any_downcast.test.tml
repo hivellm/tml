@@ -1,0 +1,30 @@
+// Tests for AnyValue::downcast, downcast_mut, into_inner, drop
+// BLOCKED: downcast[T], downcast_mut[T], into_inner[T] all hit codegen bug:
+//   "Cannot allocate unsized type %struct.T" — generic type T not monomorphized in lowlevel blocks
+//
+// AnyValue::drop is tested implicitly: any AnyValue that goes out of scope calls drop.
+// The from[I32] tests in any_value_from.test.tml exercise drop on cleanup.
+use test::{assert, assert_eq}
+use core::any::AnyValue
+
+@test
+func test_anyvalue_drop_implicit() -> I32 {
+    // Creating and discarding an AnyValue exercises drop
+    let any: AnyValue = AnyValue::from[I32](42)
+    assert(any.is_type[I32](), "should be I32 before drop")
+    // any goes out of scope here, drop is called
+    return 0
+}
+
+@test
+func test_anyvalue_multiple_drop() -> I32 {
+    // Multiple AnyValues created and dropped
+    let a1: AnyValue = AnyValue::from[I32](1)
+    let a2: AnyValue = AnyValue::from[I64](2)
+    let a3: AnyValue = AnyValue::from[Bool](true)
+    assert(a1.is_type[I32](), "a1 is I32")
+    assert(a2.is_type[I64](), "a2 is I64")
+    assert(a3.is_type[Bool](), "a3 is Bool")
+    // All go out of scope, all dropped
+    return 0
+}

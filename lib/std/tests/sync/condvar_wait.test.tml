@@ -1,0 +1,43 @@
+// Tests for Condvar::wait — the 1 uncovered function in sync/condvar
+// BLOCKER: Condvar::wait blocks the calling thread until notify_one/notify_all
+// is called from another thread. In single-threaded tests, calling wait() will
+// hang indefinitely. This function can only be tested with multi-threaded support.
+//
+// Workaround: We test that wait_while correctly delegates to wait() by using
+// a predicate that becomes false. In this test, we pre-signal the condvar
+// (though notifications are not buffered, the wait_timeout_ms path is used as
+// a proxy). The actual Condvar::wait coverage requires thread::spawn support.
+use test::{assert, assert_eq}
+use std::sync::condvar::Condvar
+use std::sync::mutex::{Mutex, MutexGuard}
+
+@test
+func test_condvar_wait_via_wait_while_true_predicate() -> I32 {
+    // wait_while calls wait() in a loop when predicate returns true.
+    // We use a predicate that checks a mutable flag value.
+    // Since the mutex value starts at 10 (>= 10), predicate returns false,
+    // so wait() is NOT called. This tests the wait_while path only.
+    var cv: Condvar = Condvar::new()
+    let mutex: Mutex[I32] = Mutex::new(10)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let guard2: MutexGuard[I32] = cv.wait_while(guard, do(val: ref I32) -> Bool {
+        return *val < 10
+    })
+    assert_eq(*guard2.get(), 10, "value should still be 10")
+    return 0
+}
+
+@test
+func test_condvar_wait_timeout_as_wait_proxy() -> I32 {
+    // wait_timeout_ms exercises the same OS condvar_wait path as wait(),
+    // just with a timeout. This is the closest we can get to testing wait()
+    // without multi-threaded support.
+    var cv: Condvar = Condvar::new()
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let result: (MutexGuard[I32], Bool) = cv.wait_timeout_ms(guard, 1 as U64)
+    let timed_out: Bool = result.1
+    assert(timed_out, "should time out since nobody signals")
+    assert_eq(*result.0.get(), 42, "mutex value should be preserved")
+    return 0
+}

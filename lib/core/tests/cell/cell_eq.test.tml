@@ -1,0 +1,19 @@
+// Tests for Cell::eq (PartialEq impl)
+use test::{assert}
+use core::cell::cell::Cell
+
+@test
+func test_cell_eq_same_value() -> I32 {
+    let a: Cell[I32] = Cell::new(42)
+    let b: Cell[I32] = Cell::new(42)
+    assert(a.eq(ref b), "cells with same value should be equal")
+    return 0
+}
+
+@test
+func test_cell_eq_different_value() -> I32 {
+    let a: Cell[I32] = Cell::new(1)
+    let b: Cell[I32] = Cell::new(2)
+    assert(not a.eq(ref b), "cells with different values should not be equal")
+    return 0
+}

@@ -1,0 +1,29 @@
+// Tests for uncovered runtime/sleep functions: get_value, sleep_poll, delay_poll
+use test::{assert, assert_eq}
+use std::runtime::sleep::{TimerState, PollResult, sleep_poll, delay_poll}
+
+@test
+func test_poll_result_get_value() -> I32 {
+    var timer: TimerState = TimerState::new(0)
+    let result: PollResult = timer.poll()
+    assert(result.is_ready(), "zero timer should be ready")
+    let val: I64 = result.get_value()
+    assert(val >= 0, "get_value should return non-negative")
+    return 0
+}
+
+@test
+func test_sleep_poll_zero() -> I32 {
+    var timer: TimerState = TimerState::new(0)
+    let result: PollResult = sleep_poll(mut ref timer)
+    assert(result.is_ready(), "sleep_poll on zero timer should be ready")
+    return 0
+}
+
+@test
+func test_delay_poll_zero() -> I32 {
+    var timer: TimerState = TimerState::new(0)
+    let result: PollResult = delay_poll(mut ref timer)
+    assert(result.is_ready(), "delay_poll on zero timer should be ready")
+    return 0
+}

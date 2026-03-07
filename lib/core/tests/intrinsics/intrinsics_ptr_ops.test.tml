@@ -1,0 +1,89 @@
+// Tests for copy and write_bytes intrinsics
+use test::{assert, assert_eq}
+use core::intrinsics::{ptr_read, ptr_write, copy, write_bytes}
+
+@test
+func test_copy_single() -> I32 {
+    let src_ptr: *Unit = alloc(4)
+    let dst_ptr: *Unit = alloc(4)
+    let src: *I32 = src_ptr as *I32
+    let dst: *I32 = dst_ptr as *I32
+    ptr_write[I32](src, 42)
+    copy[I32](src, dst, 1 as I64)
+    assert_eq(ptr_read[I32](dst), 42, "copy single I32")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}
+
+@test
+func test_copy_multiple() -> I32 {
+    let src_ptr: *Unit = alloc(16)
+    let dst_ptr: *Unit = alloc(16)
+    let src: *I32 = src_ptr as *I32
+    let dst: *I32 = dst_ptr as *I32
+    let sa: I64 = src as I64
+    let s: I64 = 4 as I64
+    let s1: *I32 = (sa + s) as *I32
+    let s2: *I32 = (sa + s + s) as *I32
+    let s3: *I32 = (sa + s + s + s) as *I32
+    ptr_write[I32](src, 10)
+    ptr_write[I32](s1, 20)
+    ptr_write[I32](s2, 30)
+    ptr_write[I32](s3, 40)
+    copy[I32](src, dst, 4 as I64)
+    let da: I64 = dst as I64
+    let d1: *I32 = (da + s) as *I32
+    let d2: *I32 = (da + s + s) as *I32
+    let d3: *I32 = (da + s + s + s) as *I32
+    assert_eq(ptr_read[I32](dst), 10, "copy elem 0")
+    assert_eq(ptr_read[I32](d1), 20, "copy elem 1")
+    assert_eq(ptr_read[I32](d2), 30, "copy elem 2")
+    assert_eq(ptr_read[I32](d3), 40, "copy elem 3")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}
+
+@test
+func test_copy_overlapping() -> I32 {
+    let ptr: *Unit = alloc(16)
+    let start: *I32 = ptr as *I32
+    let addr: I64 = start as I64
+    let s: I64 = 4 as I64
+    let p1: *I32 = (addr + s) as *I32
+    let p2: *I32 = (addr + s + s) as *I32
+    let p3: *I32 = (addr + s + s + s) as *I32
+    ptr_write[I32](start, 10)
+    ptr_write[I32](p1, 20)
+    ptr_write[I32](p2, 30)
+    ptr_write[I32](p3, 40)
+    copy[I32](start, p1, 3 as I64)
+    assert_eq(ptr_read[I32](start), 10, "overlap elem 0 unchanged")
+    assert_eq(ptr_read[I32](p1), 10, "overlap elem 1")
+    assert_eq(ptr_read[I32](p2), 20, "overlap elem 2")
+    assert_eq(ptr_read[I32](p3), 30, "overlap elem 3")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_write_bytes_zero() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, 12345)
+    write_bytes[U8](ptr as *U8, 0 as U8, 4 as I64)
+    assert_eq(ptr_read[I32](p), 0, "write_bytes zero")
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_write_bytes_fill() -> I32 {
+    let ptr: *Unit = alloc(4)
+    write_bytes[U8](ptr as *U8, 0xFF as U8, 4 as I64)
+    let p: *I32 = ptr as *I32
+    assert_eq(ptr_read[I32](p), -1, "write_bytes 0xFF fills all bits")
+    dealloc(ptr)
+    return 0
+}

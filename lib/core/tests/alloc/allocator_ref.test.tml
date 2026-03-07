@@ -1,0 +1,157 @@
+// Tests for Allocator behavior and AllocatorRef wrapper
+use test::{assert, assert_eq}
+use core::alloc::{Layout, LayoutError, AllocError, Allocator, AllocatorRef, by_ref}
+
+// A minimal allocator implementation using global malloc/free
+type SimpleAllocator {
+    alloc_count: I32,
+}
+
+impl SimpleAllocator {
+    func new() -> SimpleAllocator {
+        SimpleAllocator { alloc_count: 0 }
+    }
+}
+
+impl Allocator for SimpleAllocator {
+    func allocate(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let ptr: Ptr[U8] = alloc(layout.size())
+        if ptr == null {
+            return Err(AllocError::new())
+        }
+        this.alloc_count = this.alloc_count + 1
+        return Ok(ptr)
+    }
+
+    func deallocate(mut this, ptr: Ptr[U8], layout: Layout) {
+        dealloc(ptr)
+    }
+
+    func allocate_zeroed(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let result = this.allocate(layout)
+        when result {
+            Ok(ptr) => {
+                mem_zero(ptr, layout.size())
+                return Ok(ptr)
+            }
+            Err(e) => return Err(e)
+        }
+    }
+
+    func grow(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let new_result = this.allocate(new_layout)
+        when new_result {
+            Ok(new_ptr) => {
+                mem_copy(new_ptr, ptr, old_layout.size())
+                this.deallocate(ptr, old_layout)
+                return Ok(new_ptr)
+            }
+            Err(e) => return Err(e)
+        }
+    }
+
+    func grow_zeroed(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.grow(ptr, old_layout, new_layout)
+    }
+
+    func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.grow(ptr, old_layout, new_layout)
+    }
+}
+
+@test
+func test_simple_allocator_allocate() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let result = alloc.allocate(layout)
+    assert(result.is_ok(), "allocate should succeed")
+    when result {
+        Ok(ptr) => alloc.deallocate(ptr, layout)
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_by_ref_function() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let alloc_ref: AllocatorRef[SimpleAllocator] = by_ref[SimpleAllocator](ref alloc)
+    // If by_ref compiles and creates a valid AllocatorRef, the test passes
+    return 0
+}
+
+@test
+func test_allocator_allocate_zeroed() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    let result = alloc.allocate_zeroed(layout)
+    assert(result.is_ok(), "allocate_zeroed should succeed")
+    when result {
+        Ok(ptr) => alloc.deallocate(ptr, layout)
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_grow() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let old_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let alloc_result = alloc.allocate(old_layout)
+    assert(alloc_result.is_ok(), "initial allocate should succeed")
+    when alloc_result {
+        Ok(ptr) => {
+            let grow_result = alloc.grow(ptr, old_layout, new_layout)
+            assert(grow_result.is_ok(), "grow should succeed")
+            when grow_result {
+                Ok(new_ptr) => alloc.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_shrink() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let old_layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let alloc_result = alloc.allocate(old_layout)
+    assert(alloc_result.is_ok(), "initial allocate should succeed")
+    when alloc_result {
+        Ok(ptr) => {
+            let shrink_result = alloc.shrink(ptr, old_layout, new_layout)
+            assert(shrink_result.is_ok(), "shrink should succeed")
+            when shrink_result {
+                Ok(new_ptr) => alloc.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_grow_zeroed() -> I32 {
+    var alloc: SimpleAllocator = SimpleAllocator::new()
+    let old_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    let alloc_result = alloc.allocate(old_layout)
+    assert(alloc_result.is_ok(), "initial allocate should succeed")
+    when alloc_result {
+        Ok(ptr) => {
+            let grow_result = alloc.grow_zeroed(ptr, old_layout, new_layout)
+            assert(grow_result.is_ok(), "grow_zeroed should succeed")
+            when grow_result {
+                Ok(new_ptr) => alloc.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}

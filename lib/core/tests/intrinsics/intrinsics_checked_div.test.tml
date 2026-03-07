@@ -1,0 +1,33 @@
+// Tests for checked_div intrinsic
+use test::{assert, assert_eq}
+use core::intrinsics::checked_div
+
+@test
+func test_checked_div_normal() -> I32 {
+    let r = checked_div[I32](100, 4)
+    when r {
+        Just(val) => assert_eq(val, 25, "100 / 4 = 25"),
+        Nothing => assert(false, "should not fail")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_by_zero() -> I32 {
+    let r = checked_div[I32](42, 0)
+    when r {
+        Just(_) => assert(false, "division by zero should return Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_div_negative() -> I32 {
+    let r = checked_div[I32](-100, 5)
+    when r {
+        Just(val) => assert_eq(val, -20, "-100 / 5 = -20"),
+        Nothing => assert(false, "should not fail")
+    }
+    return 0
+}

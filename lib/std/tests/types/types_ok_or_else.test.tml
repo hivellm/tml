@@ -1,0 +1,20 @@
+// Tests for std::types::ok_or_else free function
+use test::{assert, assert_eq}
+use std::types::ok_or_else
+
+@test
+func test_ok_or_else_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let o: Outcome[I32, Str] = ok_or_else[I32, Str](m, do() -> Str { return "err" })
+    assert(o.is_ok(), "ok_or_else(Just) should be Ok")
+    assert_eq(o.unwrap(), 42, "value should be 42")
+    return 0
+}
+
+@test
+func test_ok_or_else_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let o: Outcome[I32, Str] = ok_or_else[I32, Str](m, do() -> Str { return "missing" })
+    assert(o.is_err(), "ok_or_else(Nothing) should be Err")
+    return 0
+}

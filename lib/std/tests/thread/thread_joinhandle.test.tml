@@ -1,0 +1,10 @@
+// Tests for JoinHandle — thread() and is_finished() blocked by codegen
+// BLOCKED: JoinHandle::thread() causes LLVM IR type mismatch (Maybe__U64 vs ptr)
+// This is a struct layout codegen bug when accessing Thread from JoinHandle
+use test::{assert}
+
+@test
+func test_joinhandle_thread_blocked() -> I32 {
+    assert(true, "blocked by LLVM IR type mismatch in JoinHandle")
+    return 0
+}

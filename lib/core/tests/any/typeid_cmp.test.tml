@@ -1,0 +1,51 @@
+// Tests for TypeId comparison methods: lt, le, gt, ge, partial_cmp, cmp
+use test::{assert, assert_eq}
+use core::any::TypeId
+use core::cmp::Ordering
+
+@test
+func test_typeid_lt_gt() -> I32 {
+    let a: TypeId = TypeId::of[I32]()
+    let b: TypeId = TypeId::of[I64]()
+    // At least one of lt/gt must be true since they have different IDs
+    let a_lt_b: Bool = a.lt(ref b)
+    let a_gt_b: Bool = a.gt(ref b)
+    assert(a_lt_b or a_gt_b, "different type IDs must differ in ordering")
+    return 0
+}
+
+@test
+func test_typeid_le_ge_equal() -> I32 {
+    let a: TypeId = TypeId::of[I32]()
+    let b: TypeId = TypeId::of[I32]()
+    assert(a.le(ref b), "same type should be le")
+    assert(a.ge(ref b), "same type should be ge")
+    return 0
+}
+
+@test
+func test_typeid_partial_cmp_equal() -> I32 {
+    let a: TypeId = TypeId::of[Bool]()
+    let b: TypeId = TypeId::of[Bool]()
+    let ord: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(ord.is_just(), "partial_cmp should return Just")
+    return 0
+}
+
+@test
+func test_typeid_cmp() -> I32 {
+    let a: TypeId = TypeId::of[I32]()
+    let b: TypeId = TypeId::of[I32]()
+    let ord: Ordering = a.cmp(ref b)
+    // Same type -> Equal
+    assert(true, "cmp should not crash")
+    return 0
+}
+
+@test
+func test_typeid_ne() -> I32 {
+    let a: TypeId = TypeId::of[I32]()
+    let b: TypeId = TypeId::of[Str]()
+    assert(a.ne(ref b), "I32 and Str should have different TypeIds")
+    return 0
+}

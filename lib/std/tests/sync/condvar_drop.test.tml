@@ -1,0 +1,29 @@
+// Tests for Condvar — exercises drop behavior by creating and destroying condvars
+use test::{assert}
+use std::sync::condvar::Condvar
+
+@test
+func test_condvar_create_and_drop() -> I32 {
+    // Create a condvar in a block scope so it gets dropped
+    {
+        var cv: Condvar = Condvar::new()
+        cv.notify_one()
+        // cv is dropped here when the block ends
+    }
+    assert(true, "condvar drop should not crash")
+    return 0
+}
+
+@test
+func test_condvar_multiple_create_drop() -> I32 {
+    // Create and drop multiple condvars to verify no resource leak
+    var i: I32 = 0
+    loop (i < 5) {
+        var cv: Condvar = Condvar::new()
+        cv.notify_all()
+        // cv drops at end of each iteration
+        i = i + 1
+    }
+    assert(true, "multiple condvar create/drop should not crash")
+    return 0
+}

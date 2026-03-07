@@ -1,0 +1,38 @@
+// Tests for HashMapIter methods: has_next, next, key, value, destroy
+use test::{assert, assert_eq}
+use std::collections::HashMap
+
+@test
+func test_hashmap_iter_single() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64]::new(16 as I64)
+    map.set(1 as I64, 100 as I64)
+    var it = map.iter()
+    assert(it.has_next(), "should have next")
+    let k: I64 = it.key()
+    let v: I64 = it.value()
+    assert_eq(k, 1 as I64, "key should be 1")
+    assert_eq(v, 100 as I64, "value should be 100")
+    it.next()
+    assert(not it.has_next(), "no more elements")
+    it.destroy()
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter_count() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64]::new(16 as I64)
+    map.set(1 as I64, 10 as I64)
+    map.set(2 as I64, 20 as I64)
+    map.set(3 as I64, 30 as I64)
+    var it = map.iter()
+    var count: I32 = 0
+    loop (it.has_next()) {
+        count = count + 1
+        it.next()
+    }
+    assert_eq(count, 3, "should iterate 3 elements")
+    it.destroy()
+    map.destroy()
+    return 0
+}

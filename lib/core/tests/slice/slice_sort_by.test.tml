@@ -1,0 +1,27 @@
+// Tests for MutSlice::sort_by
+use test::{assert, assert_eq}
+use core::slice::{Slice, MutSlice}
+use core::cmp::Ordering
+
+@test
+func test_sort_by_descending() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 3)
+    atomic_store(ptr_offset(ptr, 2), 2)
+
+    let mut s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    s.sort_by(do(a: ref I32, b: ref I32) -> Ordering {
+        if *a > *b { return Less }
+        if *a < *b { return Greater }
+        return Equal
+    })
+
+    let check: Slice[I32] = Slice { data: ptr, len: 3 }
+    assert_eq(*check.get(0).unwrap(), 3, "desc[0] = 3")
+    assert_eq(*check.get(1).unwrap(), 2, "desc[1] = 2")
+    assert_eq(*check.get(2).unwrap(), 1, "desc[2] = 1")
+
+    dealloc(ptr)
+    return 0
+}

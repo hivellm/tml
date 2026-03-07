@@ -1,0 +1,28 @@
+// Tests for Sync::from_raw
+// SyncInner is private, so we test from_raw by manually constructing
+// a compatible memory layout and casting to the expected pointer type.
+use test::{assert, assert_eq}
+use core::alloc::sync::Sync
+use core::mem::{mem_alloc, size_of}
+
+@test
+func test_sync_from_raw_via_alloc() -> I32 {
+    // SyncInner[I32] layout: { value: I32, strong_count: I32 } = 8 bytes
+    let size: I64 = 8
+    let raw: *Unit = mem_alloc(size)
+    assert(raw != null, "allocation should succeed")
+
+    // Write value=77 at offset 0, strong_count=1 at offset 4
+    let val_ptr: *I32 = raw as *I32
+    lowlevel { *val_ptr = 77 }
+
+    let count_ptr: *I32 = (raw as I64 + 4) as *I32
+    lowlevel { *count_ptr = 1 }
+
+    // Wrap with from_raw — the type *SyncInner[I32] is structurally { I32, I32 }
+    let s: Sync[I32] = Sync::from_raw(raw as *Unit)
+    assert_eq(s.get(), 77, "from_raw should wrap the value")
+    assert_eq(s.strong_count(), 1, "from_raw should have count 1")
+    // Drop will free the memory via decrement_count -> mem_free
+    return 0
+}

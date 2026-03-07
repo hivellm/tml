@@ -1,0 +1,38 @@
+// Tests for base64::encode_char_url — URL-safe Base64 alphabet mapping
+use test::{assert_eq}
+use core::encoding::base64
+
+@test
+func test_encode_char_url_uppercase() -> I32 {
+    // 0-25 -> A-Z
+    assert_eq(base64::encode_char_url(0) as I32, 65)   // 'A'
+    assert_eq(base64::encode_char_url(1) as I32, 66)   // 'B'
+    assert_eq(base64::encode_char_url(25) as I32, 90)  // 'Z'
+    return 0
+}
+
+@test
+func test_encode_char_url_lowercase() -> I32 {
+    // 26-51 -> a-z
+    assert_eq(base64::encode_char_url(26) as I32, 97)   // 'a'
+    assert_eq(base64::encode_char_url(27) as I32, 98)   // 'b'
+    assert_eq(base64::encode_char_url(51) as I32, 122)  // 'z'
+    return 0
+}
+
+@test
+func test_encode_char_url_digits() -> I32 {
+    // 52-61 -> 0-9
+    assert_eq(base64::encode_char_url(52) as I32, 48)  // '0'
+    assert_eq(base64::encode_char_url(53) as I32, 49)  // '1'
+    assert_eq(base64::encode_char_url(61) as I32, 57)  // '9'
+    return 0
+}
+
+@test
+func test_encode_char_url_special() -> I32 {
+    // 62 -> '-' (not '+'), 63 -> '_' (not '/')
+    assert_eq(base64::encode_char_url(62) as I32, 45)  // '-'
+    assert_eq(base64::encode_char_url(63) as I32, 95)  // '_'
+    return 0
+}

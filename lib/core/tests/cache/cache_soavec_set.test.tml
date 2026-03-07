@@ -1,0 +1,24 @@
+// Tests for SoaVec::set — exercising bounds check path
+use test::{assert, assert_eq}
+use core::cache::SoaVec
+
+@test
+func test_soavec_set_out_of_bounds() -> I32 {
+    var soa: SoaVec = SoaVec::new()
+    soa.add_column[I32]("x")
+    // row_count is 0, so set at row 0 hits the bounds check and returns early
+    soa.set[I32]("x", 0 as I64, 42)
+    // Still empty -- set on out-of-bounds row is a no-op
+    assert_eq(soa.len(), 0 as I64, "set out of bounds does not change length")
+    return 0
+}
+
+@test
+func test_soavec_set_negative_row() -> I32 {
+    var soa: SoaVec = SoaVec::new()
+    soa.add_column[I32]("val")
+    // Negative row should also be rejected by bounds check
+    soa.set[I32]("val", -1 as I64, 99)
+    assert_eq(soa.len(), 0 as I64, "set with negative row is no-op")
+    return 0
+}

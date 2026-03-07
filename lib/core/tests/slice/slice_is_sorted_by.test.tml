@@ -1,0 +1,43 @@
+// Tests for MutSlice::is_sorted_by
+use test::{assert}
+use core::slice::MutSlice
+use core::cmp::Ordering
+
+@test
+func test_is_sorted_by_ascending() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    let sorted: Bool = s.is_sorted_by(do(a: ref I32, b: ref I32) -> Ordering {
+        if *a < *b { return Less }
+        if *a > *b { return Greater }
+        return Equal
+    })
+    assert(sorted, "ascending by comparator")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_sorted_by_descending() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 3)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 1)
+
+    let s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    // Reversed comparator
+    let sorted: Bool = s.is_sorted_by(do(a: ref I32, b: ref I32) -> Ordering {
+        if *a > *b { return Less }
+        if *a < *b { return Greater }
+        return Equal
+    })
+    assert(sorted, "descending by reversed comparator")
+
+    dealloc(ptr)
+    return 0
+}

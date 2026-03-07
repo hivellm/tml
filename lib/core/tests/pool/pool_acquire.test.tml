@@ -1,0 +1,27 @@
+// Tests for Pool[T]::acquire and Pool[T]::release
+//
+// BLOCKED: Pool::acquire crashes with ACCESS_VIOLATION (-1073741819)
+// Root cause: The acquire method uses lowlevel { (*node_ptr).next } with raw pointer
+// dereference on a Ptr[PoolNode] obtained from free_list_head (I64 cast to Ptr[PoolNode]).
+// The codegen for atomic CAS operations combined with raw pointer dereferences in generic
+// Pool[T] is producing invalid code.
+//
+// Functions blocked: Pool::acquire, Pool::release (release requires acquire to test)
+//
+// When the codegen bug is fixed, add real tests for:
+//   - Pool::acquire returning Just from non-empty pool
+//   - Pool::acquire returning Nothing from exhausted Fixed pool
+//   - Pool::release returning objects to the free list
+//   - acquire/release cycle maintaining correct stats
+
+use test::{assert, assert_eq}
+use core::pool::{Pool, GrowthPolicy}
+
+@test
+func test_pool_acquire_blocked_placeholder() -> I32 {
+    // This test verifies Pool creation works but does NOT call acquire/release
+    // (which crash due to codegen bug with raw pointer + atomic CAS in generics)
+    var pool: Pool[I32] = Pool::new[I32](4, GrowthPolicy::Doubling)
+    assert_eq(pool.capacity(), 4, "pool created successfully")
+    return 0
+}

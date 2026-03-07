@@ -1,0 +1,59 @@
+// Tests for SIMD intrinsics: simd_store, simd_insert, simd_splat
+use test::{assert, assert_eq}
+use core::simd::i32x4::I32x4
+use core::intrinsics::{simd_load, simd_store, simd_insert, simd_splat, simd_extract}
+
+// ============================================================================
+// simd_store — store SIMD vector back to memory
+// ============================================================================
+
+@test
+func test_simd_store_i32x4() -> I32 {
+    var v: I32x4 = I32x4::new(1, 2, 3, 4)
+    // Load, modify via simd_insert, store back
+    let loaded: I32x4 = lowlevel {
+        let vec = simd_load[I32x4](ref v)
+        let modified = simd_insert[I32x4, I32](vec, 99, 0)
+        simd_store[I32x4](mut ref v, modified)
+        simd_load[I32x4](ref v)
+    }
+    assert_eq(loaded.get(0), 99, "lane 0 after store should be 99")
+    assert_eq(loaded.get(1), 2, "lane 1 unchanged")
+    assert_eq(loaded.get(2), 3, "lane 2 unchanged")
+    assert_eq(loaded.get(3), 4, "lane 3 unchanged")
+    return 0
+}
+
+// ============================================================================
+// simd_insert — insert element into lane
+// ============================================================================
+
+@test
+func test_simd_insert_i32x4() -> I32 {
+    let v: I32x4 = I32x4::new(10, 20, 30, 40)
+    let result: I32 = lowlevel {
+        let vec = simd_load[I32x4](ref v)
+        let modified = simd_insert[I32x4, I32](vec, 77, 2)
+        simd_extract[I32x4, I32](modified, 2)
+    }
+    assert_eq(result, 77, "inserted value at lane 2 should be 77")
+    return 0
+}
+
+// ============================================================================
+// simd_splat — broadcast scalar to all lanes
+// ============================================================================
+
+@test
+func test_simd_splat_i32x4() -> I32 {
+    var v: I32x4 = I32x4::new(0, 0, 0, 0)
+    lowlevel {
+        let splatted = simd_splat[I32x4, I32](42)
+        simd_store[I32x4](mut ref v, splatted)
+    }
+    assert_eq(v.get(0), 42, "splat lane 0")
+    assert_eq(v.get(1), 42, "splat lane 1")
+    assert_eq(v.get(2), 42, "splat lane 2")
+    assert_eq(v.get(3), 42, "splat lane 3")
+    return 0
+}

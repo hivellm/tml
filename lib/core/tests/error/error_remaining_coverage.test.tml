@@ -1,0 +1,38 @@
+// Tests for remaining uncovered error module functions:
+// - ParseError::source (default returns Nothing)
+// - IoError::description (default returns to_string())
+// - ParseError debug_string with precise output checking
+// - SimpleError debug_string with precise output checking
+use test::{assert, assert_eq}
+use core::error::{SimpleError, ParseError, IoError, IoErrorKind}
+
+// === ParseError::source (inherited default — returns Nothing) ===
+
+@test
+func test_parse_error_source_nothing() -> I32 {
+    let err = ParseError::new("bad input")
+    let src = err.source()
+    assert(src.is_nothing(), "ParseError source should return Nothing (no cause)")
+    return 0
+}
+
+// === IoError::description (inherited default — delegates to to_string) ===
+
+@test
+func test_io_error_description_with_message() -> I32 {
+    let err = IoError::with_message(IoErrorKind::BrokenPipe, "pipe closed")
+    let desc: Str = err.description()
+    assert(desc.contains("broken pipe"), "IoError description should contain kind string")
+    assert(desc.contains("pipe closed"), "IoError description should contain message")
+    return 0
+}
+
+// === SimpleError debug_string precise output ===
+
+@test
+func test_simple_error_debug_precise() -> I32 {
+    let err = SimpleError::new("test message")
+    let dbg: Str = err.debug_string()
+    assert_eq(dbg, "SimpleError(\"test message\")", "SimpleError debug format")
+    return 0
+}

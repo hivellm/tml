@@ -1,0 +1,20 @@
+// Tests for ParseError::with_position — covers the constructor and display output
+use test::{assert, assert_eq}
+use core::error::ParseError
+
+@test
+func test_with_position_creates_error() -> I32 {
+    let err = ParseError::with_position("unexpected char", 5)
+    let s: Str = err.to_string()
+    assert(s.contains("position"), "display should mention position")
+    assert(s.contains("5"), "display should contain position number")
+    assert(s.contains("unexpected char"), "display should contain message")
+    return 0
+}
+
+@test
+func test_with_position_message_field() -> I32 {
+    let err = ParseError::with_position("bad digit", 10)
+    assert_eq(err.message, "bad digit", "message field should be set")
+    return 0
+}

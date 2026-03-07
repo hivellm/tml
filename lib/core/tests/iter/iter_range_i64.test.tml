@@ -1,0 +1,24 @@
+// Tests for Range[I64] and Step[I64] implementations
+use test::{assert, assert_eq}
+use core::ops::range::Range
+use core::iter
+
+@test
+func test_range_i64_basic() -> I32 {
+    var r: Range[I64] = Range { start: 0 as I64, end: 3 as I64 }
+    assert_eq(r.next().unwrap(), 0 as I64, "first")
+    assert_eq(r.next().unwrap(), 1 as I64, "second")
+    assert_eq(r.next().unwrap(), 2 as I64, "third")
+    assert(r.next().is_nothing(), "done")
+    return 0
+}
+
+@test
+func test_range_i64_large() -> I32 {
+    let big: I64 = 1000000000 as I64
+    var r: Range[I64] = Range { start: big, end: big + 2 }
+    assert_eq(r.next().unwrap(), big, "first big")
+    assert_eq(r.next().unwrap(), big + 1, "second big")
+    assert(r.next().is_nothing(), "done")
+    return 0
+}

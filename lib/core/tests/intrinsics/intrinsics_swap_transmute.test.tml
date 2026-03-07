@@ -1,0 +1,33 @@
+// Tests for slice_swap and transmute intrinsics
+use test::{assert, assert_eq}
+use core::intrinsics::{transmute}
+
+// ============================================================================
+// transmute — reinterpret bits between same-sized types
+// ============================================================================
+
+@test
+func test_transmute_i32_to_u32() -> I32 {
+    // -1 as I32 = 0xFFFFFFFF = 4294967295 as U32
+    let val: I32 = -1
+    let result: U32 = transmute[I32, U32](val)
+    assert_eq(result, 4294967295 as U32, "transmute I32(-1) -> U32(max)")
+    return 0
+}
+
+@test
+func test_transmute_u32_to_i32() -> I32 {
+    let val: U32 = 0x80000000 as U32
+    let result: I32 = transmute[U32, I32](val)
+    assert_eq(result, -2147483648, "transmute U32(0x80000000) -> I32(min)")
+    return 0
+}
+
+@test
+func test_transmute_roundtrip() -> I32 {
+    let original: I32 = 42
+    let as_u32: U32 = transmute[I32, U32](original)
+    let back: I32 = transmute[U32, I32](as_u32)
+    assert_eq(back, 42, "transmute roundtrip preserves value")
+    return 0
+}

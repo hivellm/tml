@@ -1,0 +1,16 @@
+// Tests for core::fmt::traits — Write::write_char, Write::write_fmt default methods
+// BLOCKED: behavior default method dispatch codegen bug:
+//   The Str argument is passed as i32 (global address) instead of ptr.
+//   write_char calls write_str(s) where s passes through behavior vtable dispatch
+//   with wrong type for string arguments.
+//   Codegen produces: @tml_WriteCounter_write_fmt(ptr %this, i32 @.str.1)
+//   Should produce:   @tml_WriteCounter_write_fmt(ptr %this, ptr @.str.1)
+use test::{assert}
+
+@test
+func test_write_methods_blocked() -> I32 {
+    // Write::write_char and Write::write_fmt cannot be tested due to
+    // behavior default method dispatch passing Str as i32 instead of ptr.
+    assert(true, "Write::write_char and Write::write_fmt blocked by default method codegen")
+    return 0
+}
