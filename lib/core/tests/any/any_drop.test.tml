@@ -1,0 +1,12 @@
+// Tests for AnyValue::drop (implicit via scope exit)
+use test::{assert}
+use core::any::AnyValue
+
+@test
+func test_anyvalue_drop_implicit() -> I32 {
+    // Creating and discarding an AnyValue exercises drop
+    let any: AnyValue = AnyValue::from[I32](42)
+    assert(any.is_type[I32](), "should be I32 before drop")
+    // any goes out of scope here, drop is called
+    return 0
+}
