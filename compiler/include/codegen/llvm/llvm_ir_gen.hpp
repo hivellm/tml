@@ -1622,7 +1622,7 @@ private:
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
 
     // Method call helpers - split into separate files for maintainability
-    auto gen_static_method_call(const parser::MethodCallExpr& call, const std::string& type_name)
+    auto gen_static_method_call(const parser::MethodCallExpr& call, std::string type_name)
         -> std::optional<std::string>;
     auto gen_primitive_method(const parser::MethodCallExpr& call, const std::string& receiver,
                               const std::string& receiver_ptr, types::TypePtr receiver_type)

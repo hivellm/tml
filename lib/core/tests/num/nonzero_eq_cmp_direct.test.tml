@@ -1,15 +1,83 @@
-// Tests for NonZero[I32] — eq, partial_cmp, cmp
-// BLOCKED: Generic trait delegation codegen bug
-//   NonZero[I32].eq() returns false for equal values (42 == 42 fails)
-//   NonZero[I32].partial_cmp() and .cmp() likely same issue
-//   Root cause: codegen for `this.value.eq(ref other.value)` through generic
-//   PartialEq impl produces incorrect value comparisons
-// TODO: Enable when generic trait delegation codegen is fixed
+// Tests for NonZero[T] — eq, partial_cmp, cmp
+// Uses direct struct construction (NonZero { value: X }) to bypass Maybe[NonZero[T]]
+// layout issue in NonZero::new. The eq/cmp methods themselves work correctly.
 use test
+use core::num::nonzero::NonZero
+use core::cmp::Ordering
 
 @test
-func test_nonzero_eq_cmp_blocked() -> I32 {
-    // NonZero::eq / partial_cmp / cmp blocked by codegen bug
-    assert_eq(1, 1, "blocked by codegen")
+func test_nonzero_eq_equal() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 42 }
+    let b: NonZero[I32] = NonZero { value: 42 }
+    assert(a == b, "NonZero(42) == NonZero(42)")
+    return 0
+}
+
+@test
+func test_nonzero_eq_not_equal() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 42 }
+    let b: NonZero[I32] = NonZero { value: 99 }
+    assert(not (a == b), "NonZero(42) != NonZero(99)")
+    return 0
+}
+
+@test
+func test_nonzero_ne() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 1 }
+    let b: NonZero[I32] = NonZero { value: 2 }
+    assert(a != b, "NonZero(1) != NonZero(2)")
+    let c: NonZero[I32] = NonZero { value: 1 }
+    assert(not (a != c), "NonZero(1) == NonZero(1)")
+    return 0
+}
+
+@test
+func test_nonzero_cmp_less() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 10 }
+    let b: NonZero[I32] = NonZero { value: 20 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_less(), "10.cmp(20) should be Less")
+    return 0
+}
+
+@test
+func test_nonzero_cmp_greater() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 20 }
+    let b: NonZero[I32] = NonZero { value: 10 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_greater(), "20.cmp(10) should be Greater")
+    return 0
+}
+
+@test
+func test_nonzero_cmp_equal() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 5 }
+    let b: NonZero[I32] = NonZero { value: 5 }
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_equal(), "5.cmp(5) should be Equal")
+    return 0
+}
+
+@test
+func test_nonzero_partial_cmp_less() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 3 }
+    let b: NonZero[I32] = NonZero { value: 7 }
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "partial_cmp(3,7) is Less"),
+        Nothing => assert(false, "partial_cmp should not return Nothing for I32"),
+    }
+    return 0
+}
+
+@test
+func test_nonzero_partial_cmp_equal() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 42 }
+    let b: NonZero[I32] = NonZero { value: 42 }
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_equal(), "partial_cmp(42,42) is Equal"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
     return 0
 }

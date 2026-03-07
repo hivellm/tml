@@ -17,8 +17,8 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
-auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
-                                       const std::string& type_name) -> std::optional<std::string> {
+auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call, std::string type_name)
+    -> std::optional<std::string> {
     const std::string& method = call.method;
 
     // Helper lambda to resolve type parameter names to concrete types
@@ -343,6 +343,40 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
 
             last_expr_type_ = target_llvm;
             return result;
+        }
+    }
+
+    // Handle trait name dispatch in generic context: Default::default() → T::default()
+    // When inside impl[T: Default] Default for Wrapping[T], the call `Default::default()`
+    // uses "Default" as the type_name, but we need the concrete type T (e.g., I32).
+    if (!current_type_subs_.empty()) {
+        static const std::unordered_set<std::string> TRAIT_NAMES = {
+            "Default",
+            "Clone",
+            "Duplicate",
+            "Display",
+            "Debug",
+            "PartialEq",
+            "Eq",
+            "PartialOrd",
+            "Ord",
+            "Hash",
+            "Deref",
+            "DerefMut",
+            "From",
+            "Into",
+            "TryFrom",
+            "TryInto",
+            "Iterator",
+            "IntoIterator",
+            "ExactSizeIterator",
+            "ToString",
+            "FromStr",
+            "Copy",
+            "Sized",
+        };
+        if (TRAIT_NAMES.count(type_name) > 0 && current_type_subs_.size() == 1) {
+            type_name = types::type_to_string(current_type_subs_.begin()->second);
         }
     }
 

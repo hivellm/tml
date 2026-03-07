@@ -321,6 +321,37 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             auto type_sub_it = current_type_subs_.find(type_name);
             if (type_sub_it != current_type_subs_.end()) {
                 type_name = types::type_to_string(type_sub_it->second);
+            } else if (!current_type_subs_.empty()) {
+                // Handle trait name used as static dispatch in generic impl.
+                // e.g., Default::default() inside impl[T: Default] → T::default()
+                static const std::unordered_set<std::string> TRAIT_NAMES = {
+                    "Default",
+                    "Clone",
+                    "Duplicate",
+                    "Display",
+                    "Debug",
+                    "PartialEq",
+                    "Eq",
+                    "PartialOrd",
+                    "Ord",
+                    "Hash",
+                    "Deref",
+                    "DerefMut",
+                    "From",
+                    "Into",
+                    "TryFrom",
+                    "TryInto",
+                    "Iterator",
+                    "IntoIterator",
+                    "ExactSizeIterator",
+                    "ToString",
+                    "FromStr",
+                    "Copy",
+                    "Sized",
+                };
+                if (TRAIT_NAMES.count(type_name) > 0 && current_type_subs_.size() == 1) {
+                    type_name = types::type_to_string(current_type_subs_.begin()->second);
+                }
             }
 
             bool is_primitive_type =

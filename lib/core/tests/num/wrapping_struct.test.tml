@@ -1,6 +1,7 @@
 // Tests for Wrapping[T] struct methods
 use test
 use core::num::wrapping::Wrapping
+use core::cmp::Ordering
 
 @test
 func test_wrapping_new_value() -> I32 {
@@ -59,16 +60,55 @@ func test_wrapping_duplicate() -> I32 {
     return 0
 }
 
-// =============================================================================
-// NOTE: Wrapping::default(), eq(), partial_cmp(), cmp() — ALL BLOCKED
-//
-// default() — calls Default::default() through trait dispatch → @tml_Default_default
-//             (undefined symbol). Same trait-dispatch codegen bug as other generics.
-//
-// eq(), partial_cmp(), cmp() — `ref` parameter field access codegen bug:
-//   The IR stores `ptr %other` into `alloca ptr %t130`, then uses GEP on %t130
-//   (the alloca address) instead of %other (the pointed-to struct). This reads the
-//   low 32 bits of the pointer address as the field value instead of the actual
-//   field. All three fail at runtime because comparisons produce wrong results.
-//   Root cause: ref parameter stored in alloca; GEP uses alloca address not deref.
-// =============================================================================
+@test
+func test_wrapping_default() -> I32 {
+    let w: Wrapping[I32] = Wrapping::default()
+    assert_eq(w.value(), 0, "Wrapping::default() should be 0")
+    return 0
+}
+
+@test
+func test_wrapping_eq_equal() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(42)
+    let b: Wrapping[I32] = Wrapping::new(42)
+    assert(a == b, "Wrapping(42) == Wrapping(42)")
+    return 0
+}
+
+@test
+func test_wrapping_eq_not_equal() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(42)
+    let b: Wrapping[I32] = Wrapping::new(99)
+    assert(not (a == b), "Wrapping(42) != Wrapping(99)")
+    return 0
+}
+
+@test
+func test_wrapping_cmp_less() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(10)
+    let b: Wrapping[I32] = Wrapping::new(20)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_less(), "cmp(10, 20) should be Less")
+    return 0
+}
+
+@test
+func test_wrapping_cmp_greater() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(20)
+    let b: Wrapping[I32] = Wrapping::new(10)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_greater(), "cmp(20, 10) should be Greater")
+    return 0
+}
+
+@test
+func test_wrapping_partial_cmp_less() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(5)
+    let b: Wrapping[I32] = Wrapping::new(99)
+    let r = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "partial_cmp(5, 99) should be Less"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}
