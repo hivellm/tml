@@ -129,8 +129,151 @@ func test_nth_out_of_bounds() -> I32 {
 // NOTE: for_each(do(v: I32) {}) — blocked by closure call codegen bug:
 // passing closure struct as i32 (type mismatch in LLVM IR)
 
-// NOTE: position, all, any, find, reduce, for_each, fold, try_fold, find_map,
-// max_by, min_by — ALL blocked by closure call codegen bug:
-// closure struct ({ ptr, ptr }) is passed where i32 expected in LLVM IR.
-// These methods take func(Item) or func(Item) -> Bool closures and cannot
-// be called from test files until the closure ABI bug is fixed.
+// --- all ---
+
+@test
+func test_all_true() -> I32 {
+    var iter: Counter = Counter { current: 1, max: 5 }
+    let r: Bool = iter.all(do(x: I32) x > 0)
+    assert(r, "all positive => true")
+    return 0
+}
+
+@test
+func test_all_false() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Bool = iter.all(do(x: I32) x > 0)
+    assert(not r, "0 not positive => false")
+    return 0
+}
+
+// --- any ---
+
+@test
+func test_any_true() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Bool = iter.any(do(x: I32) x == 3)
+    assert(r, "3 in 0..5 => true")
+    return 0
+}
+
+@test
+func test_any_false() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 3 }
+    let r: Bool = iter.any(do(x: I32) x == 5)
+    assert(not r, "5 not in 0..3 => false")
+    return 0
+}
+
+// --- find ---
+
+@test
+func test_find_found() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I32] = iter.find(do(x: I32) x == 3)
+    assert(r.is_just(), "find 3 in 0..5 found")
+    assert_eq(r.unwrap() as I64, 3 as I64, "found 3")
+    return 0
+}
+
+@test
+func test_find_not_found() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 3 }
+    let r: Maybe[I32] = iter.find(do(x: I32) x == 10)
+    assert(r.is_nothing(), "find 10 not in 0..3")
+    return 0
+}
+
+// --- position ---
+
+@test
+func test_position_found() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I64] = iter.position(do(x: I32) x == 3)
+    assert(r.is_just(), "position of 3 found")
+    assert_eq(r.unwrap(), 3 as I64, "position of 3 is index 3")
+    return 0
+}
+
+@test
+func test_position_not_found() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 3 }
+    let r: Maybe[I64] = iter.position(do(x: I32) x == 10)
+    assert(r.is_nothing(), "position of 10 not in 0..3")
+    return 0
+}
+
+// NOTE: fold[B] — blocked by generic type param B not resolving when combined with
+// This::Item associated type. Compiler emits "Type mismatch: expected I32, found B".
+
+// --- max_by / min_by ---
+
+@test
+func test_max_by() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I32] = iter.max_by(do(a: ref I32, b: ref I32) -> Ordering {
+        if *a > *b { return Ordering::Greater }
+        if *a < *b { return Ordering::Less }
+        return Ordering::Equal
+    })
+    assert(r.is_just(), "max_by on 0..4 found")
+    assert_eq(r.unwrap() as I64, 4 as I64, "max of 0..4 = 4")
+    return 0
+}
+
+@test
+func test_min_by() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 5 }
+    let r: Maybe[I32] = iter.min_by(do(a: ref I32, b: ref I32) -> Ordering {
+        if *a > *b { return Ordering::Greater }
+        if *a < *b { return Ordering::Less }
+        return Ordering::Equal
+    })
+    assert(r.is_just(), "min_by on 0..4 found")
+    assert_eq(r.unwrap() as I64, 0 as I64, "min of 0..4 = 0")
+    return 0
+}
+
+// --- for_each ---
+
+@test
+func test_for_each_sum() -> I32 {
+    var sum: I32 = 0
+    var iter: Counter = Counter { current: 0, max: 5 }
+    iter.for_each(do(x: I32) { sum = sum + x })
+    assert_eq(sum as I64, 10 as I64, "for_each sum 0..4 = 10")
+    return 0
+}
+
+// --- reduce ---
+
+@test
+func test_reduce_sum() -> I32 {
+    var iter: Counter = Counter { current: 1, max: 5 }
+    let r: Maybe[I32] = iter.reduce(do(acc: I32, x: I32) acc + x)
+    assert(r.is_just(), "reduce on non-empty")
+    assert_eq(r.unwrap() as I64, 10 as I64, "reduce sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_reduce_empty() -> I32 {
+    var iter: Counter = Counter { current: 0, max: 0 }
+    let r: Maybe[I32] = iter.reduce(do(acc: I32, x: I32) acc + x)
+    assert(r.is_nothing(), "reduce on empty = Nothing")
+    return 0
+}
+
+// --- size_hint ---
+
+@test
+func test_size_hint_default() -> I32 {
+    let iter: Counter = Counter { current: 0, max: 5 }
+    let (lo, hi): (I64, Maybe[I64]) = iter.size_hint()
+    assert_eq(lo, 0 as I64, "default lower bound is 0")
+    assert(hi.is_nothing(), "default upper bound is Nothing")
+    return 0
+}
+
+// NOTE: fold[B], find_map[B], try_fold[B,E] — blocked by generic type param
+// monomorphization bug: extra type param combined with This::Item causes wrong IR.

@@ -135,3 +135,5 @@ func test_from_fn_accumulator() -> I32 {
 
     return 0
 }
+// NOTE: Successors — blocked by codegen bug: func(ref T) -> Maybe[T] return type
+// generates 'i32' where 'ptr' expected when closure returns Maybe[T] value.

@@ -1,0 +1,53 @@
+// Tests for Rev iterator adapter
+use test
+use core::iter::adapters::rev::{Rev, rev}
+use core::iter::traits::double_ended::DoubleEndedIterator
+
+type BiRange { lo: I32, hi: I32 }
+
+impl Iterator for BiRange {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.lo >= this.hi { return Nothing }
+        let v: I32 = this.lo
+        this.lo = this.lo + 1
+        return Just(v)
+    }
+}
+
+impl DoubleEndedIterator for BiRange {
+    pub func next_back(mut this) -> Maybe[I32] {
+        if this.lo >= this.hi { return Nothing }
+        this.hi = this.hi - 1
+        return Just(this.hi)
+    }
+}
+
+@test
+func test_rev_next_basic() -> I32 {
+    var src: BiRange = BiRange { lo: 0, hi: 5 }
+    var r = rev(src)
+    let v: Maybe[I32] = r.next()
+    assert(v.is_just(), "Rev.next() returns Just")
+    assert_eq(v.unwrap() as I64, 4 as I64, "first Rev.next() = 4")
+    return 0
+}
+
+@test
+func test_rev_next_sequence() -> I32 {
+    var src: BiRange = BiRange { lo: 0, hi: 3 }
+    var r = rev(src)
+    assert_eq(r.next().unwrap() as I64, 2 as I64, "1st = 2")
+    assert_eq(r.next().unwrap() as I64, 1 as I64, "2nd = 1")
+    assert_eq(r.next().unwrap() as I64, 0 as I64, "3rd = 0")
+    assert(r.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_rev_empty() -> I32 {
+    var src: BiRange = BiRange { lo: 2, hi: 2 }
+    var r = rev(src)
+    assert(r.next().is_nothing(), "Rev of empty = Nothing")
+    return 0
+}

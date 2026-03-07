@@ -53,3 +53,42 @@ func test_from_f32_to_f64() -> I32 {
     assert(val < 3.15, "F32 3.14 -> F64 should be < 3.15")
     return 0
 }
+
+// --- TryFrom: narrowing conversions ---
+
+@test
+func test_try_from_i64_to_i32_ok() -> I32 {
+    let r: Outcome[I32, TryFromIntError] = I32::try_from(42 as I64)
+    assert(r.is_ok(), "42 fits in I32")
+    assert_eq(r.unwrap() as I64, 42 as I64, "value is 42")
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i32_overflow() -> I32 {
+    let large: I64 = 9999999999 as I64
+    let r: Outcome[I32, TryFromIntError] = I32::try_from(large)
+    assert(r.is_err(), "9999999999 overflows I32")
+    return 0
+}
+
+@test
+func test_try_from_i32_to_i8_ok() -> I32 {
+    let r: Outcome[I8, TryFromIntError] = I8::try_from(100)
+    assert(r.is_ok(), "100 fits in I8")
+    assert_eq(r.unwrap() as I64, 100 as I64, "value is 100")
+    return 0
+}
+
+// --- From: Maybe and Outcome wrapping ---
+
+@test
+func test_from_to_maybe() -> I32 {
+    let m: Maybe[I32] = Maybe::from(42)
+    assert(m.is_just(), "Maybe::from wraps in Just")
+    assert_eq(m.unwrap() as I64, 42 as I64, "value is 42")
+    return 0
+}
+
+// NOTE: Outcome::from — blocked by generic type param codegen bug
+// (Outcome[T,E]::from generates Outcome__T__E instead of Outcome__T__ConcreteE)

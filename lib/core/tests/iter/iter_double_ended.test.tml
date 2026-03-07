@@ -1,0 +1,85 @@
+// Tests for DoubleEndedIterator: next_back, advance_back_by, nth_back, rfind
+use test
+use core::iter::traits::double_ended::DoubleEndedIterator
+
+// BiRange: yields lo..hi-1 forward, hi-1..lo back
+type BiRange { lo: I32, hi: I32 }
+
+impl Iterator for BiRange {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.lo >= this.hi { return Nothing }
+        let v: I32 = this.lo
+        this.lo = this.lo + 1
+        return Just(v)
+    }
+}
+
+impl DoubleEndedIterator for BiRange {
+    pub func next_back(mut this) -> Maybe[I32] {
+        if this.lo >= this.hi { return Nothing }
+        this.hi = this.hi - 1
+        return Just(this.hi)
+    }
+}
+
+// --- next_back ---
+
+@test
+func test_next_back_basic() -> I32 {
+    var iter: BiRange = BiRange { lo: 0, hi: 5 }
+    let v: Maybe[I32] = iter.next_back()
+    assert(v.is_just(), "next_back on 0..5 returns Just")
+    assert_eq(v.unwrap() as I64, 4 as I64, "last element is 4")
+    return 0
+}
+
+@test
+func test_next_back_empty() -> I32 {
+    var iter: BiRange = BiRange { lo: 3, hi: 3 }
+    let v: Maybe[I32] = iter.next_back()
+    assert(v.is_nothing(), "next_back on empty returns Nothing")
+    return 0
+}
+
+// --- advance_back_by ---
+
+@test
+func test_advance_back_by_basic() -> I32 {
+    var iter: BiRange = BiRange { lo: 0, hi: 5 }
+    let r: Outcome[Unit, I64] = iter.advance_back_by(2)
+    assert(r.is_ok(), "advance_back_by 2 succeeds")
+    let v: Maybe[I32] = iter.next_back()
+    assert_eq(v.unwrap() as I64, 2 as I64, "after 2 skip from back, next_back = 2")
+    return 0
+}
+
+// --- nth_back ---
+
+@test
+func test_nth_back_basic() -> I32 {
+    var iter: BiRange = BiRange { lo: 0, hi: 5 }
+    let v: Maybe[I32] = iter.nth_back(1)
+    assert(v.is_just(), "nth_back(1) found")
+    assert_eq(v.unwrap() as I64, 3 as I64, "nth_back(1) on 0..5 = 3")
+    return 0
+}
+
+// --- rfind ---
+
+@test
+func test_rfind_found() -> I32 {
+    var iter: BiRange = BiRange { lo: 0, hi: 5 }
+    let r: Maybe[I32] = iter.rfind(do(x: ref I32) *x == 3)
+    assert(r.is_just(), "rfind 3 in 0..5 found")
+    assert_eq(r.unwrap() as I64, 3 as I64, "found 3")
+    return 0
+}
+
+@test
+func test_rfind_not_found() -> I32 {
+    var iter: BiRange = BiRange { lo: 0, hi: 3 }
+    let r: Maybe[I32] = iter.rfind(do(x: ref I32) *x == 10)
+    assert(r.is_nothing(), "rfind 10 not in 0..3")
+    return 0
+}
