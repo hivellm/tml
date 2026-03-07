@@ -1,0 +1,58 @@
+// Tests for uncovered Array methods: Ord, Duplicate, Hash, eq_slice
+// Many functions blocked by const generic inference bugs (try_map, zip, try_from_fn, repeat, from_ref, from_mut)
+use test::{assert, assert_eq}
+use core::array::{TryFromSliceError}
+use core::slice::Slice
+
+@test
+func test_array_ord_cmp_equal() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Equal, "identical arrays should be Equal")
+    return 0
+}
+
+@test
+func test_array_ord_cmp_less() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 4]
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Less, "a < b should be Less")
+    return 0
+}
+
+@test
+func test_array_ord_cmp_greater() -> I32 {
+    let a: [I32; 3] = [1, 3, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord == Ordering::Greater, "a > b should be Greater")
+    return 0
+}
+
+// partial_cmp BLOCKED: returns () instead of Maybe[Ordering]
+
+// duplicate BLOCKED: "Unknown method: duplicate" — Duplicate for Array not resolving
+
+// hash BLOCKED: "Unknown method: hash" — Hash for Array not resolving
+
+@test
+func test_array_tryfromsliceerror_to_string() -> I32 {
+    let e: TryFromSliceError = TryFromSliceError { expected_len: 3, actual_len: 5 }
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "to_string should return non-empty string")
+    return 0
+}
+
+@test
+func test_array_tryfromsliceerror_debug_string() -> I32 {
+    let e: TryFromSliceError = TryFromSliceError { expected_len: 4, actual_len: 2 }
+    let s: Str = e.debug_string()
+    assert(s.len() > 0, "debug_string should return non-empty string")
+    return 0
+}
+
+// eq_slice BLOCKED: "Unknown method: eq_slice" — constrained impl[T: PartialEq] not resolving
+
+// first_mut, last_mut BLOCKED: return () instead of Maybe[mut ref T]

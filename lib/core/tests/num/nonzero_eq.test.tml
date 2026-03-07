@@ -1,0 +1,11 @@
+// BLOCKED: NonZero::eq
+// NonZero[T] is a generic struct. Calling NonZero::new returns NonZero[I32] but
+// the codegen generates "%struct.NonZero__T" (unsized) instead of "%struct.NonZero__I32".
+// This is a generic struct instantiation bug in the codegen.
+use test::{assert}
+
+@test
+func test_nonzero_eq_blocked() -> I32 {
+    assert(true, "blocked: NonZero generic struct unsized type alloca codegen bug")
+    return 0
+}

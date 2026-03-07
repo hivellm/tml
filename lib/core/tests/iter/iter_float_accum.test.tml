@@ -1,0 +1,11 @@
+// BLOCKED: F32::sum, F32::product, F64::sum, F64::product
+// The compiler generates `ret float 0` instead of `ret float 0.0` for float
+// accumulator return values, causing a runtime type error.
+// See: iter_accumulators_float.test.tml for the existing placeholder.
+use test::{assert}
+
+@test
+func test_float_accumulators_blocked() -> I32 {
+    assert(true, "blocked: float return codegen bug (ret float 0 vs 0.0)")
+    return 0
+}

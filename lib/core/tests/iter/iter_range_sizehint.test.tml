@@ -1,0 +1,10 @@
+// BLOCKED: Range::size_hint, RangeInclusive::size_hint, RangeFrom::size_hint
+// These functions return (I64, Maybe[I64]) tuples, but tuple destructuring
+// from method calls is not yet supported: "Cannot destructure non-tuple type with tuple pattern"
+use test::{assert}
+
+@test
+func test_range_size_hint_blocked() -> I32 {
+    assert(true, "blocked: tuple destructuring from method return not supported")
+    return 0
+}

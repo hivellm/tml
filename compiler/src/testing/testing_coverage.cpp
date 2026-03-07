@@ -97,7 +97,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         return functions;
 
     std::string line;
-    std::regex impl_regex(R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\s+for\s+(\w+))?)");
+    // Match: impl[optional_generics] BehaviorName[optional_type_args] for ConcreteType
+    // The extra (?:\[[^\]]*\])? after (\w+) consumes type args like [I8] in
+    // `impl From[I8] for I16`, so the `for ConcreteType` part is properly captured.
+    // Without this, `impl From[I8] for I16` incorrectly extracts `From::from`
+    // instead of `I16::from` (which is what the runtime coverage tracker emits).
+    std::regex impl_regex(
+        R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\[[^\]]*\])?\s*(?:for\s+(\w+))?)");
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
     std::regex class_regex(R"(^\s*(pub\s+)?class\s+(\w+))");
     std::regex interface_regex(R"(^\s*(pub\s+)?interface\s+(\w+))");
@@ -123,7 +129,22 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             if (match[2].matched) {
                 std::string type_after_for = match[2].str();
                 if (type_after_for.size() == 1 && std::isupper(type_after_for[0])) {
-                    current_impl = match[1].str();
+                    // impl Behavior[T] for T — generic type param as impl target.
+                    // Coverage emits concrete type names (I32::from), not behavior names.
+                    // Mark as "generic_impl" to skip these methods.
+                    current_impl = ""; // skip — use empty to ignore
+                    in_behavior = false;
+                    in_class = false;
+                    in_interface = false;
+                    impl_brace_depth = 0;
+                    // Track braces to know when this generic impl block ends
+                    // by processing it as a no-name block (empty current_impl)
+                    // which means functions inside won't get the type prefix
+                    // but we need to still track brace depth.
+                    // Reuse the existing "current_impl is empty" brace tracking below.
+                    // However we need to set current_impl to something so the brace
+                    // counter runs. Use a sentinel.
+                    current_impl = "__generic_impl__";
                 } else {
                     current_impl = type_after_for;
                 }
@@ -142,7 +163,18 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             impl_brace_depth = 0;
         }
 
-        if (!current_impl.empty()) {
+        // Skip brace counting for comment/docstring lines — unbalanced braces
+        // in doc examples (e.g., `/// let err = f("expected '}'", 42)`) would
+        // otherwise decrement depth prematurely and drop the current impl context.
+        bool is_comment_line = false;
+        {
+            size_t non_space = line.find_first_not_of(" \t");
+            if (non_space != std::string::npos && line[non_space] == '/' &&
+                non_space + 1 < line.size() && line[non_space + 1] == '/') {
+                is_comment_line = true;
+            }
+        }
+        if (!current_impl.empty() && !is_comment_line) {
             for (char c : line) {
                 if (c == '{')
                     impl_brace_depth++;
@@ -172,7 +204,9 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 prev_line = line;
                 continue;
             }
-            if (in_behavior && line.find('{') == std::string::npos) {
+            // Skip behavior methods entirely — declarations have no body,
+            // defaults (generate_default_method) have no emit_coverage() call
+            if (in_behavior) {
                 prev_line = line;
                 continue;
             }
@@ -183,6 +217,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             }
             // Skip Drop::drop — auto-called by runtime, never instrumented
             if (func_name == "drop") {
+                prev_line = line;
+                continue;
+            }
+
+            // Skip methods in generic impl-for-TypeParam blocks — they emit under
+            // concrete type names at runtime (e.g. I32::from not From::from)
+            if (current_impl == "__generic_impl__") {
                 prev_line = line;
                 continue;
             }

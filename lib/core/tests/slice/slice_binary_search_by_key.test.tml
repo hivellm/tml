@@ -1,0 +1,60 @@
+// Tests for Slice::binary_search_by_key
+use test::{assert, assert_eq}
+use core::slice::Slice
+
+func extract_identity(x: ref I32) -> I32 { *x }
+
+@test
+func test_binary_search_by_key_found() -> I32 {
+    // Sorted slice [1, 3, 5, 7, 9], search for key=5 via identity
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 3)
+    atomic_store(ptr_offset(ptr, 2), 5)
+    atomic_store(ptr_offset(ptr, 3), 7)
+    atomic_store(ptr_offset(ptr, 4), 9)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+    let result: Outcome[I64, I64] = slice.binary_search_by_key(ref 5, extract_identity)
+    assert(result.is_ok(), "should find element with key 5")
+    assert_eq(result.unwrap(), 2, "key 5 is at index 2")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_binary_search_by_key_not_found() -> I32 {
+    // Sorted slice [1, 3, 5, 7, 9], search for key=4 (not in slice)
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 3)
+    atomic_store(ptr_offset(ptr, 2), 5)
+    atomic_store(ptr_offset(ptr, 3), 7)
+    atomic_store(ptr_offset(ptr, 4), 9)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+    let result: Outcome[I64, I64] = slice.binary_search_by_key(ref 4, extract_identity)
+    assert(result.is_err(), "should not find key 4")
+    assert_eq(result.unwrap_err(), 2, "4 would be inserted at index 2")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_binary_search_by_key_first() -> I32 {
+    // Search for first element
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+    let result: Outcome[I64, I64] = slice.binary_search_by_key(ref 10, extract_identity)
+    assert(result.is_ok(), "should find key 10")
+    assert_eq(result.unwrap(), 0, "key 10 is at index 0")
+
+    dealloc(ptr)
+    return 0
+}

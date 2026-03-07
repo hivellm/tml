@@ -1,0 +1,10 @@
+// Tests for RawMutPtr copy_from, copy_from_nonoverlapping, write_bytes_val
+// BLOCKED: All 7 functions use @tml_memcpy/@tml_memmove/@tml_memset which
+// are not declared in generated LLVM IR
+use test::{assert}
+
+@test
+func test_mut_ptr_copy_blocked() -> I32 {
+    assert(true, "copy_from/copy_from_nonoverlapping/write_bytes_val blocked by missing memcpy/memset intrinsics")
+    return 0
+}

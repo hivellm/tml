@@ -1,0 +1,70 @@
+// Tests for AnyValue::downcast_mut, get_type_id, get_size, get_align, debug_string
+use test::{assert, assert_eq}
+use core::any::AnyValue
+
+@test
+func test_anyvalue_get_type_id() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    let tid: U64 = any.get_type_id()
+    assert(tid > 0, "type_id should be non-zero")
+    return 0
+}
+
+@test
+func test_anyvalue_get_size() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    let sz: I64 = any.get_size()
+    assert(sz > 0, "size of I32 AnyValue should be > 0")
+    return 0
+}
+
+@test
+func test_anyvalue_get_align() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    let al: I64 = any.get_align()
+    assert(al > 0, "alignment of I32 AnyValue should be > 0")
+    return 0
+}
+
+@test
+func test_anyvalue_debug_string() -> I32 {
+    let any: AnyValue = AnyValue::from[I64](99 as I64)
+    let dbg: Str = any.debug_string()
+    assert(dbg.len() > 0, "debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_anyvalue_downcast_mut_success() -> I32 {
+    var any: AnyValue = AnyValue::from[I32](10)
+    let r: Maybe[mut ref I32] = any.downcast_mut[I32]()
+    assert(r.is_just(), "downcast_mut should succeed for matching type")
+    return 0
+}
+
+@test
+func test_anyvalue_downcast_mut_wrong_type() -> I32 {
+    var any: AnyValue = AnyValue::from[I32](10)
+    let r: Maybe[mut ref I64] = any.downcast_mut[I64]()
+    assert(r.is_nothing(), "downcast_mut should fail for wrong type")
+    return 0
+}
+
+@test
+func test_anyvalue_type_id_same_type_equal() -> I32 {
+    let a1: AnyValue = AnyValue::from[I32](1)
+    let a2: AnyValue = AnyValue::from[I32](2)
+    // Both are I32 — same type_id
+    assert_eq(a1.get_type_id(), a2.get_type_id(), "same type has same type_id")
+    return 0
+}
+
+@test
+func test_anyvalue_type_id_different_types() -> I32 {
+    let ai: AnyValue = AnyValue::from[I32](1)
+    let al: AnyValue = AnyValue::from[I64](2 as I64)
+    let id_i32: U64 = ai.get_type_id()
+    let id_i64: U64 = al.get_type_id()
+    assert(id_i32 != id_i64, "different types have different type_ids")
+    return 0
+}

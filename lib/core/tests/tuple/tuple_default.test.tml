@@ -37,3 +37,36 @@ func test_tuple3_eq() -> I32 {
     assert(a != c, "different 3-tuples should not be equal")
     0
 }
+
+@test
+func test_tuple4_eq() -> I32 {
+    let a: (I32, I32, I32, I32) = (1, 2, 3, 4)
+    let b: (I32, I32, I32, I32) = (1, 2, 3, 4)
+    let c: (I32, I32, I32, I32) = (1, 2, 3, 5)
+    assert(a == b, "same 4-tuples should be equal")
+    assert(a != c, "different 4-tuples should not be equal")
+    0
+}
+
+@test
+func test_tuple5_eq() -> I32 {
+    let a: (I32, I32, I32, I32, I32) = (1, 2, 3, 4, 5)
+    let b: (I32, I32, I32, I32, I32) = (1, 2, 3, 4, 5)
+    let c: (I32, I32, I32, I32, I32) = (1, 2, 3, 4, 6)
+    assert(a == b, "same 5-tuples should be equal")
+    assert(a != c, "different 5-tuples should not be equal")
+    0
+}
+
+@test
+func test_tuple6_eq() -> I32 {
+    let a: (I32, I32, I32, I32, I32, I32) = (1, 2, 3, 4, 5, 6)
+    let b: (I32, I32, I32, I32, I32, I32) = (1, 2, 3, 4, 5, 6)
+    let c: (I32, I32, I32, I32, I32, I32) = (1, 2, 3, 4, 5, 7)
+    assert(a == b, "same 6-tuples should be equal")
+    assert(a != c, "different 6-tuples should not be equal")
+    0
+}
+
+// NOTE: Default::default() for tuple types blocked — "Type mismatch: expected (I32, I32), found ()"
+// Generic behavior dispatch for compound/tuple types not monomorphized correctly (same bug as Clone, Ord)

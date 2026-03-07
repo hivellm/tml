@@ -1,6 +1,6 @@
 // Tests for test::coverage — assert_coverage_percent, assert_func_covered
 use test::{assert, assert_eq}
-use test::coverage::{assert_coverage_percent, get_coverage_percent, get_covered_func_count}
+use test::coverage::{assert_coverage_percent, assert_func_covered, is_func_covered, get_coverage_percent, get_covered_func_count}
 
 @test
 func test_assert_coverage_percent_zero() -> I32 {
@@ -20,5 +20,17 @@ func test_get_coverage_percent() -> I32 {
 func test_get_covered_func_count() -> I32 {
     let count: I32 = get_covered_func_count()
     assert(count >= 0, "covered func count should be non-negative")
+    return 0
+}
+
+@test
+func test_assert_func_covered_guarded() -> I32 {
+    // In coverage mode, get_coverage_percent was called in a prior test in this
+    // file, so it's already in the covered set. Guard with is_func_covered so
+    // this test is a safe no-op in non-coverage mode (where tracking is inactive).
+    if is_func_covered("get_coverage_percent") {
+        assert_func_covered("get_coverage_percent", "get_coverage_percent must be covered")
+    }
+    assert(true, "assert_func_covered test ran safely")
     return 0
 }

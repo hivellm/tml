@@ -1,0 +1,119 @@
+// Tests for AllocatorRef methods — calling through the wrapper
+use test::{assert, assert_eq}
+use core::alloc::{Layout, AllocError, Allocator, AllocatorRef, by_ref}
+
+type WrapAlloc { dummy: I32 }
+impl WrapAlloc { func new() -> WrapAlloc { WrapAlloc { dummy: 0 } } }
+impl Allocator for WrapAlloc {
+    func allocate(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let ptr: Ptr[U8] = alloc(layout.size())
+        if ptr == null { return Err(AllocError::new()) }
+        return Ok(ptr)
+    }
+    func deallocate(mut this, ptr: Ptr[U8], layout: Layout) { dealloc(ptr) }
+    func allocate_zeroed(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let r = this.allocate(layout)
+        when r { Ok(p) => { mem_zero(p, layout.size()); return Ok(p) } Err(e) => return Err(e) }
+    }
+    func grow(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        let r = this.allocate(new_layout)
+        when r { Ok(p) => { mem_copy(p, ptr, old_layout.size()); this.deallocate(ptr, old_layout); return Ok(p) } Err(e) => return Err(e) }
+    }
+    func grow_zeroed(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.grow(ptr, old_layout, new_layout)
+    }
+    func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.grow(ptr, old_layout, new_layout)
+    }
+}
+
+@test
+func test_allocator_ref_allocate_deallocate() -> I32 {
+    var a: WrapAlloc = WrapAlloc::new()
+    var r: AllocatorRef[WrapAlloc] = by_ref[WrapAlloc](ref a)
+    let layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    let result = r.allocate(layout)
+    assert(result.is_ok(), "AllocatorRef::allocate should succeed")
+    when result {
+        Ok(ptr) => r.deallocate(ptr, layout)
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_ref_allocate_zeroed() -> I32 {
+    var a: WrapAlloc = WrapAlloc::new()
+    var r: AllocatorRef[WrapAlloc] = by_ref[WrapAlloc](ref a)
+    let layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let result = r.allocate_zeroed(layout)
+    assert(result.is_ok(), "AllocatorRef::allocate_zeroed should succeed")
+    when result {
+        Ok(ptr) => r.deallocate(ptr, layout)
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_ref_grow() -> I32 {
+    var a: WrapAlloc = WrapAlloc::new()
+    var r: AllocatorRef[WrapAlloc] = by_ref[WrapAlloc](ref a)
+    let old_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let init_result = r.allocate(old_layout)
+    when init_result {
+        Ok(ptr) => {
+            let grow_result = r.grow(ptr, old_layout, new_layout)
+            assert(grow_result.is_ok(), "AllocatorRef::grow should succeed")
+            when grow_result {
+                Ok(new_ptr) => r.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_ref_grow_zeroed() -> I32 {
+    var a: WrapAlloc = WrapAlloc::new()
+    var r: AllocatorRef[WrapAlloc] = by_ref[WrapAlloc](ref a)
+    let old_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    let init_result = r.allocate(old_layout)
+    when init_result {
+        Ok(ptr) => {
+            let grow_result = r.grow_zeroed(ptr, old_layout, new_layout)
+            assert(grow_result.is_ok(), "AllocatorRef::grow_zeroed should succeed")
+            when grow_result {
+                Ok(new_ptr) => r.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_allocator_ref_shrink() -> I32 {
+    var a: WrapAlloc = WrapAlloc::new()
+    var r: AllocatorRef[WrapAlloc] = by_ref[WrapAlloc](ref a)
+    let old_layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let new_layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let init_result = r.allocate(old_layout)
+    when init_result {
+        Ok(ptr) => {
+            let shrink_result = r.shrink(ptr, old_layout, new_layout)
+            assert(shrink_result.is_ok(), "AllocatorRef::shrink should succeed")
+            when shrink_result {
+                Ok(new_ptr) => r.deallocate(new_ptr, new_layout)
+                Err(_) => {}
+            }
+        }
+        Err(_) => {}
+    }
+    return 0
+}
