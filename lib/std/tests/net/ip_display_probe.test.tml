@@ -1,0 +1,9 @@
+// Superseded by ip_display_debug.test.tml which has comprehensive coverage.
+// Kept as a single-test file to avoid breaking any test discovery.
+use test::{assert}
+
+@test
+func test_ip_display_see_ip_display_debug() -> I32 {
+    assert(true, "see ip_display_debug.test.tml for full Display/Debug tests")
+    return 0
+}

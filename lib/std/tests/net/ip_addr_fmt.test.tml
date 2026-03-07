@@ -1,0 +1,27 @@
+// Tests for IpAddr::to_string (Display impl)
+// Fixed: Display impl was using Rust-style fmt(Formatter) instead of TML to_string() pattern
+use test::{assert_eq}
+use std::net::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipaddr_display_v4() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))
+    let s = addr.to_string()
+    assert_eq(s, "192.168.1.1", "IpAddr V4 display")
+    return 0
+}
+
+@test
+func test_ipaddr_display_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let s = addr.to_string()
+    assert_eq(s, "0:0:0:0:0:0:0:1", "IpAddr V6 display")
+    return 0
+}
+
+@test
+func test_ipaddr_display_v4_localhost() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert_eq(addr.to_string(), "127.0.0.1", "IpAddr V4 localhost display")
+    return 0
+}

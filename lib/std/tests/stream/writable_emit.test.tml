@@ -1,0 +1,34 @@
+// Tests for WritableStream::emit and WritableStream::writable_ended
+use test::{assert, assert_true, assert_false}
+use std::stream::writable_stream::WritableStream
+
+func noop_listener(data: I64) {}
+
+@test
+func test_writable_stream_emit_with_listener() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    ws.on("custom", noop_listener as I64)
+    let result: Bool = ws.emit("custom", 42 as I64)
+    assert_true(result, "emit returns true when listeners exist")
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_writable_stream_emit_no_listeners() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    let result: Bool = ws.emit("custom", 0 as I64)
+    assert_false(result, "emit returns false with no listeners")
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_writable_stream_writable_ended() -> I32 {
+    var ws: WritableStream = WritableStream::new()
+    assert_false(ws.writable_ended(), "not ended initially")
+    ws.end()
+    assert_true(ws.writable_ended(), "ended after end()")
+    ws.destroy()
+    return 0
+}

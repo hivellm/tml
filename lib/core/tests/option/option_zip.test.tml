@@ -1,12 +1,29 @@
-// Tests for Maybe::zip_with — BLOCKED by tuple/MaybeIter codegen bugs
-// Keeping as placeholder to document what needs fixing
-use test::{assert}
+// Tests for Maybe::zip
+use test::{assert, assert_eq}
 
 @test
-func test_maybe_zip_placeholder() -> I32 {
-    // zip: tuple type layout bug (%struct.I32_I32 not first class)
-    // zip_with: same tuple issue
-    // iter: MaybeIter value-type vs ptr-type mismatch
-    assert(true, "blocked by codegen bugs")
+func test_zip_both_just() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    let y: Maybe[I32] = Just(2)
+    let r = x.zip(y)
+    assert(r.is_just(), "zip of two Just values should be Just")
+    return 0
+}
+
+@test
+func test_zip_first_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(2)
+    let r = x.zip(y)
+    assert(r.is_nothing(), "zip with Nothing first should be Nothing")
+    return 0
+}
+
+@test
+func test_zip_second_nothing() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    let y: Maybe[I32] = Nothing
+    let r = x.zip(y)
+    assert(r.is_nothing(), "zip with Nothing second should be Nothing")
     return 0
 }

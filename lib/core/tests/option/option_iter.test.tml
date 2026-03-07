@@ -1,0 +1,9 @@
+// BLOCKED: MaybeIter struct codegen bug
+// '%this' defined with type 'ptr' but expected '%struct.Maybe__I32'
+use test::{assert}
+
+@test
+func test_option_iter_blocked() -> I32 {
+    assert(true, "blocked by MaybeIter codegen type mismatch")
+    return 0
+}

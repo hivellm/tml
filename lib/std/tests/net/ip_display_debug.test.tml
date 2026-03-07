@@ -1,0 +1,128 @@
+// Tests for Display/Debug impls on Ipv4Addr, Ipv6Addr, and IpAddr.
+// These were previously blocked by undefined symbol codegen issues.
+// The Display impls use simple to_string(this) -> Str signatures which now work.
+use test::{assert, assert_eq}
+use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+
+// =============================================================================
+// Ipv4Addr::to_string (Display)
+// =============================================================================
+
+@test
+func test_ipv4_to_string_localhost() -> I32 {
+    let addr = Ipv4Addr::new(127, 0, 0, 1)
+    let s: Str = addr.to_string()
+    assert_eq(s, "127.0.0.1", "localhost to_string")
+    return 0
+}
+
+@test
+func test_ipv4_to_string_private() -> I32 {
+    let addr = Ipv4Addr::new(192, 168, 1, 100)
+    let s: Str = addr.to_string()
+    assert_eq(s, "192.168.1.100", "private address to_string")
+    return 0
+}
+
+@test
+func test_ipv4_to_string_unspecified() -> I32 {
+    let addr = Ipv4Addr::UNSPECIFIED()
+    let s: Str = addr.to_string()
+    assert_eq(s, "0.0.0.0", "unspecified to_string")
+    return 0
+}
+
+// =============================================================================
+// Ipv4Addr::debug_string (Debug)
+// =============================================================================
+
+@test
+func test_ipv4_debug_string() -> I32 {
+    let addr = Ipv4Addr::new(10, 0, 0, 1)
+    let s: Str = addr.debug_string()
+    assert_eq(s, "10.0.0.1", "debug_string should match to_string")
+    return 0
+}
+
+// =============================================================================
+// Ipv6Addr::to_string (Display)
+// =============================================================================
+
+@test
+func test_ipv6_to_string_localhost() -> I32 {
+    let addr = Ipv6Addr::LOCALHOST()
+    let s: Str = addr.to_string()
+    // Ipv6Addr::to_string outputs decimal segment values joined by ":"
+    assert_eq(s, "0:0:0:0:0:0:0:1", "ipv6 localhost to_string")
+    return 0
+}
+
+@test
+func test_ipv6_to_string_unspecified() -> I32 {
+    let addr = Ipv6Addr::UNSPECIFIED()
+    let s: Str = addr.to_string()
+    assert_eq(s, "0:0:0:0:0:0:0:0", "ipv6 unspecified to_string")
+    return 0
+}
+
+@test
+func test_ipv6_to_string_nonzero() -> I32 {
+    let addr = Ipv6Addr::new(8193 as U16, 3512 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    let s: Str = addr.to_string()
+    // 0x2001 = 8193, 0x0db8 = 3512
+    assert_eq(s, "8193:3512:0:0:0:0:0:1", "nonzero segments to_string")
+    return 0
+}
+
+// =============================================================================
+// Ipv6Addr::debug_string (Debug)
+// =============================================================================
+
+@test
+func test_ipv6_debug_string() -> I32 {
+    let addr = Ipv6Addr::LOCALHOST()
+    let s: Str = addr.debug_string()
+    assert_eq(s, "0:0:0:0:0:0:0:1", "ipv6 debug_string should match to_string")
+    return 0
+}
+
+// =============================================================================
+// IpAddr::to_string (Display)
+// =============================================================================
+
+@test
+func test_ipaddr_to_string_v4() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))
+    let s: Str = addr.to_string()
+    assert_eq(s, "192.168.1.1", "IpAddr V4 to_string")
+    return 0
+}
+
+@test
+func test_ipaddr_to_string_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let s: Str = addr.to_string()
+    assert_eq(s, "0:0:0:0:0:0:0:1", "IpAddr V6 to_string")
+    return 0
+}
+
+// =============================================================================
+// IpAddr::debug_string (Debug)
+// =============================================================================
+
+@test
+func test_ipaddr_debug_string_v4() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))
+    let s: Str = addr.debug_string()
+    assert_eq(s, "8.8.8.8", "IpAddr V4 debug_string")
+    return 0
+}
+
+@test
+func test_ipaddr_debug_string_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::UNSPECIFIED())
+    let s: Str = addr.debug_string()
+    assert_eq(s, "0:0:0:0:0:0:0:0", "IpAddr V6 debug_string")
+    return 0
+}

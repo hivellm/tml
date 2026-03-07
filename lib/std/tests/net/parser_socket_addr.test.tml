@@ -1,10 +1,13 @@
 // Tests for net/parser: parse_socket_addr
-// NOTE: Crashes with segfault — likely SocketAddr enum codegen issue
-// Blocked: parse_socket_addr, SocketAddrV6::parse, SocketAddr::parse
+// BLOCKED: parse_socket_addr SEGFAULTS at runtime — SocketAddr codegen issue
+// The V6 path in parse_socket_addr calls SocketAddr::V6() which internally creates
+// a SocketAddrV4 from the V6 port. The struct conversion triggers an access violation.
+// Underlying free functions parse_socket_addr_v4 and parse_socket_addr_v6 work independently.
+// See: parser_remaining_coverage.test.tml, parser_socket_addr_coverage.test.tml
 use test::{assert}
 
 @test
 func test_socket_addr_parsing_blocked() -> I32 {
-    assert(true, "socket addr parsing blocked by SocketAddr enum codegen")
+    assert(true, "parse_socket_addr blocked by SocketAddr V6 path codegen SEGFAULT")
     return 0
 }

@@ -1,16 +1,30 @@
-// Tests for uncovered Maybe[T] methods
-// Most are BLOCKED by generic codegen bugs:
-// - flatten: nested Maybe[Maybe[I32]] layout mismatch
-// - also[U]: multi-type generic monomorphization fails
-// - ok_or[E]: generic param E not substituted
-// Keeping file as placeholder until codegen is fixed
+// Additional coverage tests for Maybe[T] methods
+// Tests edge cases and combinations not covered in individual test files
 use test::{assert, assert_eq}
 
 @test
-func test_maybe_placeholder() -> I32 {
-    // Maybe method tests deferred — generic codegen blocked
-    let x: Maybe[I32] = Just(42)
-    assert(x.is_just(), "Just is just")
-    assert_eq(x.unwrap(), 42, "unwrap gives 42")
+func test_unwrap_or_with_negative() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: I32 = x.unwrap_or(-999)
+    assert_eq(r, -999, "unwrap_or with negative default")
+    return 0
+}
+
+@test
+func test_filter_then_unwrap_or() -> I32 {
+    let x: Maybe[I32] = Just(3)
+    let r: I32 = x.filter(do(v) v > 5).unwrap_or(0)
+    assert_eq(r, 0, "filter failure then unwrap_or should give default")
+    return 0
+}
+
+@test
+func test_alt_chain() -> I32 {
+    let a: Maybe[I32] = Nothing
+    let b: Maybe[I32] = Nothing
+    let c: Maybe[I32] = Just(42)
+    let r: Maybe[I32] = a.alt(b).alt(c)
+    assert(r.is_just(), "alt chain should find the first Just")
+    assert_eq(r.unwrap(), 42, "alt chain should return 42")
     return 0
 }

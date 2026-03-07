@@ -1,0 +1,27 @@
+// Tests for the 3 remaining uncovered parser functions.
+// All 3 are blocked by compiler codegen bugs (verified 2026-03-07):
+//
+// 1. parse_socket_addr -- SEGFAULT at runtime. The function body contains both
+//    SocketAddr::V4(...) and SocketAddr::V6(...) constructors. The V6 path
+//    creates a SocketAddrV4 from the V6 port via SocketAddr::V6(), which triggers
+//    an access violation during struct conversion codegen.
+//    Even importing and calling this function (error path only) crashes.
+//
+// 2. SocketAddrV6::parse -- "Type mismatch: expected SocketAddrV6, found ()"
+//    Static method defined in parser.tml's `impl SocketAddrV6` block.
+//    Cross-module static method dispatch resolves return type as () instead of
+//    the actual Outcome[SocketAddrV6, AddrParseError].
+//
+// 3. SocketAddr::parse -- "Unknown method: is_ok" on the return value.
+//    Delegates to parse_socket_addr. Cross-module static method dispatch fails
+//    to resolve the Outcome return type, so methods like is_ok() are not found.
+//
+// The underlying free functions (parse_socket_addr_v4, parse_socket_addr_v6)
+// are fully covered in parser_ipv4.test.tml, parser_ipv6.test.tml, etc.
+use test::{assert}
+
+@test
+func test_parser_remaining_blocked() -> I32 {
+    assert(true, "parse_socket_addr, SocketAddrV6::parse, SocketAddr::parse blocked by codegen bugs")
+    return 0
+}

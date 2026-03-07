@@ -1,10 +1,17 @@
-// Tests for DuplexStream::write_bytes — BLOCKED by double ref crash
-// write_bytes(data: ref [U8]) calls writer.write_bytes(ref data) which
-// creates ref ref [U8], causing segfault (ACCESS_VIOLATION)
-use test::assert
+// Tests for DuplexStream::write_bytes
+// Fixed: removed redundant `ref` when forwarding already-ref parameter.
+use test::{assert, assert_eq, assert_true}
+use std::stream::duplex::DuplexStream
+
+func noop_write(data: I64, cb: I64) {}
 
 @test
-func test_duplex_write_bytes_blocked() -> I32 {
-    assert(true, "DuplexStream::write_bytes blocked by double ref crash")
+func test_duplex_write_bytes_single() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.set_write_fn(noop_write as I64)
+    let buf: [U8; 1] = [42 as U8]
+    let ok: Bool = ds.write_bytes(ref buf)
+    assert_true(ok, "write_bytes single byte returns true")
+    ds.destroy()
     return 0
 }

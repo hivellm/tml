@@ -1,0 +1,52 @@
+// Tests for TransformStream::pipe and TransformStream::unpipe
+// Previously blocked by double mut ref codegen bug — fixed by removing
+// redundant `mut ref` when forwarding already-ref parameters.
+use test::{assert, assert_true, assert_false}
+use std::stream::transform::TransformStream
+use std::stream::duplex::DuplexStream
+use std::stream::writable_stream::WritableStream
+
+func noop_write(data: I64, cb: I64) {}
+
+func pass_transform(data: I64, duplex_ptr: I64) {
+    let chunk: Str = data as Str
+    let ds: mut ref DuplexStream = duplex_ptr as mut ref DuplexStream
+    ds.push(chunk)
+}
+
+@test
+func test_transform_pipe_to_writable() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(pass_transform as I64)
+    var ws: WritableStream = WritableStream::new()
+    ws.set_write_fn(noop_write as I64)
+
+    ts.pipe(mut ref ws)
+
+    ts.write("hello")
+    ts.end()
+
+    assert_true(ws.writable_finished(), "ws finished after transform end")
+    ts.destroy()
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_transform_unpipe_from_writable() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.set_transform(pass_transform as I64)
+    var ws: WritableStream = WritableStream::new()
+    ws.set_write_fn(noop_write as I64)
+
+    ts.pipe(mut ref ws)
+    ts.unpipe(mut ref ws)
+
+    // After unpipe, ending transform should NOT end ws
+    ts.end()
+    assert_false(ws.writable_finished(), "ws NOT finished after unpipe + end")
+
+    ts.destroy()
+    ws.destroy()
+    return 0
+}

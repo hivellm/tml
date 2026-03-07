@@ -1,12 +1,9 @@
-// Tests for Outcome::inspect/inspect_err — needs function pointer ref param
-// flatten: blocked by nested Outcome codegen bug
+// BLOCKED: Outcome::flatten requires nested generic type codegen
+// Outcome[Outcome[T, E], E] -> Outcome[T, E] triggers codegen failures
 use test::{assert}
 
 @test
-func test_outcome_inspect_placeholder() -> I32 {
-    // inspect: func(ref T) param — codegen may not support ref params in fn ptrs
-    // inspect_err: same issue
-    // flatten: nested Outcome type mismatch
-    assert(true, "blocked by codegen bugs")
+func test_outcome_flatten_blocked() -> I32 {
+    assert(true, "blocked by nested generic type codegen")
     return 0
 }

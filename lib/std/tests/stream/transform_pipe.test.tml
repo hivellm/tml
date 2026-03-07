@@ -1,5 +1,5 @@
-// Tests for TransformStream uncovered: unpipe_all
-// NOTE: pipe/unpipe blocked by mut ref param crash
+// Tests for TransformStream: unpipe_all guard path
+// NOTE: pipe/unpipe tests are in transform_pipe_unpipe.test.tml
 use test::{assert}
 use std::stream::transform::TransformStream
 

@@ -1,0 +1,43 @@
+// Tests for RawMutPtr — additional edge cases for write/read/replace/swap
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_mut_ptr_write_read_i32() -> I32 {
+    let p: *Unit = alloc(4)
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(p as I64)
+    ptr.write(999)
+    let val: I32 = ptr.read()
+    assert_eq(val, 999, "write/read I32")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_mut_ptr_replace_returns_old() -> I32 {
+    let p: *Unit = alloc(4)
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(p as I64)
+    ptr.write(100)
+    let old: I32 = ptr.replace(200)
+    assert_eq(old, 100, "replace should return old value 100")
+    let cur: I32 = ptr.read()
+    assert_eq(cur, 200, "after replace current should be 200")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_mut_ptr_swap_i32() -> I32 {
+    let pa: *Unit = alloc(4)
+    let pb: *Unit = alloc(4)
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(pa as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(pb as I64)
+    a.write(11)
+    b.write(22)
+    a.swap(b)
+    assert_eq(a.read(), 22, "a should have 22 after swap")
+    assert_eq(b.read(), 11, "b should have 11 after swap")
+    dealloc(pa)
+    dealloc(pb)
+    return 0
+}

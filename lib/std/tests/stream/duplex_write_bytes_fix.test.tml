@@ -1,0 +1,38 @@
+// Tests for DuplexStream::write_bytes
+// Previously blocked by double ref codegen bug — fixed by removing
+// redundant `ref` when forwarding already-ref parameters.
+use test::{assert, assert_eq, assert_true}
+use std::stream::duplex::DuplexStream
+
+func noop_write(data: I64, cb: I64) {}
+
+@test
+func test_duplex_write_bytes_uncorked() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.set_write_fn(noop_write as I64)
+
+    let buf: [U8; 3] = [65 as U8, 66 as U8, 67 as U8]
+    let ok: Bool = ds.write_bytes(ref buf)
+    assert_true(ok, "write_bytes uncorked returns true (below hwm)")
+    // Data was written directly (not buffered) because not corked
+    assert_eq(ds.writable_length(), 0 as I64, "not buffered when uncorked")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_write_bytes_corked() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.set_write_fn(noop_write as I64)
+    ds.cork()
+
+    let buf: [U8; 5] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8]
+    let ok: Bool = ds.write_bytes(ref buf)
+    assert_true(ok, "write_bytes corked returns true")
+    assert_eq(ds.writable_length(), 5 as I64, "5 bytes buffered when corked")
+
+    ds.uncork()
+    assert_eq(ds.writable_length(), 0 as I64, "flushed after uncork")
+    ds.destroy()
+    return 0
+}

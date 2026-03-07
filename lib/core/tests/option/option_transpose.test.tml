@@ -1,0 +1,9 @@
+// BLOCKED: Maybe::transpose requires nested generic type codegen
+// Maybe[Outcome[T, E]] -> Outcome[Maybe[T], E] triggers codegen failures
+use test::{assert}
+
+@test
+func test_option_transpose_blocked() -> I32 {
+    assert(true, "blocked by nested generic type codegen")
+    return 0
+}

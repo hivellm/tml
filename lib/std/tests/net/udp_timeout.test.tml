@@ -1,11 +1,33 @@
 // Tests for UdpSocket timeout methods
-// BLOCKED: Maybe[Duration] codegen — Nothing infers as Maybe[I32], Just(Duration) type mismatch
-// All 5 uncovered functions (set_read_timeout, set_write_timeout, read_timeout, write_timeout, as_raw_socket)
-// require proper Maybe[Duration] or ref RawSocket codegen
+// RESOLVED: Maybe[Duration] works with typed Nothing (let none: Maybe[Duration] = Nothing)
+// Actual timeout tests now in: udp_timeout_coverage.test.tml, udp_raw_and_clear_timeout.test.tml
+// Bare Nothing still infers as Maybe[I32] — use typed variable as workaround.
 use test::{assert}
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::ip::Ipv4Addr
+use std::net::udp::UdpSocket
+use core::time::Duration
 
 @test
-func test_udp_timeout_blocked() -> I32 {
-    assert(true, "UdpSocket timeout methods blocked by Maybe[Duration] codegen")
+func test_udp_read_timeout_roundtrip() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr = SocketAddr::V4(v4)
+    let sock = UdpSocket::bind(addr).unwrap()
+    let timeout = Duration::from_millis(200)
+    sock.set_read_timeout(Just(timeout)).unwrap()
+    let got = sock.read_timeout().unwrap()
+    assert(got.is_just(), "read_timeout should return Just after being set")
+    return 0
+}
+
+@test
+func test_udp_write_timeout_roundtrip() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr = SocketAddr::V4(v4)
+    let sock = UdpSocket::bind(addr).unwrap()
+    let timeout = Duration::from_millis(300)
+    sock.set_write_timeout(Just(timeout)).unwrap()
+    let got = sock.write_timeout().unwrap()
+    assert(got.is_just(), "write_timeout should return Just after being set")
     return 0
 }

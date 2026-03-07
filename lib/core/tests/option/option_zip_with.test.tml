@@ -1,11 +1,9 @@
-// Tests for Maybe::zip_with — BLOCKED by tuple/struct codegen
-// zip_with internally generates struct.I32_I32 which fails LLVM IR validation:
-//   "load operand must be a pointer to a first class type"
-// Same root cause as Maybe::zip tuple layout bug
-use test::assert
+// BLOCKED: Maybe::zip_with triggers LLVM IR codegen bug
+// "load operand must be a pointer to a first class type" for tuple struct
+use test::{assert}
 
 @test
-func test_zip_with_blocked() -> I32 {
-    assert(true, "zip_with blocked by tuple type layout codegen bug")
+func test_option_zip_with_blocked() -> I32 {
+    assert(true, "blocked by tuple struct codegen bug")
     return 0
 }

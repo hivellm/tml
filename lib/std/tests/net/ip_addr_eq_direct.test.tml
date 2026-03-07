@@ -1,0 +1,29 @@
+// Tests for IpAddr::eq (PartialEq impl) via direct .eq(ref) call
+// Coverage shows IpAddr::eq as uncovered because == operator uses built-in comparison.
+// Calling .eq(ref b) directly dispatches to the PartialEq impl.
+use test::{assert}
+use std::net::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipaddr_eq_v4_same() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    let b = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    assert(a.eq(ref b), "same V4 IpAddrs should be equal via .eq()")
+    return 0
+}
+
+@test
+func test_ipaddr_eq_v4_different() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    let b = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))
+    assert(not a.eq(ref b), "different V4 IpAddrs should not be equal")
+    return 0
+}
+
+@test
+func test_ipaddr_eq_v6_same() -> I32 {
+    let a = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let b = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    assert(a.eq(ref b), "same V6 IpAddrs should be equal via .eq()")
+    return 0
+}

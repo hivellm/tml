@@ -1,0 +1,36 @@
+// Tests for uncovered Ipv4Addr functions:
+// - to_bits roundtrip with from_bits
+// - is_private for 172.16-31 boundary cases
+// - is_documentation negative cases for each range
+// - is_multicast boundary cases
+use test::{assert, assert_eq}
+use std::net::ip::Ipv4Addr
+
+// === Ipv4Addr::to_bits precise values ===
+
+@test
+func test_ipv4_to_bits_unspecified() -> I32 {
+    let addr = Ipv4Addr::UNSPECIFIED()
+    assert_eq(addr.to_bits(), 0 as U32, "UNSPECIFIED to_bits should be 0")
+    return 0
+}
+
+@test
+func test_ipv4_to_bits_broadcast() -> I32 {
+    let addr = Ipv4Addr::BROADCAST()
+    assert_eq(addr.to_bits(), 0xFFFFFFFF as U32, "BROADCAST to_bits should be 0xFFFFFFFF")
+    return 0
+}
+
+// === Ipv4Addr::from_bits edge cases ===
+
+@test
+func test_ipv4_from_bits_zero() -> I32 {
+    let addr = Ipv4Addr::from_bits(0 as U32)
+    assert(addr.is_unspecified(), "from_bits(0) should be unspecified")
+    assert_eq(addr.octet0() as I32, 0)
+    assert_eq(addr.octet1() as I32, 0)
+    assert_eq(addr.octet2() as I32, 0)
+    assert_eq(addr.octet3() as I32, 0)
+    return 0
+}

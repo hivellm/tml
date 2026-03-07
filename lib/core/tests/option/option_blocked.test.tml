@@ -1,14 +1,34 @@
-// Tests for uncovered Maybe methods
-// BLOCKED: Maybe::also has codegen issue — generic [U] instantiation fails
-// BLOCKED: Maybe::ok_or — Outcome generic E type mismatch
-// BLOCKED: Maybe[Maybe[T]]::flatten — nested Maybe layout mismatch
-// BLOCKED: Maybe::zip — tuple return type issues
-// BLOCKED: MaybeIter — unsized type allocation
-// Re-enable when generic method codegen is fixed
-use test
+// Tests for Maybe methods that were previously blocked but now work.
+// Remaining blockers documented in individual test files:
+//   option_iter.test.tml — MaybeIter struct ptr/value codegen bug
+//   option_transpose.test.tml — nested generic type layout mismatch
+//   option_zip_with.test.tml — tuple struct load codegen bug
+use test::{assert, assert_eq}
 
 @test
-func test_option_extra_placeholder() -> I32 {
-    // Placeholder — real tests blocked on generic method codegen
+func test_also_cross_type() -> I32 {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I64] = Just(99 as I64)
+    let r: Maybe[I64] = x.also(y)
+    assert(r.is_just(), "also[U] with different types should return Just")
+    assert_eq(r.unwrap(), 99 as I64, "also should return the second Maybe's value")
+    return 0
+}
+
+@test
+func test_also_cross_type_nothing_first() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I64] = Just(99 as I64)
+    let r: Maybe[I64] = x.also(y)
+    assert(r.is_nothing(), "also Nothing with Just should return Nothing")
+    return 0
+}
+
+@test
+func test_also_cross_type_nothing_second() -> I32 {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I64] = Nothing
+    let r: Maybe[I64] = x.also(y)
+    assert(r.is_nothing(), "also Just with Nothing should return Nothing")
     return 0
 }

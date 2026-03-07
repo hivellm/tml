@@ -1,10 +1,41 @@
 // Tests for RawMutPtr — read_unaligned, write_unaligned, read_volatile, write_volatile
-// BLOCKED: ptr_read_unaligned, ptr_write_unaligned, ptr_read_volatile, ptr_write_volatile
-// intrinsics are not implemented in codegen backend (UNRESOLVED references).
-use test::{assert}
+//
+// BLOCKED by codegen bug: the lowlevel intrinsics ptr_read_unaligned, ptr_write_unaligned,
+// ptr_read_volatile, ptr_write_volatile are not declared in generated LLVM IR.
+// Error: "use of undefined value '@tml_ptr_write_unaligned'" (and similar for others).
+//
+// Coverage functions blocked (4):
+//   - RawMutPtr::read_unaligned  -> lowlevel { ptr_read_unaligned[T] }  (via RawPtr)
+//   - RawMutPtr::write_unaligned -> lowlevel { ptr_write_unaligned[T] }
+//   - RawMutPtr::read_volatile   -> lowlevel { ptr_read_volatile[T] }   (via RawPtr)
+//   - RawMutPtr::write_volatile  -> lowlevel { ptr_write_volatile[T] }
+//
+// These tests document the intended behavior and will pass once the
+// intrinsics are implemented in the codegen backend.
+use test::{assert, assert_eq}
+
+// --- Placeholder: tests below will compile once intrinsics are emitted ---
 
 @test
-func test_mut_ptr_unaligned_volatile_placeholder() -> I32 {
-    assert(true, "unaligned/volatile ptr ops blocked by missing intrinsics")
+func test_mut_ptr_unaligned_volatile_blocked() -> I32 {
+    // Real tests for these 4 functions:
+    //
+    // write_unaligned / read_unaligned:
+    //   let buf: *Unit = alloc(16)
+    //   let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(buf as I64)
+    //   ptr.write_unaligned(77)
+    //   let val: I32 = ptr.read_unaligned()
+    //   assert_eq(val, 77, "write_unaligned then read_unaligned")
+    //   dealloc(buf)
+    //
+    // write_volatile / read_volatile:
+    //   let buf: *Unit = alloc(16)
+    //   let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
+    //   ptr.write_volatile(42 as I64)
+    //   let val: I64 = ptr.read_volatile()
+    //   assert_eq(val, 42 as I64, "write_volatile then read_volatile")
+    //   dealloc(buf)
+    //
+    assert(true, "blocked: ptr read/write unaligned/volatile intrinsics not emitted")
     return 0
 }

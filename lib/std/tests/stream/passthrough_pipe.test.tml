@@ -1,5 +1,5 @@
-// Tests for PassThroughStream uncovered: unpipe_all, emit
-// NOTE: pipe/unpipe blocked by mut ref param crash
+// Tests for PassThroughStream: unpipe_all guard path, emit
+// NOTE: pipe/unpipe tests are in passthrough_pipe_unpipe.test.tml
 use test::{assert, assert_false}
 use std::stream::passthrough::PassThroughStream
 

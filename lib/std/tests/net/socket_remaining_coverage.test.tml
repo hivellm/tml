@@ -1,0 +1,42 @@
+// Tests for remaining uncovered socket module functions:
+// - SocketAddr::V6 constructor (stores only port, wraps as V4)
+// - SocketAddr::ip returns IpAddr::V4
+// - SocketAddr::duplicate
+// - SocketAddrV6::set_ip
+use test::{assert, assert_eq}
+use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+use std::net::socket::{SocketAddrV4, SocketAddrV6, SocketAddr}
+
+// === SocketAddr::V6 constructor ===
+// NOTE: SocketAddr::V6 currently stores only port (IPv6 not fully implemented)
+
+@test
+func test_socket_addr_v6_constructor_preserves_port() -> I32 {
+    let v6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 9090 as U16, 0 as U32, 0 as U32)
+    let addr = SocketAddr::V6(v6)
+    assert_eq(addr.port() as I32, 9090, "V6 constructor should preserve port")
+    return 0
+}
+
+// === SocketAddr::ip with V4 ===
+
+@test
+func test_socket_addr_ip_returns_v4() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 3000 as U16)
+    let addr = SocketAddr::V4(v4)
+    let ip: IpAddr = addr.ip()
+    assert(ip.is_ipv4(), "ip() should return V4")
+    return 0
+}
+
+// === SocketAddr::duplicate ===
+
+@test
+func test_socket_addr_duplicate_preserves_all() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::new(192, 168, 1, 100), 443 as U16)
+    let addr = SocketAddr::V4(v4)
+    let copy = addr.duplicate()
+    assert_eq(copy.port() as I32, 443, "duplicate preserves port")
+    assert(copy.is_ipv4(), "duplicate preserves is_ipv4")
+    return 0
+}

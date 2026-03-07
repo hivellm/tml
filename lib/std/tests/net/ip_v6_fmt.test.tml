@@ -1,0 +1,29 @@
+// Tests for Ipv6Addr::to_string (Display impl)
+// Fixed: Display impl was using Rust-style fmt(Formatter) instead of TML to_string() pattern
+use test::{assert_eq}
+use std::net::ip::Ipv6Addr
+
+@test
+func test_ipv6_display_localhost() -> I32 {
+    let addr = Ipv6Addr::LOCALHOST()
+    let s = addr.to_string()
+    assert_eq(s, "0:0:0:0:0:0:0:1", "localhost display")
+    return 0
+}
+
+@test
+func test_ipv6_display_unspecified() -> I32 {
+    let addr = Ipv6Addr::UNSPECIFIED()
+    assert_eq(addr.to_string(), "0:0:0:0:0:0:0:0", "unspecified display")
+    return 0
+}
+
+@test
+func test_ipv6_display_custom() -> I32 {
+    let addr = Ipv6Addr::new(8193 as U16, 3512 as U16, 0 as U16, 0 as U16,
+                              0 as U16, 0 as U16, 0 as U16, 1 as U16)
+    let s = addr.to_string()
+    // 8193 = 0x2001, 3512 = 0x0DB8 -- displayed as decimal U16 segments
+    assert_eq(s, "8193:3512:0:0:0:0:0:1", "custom ipv6 display")
+    return 0
+}

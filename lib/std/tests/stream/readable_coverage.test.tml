@@ -1,0 +1,38 @@
+// Tests for ReadableStream uncovered function(s)
+// Candidates: emitter_emit (direct call), get_error_ptr, readable_aborted true path
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::readable_stream::ReadableStream
+
+func noop_listener(data: I64) {}
+
+@test
+func test_readable_stream_emitter_emit_direct() -> I32 {
+    // Directly call emitter_emit (not via the public emit wrapper)
+    var rs: ReadableStream = ReadableStream::new()
+    rs.emitter_on("test", noop_listener as I64)
+    let result: Bool = rs.emitter_emit("test", 0 as I64)
+    assert_true(result, "emitter_emit returns true with listeners")
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_readable_stream_get_error_ptr_direct() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    let ptr: I64 = rs.get_error_ptr()
+    assert_eq(ptr, 0 as I64, "no error ptr initially")
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_readable_stream_set_error_ptr_direct() -> I32 {
+    var rs: ReadableStream = ReadableStream::new()
+    rs.set_error_ptr(12345 as I64)
+    let ptr: I64 = rs.get_error_ptr()
+    assert_eq(ptr, 12345 as I64, "error ptr set correctly")
+    // Reset before destroy to avoid issues
+    rs.set_error_ptr(0 as I64)
+    rs.destroy()
+    return 0
+}

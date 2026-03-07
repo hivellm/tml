@@ -1,0 +1,56 @@
+// Tests for remaining UDP coverage:
+// - UdpSocket::as_raw_socket
+// - set_read_timeout(Nothing) to clear timeout
+// - set_write_timeout(Nothing) to clear timeout
+// NOTE: bare Nothing infers as Maybe[I32] — must use typed variable
+use test::{assert}
+use std::net::{SocketAddr, SocketAddrV4}
+use std::net::ip::Ipv4Addr
+use std::net::udp::UdpSocket
+use core::time::Duration
+
+// === UdpSocket::as_raw_socket ===
+
+@test
+func test_udp_as_raw_socket() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr = SocketAddr::V4(v4)
+    let sock = UdpSocket::bind(addr).unwrap()
+    let raw = sock.as_raw_socket()
+    assert(raw.is_valid(), "as_raw_socket should return a valid socket")
+    return 0
+}
+
+// === set_read_timeout(Nothing) — clear timeout ===
+
+@test
+func test_udp_clear_read_timeout() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr = SocketAddr::V4(v4)
+    let sock = UdpSocket::bind(addr).unwrap()
+    // Set a timeout first
+    let timeout = Duration::from_millis(100)
+    sock.set_read_timeout(Just(timeout)).unwrap()
+    // Clear it — use typed variable to avoid Maybe[I32] inference
+    let none: Maybe[Duration] = Nothing
+    let clear_result = sock.set_read_timeout(none)
+    assert(clear_result.is_ok(), "clearing read timeout should succeed")
+    return 0
+}
+
+// === set_write_timeout(Nothing) — clear timeout ===
+
+@test
+func test_udp_clear_write_timeout() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16)
+    let addr = SocketAddr::V4(v4)
+    let sock = UdpSocket::bind(addr).unwrap()
+    // Set a timeout first
+    let timeout = Duration::from_millis(100)
+    sock.set_write_timeout(Just(timeout)).unwrap()
+    // Clear it — use typed variable to avoid Maybe[I32] inference
+    let none: Maybe[Duration] = Nothing
+    let clear_result = sock.set_write_timeout(none)
+    assert(clear_result.is_ok(), "clearing write timeout should succeed")
+    return 0
+}

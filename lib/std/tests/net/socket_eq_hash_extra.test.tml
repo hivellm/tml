@@ -1,0 +1,42 @@
+// Tests for socket hash edge cases:
+// - SocketAddr::hash with different port values
+// - SocketAddrV6::hash with different addresses
+// NOTE: SocketAddr::eq / SocketAddrV6::eq with different values blocked by alloca-GEP codegen bug
+use test::{assert, assert_eq}
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+use std::net::socket::{SocketAddrV4, SocketAddrV6, SocketAddr}
+
+// === SocketAddr::hash with different IPs ===
+
+@test
+func test_socket_addr_hash_different_ips() -> I32 {
+    let a = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16))
+    let b = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 80 as U16))
+    let h1 = a.hash()
+    let h2 = b.hash()
+    assert(h1 != h2, "different IPs should produce different hashes")
+    return 0
+}
+
+// === SocketAddrV6::hash with different IPs ===
+
+@test
+func test_socket_addr_v6_hash_different_ips() -> I32 {
+    let a = SocketAddrV6::new(Ipv6Addr::LOCALHOST(), 80 as U16, 0 as U32, 0 as U32)
+    let b = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED(), 80 as U16, 0 as U32, 0 as U32)
+    let h1 = a.hash()
+    let h2 = b.hash()
+    assert(h1 != h2, "different V6 IPs should produce different hashes")
+    return 0
+}
+
+// === SocketAddrV4::cmp different IPs ===
+
+@test
+func test_socket_addr_v4_cmp_different_ips() -> I32 {
+    let a = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 80 as U16)
+    let b = SocketAddrV4::new(Ipv4Addr::new(192, 168, 1, 1), 80 as U16)
+    let ord = a.cmp(ref b)
+    assert(ord.is_less(), "10.0.0.1 should be less than 192.168.1.1")
+    return 0
+}

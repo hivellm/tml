@@ -1,9 +1,9 @@
-// Tests for Outcome::transpose — BLOCKED by nested type size mismatch
-// Maybe[Outcome[Maybe[I32], Str]] vs Maybe[Outcome[I32, Str]] codegen bug
-use test::assert
+// BLOCKED: Outcome::transpose requires nested generic type codegen
+// Outcome[Maybe[T], E] -> Maybe[Outcome[T, E]] triggers codegen failures
+use test::{assert}
 
 @test
 func test_outcome_transpose_blocked() -> I32 {
-    assert(true, "Outcome::transpose blocked by nested type codegen")
+    assert(true, "blocked by nested generic type codegen")
     return 0
 }

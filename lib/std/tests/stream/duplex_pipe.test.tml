@@ -1,0 +1,14 @@
+// Tests for DuplexStream::unpipe_all guard path (no prior pipe)
+// NOTE: pipe/unpipe tests are in duplex_pipe_unpipe.test.tml
+use test::{assert, assert_true, assert_false}
+use std::stream::duplex::DuplexStream
+
+@test
+func test_duplex_unpipe_all_no_pipe() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    // Calling unpipe_all without a pipe destination is a no-op but exercises the code path
+    ds.unpipe_all()
+    assert_true(ds.readable(), "still readable after unpipe_all")
+    ds.destroy()
+    return 0
+}

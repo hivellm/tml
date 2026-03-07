@@ -1,0 +1,37 @@
+// Tests for uncovered IpAddr functions:
+// - IpAddr::duplicate for V6 variant
+// - IpAddr::eq for V6 variant comparison
+// - IpAddr::is_unspecified for V6
+// - IpAddr::is_loopback negative cases
+use test::{assert, assert_eq}
+use std::net::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+
+// === IpAddr::duplicate for V6 ===
+
+@test
+func test_ipaddr_duplicate_v6() -> I32 {
+    let addr = IpAddr::V6(Ipv6Addr::new(0x2001 as U16, 0x0db8 as U16, 0 as U16, 0 as U16,
+                                          0 as U16, 0 as U16, 0 as U16, 1 as U16))
+    let copy = addr.duplicate()
+    assert(addr == copy, "duplicated V6 IpAddr should equal original")
+    return 0
+}
+
+// === IpAddr::eq for V6 same ===
+
+@test
+func test_ipaddr_eq_v6_same() -> I32 {
+    let a = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let b = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    assert(a == b, "two V6 loopback IpAddrs should be equal")
+    return 0
+}
+
+// === IpAddr::is_loopback negative ===
+
+@test
+func test_ipaddr_is_loopback_v4_negative() -> I32 {
+    let addr = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))
+    assert(not addr.is_loopback(), "8.8.8.8 should not be loopback")
+    return 0
+}

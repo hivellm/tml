@@ -1,0 +1,23 @@
+// Tests for the 3 remaining uncovered socket functions.
+// All 3 are blocked by Formatter codegen (verified 2026-03-07):
+//
+// 1. SocketAddrV4::fmt -- undefined symbol '@tml_...SocketAddrV4_9to_stringE'
+//    The Display impl uses `fmt(this, f: mut ref Formatter) -> FormatResult` pattern
+//    which calls `f.write_str(...)`. The Formatter type is not monomorphized
+//    cross-module, so the generated IR references a function symbol that doesn't exist.
+//
+// 2. SocketAddrV6::fmt -- same Formatter undefined symbol issue.
+//
+// 3. SocketAddr::fmt -- same issue, delegates to SocketAddrV4::fmt.
+//
+// NOTE: The analogous Display impls for Ipv4Addr/Ipv6Addr/IpAddr use a different
+// pattern: `to_string(this) -> Str` which returns a string directly. These work
+// fine (see ip_display_debug.test.tml). The socket types could potentially be
+// migrated to the same to_string pattern to work around this blocker.
+use test::{assert}
+
+@test
+func test_socket_fmt_blocked() -> I32 {
+    assert(true, "SocketAddrV4/V6/SocketAddr::fmt blocked by Formatter codegen")
+    return 0
+}
