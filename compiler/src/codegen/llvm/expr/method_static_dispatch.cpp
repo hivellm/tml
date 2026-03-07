@@ -673,6 +673,12 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     generic_names = imported_type_params;
                 }
 
+                // Also use method-level generic type params (e.g., sum[I: Iterator])
+                // when type-level params didn't provide any names.
+                if (generic_names.empty() && !func_sig->type_params.empty()) {
+                    generic_names = func_sig->type_params;
+                }
+
                 // Helper to check if a type is a generic parameter
                 auto is_generic_param = [&generic_names](const types::TypePtr& t) -> std::string {
                     if (!t)
@@ -1122,6 +1128,54 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     }
                 }
 
+                // Detect method-level generic params (e.g., sum[I: Iterator]) and
+                // infer their concrete types from arguments using infer_expr_type.
+                // This handles cases like I32::sum(counter) where I → Counter.
+                std::string method_level_suffix;
+                if (!func_sig->type_params.empty() && !call.args.empty() &&
+                    type_subs_fallback.empty()) {
+                    for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+                        auto param_type = func_sig->params[i];
+                        if (!param_type)
+                            continue;
+                        std::string generic_name;
+                        if (param_type->is<types::GenericType>()) {
+                            generic_name = param_type->as<types::GenericType>().name;
+                        } else if (param_type->is<types::NamedType>()) {
+                            const auto& named = param_type->as<types::NamedType>();
+                            if (named.type_args.empty()) {
+                                for (const auto& tp : func_sig->type_params) {
+                                    if (named.name == tp) {
+                                        generic_name = tp;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (!generic_name.empty() &&
+                            type_subs_fallback.find(generic_name) == type_subs_fallback.end()) {
+                            auto arg_type = infer_expr_type(*call.args[i]);
+                            if (arg_type) {
+                                type_subs_fallback[generic_name] = arg_type;
+                                if (!method_level_suffix.empty())
+                                    method_level_suffix += "__";
+                                method_level_suffix += mangle_type(arg_type);
+                            }
+                        }
+                    }
+                    if (!type_subs_fallback.empty() && !method_level_suffix.empty()) {
+                        std::string method_key = mangle_impl_method(
+                            mangled_type_name, method + "__" + method_level_suffix);
+                        if (generated_impl_methods_.find(method_key) ==
+                            generated_impl_methods_.end()) {
+                            pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                mangled_type_name, method, type_subs_fallback, type_name,
+                                method_level_suffix, /*is_library_type=*/true});
+                            generated_impl_methods_.insert(method_key);
+                        }
+                    }
+                }
+
                 // Generate arguments FIRST to determine their types
                 // Needed for behavior method overload resolution (e.g., TryFrom[I64])
                 std::vector<std::pair<std::string, std::string>> typed_args;
@@ -1227,6 +1281,10 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                 if ((method == "try_from" || method == "from") && is_primitive(type_name) &&
                     !arg_tml_types.empty() && !arg_tml_types[0].empty()) {
                     behavior_suffix = "__" + arg_tml_types[0];
+                }
+                // Append method-level generic suffix (e.g., "__Counter" for sum[I=Counter])
+                if (!method_level_suffix.empty() && behavior_suffix.empty()) {
+                    behavior_suffix = "__" + method_level_suffix;
                 }
 
                 // Look up in functions_ for the correct LLVM name

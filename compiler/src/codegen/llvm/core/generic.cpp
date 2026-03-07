@@ -34,6 +34,9 @@ TML_MODULE("codegen_x86")
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "types/module_binary.hpp"
+
+#include <fstream>
 
 namespace tml::codegen {
 
@@ -577,9 +580,24 @@ void LLVMIRGen::generate_pending_instantiations() {
                                      << mod_name
                                      << " has_source=" << (!mod.source_code.empty() ? "yes" : "no")
                                      << " has_type=" << (has_type ? "yes" : "no"));
-
                         // Get parsed AST from global cache or parse if not cached
-                        if (mod.source_code.empty()) {
+
+                        // Try to resolve source code: prefer stored source_code, but
+                        // fall back to reading from file_path if the module binary is old
+                        // (compiled before source code storage was added to the binary format).
+                        std::string effective_source = mod.source_code;
+                        if (effective_source.empty() && !mod.file_path.empty()) {
+                            std::ifstream fallback_file(mod.file_path);
+                            if (fallback_file) {
+                                effective_source =
+                                    std::string(std::istreambuf_iterator<char>(fallback_file),
+                                                std::istreambuf_iterator<char>());
+                                TML_DEBUG_LN(
+                                    "[IMPL_INST]   Loaded source from disk: " << mod.file_path);
+                            }
+                        }
+
+                        if (effective_source.empty()) {
                             TML_DEBUG_LN("[IMPL_INST]   Module has no source_code, skipping");
                             continue;
                         }
@@ -598,7 +616,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                         parser::Module local_parsed_mod;
                         if (!parsed_mod_ptr) {
                             auto source =
-                                lexer::Source::from_string(mod.source_code, mod.file_path);
+                                lexer::Source::from_string(effective_source, mod.file_path);
                             lexer::Lexer lex(source);
                             auto tokens = lex.tokenize();
                             if (lex.has_errors())
@@ -690,7 +708,6 @@ void LLVMIRGen::generate_pending_instantiations() {
                             TML_DEBUG_LN("[IMPL_INST]   Found impl for "
                                          << pim.base_type_name
                                          << ", methods: " << impl_decl.methods.size());
-
                             // Process associated type bindings from the imported impl
                             auto saved_associated_types = current_associated_types_;
                             current_associated_types_.clear();
@@ -805,6 +822,121 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                             if (found)
                                 break;
+                        }
+                    }
+
+                    // Fallback: search GlobalModuleCache for library modules that aren't
+                    // in the local module registry (e.g., behavior impl modules loaded
+                    // transitively from parent module binaries but not explicitly registered).
+                    if (!found) {
+                        auto cached_modules = types::GlobalModuleCache::instance().get_all();
+                        for (const auto& [cached_name, cached_mod] : cached_modules) {
+                            if (found)
+                                break;
+                            // Skip modules already in local registry (already searched above)
+                            if (env_.module_registry() &&
+                                env_.module_registry()->get_module(cached_name)) {
+                                continue;
+                            }
+                            if (cached_mod.source_code.empty())
+                                continue;
+
+                            // Parse this module
+                            parser::Module local_cached_parsed;
+                            const parser::Module* cached_parsed_ptr = nullptr;
+                            if (GlobalASTCache::should_cache(cached_name)) {
+                                cached_parsed_ptr = GlobalASTCache::instance().get(cached_name);
+                            }
+                            if (!cached_parsed_ptr) {
+                                auto src = lexer::Source::from_string(cached_mod.source_code,
+                                                                      cached_mod.file_path);
+                                lexer::Lexer lex(src);
+                                auto tokens = lex.tokenize();
+                                if (lex.has_errors())
+                                    continue;
+                                auto cached_name_stem = cached_name;
+                                if (auto p = cached_name_stem.rfind("::"); p != std::string::npos)
+                                    cached_name_stem = cached_name_stem.substr(p + 2);
+                                parser::Parser mp(std::move(tokens));
+                                auto res = mp.parse_module(cached_name_stem);
+                                if (!std::holds_alternative<parser::Module>(res))
+                                    continue;
+                                local_cached_parsed = std::get<parser::Module>(std::move(res));
+                                if (GlobalASTCache::should_cache(cached_name)) {
+                                    GlobalASTCache::instance().put(cached_name,
+                                                                   std::move(local_cached_parsed));
+                                    cached_parsed_ptr = GlobalASTCache::instance().get(cached_name);
+                                } else {
+                                    cached_parsed_ptr = &local_cached_parsed;
+                                }
+                            }
+                            if (!cached_parsed_ptr)
+                                continue;
+
+                            for (const auto& decl : cached_parsed_ptr->decls) {
+                                if (found)
+                                    break;
+                                if (!decl->is<parser::ImplDecl>())
+                                    continue;
+                                const auto& impl_decl = decl->as<parser::ImplDecl>();
+                                if (!impl_decl.self_type ||
+                                    !impl_decl.self_type->is<parser::NamedType>())
+                                    continue;
+                                const auto& target = impl_decl.self_type->as<parser::NamedType>();
+                                if (target.path.segments.empty() ||
+                                    target.path.segments.back() != pim.base_type_name)
+                                    continue;
+
+                                // Resolve associated types
+                                auto saved_associated_types = current_associated_types_;
+                                current_associated_types_.clear();
+                                for (const auto& [pname, ctype] : pim.type_subs) {
+                                    if (ctype && ctype->is<types::NamedType>()) {
+                                        auto ci = pending_generic_impls_.find(
+                                            ctype->as<types::NamedType>().name);
+                                        if (ci != pending_generic_impls_.end()) {
+                                            for (const auto& b : ci->second->type_bindings) {
+                                                current_associated_types_[b.name] =
+                                                    resolve_parser_type_with_subs(*b.type, {});
+                                            }
+                                        }
+                                    }
+                                }
+                                auto effective_type_subs_gc = pim.type_subs;
+                                resolve_where_clause_type_equalities(impl_decl.where_clause,
+                                                                     effective_type_subs_gc);
+                                for (const auto& binding : impl_decl.type_bindings) {
+                                    current_associated_types_[binding.name] =
+                                        resolve_parser_type_with_subs(*binding.type,
+                                                                      effective_type_subs_gc);
+                                }
+
+                                // Set module context
+                                std::string gc_prefix = cached_name;
+                                size_t gc_pos = 0;
+                                while ((gc_pos = gc_prefix.find("::", gc_pos)) !=
+                                       std::string::npos) {
+                                    gc_prefix.replace(gc_pos, 2, "_");
+                                    gc_pos += 1;
+                                }
+                                current_module_name_ = cached_name;
+                                current_module_prefix_ = gc_prefix;
+
+                                for (const auto& meth : impl_decl.methods) {
+                                    if (meth.name == pim.method_name) {
+                                        gen_impl_method_instantiation(
+                                            pim.mangled_type_name, meth, effective_type_subs_gc,
+                                            impl_decl.generics, pim.method_type_suffix,
+                                            pim.is_library_type, pim.base_type_name);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+
+                                current_module_name_ = saved_module_name;
+                                current_module_prefix_ = saved_module_prefix;
+                                current_associated_types_ = saved_associated_types;
+                            }
                         }
                     }
                 }

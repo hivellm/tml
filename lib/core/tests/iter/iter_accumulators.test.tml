@@ -1,15 +1,37 @@
 // Tests for iter/traits/accumulators — Sum and Product
-// BLOCKED: I32::sum[I: Iterator](iter: I) — generic iterator type param not monomorphized.
-// LLVM IR generates %struct.I instead of the concrete iterator struct type.
-// This is the same generic function monomorphization bug that affects cast[T,U],
-// ptr/ops, and other generic functions with type-constrained parameters.
-// Cannot be tested until the compiler correctly monomorphizes generic Iterator params.
-use test::{assert}
+use test::{assert, assert_eq}
+
+type AccCounter { current: I32, max: I32 }
+impl Iterator for AccCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
 
 @test
-func test_accumulators_placeholder() -> I32 {
-    // I32::sum, I32::product, I64::sum, I64::product, etc. all blocked
-    // by generic type parameter monomorphization bug in codegen.
-    assert(true, "accumulators blocked by generic codegen")
+func test_i32_sum_basic() -> I32 {
+    var iter: AccCounter = AccCounter { current: 1, max: 5 }
+    let s: I32 = I32::sum(iter)
+    assert_eq(s as I64, 10 as I64, "sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_i32_sum_empty() -> I32 {
+    var iter: AccCounter = AccCounter { current: 0, max: 0 }
+    let s: I32 = I32::sum(iter)
+    assert_eq(s as I64, 0 as I64, "sum empty = 0")
+    return 0
+}
+
+@test
+func test_i32_product_basic() -> I32 {
+    var iter: AccCounter = AccCounter { current: 1, max: 5 }
+    let p: I32 = I32::product(iter)
+    assert_eq(p as I64, 24 as I64, "product 1..4 = 24")
     return 0
 }

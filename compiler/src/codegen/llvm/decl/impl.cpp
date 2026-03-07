@@ -852,9 +852,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             param_type = "{ ptr, ptr }";
         }
-        // For non-instance methods, the first param (e.g., ManuallyDrop::into_inner(slot))
-        // is passed as ptr from call sites (method syntax), so accept ptr in signature
-        if (i == param_start && !is_instance_method &&
+        // For non-instance methods called via method syntax (e.g., ManuallyDrop::into_inner(slot)),
+        // the first param is passed as ptr from call sites. However, method-level generic
+        // instantiations (method_type_suffix non-empty, e.g., sum__AccCounter called as
+        // I32::sum(iter)) are called with the value directly, not via ptr.
+        if (i == param_start && !is_instance_method && method_type_suffix.empty() &&
             (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
             param_type = "ptr";
         }
@@ -879,8 +881,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             pt = "{ ptr, ptr }";
         }
-        // Match signature: non-instance first struct/enum param → ptr
-        if (i == param_start && !is_instance_method &&
+        // Match signature: non-instance first struct/enum param → ptr (only for non-generic
+        // methods)
+        if (i == param_start && !is_instance_method && method_type_suffix.empty() &&
             (pt.find("%struct.") == 0 || pt.find("%enum.") == 0)) {
             pt = "ptr";
         }
@@ -957,9 +960,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             param_type = "{ ptr, ptr }";
         }
-        // For non-instance methods, first struct/enum param arrives as ptr (from call site).
-        // Load the struct value from the ptr and store into a local alloca.
-        if (i == param_start && !is_instance_method &&
+        // For non-instance methods called via method syntax, first struct/enum param arrives
+        // as ptr (from call site). Load the struct value from the ptr and store into a local
+        // alloca. Method-level generic instantiations (method_type_suffix non-empty) receive the
+        // value directly (not via ptr), so use the normal by-value path.
+        if (i == param_start && !is_instance_method && method_type_suffix.empty() &&
             (param_type.find("%struct.") == 0 || param_type.find("%enum.") == 0)) {
             std::string alloca_reg = fresh_reg();
             std::string loaded_reg = fresh_reg();

@@ -406,6 +406,30 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         free_func_type_subs[generic.name] = loc_it->second.semantic_type;
                     }
                 }
+            } else if (param_type->is<types::NamedType>()) {
+                // Handle generic type params stored as NamedType (e.g., "I" in sum[I: Iterator])
+                const auto& named = param_type->as<types::NamedType>();
+                if (named.type_args.empty()) {
+                    for (const auto& tp : func_sig->type_params) {
+                        if (named.name == tp && !free_func_type_subs.count(tp)) {
+                            types::TypePtr arg_type;
+                            if (call.args[i]->is<parser::IdentExpr>()) {
+                                const auto& ident = call.args[i]->as<parser::IdentExpr>();
+                                auto loc_it = locals_.find(ident.name);
+                                if (loc_it != locals_.end() && loc_it->second.semantic_type) {
+                                    arg_type = loc_it->second.semantic_type;
+                                }
+                            }
+                            if (!arg_type) {
+                                arg_type = infer_expr_type(*call.args[i]);
+                            }
+                            if (arg_type) {
+                                free_func_type_subs[tp] = arg_type;
+                            }
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -426,6 +450,45 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 auto it = current_type_subs_.find(generic.name);
                 if (it != current_type_subs_.end()) {
                     free_func_type_subs[generic.name] = it->second;
+                }
+            }
+        }
+    }
+
+    // For static Type::method calls with method-level generic type params
+    // (e.g., I32::sum[I: Iterator](iter: I)), re-mangle to the monomorphized name
+    // and queue the impl method instantiation for the concrete type.
+    {
+        size_t sep_pos_sm = fn_name.find("::");
+        bool is_type_method_call =
+            sep_pos_sm != std::string::npos && !fn_name.empty() && std::isupper(fn_name[0]);
+        if (is_type_method_call && func_sig.has_value() && !func_sig->type_params.empty() &&
+            !free_func_type_subs.empty()) {
+            std::string type_name_sm = fn_name.substr(0, sep_pos_sm);
+            std::string method_name_sm = fn_name.substr(sep_pos_sm + 2);
+            // Build type suffix from the inferred substitutions (one per type param, in order)
+            std::string method_type_suffix;
+            for (const auto& tp : func_sig->type_params) {
+                auto it = free_func_type_subs.find(tp);
+                if (it != free_func_type_subs.end()) {
+                    if (!method_type_suffix.empty())
+                        method_type_suffix += "__";
+                    method_type_suffix += mangle_type(it->second);
+                }
+            }
+            if (!method_type_suffix.empty()) {
+                // Override mangled name with the monomorphized name
+                mangled = "@" + mangle_impl_method(type_name_sm,
+                                                   method_name_sm + "__" + method_type_suffix);
+                // Queue the impl method instantiation if not already queued/generated
+                std::string method_key =
+                    mangle_impl_method(type_name_sm, method_name_sm + "__" + method_type_suffix);
+                if (generated_impl_methods_.find(method_key) == generated_impl_methods_.end()) {
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{type_name_sm, method_name_sm, free_func_type_subs,
+                                          type_name_sm, method_type_suffix,
+                                          /*is_library_type=*/true});
+                    generated_impl_methods_.insert(method_key);
                 }
             }
         }
