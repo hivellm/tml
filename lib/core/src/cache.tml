@@ -536,11 +536,6 @@ func aligned_free(ptr: I64) {
     mem_free(ptr as *Unit)
 }
 
-/// Returns a zeroed array.
-func zeroed_array[T, N]() -> [T; N] {
-    lowlevel { zeroed() }
-}
-
 /// Returns max of two I64 values.
 func max_i64(a: I64, b: I64) -> I64 {
     if a > b { return a }

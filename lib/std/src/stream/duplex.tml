@@ -139,12 +139,12 @@ impl DuplexStream {
 
     /// Pipe readable side to a writable destination.
     pub func pipe(mut this, dest: mut ref WritableStream) {
-        this.reader.pipe(mut ref dest)
+        this.reader.pipe(dest)
     }
 
     /// Remove pipe from readable side.
     pub func unpipe(mut this, dest: mut ref WritableStream) {
-        this.reader.unpipe(mut ref dest)
+        this.reader.unpipe(dest)
     }
 
     /// Remove all pipes from readable side.
@@ -163,7 +163,7 @@ impl DuplexStream {
 
     /// Write raw bytes to the writable side.
     pub func write_bytes(mut this, data: ref [U8]) -> Bool {
-        this.writer.write_bytes(ref data)
+        this.writer.write_bytes(data)
     }
 
     /// Set the _write callback.

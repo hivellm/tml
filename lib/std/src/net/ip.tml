@@ -28,7 +28,6 @@
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::hash::Hash
-// Note: Formatter and FormatResult would need real imports if used
 use core::default::Default
 use core::option::Maybe::{Just, Nothing}
 
@@ -290,20 +289,14 @@ impl Default for Ipv4Addr {
 }
 
 impl Display for Ipv4Addr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        f.write_str(this.o0.to_string())
-        f.write_str(".")
-        f.write_str(this.o1.to_string())
-        f.write_str(".")
-        f.write_str(this.o2.to_string())
-        f.write_str(".")
-        f.write_str(this.o3.to_string())
+    pub func to_string(this) -> Str {
+        this.o0.to_string() + "." + this.o1.to_string() + "." + this.o2.to_string() + "." + this.o3.to_string()
     }
 }
 
 impl Debug for Ipv4Addr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }
 
@@ -514,29 +507,17 @@ impl Default for Ipv6Addr {
 }
 
 impl Display for Ipv6Addr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        // Simplified format - full colon notation
-        f.write_str(this.s0.to_string())
-        f.write_str(":")
-        f.write_str(this.s1.to_string())
-        f.write_str(":")
-        f.write_str(this.s2.to_string())
-        f.write_str(":")
-        f.write_str(this.s3.to_string())
-        f.write_str(":")
-        f.write_str(this.s4.to_string())
-        f.write_str(":")
-        f.write_str(this.s5.to_string())
-        f.write_str(":")
-        f.write_str(this.s6.to_string())
-        f.write_str(":")
-        f.write_str(this.s7.to_string())
+    pub func to_string(this) -> Str {
+        this.s0.to_string() + ":" + this.s1.to_string() + ":" +
+        this.s2.to_string() + ":" + this.s3.to_string() + ":" +
+        this.s4.to_string() + ":" + this.s5.to_string() + ":" +
+        this.s6.to_string() + ":" + this.s7.to_string()
     }
 }
 
 impl Debug for Ipv6Addr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }
 
@@ -663,16 +644,16 @@ impl Hash for IpAddr {
 }
 
 impl Display for IpAddr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
+    pub func to_string(this) -> Str {
         when this {
-            V4(addr) => addr.fmt(f),
-            V6(addr) => addr.fmt(f),
+            V4(addr) => addr.to_string(),
+            V6(addr) => addr.to_string(),
         }
     }
 }
 
 impl Debug for IpAddr {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+    pub func debug_string(this) -> Str {
+        this.to_string()
     }
 }

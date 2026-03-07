@@ -157,11 +157,11 @@ impl PassThroughStream {
     }
 
     pub func pipe(mut this, dest: mut ref WritableStream) {
-        this.duplex.pipe(mut ref dest)
+        this.duplex.pipe(dest)
     }
 
     pub func unpipe(mut this, dest: mut ref WritableStream) {
-        this.duplex.unpipe(mut ref dest)
+        this.duplex.unpipe(dest)
     }
 
     pub func unpipe_all(mut this) {
