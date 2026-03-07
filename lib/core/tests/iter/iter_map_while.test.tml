@@ -1,0 +1,59 @@
+// Tests for MapWhile iterator adapter
+use test
+use core::iter::adapters::map_while::{MapWhile, map_while}
+
+type MWCounter { current: I32, max: I32 }
+impl Iterator for MWCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_map_while_basic() -> I32 {
+    // map_while stops on first Nothing from f — stops at x=3
+    var iter: MapWhile[MWCounter, func(I32) -> Maybe[I32]] = map_while(
+        MWCounter { current: 0, max: 10 },
+        do(x: I32) -> Maybe[I32] {
+            if x >= 3 { return Nothing }
+            return Just(x * 2)
+        }
+    )
+    assert_eq(iter.next().unwrap(), 0, "0*2=0")
+    assert_eq(iter.next().unwrap(), 2, "1*2=2")
+    assert_eq(iter.next().unwrap(), 4, "2*2=4")
+    assert(iter.next().is_nothing(), "stops at x=3")
+    return 0
+}
+
+@test
+func test_map_while_all_just() -> I32 {
+    // f always returns Just — all items produced
+    var iter: MapWhile[MWCounter, func(I32) -> Maybe[I32]] = map_while(
+        MWCounter { current: 1, max: 4 },
+        do(x: I32) -> Maybe[I32] { return Just(x + 10) }
+    )
+    assert_eq(iter.next().unwrap(), 11, "1+10=11")
+    assert_eq(iter.next().unwrap(), 12, "2+10=12")
+    assert_eq(iter.next().unwrap(), 13, "3+10=13")
+    assert(iter.next().is_nothing(), "source exhausted")
+    return 0
+}
+
+@test
+func test_map_while_stops_immediately() -> I32 {
+    // f returns Nothing on first item — yields nothing
+    var iter: MapWhile[MWCounter, func(I32) -> Maybe[I32]] = map_while(
+        MWCounter { current: 5, max: 10 },
+        do(x: I32) -> Maybe[I32] {
+            if x >= 0 { return Nothing }
+            return Just(x)
+        }
+    )
+    assert(iter.next().is_nothing(), "nothing on first item")
+    return 0
+}

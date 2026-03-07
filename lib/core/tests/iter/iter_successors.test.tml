@@ -1,0 +1,49 @@
+// Tests for Successors iterator source
+use test::{assert, assert_eq}
+use core::iter::sources::successors::{Successors, successors}
+
+@test
+func test_successors_doubling() -> I32 {
+    var iter: Successors[I32, func(ref I32) -> Maybe[I32]] = successors(
+        Just(1),
+        do(n: ref I32) -> Maybe[I32] {
+            let next: I32 = *n * 2
+            if next > 8 { return Nothing }
+            return Just(next)
+        }
+    )
+    assert_eq(iter.next().unwrap(), 1, "first=1")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert_eq(iter.next().unwrap(), 4, "4")
+    assert_eq(iter.next().unwrap(), 8, "8")
+    assert(iter.next().is_nothing(), "16>8 stops")
+    return 0
+}
+
+@test
+func test_successors_arithmetic() -> I32 {
+    var iter: Successors[I32, func(ref I32) -> Maybe[I32]] = successors(
+        Just(0),
+        do(n: ref I32) -> Maybe[I32] {
+            let next: I32 = *n + 5
+            if next >= 20 { return Nothing }
+            return Just(next)
+        }
+    )
+    assert_eq(iter.next().unwrap(), 0, "0")
+    assert_eq(iter.next().unwrap(), 5, "5")
+    assert_eq(iter.next().unwrap(), 10, "10")
+    assert_eq(iter.next().unwrap(), 15, "15")
+    assert(iter.next().is_nothing(), "20 stops")
+    return 0
+}
+
+@test
+func test_successors_nothing_start() -> I32 {
+    var iter: Successors[I32, func(ref I32) -> Maybe[I32]] = successors(
+        Nothing,
+        do(n: ref I32) -> Maybe[I32] { return Just(*n + 1) }
+    )
+    assert(iter.next().is_nothing(), "Nothing start yields nothing")
+    return 0
+}

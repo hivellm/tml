@@ -61,6 +61,7 @@ auto Parser::parse_if_expr() -> Result<ExprPtr, ParseError> {
     }
 
     std::optional<ExprPtr> else_branch;
+    size_t pre_else_pos = pos_;
     skip_newlines();
     if (match(lexer::TokenKind::KwElse)) {
         skip_newlines();
@@ -82,6 +83,12 @@ auto Parser::parse_if_expr() -> Result<ExprPtr, ParseError> {
                 return else_block;
             else_branch = std::move(unwrap(else_block));
         }
+    } else {
+        // No else found — restore position so we don't consume the newlines.
+        // Without this, the newlines before the next statement are consumed,
+        // defeating the `*`-after-newline guard in parse_expr_with_precedence
+        // and causing `*acc` on the next line to be parsed as binary multiply.
+        pos_ = pre_else_pos;
     }
 
     auto end_span = previous().span;
@@ -115,6 +122,7 @@ auto Parser::parse_if_let_expr(SourceSpan start_span) -> Result<ExprPtr, ParseEr
 
     // Parse optional else branch
     std::optional<ExprPtr> else_branch;
+    size_t pre_else_pos = pos_;
     skip_newlines();
     if (match(lexer::TokenKind::KwElse)) {
         skip_newlines();
@@ -131,6 +139,8 @@ auto Parser::parse_if_let_expr(SourceSpan start_span) -> Result<ExprPtr, ParseEr
                 return else_block;
             else_branch = std::move(unwrap(else_block));
         }
+    } else {
+        pos_ = pre_else_pos;
     }
 
     auto end_span = previous().span;

@@ -410,7 +410,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (ty == "double")
                 return types::make_f64();
             if (ty == "ptr")
-                return types::make_str(); // Assume string for now
+                return nullptr; // Unknown ptr — do not assume Str (mut ref params are also ptr)
             // For tuple types like "{ i32, i32 }", parse element types
             if (ty.starts_with("{ ") && ty.back() == '}') {
                 // Parse "{ i32, i32 }" -> TupleType{I32, I32}

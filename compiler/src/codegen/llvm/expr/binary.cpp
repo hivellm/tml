@@ -909,7 +909,6 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         bool is_string_add =
             left_type_check && left_type_check->is<types::PrimitiveType>() &&
             left_type_check->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
-
         if (is_string_add) {
             // Collect all strings in the concat chain using a helper lambda
             std::vector<const parser::Expr*> strings;

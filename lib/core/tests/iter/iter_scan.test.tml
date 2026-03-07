@@ -1,0 +1,76 @@
+// Tests for Scan iterator adapter
+// scan(iter, initial_state, f) — accumulates state and yields Maybe[B] per step
+
+use test::{assert, assert_eq}
+use core::iter::adapters::scan::{Scan, scan}
+
+type ScanCounter { current: I32, max: I32 }
+
+impl Iterator for ScanCounter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_scan_running_sum() -> I32 {
+    var s: Scan[ScanCounter, I32, func(mut ref I32, I32) -> Maybe[I32]] = scan(
+        ScanCounter { current: 1, max: 4 },
+        0,
+        do(acc: mut ref I32, x: I32) -> Maybe[I32] {
+            *acc = *acc + x
+            return Just(*acc)
+        }
+    )
+    let s1: Maybe[I32] = s.next()
+    assert_eq(s1.unwrap(), 1, "acc=0+1=1")
+    let s2: Maybe[I32] = s.next()
+    assert_eq(s2.unwrap(), 3, "acc=1+2=3")
+    let s3: Maybe[I32] = s.next()
+    assert_eq(s3.unwrap(), 6, "acc=3+3=6")
+    let s4: Maybe[I32] = s.next()
+    assert(s4.is_nothing(), "exhausted after 3 items")
+    return 0
+}
+
+@test
+func test_scan_early_stop() -> I32 {
+    // Scan can return Nothing to stop early
+    var s: Scan[ScanCounter, I32, func(mut ref I32, I32) -> Maybe[I32]] = scan(
+        ScanCounter { current: 0, max: 5 },
+        0,
+        do(acc: mut ref I32, x: I32) -> Maybe[I32] {
+            if x >= 3 { return Nothing }
+            *acc = *acc + x
+            return Just(*acc)
+        }
+    )
+    let s1: Maybe[I32] = s.next()
+    assert_eq(s1.unwrap(), 0, "acc=0+0=0")
+    let s2: Maybe[I32] = s.next()
+    assert_eq(s2.unwrap(), 1, "acc=0+1=1")
+    let s3: Maybe[I32] = s.next()
+    assert_eq(s3.unwrap(), 3, "acc=1+2=3")
+    let s4: Maybe[I32] = s.next()
+    assert(s4.is_nothing(), "stopped at x=3")
+    return 0
+}
+
+@test
+func test_scan_empty_iter() -> I32 {
+    var s: Scan[ScanCounter, I32, func(mut ref I32, I32) -> Maybe[I32]] = scan(
+        ScanCounter { current: 0, max: 0 },
+        0,
+        do(acc: mut ref I32, x: I32) -> Maybe[I32] {
+            *acc = *acc + x
+            return Just(*acc)
+        }
+    )
+    let s1: Maybe[I32] = s.next()
+    assert(s1.is_nothing(), "empty iterator yields nothing")
+    return 0
+}
