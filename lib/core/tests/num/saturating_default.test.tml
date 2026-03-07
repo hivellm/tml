@@ -1,8 +1,18 @@
-// Tests for Saturating/Wrapping default — BLOCKED by generic Default dispatch
-use test::assert
+// Tests for Saturating[T]::default and Wrapping[T]::default
+use test
+use core::num::saturating::Saturating
+use core::num::wrapping::Wrapping
 
 @test
-func test_saturating_wrapping_default_blocked() -> I32 {
-    assert(true, "Saturating/Wrapping default blocked by Default::default() codegen")
+func test_saturating_default_is_zero() -> I32 {
+    let s: Saturating[I32] = Saturating::default()
+    assert_eq(s.value(), 0, "Saturating::default() should be 0")
+    return 0
+}
+
+@test
+func test_wrapping_default_is_zero() -> I32 {
+    let w: Wrapping[I32] = Wrapping::default()
+    assert_eq(w.value(), 0, "Wrapping::default() should be 0")
     return 0
 }

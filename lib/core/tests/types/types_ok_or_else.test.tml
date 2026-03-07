@@ -1,12 +1,24 @@
-// Tests for Maybe::ok_or_else — blocked by generic method dispatch codegen bug
-// Error: use of undefined value '@tml_N4core10Maybe__I3215ok_or_else__I32E'
-// The monomorphized generic is not being emitted/linked.
-use test::{assert}
+// Tests for Maybe::ok_or_else
+use test
 
 @test
-func test_ok_or_else_blocked() -> I32 {
-    // ok_or_else[E] is blocked by generic instantiation codegen bug
-    // The symbol tml_N4core10Maybe__I3215ok_or_else__I32E is undefined
-    assert(true, "ok_or_else blocked by generic dispatch codegen bug")
+func test_ok_or_else_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let r: Outcome[I32, Str] = m.ok_or_else(do() -> Str { return "error" })
+    when r {
+        Ok(v) => assert_eq(v, 42, "ok_or_else on Just should return Ok(42)"),
+        Err(_) => assert(false, "should not be Err"),
+    }
+    return 0
+}
+
+@test
+func test_ok_or_else_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let r: Outcome[I32, Str] = m.ok_or_else(do() -> Str { return "none" })
+    when r {
+        Ok(_) => assert(false, "should not be Ok"),
+        Err(e) => assert(e == "none", "error message should be 'none'"),
+    }
     return 0
 }

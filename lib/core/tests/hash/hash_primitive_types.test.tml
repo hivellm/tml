@@ -1,10 +1,47 @@
 // Tests for primitive type Hash behavior implementations
-// BLOCKED: calling .hash() on primitive types crashes (access violation)
-// The behavior dispatch for Hash on I8/I16/I32/etc. is not working correctly.
-use test::{assert}
+use test
+use core::hash::{Hasher, DefaultHasher, Hash}
 
 @test
-func test_hash_primitives_placeholder() -> I32 {
-    assert(true, "primitive hash blocked by behavior dispatch crash")
+func test_hash_i32_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    let x: I32 = 42
+    x.hash(mut ref h1)
+    let v1: U64 = h1.finish()
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    x.hash(mut ref h2)
+    let v2: U64 = h2.finish()
+
+    assert(v1 == v2, "same I32 hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_i64_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    let x: I64 = 9999_i64
+    x.hash(mut ref h1)
+    let v1: U64 = h1.finish()
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    x.hash(mut ref h2)
+    let v2: U64 = h2.finish()
+
+    assert(v1 == v2, "same I64 hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_bool_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    true.hash(mut ref h1)
+    let v1: U64 = h1.finish()
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    true.hash(mut ref h2)
+    let v2: U64 = h2.finish()
+
+    assert(v1 == v2, "same bool hash should be deterministic")
     return 0
 }

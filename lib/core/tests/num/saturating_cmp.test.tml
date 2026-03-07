@@ -1,8 +1,59 @@
-// Tests for Saturating[T] — partial_cmp, cmp blocked by generic trait codegen
-use test::{assert}
+// Tests for Saturating[T] — cmp, partial_cmp, eq
+use test
+use core::num::saturating::Saturating
+use core::cmp::Ordering
 
 @test
-func test_saturating_cmp_placeholder() -> I32 {
-    assert(true, "Saturating cmp/partial_cmp blocked by codegen")
-    0
+func test_saturating_cmp_less() -> I32 {
+    let a: Saturating[I32] = Saturating::new(10)
+    let b: Saturating[I32] = Saturating::new(20)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_less(), "cmp(10, 20) should be Less")
+    return 0
+}
+
+@test
+func test_saturating_cmp_greater() -> I32 {
+    let a: Saturating[I32] = Saturating::new(20)
+    let b: Saturating[I32] = Saturating::new(10)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_greater(), "cmp(20, 10) should be Greater")
+    return 0
+}
+
+@test
+func test_saturating_cmp_equal() -> I32 {
+    let a: Saturating[I32] = Saturating::new(5)
+    let b: Saturating[I32] = Saturating::new(5)
+    let ord: Ordering = a.cmp(ref b)
+    assert(ord.is_equal(), "cmp(5, 5) should be Equal")
+    return 0
+}
+
+@test
+func test_saturating_partial_cmp_less() -> I32 {
+    let a: Saturating[I32] = Saturating::new(3)
+    let b: Saturating[I32] = Saturating::new(7)
+    let r = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "partial_cmp(3, 7) should be Less"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_saturating_eq_equal() -> I32 {
+    let a: Saturating[I32] = Saturating::new(42)
+    let b: Saturating[I32] = Saturating::new(42)
+    assert(a == b, "Saturating(42) == Saturating(42)")
+    return 0
+}
+
+@test
+func test_saturating_eq_not_equal() -> I32 {
+    let a: Saturating[I32] = Saturating::new(42)
+    let b: Saturating[I32] = Saturating::new(99)
+    assert(not (a == b), "Saturating(42) != Saturating(99)")
+    return 0
 }

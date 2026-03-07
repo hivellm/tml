@@ -1,9 +1,22 @@
-// Tests for Saturating[T] — blocked by generic trait dispatch codegen bug
-// Saturating::eq crashes (HEAP_CORRUPTION) when delegating to inner.eq()
-use test::{assert}
+// Tests for Saturating[T] trait impls — default, eq, cmp, partial_cmp, duplicate
+use test
+use core::num::saturating::Saturating
+use core::cmp::Ordering
 
 @test
-func test_saturating_traits_placeholder() -> I32 {
-    assert(true, "Saturating trait impls blocked by generic codegen")
-    0
+func test_saturating_ne() -> I32 {
+    let a: Saturating[I32] = Saturating::new(1)
+    let b: Saturating[I32] = Saturating::new(2)
+    assert(a != b, "Saturating(1) != Saturating(2)")
+    let c: Saturating[I32] = Saturating::new(1)
+    assert(not (a != c), "Saturating(1) == Saturating(1)")
+    return 0
+}
+
+@test
+func test_saturating_duplicate() -> I32 {
+    let a: Saturating[I32] = Saturating::new(77)
+    let b: Saturating[I32] = a.duplicate()
+    assert_eq(b.value(), 77, "Saturating::duplicate")
+    return 0
 }

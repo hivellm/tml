@@ -1,12 +1,40 @@
 // Tests for Step::steps_between — concrete impls for I8, I16, I32, I64, U8, U16, U32, U64
-// BLOCKED: Static trait method dispatch — function not emitted to LLVM IR
-// Error: 'use of undefined value @tml_s0_I32_steps_between'
-// Keeping file as placeholder until codegen is fixed
-use test::{assert, assert_eq}
+use test
+use core::iter::range::Step
 
 @test
-func test_steps_between_placeholder() -> I32 {
-    // steps_between tests deferred — static trait dispatch codegen blocked
-    assert(true, "placeholder")
+func test_steps_between_i32_basic() -> I32 {
+    let r: Maybe[I64] = I32::steps_between(ref 0, ref 10)
+    when r {
+        Just(n) => assert_eq(n, 10_i64, "steps_between(0, 10) = 10"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_steps_between_i32_same() -> I32 {
+    let r: Maybe[I64] = I32::steps_between(ref 5, ref 5)
+    when r {
+        Just(n) => assert_eq(n, 0_i64, "steps_between(5, 5) = 0"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_steps_between_i32_reverse() -> I32 {
+    let r: Maybe[I64] = I32::steps_between(ref 10, ref 5)
+    assert(r.is_nothing(), "steps_between(10, 5) = Nothing (reverse)")
+    return 0
+}
+
+@test
+func test_steps_between_i64_basic() -> I32 {
+    let r: Maybe[I64] = I64::steps_between(ref 0_i64, ref 100_i64)
+    when r {
+        Just(n) => assert_eq(n, 100_i64, "i64 steps_between(0, 100) = 100"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
     return 0
 }

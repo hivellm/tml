@@ -1,13 +1,19 @@
-// Tests for NonZero[I32] — trait impls
-// NOTE: ALL NonZero tests blocked by generic monomorphization bug
-//       (Maybe__NonZero__T vs Maybe__NonZero__I32 type mismatch in LLVM IR)
-// TODO: Re-enable when codegen fix lands
-use test::{assert, assert_eq}
+// Tests for NonZero[I32] — trait impls (get, duplicate)
+// Uses direct struct construction to bypass NonZero::new layout issue
+use test
+use core::num::nonzero::NonZero
 
 @test
-func test_nonzero_placeholder() -> I32 {
-    // NonZero::new(42).unwrap() triggers codegen bug
-    // NonZero::new(42).eq() triggers codegen bug
-    // All NonZero trait methods blocked
-    0
+func test_nonzero_get() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 42 }
+    assert_eq(a.get(), 42, "NonZero.get() returns inner value")
+    return 0
+}
+
+@test
+func test_nonzero_duplicate() -> I32 {
+    let a: NonZero[I32] = NonZero { value: 77 }
+    let b: NonZero[I32] = a.duplicate()
+    assert_eq(b.get(), 77, "NonZero::duplicate copies the value")
+    return 0
 }
