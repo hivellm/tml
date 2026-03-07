@@ -1,0 +1,73 @@
+// Tests for JsonArray methods: get_string, get_i64, get_f64, get_bool, len, is_empty
+use test::{assert, assert_eq}
+use std::json::types::{Json, JsonArray, parse_or_panic}
+
+@test
+func test_json_array_len() -> I32 {
+    let j = parse_or_panic("[1, 2, 3]")
+    let arr: JsonArray = j.as_array().unwrap()
+    assert_eq(arr.len(), 3 as I64, "array length should be 3")
+    return 0
+}
+
+@test
+func test_json_array_is_empty() -> I32 {
+    let j = parse_or_panic("[]")
+    let arr: JsonArray = j.as_array().unwrap()
+    assert(arr.is_empty(), "empty array is_empty should be true")
+    return 0
+}
+
+@test
+func test_json_array_get() -> I32 {
+    let j = parse_or_panic("[10, 20, 30]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let elem = arr.get(1)
+    assert(elem.is_just(), "get(1) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_string() -> I32 {
+    let j = parse_or_panic("[\"hello\", \"world\"]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let val = arr.get_string(0)
+    assert(val.is_just(), "get_string(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_i64() -> I32 {
+    let j = parse_or_panic("[10, 20, 30]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let val = arr.get_i64(1)
+    assert(val.is_just(), "get_i64(1) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_f64() -> I32 {
+    let j = parse_or_panic("[1.5, 2.5]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let val = arr.get_f64(0)
+    assert(val.is_just(), "get_f64(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_bool() -> I32 {
+    let j = parse_or_panic("[true, false]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let val = arr.get_bool(0)
+    assert(val.is_just(), "get_bool(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_oob() -> I32 {
+    let j = parse_or_panic("[1]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let val = arr.get(5)
+    assert(val.is_nothing(), "get(5) on 1-element array should be Nothing")
+    return 0
+}

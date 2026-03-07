@@ -1,0 +1,69 @@
+// Tests for Json::at, get_path, get_path_string, get_path_i64
+use test::{assert, assert_eq}
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_at_valid_index() -> I32 {
+    let arr = parse_or_panic("[10, 20, 30]")
+    let elem = arr.at(1)
+    assert(elem.is_just(), "at(1) should return Just")
+    let val: Json = elem.unwrap()
+    assert(val.is_number(), "element should be number")
+    return 0
+}
+
+@test
+func test_json_at_out_of_bounds() -> I32 {
+    let arr = parse_or_panic("[10, 20, 30]")
+    let elem = arr.at(5)
+    assert(elem.is_nothing(), "at(5) should return Nothing")
+    return 0
+}
+
+@test
+func test_json_at_negative_index() -> I32 {
+    let arr = parse_or_panic("[10, 20, 30]")
+    let elem = arr.at(-1)
+    assert(elem.is_nothing(), "at(-1) should return Nothing")
+    return 0
+}
+
+@test
+func test_json_at_on_non_array() -> I32 {
+    let obj = parse_or_panic("{\"a\": 1}")
+    let elem = obj.at(0)
+    assert(elem.is_nothing(), "at on non-array should return Nothing")
+    return 0
+}
+
+@test
+func test_json_get_path_nested() -> I32 {
+    let j = parse_or_panic("{\"users\": [{\"name\": \"Alice\"}]}")
+    let name = j.get_path("users[0].name")
+    assert(name.is_just(), "get_path should find nested value")
+    return 0
+}
+
+@test
+func test_json_get_path_missing() -> I32 {
+    let j = parse_or_panic("{\"users\": [{\"name\": \"Alice\"}]}")
+    let missing = j.get_path("users[1].name")
+    assert(missing.is_nothing(), "get_path should return Nothing for missing")
+    return 0
+}
+
+@test
+func test_json_get_path_string() -> I32 {
+    let j = parse_or_panic("{\"a\": {\"b\": \"hello\"}}")
+    let ps = j.get_path_string("a.b")
+    assert(ps.is_just(), "get_path_string should find string")
+    return 0
+}
+
+@test
+func test_json_get_path_i64() -> I32 {
+    let j = parse_or_panic("{\"data\": {\"count\": 42}}")
+    let pi = j.get_path_i64("data.count")
+    assert(pi.is_just(), "get_path_i64 should find integer")
+    return 0
+}

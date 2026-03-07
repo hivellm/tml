@@ -1,18 +1,37 @@
-// Tests for Outcome methods — most are blocked by generic constraint monomorphization bug
-// Blocked: inspect, inspect_err, duplicated, copied, transpose, as_ref, as_mut, flatten
-// Root cause: methods with type constraints (Duplicate, Copy, etc.) or closure params
-// with ref T generate undefined symbols in LLVM IR — the monomorphization doesn't emit them.
+// Tests for Outcome::inspect and inspect_err
 use test::{assert}
 
+func ok_inspector(x: ref I32) {}
+func err_inspector(x: ref Str) {}
+
 @test
-func test_result_inspect_placeholder() -> I32 {
-    // Outcome::inspect — blocked: '@tml_N4core17Outcome__I32__Str7inspectE' undefined
-    // Outcome::inspect_err — blocked: same undefined symbol issue
-    // Outcome::duplicated — blocked: requires Duplicate constraint
-    // Outcome::copied — blocked: requires Copy constraint
-    // Outcome::transpose — blocked: requires Maybe[T] constraint
-    // Outcome::as_ref, as_mut — blocked: ref return type codegen
-    // Outcome::flatten — blocked: nested Outcome[Outcome[T,E],E] constraint
-    assert(true, "Outcome advanced methods blocked by generic monomorphization")
+func test_outcome_inspect_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let y = x.inspect(ok_inspector)
+    assert(y.is_ok(), "inspect should pass through Ok")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("oops")
+    let y = x.inspect(ok_inspector)
+    assert(y.is_err(), "inspect on Err should pass through Err")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_method() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let y = x.inspect_err(err_inspector)
+    assert(y.is_err(), "inspect_err should pass through Err")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_on_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    let y = x.inspect_err(err_inspector)
+    assert(y.is_ok(), "inspect_err on Ok should pass through Ok")
     return 0
 }

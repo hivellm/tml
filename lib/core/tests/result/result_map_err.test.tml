@@ -1,8 +1,18 @@
-// Tests for Outcome::map_err — blocked by generic [F] codegen
+// Tests for Outcome::map_err
 use test::{assert}
 
 @test
-func test_outcome_map_err_placeholder() -> I32 {
-    assert(true, "Outcome::map_err blocked by generic codegen")
+func test_outcome_map_err_on_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    let y = x.map_err(do(e: Str) -> I32 { 0 })
+    assert(y.is_ok(), "map_err on Ok should stay Ok")
+    return 0
+}
+
+@test
+func test_outcome_map_err_on_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    let y = x.map_err(do(s: Str) -> I32 { 42 })
+    assert(y.is_err(), "map_err on Err should stay Err")
     return 0
 }

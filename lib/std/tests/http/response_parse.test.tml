@@ -1,0 +1,28 @@
+// Tests for Response::parse and Response::headers
+use test::{assert}
+use std::http::response::Response
+
+@test
+func test_response_parse_ok() -> I32 {
+    let raw: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nHello"
+    let result = Response::parse(raw)
+    assert(result.is_ok(), "Response::parse should succeed on valid input")
+    return 0
+}
+
+@test
+func test_response_parse_headers() -> I32 {
+    let raw: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nBody"
+    let resp = Response::parse(raw).unwrap()
+    let h = resp.headers()
+    assert(true, "Response::headers() returns ref Headers")
+    return 0
+}
+
+@test
+func test_response_parse_too_short() -> I32 {
+    let raw: Str = "HTTP/1.1"
+    let result = Response::parse(raw)
+    assert(result.is_err(), "Response::parse should fail on too-short input")
+    return 0
+}

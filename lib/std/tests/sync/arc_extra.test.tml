@@ -23,7 +23,21 @@ func test_arc_try_unwrap_fail() -> I32 {
     return 0
 }
 
-// NOTE: Arc::ptr_eq — BLOCKED: static method on generic type not emitted (undefined symbol)
-// NOTE: Arc::get_mut — BLOCKED: returns Maybe[mut ref T], ref codegen issue
-// NOTE: Arc::deref — BLOCKED: same ref return type issue
-// NOTE: Weak::upgrade, Weak::ptr_eq — BLOCKED: Weak__T not monomorphized to Weak__I32
+@test
+func test_arc_deref() -> I32 {
+    let a: Arc[I64] = Arc::new(42 as I64)
+    let val = a.deref()
+    assert(*val == 42 as I64, "deref should return ref to value")
+    return 0
+}
+
+@test
+func test_arc_get_mut_unique() -> I32 {
+    let mut a: Arc[I64] = Arc::new(99 as I64)
+    let gm = a.get_mut()
+    assert(gm.is_just(), "get_mut on unique Arc should be Just")
+    return 0
+}
+
+// NOTE: Arc::ptr_eq — BLOCKED: static method on generic type not emitted
+// NOTE: Weak::upgrade — BLOCKED: Maybe[Arc[T]] codegen bug

@@ -1,0 +1,79 @@
+// Tests for JsonObject methods: get_f64, get_bool, key_at, value_at, entry_at
+use test::{assert, assert_eq}
+use std::json::types::{Json, JsonObject, parse_or_panic}
+
+@test
+func test_json_object_get_f64() -> I32 {
+    let j = parse_or_panic("{\"pi\": 3.14}")
+    let obj: JsonObject = j.as_object().unwrap()
+    let val = obj.get_f64("pi")
+    assert(val.is_just(), "get_f64 should return Just for float")
+    return 0
+}
+
+@test
+func test_json_object_get_f64_missing() -> I32 {
+    let j = parse_or_panic("{\"pi\": 3.14}")
+    let obj: JsonObject = j.as_object().unwrap()
+    let val = obj.get_f64("nope")
+    assert(val.is_nothing(), "get_f64 should return Nothing for missing key")
+    return 0
+}
+
+@test
+func test_json_object_get_bool() -> I32 {
+    let j = parse_or_panic("{\"flag\": true}")
+    let obj: JsonObject = j.as_object().unwrap()
+    let val = obj.get_bool("flag")
+    assert(val.is_just(), "get_bool should return Just for bool")
+    return 0
+}
+
+@test
+func test_json_object_get_bool_wrong_type() -> I32 {
+    let j = parse_or_panic("{\"num\": 42}")
+    let obj: JsonObject = j.as_object().unwrap()
+    let val = obj.get_bool("num")
+    assert(val.is_nothing(), "get_bool on number should return Nothing")
+    return 0
+}
+
+@test
+func test_json_object_key_at() -> I32 {
+    let j = parse_or_panic("{\"a\": 1, \"b\": 2}")
+    let k = j.key_at(0)
+    assert(k.is_just(), "key_at(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_object_key_at_oob() -> I32 {
+    let j = parse_or_panic("{\"a\": 1}")
+    let k = j.key_at(99)
+    assert(k.is_nothing(), "key_at(99) should return Nothing")
+    return 0
+}
+
+@test
+func test_json_object_value_at() -> I32 {
+    let j = parse_or_panic("{\"a\": 1, \"b\": 2}")
+    let v = j.value_at(0)
+    assert(v.is_just(), "value_at(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_object_entry_at() -> I32 {
+    let j = parse_or_panic("{\"x\": 10}")
+    let e = j.entry_at(0)
+    assert(e.is_just(), "entry_at(0) should return Just")
+    return 0
+}
+
+@test
+func test_json_object_entry_at_oob() -> I32 {
+    let j = parse_or_panic("{\"x\": 10}")
+    let e = j.entry_at(99)
+    assert(e.is_nothing(), "entry_at(99) should return Nothing")
+    return 0
+}

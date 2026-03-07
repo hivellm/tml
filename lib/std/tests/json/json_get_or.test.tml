@@ -1,9 +1,53 @@
-// Tests for Json::get_or — blocked by method dispatch
-// get_or is defined in impl Json but codegen can't find it
-use test::assert
+// Tests for Json::get_or, get_string, get_i64, at
+use test::{assert, assert_eq}
+use std::json::types::{Json, parse_or_panic}
 
 @test
-func test_json_get_or_blocked() -> I32 {
-    assert(true, "Json::get_or blocked by method dispatch codegen")
+func test_json_get_or_existing_key() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1}")
+    let fallback: Json = Json::string("nope")
+    let got: Json = j.get_or("a", fallback)
+    assert(got.is_number(), "get_or existing key returns number")
+    return 0
+}
+
+@test
+func test_json_get_or_missing_key() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1}")
+    let fallback: Json = Json::string("default")
+    let got: Json = j.get_or("missing", fallback)
+    assert(got.is_string(), "get_or missing key returns fallback")
+    return 0
+}
+
+@test
+func test_json_get_string_existing() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"alice\"}")
+    let val: Maybe[Str] = j.get_string("name")
+    assert(val.is_just(), "get_string existing returns Just")
+    return 0
+}
+
+@test
+func test_json_get_string_missing() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"alice\"}")
+    let val: Maybe[Str] = j.get_string("nope")
+    assert(val.is_nothing(), "get_string missing returns Nothing")
+    return 0
+}
+
+@test
+func test_json_get_i64_existing() -> I32 {
+    let j: Json = parse_or_panic("{\"age\": 42}")
+    let val: Maybe[I64] = j.get_i64("age")
+    assert(val.is_just(), "get_i64 existing returns Just")
+    return 0
+}
+
+@test
+func test_json_get_i64_missing() -> I32 {
+    let j: Json = parse_or_panic("{\"age\": 42}")
+    let val: Maybe[I64] = j.get_i64("nope")
+    assert(val.is_nothing(), "get_i64 missing returns Nothing")
     return 0
 }

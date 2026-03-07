@@ -1,0 +1,83 @@
+// Tests for Json::as_bool, as_i64, as_f64, as_str, as_array, as_object, get_type
+use test::{assert}
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_as_bool_true() -> I32 {
+    let j = parse_or_panic("true")
+    let val = j.as_bool()
+    assert(val.is_just(), "as_bool on true should be Just")
+    return 0
+}
+
+@test
+func test_json_as_bool_false() -> I32 {
+    let j = parse_or_panic("false")
+    let val = j.as_bool()
+    assert(val.is_just(), "as_bool on false should be Just")
+    return 0
+}
+
+@test
+func test_json_as_bool_wrong_type() -> I32 {
+    let j = parse_or_panic("42")
+    let val = j.as_bool()
+    assert(val.is_nothing(), "as_bool on number should be Nothing")
+    return 0
+}
+
+@test
+func test_json_as_i64() -> I32 {
+    let j = parse_or_panic("42")
+    let val = j.as_i64()
+    assert(val.is_just(), "as_i64 on integer should be Just")
+    return 0
+}
+
+@test
+func test_json_as_f64() -> I32 {
+    let j = parse_or_panic("3.14")
+    let val = j.as_f64()
+    assert(val.is_just(), "as_f64 on float should be Just")
+    return 0
+}
+
+@test
+func test_json_as_str() -> I32 {
+    let j = parse_or_panic("\"hello\"")
+    let val = j.as_str()
+    assert(val.is_just(), "as_str on string should be Just")
+    return 0
+}
+
+@test
+func test_json_as_str_wrong_type() -> I32 {
+    let j = parse_or_panic("42")
+    let val = j.as_str()
+    assert(val.is_nothing(), "as_str on number should be Nothing")
+    return 0
+}
+
+@test
+func test_json_as_array() -> I32 {
+    let j = parse_or_panic("[1, 2]")
+    let val = j.as_array()
+    assert(val.is_just(), "as_array on array should be Just")
+    return 0
+}
+
+@test
+func test_json_as_object() -> I32 {
+    let j = parse_or_panic("{\"k\": 1}")
+    let val = j.as_object()
+    assert(val.is_just(), "as_object on object should be Just")
+    return 0
+}
+
+@test
+func test_json_get_type() -> I32 {
+    let jn = parse_or_panic("42")
+    let t = jn.get_type()
+    assert(t > 0, "get_type should return non-zero for number")
+    return 0
+}

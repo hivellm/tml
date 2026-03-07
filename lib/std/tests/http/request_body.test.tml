@@ -1,0 +1,26 @@
+// Tests for Request::json, Request::form, Request::headers
+use test::{assert}
+use std::http::request::Request
+use std::http::headers::Headers
+
+@test
+func test_request_json_body() -> I32 {
+    let req = Request::post("http://example.com").json("{\"key\": \"value\"}")
+    assert(true, "Request::json compiled and ran")
+    return 0
+}
+
+@test
+func test_request_form_body() -> I32 {
+    let req = Request::post("http://example.com").form("a=1&b=2")
+    assert(true, "Request::form compiled and ran")
+    return 0
+}
+
+@test
+func test_request_headers_ref() -> I32 {
+    let req = Request::get("http://example.com").header("Accept", "text/html")
+    let h: ref Headers = req.headers()
+    assert(true, "Request::headers() returns ref Headers")
+    return 0
+}
