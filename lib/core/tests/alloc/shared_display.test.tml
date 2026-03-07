@@ -1,0 +1,19 @@
+// Tests for Shared::to_string and Shared::debug_string
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+
+@test
+func test_shared_to_string() -> I32 {
+    let s: Shared[I32] = Shared::new(42)
+    let str_val = s.to_string()
+    assert_eq(str_val, "42", "Shared::to_string delegates to inner")
+    return 0
+}
+
+@test
+func test_shared_debug_string() -> I32 {
+    let s: Shared[I32] = Shared::new(99)
+    let dbg = s.debug_string()
+    assert(dbg.len() > 0, "Shared::debug_string returns non-empty")
+    return 0
+}

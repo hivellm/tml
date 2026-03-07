@@ -1,9 +1,4 @@
 // Tests for AnyValue::downcast, downcast_mut, into_inner, drop
-// BLOCKED: downcast[T], downcast_mut[T], into_inner[T] all hit codegen bug:
-//   "Cannot allocate unsized type %struct.T" — generic type T not monomorphized in lowlevel blocks
-//
-// AnyValue::drop is tested implicitly: any AnyValue that goes out of scope calls drop.
-// The from[I32] tests in any_value_from.test.tml exercise drop on cleanup.
 use test::{assert, assert_eq}
 use core::any::AnyValue
 
@@ -28,3 +23,23 @@ func test_anyvalue_multiple_drop() -> I32 {
     // All go out of scope, all dropped
     return 0
 }
+
+@test
+func test_downcast_ok() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    let r: Maybe[ref I32] = any.downcast[I32]()
+    assert(r.is_just(), "downcast should succeed for matching type")
+    return 0
+}
+
+@test
+func test_downcast_wrong_type() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    let r: Maybe[ref I64] = any.downcast[I64]()
+    assert(r.is_nothing(), "downcast should fail for wrong type")
+    return 0
+}
+
+// NOTE: into_inner[T] tests omitted — into_inner calls dealloc internally but TML
+// does not yet support move semantics for 'this', so drop also runs on scope exit
+// causing a double-free (heap corruption). Requires compiler move/consume support.

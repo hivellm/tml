@@ -1,9 +1,31 @@
-// BLOCKED: AnyValue::from[T] triggers "Cannot allocate unsized type %struct.T"
-// The compiler cannot monomorphize generic alloc for type-erased storage
+// Tests for AnyValue::from[T] — type-erased heap storage
 use test::{assert}
+use core::any::AnyValue
 
 @test
-func test_anyvalue_from_blocked() -> I32 {
-    assert(true, "blocked by generic type erasure codegen bug")
+func test_from_i32() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](42)
+    assert(any.is_type[I32](), "should be I32")
+    return 0
+}
+
+@test
+func test_from_i64() -> I32 {
+    let any: AnyValue = AnyValue::from[I64](100 as I64)
+    assert(any.is_type[I64](), "should be I64")
+    return 0
+}
+
+@test
+func test_from_bool() -> I32 {
+    let any: AnyValue = AnyValue::from[Bool](true)
+    assert(any.is_type[Bool](), "should be Bool")
+    return 0
+}
+
+@test
+func test_from_not_wrong_type() -> I32 {
+    let any: AnyValue = AnyValue::from[I32](7)
+    assert(not any.is_type[I64](), "I32 AnyValue should not match I64")
     return 0
 }
