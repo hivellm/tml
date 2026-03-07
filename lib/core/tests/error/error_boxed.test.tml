@@ -1,0 +1,26 @@
+// Tests for BoxedError
+use test::{assert, assert_eq, assert_true}
+use core::error::{BoxedError}
+
+@test
+func test_boxed_error_from_message() -> I32 {
+    let err = BoxedError::from_message("wrapped error")
+    assert_eq(err.to_string(), "wrapped error", "to_string should return message")
+    return 0
+}
+
+@test
+func test_boxed_error_debug_string() -> I32 {
+    let err = BoxedError::from_message("test msg")
+    let dbg: Str = err.debug_string()
+    assert_true(dbg.len() > 0, "debug_string should produce output")
+    return 0
+}
+
+@test
+func test_boxed_error_description() -> I32 {
+    let err = BoxedError::from_message("desc test")
+    let desc: Str = err.description()
+    assert_eq(desc, "desc test", "description should match to_string")
+    return 0
+}

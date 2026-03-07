@@ -1,0 +1,17 @@
+// Tests for encode_utf8 and encode_utf16
+use test::{assert_eq}
+use core::char::methods::{encode_utf8, encode_utf16}
+
+@test
+func test_encode_utf8_ascii() -> I32 {
+    let (bytes, len) = encode_utf8('A')
+    assert_eq(len, 1 as I64, "ASCII 'A' should be 1 byte UTF-8")
+    return 0
+}
+
+@test
+func test_encode_utf16_bmp() -> I32 {
+    let (units, len) = encode_utf16('A')
+    assert_eq(len, 1 as I64, "ASCII 'A' should be 1 UTF-16 unit")
+    return 0
+}

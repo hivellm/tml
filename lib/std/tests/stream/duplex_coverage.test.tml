@@ -15,7 +15,7 @@ func test_duplex_with_options() -> I32 {
 
 @test
 func test_duplex_with_half_open() -> I32 {
-    var ds: DuplexStream = DuplexStream::with_half_open(true)
+    var ds: DuplexStream = DuplexStream::with_half_open(1024, 1024, true)
     assert_true(ds.allow_half_open_enabled(), "half open enabled")
     ds.destroy()
     return 0

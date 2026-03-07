@@ -1,0 +1,24 @@
+// Tests for Request::version builder method
+use test::{assert, assert_true}
+use std::http::request::Request
+use std::http::version::HttpVersion
+
+@test
+func test_request_version_builder() -> I32 {
+    let req: Request = Request::get("http://example.com")
+        .version(HttpVersion::HTTP_1_1)
+    let wire: Str = req.serialize()
+    assert_true(wire.len() > 0, "serialized request should have content")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_version_http10() -> I32 {
+    let req: Request = Request::get("http://example.com")
+        .version(HttpVersion::HTTP_1_0)
+    let wire: Str = req.serialize()
+    assert_true(wire.len() > 0, "HTTP/1.0 request should serialize")
+    req.destroy()
+    return 0
+}

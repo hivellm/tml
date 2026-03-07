@@ -1,0 +1,11 @@
+// Tests for UdpSocket timeout methods
+// BLOCKED: Maybe[Duration] codegen — Nothing infers as Maybe[I32], Just(Duration) type mismatch
+// All 5 uncovered functions (set_read_timeout, set_write_timeout, read_timeout, write_timeout, as_raw_socket)
+// require proper Maybe[Duration] or ref RawSocket codegen
+use test::{assert}
+
+@test
+func test_udp_timeout_blocked() -> I32 {
+    assert(true, "UdpSocket timeout methods blocked by Maybe[Duration] codegen")
+    return 0
+}

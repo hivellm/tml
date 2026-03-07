@@ -1,0 +1,22 @@
+// Tests for Outcome::copied, duplicated
+// NOTE: Outcome::flatten blocked by nested Outcome codegen (type size mismatch)
+// NOTE: Outcome::transpose blocked by where T: Maybe[T] constraint
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_copied() -> I32 {
+    let x: Outcome[I32, Str] = Ok(99)
+    let y: Outcome[I32, Str] = x.copied()
+    assert(y.is_ok(), "copied should preserve Ok")
+    assert_eq(y.unwrap(), 99, "copied should copy value")
+    return 0
+}
+
+@test
+func test_outcome_duplicated() -> I32 {
+    let x: Outcome[I32, Str] = Ok(77)
+    let y: Outcome[I32, Str] = x.duplicated()
+    assert(y.is_ok(), "duplicated should preserve Ok")
+    assert_eq(y.unwrap(), 77, "duplicated should duplicate value")
+    return 0
+}

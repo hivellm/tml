@@ -1,0 +1,91 @@
+// Tests for Headers convenience accessors on empty headers
+use test::{assert_eq, assert_false}
+use std::http::headers::Headers
+
+@test
+func test_headers_content_encoding_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.content_encoding(), "", "content_encoding on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_transfer_encoding_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.transfer_encoding(), "", "transfer_encoding on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_host_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.host(), "", "host on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_connection_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.connection(), "", "connection on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_accept_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.accept(), "", "accept on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_authorization_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.authorization(), "", "authorization on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_location_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.location(), "", "location on empty should be empty")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_is_chunked_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_false(h.is_chunked(), "is_chunked on empty should be false")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_is_keep_alive_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_false(h.is_keep_alive(), "is_keep_alive on empty should be false")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_is_close_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_false(h.is_close(), "is_close on empty should be false")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_accept_encoding_empty() -> I32 {
+    let h: Headers = Headers::new()
+    assert_eq(h.accept_encoding(), "", "accept_encoding on empty should be empty")
+    h.destroy()
+    return 0
+}

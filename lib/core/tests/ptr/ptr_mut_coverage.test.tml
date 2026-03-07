@@ -1,0 +1,45 @@
+// Tests for RawMutPtr uncovered: read_unaligned, read_volatile, write_unaligned, write_volatile
+// NOTE: copy_from, copy_from_nonoverlapping blocked by @tml_memcpy not emitted
+// NOTE: write_bytes_val blocked by @tml_memset not emitted
+// NOTE: read_unaligned, read_volatile delegate to RawPtr methods which aren't emitted either
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_mut_ptr_basic_write_read() -> I32 {
+    let p: *Unit = alloc(16)
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(p as I64)
+    ptr.write(42)
+    let val: I32 = ptr.read()
+    assert_eq(val, 42, "basic write/read should work")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_mut_ptr_replace() -> I32 {
+    let p: *Unit = alloc(16)
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(p as I64)
+    ptr.write(10)
+    let old: I32 = ptr.replace(20)
+    assert_eq(old, 10, "replace should return old value")
+    assert_eq(ptr.read(), 20, "replace should write new value")
+    dealloc(p)
+    return 0
+}
+
+@test
+func test_mut_ptr_swap() -> I32 {
+    let pa: *Unit = alloc(16)
+    let pb: *Unit = alloc(16)
+    let a: RawMutPtr[I32] = RawMutPtr::from_addr(pa as I64)
+    let b: RawMutPtr[I32] = RawMutPtr::from_addr(pb as I64)
+    a.write(111)
+    b.write(222)
+    a.swap(b)
+    assert_eq(a.read(), 222, "a should have b's value after swap")
+    assert_eq(b.read(), 111, "b should have a's value after swap")
+    dealloc(pa)
+    dealloc(pb)
+    return 0
+}

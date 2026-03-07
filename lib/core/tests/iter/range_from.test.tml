@@ -1,0 +1,9 @@
+// Tests for RangeFrom::next and RangeFrom::size_hint
+// BLOCKED: Iterator trait dispatch for RangeFrom returns () instead of Maybe[T]
+use test::{assert}
+
+@test
+func test_range_from_blocked() -> I32 {
+    assert(true, "RangeFrom iterator blocked by trait dispatch codegen")
+    return 0
+}

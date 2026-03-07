@@ -1,0 +1,52 @@
+// Tests for Saturating[T] uncovered: eq, partial_cmp, cmp
+use test::{assert, assert_true, assert_false}
+use core::num::saturating::Saturating
+
+@test
+func test_saturating_eq_same() -> I32 {
+    let a: Saturating[I32] = Saturating::new(10)
+    let b: Saturating[I32] = Saturating::new(10)
+    assert_true(a.eq(ref b), "equal values should be eq")
+    return 0
+}
+
+@test
+func test_saturating_eq_different() -> I32 {
+    let a: Saturating[I32] = Saturating::new(10)
+    let b: Saturating[I32] = Saturating::new(20)
+    assert_false(a.eq(ref b), "different values should not be eq")
+    return 0
+}
+
+@test
+func test_saturating_cmp_less() -> I32 {
+    let a: Saturating[I32] = Saturating::new(5)
+    let b: Saturating[I32] = Saturating::new(10)
+    assert(a.cmp(ref b) == Ordering::Less, "5 should be less than 10")
+    return 0
+}
+
+@test
+func test_saturating_cmp_greater() -> I32 {
+    let a: Saturating[I32] = Saturating::new(20)
+    let b: Saturating[I32] = Saturating::new(10)
+    assert(a.cmp(ref b) == Ordering::Greater, "20 should be greater than 10")
+    return 0
+}
+
+@test
+func test_saturating_cmp_equal() -> I32 {
+    let a: Saturating[I32] = Saturating::new(7)
+    let b: Saturating[I32] = Saturating::new(7)
+    assert(a.cmp(ref b) == Ordering::Equal, "same values should be equal")
+    return 0
+}
+
+@test
+func test_saturating_partial_cmp() -> I32 {
+    let a: Saturating[I32] = Saturating::new(3)
+    let b: Saturating[I32] = Saturating::new(9)
+    let result = a.partial_cmp(ref b)
+    assert_true(result.is_just(), "partial_cmp should return Just")
+    return 0
+}

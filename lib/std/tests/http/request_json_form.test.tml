@@ -1,0 +1,24 @@
+// Tests for Request content_type, content_length accessors
+use test::{assert_eq}
+use std::http::request::Request
+
+@test
+func test_request_content_type_empty() -> I32 {
+    let req: Request = Request::get("http://example.com")
+    let ct: Str = req.content_type()
+    assert_eq(ct, "", "GET should have empty content-type")
+    req.destroy()
+    return 0
+}
+
+@test
+func test_request_content_length_empty() -> I32 {
+    let req: Request = Request::get("http://example.com")
+    let cl: I64 = req.content_length()
+    assert_eq(cl, -1 as I64, "GET should have -1 content-length")
+    req.destroy()
+    return 0
+}
+
+// NOTE: Request::json/form crash (double header mutation in single method)
+// NOTE: Request::headers returns ref Headers — blocked by ref return codegen

@@ -1,0 +1,12 @@
+// Tests for TransformStream uncovered: unpipe_all
+// NOTE: pipe/unpipe blocked by mut ref param crash
+use test::{assert}
+use std::stream::transform::TransformStream
+
+@test
+func test_transform_unpipe_all() -> I32 {
+    var ts: TransformStream = TransformStream::new()
+    ts.unpipe_all()
+    ts.destroy()
+    return 0
+}

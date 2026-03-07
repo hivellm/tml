@@ -1,0 +1,52 @@
+// Tests for DuplexStream uncovered: with_half_open, end_with_data, allow_half_open_enabled, write_bytes
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::duplex::DuplexStream
+
+@test
+func test_duplex_with_half_open_false() -> I32 {
+    var ds: DuplexStream = DuplexStream::with_half_open(1024, 1024, false)
+    assert_false(ds.allow_half_open_enabled(), "half open should be false")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_with_half_open_true() -> I32 {
+    var ds: DuplexStream = DuplexStream::with_half_open(1024, 1024, true)
+    assert_true(ds.allow_half_open_enabled(), "half open should be true")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_end_with_data() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.end_with_data("final chunk")
+    assert_true(ds.writable_ended(), "writable should be ended after end_with_data")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_allow_half_open_default() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    assert_false(ds.allow_half_open_enabled(), "default should not allow half open")
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_set_read_fn() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.set_read_fn(0)
+    ds.destroy()
+    return 0
+}
+
+@test
+func test_duplex_set_write_fn() -> I32 {
+    var ds: DuplexStream = DuplexStream::new()
+    ds.set_write_fn(0)
+    ds.destroy()
+    return 0
+}

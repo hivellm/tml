@@ -1,0 +1,38 @@
+// Tests for Outcome::inspect and Outcome::inspect_err
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_inspect_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    var seen: I32 = 0
+    let y: Outcome[I32, Str] = x.inspect(do(v: ref I32) { seen = *v })
+    assert(y.is_ok(), "inspect should preserve Ok")
+    assert_eq(y.unwrap(), 42, "inspect should not change value")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_case() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    let y: Outcome[I32, Str] = x.inspect(do(v: ref I32) { })
+    assert(y.is_err(), "inspect on Err should preserve Err")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_ok_case() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    let y: Outcome[I32, Str] = x.inspect_err(do(e: ref Str) { })
+    assert(y.is_ok(), "inspect_err on Ok should preserve Ok")
+    assert_eq(y.unwrap(), 10, "inspect_err should not change value")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_err_case() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    var seen: Bool = false
+    let y: Outcome[I32, Str] = x.inspect_err(do(e: ref Str) { seen = true })
+    assert(y.is_err(), "inspect_err should preserve Err")
+    return 0
+}
