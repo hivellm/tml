@@ -140,7 +140,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 if (semantic_type) {
                     type_subs[func_sig->type_params[param_idx]] = semantic_type;
                     if (!method_type_suffix.empty()) {
-                        method_type_suffix += "_";
+                        method_type_suffix += "__";
                     }
                     method_type_suffix += mangle_type(semantic_type);
                 }
@@ -164,7 +164,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                             if (arg_type) {
                                 type_subs[type_param] = arg_type;
                                 if (!method_type_suffix.empty()) {
-                                    method_type_suffix += "_";
+                                    method_type_suffix += "__";
                                 }
                                 method_type_suffix += mangle_type(arg_type);
                             }
@@ -187,7 +187,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                                 if (inferred) {
                                                     type_subs[type_param] = inferred;
                                                     if (!method_type_suffix.empty()) {
-                                                        method_type_suffix += "_";
+                                                        method_type_suffix += "__";
                                                     }
                                                     method_type_suffix += mangle_type(inferred);
                                                 }
@@ -216,7 +216,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                     if (arg_func.return_type) {
                                         type_subs[type_param] = arg_func.return_type;
                                         if (!method_type_suffix.empty()) {
-                                            method_type_suffix += "_";
+                                            method_type_suffix += "__";
                                         }
                                         method_type_suffix += mangle_type(arg_func.return_type);
                                     }
