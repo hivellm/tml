@@ -1214,9 +1214,11 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             if (path_expr.generics && !path_expr.generics->args.empty()) {
                 const auto& first_arg = path_expr.generics->args[0];
                 if (first_arg.is_type()) {
-                    std::unordered_map<std::string, types::TypePtr> empty_subs;
+                    // Use current_type_subs_ so that generic type params (e.g. T inside
+                    // downcast[T]) are resolved to their concrete types (e.g. I32) before
+                    // hashing. Without this, type_id[T]() always hashes "T" → collision.
                     types::TypePtr type_arg =
-                        resolve_parser_type_with_subs(*first_arg.as_type(), empty_subs);
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
                     type_name = mangle_type(type_arg);
                 }
             }

@@ -388,6 +388,23 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
     // resolved to the concrete type (e.g., I32) from the actual argument.
     std::unordered_map<std::string, types::TypePtr> free_func_type_subs;
     if (func_sig.has_value() && !func_sig->type_params.empty()) {
+        // Seed from explicit path generic args first (e.g., AnyValue::from[I64](2)).
+        // This takes priority over argument-inferred types so that From[I64] with a
+        // literal argument isn't incorrectly resolved to From[I32].
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& pe = call.callee->as<parser::PathExpr>();
+            if (pe.generics && !pe.generics->args.empty()) {
+                for (size_t i = 0; i < pe.generics->args.size() && i < func_sig->type_params.size();
+                     ++i) {
+                    const auto& ga = pe.generics->args[i];
+                    if (ga.is_type()) {
+                        types::TypePtr t =
+                            resolve_parser_type_with_subs(*ga.as_type(), current_type_subs_);
+                        free_func_type_subs[func_sig->type_params[i]] = t;
+                    }
+                }
+            }
+        }
         // Infer type params from arguments by looking at local variable types
         for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
             auto param_type = func_sig->params[i];
