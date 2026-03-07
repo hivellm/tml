@@ -1,6 +1,6 @@
 # Tasks: Rewrite Test System
 
-**Status**: In Progress (99%) — Phases 1-10 complete. Phase 11 docs done. Remaining: 9.1.2/10.1.1 blocked (remove inline-main coverage path), deferred items (sharding, cross-platform, cache extras), 5.1.11 pending full coverage rerun.
+**Status**: In Progress (99.5%) — Phases 1-11 complete. Inline-main coverage path removed, coverage.c simplified (676→200 lines). Remaining: 5.1.11 (full coverage verification rerun), deferred items (sharding, cross-platform, cache extras).
 
 ### Progress Log
 - **??%** (pending) — Fixed 2 compiler/runtime bugs: (1) double destroy+drop codegen in method.cpp (mark_var_consumed on .destroy()), (2) argon2 DLL threading crash in crypto_kdf.c (threads=1 + mem_free fix). All 26 kdf tests now pass, 0 memory leaks.
@@ -174,7 +174,7 @@
 ## Phase 9: Delete Old System
 
 - [x] 9.1.1 Delete entire compiler/src/cli/tester/ directory (25 files, 15,464 lines)
-- [ ] 9.1.2 Delete lib/test/runtime/coverage.c (676 lines) — BLOCKED: tml_cover_func (codegen instrumentation), tml_coverage_write_file (dispatcher + generate.cpp), print_coverage_report/write_coverage_html (llvm_utils.cpp old path) still in use. Unblock: remove inline-main test path from generate.cpp + llvm_utils.cpp first.
+- [x] 9.1.2 Simplify lib/test/runtime/coverage.c (676→200 lines) — removed print_coverage_report, write_coverage_html, write_coverage_json, line/branch coverage, query functions. Kept only tml_cover_func (instrumentation) + tml_coverage_write_file (subprocess comms) + query helpers for DLL exports.
 - [x] 9.1.3 Remove all old tester includes from other source files
 - [x] 9.1.4 Update CMakeLists.txt: remove old tester files, add compiler/src/testing/ files
 - [x] 9.1.5 Delete orphaned compiler/include/cli/tester/test_cache.hpp
@@ -184,7 +184,7 @@
 
 ## Phase 10: TML Runtime Updates
 
-- [ ] 10.1.1 Simplify lib/test/runtime/coverage.c → simple file-write function (if kept) or remove entirely — BLOCKED same as 9.1.2: cannot simplify until old generate.cpp inline-main test path removed
+- [x] 10.1.1 Simplify lib/test/runtime/coverage.c — removed old report functions (print_coverage_report, write_coverage_html, write_coverage_json), removed emit_coverage_report_calls from llvm_utils.cpp, removed old coverage declarations from runtime.cpp, removed old DLL exports from object_compiler.cpp. Coverage.c now contains only tml_cover_func + tml_coverage_write_file + query helpers.
 - [x] 10.1.2 Update lib/test/runtime/test.c assertions if needed for NDJSON protocol — NO CHANGE NEEDED: test.c uses exit(1) on failure which is correct for subprocess model (dispatcher catches panics via NDJSON)
 - [x] 10.1.3 Update lib/test/src/ TML test framework modules if needed — NO CHANGE NEEDED: all modules (assertions, runner, coverage, mock, report) are correct for new system
 - [x] 10.1.4 Verify all test framework self-tests pass — VERIFIED: mock/3, report/9, assertions/3, coverage/1 — all pass
