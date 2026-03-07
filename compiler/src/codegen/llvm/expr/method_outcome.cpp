@@ -566,7 +566,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, ok_type, std::nullopt};
 
             std::string merge = fresh_label("is_ok_and_merge");
             std::string ret_alloca = fresh_reg();
@@ -661,7 +661,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, err_type, std::nullopt};
 
             std::string merge = fresh_label("is_err_and_merge");
             std::string ret_alloca = fresh_reg();
@@ -769,7 +769,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, err_type, std::nullopt};
 
             std::string merge = fresh_label("unwrap_else_merge");
             std::string ret_alloca = fresh_reg();
@@ -860,7 +860,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, ok_type, std::nullopt};
 
             std::string merge = fresh_label("map_ok_merge");
             std::string ret_alloca = fresh_reg();
@@ -1012,7 +1012,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, ok_type, std::nullopt};
 
             std::string merge = fresh_label("map_or_ok_merge");
             std::string ret_alloca = fresh_reg();
@@ -1106,7 +1106,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, ok_type, std::nullopt};
 
             std::string merge = fresh_label("and_then_merge");
             std::string ret_alloca = fresh_reg();
@@ -1206,7 +1206,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             std::string param_alloca = fresh_reg();
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, err_type, std::nullopt};
 
             std::string merge = fresh_label("or_else_merge");
             std::string ret_alloca = fresh_reg();

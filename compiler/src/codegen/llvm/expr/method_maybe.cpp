@@ -283,7 +283,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string param_alloca = fresh_reg();
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
+        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, inner_type, std::nullopt};
 
         // Set up closure return redirect for `return` inside the map closure.
         std::string map_merge = fresh_label("map_closure_merge");
@@ -408,7 +408,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string param_alloca = fresh_reg();
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
+        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, inner_type, std::nullopt};
 
         // Set up closure return redirect so `return` inside the closure body
         // stores the value and branches instead of emitting function-level `ret`
@@ -627,7 +627,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
             std::string val_alloca = fresh_reg();
             emit_line("  " + val_alloca + " = alloca " + inner_llvm_type);
             emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + val_alloca);
-            locals_[param_name] = VarInfo{val_alloca, inner_llvm_type, nullptr, std::nullopt};
+            locals_[param_name] = VarInfo{val_alloca, inner_llvm_type, inner_type, std::nullopt};
         } else {
             // For struct types, create ref T indirection
             std::string val_alloca = fresh_reg();
@@ -849,7 +849,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string param_alloca = fresh_reg();
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
+        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, inner_type, std::nullopt};
 
         // Set up closure return redirect for map_or
         std::string mo_merge = fresh_label("map_or_merge");

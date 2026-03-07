@@ -278,7 +278,14 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_llvm_types[i]);
         emit_line("  store " + param_llvm_types[i] + " %" + param_names[i] + ", ptr " + alloca_reg);
-        locals_[param_names[i]] = VarInfo{alloca_reg, param_llvm_types[i], nullptr, std::nullopt};
+        // Resolve semantic type from annotation so infer_expr_type can dispatch methods correctly
+        // (e.g. `do(e: Str) -> Bool { e.len() > 0 }` requires Str semantic type to find len)
+        types::TypePtr sem_type = nullptr;
+        if (closure.params[i].second.has_value()) {
+            sem_type = resolve_parser_type_with_subs(*closure.params[i].second.value(),
+                                                     current_type_subs_);
+        }
+        locals_[param_names[i]] = VarInfo{alloca_reg, param_llvm_types[i], sem_type, std::nullopt};
     }
 
     // Begin alloca hoisting for closure body
