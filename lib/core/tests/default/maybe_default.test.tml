@@ -1,9 +1,23 @@
-// Tests for Maybe[T]::default — blocked by generic impl[T] Default for Maybe[T]
-// IR type conflict: %struct.Maybe__T vs concrete Maybe__I32 layout during monomorphization
-use test::assert
+// Tests for Maybe[T]::default — returns Nothing
+use test::{assert, assert_eq}
 
 @test
-func test_maybe_default_blocked() -> I32 {
-    assert(true, "Maybe::default blocked: generic impl[T] Default for Maybe[T] IR type conflict")
+func test_maybe_i32_default_is_nothing() -> I32 {
+    let m: Maybe[I32] = Maybe::default()
+    assert(m.is_nothing(), "Maybe[I32]::default should be Nothing")
+    return 0
+}
+
+@test
+func test_maybe_bool_default_is_nothing() -> I32 {
+    let m: Maybe[Bool] = Maybe::default()
+    assert(m.is_nothing(), "Maybe[Bool]::default should be Nothing")
+    return 0
+}
+
+@test
+func test_maybe_i64_default_is_nothing() -> I32 {
+    let m: Maybe[I64] = Maybe::default()
+    assert(m.is_nothing(), "Maybe[I64]::default should be Nothing")
     return 0
 }

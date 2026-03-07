@@ -88,6 +88,8 @@ pub type PoolStats {
     pub misses: I64,
     /// Number of times the pool was grown
     pub grows: I32,
+    /// Total number of successful acquire() calls
+    pub total_allocations: I64,
 }
 
 impl PoolStats {
@@ -100,6 +102,7 @@ impl PoolStats {
             hits: 0,
             misses: 0,
             grows: 0,
+            total_allocations: 0,
         }
     }
 
@@ -271,6 +274,7 @@ impl[T] Pool[T] {
                 this.stats.available = this.stats.available - 1
                 this.stats.in_use = this.stats.in_use + 1
                 this.stats.hits = this.stats.hits + 1
+                this.stats.total_allocations = this.stats.total_allocations + 1
 
                 // Return pointer to the object (after the node header)
                 let obj_ptr: Ptr[T] = (head + 8) as Ptr[T]
@@ -409,11 +413,9 @@ impl[T] Pool[T] {
     pub func clear(mut this) {
         // Free all allocated blocks
         spin_lock(mut ref this.blocks_lock)
-        loop (true) {
-            when this.blocks.pop() {
-                Just(block) => dealloc(block as *Unit),
-                Nothing => break
-            }
+        loop (not this.blocks.is_empty()) {
+            let block: I64 = this.blocks.pop()
+            dealloc(block as *Unit)
         }
         spin_unlock(mut ref this.blocks_lock)
 
@@ -614,11 +616,9 @@ impl[T] ThreadLocalPool[T] {
 
     /// Clears the pool and frees all memory.
     pub func clear(mut this) {
-        loop (true) {
-            when this.blocks.pop() {
-                Just(block) => dealloc(block as *Unit),
-                Nothing => break
-            }
+        loop (not this.blocks.is_empty()) {
+            let block: I64 = this.blocks.pop()
+            dealloc(block as *Unit)
         }
         this.objects.clear()
         this.capacity = 0

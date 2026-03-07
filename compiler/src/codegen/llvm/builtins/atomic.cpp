@@ -38,6 +38,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string ptr = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = load atomic i32, ptr " + ptr + " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -50,6 +51,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string val = gen_expr(*call.args[1]);
             emit_line("  store atomic i32 " + val + ", ptr " + ptr + " seq_cst, align 4");
         }
+        last_expr_type_ = "void";
         return "0";
     }
 
@@ -61,6 +63,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = atomicrmw add ptr " + ptr + ", i32 " + val +
                       " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -74,6 +77,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = atomicrmw sub ptr " + ptr + ", i32 " + val +
                       " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -87,6 +91,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = atomicrmw xchg ptr " + ptr + ", i32 " + val +
                       " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -104,6 +109,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             emit_line("  " + cas_result + " = cmpxchg ptr " + ptr + ", i32 " + expected + ", i32 " +
                       desired + " seq_cst seq_cst, align 4");
             emit_line("  " + success + " = extractvalue { i32, i1 } " + cas_result + ", 1");
+            last_expr_type_ = "i1";
             return success;
         }
         return "0";
@@ -120,6 +126,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             emit_line("  " + cas_result + " = cmpxchg ptr " + ptr + ", i32 " + expected + ", i32 " +
                       desired + " seq_cst seq_cst, align 4");
             emit_line("  " + old_val + " = extractvalue { i32, i1 } " + cas_result + ", 0");
+            last_expr_type_ = "i32";
             return old_val;
         }
         return "0";
@@ -133,6 +140,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = atomicrmw and ptr " + ptr + ", i32 " + val +
                       " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -146,6 +154,7 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = atomicrmw or ptr " + ptr + ", i32 " + val +
                       " seq_cst, align 4");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
