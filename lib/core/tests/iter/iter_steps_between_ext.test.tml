@@ -1,0 +1,85 @@
+// Tests for Step::steps_between — I8, I16, U8, U16, U32, U64 impls
+use test::{assert, assert_eq}
+use core::iter::range::Step
+
+@test
+func test_steps_between_i8() -> I32 {
+    let r: Maybe[I64] = I8::steps_between(ref 0_i8, ref 10_i8)
+    when r {
+        Just(n) => assert_eq(n, 10_i64, "i8 steps_between(0, 10) = 10"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_steps_between_i16() -> I32 {
+    let r: Maybe[I64] = I16::steps_between(ref 0_i16, ref 100_i16)
+    when r {
+        Just(n) => assert_eq(n, 100_i64, "i16 steps_between(0, 100) = 100"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_steps_between_u8() -> I32 {
+    let r: Maybe[I64] = U8::steps_between(ref 0_u8, ref 50_u8)
+    when r {
+        Just(n) => assert_eq(n, 50_i64, "u8 steps_between(0, 50) = 50"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_steps_between_u16() -> I32 {
+    let r: Maybe[I64] = U16::steps_between(ref 10_u16, ref 110_u16)
+    when r {
+        Just(n) => assert_eq(n, 100_i64, "u16 steps_between(10, 110) = 100"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_steps_between_u32() -> I32 {
+    let r: Maybe[I64] = U32::steps_between(ref 0_u32, ref 1000_u32)
+    when r {
+        Just(n) => assert_eq(n, 1000_i64, "u32 steps_between(0, 1000) = 1000"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_steps_between_u64() -> I32 {
+    let r: Maybe[I64] = U64::steps_between(ref 0_u64, ref 500_u64)
+    when r {
+        Just(n) => assert_eq(n, 500_i64, "u64 steps_between(0, 500) = 500"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_u8_backward_checked() -> I32 {
+    let v: U8 = 100_u8
+    let r: Maybe[U8] = v.backward_checked(50_i64)
+    when r {
+        Just(n) => assert_eq(n, 50_u8, "u8 backward_checked(100, 50) = 50"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_u16_backward_checked() -> I32 {
+    let v: U16 = 200_u16
+    let r: Maybe[U16] = v.backward_checked(100_i64)
+    when r {
+        Just(n) => assert_eq(n, 100_u16, "u16 backward_checked(200, 100) = 100"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+    return 0
+}

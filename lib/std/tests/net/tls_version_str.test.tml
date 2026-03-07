@@ -1,0 +1,31 @@
+// Tests for TlsVersion::to_string and TlsVersion::TLS_1_0/TLS_1_1
+use test::{assert_eq}
+use std::net::tls::TlsVersion
+
+@test
+func test_tls_version_to_string_1_0() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_0()
+    assert_eq(v.to_string(), "TLS 1.0", "TLS 1.0 to_string")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_1_1() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_1()
+    assert_eq(v.to_string(), "TLS 1.1", "TLS 1.1 to_string")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_1_2() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_2()
+    assert_eq(v.to_string(), "TLS 1.2", "TLS 1.2 to_string")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_1_3() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_3()
+    assert_eq(v.to_string(), "TLS 1.3", "TLS 1.3 to_string")
+    return 0
+}

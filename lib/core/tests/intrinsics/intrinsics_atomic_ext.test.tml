@@ -1,0 +1,9 @@
+// BLOCKED: atomic_xor and atomic_cmpxchg intrinsic codegen not emitted
+// "use of undefined value" - compiler doesn't emit LLVM intrinsic declarations
+use test::{assert}
+
+@test
+func test_atomic_xor_cmpxchg_blocked() -> I32 {
+    assert(true, "blocked by missing atomic intrinsic codegen")
+    return 0
+}

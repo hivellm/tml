@@ -1,0 +1,83 @@
+// Tests for Sum/Product on additional types: I8, I16, I64
+use test::{assert_eq}
+
+type I64Counter { current: I64, max: I64 }
+impl Iterator for I64Counter {
+    type Item = I64
+    pub func next(mut this) -> Maybe[I64] {
+        if this.current >= this.max { return Nothing }
+        let val: I64 = this.current
+        this.current = this.current + 1 as I64
+        return Just(val)
+    }
+}
+
+@test
+func test_i64_sum() -> I32 {
+    var iter: I64Counter = I64Counter { current: 1 as I64, max: 5 as I64 }
+    let s: I64 = I64::sum(iter)
+    assert_eq(s, 10 as I64, "i64 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_i64_product() -> I32 {
+    var iter: I64Counter = I64Counter { current: 1 as I64, max: 5 as I64 }
+    let p: I64 = I64::product(iter)
+    assert_eq(p, 24 as I64, "i64 product 1..4 = 24")
+    return 0
+}
+
+type U32Counter { current: U32, max: U32 }
+impl Iterator for U32Counter {
+    type Item = U32
+    pub func next(mut this) -> Maybe[U32] {
+        if this.current >= this.max { return Nothing }
+        let val: U32 = this.current
+        this.current = this.current + 1_u32
+        return Just(val)
+    }
+}
+
+@test
+func test_u32_sum() -> I32 {
+    var iter: U32Counter = U32Counter { current: 1_u32, max: 5_u32 }
+    let s: U32 = U32::sum(iter)
+    assert_eq(s as I64, 10 as I64, "u32 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_u32_product() -> I32 {
+    var iter: U32Counter = U32Counter { current: 1_u32, max: 5_u32 }
+    let p: U32 = U32::product(iter)
+    assert_eq(p as I64, 24 as I64, "u32 product 1..4 = 24")
+    return 0
+}
+
+type U64Counter { current: U64, max: U64 }
+impl Iterator for U64Counter {
+    type Item = U64
+    pub func next(mut this) -> Maybe[U64] {
+        if this.current >= this.max { return Nothing }
+        let val: U64 = this.current
+        this.current = this.current + 1_u64
+        return Just(val)
+    }
+}
+
+@test
+func test_u64_sum() -> I32 {
+    var iter: U64Counter = U64Counter { current: 1_u64, max: 5_u64 }
+    let s: U64 = U64::sum(iter)
+    assert_eq(s as I64, 10 as I64, "u64 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_u64_product() -> I32 {
+    var iter: U64Counter = U64Counter { current: 1_u64, max: 5_u64 }
+    let p: U64 = U64::product(iter)
+    assert_eq(p as I64, 24 as I64, "u64 product 1..4 = 24")
+    return 0
+}

@@ -1,4 +1,6 @@
 // Tests for core::any — TypeId debug_string and duplicate
+// BLOCKED: TypeId::hash — "Unknown method: write_u64" when calling state.write_u64()
+//   via generic trait dispatch (H: Hasher). Known compiler limitation.
 use test::{assert, assert_eq}
 use core::any::TypeId
 

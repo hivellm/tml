@@ -1,0 +1,110 @@
+// Tests for Sum/Product on small types: I8, I16, U8, U16, F32, F64
+use test::{assert_eq, assert}
+
+type I8Counter { current: I8, max: I8 }
+impl Iterator for I8Counter {
+    type Item = I8
+    pub func next(mut this) -> Maybe[I8] {
+        if this.current >= this.max { return Nothing }
+        let val: I8 = this.current
+        this.current = this.current + 1_i8
+        return Just(val)
+    }
+}
+
+@test
+func test_i8_sum() -> I32 {
+    var iter: I8Counter = I8Counter { current: 1_i8, max: 5_i8 }
+    let s: I8 = I8::sum(iter)
+    assert_eq(s as I32, 10, "i8 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_i8_product() -> I32 {
+    var iter: I8Counter = I8Counter { current: 1_i8, max: 5_i8 }
+    let p: I8 = I8::product(iter)
+    assert_eq(p as I32, 24, "i8 product 1..4 = 24")
+    return 0
+}
+
+type I16Counter { current: I16, max: I16 }
+impl Iterator for I16Counter {
+    type Item = I16
+    pub func next(mut this) -> Maybe[I16] {
+        if this.current >= this.max { return Nothing }
+        let val: I16 = this.current
+        this.current = this.current + 1_i16
+        return Just(val)
+    }
+}
+
+@test
+func test_i16_sum() -> I32 {
+    var iter: I16Counter = I16Counter { current: 1_i16, max: 5_i16 }
+    let s: I16 = I16::sum(iter)
+    assert_eq(s as I32, 10, "i16 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_i16_product() -> I32 {
+    var iter: I16Counter = I16Counter { current: 1_i16, max: 5_i16 }
+    let p: I16 = I16::product(iter)
+    assert_eq(p as I32, 24, "i16 product 1..4 = 24")
+    return 0
+}
+
+type U8Counter { current: U8, max: U8 }
+impl Iterator for U8Counter {
+    type Item = U8
+    pub func next(mut this) -> Maybe[U8] {
+        if this.current >= this.max { return Nothing }
+        let val: U8 = this.current
+        this.current = this.current + 1_u8
+        return Just(val)
+    }
+}
+
+@test
+func test_u8_sum() -> I32 {
+    var iter: U8Counter = U8Counter { current: 1_u8, max: 5_u8 }
+    let s: U8 = U8::sum(iter)
+    assert_eq(s as I32, 10, "u8 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_u8_product() -> I32 {
+    var iter: U8Counter = U8Counter { current: 1_u8, max: 5_u8 }
+    let p: U8 = U8::product(iter)
+    assert_eq(p as I32, 24, "u8 product 1..4 = 24")
+    return 0
+}
+
+type U16Counter { current: U16, max: U16 }
+impl Iterator for U16Counter {
+    type Item = U16
+    pub func next(mut this) -> Maybe[U16] {
+        if this.current >= this.max { return Nothing }
+        let val: U16 = this.current
+        this.current = this.current + 1_u16
+        return Just(val)
+    }
+}
+
+@test
+func test_u16_sum() -> I32 {
+    var iter: U16Counter = U16Counter { current: 1_u16, max: 5_u16 }
+    let s: U16 = U16::sum(iter)
+    assert_eq(s as I32, 10, "u16 sum 1..4 = 10")
+    return 0
+}
+
+@test
+func test_u16_product() -> I32 {
+    var iter: U16Counter = U16Counter { current: 1_u16, max: 5_u16 }
+    let p: U16 = U16::product(iter)
+    assert_eq(p as I32, 24, "u16 product 1..4 = 24")
+    return 0
+}

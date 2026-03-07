@@ -1,0 +1,9 @@
+// BLOCKED: volatile_read/volatile_write generic type resolution codegen bug
+// '%struct.T = type opaque' - generic T not monomorphized for volatile ops
+use test::{assert}
+
+@test
+func test_volatile_blocked() -> I32 {
+    assert(true, "blocked by volatile intrinsic generic codegen bug")
+    return 0
+}

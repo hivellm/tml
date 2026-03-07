@@ -1,0 +1,76 @@
+// Tests for test::runner helper functions
+use test::{assert, assert_eq}
+use test::runner::{default_config, empty_stats, stats_add_passed, stats_add_failed, stats_add_ignored, stats_set_duration, make_metadata, print_test_result}
+
+@test
+func test_default_config() -> I32 {
+    let config = default_config()
+    assert(not config.parallel, "default parallel should be false")
+    assert_eq(config.threads, 1, "default threads should be 1")
+    assert(not config.verbose, "default verbose should be false")
+    return 0
+}
+
+@test
+func test_empty_stats() -> I32 {
+    let stats = empty_stats()
+    assert_eq(stats.total, 0, "empty total should be 0")
+    assert_eq(stats.passed, 0, "empty passed should be 0")
+    assert_eq(stats.failed, 0, "empty failed should be 0")
+    assert_eq(stats.ignored, 0, "empty ignored should be 0")
+    return 0
+}
+
+@test
+func test_stats_add_passed() -> I32 {
+    var stats = empty_stats()
+    stats_add_passed(mut ref stats)
+    assert_eq(stats.passed, 1, "passed should be 1")
+    assert_eq(stats.total, 1, "total should be 1")
+    return 0
+}
+
+@test
+func test_stats_add_failed() -> I32 {
+    var stats = empty_stats()
+    stats_add_failed(mut ref stats)
+    assert_eq(stats.failed, 1, "failed should be 1")
+    assert_eq(stats.total, 1, "total should be 1")
+    return 0
+}
+
+@test
+func test_stats_add_ignored() -> I32 {
+    var stats = empty_stats()
+    stats_add_ignored(mut ref stats)
+    assert_eq(stats.ignored, 1, "ignored should be 1")
+    assert_eq(stats.total, 1, "total should be 1")
+    return 0
+}
+
+@test
+func test_stats_set_duration() -> I32 {
+    var stats = empty_stats()
+    stats_set_duration(mut ref stats, 5000 as I64)
+    assert_eq(stats.duration as I32, 5000, "duration should be 5000")
+    return 0
+}
+
+@test
+func test_make_metadata() -> I32 {
+    let meta = make_metadata("test_foo", "my_mod", "test.tml", 10, false, false)
+    assert_eq(meta.name, "test_foo", "name should match")
+    assert_eq(meta.module, "my_mod", "module should match")
+    assert_eq(meta.line, 10, "line should match")
+    assert(not meta.should_panic, "should_panic should be false")
+    assert(not meta.ignored, "ignored should be false")
+    return 0
+}
+
+@test
+func test_print_test_result() -> I32 {
+    // This prints to stdout, we just verify it doesn't crash
+    print_test_result("sample_test", true)
+    print_test_result("sample_fail", false)
+    return 0
+}

@@ -1,0 +1,75 @@
+// Tests for CipherAlgorithm methods: name, key_size, iv_size, block_size, is_aead, tag_size
+use test::{assert, assert_eq}
+use std::crypto::cipher::CipherAlgorithm
+
+@test
+func test_aes128cbc_name() -> I32 {
+    let algo: CipherAlgorithm = CipherAlgorithm::Aes128Cbc
+    assert_eq(algo.name(), "aes-128-cbc", "AES-128-CBC name")
+    return 0
+}
+
+@test
+func test_aes256cbc_properties() -> I32 {
+    let algo: CipherAlgorithm = CipherAlgorithm::Aes256Cbc
+    assert_eq(algo.key_size(), 32, "AES-256-CBC key_size = 32")
+    assert_eq(algo.iv_size(), 16, "AES-256-CBC iv_size = 16")
+    assert_eq(algo.block_size(), 16, "AES-256-CBC block_size = 16")
+    assert(not algo.is_aead(), "AES-256-CBC is not AEAD")
+    assert_eq(algo.tag_size(), 0, "AES-256-CBC tag_size = 0")
+    return 0
+}
+
+@test
+func test_aes256gcm_properties() -> I32 {
+    let algo: CipherAlgorithm = CipherAlgorithm::Aes256Gcm
+    assert_eq(algo.key_size(), 32, "AES-256-GCM key_size = 32")
+    assert_eq(algo.iv_size(), 12, "AES-256-GCM iv_size = 12")
+    assert(algo.is_aead(), "AES-256-GCM is AEAD")
+    assert_eq(algo.tag_size(), 16, "AES-256-GCM tag_size = 16")
+    return 0
+}
+
+@test
+func test_aes_cbc_for_key_len() -> I32 {
+    let a128 = CipherAlgorithm::aes_cbc_for_key_len(16 as I64)
+    when a128 {
+        Ok(algo) => assert_eq(algo.name(), "aes-128-cbc", "16 bytes = AES-128-CBC"),
+        Err(_) => assert(false, "should find 128-bit variant")
+    }
+    let a256 = CipherAlgorithm::aes_cbc_for_key_len(32 as I64)
+    when a256 {
+        Ok(algo) => assert_eq(algo.name(), "aes-256-cbc", "32 bytes = AES-256-CBC"),
+        Err(_) => assert(false, "should find 256-bit variant")
+    }
+    let bad = CipherAlgorithm::aes_cbc_for_key_len(17 as I64)
+    assert(bad.is_err(), "17 bytes should return Err")
+    return 0
+}
+
+@test
+func test_aes_gcm_for_key_len() -> I32 {
+    let a128 = CipherAlgorithm::aes_gcm_for_key_len(16 as I64)
+    when a128 {
+        Ok(algo) => assert(algo.is_aead(), "128 GCM is AEAD"),
+        Err(_) => assert(false, "should find 128-bit GCM")
+    }
+    let a256 = CipherAlgorithm::aes_gcm_for_key_len(32 as I64)
+    when a256 {
+        Ok(algo) => assert(algo.is_aead(), "256 GCM is AEAD"),
+        Err(_) => assert(false, "should find 256-bit GCM")
+    }
+    return 0
+}
+
+@test
+func test_from_name() -> I32 {
+    let algo = CipherAlgorithm::from_name("aes-256-cbc")
+    when algo {
+        Just(a) => assert_eq(a.key_size(), 32, "from_name aes-256-cbc"),
+        Nothing => assert(false, "should find aes-256-cbc")
+    }
+    let bad = CipherAlgorithm::from_name("unknown-cipher")
+    assert(bad.is_nothing(), "unknown cipher should return Nothing")
+    return 0
+}
