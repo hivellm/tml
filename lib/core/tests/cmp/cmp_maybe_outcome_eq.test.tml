@@ -1,5 +1,4 @@
-// Tests for Ord::partial_cmp default implementation
-// Maybe::eq and Outcome::eq are blocked by codegen bug (undefined @tml_Maybe__T_eq)
+// Tests for Maybe::eq, Outcome::eq, and Ord::partial_cmp
 use test
 use core::cmp::Ordering
 
@@ -25,5 +24,60 @@ func test_ord_partial_cmp_u32() -> I32 {
         Just(ord) => assert(ord.is_equal(), "U32 Ord::partial_cmp equal"),
         Nothing => assert(false, "should not be Nothing"),
     }
+    return 0
+}
+
+// Tests for Maybe[T]::eq (PartialEq impl)
+
+@test
+func test_maybe_i32_eq_just_equal() -> I32 {
+    let a: Maybe[I32] = Just(42)
+    let b: Maybe[I32] = Just(42)
+    assert(a == b, "Just(42) == Just(42)")
+    return 0
+}
+
+@test
+func test_maybe_i32_eq_just_different() -> I32 {
+    let a: Maybe[I32] = Just(42)
+    let b: Maybe[I32] = Just(99)
+    assert(not (a == b), "Just(42) != Just(99)")
+    return 0
+}
+
+@test
+func test_maybe_i32_eq_nothing() -> I32 {
+    let a: Maybe[I32] = Nothing
+    let b: Maybe[I32] = Nothing
+    assert(a == b, "Nothing == Nothing")
+    return 0
+}
+
+@test
+func test_maybe_i32_eq_just_vs_nothing() -> I32 {
+    let a: Maybe[I32] = Just(42)
+    let b: Maybe[I32] = Nothing
+    assert(not (a == b), "Just != Nothing")
+    assert(not (b == a), "Nothing != Just")
+    return 0
+}
+
+@test
+func test_maybe_i32_ne() -> I32 {
+    let a: Maybe[I32] = Just(1)
+    let b: Maybe[I32] = Just(2)
+    assert(a != b, "Just(1) != Just(2)")
+    let c: Maybe[I32] = Just(1)
+    assert(not (a != c), "Just(1) == Just(1)")
+    return 0
+}
+
+@test
+func test_maybe_bool_eq() -> I32 {
+    let a: Maybe[Bool] = Just(true)
+    let b: Maybe[Bool] = Just(true)
+    let c: Maybe[Bool] = Just(false)
+    assert(a == b, "Just(true) == Just(true)")
+    assert(not (a == c), "Just(true) != Just(false)")
     return 0
 }

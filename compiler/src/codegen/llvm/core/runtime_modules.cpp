@@ -18,6 +18,7 @@ TML_MODULE("codegen_x86")
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
+#include "types/module_binary.hpp"
 
 #include <filesystem>
 #include <unordered_set>
@@ -347,15 +348,35 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // generic.cpp:554 cannot find the source to emit method bodies.
             "core::option",
             "core::result",
+            // Default trait impls for built-in types (Maybe::default, Outcome::default, etc.)
+            // core::default is not transitively imported by most user code but its
+            // impl[T] Default for Maybe[T] is needed when Maybe::default() is called.
+            "core::default",
+            // PartialEq/Eq impls for Maybe/Outcome (needed for == operator on these types)
+            "core::cmp",
+            // Clone/Duplicate impls for Maybe/Outcome
+            "core::clone",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))
                 continue;
+            // Try GlobalModuleCache first (populated by type checker during this run)
             auto cached = types::GlobalModuleCache::instance().get(mod_path);
             if (cached) {
                 registry->register_module(mod_path, std::move(*cached));
                 TML_DEBUG_LN("[MODULE] Auto-registered essential module from GlobalModuleCache: "
                              << mod_path);
+            } else {
+                // Fall back to binary meta cache (.tml.meta files on disk).
+                // This handles trait-impl modules (core::default, core::cmp, etc.)
+                // that may not be loaded into GlobalModuleCache during this run
+                // because user code doesn't explicitly import them.
+                auto from_disk = types::load_module_from_cache(mod_path);
+                if (from_disk && !from_disk->source_code.empty()) {
+                    registry->register_module(mod_path, std::move(*from_disk));
+                    TML_DEBUG_LN(
+                        "[MODULE] Auto-registered essential module from disk cache: " << mod_path);
+                }
             }
         }
     }

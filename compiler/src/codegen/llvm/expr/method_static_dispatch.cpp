@@ -764,6 +764,13 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                 }
             }
 
+            // Built-in generic enums (Maybe, Outcome, Ordering, etc.) are created
+            // synthetically and don't appear in any module's enums map.
+            // Recognize them as imported so their impl methods get instantiated.
+            if (!is_imported && pending_generic_enums_.count(type_name) > 0) {
+                is_imported = true;
+            }
+
             // If the library already emitted methods using the unmangled base name
             // (e.g., tml_BTreeMap_create from gen_impl_method), use the base name
             // so user code calls the existing function instead of a non-existent mangled one.

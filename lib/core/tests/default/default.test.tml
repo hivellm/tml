@@ -270,18 +270,31 @@ func test_str_default_basics() -> I32 {
 
 // ============================================================================
 // Section 2: default_basics.test.tml - Maybe Default Test
-// (commented out due to codegen bug with generic static methods)
 // ============================================================================
 
-// @test
-// func test_maybe_default() -> I32 {
-//     let val: Maybe[I32] = Maybe::default()
-//     when val {
-//         Just(_) => panic("Maybe::default() should be Nothing"),
-//         Nothing => {},
-//     }
-//     return 0
-// }
+@test
+func test_maybe_default() -> I32 {
+    let val: Maybe[I32] = Maybe::default()
+    when val {
+        Just(_) => assert(false, "Maybe::default() should be Nothing"),
+        Nothing => {},
+    }
+    return 0
+}
+
+@test
+func test_maybe_default_i64() -> I32 {
+    let val: Maybe[I64] = Maybe::default()
+    assert(val.is_nothing(), "Maybe[I64]::default() should be Nothing")
+    return 0
+}
+
+@test
+func test_maybe_default_bool() -> I32 {
+    let val: Maybe[Bool] = Maybe::default()
+    assert(val.is_nothing(), "Maybe[Bool]::default() should be Nothing")
+    return 0
+}
 
 // ============================================================================
 // Section 2: default_basics.test.tml - Custom Type with Default

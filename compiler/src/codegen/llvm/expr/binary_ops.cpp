@@ -310,7 +310,60 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             return final_result;
         }
 
-        // For comparison ops (==, !=, etc.) just use extracted values
+        // For == and != on generic builtin enum structs (Maybe, Outcome, Poll), call their
+        // PartialEq::eq() method instead of comparing only the discriminant tag.
+        // Tag-only comparison is incorrect: Just(42) == Just(99) would erroneously return true.
+        if (bin.op == parser::BinaryOp::Eq || bin.op == parser::BinaryOp::Ne) {
+            // Extract base name from mangled enum name (e.g., "Maybe__I32" → "Maybe")
+            std::string base_name = enum_name;
+            size_t dpos = enum_name.find("__");
+            if (dpos != std::string::npos) {
+                base_name = enum_name.substr(0, dpos);
+            }
+
+            bool is_generic_builtin = pending_generic_enums_.count(base_name) > 0;
+            std::string eq_fn_name = "@" + mangle_impl_method(enum_name, "eq");
+            bool has_eq_fn = generated_functions_.count(eq_fn_name) > 0;
+
+            if (is_generic_builtin || has_eq_fn) {
+                // For generic builtins, queue the eq method instantiation so the body gets
+                // generated in generate_pending_instantiations(). The type_subs recovery
+                // logic there will fill in type substitutions from the mangled_type_name.
+                if (is_generic_builtin && !has_eq_fn) {
+                    PendingImplMethod pim;
+                    pim.base_type_name = base_name;
+                    pim.mangled_type_name = enum_name;
+                    pim.method_name = "eq";
+                    pim.is_library_type = true;
+                    pending_impl_method_instantiations_.push_back(pim);
+                }
+
+                // eq() takes (ptr %this, ptr %other) — pass both by pointer
+                std::string left_ptr = fresh_reg();
+                emit_line("  " + left_ptr + " = alloca " + left_type + ", align 8");
+                emit_line("  store " + left_type + " " + left + ", ptr " + left_ptr);
+
+                std::string right_ptr = fresh_reg();
+                emit_line("  " + right_ptr + " = alloca " + right_type + ", align 8");
+                emit_line("  store " + right_type + " " + right + ", ptr " + right_ptr);
+
+                // Call: i1 eq(ptr this, ptr other)
+                std::string eq_result = fresh_reg();
+                emit_line("  " + eq_result + " = call i1 " + eq_fn_name + "(ptr " + left_ptr +
+                          ", ptr " + right_ptr + ")");
+
+                if (bin.op == parser::BinaryOp::Ne) {
+                    std::string neg = fresh_reg();
+                    emit_line("  " + neg + " = xor i1 " + eq_result + ", 1");
+                    last_expr_type_ = "i1";
+                    return neg;
+                }
+                last_expr_type_ = "i1";
+                return eq_result;
+            }
+        }
+
+        // For all other comparison ops (and == on non-PartialEq enums), use extracted tag values
         left = left_tag;
         right = right_tag;
         left_type = tag_type;

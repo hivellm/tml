@@ -14,6 +14,7 @@ TML_MODULE("codegen_x86")
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
+#include "types/module_binary.hpp"
 #include "version_generated.hpp"
 
 #include <filesystem>
@@ -508,6 +509,44 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Restore emitted dyn types (prevents duplicate %dyn.X type definitions)
         for (const auto& name : state.emitted_dyn_types) {
             emitted_dyn_types_.insert(name);
+        }
+
+        // Ensure trait-impl modules (core::default, core::cmp, core::clone, etc.) are
+        // in the registry even in the fast path. These may not be loaded by the type
+        // checker because they contain only trait impls for built-in types (Maybe, etc.)
+        // and are not explicitly imported by user code.
+        {
+            static const std::vector<std::string> trait_impl_modules = {
+                "core::default",
+                "core::cmp",
+                "core::clone",
+            };
+            if (env_.module_registry()) {
+                auto reg = env_.module_registry();
+                // Determine which modules need loading (must read before writing)
+                std::vector<std::string> needs_loading;
+                {
+                    const auto& all_mods = reg->get_all_modules();
+                    for (const auto& mod_path : trait_impl_modules) {
+                        auto it = all_mods.find(mod_path);
+                        bool has_source = it != all_mods.end() && !it->second.source_code.empty();
+                        if (!has_source)
+                            needs_loading.push_back(mod_path);
+                    }
+                }
+                // Now register them (safe to modify registry here)
+                for (const auto& mod_path : needs_loading) {
+                    auto cached = types::GlobalModuleCache::instance().get(mod_path);
+                    if (cached && !cached->source_code.empty()) {
+                        reg->register_module(mod_path, std::move(*cached));
+                    } else {
+                        auto from_disk = types::load_module_from_cache(mod_path);
+                        if (from_disk && !from_disk->source_code.empty()) {
+                            reg->register_module(mod_path, std::move(*from_disk));
+                        }
+                    }
+                }
+            }
         }
 
         // Re-parse library module ASTs for pending generic registration.

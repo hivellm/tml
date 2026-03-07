@@ -777,6 +777,14 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                     // Determine if this is an imported library type
                     bool is_imported = !imported_type_params.empty();
 
+                    // Built-in generic enums (Maybe, Outcome, Poll) are not in any module's
+                    // enums map (they're synthetic builtins) but their impl methods live in
+                    // library modules (core::default, core::cmp, etc.). Treat them as imported
+                    // so the module-wide search in generate_pending_instantiations is used.
+                    if (!is_imported && pending_generic_enums_.count(type_name) > 0) {
+                        is_imported = true;
+                    }
+
                     // For local generic impls, extract method signature from AST if not in env_
                     const parser::FuncDecl* local_method_decl = nullptr;
                     if (!func_sig && impl_it != pending_generic_impls_.end()) {

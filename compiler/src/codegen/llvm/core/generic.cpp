@@ -389,7 +389,6 @@ void LLVMIRGen::generate_pending_instantiations() {
                              << " (mangled: " << pim.mangled_type_name << ")"
                              << " is_library_type=" << (pim.is_library_type ? "true" : "false")
                              << " method_type_suffix=" << pim.method_type_suffix);
-
                 bool method_generated = false;
 
                 // First check locally defined impls
@@ -557,7 +556,6 @@ void LLVMIRGen::generate_pending_instantiations() {
                     TML_DEBUG_LN("[IMPL_INST]   Not in local impls, searching "
                                  << all_modules.size() << " modules for " << pim.base_type_name
                                  << "::" << pim.method_name);
-
                     bool found = false;
                     for (const auto& [mod_name, mod] : all_modules) {
                         if (found)
@@ -568,15 +566,17 @@ void LLVMIRGen::generate_pending_instantiations() {
                         // and search the source code directly
                         auto struct_it = mod.structs.find(pim.base_type_name);
                         auto internal_struct_it = mod.internal_structs.find(pim.base_type_name);
-                        bool has_struct = struct_it != mod.structs.end() ||
-                                          internal_struct_it != mod.internal_structs.end();
-                        if (!has_struct && !pim.is_library_type)
+                        auto enum_it = mod.enums.find(pim.base_type_name);
+                        bool has_type = struct_it != mod.structs.end() ||
+                                        internal_struct_it != mod.internal_structs.end() ||
+                                        enum_it != mod.enums.end();
+                        if (!has_type && !pim.is_library_type)
                             continue;
 
                         TML_DEBUG_LN("[IMPL_INST]   Checking module: "
                                      << mod_name
                                      << " has_source=" << (!mod.source_code.empty() ? "yes" : "no")
-                                     << " has_struct=" << (has_struct ? "yes" : "no"));
+                                     << " has_type=" << (has_type ? "yes" : "no"));
 
                         // Get parsed AST from global cache or parse if not cached
                         if (mod.source_code.empty()) {
