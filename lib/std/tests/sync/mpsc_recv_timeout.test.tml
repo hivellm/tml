@@ -1,0 +1,12 @@
+// Tests for Receiver::recv_timeout
+use test::{assert}
+use std::sync::mpsc
+use core::time::Duration
+
+@test
+func test_recv_timeout_empty() -> I32 {
+    let (tx, mut rx) = mpsc::channel[I32]()
+    let result = rx.recv_timeout(Duration::from_millis(1))
+    assert(result.is_err(), "recv_timeout on empty channel should be Err")
+    return 0
+}

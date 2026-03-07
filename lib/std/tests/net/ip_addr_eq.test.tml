@@ -1,0 +1,11 @@
+// Tests for IpAddr::eq (PartialEq impl)
+use test::{assert}
+use std::net::ip::{IpAddr, Ipv4Addr}
+
+@test
+func test_ip_addr_eq_same_v4() -> I32 {
+    let a = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    let b = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    assert(a == b, "same IPv4 addresses should be equal")
+    return 0
+}

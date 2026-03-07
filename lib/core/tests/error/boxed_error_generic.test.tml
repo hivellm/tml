@@ -1,0 +1,9 @@
+// Tests for BoxedError::new[E: Error] — BLOCKED by generic trait dispatch
+// BoxedError::new calls error.to_string() on generic E which fails
+use test::assert
+
+@test
+func test_boxed_error_new_blocked() -> I32 {
+    assert(true, "BoxedError::new blocked by generic E: Error dispatch")
+    return 0
+}

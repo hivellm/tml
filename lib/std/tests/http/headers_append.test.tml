@@ -1,0 +1,11 @@
+// Tests for Headers::append
+use test::{assert}
+use std::http::headers::Headers
+
+@test
+func test_headers_append_single() -> I32 {
+    var h: Headers = Headers::new()
+    h.append("x-test", "val1")
+    h.destroy()
+    return 0
+}

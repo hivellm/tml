@@ -1,0 +1,18 @@
+// Tests for fmt helpers — exercise format_sign via negative number formatting
+use test::{assert_eq, assert}
+
+@test
+func test_negative_i64_format() -> I32 {
+    let x: I64 = -123 as I64
+    let s: Str = x.to_string()
+    assert_eq(s, "-123", "negative I64 should format with sign")
+    return 0
+}
+
+@test
+func test_large_u64_format() -> I32 {
+    let x: U64 = 999999999 as U64
+    let s: Str = x.to_string()
+    assert_eq(s, "999999999", "large U64 should format correctly")
+    return 0
+}

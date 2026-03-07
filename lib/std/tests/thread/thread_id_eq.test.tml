@@ -1,0 +1,12 @@
+// Tests for ThreadId::eq
+use test::{assert}
+use std::thread
+
+@test
+func test_thread_id_eq_self() -> I32 {
+    let t = thread::current()
+    let id1 = t.id()
+    let id2 = t.id()
+    assert(id1 == id2, "same thread id should be equal to itself")
+    return 0
+}

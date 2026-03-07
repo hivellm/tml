@@ -1,0 +1,24 @@
+// Tests for Weak::ptr_eq and Weak::upgrade
+use test::{assert, assert_false, assert_eq}
+use std::sync::Arc::{Arc, Weak}
+
+@test
+func test_weak_ptr_eq_same() -> I32 {
+    let a: Arc[I32] = Arc::new(42)
+    let w1: Weak[I32] = a.downgrade()
+    let w2: Weak[I32] = a.downgrade()
+    assert(Weak::ptr_eq(ref w1, ref w2), "weak refs from same Arc should be ptr_eq")
+    return 0
+}
+
+@test
+func test_weak_ptr_eq_different() -> I32 {
+    let a: Arc[I32] = Arc::new(1)
+    let b: Arc[I32] = Arc::new(2)
+    let w1: Weak[I32] = a.downgrade()
+    let w2: Weak[I32] = b.downgrade()
+    assert_false(Weak::ptr_eq(ref w1, ref w2), "weak refs from different Arcs should not be ptr_eq")
+    return 0
+}
+
+// NOTE: Weak::upgrade blocked by Maybe[Arc[T]] codegen bug

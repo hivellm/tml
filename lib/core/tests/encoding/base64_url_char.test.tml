@@ -1,0 +1,20 @@
+// Tests for base64::encode_url — covers encode_char_url internally
+use test::{assert_eq, assert}
+use core::encoding::base64
+
+@test
+func test_encode_url_simple() -> I32 {
+    let result: Str = base64::encode_url("Hello")
+    assert(result.len() > 0, "encode_url should produce output")
+    return 0
+}
+
+@test
+func test_encode_url_special_chars() -> I32 {
+    let result: Str = base64::encode_url("a>b?c")
+    assert(result.len() > 0, "encode_url with special chars should work")
+    // URL-safe should not contain + or /
+    assert_eq(result.contains("+"), false, "URL-safe should not contain +")
+    assert_eq(result.contains("/"), false, "URL-safe should not contain /")
+    return 0
+}

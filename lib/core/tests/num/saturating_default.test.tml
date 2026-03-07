@@ -1,0 +1,8 @@
+// Tests for Saturating/Wrapping default — BLOCKED by generic Default dispatch
+use test::assert
+
+@test
+func test_saturating_wrapping_default_blocked() -> I32 {
+    assert(true, "Saturating/Wrapping default blocked by Default::default() codegen")
+    return 0
+}

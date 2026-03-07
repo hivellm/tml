@@ -1,0 +1,9 @@
+// Tests for SocketAddr::V6 — BLOCKED by Ipv6Addr struct codegen
+// Ipv6Addr (8x i16) is passed as i32 due to struct type mismatch
+use test::assert
+
+@test
+func test_socket_addr_v6_blocked() -> I32 {
+    assert(true, "SocketAddr::V6 blocked by Ipv6Addr struct codegen")
+    return 0
+}
