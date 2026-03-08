@@ -8,6 +8,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Test Coverage Push to 93.1%** (2026-03-07) — Systematic coverage campaign adding 100+ test files and fixing compiler bugs
+  - Coverage: 5113/5492 library functions covered (93.1%), 1378 tests passing, 205 modules at 100%
+  - Coverage ceiling analysis: ~379 uncovered functions, ~98% theoretical max (blocked by codegen bugs)
+  - Permanently uncoverable: 8 primitive `From::from` (inlined as LLVM casts at `call.cpp:521`), 2 `NeverError` (Never type), 2 non-pub helpers
+  - Key blockers: generic trait dispatch (~57 functions), async/net/http (~144), codegen type mismatches (~80)
+
+- **Coverage Scanner Bug Fixes** (2026-03-07) — Fixed 2 bugs in `testing_coverage.cpp` function name extraction
+  - `impl` regex now handles generic params and behavior impls (`impl[T] Behavior for Type`)
+  - Comment/string brace skipping prevents false brace depth tracking
+  - Added `class`/`interface` keyword handling for non-TML constructs in coverage extraction
+
+### Fixed
+- **Parser Position Restore on Missing Else** (2026-03-04) — `parse_if_expr` consumed newlines looking for `else` without restoring `pos_` when no `else` found
+  - Caused `*acc` on next line to be parsed as binary `*` (multiply) instead of unary deref
+  - Fix: save/restore `pre_else_pos` in `parser_expr_complex.cpp`
+  - Unblocked 5 iterator tests: `iter_scan`, `iter_map_while`, `iter_filter_map`, `iter_successors`, `iter_map`
+
+- **type_id[T] Hash Collision and Explicit Generic Args** (2026-03-06) — Fixed `type_id` returning same hash for different types and resolved explicit generic argument resolution in codegen
+
+- **Unsized %struct.T Emission** (2026-03-05) — Fixed method-level generic methods emitting unsized `%struct.T` instead of concrete type
+
+- **Closure Param Semantic Type Propagation** (2026-03-05) — Fixed inline closure params in `Maybe`/`Outcome` methods losing semantic type info (e.g., `mut ref I32` treated as `Str`)
+
+- **Method-Level Generic Instantiation** (2026-03-04) — Added `GlobalModuleCache` fallback for method-level generic instantiation, fixing unresolved function references
+
+- **DoubleEndedIterator PIMs and nth_back** (2026-03-03) — Generated protocol implementation methods for DoubleEndedIterator and fixed `nth_back` return type
+
+- **Str::eq/ne Inline Codegen** (2026-03-03) — Added inline codegen for `Str::eq` and `Str::ne` method dispatch, avoiding runtime function call overhead
+
+- **Atomic Builtins last_expr_type_** (2026-03-03) — Fixed `last_expr_type_` not being set in atomic builtin codegen, causing type inference failures in pool operations
+
+- **Private Enum Constructor Codegen** (2026-03-03) — Added `internal_enums` support for private enum constructors (e.g., `BorrowState` in RefCell)
+
+- **Generic Default::default() Trait Dispatch** (2026-03-02) — Resolved trait name dispatch for `Default::default()` in generic impl blocks
+
+- **Maybe::default() and Maybe::eq() for Builtin Enums** (2026-03-02) — Enabled generic builtin enum methods that were blocked by monomorphization
+
+- **Array Mutable Method Dispatch** (2026-03-02) — Added `mut this` method dispatch for Array methods: `get_mut`, `first_mut`, `last_mut`, `each_ref`, `each_mut`
+
+- **When Arm String Codegen + Generic Multi-Param Methods** (2026-03-02) — Fixed 2 codegen bugs: incorrect string literals in `when` arms and multi-parameter generic method resolution
+
+- **5 Compiler Bugs + Coverage Runtime Refactor** (2026-03-01) — Fixed codegen issues in enum I64 payload, pathbuf, BufWriter; refactored coverage data collection to write before exit
+
+- **Sealed Class Codegen** (2026-03-01) — Complete sealed class support: type codegen, phi predecessors, suite merging, ABI mismatches for struct/enum params in generic and non-generic method calls
+
 - **Async I/O Event Loop (Phase 3)** (2026-02-25) — `std::aio` module with single-threaded event loop combining I/O polling + timer management
   - `Poller` (Layer 2) — TML wrapper around platform I/O polling (epoll on Linux, WSAPoll on Windows)
     - Register sockets with token-based dispatch (U32 tokens)
