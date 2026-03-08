@@ -1,0 +1,10 @@
+// Tests for Poll::eq (PartialEq)
+// BLOCKED: "invalid getelementptr indices" — tuple pattern (this, other)
+// in PartialEq impl with ref Poll[T] produces invalid GEP on ptr type.
+use test::{assert}
+
+@test
+func test_poll_eq_blocked() -> I32 {
+    assert(true, "Poll::eq blocked by GEP codegen bug on tuple+ref pattern")
+    return 0
+}

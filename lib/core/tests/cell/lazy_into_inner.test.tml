@@ -1,0 +1,11 @@
+// Tests for LazyCell::into_inner
+// BLOCKED: Maybe[I32] from OnceCell::into_inner() collides with Maybe[func() -> I32]
+// in the same compilation unit. Both have layout {i32, i32} but different LLVM type names.
+// Error: '%t24' defined with type '%struct.Maybe__I32__Fn' but expected '%struct.Maybe__I32'
+use test::{assert}
+
+@test
+func test_lazy_into_inner_blocked() -> I32 {
+    assert(true, "into_inner blocked by Maybe type collision in codegen")
+    return 0
+}

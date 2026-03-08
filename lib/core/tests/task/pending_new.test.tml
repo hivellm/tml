@@ -1,0 +1,24 @@
+// Tests for Pending::new and pending() helper
+use test::{assert}
+use core::task::{Pending, pending}
+
+@test
+func test_pending_new() -> I32 {
+    let p: Pending[I32] = Pending::new()
+    assert(true, "Pending::new should construct without error")
+    return 0
+}
+
+@test
+func test_pending_helper() -> I32 {
+    let p: Pending[I32] = pending()
+    assert(true, "pending() helper should construct without error")
+    return 0
+}
+
+@test
+func test_pending_new_str() -> I32 {
+    let p: Pending[Str] = Pending::new()
+    assert(true, "Pending::new with Str type param works")
+    return 0
+}

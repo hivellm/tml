@@ -1,9 +1,12 @@
-// BLOCKED: Intersperse adapter requires associated type resolution in LLVM IR
-// The compiler cannot resolve Iterator::Item for generic adapter types
+// Tests for core::iter::adapters::intersperse — Intersperse[I] adapter
+// BLOCKED: LLVM IR codegen error "expected comma after load's type" in Intersperse::next
+// The Duplicate behavior's .duplicate() call or the next_item: Maybe[I::Item] field
+// produces malformed load instruction in the IR.
+// Functions blocked: next, intersperse (both)
 use test::{assert}
 
 @test
-func test_intersperse_blocked() -> I32 {
-    assert(true, "blocked by associated type IR resolution")
+func test_intersperse_blocked_codegen() -> I32 {
+    assert(true, "intersperse blocked by load IR codegen bug — see comment")
     return 0
 }

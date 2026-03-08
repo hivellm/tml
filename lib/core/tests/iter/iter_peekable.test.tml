@@ -1,8 +1,8 @@
 // Tests for core::iter::adapters::peekable — Peekable[I] adapter
 // BLOCKED: Nested Maybe[Maybe[T]] codegen type mismatch in peeked field.
-// The type checker now passes but LLVM IR generation produces:
-//   Maybe[I32] vs Maybe[Maybe[I32]] type mismatch for the peeked field.
-use test
+// LLVM IR error: Maybe[I32] vs Maybe[Maybe[I32]] type layout mismatch.
+// Functions blocked: next, size_hint, peek, peek_mut, next_if, next_if_eq, peekable (all 7)
+use test::{assert}
 
 @test
 func test_peekable_blocked_codegen() -> I32 {

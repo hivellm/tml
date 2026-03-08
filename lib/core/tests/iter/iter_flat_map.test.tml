@@ -1,9 +1,39 @@
-// BLOCKED: FlatMap adapter loses inner iterator state across calls
-// The compiler doesn't properly track mutable state in nested generic iterators
-use test::{assert}
+// Tests for core::iter::adapters::flat_map — FlatMap[I, F, U] adapter
+// PARTIALLY BLOCKED: Maybe[U] current field mutation bug -- after inner iterator
+// is exhausted, setting this.current = Nothing doesn't work properly.
+// Multi-element and exhaustion tests fail.
+use test::{assert_eq}
+use core::iter::adapters::flat_map::{FlatMap, flat_map}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+type Once { value: I32, done: Bool }
+impl Iterator for Once {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.done { return Nothing }
+        this.done = true
+        return Just(this.value)
+    }
+}
 
 @test
-func test_flat_map_blocked() -> I32 {
-    assert(true, "blocked by inner iterator state mutation bug")
+func test_flat_map_first_element() -> I32 {
+    // Tests: flat_map constructor + first call to next (covers both functions)
+    // Cannot test exhaustion due to Maybe[U] field mutation codegen bug
+    var iter: FlatMap[Counter, func(I32) -> Once, Once] = flat_map(
+        Counter { current: 5, max: 6 },
+        do(x: I32) -> Once { Once { value: x * 10, done: false } }
+    )
+    assert_eq(iter.next().unwrap(), 50, "5*10=50")
     return 0
 }

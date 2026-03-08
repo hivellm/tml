@@ -1,0 +1,31 @@
+// Tests for array/iter: ArrayIter and Array::iter/iter_mut/into_iter
+//
+// ALL 19 FUNCTIONS BLOCKED by two codegen bugs:
+//
+// 1. Const generic monomorphization in struct layout: ArrayIter[T, const N: I64]
+//    uses `data: [T; N]` field, but codegen always emits `[0 x i32]` instead of
+//    `[N x i32]` for the concrete instantiation. LLVM IR error:
+//    "'%t7' defined with type '[3 x i32]' but expected '[0 x i32]'"
+//    ArrayIter::new also crashes (ACCESS_VIOLATION) due to this layout bug.
+//    This affects: ArrayIter::new, empty, as_slice, as_mut_slice, next, count,
+//    last, nth, advance_by, next_back, nth_back, advance_back_by, len,
+//    is_empty_exact, duplicate, debug_string (16 functions).
+//
+// 2. Cross-file impl resolution: Array::iter, Array::iter_mut, Array::into_iter
+//    are defined in `impl[T, const N: I64] Array[T, N]` blocks in array/iter.tml.
+//    The compiler reports "Unknown method" even with imports.
+//    This affects: Array::into_iter, Array::iter, Array::iter_mut (3 functions).
+//
+// Blocked functions (19 total):
+//   ArrayIter::new, empty, as_slice, as_mut_slice, next, count, last, nth,
+//   advance_by, next_back, nth_back, advance_back_by, len, is_empty_exact,
+//   duplicate, debug_string, Array::into_iter, Array::iter, Array::iter_mut
+
+use test
+
+@test
+func test_array_iter_blocked() -> I32 {
+    // All array/iter tests blocked by codegen bugs documented above
+    assert(true, "placeholder - see file header for blockers")
+    return 0
+}

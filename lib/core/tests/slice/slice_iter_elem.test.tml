@@ -1,0 +1,14 @@
+// Additional test file for SliceIter/SliceIterMut - see slice_iter_chunks.test.tml
+// for full blocker documentation. This file is kept separate for when the
+// Slice struct codegen bug is fixed independently of the cross-file impl bug.
+//
+// BLOCKED: Constructing SliceIter{slice: s, index: 0} where s is Slice[I32]
+// emits anonymous {ptr, i64} vs named %struct.Slice__I32 type mismatch.
+
+use test
+
+@test
+func test_slice_iter_elem_blocked() -> I32 {
+    assert(true, "placeholder - blocked by Slice struct codegen")
+    return 0
+}

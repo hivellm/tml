@@ -1,0 +1,13 @@
+// Tests for core::convert — Outcome::from
+// BLOCKED: generic codegen bug — Outcome__I32__E vs Outcome__I32__Str type mismatch
+// Will pass when generic type parameter resolution is fixed in codegen.
+use test::{assert, assert_eq}
+use core::convert::From
+
+@test
+func test_outcome_from_i32() -> I32 {
+    let r: Outcome[I32, Str] = Outcome::from(42)
+    assert(r.is_ok(), "Outcome::from should produce Ok")
+    assert_eq(r.unwrap(), 42, "value should be 42")
+    return 0
+}

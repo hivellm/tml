@@ -1,0 +1,43 @@
+// Tests for core::cell::lazy — LazyCell
+use test::{assert, assert_eq}
+use core::cell::lazy::LazyCell
+
+@test
+func test_lazy_cell_not_initialized() -> I32 {
+    let cell = LazyCell[I32, func() -> I32]::new(do() -> I32 { return 42 })
+    assert(not cell.is_initialized(), "LazyCell should not be initialized before get")
+    return 0
+}
+
+@test
+func test_lazy_cell_get() -> I32 {
+    let mut cell = LazyCell[I32, func() -> I32]::new(do() -> I32 { return 42 })
+    let val: ref I32 = cell.get()
+    assert(*val == 42, "LazyCell get should return 42")
+    return 0
+}
+
+@test
+func test_lazy_cell_is_initialized_after_get() -> I32 {
+    let mut cell = LazyCell[I32, func() -> I32]::new(do() -> I32 { return 99 })
+    let _val = cell.get()
+    assert(cell.is_initialized(), "LazyCell should be initialized after get")
+    return 0
+}
+
+@test
+func test_lazy_cell_get_mut_uninit() -> I32 {
+    let mut cell = LazyCell[I32, func() -> I32]::new(do() -> I32 { return 10 })
+    let result: Maybe[mut ref I32] = cell.get_mut()
+    assert(result.is_nothing(), "get_mut on uninitialized should be Nothing")
+    return 0
+}
+
+@test
+func test_lazy_cell_get_mut_after_init() -> I32 {
+    let mut cell = LazyCell[I32, func() -> I32]::new(do() -> I32 { return 50 })
+    let _v = cell.get()
+    let result: Maybe[mut ref I32] = cell.get_mut()
+    assert(result.is_just(), "get_mut on initialized should be Just")
+    return 0
+}

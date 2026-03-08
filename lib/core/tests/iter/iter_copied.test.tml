@@ -1,0 +1,12 @@
+// Tests for core::iter::adapters::copied — Copied[I] adapter
+// BLOCKED: Generic monomorphization bug -- `where I::Item = ref T` constraint
+// causes codegen to emit `load %struct.T` instead of concrete type (e.g., i32).
+// Same root cause as generic trait dispatch codegen bug.
+// Functions blocked: next, size_hint, copied (all 3)
+use test::{assert}
+
+@test
+func test_copied_blocked_codegen() -> I32 {
+    assert(true, "copied blocked by generic T monomorphization in where clause")
+    return 0
+}

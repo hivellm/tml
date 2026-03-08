@@ -1,0 +1,34 @@
+// Tests for Context::from_waker, Context::waker
+use test::{assert}
+use core::task::{Context, Waker, RawWaker, RawWakerVTable}
+use core::ptr::RawPtr
+
+func noop_clone(p: RawPtr[Unit]) -> RawWaker {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    return RawWaker::new(p, ref vtable)
+}
+func noop_wake(p: RawPtr[Unit]) {}
+func noop_drop(p: RawPtr[Unit]) {}
+
+@test
+func test_context_from_waker() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    let ctx: Context[Unit] = Context::from_waker(ref w)
+    assert(true, "Context::from_waker should construct")
+    return 0
+}
+
+@test
+func test_context_waker() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    let ctx: Context[Unit] = Context::from_waker(ref w)
+    let wref: ref Waker = ctx.waker()
+    assert(true, "Context::waker should return waker ref")
+    return 0
+}

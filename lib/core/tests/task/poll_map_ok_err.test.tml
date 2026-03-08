@@ -1,0 +1,10 @@
+// Tests for Poll::map_ok, Poll::map_err
+// BLOCKED: FnOnce[(T,)] closure call codegen produces {i32} tuple struct
+// instead of plain i32, causing "defined with type '{i32}' but expected 'i32'"
+use test::{assert}
+
+@test
+func test_poll_map_ok_err_blocked() -> I32 {
+    assert(true, "Poll::map_ok/map_err blocked by FnOnce tuple arg codegen bug")
+    return 0
+}

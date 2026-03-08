@@ -1,0 +1,51 @@
+// Tests for Array uncovered functions
+// BLOCKED functions documented below with root causes
+use test::{assert, assert_eq}
+
+// --- index / index_mut are exercised via arr[i] syntax in array.test.tml ---
+// The coverage tool may not track these as they use built-in codegen, not the impl body.
+
+@test
+func test_array_index_read() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let v: I32 = arr[1]
+    assert(v == 20, "index should return element at position")
+    return 0
+}
+
+@test
+func test_array_index_mut_write() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    arr[2] = 99
+    assert(arr[2] == 99, "index_mut should allow writing element")
+    return 0
+}
+
+@test
+func test_array_as_slice() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let s = arr.as_slice()
+    let len: I64 = s.len()
+    assert(len == 3, "as_slice length should be 3")
+    return 0
+}
+
+// =========================================================================
+// BLOCKED: All below return () due to generic trait dispatch codegen bug
+// =========================================================================
+// try_map[U, E]      — "Unknown method: try_map" or returns ()
+// zip[U]             — returns ()
+// try_from_fn[T,E,N] — returns ()
+// from_ref[T]        — returns ()
+// from_mut[T]        — returns ()
+// partial_cmp        — impl[T: PartialOrd] returns ()
+// duplicate          — impl[T: Duplicate] "Unknown method: duplicate"
+// hash               — impl[T: Hash] "Unknown method: hash"
+// default            — impl[T: Default] returns ()
+// to_string          — impl[T: Display] "Unknown method: to_string"
+// debug_string       — impl[T: Debug] "Unknown method: debug_string"
+// AsRef::as_ref      — impl returns ()
+// AsMut::as_mut      — MutSlice unsized type alloc failure
+// TryFrom::try_from  — impl[T: Copy] returns ()
+// eq_slice           — impl[T: PartialEq] returns ()
+// eq (PartialEq)     — built-in comparison codegen: [3 x i32] vs i32 mismatch

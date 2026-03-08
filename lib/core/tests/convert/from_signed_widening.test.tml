@@ -1,0 +1,24 @@
+// Tests for core::convert — signed widening From conversions
+use test::{assert, assert_eq}
+use core::convert::From
+
+@test
+func test_from_i8_to_i16() -> I32 {
+    let v: I16 = I16::from(42 as I8)
+    assert_eq(v as I64, 42, "I8 42 to I16")
+    return 0
+}
+
+@test
+func test_from_i8_to_i16_negative() -> I32 {
+    let v: I16 = I16::from(-100 as I8)
+    assert_eq(v as I64, -100, "I8 -100 to I16")
+    return 0
+}
+
+@test
+func test_from_i16_to_i64() -> I32 {
+    let v: I64 = I64::from(30000 as I16)
+    assert_eq(v, 30000, "I16 30000 to I64")
+    return 0
+}

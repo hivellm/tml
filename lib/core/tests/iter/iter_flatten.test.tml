@@ -1,0 +1,11 @@
+// Tests for core::iter::adapters::flatten — Flatten[I, U] adapter
+// BLOCKED: Codegen error "store %struct.Counter 0" -- Maybe[U] field initialized
+// to Nothing generates `store struct 0` instead of zeroinitializer in LLVM IR.
+// Functions blocked: next, flatten (both)
+use test::{assert}
+
+@test
+func test_flatten_blocked_codegen() -> I32 {
+    assert(true, "flatten blocked by Maybe[U] Nothing initialization codegen bug")
+    return 0
+}

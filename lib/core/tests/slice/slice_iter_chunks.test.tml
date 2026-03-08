@@ -1,0 +1,31 @@
+// Tests for slice/iter: Chunks, ChunksExact, Windows, SliceIter, SliceIterMut
+//
+// ALL 19 FUNCTIONS BLOCKED by two codegen bugs:
+//
+// 1. Cross-file impl resolution: Methods like chunks(), iter(), windows() are defined
+//    in `impl[T] Slice[T]` blocks in slice/iter.tml submodule. The compiler reports
+//    "Unknown method: chunks" (and iter, windows) even with `use core::slice::iter::*`.
+//    This affects: Slice::chunks, Slice::chunks_exact, Slice::windows, Slice::iter,
+//    MutSlice::iter, MutSlice::iter_mut (6 functions).
+//
+// 2. Named struct vs anonymous struct in codegen: Constructing structs that contain
+//    a Slice[T] field (like SliceIter, Chunks, Windows) emits `{ptr, i64}` anonymous
+//    type but the store instruction expects `%struct.Slice__I32 = type { ptr, i64 }`.
+//    LLVM IR error: "'%t16' defined with type '{ ptr, i64 }' but expected '%struct.Slice__I32'"
+//    This affects: ALL iterator types since they all contain Slice[T] fields (13 functions).
+//
+// Blocked functions (19 total):
+//   Chunks::next, Chunks::remainder, Slice::chunks, Slice::chunks_exact,
+//   ChunksExact::next, ChunksExact::remainder, Windows::next, Windows::remaining,
+//   Slice::windows, SliceIter::next, SliceIter::len, SliceIter::is_empty,
+//   SliceIter::as_slice, Slice::iter, SliceIterMut::next, SliceIterMut::len,
+//   SliceIterMut::is_empty, MutSlice::iter, MutSlice::iter_mut
+
+use test
+
+@test
+func test_slice_iter_blocked() -> I32 {
+    // All slice/iter tests blocked by codegen bugs documented above
+    assert(true, "placeholder - see file header for blockers")
+    return 0
+}

@@ -1,0 +1,34 @@
+// Tests for Poll::default, Poll::duplicate
+use test::{assert, assert_eq}
+use core::task::Poll
+
+@test
+func test_poll_default_i32() -> I32 {
+    let p: Poll[I32] = Poll::default()
+    assert(p.is_ready(), "default Poll should be Ready")
+    when p {
+        Ready(v) => assert_eq(v, 0, "default I32 is 0"),
+        Pending => panic("should be Ready")
+    }
+    return 0
+}
+
+@test
+func test_poll_duplicate_ready() -> I32 {
+    let p: Poll[I32] = Poll::Ready(42)
+    let p2: Poll[I32] = p.duplicate()
+    assert(p2.is_ready(), "duplicated Ready should be Ready")
+    when p2 {
+        Ready(v) => assert_eq(v, 42, "duplicated value should be 42"),
+        Pending => panic("should be Ready")
+    }
+    return 0
+}
+
+@test
+func test_poll_duplicate_pending() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    let p2: Poll[I32] = p.duplicate()
+    assert(p2.is_pending(), "duplicated Pending should be Pending")
+    return 0
+}

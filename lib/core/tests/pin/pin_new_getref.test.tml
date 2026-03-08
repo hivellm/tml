@@ -1,0 +1,11 @@
+// Tests for Pin[ref T]::new, get_ref, get_mut, get_unchecked_mut, deref, deref_mut
+// BLOCKED: "Type mismatch: expected ref I32, found ref ref I32"
+// All 6 functions access a `ref T` field through implicit `ref Self` receiver,
+// producing `ref ref T` which the type system rejects.
+use test::{assert}
+
+@test
+func test_pin_ref_methods_blocked() -> I32 {
+    assert(true, "Pin[ref T] 6 methods blocked by ref-ref codegen bug")
+    return 0
+}

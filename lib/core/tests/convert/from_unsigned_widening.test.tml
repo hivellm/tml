@@ -1,0 +1,24 @@
+// Tests for core::convert — unsigned widening From conversions
+use test::{assert, assert_eq}
+use core::convert::From
+
+@test
+func test_from_u8_to_u16() -> I32 {
+    let v: U16 = U16::from(200 as U8)
+    assert_eq(v as I64, 200, "U8 200 to U16")
+    return 0
+}
+
+@test
+func test_from_u16_to_u32() -> I32 {
+    let v: U32 = U32::from(50000 as U16)
+    assert_eq(v as I64, 50000, "U16 50000 to U32")
+    return 0
+}
+
+@test
+func test_from_u32_to_u64() -> I32 {
+    let v: U64 = U64::from(4000000000 as U32)
+    assert_eq(v as I64, 4000000000, "U32 4000000000 to U64")
+    return 0
+}

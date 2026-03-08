@@ -1,0 +1,24 @@
+// Tests for core::convert — wider unsigned From conversions
+use test::{assert, assert_eq}
+use core::convert::From
+
+@test
+func test_from_u8_to_u64() -> I32 {
+    let v: U64 = U64::from(255 as U8)
+    assert_eq(v as I64, 255, "U8 255 to U64")
+    return 0
+}
+
+@test
+func test_from_u16_to_u64() -> I32 {
+    let v: U64 = U64::from(65535 as U16)
+    assert_eq(v as I64, 65535, "U16 65535 to U64")
+    return 0
+}
+
+@test
+func test_from_i8_to_i64() -> I32 {
+    let v: I64 = I64::from(-50 as I8)
+    assert_eq(v, -50, "I8 -50 to I64")
+    return 0
+}

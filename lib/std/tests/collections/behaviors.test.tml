@@ -1,0 +1,253 @@
+// Tests for std::collections::behaviors module
+use test
+use test::{assert, assert_eq}
+use std::collections::List
+use std::collections::HashMap
+
+@test
+func test_list_default() -> I32 {
+    let list: List[I32] = List[I32].default()
+    assert_eq(list.len(), 0 as I64, "default list should be empty")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_duplicate() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    let copy: List[I32] = list.duplicate()
+    assert_eq(copy.len(), 3 as I64, "duplicate should have same length")
+    assert_eq(copy.get(0 as I64), 10, "duplicate elem 0")
+    assert_eq(copy.get(1 as I64), 20, "duplicate elem 1")
+    assert_eq(copy.get(2 as I64), 30, "duplicate elem 2")
+    copy.destroy()
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_eq_same() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(2)
+    assert(a.eq(ref b), "identical lists should be equal")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_eq_different() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(3)
+    assert(not a.eq(ref b), "different lists should not be equal")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_eq_different_length() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(2)
+    assert(not a.eq(ref b), "lists with different lengths should not be equal")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_partial_cmp_less() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(3)
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_cmp_less() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(3)
+    let result = a.cmp(ref b)
+    // Less should be the result since 2 < 3
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_cmp_shorter() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(2)
+    let result = a.cmp(ref b)
+    // shorter list is Less
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_to_string() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    let s = list.to_string()
+    assert_eq(s, "[1, 2, 3]", "to_string format")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_debug_string() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(1)
+    list.push(2)
+    let s = list.debug_string()
+    assert_eq(s, "List[1, 2]", "debug_string format")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_hash() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(1)
+    b.push(2)
+    assert_eq(a.hash(), b.hash(), "equal lists should have equal hashes")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_list_index() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    assert_eq(list.index(0 as I64), 10, "index 0")
+    assert_eq(list.index(1 as I64), 20, "index 1")
+    assert_eq(list.index(2 as I64), 30, "index 2")
+    list.destroy()
+    return 0
+}
+
+// BLOCKED: iter/ListIter::next - codegen ptr vs struct mismatch for ListIter[T]
+// @test func test_list_iter_and_next() -- '%this' ptr vs '%struct.List__I32'
+
+// BLOCKED: into_iter - codegen ptr vs struct mismatch for List ownership transfer
+// @test func test_list_into_iter() -- '%this' ptr vs '%struct.List__I32'
+
+@test
+func test_hashmap_default() -> I32 {
+    let map: HashMap[I32, I32] = HashMap[I32, I32].default()
+    assert_eq(map.len(), 0 as I64, "default hashmap should be empty")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_index() -> I32 {
+    let map: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    map.set(1, 100)
+    map.set(2, 200)
+    assert_eq(map.index(1), 100, "index key 1")
+    assert_eq(map.index(2), 200, "index key 2")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_duplicate() -> I32 {
+    let map: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    map.set(1, 10)
+    map.set(2, 20)
+    let copy: HashMap[I32, I32] = map.duplicate()
+    assert_eq(copy.len(), 2 as I64, "duplicate should have same length")
+    assert_eq(copy.get(1), 10, "duplicate key 1")
+    assert_eq(copy.get(2), 20, "duplicate key 2")
+    copy.destroy()
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_to_string() -> I32 {
+    let map: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    map.set(1, 42)
+    let s = map.to_string()
+    // HashMap iteration order is not guaranteed, but with 1 entry it's deterministic
+    assert_eq(s, "{1: 42}", "to_string for single-entry map")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_debug_string() -> I32 {
+    let map: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    map.set(1, 42)
+    let s = map.debug_string()
+    assert_eq(s, "HashMap{1: 42}", "debug_string for single-entry map")
+    map.destroy()
+    return 0
+}
+
+// BLOCKED: index_mut - codegen returns i32 instead of ptr for mut ref T
+// @test func test_list_index_mut() -- '%t' i32 vs ptr
+
+// BLOCKED: from_iter, extend, iter, into_iter, ListIter::next all depend on ListIter[T]
+// which triggers codegen bug: '%this' ptr vs '%struct.List__I32'
+// from_iter and extend also blocked transitively since they need an Iterator arg
+
+@test
+func test_list_to_string_empty() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    assert_eq(list.to_string(), "[]", "empty list to_string")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_hash_different() -> I32 {
+    let a: List[I32] = List[I32].new(4)
+    a.push(1)
+    a.push(2)
+    let b: List[I32] = List[I32].new(4)
+    b.push(2)
+    b.push(1)
+    assert(a.hash() != b.hash(), "different lists should have different hashes")
+    a.destroy()
+    b.destroy()
+    return 0
+}

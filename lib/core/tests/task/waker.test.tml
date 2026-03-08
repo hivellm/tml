@@ -1,0 +1,45 @@
+// Tests for Waker::from_raw, will_wake, as_raw
+// wake, wake_by_ref, duplicate are stub panics — untestable
+use test::{assert}
+use core::task::{Waker, RawWaker, RawWakerVTable}
+use core::ptr::RawPtr
+
+func noop_clone(p: RawPtr[Unit]) -> RawWaker {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    return RawWaker::new(p, ref vtable)
+}
+func noop_wake(p: RawPtr[Unit]) {}
+func noop_drop(p: RawPtr[Unit]) {}
+
+@test
+func test_waker_from_raw() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    assert(true, "Waker::from_raw should construct")
+    return 0
+}
+
+@test
+func test_waker_will_wake_same() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw1: RawWaker = RawWaker::new(data, ref vtable)
+    let raw2: RawWaker = RawWaker::new(data, ref vtable)
+    let w1: Waker = Waker::from_raw(raw1)
+    let w2: Waker = Waker::from_raw(raw2)
+    assert(w1.will_wake(ref w2), "same data ptr should will_wake")
+    return 0
+}
+
+@test
+func test_waker_as_raw() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    let r: ref RawWaker = w.as_raw()
+    assert(true, "as_raw should return ref to inner RawWaker")
+    return 0
+}

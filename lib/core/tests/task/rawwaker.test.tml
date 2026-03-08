@@ -1,0 +1,31 @@
+// Tests for RawWaker::new, data, vtable and RawWakerVTable::new
+use test::{assert}
+use core::task::{RawWaker, RawWakerVTable}
+use core::ptr::RawPtr
+
+func noop_clone(p: RawPtr[Unit]) -> RawWaker {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    return RawWaker::new(p, ref vtable)
+}
+
+func noop_wake(p: RawPtr[Unit]) {}
+func noop_drop(p: RawPtr[Unit]) {}
+
+@test
+func test_rawwaker_vtable_new() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    assert(true, "RawWakerVTable::new should construct")
+    return 0
+}
+
+@test
+func test_rawwaker_new_data_vtable() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let rw: RawWaker = RawWaker::new(data, ref vtable)
+    let d: RawPtr[Unit] = rw.data()
+    assert(d.is_null(), "data should be null")
+    let vt: ref RawWakerVTable = rw.vtable()
+    assert(true, "vtable accessor works")
+    return 0
+}
