@@ -744,7 +744,9 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             if (!free_func_type_subs.empty()) {
                 resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
             }
-            expected_type = llvm_type_from_semantic(resolved_param);
+            // Use for_data=true for parameter types — Unit should be "{}" not "void"
+            // since void cannot be used as a call argument type in LLVM IR.
+            expected_type = llvm_type_from_semantic(resolved_param, /*for_data=*/true);
             // Function-typed parameters use fat pointer { ptr, ptr }
             if (resolved_param && resolved_param->is<types::FuncType>()) {
                 expected_type = "{ ptr, ptr }";

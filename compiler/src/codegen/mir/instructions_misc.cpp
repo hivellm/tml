@@ -110,9 +110,20 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
                                const mir::InstructionData& inst) {
     mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
+    // Unit type maps to "void" but LLVM doesn't allow `phi void`.
+    // Use "{}" (empty struct, zero-sized) as the data representation.
+    if (type_str == "void") {
+        type_str = "{}";
+    }
 
     if (i.incoming.empty()) {
-        emitln("    " + result_reg + " = add " + type_str + " undef, 0");
+        if (type_str == "{}") {
+            // Empty struct (Unit) — no add instruction possible, just use undef
+            emitln("    ; Unit phi with no incoming — treating as zeroinitializer");
+            value_regs_[inst.result] = "zeroinitializer";
+        } else {
+            emitln("    " + result_reg + " = add " + type_str + " undef, 0");
+        }
     } else {
         emit("    " + result_reg + " = phi " + type_str + " ");
         for (size_t j = 0; j < i.incoming.size(); ++j) {
@@ -202,7 +213,12 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                     value_string_contents_[inst.result] = c.value;
                 }
             } else if constexpr (std::is_same_v<C, mir::ConstUnit>) {
-                // Unit type - no value needed
+                // Unit type — zero-sized. Map to zeroinitializer so that any
+                // downstream use (insertvalue, store, phi) gets a valid operand.
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_regs_[inst.result] = "zeroinitializer";
+                    value_types_[inst.result] = "{}";
+                }
             } else if constexpr (std::is_same_v<C, mir::ConstFuncRef>) {
                 // Function reference - store as opaque pointer (modern LLVM uses ptr for all
                 // pointers including function pointers)
@@ -358,6 +374,22 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
 void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::string& result_reg) {
     mir::MirTypePtr tuple_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string tuple_type = mir_type_to_llvm(tuple_ptr);
+
+    // Unit type (empty tuple) maps to "void" but LLVM doesn't allow alloca/load void.
+    // Use "{}" (empty struct, zero-sized) for the data representation.
+    if (tuple_type == "void" && i.elements.empty()) {
+        // Map the result register to zeroinitializer so downstream uses get a
+        // valid operand. The result_reg was derived from the instruction's result
+        // ID, so we overwrite it in value_regs_ by looking up the register name.
+        // This is safe because `result_reg` = "%vN" where N is the result ID.
+        // Extract the ID from result_reg ("%vN" -> N).
+        if (result_reg.size() > 2 && result_reg[0] == '%' && result_reg[1] == 'v') {
+            unsigned id = std::stoul(result_reg.substr(2));
+            value_regs_[id] = "zeroinitializer";
+            value_types_[id] = "{}";
+        }
+        return;
+    }
 
     std::string alloc_reg = "%tmp" + std::to_string(temp_counter_++);
     emitln("    " + alloc_reg + " = alloca " + tuple_type);

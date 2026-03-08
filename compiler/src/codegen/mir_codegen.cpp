@@ -352,6 +352,10 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
         const auto& param_name = func.params[i].name;
+        // Unit type maps to "void" but LLVM doesn't allow void as a parameter type.
+        if (param_type == "void") {
+            param_type = "{}";
+        }
         // Method 'this'/'self' parameters for struct/enum types → ptr
         if ((param_name == "this" || param_name == "self") &&
             (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
@@ -868,6 +872,11 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
         const auto& param_name = func.params[i].name;
+        // Unit type maps to "void" but LLVM doesn't allow void as a parameter type.
+        // Use "{}" (empty struct, zero-sized) as the data representation.
+        if (param_type == "void") {
+            param_type = "{}";
+        }
         // Method 'this'/'self' parameters for struct/enum types must be passed
         // as ptr (pointer), not by value. The function body uses GEP instructions
         // that expect a pointer base, so the parameter type must match.

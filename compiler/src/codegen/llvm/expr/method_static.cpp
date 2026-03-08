@@ -404,7 +404,9 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call, std::
                 }
 
                 // Get return type - ensure struct type is defined
-                std::string ret_type = llvm_type_from_semantic(func_sig.return_type);
+                // Use for_data=true: method return types are data — Unit should be "{}"
+                std::string ret_type =
+                    llvm_type_from_semantic(func_sig.return_type, /*for_data=*/true);
 
                 // For library types, use no suite prefix; for local test types use suite prefix
                 // Primitive types (I8, I16, I32, etc.) are also library types - their impls are in

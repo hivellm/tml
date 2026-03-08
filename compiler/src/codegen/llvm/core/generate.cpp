@@ -1018,7 +1018,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     bool is_primitive_impl = (impl_llvm_type[0] != '%');
 
                     for (size_t i = 0; i < method.params.size(); ++i) {
-                        if (i > 0) {
+                        if (!params.empty()) {
                             params += ", ";
                             param_types += ", ";
                         }
@@ -1050,7 +1050,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         // resolves This to the concrete type (e.g. %struct.Counter), so the
                         // "This" literal is already gone by this point.
                         if (param_name == "this" || param_name == "self") {
-                            if (is_primitive_impl && !param_is_mut && !param_is_ref_sig) {
+                            if (impl_llvm_type == "void") {
+                                // Unit type: skip this param entirely
+                                continue;
+                            } else if (is_primitive_impl && !param_is_mut && !param_is_ref_sig) {
                                 param_type = impl_llvm_type;
                             } else {
                                 param_type = "ptr";

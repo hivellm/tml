@@ -277,6 +277,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         receiver_type_for_call = "ptr";
     } else if (receiver_actual_type == "ptr" || receiver_actual_type.empty()) {
         receiver_type_for_call = "ptr";
+    } else if (receiver_actual_type == "void") {
+        // Unit receiver — zero-sized type, no spill needed. Use a null pointer
+        // as a dummy receiver since the function won't dereference it.
+        receiver_type_for_call = "ptr";
+        receiver = "null";
     } else {
         std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
         emitln("    " + spill_ptr + " = alloca " + receiver_actual_type);
@@ -324,6 +329,10 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             arg_ptr = mir::make_i32_type();
         }
         std::string arg_type = mir_type_to_llvm(arg_ptr);
+        // Unit type maps to "void" but LLVM doesn't allow void as a call argument.
+        if (arg_type == "void") {
+            arg_type = "{}";
+        }
         std::string arg = get_value_reg(i.args[j]);
         emit(arg_type + " " + arg);
     }

@@ -36,12 +36,20 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                             type_str = it->second;
                         }
                     }
-                    if (type_str.empty() || type_str == "void") {
-                        // Having a return value with void type means type info was lost;
-                        // fall back to i32 rather than emitting invalid "ret void %vN"
+                    if (type_str == "void") {
+                        // Unit type return — emit `ret void` without a value operand
+                        emitln("    ret void");
+                    } else if (type_str.empty()) {
+                        // Type info was lost; fall back to i32
                         type_str = "i32";
+                        emitln("    ret " + type_str + " " + val);
+                    } else if (type_str == "{}") {
+                        // Unit stored as empty struct — emit `ret void` since the
+                        // function signature uses void for Unit return type
+                        emitln("    ret void");
+                    } else {
+                        emitln("    ret " + type_str + " " + val);
                     }
-                    emitln("    ret " + type_str + " " + val);
                 } else {
                     emitln("    ret void");
                 }

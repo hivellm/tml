@@ -1041,7 +1041,9 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     std::string ret_type = "void";
     if (func.return_type.has_value()) {
         types::TypePtr resolved_ret = resolve_parser_type_with_subs(**func.return_type, subs);
-        ret_type = llvm_type_from_semantic(resolved_ret);
+        // Use for_data=true: return types in data context — Unit should be "{}" not "void"
+        // since void can only be used for functions that truly return nothing.
+        ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
     }
     current_ret_type_ = ret_type;
 
@@ -1063,7 +1065,8 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         }
         // Resolve param type with substitution
         types::TypePtr resolved_param = resolve_parser_type_with_subs(*func.params[i].type, subs);
-        std::string param_type = llvm_type_from_semantic(resolved_param);
+        // Use for_data=true: param types are data context — Unit should be "{}" not "void"
+        std::string param_type = llvm_type_from_semantic(resolved_param, /*for_data=*/true);
         // Function-typed parameters use fat pointer { ptr, ptr } to support closures
         // This matches struct field storage (see types.cpp struct field generation)
         if (resolved_param && resolved_param->is<types::FuncType>()) {

@@ -403,7 +403,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Resolve type with current type substitutions (for generic impl methods)
         semantic_var_type =
             resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
-        var_type = llvm_type_from_semantic(semantic_var_type);
+        // Use for_data=true because variable declarations are data contexts —
+        // Unit should be "{}" (empty struct), not "void" which can't be alloca'd.
+        var_type = llvm_type_from_semantic(semantic_var_type, /*for_data=*/true);
         is_struct = var_type.starts_with("%struct.") || var_type.starts_with("%union.");
         is_ptr = (var_type == "ptr"); // Collection types like List[T] are pointers
     } else if (let.init.has_value()) {

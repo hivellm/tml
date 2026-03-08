@@ -611,9 +611,39 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
 
             if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+                // Check if the payload type is Unit (zero-sized) — if so, skip the
+                // GEP entirely since the enum struct only has a discriminant field.
+                // Example: Maybe[Unit] = { i32 } — no field at index 1.
+                bool payload_is_unit = false;
+                if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                    const auto& named_check = scrutinee_semantic->as<types::NamedType>();
+                    std::string variant_check;
+                    if (!enum_pat.path.segments.empty()) {
+                        variant_check = enum_pat.path.segments.back();
+                    }
+                    types::TypePtr payload_check = nullptr;
+                    if (named_check.name == "Maybe" && !named_check.type_args.empty() &&
+                        variant_check == "Just") {
+                        payload_check = named_check.type_args[0];
+                    } else if (named_check.name == "Outcome" && named_check.type_args.size() >= 2) {
+                        if (variant_check == "Ok")
+                            payload_check = named_check.type_args[0];
+                        else if (variant_check == "Err")
+                            payload_check = named_check.type_args[1];
+                    }
+                    if (payload_check && payload_check->is<types::PrimitiveType>()) {
+                        auto kind = payload_check->as<types::PrimitiveType>().kind;
+                        payload_is_unit = (kind == types::PrimitiveKind::Unit);
+                    }
+                }
+
                 // Extract payload pointer (points to the data bytes of the enum)
                 std::string payload_ptr;
-                if (is_nullable_maybe) {
+                if (payload_is_unit) {
+                    // Unit payload — zero-sized, no data field in the enum struct.
+                    // Skip GEP and use a null pointer as a dummy (won't be dereferenced).
+                    payload_ptr = "null";
+                } else if (is_nullable_maybe) {
                     // Nullable pointer optimization: the scrutinee IS the payload (a ptr value)
                     // For Just(x), bind x to the scrutinee pointer directly
                     // We need a pointer to the value for consistency with the binding code below

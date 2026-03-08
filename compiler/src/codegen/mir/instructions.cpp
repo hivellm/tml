@@ -51,6 +51,11 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string ptr = get_value_reg(i.ptr);
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
+                // Unit type maps to "void" but LLVM doesn't allow `load void`.
+                // Use "{}" (empty struct, zero-sized) as the data representation.
+                if (type_str == "void") {
+                    type_str = "{}";
+                }
                 std::string volatile_kw = i.is_volatile ? "volatile " : "";
                 // Array loads need align 16 to match the alignment of array allocas.
                 bool is_array_load = type_ptr && type_ptr->is_array();
@@ -72,20 +77,33 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                std::string volatile_kw = i.is_volatile ? "volatile " : "";
-                // Array stores need align 16 to match the alignment of array allocas
-                // and prevent LLVM backend crashes with SIMD aggregate stores.
-                bool is_array_store = type_ptr && type_ptr->is_array();
-                if (is_array_store) {
-                    emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr +
-                           ", align 16");
+                // Unit type maps to "void" but LLVM doesn't allow `store void`.
+                // Skip the store entirely for void/unit — it's a zero-sized type
+                // with no data to write.
+                if (type_str == "void") {
+                    emitln("    ; skip store of void (unit type)");
                 } else {
-                    emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr);
+                    std::string volatile_kw = i.is_volatile ? "volatile " : "";
+                    // Array stores need align 16 to match the alignment of array allocas
+                    // and prevent LLVM backend crashes with SIMD aggregate stores.
+                    bool is_array_store = type_ptr && type_ptr->is_array();
+                    if (is_array_store) {
+                        emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " +
+                               ptr + ", align 16");
+                    } else {
+                        emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " +
+                               ptr);
+                    }
                 }
 
             } else if constexpr (std::is_same_v<T, mir::AllocaInst>) {
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
+                // Unit type maps to "void" but LLVM doesn't allow `alloca void`.
+                // Use "{}" (empty struct, zero-sized) as the data representation.
+                if (type_str == "void") {
+                    type_str = "{}";
+                }
                 emitln("    ; ALLOCA: result_id=" + std::to_string(inst.result) +
                        " reg=" + result_reg + " type=" + type_str);
                 // Array allocas need explicit alignment to prevent LLVM backend crashes
@@ -309,7 +327,11 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emit_tuple_init_inst(i, result_reg);
                 // Track tuple type so GEP can detect non-pointer bases
                 if (inst.result != mir::INVALID_VALUE && i.result_type) {
-                    value_types_[inst.result] = mir_type_to_llvm(i.result_type);
+                    std::string tup_type = mir_type_to_llvm(i.result_type);
+                    // Unit/empty tuple: use "{}" instead of "void" for data tracking
+                    if (tup_type == "void")
+                        tup_type = "{}";
+                    value_types_[inst.result] = tup_type;
                 }
 
             } else if constexpr (std::is_same_v<T, mir::ArrayInitInst>) {
@@ -990,6 +1012,11 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             }
         }
 
+        // Unit type maps to "void" but LLVM doesn't allow void as a call argument.
+        // Use "{}" (empty struct, zero-sized) as the data representation.
+        if (arg_type == "void") {
+            arg_type = "{}";
+        }
         processed_args.push_back(arg_type + " " + arg);
     }
 

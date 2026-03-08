@@ -406,6 +406,13 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     if (!trait_method.body.has_value())
         return false;
 
+    // Skip default methods for Unit type — Unit is zero-sized and its methods
+    // (eq, ne, partial_cmp, cmp, default) are handled through explicit impls.
+    // Default behavior methods (lt, le, gt, ge, max, min, clamp) reference 'this'
+    // which is void for Unit and cannot appear in LLVM IR data contexts.
+    if (llvm_type_name(type_name) == "void")
+        return false;
+
     // Skip methods with their own generic parameters
     if (!trait_method.generics.empty())
         return false;
@@ -463,7 +470,8 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
         auto resolved_ret =
             resolve_parser_type_with_subs(**trait_method.return_type, current_type_subs_);
         if (resolved_ret) {
-            ret_type = llvm_type_from_semantic(resolved_ret);
+            // Use for_data=true: return types in data context — Unit should be "{}" not "void"
+            ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
             // Ensure generic types in return position are instantiated
             ensure_generic_types_instantiated(resolved_ret);
         } else {
@@ -536,7 +544,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     bool trait_is_primitive_impl = (trait_impl_llvm_type[0] != '%');
 
     for (size_t i = 0; i < trait_method.params.size(); ++i) {
-        if (i > 0) {
+        if (!params.empty()) {
             params += ", ";
             param_types += ", ";
         }
@@ -544,7 +552,8 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
         auto resolved_param =
             resolve_parser_type_with_subs(*trait_method.params[i].type, current_type_subs_);
         if (resolved_param) {
-            param_type = llvm_type_from_semantic(resolved_param);
+            // Use for_data=true: param types are data context — Unit should be "{}" not "void"
+            param_type = llvm_type_from_semantic(resolved_param, /*for_data=*/true);
         } else {
             param_type = llvm_type_ptr(trait_method.params[i].type);
         }
@@ -559,6 +568,10 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
             (param_type.find("This") != std::string::npos ||
              param_type.find(type_name) != std::string::npos)) {
             param_type = trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
+        }
+        // Skip void parameters (Unit type as value — invalid in LLVM)
+        if (param_type == "void") {
+            continue;
         }
         params += param_type + " %" + param_name;
         param_types += param_type;
