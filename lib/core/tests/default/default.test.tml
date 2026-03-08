@@ -2,6 +2,7 @@
 use test
 use core::default
 use core::default::Default
+use core::tuple::Unit
 
 // ============================================================================
 // Section 1: default.test.tml - Integer Default implementations
@@ -334,5 +335,12 @@ func test_i64_default_maybe() -> I32 {
 func test_str_default_maybe() -> I32 {
     let v: Str = Str::default()
     assert_eq(v, "", "Str::default() is empty")
+    return 0
+}
+
+@test
+func test_unit_default() -> I32 {
+    let u = Unit::default()
+    assert(true, "Unit::default() should compile and run")
     return 0
 }

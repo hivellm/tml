@@ -1,0 +1,47 @@
+// Tests for Maybe[Unit] — pattern matching and methods
+// Previously blocked by "alloca void" and GEP out-of-bounds codegen bugs
+use test::{assert, assert_eq}
+use core::tuple::Unit
+
+func returns_maybe_unit(flag: Bool) -> Maybe[Unit] {
+    if flag {
+        return Just(Unit::default())
+    }
+    return Nothing
+}
+
+@test
+func test_maybe_unit_just() -> I32 {
+    let m = returns_maybe_unit(true)
+    assert(m.is_just(), "Maybe[Unit] Just should be is_just")
+    assert(not m.is_nothing(), "Maybe[Unit] Just should not be is_nothing")
+    return 0
+}
+
+@test
+func test_maybe_unit_nothing() -> I32 {
+    let m = returns_maybe_unit(false)
+    assert(m.is_nothing(), "Maybe[Unit] Nothing should be is_nothing")
+    assert(not m.is_just(), "Maybe[Unit] Nothing should not be is_just")
+    return 0
+}
+
+@test
+func test_maybe_unit_pattern_match() -> I32 {
+    let j = returns_maybe_unit(true)
+    let mut matched_just = false
+    when j {
+        Just(u) => { matched_just = true }
+        Nothing => {}
+    }
+    assert(matched_just, "Pattern match on Maybe[Unit] Just should work")
+
+    let n = returns_maybe_unit(false)
+    let mut matched_nothing = false
+    when n {
+        Just(u) => {}
+        Nothing => { matched_nothing = true }
+    }
+    assert(matched_nothing, "Pattern match on Maybe[Unit] Nothing should work")
+    return 0
+}

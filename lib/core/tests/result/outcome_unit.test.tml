@@ -1,0 +1,55 @@
+// Tests for Outcome[Unit, E] — pattern matching and methods
+// Previously blocked by Unit void-in-data-context codegen bug
+use test::{assert, assert_eq}
+use core::tuple::Unit
+
+func returns_outcome(flag: Bool) -> Outcome[Unit, Str] {
+    if flag {
+        return Ok(Unit::default())
+    }
+    return Err("something failed")
+}
+
+@test
+func test_outcome_unit_ok() -> I32 {
+    let r = returns_outcome(true)
+    assert(r.is_ok(), "Outcome[Unit, Str] Ok should be is_ok")
+    assert(not r.is_err(), "Outcome[Unit, Str] Ok should not be is_err")
+    return 0
+}
+
+@test
+func test_outcome_unit_err() -> I32 {
+    let r = returns_outcome(false)
+    assert(r.is_err(), "Outcome[Unit, Str] Err should be is_err")
+    assert(not r.is_ok(), "Outcome[Unit, Str] Err should not be is_ok")
+    return 0
+}
+
+@test
+func test_outcome_unit_pattern_match() -> I32 {
+    let ok = returns_outcome(true)
+    let mut matched_ok = false
+    when ok {
+        Ok(u) => { matched_ok = true }
+        Err(e) => {}
+    }
+    assert(matched_ok, "Pattern match on Outcome[Unit, Str] Ok should work")
+
+    let err = returns_outcome(false)
+    let mut matched_err = false
+    when err {
+        Ok(u) => {}
+        Err(e) => { matched_err = true }
+    }
+    assert(matched_err, "Pattern match on Outcome[Unit, Str] Err should work")
+    return 0
+}
+
+@test
+func test_outcome_unit_err_value() -> I32 {
+    let r = returns_outcome(false)
+    let e = r.unwrap_err()
+    assert_eq(e, "something failed", "Outcome[Unit, Str] Err should preserve error value")
+    return 0
+}
