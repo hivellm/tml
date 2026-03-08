@@ -1,0 +1,25 @@
+// Tests for spin_lock and spin_unlock functions
+use test::{assert, assert_eq}
+use core::pool::{spin_lock, spin_unlock}
+
+@test
+func test_spin_lock_unlock() -> I32 {
+    let mut lock: I32 = 0
+    spin_lock(ref lock)
+    assert_eq(lock, 1, "spin_lock should set lock to 1")
+    spin_unlock(ref lock)
+    assert_eq(lock, 0, "spin_unlock should set lock to 0")
+    return 0
+}
+
+@test
+func test_spin_lock_reentrant() -> I32 {
+    let mut lock: I32 = 0
+    spin_lock(ref lock)
+    spin_unlock(ref lock)
+    spin_lock(ref lock)
+    assert_eq(lock, 1, "lock should be 1 after re-lock")
+    spin_unlock(ref lock)
+    assert_eq(lock, 0, "lock should be 0 after re-unlock")
+    return 0
+}

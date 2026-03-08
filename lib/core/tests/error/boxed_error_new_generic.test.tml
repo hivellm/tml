@@ -1,12 +1,20 @@
 // Tests for BoxedError::new[E: Error] — generic constructor
-// BLOCKED: Generic trait dispatch codegen bug — calls error.to_string() on
-// generic E which fails with "Unknown method: to_string"
-// This test will pass once generic trait constraint method dispatch is fixed.
-use test::{assert}
+use test::{assert, assert_eq}
+use core::error::{BoxedError, SimpleError}
 
 @test
-func test_boxed_error_new_blocked_by_generic_dispatch() -> I32 {
-    // BoxedError::new[E: Error] blocked by generic trait method dispatch
-    assert(true, "BoxedError::new blocked by generic E: Error dispatch")
+func test_boxed_error_new_from_simple_error() -> I32 {
+    let err = SimpleError::new("something went wrong")
+    let boxed = BoxedError::new(err)
+    assert_eq(boxed.to_string(), "something went wrong", "BoxedError::new preserves message")
+    return 0
+}
+
+@test
+func test_boxed_error_new_debug_string() -> I32 {
+    let err = SimpleError::new("test")
+    let boxed = BoxedError::new(err)
+    let dbg = boxed.debug_string()
+    assert_eq(dbg, "BoxedError { message: test }", "BoxedError::new debug_string")
     return 0
 }

@@ -1,0 +1,10 @@
+// Tests for LazyFuture::new — previously marked blocked by generic monomorphization
+use test::{assert}
+use core::ops::async_function::LazyFuture
+
+@test
+func test_lazy_future_new() -> I32 {
+    let f = LazyFuture::new(do() -> I32 { 42 })
+    assert(true, "LazyFuture::new constructed successfully")
+    return 0
+}
