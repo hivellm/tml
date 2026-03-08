@@ -1,9 +1,11 @@
-// Tests for Unit Display/Debug — blocked by compiler Unit type assignment bug
-// "let u: Unit = ()" gives "Return type mismatch: expected (), found ()"
-use test::{assert}
+// Tests for Unit Display/Debug type formatting
+use test::{assert, assert_eq}
+use core::tuple::Unit
+use core::fmt::Debug
 
 @test
-func test_unit_display_placeholder() -> I32 {
-    assert(true, "Unit Display/Debug blocked by Unit type assignment bug")
+func test_unit_debug_output() -> I32 {
+    let u = Unit::default()
+    assert_eq(u.debug_string(), "()", "Unit debug output is '()'")
     return 0
 }
