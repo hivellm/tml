@@ -1,0 +1,12 @@
+// Tests for AnyValue::into_inner and TypeId::hash
+// BLOCKED:
+//   AnyValue::into_inner — heap corruption in lowlevel dealloc (STATUS_HEAP_CORRUPTION)
+//   TypeId::hash — requires generic Hasher parameter (H: Hasher) → generic trait dispatch bug
+//   type_id[T]() returns I64, not TypeId struct → "Type mismatch: expected TypeId, found I64"
+use test::{assert}
+
+@test
+func test_any_into_inner_blocked() -> I32 {
+    assert(true, "AnyValue::into_inner blocked by heap corruption in dealloc")
+    return 0
+}
