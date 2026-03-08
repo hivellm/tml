@@ -527,6 +527,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
     }
 
+    // Convert Unit type (PrimitiveKind::Unit or empty TupleType) to NamedType("Unit")
+    // so method dispatch works. Unit impl methods (eq, ne, clone, etc.) are registered
+    // under "Unit" NamedType in the module registry, but infer_expr_type returns
+    // PrimitiveType(Unit). The impl method dispatch requires NamedType.
+    if (receiver_type) {
+        bool is_unit = false;
+        if (receiver_type->is<types::PrimitiveType>() &&
+            receiver_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit) {
+            is_unit = true;
+        } else if (receiver_type->is<types::TupleType>() &&
+                   receiver_type->as<types::TupleType>().elements.empty()) {
+            is_unit = true;
+        }
+        if (is_unit) {
+            receiver_type = std::make_shared<types::Type>(types::NamedType{"Unit"});
+        }
+    }
+
     std::string receiver_type_name;
     if (receiver_type) {
         if (receiver_type->is<types::ClassType>()) {
@@ -581,6 +599,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 break;
             case types::PrimitiveKind::Str:
                 receiver_type_name = "Str";
+                break;
+            case types::PrimitiveKind::Unit:
+                receiver_type_name = "Unit";
                 break;
             default:
                 break;

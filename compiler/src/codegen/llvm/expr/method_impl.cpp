@@ -610,7 +610,12 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     // are passed as ptr in both the call site and the function definition.
     // The function body loads the struct from the ptr if needed (see impl.cpp).
 
-    typed_args.push_back({this_arg_type, impl_receiver_val});
+    // Skip 'this' argument for Unit type — Unit methods have no 'this' parameter
+    // because void is not a valid LLVM parameter type (see impl.cpp void guard).
+    bool is_unit_type = (impl_llvm_type == "void");
+    if (!is_unit_type) {
+        typed_args.push_back({this_arg_type, impl_receiver_val});
+    }
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
@@ -619,6 +624,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
         types::TypePtr param_type_resolved;
+        // func_sig always has 'this' at index 0 (semantic params), so offset is always 1
         if (func_sig && i + 1 < func_sig->params.size()) {
             param_type_resolved = func_sig->params[i + 1];
             if (!type_subs.empty()) {
@@ -632,8 +638,13 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         }
         // Fallback: when func_sig is unavailable (e.g., default behavior methods like
         // for_each, map, filter), use the registered LLVM param types from functions_
-        else if (method_it != functions_.end() && (i + 1) < method_it->second.param_types.size()) {
-            expected_type = method_it->second.param_types[i + 1];
+        // For functions_ lookup, use the registered param count which already reflects
+        // the actual LLVM signature (no 'this' for Unit). Use is_unit_type to adjust.
+        else if (method_it != functions_.end()) {
+            size_t fn_offset = is_unit_type ? 0 : 1;
+            if ((i + fn_offset) < method_it->second.param_types.size()) {
+                expected_type = method_it->second.param_types[i + fn_offset];
+            }
         }
         if (actual_type != expected_type) {
             bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
@@ -883,13 +894,18 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     // The function definition always emits `ptr %this` for struct types.
     // Do NOT load the struct value and pass by value — that creates a type mismatch.
 
-    typed_args.push_back({this_arg_type, impl_receiver_val});
+    // Skip 'this' argument for Unit type — Unit methods have no 'this' parameter
+    bool is_unit_type2 = (impl_llvm_type == "void");
+    if (!is_unit_type2) {
+        typed_args.push_back({this_arg_type, impl_receiver_val});
+    }
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
         std::string actual_type = last_expr_type_;
         std::string arg_type = "i32";
         types::TypePtr param_type_ptr;
+        // func_sig always has 'this' at index 0 (semantic params), so offset is always 1
         if (func_sig && i + 1 < func_sig->params.size()) {
             param_type_ptr = func_sig->params[i + 1];
             arg_type = llvm_type_from_semantic(param_type_ptr);
