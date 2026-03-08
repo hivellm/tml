@@ -1004,6 +1004,9 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     if (!named.path.segments.empty()) {
                         type_name = named.path.segments.back();
                     }
+                } else if (impl.self_type && impl.self_type->is<parser::TupleType>()) {
+                    const auto& tuple = impl.self_type->as<parser::TupleType>();
+                    type_name = "Tuple" + std::to_string(tuple.elements.size());
                 }
 
                 // Skip generic impls - they need to be instantiated on demand
@@ -1020,6 +1023,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 if (has_impl_generics || has_type_generics) {
                     if (!type_name.empty()) {
                         pending_generic_impls_[type_name] = &impl;
+                        pending_generic_impls_all_[type_name].push_back(&impl);
                     }
                     TML_DEBUG_LN("[MODULE] Registered imported generic impl for: "
                                  << type_name << " (generics=" << impl.generics.size() << ")");

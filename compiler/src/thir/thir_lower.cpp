@@ -265,8 +265,24 @@ auto ThirLower::lower_binary(const hir::HirBinaryExpr& bin) -> ThirExprPtr {
 
     std::optional<ResolvedMethod> op_method;
 
-    // Only desugar operators for non-primitive types
-    if (left_type && !is_primitive_numeric(left_type)) {
+    // Only desugar operators for non-primitive types.
+    // Skip tuples: the MIR codegen has inline element-by-element comparison
+    // for aggregate types, which is more efficient and doesn't require
+    // generating a separate eq/ne function for each tuple arity.
+    auto desugar_type = left_type;
+    if (desugar_type && desugar_type->is<types::RefType>())
+        desugar_type = desugar_type->as<types::RefType>().inner;
+    bool is_tuple = desugar_type && desugar_type->is<types::TupleType>();
+    // Also detect tuples stored as PrimitiveType("()") — type inference
+    // may resolve tuple types to a simplified form where the string
+    // representation is "(elem1, elem2)" but the kind is not TupleType.
+    if (!is_tuple && desugar_type) {
+        auto ts = types::type_to_string(desugar_type);
+        if (ts.size() >= 2 && ts.front() == '(' && ts.back() == ')') {
+            is_tuple = true;
+        }
+    }
+    if (left_type && !is_primitive_numeric(left_type) && !is_tuple) {
         auto behavior_method = op_behavior_method(bin.op);
         if (behavior_method) {
             auto& [behavior, method] = *behavior_method;

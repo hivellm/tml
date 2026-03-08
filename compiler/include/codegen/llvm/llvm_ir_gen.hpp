@@ -1152,6 +1152,10 @@ private:
     // These are registered and methods are instantiated when called on concrete types
     std::unordered_map<std::string, const parser::ImplDecl*> pending_generic_impls_;
 
+    // All generic impls per type (for types with multiple trait impls, like tuples)
+    std::unordered_map<std::string, std::vector<const parser::ImplDecl*>>
+        pending_generic_impls_all_;
+
     // Generated impl method instantiations (mangled_name -> true)
     // Tracks which specialized methods have been REQUESTED for generation
     std::unordered_set<std::string> generated_impl_methods_;

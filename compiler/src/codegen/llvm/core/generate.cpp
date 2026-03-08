@@ -595,10 +595,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
                                 type_name =
                                     impl.self_type->as<parser::NamedType>().path.segments.back();
+                            } else if (impl.self_type && impl.self_type->is<parser::TupleType>()) {
+                                const auto& tuple = impl.self_type->as<parser::TupleType>();
+                                type_name = "Tuple" + std::to_string(tuple.elements.size());
                             }
-                            if (!type_name.empty() && pending_generic_impls_.find(type_name) ==
-                                                          pending_generic_impls_.end()) {
-                                pending_generic_impls_[type_name] = &impl;
+                            if (!type_name.empty()) {
+                                if (pending_generic_impls_.find(type_name) ==
+                                    pending_generic_impls_.end()) {
+                                    pending_generic_impls_[type_name] = &impl;
+                                }
+                                pending_generic_impls_all_[type_name].push_back(&impl);
                             }
                         }
                         // Register for vtable generation
@@ -904,6 +910,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 if (!named.path.segments.empty()) {
                     type_name = named.path.segments.back();
                 }
+            } else if (impl.self_type->is<parser::TupleType>()) {
+                // Tuple impls: use arity-based name like "Tuple2", "Tuple3", etc.
+                const auto& tuple = impl.self_type->as<parser::TupleType>();
+                type_name = "Tuple" + std::to_string(tuple.elements.size());
             }
             if (!type_name.empty()) {
                 // Skip builtin types that have hard-coded implementations in method.cpp
@@ -930,6 +940,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 if (has_impl_generics || has_type_generics) {
                     // Store the generic impl block for later instantiation
                     pending_generic_impls_[type_name] = &impl;
+                    pending_generic_impls_all_[type_name].push_back(&impl);
                     continue;
                 }
                 // For impls with generic methods, store for instantiation but continue

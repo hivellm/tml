@@ -89,12 +89,23 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     -> std::optional<std::string> {
     const std::string& method = call.method;
 
-    // Only handle NamedType receivers
-    if (!receiver_type || !receiver_type->is<types::NamedType>()) {
+    // Convert TupleType to a synthetic NamedType for dispatch.
+    // Tuple impls are registered under "Tuple2", "Tuple3", etc. in pending_generic_impls_.
+    types::TypePtr effective_receiver = receiver_type;
+    if (receiver_type && receiver_type->is<types::TupleType>()) {
+        const auto& tuple = receiver_type->as<types::TupleType>();
+        std::string tuple_name = "Tuple" + std::to_string(tuple.elements.size());
+        auto synth = std::make_shared<types::Type>();
+        synth->kind = types::NamedType{tuple_name, "", tuple.elements};
+        effective_receiver = synth;
+    }
+
+    // Only handle NamedType receivers (including synthesized tuple types)
+    if (!effective_receiver || !effective_receiver->is<types::NamedType>()) {
         return std::nullopt;
     }
 
-    const auto& named = receiver_type->as<types::NamedType>();
+    const auto& named = effective_receiver->as<types::NamedType>();
     // File/Path now use normal dispatch via @extern FFI
     bool is_slice_inlined = (named.name == "Slice" || named.name == "MutSlice") &&
                             (method == "len" || method == "is_empty");

@@ -397,19 +397,44 @@ void LLVMIRGen::generate_pending_instantiations() {
                 // First check locally defined impls
                 auto impl_it = pending_generic_impls_.find(pim.base_type_name);
                 if (impl_it != pending_generic_impls_.end()) {
-                    const auto& impl = *impl_it->second;
+                    const parser::ImplDecl* impl_ptr = impl_it->second;
 
                     // Check if this impl has the method we're looking for BEFORE
                     // doing any processing. This handles the case where multiple
                     // modules define the same type (e.g., core::range::Range vs
                     // core::ops::range::Range) but with different methods.
                     bool has_method = false;
-                    for (const auto& m : impl.methods) {
+                    for (const auto& m : impl_ptr->methods) {
                         if (m.name == pim.method_name) {
                             has_method = true;
                             break;
                         }
                     }
+
+                    // If primary impl doesn't have the method, check all
+                    // registered impls for this type. Types like tuples have
+                    // separate impl blocks per trait (Default, Clone, PartialEq,
+                    // etc.) but pending_generic_impls_ stores only the first one.
+                    if (!has_method) {
+                        auto all_it = pending_generic_impls_all_.find(pim.base_type_name);
+                        if (all_it != pending_generic_impls_all_.end()) {
+                            for (const auto* alt : all_it->second) {
+                                if (alt == impl_ptr)
+                                    continue;
+                                for (const auto& m : alt->methods) {
+                                    if (m.name == pim.method_name) {
+                                        impl_ptr = alt;
+                                        has_method = true;
+                                        break;
+                                    }
+                                }
+                                if (has_method)
+                                    break;
+                            }
+                        }
+                    }
+
+                    const auto& impl = *impl_ptr;
 
                     // DEBUG: Log method lookup result for Range types
                     if (pim.base_type_name == "RangeInclusive" || pim.base_type_name == "Range") {
@@ -658,12 +683,16 @@ void LLVMIRGen::generate_pending_instantiations() {
                             // Check if this impl is for our type
                             if (!impl_decl.self_type)
                                 continue;
-                            if (!impl_decl.self_type->is<parser::NamedType>())
-                                continue;
-                            const auto& target = impl_decl.self_type->as<parser::NamedType>();
-                            if (target.path.segments.empty())
-                                continue;
-                            if (target.path.segments.back() != pim.base_type_name)
+                            std::string impl_type_name;
+                            if (impl_decl.self_type->is<parser::NamedType>()) {
+                                const auto& target = impl_decl.self_type->as<parser::NamedType>();
+                                if (!target.path.segments.empty())
+                                    impl_type_name = target.path.segments.back();
+                            } else if (impl_decl.self_type->is<parser::TupleType>()) {
+                                const auto& tuple = impl_decl.self_type->as<parser::TupleType>();
+                                impl_type_name = "Tuple" + std::to_string(tuple.elements.size());
+                            }
+                            if (impl_type_name.empty() || impl_type_name != pim.base_type_name)
                                 continue;
 
                             // For TryFrom/From on primitive types, match the behavior type
@@ -1055,12 +1084,22 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 if (!decl->is<parser::ImplDecl>())
                                     continue;
                                 const auto& impl_decl = decl->as<parser::ImplDecl>();
-                                if (!impl_decl.self_type ||
-                                    !impl_decl.self_type->is<parser::NamedType>())
+                                if (!impl_decl.self_type)
                                     continue;
-                                const auto& target = impl_decl.self_type->as<parser::NamedType>();
-                                if (target.path.segments.empty() ||
-                                    target.path.segments.back() != pim.base_type_name)
+                                std::string cached_impl_type_name;
+                                if (impl_decl.self_type->is<parser::NamedType>()) {
+                                    const auto& target =
+                                        impl_decl.self_type->as<parser::NamedType>();
+                                    if (!target.path.segments.empty())
+                                        cached_impl_type_name = target.path.segments.back();
+                                } else if (impl_decl.self_type->is<parser::TupleType>()) {
+                                    const auto& tuple =
+                                        impl_decl.self_type->as<parser::TupleType>();
+                                    cached_impl_type_name =
+                                        "Tuple" + std::to_string(tuple.elements.size());
+                                }
+                                if (cached_impl_type_name.empty() ||
+                                    cached_impl_type_name != pim.base_type_name)
                                     continue;
 
                                 // Resolve associated types

@@ -1329,6 +1329,42 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
+    // Handle TupleType methods — PartialEq, Eq, PartialOrd, Ord, Clone, Default
+    // Tuple impls are generic (e.g., impl[A: PartialEq, B: PartialEq] PartialEq for (A, B))
+    // but the type checker needs explicit return type resolution here.
+    TypePtr tuple_receiver = receiver_type;
+    if (tuple_receiver->is<RefType>()) {
+        tuple_receiver = tuple_receiver->as<RefType>().inner;
+    }
+    if (tuple_receiver->is<TupleType>()) {
+        // eq(other), ne(other) return Bool
+        if (call.method == "eq" || call.method == "ne") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+        // partial_cmp(other) returns Maybe[Ordering]
+        if (call.method == "partial_cmp") {
+            auto ordering = std::make_shared<Type>(NamedType{"Ordering", "", {}});
+            std::vector<TypePtr> type_args = {ordering};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+        // cmp(other) returns Ordering
+        if (call.method == "cmp") {
+            return std::make_shared<Type>(NamedType{"Ordering", "", {}});
+        }
+        // clone() returns the same tuple type
+        if (call.method == "clone" || call.method == "duplicate") {
+            return tuple_receiver;
+        }
+        // to_string(), debug_string() return Str
+        if (call.method == "to_string" || call.method == "debug_string") {
+            return make_primitive(PrimitiveKind::Str);
+        }
+        // hash(hasher) returns Unit
+        if (call.method == "hash") {
+            return make_unit();
+        }
+    }
+
     // Fallback: Check if "method" is actually a field with a function type
     // This handles cases like vtable.call_fn(args) where call_fn is a field
     // containing a function pointer
