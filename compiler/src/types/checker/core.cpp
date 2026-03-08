@@ -828,10 +828,14 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     if (func.where_clause) {
         for (const auto& [type_ptr, behaviors] : func.where_clause->constraints) {
             std::string type_param_name;
+            std::string assoc_type_name; // For I::Item, this is "Item"
             if (type_ptr->is<parser::NamedType>()) {
                 const auto& named = type_ptr->as<parser::NamedType>();
                 if (!named.path.segments.empty()) {
                     type_param_name = named.path.segments[0];
+                    if (named.path.segments.size() > 1) {
+                        assoc_type_name = named.path.segments.back();
+                    }
                 }
             }
 
@@ -860,6 +864,13 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
 
             if (!type_param_name.empty() &&
                 (!behavior_names.empty() || !parameterized_bounds.empty())) {
+                // For associated type paths like I::Item, also register the
+                // constraint under the last segment (e.g., "Item") so method
+                // lookups on associated types can find the bound.
+                if (!assoc_type_name.empty()) {
+                    current_where_constraints_.push_back(
+                        WhereConstraint{assoc_type_name, behavior_names, parameterized_bounds});
+                }
                 current_where_constraints_.push_back(WhereConstraint{
                     type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
             }
@@ -1161,10 +1172,14 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
     if (impl.where_clause) {
         for (const auto& [type_ptr, behaviors] : impl.where_clause->constraints) {
             std::string type_param_name;
+            std::string assoc_type_name;
             if (type_ptr->is<parser::NamedType>()) {
                 const auto& named = type_ptr->as<parser::NamedType>();
                 if (!named.path.segments.empty()) {
                     type_param_name = named.path.segments[0];
+                    if (named.path.segments.size() > 1) {
+                        assoc_type_name = named.path.segments.back();
+                    }
                 }
             }
 
@@ -1193,6 +1208,10 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
 
             if (!type_param_name.empty() &&
                 (!behavior_names.empty() || !parameterized_bounds.empty())) {
+                if (!assoc_type_name.empty()) {
+                    current_where_constraints_.push_back(
+                        WhereConstraint{assoc_type_name, behavior_names, parameterized_bounds});
+                }
                 current_where_constraints_.push_back(WhereConstraint{
                     type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
             }

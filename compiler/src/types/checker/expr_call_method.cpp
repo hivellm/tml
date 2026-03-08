@@ -556,11 +556,17 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
     if (receiver_type->is<RefType>()) {
         unwrapped_receiver = receiver_type->as<RefType>().inner;
     }
+    // Extract type parameter name from either NamedType or GenericType
+    std::string type_param_name;
     if (unwrapped_receiver->is<NamedType>()) {
-        auto& named_receiver = unwrapped_receiver->as<NamedType>();
+        type_param_name = unwrapped_receiver->as<NamedType>().name;
+    } else if (unwrapped_receiver->is<GenericType>()) {
+        type_param_name = unwrapped_receiver->as<GenericType>().name;
+    }
+    if (!type_param_name.empty()) {
         // Check if this is a type parameter by looking for it in current where constraints
         for (const auto& constraint : current_where_constraints_) {
-            if (constraint.type_param == named_receiver.name) {
+            if (constraint.type_param == type_param_name) {
                 // Found where constraint for this type parameter
                 // Look through parameterized bounds for a behavior with this method
                 for (const auto& bound : constraint.parameterized_bounds) {

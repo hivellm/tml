@@ -1,17 +1,11 @@
 // Tests for core::iter::adapters::peekable — Peekable[I] adapter
-// BLOCKED: The peekable.tml source itself fails to compile due to:
-//   "Can only take reference of variables"
-//   In peek(): `return Just(ref item)` where `item` is a pattern-match binding.
-//   The compiler does not allow `ref` on pattern-match bindings in when-arms.
-//   This blocks ALL Peekable functions: next, size_hint, peek, peek_mut,
-//   next_if, next_if_eq. No tests can be run until the compiler supports
-//   taking references of pattern-match bound variables.
+// BLOCKED: Nested Maybe[Maybe[T]] codegen type mismatch in peeked field.
+// The type checker now passes but LLVM IR generation produces:
+//   Maybe[I32] vs Maybe[Maybe[I32]] type mismatch for the peeked field.
 use test
 
 @test
-func test_peekable_blocked_note() -> I32 {
-    // Peekable module blocked by "Can only take reference of variables" in
-    // peekable.tml peek() implementation. See comment above.
-    assert(true, "peekable blocked — see comment above")
+func test_peekable_blocked_codegen() -> I32 {
+    assert(true, "peekable blocked by nested Maybe codegen — see comment")
     return 0
 }

@@ -3,7 +3,7 @@
 //! This module provides the `Peekable` iterator adapter which allows peeking
 //! at the next element without consuming it.
 
-// PartialEq is a builtin behavior - no import needed
+use core::cmp::PartialEq
 
 // ============================================================================
 // Peekable Adapter
