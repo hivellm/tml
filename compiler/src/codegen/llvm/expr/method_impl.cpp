@@ -129,6 +129,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 }
             }
         }
+        // Also search GlobalModuleCache
+        if (!func_sig) {
+            for (const auto& [mod_path, mod] : types::GlobalModuleCache::instance().get_all()) {
+                auto func_it = mod.functions.find(qualified_name);
+                if (func_it != mod.functions.end()) {
+                    func_sig = func_it->second;
+                    break;
+                }
+            }
+        }
     }
 
     if (!func_sig) {
@@ -839,6 +849,18 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         if (!func_sig && env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
+                auto func_it = mod.functions.find(qualified_name);
+                if (func_it != mod.functions.end()) {
+                    func_sig = func_it->second;
+                    is_from_library = true;
+                    break;
+                }
+            }
+        }
+        // Also search GlobalModuleCache for modules not loaded into registry
+        // (e.g., behavior impls in sibling submodules like std::collections::behaviors)
+        if (!func_sig) {
+            for (const auto& [mod_path, mod] : types::GlobalModuleCache::instance().get_all()) {
                 auto func_it = mod.functions.find(qualified_name);
                 if (func_it != mod.functions.end()) {
                     func_sig = func_it->second;

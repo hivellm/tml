@@ -103,7 +103,9 @@ impl[T: PartialEq] PartialEq for List[T] {
         }
         let mut i: I64 = 0
         loop (i < this.len()) {
-            if this.get(i).ne(ref other.get(i)) {
+            let a = this.get(i)
+            let b = other.get(i)
+            if a.ne(ref b) {
                 return false
             }
             i = i + 1
@@ -136,7 +138,8 @@ impl[T: PartialOrd] PartialOrd for List[T] {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
         loop (i < min_len) {
-            when this.get(i).partial_cmp(ref other.get(i)) {
+            let b = other.get(i)
+            when this.get(i).partial_cmp(ref b) {
                 Just(ord) => {
                     when ord {
                         Less => return Just(Less),
@@ -164,7 +167,8 @@ impl[T: Ord] Ord for List[T] {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
         loop (i < min_len) {
-            when this.get(i).cmp(ref other.get(i)) {
+            let b = other.get(i)
+            when this.get(i).cmp(ref b) {
                 Less => return Less,
                 Greater => return Greater,
                 Equal => {}

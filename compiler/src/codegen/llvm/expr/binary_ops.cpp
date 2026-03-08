@@ -18,6 +18,7 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
+#include "types/module.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -322,14 +323,32 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             }
 
             bool is_generic_builtin = pending_generic_enums_.count(base_name) > 0;
+            // Also check if this is a generic struct with eq impl (e.g., List[T])
+            bool is_generic_struct_with_eq = false;
+            if (!is_generic_builtin && pending_generic_impls_.count(base_name) > 0) {
+                // Check if any impl for this type has an eq method
+                auto all_it = pending_generic_impls_all_.find(base_name);
+                if (all_it != pending_generic_impls_all_.end()) {
+                    for (const auto* impl : all_it->second) {
+                        for (const auto& m : impl->methods) {
+                            if (m.name == "eq") {
+                                is_generic_struct_with_eq = true;
+                                break;
+                            }
+                        }
+                        if (is_generic_struct_with_eq)
+                            break;
+                    }
+                }
+            }
             std::string eq_fn_name = "@" + mangle_impl_method(enum_name, "eq");
             bool has_eq_fn = generated_functions_.count(eq_fn_name) > 0;
 
-            if (is_generic_builtin || has_eq_fn) {
+            if (is_generic_builtin || is_generic_struct_with_eq || has_eq_fn) {
                 // For generic builtins, queue the eq method instantiation so the body gets
                 // generated in generate_pending_instantiations(). The type_subs recovery
                 // logic there will fill in type substitutions from the mangled_type_name.
-                if (is_generic_builtin && !has_eq_fn) {
+                if ((is_generic_builtin || is_generic_struct_with_eq) && !has_eq_fn) {
                     PendingImplMethod pim;
                     pim.base_type_name = base_name;
                     pim.mangled_type_name = enum_name;
@@ -832,8 +851,73 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                       ")");
             emit_line("  " + result + " = icmp eq i32 " + cmp_result + ", 0");
         } else if (left_type == "ptr" && right_type == "ptr") {
-            // Pointer equality comparison (non-string pointers)
-            emit_line("  " + result + " = icmp eq ptr " + left + ", " + right);
+            // Check if this is a struct type with PartialEq impl
+            // If so, dispatch to eq() method instead of pointer comparison
+            bool dispatched_eq = false;
+            if (left_semantic && left_semantic->is<types::NamedType>()) {
+                const auto& lnamed = left_semantic->as<types::NamedType>();
+                std::string eq_qualified = lnamed.name + "::eq";
+                // Check if eq method exists in any module
+                bool has_eq = false;
+                if (env_.lookup_func(eq_qualified)) {
+                    has_eq = true;
+                } else if (env_.module_registry()) {
+                    for (const auto& [mn, mod] : env_.module_registry()->get_all_modules()) {
+                        if (mod.functions.find(eq_qualified) != mod.functions.end()) {
+                            has_eq = true;
+                            break;
+                        }
+                    }
+                }
+                if (!has_eq) {
+                    for (const auto& [mp, mod] : types::GlobalModuleCache::instance().get_all()) {
+                        if (mod.functions.find(eq_qualified) != mod.functions.end()) {
+                            has_eq = true;
+                            break;
+                        }
+                    }
+                }
+                if (has_eq) {
+                    // Dispatch to eq() method
+                    std::string mangled_type = lnamed.name;
+                    if (!lnamed.type_args.empty()) {
+                        mangled_type = mangle_struct_name(lnamed.name, lnamed.type_args);
+                    }
+                    std::string eq_fn = "@" + mangle_impl_method(mangled_type, "eq");
+                    // Queue instantiation if generic
+                    if (!lnamed.type_args.empty() && generated_functions_.count(eq_fn) == 0) {
+                        PendingImplMethod pim;
+                        pim.base_type_name = lnamed.name;
+                        pim.mangled_type_name = mangled_type;
+                        pim.method_name = "eq";
+                        pim.is_library_type = true;
+                        // Build type_subs from type args
+                        if (env_.module_registry()) {
+                            for (const auto& [mn, mod] :
+                                 env_.module_registry()->get_all_modules()) {
+                                auto sit = mod.structs.find(lnamed.name);
+                                if (sit != mod.structs.end()) {
+                                    for (size_t i = 0; i < sit->second.type_params.size() &&
+                                                       i < lnamed.type_args.size();
+                                         ++i) {
+                                        pim.type_subs[sit->second.type_params[i]] =
+                                            lnamed.type_args[i];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        pending_impl_method_instantiations_.push_back(pim);
+                    }
+                    emit_line("  " + result + " = call i1 " + eq_fn + "(ptr " + left + ", ptr " +
+                              right + ")");
+                    dispatched_eq = true;
+                }
+            }
+            if (!dispatched_eq) {
+                // Pointer equality comparison (non-string pointers)
+                emit_line("  " + result + " = icmp eq ptr " + left + ", " + right);
+            }
         } else {
             emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
         }
@@ -850,8 +934,71 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                       ")");
             emit_line("  " + result + " = icmp ne i32 " + cmp_result + ", 0");
         } else if (left_type == "ptr" && right_type == "ptr") {
-            // Pointer inequality comparison (non-string pointers)
-            emit_line("  " + result + " = icmp ne ptr " + left + ", " + right);
+            // Check if this is a struct type with PartialEq impl (ne = !eq)
+            bool dispatched_ne = false;
+            if (left_semantic && left_semantic->is<types::NamedType>()) {
+                const auto& lnamed = left_semantic->as<types::NamedType>();
+                std::string eq_qualified = lnamed.name + "::eq";
+                bool has_eq = false;
+                if (env_.lookup_func(eq_qualified)) {
+                    has_eq = true;
+                } else if (env_.module_registry()) {
+                    for (const auto& [mn, mod] : env_.module_registry()->get_all_modules()) {
+                        if (mod.functions.find(eq_qualified) != mod.functions.end()) {
+                            has_eq = true;
+                            break;
+                        }
+                    }
+                }
+                if (!has_eq) {
+                    for (const auto& [mp, mod] : types::GlobalModuleCache::instance().get_all()) {
+                        if (mod.functions.find(eq_qualified) != mod.functions.end()) {
+                            has_eq = true;
+                            break;
+                        }
+                    }
+                }
+                if (has_eq) {
+                    std::string mangled_type = lnamed.name;
+                    if (!lnamed.type_args.empty()) {
+                        mangled_type = mangle_struct_name(lnamed.name, lnamed.type_args);
+                    }
+                    std::string eq_fn = "@" + mangle_impl_method(mangled_type, "eq");
+                    if (!lnamed.type_args.empty() && generated_functions_.count(eq_fn) == 0) {
+                        PendingImplMethod pim;
+                        pim.base_type_name = lnamed.name;
+                        pim.mangled_type_name = mangled_type;
+                        pim.method_name = "eq";
+                        pim.is_library_type = true;
+                        if (env_.module_registry()) {
+                            for (const auto& [mn, mod] :
+                                 env_.module_registry()->get_all_modules()) {
+                                auto sit = mod.structs.find(lnamed.name);
+                                if (sit != mod.structs.end()) {
+                                    for (size_t i = 0; i < sit->second.type_params.size() &&
+                                                       i < lnamed.type_args.size();
+                                         ++i) {
+                                        pim.type_subs[sit->second.type_params[i]] =
+                                            lnamed.type_args[i];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        pending_impl_method_instantiations_.push_back(pim);
+                    }
+                    // ne = !eq
+                    std::string eq_result = fresh_reg();
+                    emit_line("  " + eq_result + " = call i1 " + eq_fn + "(ptr " + left + ", ptr " +
+                              right + ")");
+                    emit_line("  " + result + " = xor i1 " + eq_result + ", true");
+                    dispatched_ne = true;
+                }
+            }
+            if (!dispatched_ne) {
+                // Pointer inequality comparison (non-string pointers)
+                emit_line("  " + result + " = icmp ne ptr " + left + ", " + right);
+            }
         } else {
             emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
         }

@@ -18,6 +18,7 @@ TML_MODULE("compiler")
 #include "common.hpp"
 #include "lexer/token.hpp"
 #include "types/checker.hpp"
+#include "types/module.hpp"
 
 #include <unordered_set>
 
@@ -455,6 +456,28 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (module) {
                 auto func_it = module->functions.find(qualified);
                 if (func_it != module->functions.end()) {
+                    return apply_with_receiver_type_args(func_it->second);
+                }
+            }
+        }
+
+        // Fallback: search ALL loaded modules AND global module cache
+        // for behavior impl methods defined in separate modules.
+        // E.g., `impl PartialEq for List[T]` in std::collections::behaviors
+        // while List is defined in std::collections::list
+        {
+            auto all_modules = env_.get_all_modules();
+            for (const auto& [mod_path, mod] : all_modules) {
+                auto func_it = mod.functions.find(qualified);
+                if (func_it != mod.functions.end()) {
+                    return apply_with_receiver_type_args(func_it->second);
+                }
+            }
+            // Also search GlobalModuleCache for modules not yet loaded
+            // into the local registry (e.g., sibling submodules)
+            for (const auto& [mod_path, mod] : GlobalModuleCache::instance().get_all()) {
+                auto func_it = mod.functions.find(qualified);
+                if (func_it != mod.functions.end()) {
                     return apply_with_receiver_type_args(func_it->second);
                 }
             }

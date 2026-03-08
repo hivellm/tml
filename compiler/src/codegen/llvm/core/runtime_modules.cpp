@@ -337,6 +337,9 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         static const std::vector<std::string> essential_library_modules = {
             "std::collections::List",
             "std::collections::buffer",
+            // Behavior impls for collection types (PartialEq, Duplicate, etc.)
+            // These are in a separate module from the type definitions.
+            "std::collections::behaviors",
             "core::str",
             "core::hash",
             "std::text",
