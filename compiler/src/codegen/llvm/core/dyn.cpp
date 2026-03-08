@@ -443,12 +443,28 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     // Set up type substitutions for associated types
     auto saved_type_subs = current_type_subs_;
     auto saved_associated_types = current_associated_types_;
-    {
-        auto this_type = std::make_shared<types::Type>();
-        this_type->kind = types::NamedType{type_name, "", {}};
-        current_type_subs_["This"] = this_type;
-        current_type_subs_["Self"] = this_type;
+    // Build the proper semantic type for This/Self — used both for type_subs
+    // and for the this/self local variable's semantic_type.
+    auto this_semantic_type = std::make_shared<types::Type>();
+    if (impl && !impl->generics.empty()) {
+        // For generic impls, create NamedType with base name and resolved type_args
+        // so method dispatch can resolve methods through the generic path.
+        // E.g., for Outcome__I32__Str, create NamedType{"Outcome", "", {I32_type, Str_type}}
+        auto sep = type_name.find("__");
+        std::string base_name = (sep != std::string::npos) ? type_name.substr(0, sep) : type_name;
+        std::vector<types::TypePtr> type_args;
+        for (const auto& generic : impl->generics) {
+            auto it = current_type_subs_.find(generic.name);
+            if (it != current_type_subs_.end()) {
+                type_args.push_back(it->second);
+            }
+        }
+        this_semantic_type->kind = types::NamedType{base_name, "", type_args};
+    } else {
+        this_semantic_type->kind = types::NamedType{type_name, "", {}};
     }
+    current_type_subs_["This"] = this_semantic_type;
+    current_type_subs_["Self"] = this_semantic_type;
     if (impl) {
         for (const auto& binding : impl->type_bindings) {
             if (binding.type) {
@@ -611,8 +627,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
             (param_type.find("This") != std::string::npos ||
              param_type.find(type_name) != std::string::npos || param_type == "ptr")) {
             param_type = trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
-            semantic_type = std::make_shared<types::Type>();
-            semantic_type->kind = types::NamedType{type_name, "", {}};
+            semantic_type = this_semantic_type;
         }
 
         if (param_name == "this" || param_name == "self") {

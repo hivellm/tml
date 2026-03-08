@@ -436,6 +436,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                      << " is_local=" << (impl_it != pending_generic_impls_.end())
                      << " mangled_method=" << mangled_method_name);
 
+        // Map Self/This to the concrete implementing type so that trait method
+        // parameters (e.g., ref Self in ne/lt/le/gt/ge defaults) resolve correctly
+        // when building the call instruction's argument types.
+        {
+            auto self_type = std::make_shared<types::Type>();
+            self_type->kind = types::NamedType{named.name, "", named.type_args};
+            type_subs["Self"] = self_type;
+            type_subs["This"] = self_type;
+        }
+
         if (generated_impl_methods_.find(mangled_method_name) == generated_impl_methods_.end()) {
             bool is_local = impl_it != pending_generic_impls_.end();
             if (is_local || is_imported) {
@@ -624,7 +634,9 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
         types::TypePtr param_type_resolved;
-        // func_sig always has 'this' at index 0 (semantic params), so offset is always 1
+        // func_sig usually has 'this' at index 0 (semantic params), so offset is 1.
+        // However, default behavior methods from module binary cache may omit 'this',
+        // so fall back to direct indexing when i+1 is out of bounds but i is valid.
         if (func_sig && i + 1 < func_sig->params.size()) {
             param_type_resolved = func_sig->params[i + 1];
             if (!type_subs.empty()) {
@@ -632,6 +644,18 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
             expected_type = llvm_type_from_semantic(param_type_resolved);
             // Function-typed parameters use fat pointer { ptr, ptr }
+            if (param_type_resolved->is<types::FuncType>()) {
+                expected_type = "{ ptr, ptr }";
+            }
+        }
+        // Fallback for func_sig without 'this': default behavior methods from module
+        // binary cache store params WITHOUT 'this', so params[0] is the first real arg.
+        else if (func_sig && i < func_sig->params.size()) {
+            param_type_resolved = func_sig->params[i];
+            if (!type_subs.empty()) {
+                param_type_resolved = types::substitute_type(param_type_resolved, type_subs);
+            }
+            expected_type = llvm_type_from_semantic(param_type_resolved);
             if (param_type_resolved->is<types::FuncType>()) {
                 expected_type = "{ ptr, ptr }";
             }
@@ -905,11 +929,19 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         std::string actual_type = last_expr_type_;
         std::string arg_type = "i32";
         types::TypePtr param_type_ptr;
-        // func_sig always has 'this' at index 0 (semantic params), so offset is always 1
+        // func_sig usually has 'this' at index 0 (semantic params), so offset is 1.
+        // However, default behavior methods from module binary cache may omit 'this'.
         if (func_sig && i + 1 < func_sig->params.size()) {
             param_type_ptr = func_sig->params[i + 1];
             arg_type = llvm_type_from_semantic(param_type_ptr);
-            // Function-typed parameters use fat pointer to support closures
+            if (param_type_ptr->is<types::FuncType>()) {
+                arg_type = "{ ptr, ptr }";
+            }
+        }
+        // Fallback for func_sig without 'this': direct indexing
+        else if (func_sig && i < func_sig->params.size()) {
+            param_type_ptr = func_sig->params[i];
+            arg_type = llvm_type_from_semantic(param_type_ptr);
             if (param_type_ptr->is<types::FuncType>()) {
                 arg_type = "{ ptr, ptr }";
             }

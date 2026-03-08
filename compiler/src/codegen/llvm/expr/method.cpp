@@ -964,8 +964,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 emit_line("  " + tag_val + " = zext i1 " + is_null + " to i32");
             } else {
                 // Standard struct-based Maybe: extract tag from field 0
-                if (call.receiver->is<parser::FieldExpr>() &&
-                    enum_type_name.starts_with("%struct.")) {
+                // Load from ptr if receiver is a field access or ref param
+                if (enum_type_name.starts_with("%struct.") &&
+                    (call.receiver->is<parser::FieldExpr>() || last_expr_type_ == "ptr")) {
                     std::string loaded = fresh_reg();
                     emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                     maybe_val = loaded;
@@ -984,9 +985,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (named.name == "Outcome" && named.type_args.size() >= 2) {
             std::string enum_type_name = llvm_type_from_semantic(receiver_type, true);
 
-            // If receiver is from field access, it's a pointer - need to load first
+            // If receiver is a pointer (field access or ref param), load struct first
             std::string outcome_val = receiver;
-            if (call.receiver->is<parser::FieldExpr>() && enum_type_name.starts_with("%struct.")) {
+            if (enum_type_name.starts_with("%struct.") &&
+                (call.receiver->is<parser::FieldExpr>() || last_expr_type_ == "ptr")) {
                 std::string loaded = fresh_reg();
                 emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                 outcome_val = loaded;

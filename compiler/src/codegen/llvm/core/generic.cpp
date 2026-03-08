@@ -815,6 +815,182 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 }
                             }
 
+                            // If method not in impl, check if the impl's trait has a
+                            // default implementation (e.g., ne/lt/le/gt/ge from
+                            // PartialEq/PartialOrd)
+                            if (!found && impl_decl.trait_type &&
+                                impl_decl.trait_type->is<parser::NamedType>()) {
+                                const auto& trait_nt =
+                                    impl_decl.trait_type->as<parser::NamedType>();
+                                std::string dflt_trait_name = trait_nt.path.segments.empty()
+                                                                  ? ""
+                                                                  : trait_nt.path.segments.back();
+                                if (!dflt_trait_name.empty()) {
+                                    // Find trait declaration
+                                    const parser::TraitDecl* dflt_trait = nullptr;
+                                    auto dti = trait_decls_.find(dflt_trait_name);
+                                    if (dti != trait_decls_.end()) {
+                                        dflt_trait = dti->second;
+                                    }
+                                    // Search in same parsed module
+                                    if (!dflt_trait) {
+                                        for (const auto& d : parsed_mod.decls) {
+                                            if (d->is<parser::TraitDecl>() &&
+                                                d->as<parser::TraitDecl>().name ==
+                                                    dflt_trait_name) {
+                                                dflt_trait = &d->as<parser::TraitDecl>();
+                                                trait_decls_[dflt_trait_name] = dflt_trait;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    // Load from behavior source files if needed
+                                    if (!dflt_trait) {
+                                        static const std::unordered_map<std::string, std::string>
+                                            behavior_src = {
+                                                {"PartialEq", "core/src/cmp"},
+                                                {"Eq", "core/src/cmp"},
+                                                {"PartialOrd", "core/src/cmp"},
+                                                {"Ord", "core/src/cmp"},
+                                                {"Iterator", "core/src/iter/traits/iterator"},
+                                                {"DoubleEndedIterator",
+                                                 "core/src/iter/traits/double_ended"},
+                                                {"Display", "core/src/fmt/traits"},
+                                                {"Debug", "core/src/fmt/traits"},
+                                                {"Duplicate", "core/src/clone"},
+                                                {"Clone", "core/src/clone"},
+                                                {"Hash", "core/src/hash"},
+                                                {"Default", "core/src/default"},
+                                                {"Error", "core/src/error"},
+                                                {"From", "core/src/convert"},
+                                                {"Into", "core/src/convert"},
+                                                {"TryFrom", "core/src/convert"},
+                                                {"TryInto", "core/src/convert"},
+                                            };
+                                        auto bs_it = behavior_src.find(dflt_trait_name);
+                                        if (bs_it != behavior_src.end()) {
+                                            std::string bskey = bs_it->second;
+                                            for (auto& ch : bskey)
+                                                if (ch == '/')
+                                                    ch = ':';
+                                            std::string clean_key;
+                                            std::istringstream kss(bskey);
+                                            std::string seg;
+                                            while (std::getline(kss, seg, ':')) {
+                                                if (seg.empty() || seg == "src")
+                                                    continue;
+                                                if (!clean_key.empty())
+                                                    clean_key += "::";
+                                                clean_key += seg;
+                                            }
+                                            const parser::Module* tmod =
+                                                GlobalASTCache::instance().get(clean_key);
+                                            if (!tmod) {
+                                                namespace fs = std::filesystem;
+                                                std::vector<fs::path> roots = {
+                                                    fs::current_path() / "lib",
+                                                    fs::path("lib"),
+                                                    fs::path("F:/Node/hivellm/tml/lib"),
+                                                };
+                                                for (const auto& lr : roots) {
+                                                    fs::path sp = lr / (bs_it->second + ".tml");
+                                                    if (fs::exists(sp)) {
+                                                        auto sr =
+                                                            lexer::Source::from_file(sp.string());
+                                                        if (is_err(sr))
+                                                            break;
+                                                        auto src =
+                                                            std::move(std::get<lexer::Source>(sr));
+                                                        lexer::Lexer lx(src);
+                                                        auto toks = lx.tokenize();
+                                                        if (lx.has_errors())
+                                                            break;
+                                                        parser::Parser pp(std::move(toks));
+                                                        auto res =
+                                                            pp.parse_module(sp.stem().string());
+                                                        if (std::holds_alternative<parser::Module>(
+                                                                res)) {
+                                                            GlobalASTCache::instance().put(
+                                                                clean_key, std::get<parser::Module>(
+                                                                               std::move(res)));
+                                                            tmod = GlobalASTCache::instance().get(
+                                                                clean_key);
+                                                        }
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if (tmod) {
+                                                for (const auto& d : tmod->decls) {
+                                                    if (d->is<parser::TraitDecl>() &&
+                                                        d->as<parser::TraitDecl>().name ==
+                                                            dflt_trait_name) {
+                                                        dflt_trait = &d->as<parser::TraitDecl>();
+                                                        trait_decls_[dflt_trait_name] = dflt_trait;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Generate the default method from the trait
+                                    if (dflt_trait) {
+                                        for (const auto& tm : dflt_trait->methods) {
+                                            if (tm.name == pim.method_name && tm.body.has_value()) {
+                                                // Default methods may call other methods from
+                                                // the same trait (e.g., ne calls eq, lt calls
+                                                // partial_cmp). Ensure dependencies are
+                                                // generated first.
+                                                static const std::unordered_map<std::string,
+                                                                                std::string>
+                                                    method_deps = {
+                                                        {"ne", "eq"},
+                                                        {"lt", "partial_cmp"},
+                                                        {"le", "partial_cmp"},
+                                                        {"gt", "partial_cmp"},
+                                                        {"ge", "partial_cmp"},
+                                                        {"max", "cmp"},
+                                                        {"min", "cmp"},
+                                                        {"clamp", "cmp"},
+                                                    };
+                                                auto dep_it = method_deps.find(pim.method_name);
+                                                if (dep_it != method_deps.end()) {
+                                                    std::string dep_key = pim.mangled_type_name +
+                                                                          "_" + dep_it->second;
+                                                    if (functions_.find(dep_key) ==
+                                                        functions_.end()) {
+                                                        // Generate the dependency from impl
+                                                        for (const auto& dm : impl_decl.methods) {
+                                                            if (dm.name == dep_it->second) {
+                                                                gen_impl_method_instantiation(
+                                                                    pim.mangled_type_name, dm,
+                                                                    effective_type_subs,
+                                                                    impl_decl.generics,
+                                                                    pim.method_type_suffix,
+                                                                    pim.is_library_type,
+                                                                    pim.base_type_name);
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Set up generic type subs for resolution
+                                                auto saved_ts = current_type_subs_;
+                                                for (const auto& [k, v] : effective_type_subs) {
+                                                    current_type_subs_[k] = v;
+                                                }
+                                                found = generate_default_method(
+                                                    pim.mangled_type_name, dflt_trait, tm,
+                                                    &impl_decl);
+                                                current_type_subs_ = saved_ts;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Restore module context and associated types
                             current_module_name_ = saved_module_name;
                             current_module_prefix_ = saved_module_prefix;
@@ -930,6 +1106,50 @@ void LLVMIRGen::generate_pending_instantiations() {
                                             pim.is_library_type, pim.base_type_name);
                                         found = true;
                                         break;
+                                    }
+                                }
+
+                                // Check trait default if method not in impl
+                                if (!found && impl_decl.trait_type &&
+                                    impl_decl.trait_type->is<parser::NamedType>()) {
+                                    const auto& gc_tn =
+                                        impl_decl.trait_type->as<parser::NamedType>();
+                                    std::string gc_trait = gc_tn.path.segments.empty()
+                                                               ? ""
+                                                               : gc_tn.path.segments.back();
+                                    if (!gc_trait.empty()) {
+                                        const parser::TraitDecl* gc_td = nullptr;
+                                        auto gc_dti = trait_decls_.find(gc_trait);
+                                        if (gc_dti != trait_decls_.end())
+                                            gc_td = gc_dti->second;
+                                        // Search in same cached module
+                                        if (!gc_td && cached_parsed_ptr) {
+                                            for (const auto& d : cached_parsed_ptr->decls) {
+                                                if (d->is<parser::TraitDecl>() &&
+                                                    d->as<parser::TraitDecl>().name == gc_trait) {
+                                                    gc_td = &d->as<parser::TraitDecl>();
+                                                    trait_decls_[gc_trait] = gc_td;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (gc_td) {
+                                            for (const auto& tm : gc_td->methods) {
+                                                if (tm.name == pim.method_name &&
+                                                    tm.body.has_value()) {
+                                                    auto saved_ts2 = current_type_subs_;
+                                                    for (const auto& [k, v] :
+                                                         effective_type_subs_gc) {
+                                                        current_type_subs_[k] = v;
+                                                    }
+                                                    found = generate_default_method(
+                                                        pim.mangled_type_name, gc_td, tm,
+                                                        &impl_decl);
+                                                    current_type_subs_ = saved_ts2;
+                                                    break;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
