@@ -104,7 +104,6 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
     // ============ GENERIC STRUCT STATIC METHODS ============
     // Handle calls like Range::new(0, 10) where Range is a generic struct
     // These need type inference from expected_enum_type_ context
-
     if (call.callee->is<parser::PathExpr>()) {
         const auto& path_expr = call.callee->as<parser::PathExpr>();
         const auto& path = path_expr.path;
@@ -470,6 +469,48 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             generic_names.push_back(g.name);
                         }
                     }
+                    // Also check pending_generic_enums_ for built-in generic enums
+                    // (Outcome[T,E], Maybe[T], Poll[T]) which are not in module registry
+                    if (generic_names.empty()) {
+                        auto enum_it = pending_generic_enums_.find(type_name);
+                        if (enum_it != pending_generic_enums_.end()) {
+                            for (const auto& g : enum_it->second->generics) {
+                                generic_names.push_back(g.name);
+                            }
+                        }
+                    }
+                }
+
+                // After populating generic_names from the primary impl, check if there's
+                // a more specific impl in pending_generic_impls_all_ that:
+                // (a) contains the target method, and (b) has more generic params.
+                // This handles cases like impl[T,E] Try for Outcome[T,E] where the primary
+                // pending_generic_impls_["Outcome"] may point to a 1-param impl
+                // (e.g., impl[T] Display for Outcome[T,_]) that lacks E.
+                {
+                    auto all_it = pending_generic_impls_all_.find(type_name);
+                    if (all_it != pending_generic_impls_all_.end()) {
+                        for (const auto* cand : all_it->second) {
+                            // Check if this impl has the target method
+                            bool has_method = false;
+                            for (const auto& m : cand->methods) {
+                                if (m.name == method) {
+                                    has_method = true;
+                                    break;
+                                }
+                            }
+                            // If it has the method AND more generics, prefer it
+                            if (has_method && cand->generics.size() > generic_names.size()) {
+                                generic_names.clear();
+                                for (const auto& g : cand->generics) {
+                                    generic_names.push_back(g.name);
+                                }
+                                // Also update impl_it to point to this impl if possible
+                                // (impl_it is used downstream to find local_method_decl)
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // Check for explicit type arguments like StackNode::new[T](...)
@@ -620,6 +661,27 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
 
                         if (type_arg && !generic_names.empty()) {
                             type_subs[generic_names[0]] = type_arg;
+                        }
+                    } else if (suffix.starts_with("__") && generic_names.size() > 1) {
+                        // Multi-param case (e.g., Outcome__I32__Str with generic_names=[T,E])
+                        // Split args_str on "__" and map each part to each generic name
+                        std::string args_str = suffix.substr(2);
+                        std::vector<std::string> parts;
+                        size_t pos = 0;
+                        while (pos < args_str.size()) {
+                            size_t next = args_str.find("__", pos);
+                            if (next == std::string::npos) {
+                                parts.push_back(args_str.substr(pos));
+                                break;
+                            }
+                            parts.push_back(args_str.substr(pos, next - pos));
+                            pos = next + 2;
+                        }
+                        for (size_t i = 0; i < generic_names.size() && i < parts.size(); ++i) {
+                            types::TypePtr type_arg = parse_mangled_type_string(parts[i]);
+                            if (type_arg) {
+                                type_subs[generic_names[i]] = type_arg;
+                            }
                         }
                     }
                 }

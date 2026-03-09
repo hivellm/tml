@@ -1,0 +1,33 @@
+// Tests for ops::try_trait — from_output, from_residual
+use test::{assert, assert_eq}
+use core::ops::try_trait::Try
+
+@test
+func test_outcome_from_output() -> I32 {
+    let r: Outcome[I32, Str] = Outcome::from_output(42)
+    when r {
+        Ok(v) => assert_eq(v, 42, "from_output value"),
+        Err(_) => assert(false, "should be Ok")
+    }
+    return 0
+}
+
+@test
+func test_outcome_from_residual() -> I32 {
+    let r: Outcome[I32, Str] = Outcome::from_residual("err")
+    when r {
+        Ok(_) => assert(false, "should be Err"),
+        Err(e) => assert_eq(e, "err", "from_residual value")
+    }
+    return 0
+}
+
+@test
+func test_maybe_from_residual() -> I32 {
+    let r: Maybe[I32] = Maybe::from_residual(())
+    when r {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "from_residual returns Nothing")
+    }
+    return 0
+}
