@@ -1712,7 +1712,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // ============ GENERIC FUNCTION CALLS ============
-
     // Check if this is a generic function call
     auto pending_func_it = pending_generic_funcs_.find(fn_name);
     // Arity check on direct match: if the generic function's param count doesn't match

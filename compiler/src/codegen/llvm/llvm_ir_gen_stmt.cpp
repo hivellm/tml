@@ -1106,6 +1106,17 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // This is needed for tuple field access and array method dispatch to work correctly
         semantic_type = infer_expr_type(*let.init.value());
     }
+    // For struct variables from method calls (e.g., let r = x.transpose()),
+    // use last_semantic_type_ for correct nested generic type dispatch.
+    // infer_expr_type falls back to parse_mangled_type_string which gives a flat
+    // (wrong) type for nested generics like Maybe[Outcome[Maybe[I32],Str]].
+    if (!semantic_type && (var_type.starts_with("%struct.") || var_type.starts_with("%union."))) {
+        if (last_semantic_type_) {
+            semantic_type = last_semantic_type_;
+        } else if (let.init.has_value()) {
+            semantic_type = infer_expr_type(*let.init.value());
+        }
+    }
     // For ptr variables from method calls (e.g., let maybe_ptr = s.get_mut()),
     // use semantic_var_type or last_semantic_type_ for method dispatch
     if (!semantic_type && var_type == "ptr") {

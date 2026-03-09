@@ -680,9 +680,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     const std::string& mangled_type_name, const parser::FuncDecl& method,
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
     const std::vector<parser::GenericParam>& impl_generics, const std::string& method_type_suffix,
-    bool is_library_type, const std::string& base_type_name) {
-    emit_line("; XYZZY_DEBUG gen_impl_method_instantiation mangled=" + mangled_type_name +
-              " method=" + method.name + " nsubs=" + std::to_string(type_subs.size()));
+    bool is_library_type, const std::string& base_type_name, const parser::Type* impl_self_type) {
     // Skip method-level generic methods without a concrete type suffix.
     // Without a suffix, type params (e.g. T) remain unresolved and produce
     // `alloca %struct.T` in the IR — an unsized type that LLVM rejects.
@@ -953,9 +951,18 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
         auto this_semantic_type = std::make_shared<types::Type>();
 
-        // Use base_type_name with type_args so method lookup finds "RawPtr::offset" not
-        // "RawPtr__I64::offset"
-        if (!base_type_name.empty()) {
+        // For specialized impls (e.g., impl[T,E] Outcome[Outcome[T,E], E]), the
+        // impl_self_type carries the full structural pattern. Resolve it with type_subs
+        // to get the correct self type (e.g., Outcome[Outcome[I32,Str], Str]).
+        // Without this, building from impl_generics flat would yield Outcome[I32,Str].
+        if (impl_self_type != nullptr) {
+            auto resolved = resolve_parser_type_with_subs(*impl_self_type, type_subs);
+            if (resolved) {
+                this_semantic_type = resolved;
+            }
+        } else if (!base_type_name.empty()) {
+            // Use base_type_name with type_args so method lookup finds "RawPtr::offset" not
+            // "RawPtr__I64::offset"
             // Build type_args from type_subs based on impl_generics order
             std::vector<types::TypePtr> type_args;
             for (const auto& gp : impl_generics) {

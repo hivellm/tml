@@ -1509,7 +1509,7 @@ private:
         const std::unordered_map<std::string, types::TypePtr>& type_subs,
         const std::vector<parser::GenericParam>& impl_generics,
         const std::string& method_type_suffix = "", bool is_library_type = false,
-        const std::string& base_type_name = "");
+        const std::string& base_type_name = "", const parser::Type* impl_self_type = nullptr);
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_union_decl(const parser::UnionDecl& u);
     void gen_enum_decl(const parser::EnumDecl& e);

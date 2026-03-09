@@ -655,7 +655,7 @@ impl[T] Maybe[Maybe[T]] {
     /// let z: Maybe[Maybe[I64]] = Nothing
     /// assert(z.flatten() == Nothing)
     /// ```
-    pub func flatten(this) -> T {
+    pub func flatten(this) -> Maybe[T] {
         when this {
             Just(inner) => return inner,
             Nothing => return Nothing

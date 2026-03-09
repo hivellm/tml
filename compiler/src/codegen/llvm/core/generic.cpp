@@ -102,6 +102,92 @@ static void extract_type_params_from_parser(const parser::Type& pattern,
     }
 }
 
+// Helper: Tokenize a mangled name by splitting on "__"
+// e.g., "Outcome__Outcome__I32__Str__Str" -> ["Outcome", "Outcome", "I32", "Str", "Str"]
+static std::vector<std::string> tokenize_mangled(const std::string& s) {
+    std::vector<std::string> tokens;
+    size_t pos = 0;
+    while (pos < s.size()) {
+        auto next = s.find("__", pos);
+        if (next == std::string::npos) {
+            if (pos < s.size())
+                tokens.push_back(s.substr(pos));
+            break;
+        }
+        tokens.push_back(s.substr(pos, next - pos));
+        pos = next + 2;
+    }
+    return tokens;
+}
+
+// Forward declaration for mutual recursion
+static types::TypePtr parse_mangled_type_string(const std::string& s);
+
+// Helper: Parse a type from a flat token list guided by a parser::Type pattern.
+// Uses the pattern's arity to correctly group tokens into nested types.
+// For bare type params (e.g., T, E): reads exactly one token.
+// For generic types (e.g., Outcome[T, E]): reads the base token then recurses for each arg.
+// Extracts type param bindings into subs.
+static types::TypePtr
+parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::string>& tokens,
+                          size_t& pos, const std::vector<parser::GenericParam>& impl_generics,
+                          std::unordered_map<std::string, types::TypePtr>& subs) {
+
+    if (pos >= tokens.size())
+        return nullptr;
+
+    if (!pattern.is<parser::NamedType>())
+        return nullptr;
+
+    const auto& named = pattern.as<parser::NamedType>();
+    std::string name = named.path.segments.empty() ? "" : named.path.segments.back();
+
+    // Check if this pattern node is a bare type parameter
+    bool is_type_param = false;
+    if (!named.generics.has_value() || named.generics->args.empty()) {
+        for (const auto& gp : impl_generics) {
+            if (gp.name == name) {
+                is_type_param = true;
+                break;
+            }
+        }
+    }
+
+    if (is_type_param) {
+        // Read exactly one token as this param's value (handles primitive types).
+        // For complex concrete types (e.g., T = Maybe[I32]) this reads only the base name;
+        // that case requires a registry-aware parser which is out of scope here.
+        std::string token = tokens[pos++];
+        auto t = parse_mangled_type_string(token);
+        if (t && subs.find(name) == subs.end()) {
+            subs[name] = t;
+        }
+        return t;
+    }
+
+    // Non-param: verify the current token matches the expected type name
+    if (tokens[pos] != name)
+        return nullptr;
+    pos++;
+
+    // Recursively parse type args based on pattern arity
+    std::vector<types::TypePtr> type_args;
+    if (named.generics.has_value()) {
+        for (const auto& arg : named.generics->args) {
+            if (arg.is_type()) {
+                auto arg_type =
+                    parse_tokens_with_pattern(*arg.as_type(), tokens, pos, impl_generics, subs);
+                if (arg_type)
+                    type_args.push_back(arg_type);
+            }
+        }
+    }
+
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{name, "", std::move(type_args)};
+    return t;
+}
+
 // Helper: Parse a mangled type string back into a semantic type
 // e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
 static types::TypePtr parse_mangled_type_string(const std::string& s) {
@@ -540,56 +626,59 @@ void LLVMIRGen::generate_pending_instantiations() {
                             }
                         }
 
-                        // Recover type_subs from mangled_type_name if empty
+                        // Recover type_subs from mangled_type_name.
                         // For example: mangled_type_name="Range__I64", base_type_name="Range"
                         // Extract "I64" and map to impl generics (e.g., T -> I64)
                         auto effective_type_subs = pim.type_subs;
-                        emit_line("; DEBUG effective_type_subs.empty()=" +
-                                  std::to_string(effective_type_subs.empty()) +
-                                  " impl.generics.size()=" + std::to_string(impl.generics.size()));
-                        if (effective_type_subs.empty() && !impl.generics.empty() &&
-                            pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
 
-                            // Check if this is a specialized impl (e.g., impl[T,E]
-                            // Outcome[Outcome[T,E], E]) where the self_type's type args contain
-                            // nested types, not just bare params.
-                            bool is_specialized_impl = false;
-                            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
-                                const auto& self_named = impl.self_type->as<parser::NamedType>();
-                                if (self_named.generics.has_value()) {
-                                    for (const auto& arg : self_named.generics->args) {
-                                        if (arg.is_type() &&
-                                            arg.as_type()->is<parser::NamedType>()) {
-                                            const auto& arg_named =
-                                                arg.as_type()->as<parser::NamedType>();
-                                            // A type arg with its own generics is a
-                                            // nested/specialized pattern
-                                            if (arg_named.generics.has_value() &&
-                                                !arg_named.generics->args.empty()) {
-                                                is_specialized_impl = true;
-                                                break;
-                                            }
-                                        }
-                                        if (arg.is_type() && arg.as_type()->is<parser::RefType>()) {
+                        // Detect specialized impls: e.g., impl[T,E] Outcome[Outcome[T,E], E]
+                        // where the self_type's type args contain nested types, not just bare
+                        // params. For these, the passed type_subs may use the outer type's generic
+                        // params (wrong); we must re-derive from the mangled name and impl pattern.
+                        bool is_specialized_impl = false;
+                        if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                            const auto& self_named = impl.self_type->as<parser::NamedType>();
+                            if (self_named.generics.has_value()) {
+                                for (const auto& arg : self_named.generics->args) {
+                                    if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
+                                        const auto& arg_named =
+                                            arg.as_type()->as<parser::NamedType>();
+                                        if (arg_named.generics.has_value() &&
+                                            !arg_named.generics->args.empty()) {
                                             is_specialized_impl = true;
                                             break;
                                         }
                                     }
+                                    if (arg.is_type() && arg.as_type()->is<parser::RefType>()) {
+                                        is_specialized_impl = true;
+                                        break;
+                                    }
                                 }
                             }
+                        }
+
+                        if (!impl.generics.empty() &&
+                            pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
 
                             if (is_specialized_impl) {
-                                // Use pattern matching: parse the concrete type from mangled name,
-                                // then match impl self_type pattern against it to extract type
-                                // params.
-                                auto concrete_type =
-                                    parse_mangled_type_string(pim.mangled_type_name);
-                                if (concrete_type && impl.self_type) {
-                                    extract_type_params_from_parser(*impl.self_type, concrete_type,
-                                                                    impl.generics,
-                                                                    effective_type_subs);
+                                // Use token-based pattern-guided extraction to correctly handle
+                                // nested generic types (e.g., Outcome[Outcome[T,E], E]).
+                                // The token list is built by splitting on "__", then the pattern
+                                // provides the arity to correctly group tokens into nested types.
+                                // This correctly derives T=I32, E=Str from
+                                // "Outcome__Outcome__I32__Str__Str" with pattern
+                                // Outcome[Outcome[T,E], E].
+                                auto tokens = tokenize_mangled(pim.mangled_type_name);
+                                size_t tok_pos = 0;
+                                std::unordered_map<std::string, types::TypePtr> new_subs;
+                                if (impl.self_type) {
+                                    parse_tokens_with_pattern(*impl.self_type, tokens, tok_pos,
+                                                              impl.generics, new_subs);
                                 }
-                            } else {
+                                if (!new_subs.empty()) {
+                                    effective_type_subs = new_subs;
+                                }
+                            } else if (effective_type_subs.empty()) {
                                 std::string suffix =
                                     pim.mangled_type_name.substr(pim.base_type_name.length());
                                 if (suffix.starts_with("__")) {
@@ -627,7 +716,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                                         }
                                     }
                                 }
-                            } // end else (non-specialized)
+                            }
                         }
 
                         // Resolve where clause type equalities to derive additional
@@ -672,8 +761,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                             if (m.name == pim.method_name) {
                                 gen_impl_method_instantiation(
                                     pim.mangled_type_name, m, effective_type_subs, impl.generics,
-                                    pim.method_type_suffix, pim.is_library_type,
-                                    pim.base_type_name);
+                                    pim.method_type_suffix, pim.is_library_type, pim.base_type_name,
+                                    impl.self_type.get());
                                 method_generated = true;
                                 break;
                             }
@@ -871,42 +960,86 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 }
                             }
 
-                            // Recover type_subs from mangled_type_name if empty
+                            // Recover type_subs from mangled_type_name.
+                            // For specialized impls (e.g., impl[T,E] Outcome[Outcome[T,E], E]),
+                            // the passed type_subs may use the outer type's generic params (wrong);
+                            // re-derive using the impl self_type pattern.
                             auto effective_type_subs = pim.type_subs;
-                            if (effective_type_subs.empty() && !impl_decl.generics.empty() &&
-                                pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
-                                std::string suffix =
-                                    pim.mangled_type_name.substr(pim.base_type_name.length());
-                                if (suffix.starts_with("__")) {
-                                    suffix = suffix.substr(2);
-                                    if (impl_decl.generics.size() == 1) {
-                                        auto type_arg = parse_mangled_type_string(suffix);
-                                        if (type_arg) {
-                                            effective_type_subs[impl_decl.generics[0].name] =
-                                                type_arg;
-                                            TML_DEBUG_LN(
-                                                "[IMPL_INST] Recovered type_subs (imported): "
-                                                << impl_decl.generics[0].name << " -> " << suffix);
-                                        }
-                                    } else {
-                                        std::vector<std::string> parts;
-                                        size_t pos = 0;
-                                        while (pos < suffix.size()) {
-                                            size_t next = suffix.find("__", pos);
-                                            if (next == std::string::npos) {
-                                                parts.push_back(suffix.substr(pos));
+
+                            bool is_specialized_impl_imp = false;
+                            if (impl_decl.self_type &&
+                                impl_decl.self_type->is<parser::NamedType>()) {
+                                const auto& sn = impl_decl.self_type->as<parser::NamedType>();
+                                if (sn.generics.has_value()) {
+                                    for (const auto& arg : sn.generics->args) {
+                                        if (arg.is_type() &&
+                                            arg.as_type()->is<parser::NamedType>()) {
+                                            const auto& an = arg.as_type()->as<parser::NamedType>();
+                                            if (an.generics.has_value() &&
+                                                !an.generics->args.empty()) {
+                                                is_specialized_impl_imp = true;
                                                 break;
                                             }
-                                            parts.push_back(suffix.substr(pos, next - pos));
-                                            pos = next + 2;
                                         }
-                                        for (size_t i = 0;
-                                             i < impl_decl.generics.size() && i < parts.size();
-                                             ++i) {
-                                            auto type_arg = parse_mangled_type_string(parts[i]);
+                                        if (arg.is_type() && arg.as_type()->is<parser::RefType>()) {
+                                            is_specialized_impl_imp = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!impl_decl.generics.empty() &&
+                                pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
+                                if (is_specialized_impl_imp) {
+                                    // Use token-based pattern-guided extraction to correctly
+                                    // handle nested generic types in specialized impls.
+                                    auto tokens = tokenize_mangled(pim.mangled_type_name);
+                                    size_t tok_pos = 0;
+                                    std::unordered_map<std::string, types::TypePtr> new_subs;
+                                    if (impl_decl.self_type) {
+                                        parse_tokens_with_pattern(*impl_decl.self_type, tokens,
+                                                                  tok_pos, impl_decl.generics,
+                                                                  new_subs);
+                                    }
+                                    if (!new_subs.empty()) {
+                                        effective_type_subs = new_subs;
+                                    }
+                                } else if (effective_type_subs.empty()) {
+                                    std::string suffix =
+                                        pim.mangled_type_name.substr(pim.base_type_name.length());
+                                    if (suffix.starts_with("__")) {
+                                        suffix = suffix.substr(2);
+                                        if (impl_decl.generics.size() == 1) {
+                                            auto type_arg = parse_mangled_type_string(suffix);
                                             if (type_arg) {
-                                                effective_type_subs[impl_decl.generics[i].name] =
+                                                effective_type_subs[impl_decl.generics[0].name] =
                                                     type_arg;
+                                                TML_DEBUG_LN("[IMPL_INST] Recovered type_subs "
+                                                             "(imported): "
+                                                             << impl_decl.generics[0].name << " -> "
+                                                             << suffix);
+                                            }
+                                        } else {
+                                            std::vector<std::string> parts;
+                                            size_t pos = 0;
+                                            while (pos < suffix.size()) {
+                                                size_t next = suffix.find("__", pos);
+                                                if (next == std::string::npos) {
+                                                    parts.push_back(suffix.substr(pos));
+                                                    break;
+                                                }
+                                                parts.push_back(suffix.substr(pos, next - pos));
+                                                pos = next + 2;
+                                            }
+                                            for (size_t i = 0;
+                                                 i < impl_decl.generics.size() && i < parts.size();
+                                                 ++i) {
+                                                auto type_arg = parse_mangled_type_string(parts[i]);
+                                                if (type_arg) {
+                                                    effective_type_subs[impl_decl.generics[i]
+                                                                            .name] = type_arg;
+                                                }
                                             }
                                         }
                                     }
@@ -947,7 +1080,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     gen_impl_method_instantiation(
                                         pim.mangled_type_name, method_decl, effective_type_subs,
                                         impl_decl.generics, pim.method_type_suffix,
-                                        pim.is_library_type, pim.base_type_name);
+                                        pim.is_library_type, pim.base_type_name,
+                                        impl_decl.self_type.get());
                                     found = true;
                                     break;
                                 }
@@ -1106,7 +1240,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                                                     impl_decl.generics,
                                                                     pim.method_type_suffix,
                                                                     pim.is_library_type,
-                                                                    pim.base_type_name);
+                                                                    pim.base_type_name,
+                                                                    impl_decl.self_type.get());
                                                                 break;
                                                             }
                                                         }
@@ -1226,7 +1361,49 @@ void LLVMIRGen::generate_pending_instantiations() {
                                         }
                                     }
                                 }
+                                // For specialized impls (e.g., impl[T,E] Outcome[Outcome[T,E],E]),
+                                // re-derive type subs from the mangled name and impl pattern.
+                                bool is_spec_gc = false;
+                                if (impl_decl.self_type &&
+                                    impl_decl.self_type->is<parser::NamedType>()) {
+                                    const auto& sn = impl_decl.self_type->as<parser::NamedType>();
+                                    if (sn.generics.has_value()) {
+                                        for (const auto& arg : sn.generics->args) {
+                                            if (arg.is_type() &&
+                                                arg.as_type()->is<parser::NamedType>()) {
+                                                const auto& an =
+                                                    arg.as_type()->as<parser::NamedType>();
+                                                if (an.generics.has_value() &&
+                                                    !an.generics->args.empty()) {
+                                                    is_spec_gc = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (arg.is_type() &&
+                                                arg.as_type()->is<parser::RefType>()) {
+                                                is_spec_gc = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 auto effective_type_subs_gc = pim.type_subs;
+                                if (is_spec_gc && !impl_decl.generics.empty() &&
+                                    pim.mangled_type_name.length() >
+                                        pim.base_type_name.length() + 2) {
+                                    auto tokens = tokenize_mangled(pim.mangled_type_name);
+                                    size_t tok_pos = 0;
+                                    std::unordered_map<std::string, types::TypePtr> new_subs;
+                                    if (impl_decl.self_type) {
+                                        parse_tokens_with_pattern(*impl_decl.self_type, tokens,
+                                                                  tok_pos, impl_decl.generics,
+                                                                  new_subs);
+                                    }
+                                    if (!new_subs.empty()) {
+                                        effective_type_subs_gc = new_subs;
+                                    }
+                                }
                                 resolve_where_clause_type_equalities(impl_decl.where_clause,
                                                                      effective_type_subs_gc);
                                 for (const auto& binding : impl_decl.type_bindings) {
@@ -1251,7 +1428,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                         gen_impl_method_instantiation(
                                             pim.mangled_type_name, meth, effective_type_subs_gc,
                                             impl_decl.generics, pim.method_type_suffix,
-                                            pim.is_library_type, pim.base_type_name);
+                                            pim.is_library_type, pim.base_type_name,
+                                            impl_decl.self_type.get());
                                         found = true;
                                         break;
                                     }

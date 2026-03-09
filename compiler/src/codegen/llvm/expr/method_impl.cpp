@@ -286,6 +286,54 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                     }
                 }
             }
+
+            // For specialized impls (e.g., impl[T,E] Outcome[Outcome[T,E],E]), the
+            // flat mapping above uses ENUM's T/E positions which gives wrong subs.
+            // Check all registered impls for a specialized one that has the method,
+            // and if found, use match_where_pattern to derive correct subs.
+            auto all_impl_it = pending_generic_impls_all_.find(named.name);
+            if (all_impl_it != pending_generic_impls_all_.end()) {
+                for (const auto* alt_impl : all_impl_it->second) {
+                    if (!alt_impl->self_type || !alt_impl->self_type->is<parser::NamedType>())
+                        continue;
+                    const auto& self_named = alt_impl->self_type->as<parser::NamedType>();
+                    if (!self_named.generics || self_named.generics->args.empty())
+                        continue;
+                    // Is this a specialized impl? (type arg is not just a bare param)
+                    bool is_specialized = false;
+                    for (const auto& arg : self_named.generics->args) {
+                        if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
+                            const auto& arg_named = arg.as_type()->as<parser::NamedType>();
+                            if (arg_named.generics && !arg_named.generics->args.empty()) {
+                                is_specialized = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!is_specialized)
+                        continue;
+                    // Does this impl contain the method?
+                    bool has_method = false;
+                    for (const auto& m : alt_impl->methods) {
+                        if (m.name == method) {
+                            has_method = true;
+                            break;
+                        }
+                    }
+                    if (!has_method)
+                        continue;
+                    // Derive correct type subs by matching self_type pattern against receiver
+                    std::unordered_map<std::string, types::TypePtr> spec_subs;
+                    match_where_pattern(*alt_impl->self_type, effective_receiver, spec_subs);
+                    if (!spec_subs.empty()) {
+                        for (const auto& [k, v] : spec_subs) {
+                            type_subs[k] = v;
+                        }
+                    }
+                    break;
+                }
+            }
+
             // Check if this type is from an imported module (even though impl is in
             // pending_generic_impls_, it may have been registered from an imported module)
             if (env_.module_registry()) {
