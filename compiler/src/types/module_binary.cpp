@@ -505,6 +505,12 @@ void ModuleBinaryWriter::write_func_sig(const FuncSig& sig) {
         write_string(param);
         write_string(bound);
     }
+
+    // Impl self-type args (for specialized impls like impl[T] Pin[ref T])
+    write_u32(static_cast<uint32_t>(sig.impl_self_type_args.size()));
+    for (const auto& arg : sig.impl_self_type_args) {
+        write_type(arg);
+    }
 }
 
 void ModuleBinaryWriter::write_struct_field(const StructFieldDef& field) {

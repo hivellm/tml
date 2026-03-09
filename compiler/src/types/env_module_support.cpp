@@ -1001,6 +1001,20 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 // Check if this is a behavior impl (has trait_type)
                 bool is_behavior_impl = impl_decl.trait_type != nullptr;
 
+                // Extract impl self-type args for specialized impls like impl[T] Pin[ref T].
+                // These patterns are needed to correctly map type params at call sites.
+                std::vector<types::TypePtr> impl_self_type_args;
+                if (impl_decl.self_type && impl_decl.self_type->is<parser::NamedType>()) {
+                    const auto& self_named = impl_decl.self_type->as<parser::NamedType>();
+                    if (self_named.generics.has_value()) {
+                        for (const auto& arg : self_named.generics->args) {
+                            if (arg.is_type()) {
+                                impl_self_type_args.push_back(resolve_simple_type(*arg.as_type()));
+                            }
+                        }
+                    }
+                }
+
                 // Extract methods from impl block (methods is std::vector<FuncDecl>)
                 for (const auto& func : impl_decl.methods) {
                     // Include ALL methods (public and private) from generic impl blocks.
@@ -1055,6 +1069,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                 .since_version = "1.0",
                                 .where_constraints = {},
                                 .is_lowlevel = func.is_unsafe};
+                    sig.impl_self_type_args = impl_self_type_args;
 
                     mod.functions[qualified_name] = sig;
                     TML_DEBUG_LN("[MODULE] Registered impl method: "

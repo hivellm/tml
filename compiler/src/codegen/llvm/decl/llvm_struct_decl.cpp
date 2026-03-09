@@ -271,10 +271,19 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     if (decl_it != pending_generic_structs_.end()) {
         const parser::StructDecl* decl = decl_it->second;
 
-        // Create substitution map
+        // Create substitution map and const generic values map
         std::unordered_map<std::string, types::TypePtr> subs;
+        auto saved_const_values = current_const_generic_values_;
         for (size_t i = 0; i < decl->generics.size() && i < final_type_args.size(); ++i) {
             subs[decl->generics[i].name] = final_type_args[i];
+            // For const generic params, extract the resolved value
+            if (decl->generics[i].is_const && final_type_args[i] &&
+                final_type_args[i]->is<types::ConstGenericType>()) {
+                const auto& cgt = final_type_args[i]->as<types::ConstGenericType>();
+                if (cgt.resolved_value.has_value()) {
+                    current_const_generic_values_[decl->generics[i].name] = *cgt.resolved_value;
+                }
+            }
         }
 
         // Register field info
@@ -301,6 +310,7 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
 
         // Generate type definition immediately to type_defs_buffer_
         gen_struct_instantiation(*decl, final_type_args);
+        current_const_generic_values_ = saved_const_values;
     }
     // Handle imported generic structs from module registry
     else if (env_.module_registry()) {

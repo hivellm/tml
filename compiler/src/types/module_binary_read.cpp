@@ -475,6 +475,12 @@ FuncSig ModuleBinaryReader::read_func_sig() {
         sig.lifetime_bounds[param] = bound;
     }
 
+    // Impl self-type args (for specialized impls like impl[T] Pin[ref T])
+    uint32_t sta_count = read_u32();
+    for (uint32_t i = 0; i < sta_count && !has_error_; ++i) {
+        sig.impl_self_type_args.push_back(read_type());
+    }
+
     return sig;
 }
 

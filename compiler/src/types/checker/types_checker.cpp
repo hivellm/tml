@@ -103,6 +103,8 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
         }
 
         // Check field expressions with expected field types for coercion
+        // Also collect actual field value types for generic type inference
+        std::unordered_map<std::string, TypePtr> field_value_types;
         for (const auto& [field_name, field_expr] : struct_expr.fields) {
             // Look up the expected field type
             TypePtr expected_field_type = nullptr;
@@ -119,7 +121,8 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
                 error("Unknown field '" + field_name + "' in " + type_kind + " '" + name + "'",
                       struct_expr.span, "T059");
             }
-            check_expr(*field_expr, expected_field_type);
+            auto val_type = check_expr(*field_expr, expected_field_type);
+            field_value_types[field_name] = val_type;
         }
 
         // For unions: exactly one field must be provided
@@ -161,9 +164,53 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
             }
         }
 
-        // Struct type
+        // Struct type - infer type arguments for generic structs
+        std::vector<TypePtr> inferred_type_args;
+        if (!struct_def->type_params.empty()) {
+            // Check if explicit type args were provided
+            if (struct_expr.generics.has_value() && !struct_expr.generics->args.empty()) {
+                for (const auto& arg : struct_expr.generics->args) {
+                    if (arg.is_type()) {
+                        inferred_type_args.push_back(resolve_type(*arg.as_type()));
+                    }
+                }
+            } else {
+                // Infer type args from field values
+                std::unordered_map<std::string, TypePtr> param_subs;
+                for (const auto& [field_name, val_type] : field_value_types) {
+                    // Find the struct field definition to get the declared type
+                    for (const auto& fld : struct_def->fields) {
+                        if (fld.name == field_name && fld.type) {
+                            // Match declared field type against actual value type
+                            // to extract type parameter bindings
+                            // E.g., field declared as `inner: T`, value is `ref I32`
+                            //   -> T = ref I32
+                            if (fld.type->is<NamedType>()) {
+                                const auto& fld_named = fld.type->as<NamedType>();
+                                if (fld_named.type_args.empty()) {
+                                    for (const auto& tp : struct_def->type_params) {
+                                        if (fld_named.name == tp) {
+                                            param_subs[tp] = val_type;
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                // Build type_args in order of type_params
+                for (const auto& tp : struct_def->type_params) {
+                    auto it = param_subs.find(tp);
+                    if (it != param_subs.end()) {
+                        inferred_type_args.push_back(it->second);
+                    }
+                }
+            }
+        }
+
         auto type = std::make_shared<Type>();
-        type->kind = NamedType{name, "", {}};
+        type->kind = NamedType{name, "", std::move(inferred_type_args)};
         return type;
     }
 

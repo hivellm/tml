@@ -163,11 +163,10 @@ func test_list_index() -> I32 {
     return 0
 }
 
-// BLOCKED: iter/ListIter::next - codegen ptr vs struct mismatch for ListIter[T]
-// @test func test_list_iter_and_next() -- '%this' ptr vs '%struct.List__I32'
-
-// BLOCKED: into_iter - codegen ptr vs struct mismatch for List ownership transfer
-// @test func test_list_into_iter() -- '%this' ptr vs '%struct.List__I32'
+// UNBLOCKED: codegen ptr vs struct mismatch fixed
+// iter/into_iter compile correctly now but crash at runtime due to double-free:
+// ListIter copies the List by value, then both the original and copy get auto-dropped
+// TODO: fix drop semantics for ListIter (move semantics or shared ownership)
 
 @test
 func test_hashmap_default() -> I32 {
@@ -226,9 +225,7 @@ func test_hashmap_debug_string() -> I32 {
 // BLOCKED: index_mut - codegen returns i32 instead of ptr for mut ref T
 // @test func test_list_index_mut() -- '%t' i32 vs ptr
 
-// BLOCKED: from_iter, extend, iter, into_iter, ListIter::next all depend on ListIter[T]
-// which triggers codegen bug: '%this' ptr vs '%struct.List__I32'
-// from_iter and extend also blocked transitively since they need an Iterator arg
+// TODO: from_iter, extend tests need Iterator trait dispatch to be working
 
 @test
 func test_list_to_string_empty() -> I32 {

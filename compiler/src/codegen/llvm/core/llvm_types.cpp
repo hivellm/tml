@@ -201,6 +201,21 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                         types::TypePtr semantic_type =
                             resolve_parser_type_with_subs(*arg.as_type(), {});
                         type_args.push_back(semantic_type);
+                    } else if (arg.is_const && arg.is_expr()) {
+                        // Const generic argument (e.g., 3 in MyStruct[I32, 3])
+                        // Extract the integer value and encode as ConstGenericType
+                        int64_t const_val = 0;
+                        const auto& expr = arg.as_expr();
+                        if (expr && expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                const_val = lit.token.int_value().value;
+                            }
+                        }
+                        auto const_type = std::make_shared<types::Type>();
+                        const_type->kind = types::ConstGenericType{std::to_string(const_val),
+                                                                   types::make_i64(), const_val};
+                        type_args.push_back(const_type);
                     }
                 }
 
@@ -273,6 +288,13 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
             if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                 const auto& val = lit.token.int_value();
                 arr_size = static_cast<size_t>(val.value);
+            }
+        } else if (arr.size && arr.size->is<parser::IdentExpr>()) {
+            // Const generic parameter reference (e.g., N in [T; N])
+            const auto& ident = arr.size->as<parser::IdentExpr>();
+            auto it = current_const_generic_values_.find(ident.name);
+            if (it != current_const_generic_values_.end()) {
+                arr_size = static_cast<size_t>(it->second);
             }
         }
 
@@ -1031,6 +1053,12 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
         }
         // Fallback: uninstantiated generic - shouldn't reach codegen normally
         return generic.name;
+    } else if (type->is<types::ConstGenericType>()) {
+        const auto& cgt = type->as<types::ConstGenericType>();
+        if (cgt.resolved_value.has_value()) {
+            return std::to_string(*cgt.resolved_value);
+        }
+        return cgt.name;
     } else if (type->is<types::FuncType>()) {
         // Function types are opaque pointers in LLVM, mangle as "Fn"
         return "Fn";

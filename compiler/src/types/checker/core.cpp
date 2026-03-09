@@ -983,6 +983,13 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         env_.current_scope()->define(qualified_name, const_type, false, const_decl.span);
     }
 
+    // Extract impl self-type args for specialized impls like impl[T] Pin[ref T].
+    // These patterns are needed to correctly map type params at call sites.
+    std::vector<TypePtr> impl_self_type_args;
+    if (resolved_self->is<NamedType>()) {
+        impl_self_type_args = resolved_self->as<NamedType>().type_args;
+    }
+
     // Register all methods in the impl block
     for (const auto& method : impl.methods) {
         std::string qualified_name = type_name + "::" + method.name;
@@ -1004,7 +1011,8 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
                                  .return_type = std::move(ret),
                                  .type_params = method_type_params,
                                  .is_async = method.is_async,
-                                 .span = method.span});
+                                 .span = method.span,
+                                 .impl_self_type_args = impl_self_type_args});
     }
 
     // Register default implementations from the behavior

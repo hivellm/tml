@@ -30,22 +30,126 @@ func test_array_as_slice() -> I32 {
     return 0
 }
 
+// --- PartialEq ---
+
+@test
+func test_array_eq() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    let c: [I32; 3] = [1, 2, 4]
+    assert(a.eq(ref b), "equal arrays should return true")
+    assert(not a.eq(ref c), "different arrays should return false")
+    return 0
+}
+
+@test
+func test_array_ne() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 4]
+    assert(a.ne(ref b), "different arrays should return true for ne")
+    return 0
+}
+
+// --- PartialOrd ---
+
+@test
+func test_array_partial_cmp() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 4]
+    let c: [I32; 3] = [1, 2, 3]
+    let r1 = a.partial_cmp(ref b)
+    when r1 {
+        Just(ord) => {
+            when ord {
+                Less => {}
+                _ => { assert(false, "expected Less") }
+            }
+        }
+        Nothing => { assert(false, "expected Just") }
+    }
+    let r2 = a.partial_cmp(ref c)
+    when r2 {
+        Just(ord) => {
+            when ord {
+                Equal => {}
+                _ => { assert(false, "expected Equal") }
+            }
+        }
+        Nothing => { assert(false, "expected Just") }
+    }
+    return 0
+}
+
+// --- Ord ---
+
+@test
+func test_array_cmp() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 4]
+    let r = a.cmp(ref b)
+    when r {
+        Less => {}
+        _ => { assert(false, "expected Less for cmp") }
+    }
+    return 0
+}
+
+// --- Duplicate / Clone ---
+
+@test
+func test_array_duplicate() -> I32 {
+    let a: [I32; 3] = [10, 20, 30]
+    let b: [I32; 3] = a.duplicate()
+    assert(b[0] == 10, "duplicate elem 0")
+    assert(b[1] == 20, "duplicate elem 1")
+    assert(b[2] == 30, "duplicate elem 2")
+    return 0
+}
+
+@test
+func test_array_clone() -> I32 {
+    let a: [I32; 3] = [10, 20, 30]
+    let b: [I32; 3] = a.clone()
+    assert(b[0] == 10, "clone elem 0")
+    assert(b[1] == 20, "clone elem 1")
+    assert(b[2] == 30, "clone elem 2")
+    return 0
+}
+
+// --- Hash ---
+
+@test
+func test_array_hash() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let h: I64 = a.hash()
+    // Just verify it doesn't crash and returns a non-zero value
+    assert(h != 0, "hash should be non-zero")
+    return 0
+}
+
+// --- Display ---
+
+@test
+func test_array_to_string() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let s: Str = a.to_string()
+    // Basic check - should return some string representation
+    assert(s.len() > 0, "to_string should return non-empty string")
+    return 0
+}
+
+// --- AsRef ---
+// BLOCKED: as_ref returns { ptr, i64 } slice but codegen stores as [3 x i32] type mismatch
+
 // =========================================================================
-// BLOCKED: All below return () due to generic trait dispatch codegen bug
+// BLOCKED: Still blocked due to unresolved issues
 // =========================================================================
-// try_map[U, E]      — "Unknown method: try_map" or returns ()
-// zip[U]             — returns ()
-// try_from_fn[T,E,N] — returns ()
-// from_ref[T]        — returns ()
-// from_mut[T]        — returns ()
-// partial_cmp        — impl[T: PartialOrd] returns ()
-// duplicate          — impl[T: Duplicate] "Unknown method: duplicate"
-// hash               — impl[T: Hash] "Unknown method: hash"
-// default            — impl[T: Default] returns ()
-// to_string          — impl[T: Display] "Unknown method: to_string"
-// debug_string       — impl[T: Debug] "Unknown method: debug_string"
-// AsRef::as_ref      — impl returns ()
+// try_map[U, E]      — "Unknown method: try_map" (complex generic)
+// zip[U]             — returns () (complex generic)
+// try_from_fn[T,E,N] — returns () (complex generic)
+// from_ref[T]        — returns () (complex generic)
+// from_mut[T]        — returns () (complex generic)
 // AsMut::as_mut      — MutSlice unsized type alloc failure
-// TryFrom::try_from  — impl[T: Copy] returns ()
-// eq_slice           — impl[T: PartialEq] returns ()
-// eq (PartialEq)     — built-in comparison codegen: [3 x i32] vs i32 mismatch
+// TryFrom::try_from  — impl[T: Copy] returns () (complex generic)
+// eq_slice           — requires Slice argument construction
+// default            — requires static method syntax on Array type

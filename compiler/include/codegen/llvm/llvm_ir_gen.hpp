@@ -420,6 +420,10 @@ private:
     // Maps type parameter names to their concrete types (e.g., "T" -> I64)
     std::unordered_map<std::string, types::TypePtr> current_type_subs_;
 
+    // Current const generic parameter values (for resolving N in [T; N] array types)
+    // Maps const param names to their concrete integer values (e.g., "N" -> 3)
+    std::unordered_map<std::string, int64_t> current_const_generic_values_;
+
     // Current where clause constraints (for method dispatch on bounded generics)
     // Used to resolve methods like container.get() when C: Container[T]
     std::vector<types::WhereConstraint> current_where_constraints_;

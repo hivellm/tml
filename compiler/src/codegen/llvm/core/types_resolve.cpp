@@ -199,12 +199,18 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
             } else if constexpr (std::is_same_v<T, parser::ArrayType>) {
                 auto element = resolve_parser_type_with_subs(*t.element, subs);
                 // parser::ArrayType::size is an ExprPtr, need to evaluate it
-                // For now, use a default size of 0 (will be computed elsewhere if needed)
                 size_t arr_size = 0;
                 if (t.size && t.size->template is<parser::LiteralExpr>()) {
                     const auto& lit = t.size->template as<parser::LiteralExpr>();
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         arr_size = static_cast<size_t>(lit.token.int_value().value);
+                    }
+                } else if (t.size && t.size->template is<parser::IdentExpr>()) {
+                    // Const generic parameter reference (e.g., N in [T; N])
+                    const auto& ident = t.size->template as<parser::IdentExpr>();
+                    auto it = current_const_generic_values_.find(ident.name);
+                    if (it != current_const_generic_values_.end()) {
+                        arr_size = static_cast<size_t>(it->second);
                     }
                 }
                 auto result = std::make_shared<types::Type>();

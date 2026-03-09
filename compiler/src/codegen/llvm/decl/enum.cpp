@@ -197,6 +197,22 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
                     }
                     return struct_size > 0 ? struct_size : 8;
                 }
+
+                // For enum types (not in struct_fields_), check enum_instantiations_
+                auto enum_it = enum_instantiations_.find(struct_name);
+                if (enum_it != enum_instantiations_.end()) {
+                    // Use enum_payload_type_ to determine actual layout size
+                    std::string enum_type = "%struct." + struct_name;
+                    auto ept_it = enum_payload_type_.find(enum_type);
+                    if (ept_it != enum_payload_type_.end()) {
+                        if (ept_it->second == "i32") {
+                            return 8; // { i32, i32 }
+                        } else if (ept_it->second == "i64") {
+                            return 16; // { i32, i64 } with padding
+                        }
+                        // Empty means tag-only or large [N x i64]; fall through to default
+                    }
+                }
             }
             return 8; // Default size
         };
@@ -442,12 +458,18 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                             }
                             inner_max_size = std::max(inner_max_size, vsize);
                         }
-                        if (inner_max_size == 0)
-                            inner_max_size = 8;
-                        size_t inner_num_i64 = (inner_max_size + 7) / 8;
-                        // Enum layout: { i32, [N x i64] } with 8-byte alignment
-                        // i32 tag (4 bytes) + padding (4 bytes) + N * 8 bytes
-                        return 8 + inner_num_i64 * 8;
+                        // Use compact layout sizes matching the actual type emission
+                        // (lines 480-498 below). This must stay in sync.
+                        if (inner_max_size == 0) {
+                            return 4; // { i32 } — tag only
+                        } else if (inner_max_size <= 4) {
+                            return 8; // { i32, i32 } — compact
+                        } else if (inner_max_size <= 8) {
+                            return 16; // { i32, i64 } — 4 + 4 padding + 8
+                        } else {
+                            size_t inner_num_i64 = (inner_max_size + 7) / 8;
+                            return 8 + inner_num_i64 * 8; // { i32, [N x i64] }
+                        }
                     }
                 }
             }

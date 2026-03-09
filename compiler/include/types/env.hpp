@@ -121,6 +121,11 @@ struct FuncSig {
     // Lifetime bounds for type parameters (e.g., "T" -> "static" for [T: life static])
     std::unordered_map<std::string, std::string> lifetime_bounds = {};
 
+    // Impl self-type arg patterns for specialized impls like impl[T] Pin[ref T].
+    // Stores the type_args from the impl's self_type (e.g., [RefType(T)] for Pin[ref T]).
+    // Used to correctly extract type param substitutions at call sites.
+    std::vector<TypePtr> impl_self_type_args = {};
+
     // Helper methods
 
     /// Returns true if this is an external (FFI) function.

@@ -214,8 +214,9 @@ struct ConstValue {
 ///
 /// Used in generic definitions: `func foo[const N: U64](arr: Array[T, N])`
 struct ConstGenericType {
-    std::string name;   ///< Parameter name (e.g., "N").
-    TypePtr value_type; ///< Type of the const value (e.g., `U64`).
+    std::string name;                      ///< Parameter name (e.g., "N").
+    TypePtr value_type;                    ///< Type of the const value (e.g., `U64`).
+    std::optional<int64_t> resolved_value; ///< Concrete value when monomorphized (e.g., 3).
 };
 
 /// Dynamic behavior (trait object): `dyn Behavior[T]`.

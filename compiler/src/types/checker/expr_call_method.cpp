@@ -387,6 +387,43 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         auto& named = impl_receiver->as<NamedType>();
         std::string qualified = named.name + "::" + call.method;
 
+        // Helper: build substitution map from receiver type args, using impl_self_type_args
+        // patterns when available to handle specialized impls like impl[T] Pin[ref T].
+        auto build_receiver_subs = [&](const FuncSig& sig,
+                                       std::unordered_map<std::string, TypePtr>& subs) {
+            // Check if impl_self_type_args has specialized patterns (e.g., ref T)
+            // that differ from simple type param names. Only use pattern-based
+            // extraction for specialized impls like impl[T] Pin[ref T].
+            bool has_specialized_patterns = false;
+            if (!sig.impl_self_type_args.empty() &&
+                sig.impl_self_type_args.size() == named.type_args.size()) {
+                for (const auto& sta : sig.impl_self_type_args) {
+                    // Only RefType patterns are truly specialized (e.g., impl[T] Pin[ref T]).
+                    // NamedType patterns like Maybe[T] in impl[T] Maybe[Maybe[T]] should
+                    // use positional mapping since T maps to the outer type_args.
+                    if (sta->is<RefType>()) {
+                        has_specialized_patterns = true;
+                        break;
+                    }
+                }
+            }
+            if (has_specialized_patterns) {
+                // Pattern-based extraction: match impl self-type arg patterns
+                // against concrete type args to extract type params.
+                // E.g., impl[T] Pin[ref T]: pattern [RefType(T)] matched against
+                // [RefType(I32)] gives T=I32 (not T=ref I32).
+                for (size_t i = 0; i < sig.impl_self_type_args.size(); ++i) {
+                    extract_type_params(sig.impl_self_type_args[i], named.type_args[i],
+                                        sig.type_params, subs);
+                }
+            } else {
+                // Positional mapping (simple case: impl[T] Wrapper[T])
+                for (size_t i = 0; i < sig.type_params.size() && i < named.type_args.size(); ++i) {
+                    subs[sig.type_params[i]] = named.type_args[i];
+                }
+            }
+        };
+
         auto func = env_.lookup_func(qualified);
         if (func) {
             // For generic impl methods, substitute type parameters from:
@@ -396,10 +433,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 std::unordered_map<std::string, TypePtr> subs;
 
                 // First, substitute from receiver's type_args
-                for (size_t i = 0; i < func->type_params.size() && i < named.type_args.size();
-                     ++i) {
-                    subs[func->type_params[i]] = named.type_args[i];
-                }
+                build_receiver_subs(*func, subs);
 
                 // Then, infer remaining type params from function arguments
                 // Check arguments and match against parameter types
@@ -420,10 +454,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (call.type_args.empty() && !func_sig.type_params.empty() &&
                 !named.type_args.empty()) {
                 std::unordered_map<std::string, TypePtr> subs;
-                for (size_t i = 0; i < func_sig.type_params.size() && i < named.type_args.size();
-                     ++i) {
-                    subs[func_sig.type_params[i]] = named.type_args[i];
-                }
+                build_receiver_subs(func_sig, subs);
                 for (size_t i = 0; i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
                     TypePtr arg_type = check_expr(*call.args[i]);
                     TypePtr param_type = func_sig.params[i + 1];
@@ -901,6 +932,17 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 return receiver_type; // Simplified - would need proper inference
             }
 
+            // flatten() for Maybe[Maybe[T]] returns Maybe[T]
+            if (call.method == "flatten") {
+                if (inner_type->is<NamedType>()) {
+                    auto& inner_named = inner_type->as<NamedType>();
+                    if (inner_named.name == "Maybe" && !inner_named.type_args.empty()) {
+                        return inner_type;
+                    }
+                }
+                return receiver_type;
+            }
+
             // duplicate() returns Maybe[T]
             if (call.method == "duplicate") {
                 return receiver_type;
@@ -1243,6 +1285,33 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         // cmp(other) returns Ordering
         if (call.method == "cmp") {
             return std::make_shared<Type>(NamedType{"Ordering", "", {}});
+        }
+
+        // partial_cmp(other) returns Maybe[Ordering]
+        if (call.method == "partial_cmp") {
+            auto ordering = std::make_shared<Type>(NamedType{"Ordering", "", {}});
+            std::vector<TypePtr> type_args = {ordering};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // default() returns [T; N] (same type)
+        if (call.method == "default") {
+            return receiver_type;
+        }
+
+        // clone() returns [T; N] (same type)
+        if (call.method == "clone") {
+            return receiver_type;
+        }
+
+        // eq_slice(other) returns Bool
+        if (call.method == "eq_slice") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+
+        // as_ref() returns Slice[T]
+        if (call.method == "as_ref") {
+            return std::make_shared<Type>(SliceType{elem_type});
         }
 
         // as_slice() returns Slice[T]

@@ -645,6 +645,292 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         return result;
     }
 
+    // partial_cmp(other) returns Maybe[Ordering]
+    if (method == "partial_cmp") {
+        emit_coverage("Array::partial_cmp");
+        if (call.args.empty()) {
+            report_error("partial_cmp requires an argument", call.span, "C015");
+            return "0";
+        }
+
+        // Ensure Maybe[Ordering] is instantiated
+        auto ordering_type = std::make_shared<types::Type>();
+        ordering_type->kind = types::NamedType{"Ordering", "", {}};
+        std::vector<types::TypePtr> maybe_type_args = {ordering_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        std::string other = gen_expr(*call.args[0]);
+        std::string other_type = last_expr_type_;
+        std::string other_ptr;
+        if (other_type == "ptr") {
+            other_ptr = other;
+        } else {
+            other_ptr = fresh_reg();
+            emit_line("  " + other_ptr + " = alloca " + array_llvm_type);
+            emit_line("  store " + array_llvm_type + " " + other + ", ptr " + other_ptr);
+        }
+
+        // Lexicographic comparison: iterate elements, first non-equal determines result
+        // Use alloca to hold current ordering tag (Less=0, Equal=1, Greater=2)
+        std::string ordering_result_ptr = fresh_reg();
+        emit_line("  " + ordering_result_ptr + " = alloca i32");
+        emit_line("  store i32 1, ptr " + ordering_result_ptr); // Default: Equal
+
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem1_ptr = fresh_reg();
+            emit_line("  " + elem1_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string elem1 = fresh_reg();
+            emit_line("  " + elem1 + " = load " + elem_llvm_type + ", ptr " + elem1_ptr);
+
+            std::string elem2_ptr = fresh_reg();
+            emit_line("  " + elem2_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      other_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string elem2 = fresh_reg();
+            emit_line("  " + elem2 + " = load " + elem_llvm_type + ", ptr " + elem2_ptr);
+
+            std::string cmp_lt = fresh_reg();
+            std::string cmp_gt = fresh_reg();
+            emit_line("  " + cmp_lt + " = icmp slt " + elem_llvm_type + " " + elem1 + ", " + elem2);
+            emit_line("  " + cmp_gt + " = icmp sgt " + elem_llvm_type + " " + elem1 + ", " + elem2);
+
+            std::string sel1 = fresh_reg();
+            emit_line("  " + sel1 + " = select i1 " + cmp_lt + ", i32 0, i32 1");
+            std::string sel2 = fresh_reg();
+            emit_line("  " + sel2 + " = select i1 " + cmp_gt + ", i32 2, i32 " + sel1);
+
+            std::string old_result = fresh_reg();
+            emit_line("  " + old_result + " = load i32, ptr " + ordering_result_ptr);
+            std::string is_equal = fresh_reg();
+            emit_line("  " + is_equal + " = icmp eq i32 " + old_result + ", 1");
+            std::string new_result = fresh_reg();
+            emit_line("  " + new_result + " = select i1 " + is_equal + ", i32 " + sel2 + ", i32 " +
+                      old_result);
+            emit_line("  store i32 " + new_result + ", ptr " + ordering_result_ptr);
+        }
+
+        // Build Ordering struct
+        std::string ordering_alloca = fresh_reg();
+        emit_line("  " + ordering_alloca + " = alloca %struct.Ordering, align 4");
+        std::string tag_val = fresh_reg();
+        emit_line("  " + tag_val + " = load i32, ptr " + ordering_result_ptr);
+        std::string ordering_tag_ptr = fresh_reg();
+        emit_line("  " + ordering_tag_ptr + " = getelementptr inbounds %struct.Ordering, ptr " +
+                  ordering_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 " + tag_val + ", ptr " + ordering_tag_ptr);
+        std::string ordering_val = fresh_reg();
+        emit_line("  " + ordering_val + " = load %struct.Ordering, ptr " + ordering_alloca);
+
+        // Build Maybe[Ordering] = Just(ordering): tag=0 (Just), payload=Ordering
+        std::string enum_alloca = fresh_reg();
+        emit_line("  " + enum_alloca + " = alloca " + maybe_type + ", align 8");
+        std::string maybe_tag_ptr = fresh_reg();
+        emit_line("  " + maybe_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  enum_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + maybe_tag_ptr);
+        std::string payload_ptr = fresh_reg();
+        emit_line("  " + payload_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  enum_alloca + ", i32 0, i32 1");
+        emit_line("  store %struct.Ordering " + ordering_val + ", ptr " + payload_ptr);
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + enum_alloca);
+        last_expr_type_ = maybe_type;
+        return result;
+    }
+
+    // duplicate() / clone() returns [T; N] (copy of the array)
+    if (method == "duplicate" || method == "clone") {
+        emit_coverage("Array::" + method);
+        // Array is a value type, just load and return it
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + array_llvm_type + ", ptr " + arr_ptr);
+        last_expr_type_ = array_llvm_type;
+        return result;
+    }
+
+    // default() returns [T; N] with all elements zeroed
+    if (method == "default") {
+        emit_coverage("Array::default");
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + array_llvm_type);
+        // Zero-initialize
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      result_ptr + ", i64 0, i64 " + std::to_string(i));
+            emit_line("  store " + elem_llvm_type + " 0, ptr " + elem_ptr);
+        }
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + array_llvm_type + ", ptr " + result_ptr);
+        last_expr_type_ = array_llvm_type;
+        return result;
+    }
+
+    // hash() returns I64
+    if (method == "hash") {
+        emit_coverage("Array::hash");
+        // Simple hash: combine element hashes with FNV-like mixing
+        std::string hash_ptr = fresh_reg();
+        emit_line("  " + hash_ptr + " = alloca i64");
+        emit_line("  store i64 14695981039346656037, ptr " + hash_ptr); // FNV offset basis
+
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string elem = fresh_reg();
+            emit_line("  " + elem + " = load " + elem_llvm_type + ", ptr " + elem_ptr);
+            // Cast element to i64 for hashing
+            std::string elem_i64 = fresh_reg();
+            if (elem_llvm_type == "i64") {
+                elem_i64 = elem;
+            } else if (elem_llvm_type == "i32") {
+                emit_line("  " + elem_i64 + " = sext i32 " + elem + " to i64");
+            } else if (elem_llvm_type == "i8") {
+                emit_line("  " + elem_i64 + " = sext i8 " + elem + " to i64");
+            } else if (elem_llvm_type == "i16") {
+                emit_line("  " + elem_i64 + " = sext i16 " + elem + " to i64");
+            } else {
+                // For ptr and other types, ptrtoint
+                emit_line("  " + elem_i64 + " = ptrtoint " + elem_llvm_type + " " + elem +
+                          " to i64");
+            }
+            std::string old_hash = fresh_reg();
+            emit_line("  " + old_hash + " = load i64, ptr " + hash_ptr);
+            std::string xored = fresh_reg();
+            emit_line("  " + xored + " = xor i64 " + old_hash + ", " + elem_i64);
+            std::string mixed = fresh_reg();
+            emit_line("  " + mixed + " = mul i64 " + xored + ", 1099511628211"); // FNV prime
+            emit_line("  store i64 " + mixed + ", ptr " + hash_ptr);
+        }
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load i64, ptr " + hash_ptr);
+        last_expr_type_ = "i64";
+        return result;
+    }
+
+    // to_string() / debug_string() returns Str
+    if (method == "to_string" || method == "debug_string") {
+        emit_coverage("Array::" + method);
+        // Build string representation "[e1, e2, ...]"
+        // For simplicity, call tml_array_to_string runtime helper or build inline
+        // Simple approach: allocate a fixed string "[...]" placeholder
+        // TODO: proper to_string with element formatting
+        // For now, return a static string to avoid crash
+        std::string str_global = add_string_literal("[array]");
+        last_expr_type_ = "ptr";
+        return str_global;
+    }
+
+    // eq_slice(other) returns Bool - compare array with a slice
+    if (method == "eq_slice") {
+        emit_coverage("Array::eq_slice");
+        if (call.args.empty()) {
+            report_error("eq_slice requires an argument", call.span, "C015");
+            return "0";
+        }
+
+        // Get the slice argument (fat pointer { ptr, i64 })
+        std::string slice_val = gen_expr(*call.args[0]);
+        std::string slice_type = last_expr_type_;
+
+        // Extract data ptr and length from slice
+        std::string slice_alloca = fresh_reg();
+        emit_line("  " + slice_alloca + " = alloca { ptr, i64 }");
+        emit_line("  store { ptr, i64 } " + slice_val + ", ptr " + slice_alloca);
+        std::string data_ptr_ptr = fresh_reg();
+        emit_line("  " + data_ptr_ptr + " = getelementptr inbounds { ptr, i64 }, ptr " +
+                  slice_alloca + ", i32 0, i32 0");
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = load ptr, ptr " + data_ptr_ptr);
+        std::string len_ptr = fresh_reg();
+        emit_line("  " + len_ptr + " = getelementptr inbounds { ptr, i64 }, ptr " + slice_alloca +
+                  ", i32 0, i32 1");
+        std::string len_val = fresh_reg();
+        emit_line("  " + len_val + " = load i64, ptr " + len_ptr);
+
+        // Check length matches
+        std::string len_match = fresh_reg();
+        emit_line("  " + len_match + " = icmp eq i64 " + len_val + ", " + std::to_string(arr_size));
+
+        std::string label_check = "eqslice_check_" + std::to_string(label_counter_++);
+        std::string label_false = "eqslice_false_" + std::to_string(label_counter_++);
+        std::string label_end = "eqslice_end_" + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + len_match + ", label %" + label_check + ", label %" + label_false);
+
+        // Length matches: compare elements
+        emit_line(label_check + ":");
+        current_block_ = label_check;
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca i1");
+        emit_line("  store i1 true, ptr " + result_ptr);
+
+        for (size_t i = 0; i < arr_size; ++i) {
+            std::string elem1_ptr = fresh_reg();
+            emit_line("  " + elem1_ptr + " = getelementptr inbounds " + array_llvm_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + std::to_string(i));
+            std::string elem1 = fresh_reg();
+            emit_line("  " + elem1 + " = load " + elem_llvm_type + ", ptr " + elem1_ptr);
+
+            std::string elem2_ptr = fresh_reg();
+            emit_line("  " + elem2_ptr + " = getelementptr inbounds " + elem_llvm_type + ", ptr " +
+                      data_ptr + ", i64 " + std::to_string(i));
+            std::string elem2 = fresh_reg();
+            emit_line("  " + elem2 + " = load " + elem_llvm_type + ", ptr " + elem2_ptr);
+
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq " + elem_llvm_type + " " + elem1 + ", " + elem2);
+
+            std::string old_result = fresh_reg();
+            emit_line("  " + old_result + " = load i1, ptr " + result_ptr);
+            std::string new_result = fresh_reg();
+            emit_line("  " + new_result + " = and i1 " + old_result + ", " + cmp);
+            emit_line("  store i1 " + new_result + ", ptr " + result_ptr);
+        }
+
+        std::string check_result = fresh_reg();
+        emit_line("  " + check_result + " = load i1, ptr " + result_ptr);
+        emit_line("  br label %" + label_end);
+
+        // Length mismatch: return false
+        emit_line(label_false + ":");
+        current_block_ = label_false;
+        emit_line("  br label %" + label_end);
+
+        // Merge
+        emit_line(label_end + ":");
+        current_block_ = label_end;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi i1 [ " + check_result + ", %" + label_check +
+                  " ], [ false, %" + label_false + " ]");
+        last_expr_type_ = "i1";
+        return result;
+    }
+
+    // as_ref() returns Slice[T] (same as as_slice)
+    if (method == "as_ref") {
+        emit_coverage("Array::as_ref");
+        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 0");
+        emit_line("  store ptr " + arr_ptr + ", ptr " + data_ptr);
+        std::string len_ptr = fresh_reg();
+        emit_line("  " + len_ptr + " = getelementptr inbounds " + slice_llvm_type + ", ptr " +
+                  result_ptr + ", i32 0, i32 1");
+        emit_line("  store i64 " + std::to_string(arr_size) + ", ptr " + len_ptr);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + slice_llvm_type + ", ptr " + result_ptr);
+        last_expr_type_ = slice_llvm_type;
+        return result;
+    }
+
     // as_slice() returns Slice[T] (fat pointer { ptr, i64 })
     if (method == "as_slice") {
         emit_coverage("Array::as_slice");

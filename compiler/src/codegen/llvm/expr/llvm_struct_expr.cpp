@@ -306,8 +306,15 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 field_type = last_expr_type_;
             }
 
+            // If the expression is a pointer (like 'this') but the field expects a struct value,
+            // we need to load the struct value from the pointer
+            if (last_expr_type_ == "ptr" && field_type.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_val);
+                field_val = loaded;
+            }
             // Promote ptr (thin func pointer) to { ptr, ptr } (fat pointer with null env)
-            if (last_expr_type_ == "ptr" && field_type == "{ ptr, ptr }") {
+            else if (last_expr_type_ == "ptr" && field_type == "{ ptr, ptr }") {
                 std::string fat = fresh_reg();
                 emit_line("  " + fat + " = insertvalue { ptr, ptr } { ptr null, ptr null }, ptr " +
                           field_val + ", 0");
@@ -382,8 +389,15 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 field_type = last_expr_type_;
             }
 
+            // If the expression is a pointer (like 'this') but the field expects a struct value,
+            // we need to load the struct value from the pointer
+            if (last_expr_type_ == "ptr" && field_type.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_val);
+                field_val = loaded;
+            }
             // Promote ptr (thin func pointer) to { ptr, ptr } (fat pointer with null env)
-            if (last_expr_type_ == "ptr" && field_type == "{ ptr, ptr }") {
+            else if (last_expr_type_ == "ptr" && field_type == "{ ptr, ptr }") {
                 std::string fat = fresh_reg();
                 emit_line("  " + fat + " = insertvalue { ptr, ptr } { ptr null, ptr null }, ptr " +
                           field_val + ", 0");
@@ -479,8 +493,39 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 inferred_generics[generic_param.name] = nullptr;
             }
 
+            // Use explicit generic arguments if provided (e.g., MyStruct[I32, 3])
+            if (s.generics.has_value() && !s.generics->args.empty()) {
+                size_t arg_idx = 0;
+                for (const auto& arg : s.generics->args) {
+                    if (arg_idx >= decl->generics.size())
+                        break;
+                    if (arg.is_type()) {
+                        types::TypePtr semantic_type =
+                            resolve_parser_type_with_subs(*arg.as_type(), {});
+                        inferred_generics[decl->generics[arg_idx].name] = semantic_type;
+                    } else if (arg.is_const && arg.is_expr()) {
+                        // Const generic argument (e.g., 3 in MyStruct[I32, 3])
+                        int64_t const_val = 0;
+                        const auto& expr = arg.as_expr();
+                        if (expr && expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                const_val = lit.token.int_value().value;
+                            }
+                        }
+                        auto const_type = std::make_shared<types::Type>();
+                        const_type->kind = types::ConstGenericType{std::to_string(const_val),
+                                                                   types::make_i64(), const_val};
+                        inferred_generics[decl->generics[arg_idx].name] = const_type;
+                    }
+                    arg_idx++;
+                }
+            }
+
             // First check if we have type substitutions from enclosing generic context
             for (const auto& generic_param : decl->generics) {
+                if (inferred_generics[generic_param.name])
+                    continue; // Already resolved
                 auto sub_it = current_type_subs_.find(generic_param.name);
                 if (sub_it != current_type_subs_.end() && sub_it->second) {
                     inferred_generics[generic_param.name] = sub_it->second;
