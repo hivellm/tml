@@ -118,9 +118,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "llvm_shl", "llvm_shr", "llvm_eq", "llvm_ne", "llvm_lt", "llvm_le", "llvm_gt", "llvm_ge",
         "transmute", "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
         "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read",
-        "volatile_write", "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange",
-        "atomic_add", "atomic_sub", "atomic_and", "atomic_or", "atomic_xor", "fence",
-        "compiler_fence", "black_box",
+        "volatile_write", "ptr_read_volatile", "ptr_write_volatile", "ptr_read_unaligned",
+        "ptr_write_unaligned", "memcpy", "memmove", "memset", "atomic_load", "atomic_store",
+        "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or",
+        "atomic_xor", "fence", "compiler_fence", "black_box",
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
         // Math intrinsics
@@ -523,27 +524,49 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // Memory Intrinsics
     // ============================================================================
 
+    // Helper: resolve element type for ptr_read/ptr_write family intrinsics
+    // Priority: 1) generic type param [T], 2) pointer inner type, 3) default i32
+    auto resolve_ptr_elem_type = [&](const parser::CallExpr& c, int ptr_arg_idx) -> std::string {
+        // Try generic type parameter first (e.g., ptr_read[I32](...))
+        if (c.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = c.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    std::string type_llvm = llvm_type_from_semantic(resolved, true);
+                    if (type_llvm != "void" && type_llvm != "{}")
+                        return type_llvm;
+                }
+            }
+        }
+        // Fall back to pointer inner type
+        if (ptr_arg_idx < static_cast<int>(c.args.size())) {
+            types::TypePtr arg_type = infer_expr_type(*c.args[ptr_arg_idx]);
+            if (arg_type && arg_type->is<types::PtrType>()) {
+                std::string elem =
+                    llvm_type_from_semantic(arg_type->as<types::PtrType>().inner, true);
+                if (elem != "void" && elem != "{}")
+                    return elem;
+            }
+        }
+        return std::string("i32"); // Default
+    };
+
     // ptr_read[T](ptr: Ptr[T]) -> T
     if (intrinsic_name == "ptr_read") {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string ptr_type = last_expr_type_;
 
-            // If the pointer argument is i64 (e.g., RawMutPtr.addr field),
-            // convert it to ptr with inttoptr
             if (ptr_type == "i64") {
                 std::string conv = fresh_reg();
                 emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
                 ptr = conv;
             }
 
-            // Infer element type from the argument's semantic pointer type
-            // This works even when func_sig is null (e.g., imported module functions)
-            std::string elem_type = "i32"; // Default
-            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-            if (arg_type && arg_type->is<types::PtrType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::PtrType>().inner);
-            }
+            std::string elem_type = resolve_ptr_elem_type(call, 0);
 
             std::string result = fresh_reg();
             emit_line("  " + result + " = load " + elem_type + ", ptr " + ptr);
@@ -597,13 +620,233 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         return "0";
     }
 
+    // ptr_read_volatile[T](ptr) -> T
+    // Like ptr_read but with volatile semantics (prevents reordering/elimination)
+    if (intrinsic_name == "ptr_read_volatile" || intrinsic_name == "volatile_read") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
+            std::string elem_type = resolve_ptr_elem_type(call, 0);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load volatile " + elem_type + ", ptr " + ptr);
+            last_expr_type_ = elem_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // ptr_write_volatile[T](ptr, val)
+    // Like ptr_write but with volatile semantics
+    if (intrinsic_name == "ptr_write_volatile" || intrinsic_name == "volatile_write") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
+            std::string val = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+            emit_line("  store volatile " + val_type + " " + val + ", ptr " + ptr);
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // ptr_read_unaligned[T](ptr) -> T
+    // Like ptr_read but with align 1 (no alignment requirement)
+    if (intrinsic_name == "ptr_read_unaligned") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
+            std::string elem_type = resolve_ptr_elem_type(call, 0);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + elem_type + ", ptr " + ptr + ", align 1");
+            last_expr_type_ = elem_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // ptr_write_unaligned[T](ptr, val)
+    // Like ptr_write but with align 1 (no alignment requirement)
+    if (intrinsic_name == "ptr_write_unaligned") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
+            std::string val = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+            emit_line("  store " + val_type + " " + val + ", ptr " + ptr + ", align 1");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // memcpy(dst, src, size) - non-overlapping memory copy
+    if (intrinsic_name == "memcpy") {
+        if (call.args.size() >= 3) {
+            std::string dst = gen_expr(*call.args[0]);
+            std::string dst_type = last_expr_type_;
+            if (dst_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + dst + " to ptr");
+                dst = conv;
+            }
+
+            std::string src = gen_expr(*call.args[1]);
+            std::string src_type = last_expr_type_;
+            if (src_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + src + " to ptr");
+                src = conv;
+            }
+
+            std::string size = gen_expr(*call.args[2]);
+            std::string size_type = last_expr_type_;
+            std::string size64 = size;
+            if (size_type == "i32") {
+                size64 = fresh_reg();
+                emit_line("  " + size64 + " = sext i32 " + size + " to i64");
+            }
+
+            emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+                      size64 + ", i1 false)");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // memmove(dst, src, size) - potentially overlapping memory copy
+    if (intrinsic_name == "memmove") {
+        if (call.args.size() >= 3) {
+            std::string dst = gen_expr(*call.args[0]);
+            std::string dst_type = last_expr_type_;
+            if (dst_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + dst + " to ptr");
+                dst = conv;
+            }
+
+            std::string src = gen_expr(*call.args[1]);
+            std::string src_type = last_expr_type_;
+            if (src_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + src + " to ptr");
+                src = conv;
+            }
+
+            std::string size = gen_expr(*call.args[2]);
+            std::string size_type = last_expr_type_;
+            std::string size64 = size;
+            if (size_type == "i32") {
+                size64 = fresh_reg();
+                emit_line("  " + size64 + " = sext i32 " + size + " to i64");
+            }
+
+            emit_line("  call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+                      size64 + ", i1 false)");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // memset(dst, value, size) - fill memory with byte value
+    if (intrinsic_name == "memset") {
+        if (call.args.size() >= 3) {
+            std::string dst = gen_expr(*call.args[0]);
+            std::string dst_type = last_expr_type_;
+            if (dst_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + dst + " to ptr");
+                dst = conv;
+            }
+
+            std::string val = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+            // Truncate to i8 if needed
+            std::string val8 = val;
+            if (val_type != "i8") {
+                val8 = fresh_reg();
+                emit_line("  " + val8 + " = trunc " + val_type + " " + val + " to i8");
+            }
+
+            std::string size = gen_expr(*call.args[2]);
+            std::string size_type = last_expr_type_;
+            std::string size64 = size;
+            if (size_type == "i32") {
+                size64 = fresh_reg();
+                emit_line("  " + size64 + " = sext i32 " + size + " to i64");
+            }
+
+            emit_line("  call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val8 + ", i64 " +
+                      size64 + ", i1 false)");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // Helper: coerce a value to ptr type for memory intrinsics.
+    // RawPtr[T]/RawMutPtr[T] structs wrap an i64 addr field — extract and inttoptr.
+    auto coerce_to_ptr = [&](std::string val, const std::string& val_type) -> std::string {
+        if (val_type == "ptr")
+            return val;
+        if (val_type == "i64") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = inttoptr i64 " + val + " to ptr");
+            return conv;
+        }
+        // Struct types like %struct.RawMutPtr__I64 — extract field 0 (i64 addr), then inttoptr
+        if (val_type.find("%struct.") != std::string::npos ||
+            val_type.find("{ i64 }") != std::string::npos) {
+            std::string addr = fresh_reg();
+            emit_line("  " + addr + " = extractvalue " + val_type + " " + val + ", 0");
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = inttoptr i64 " + addr + " to ptr");
+            return conv;
+        }
+        return val;
+    };
+
     // copy_nonoverlapping[T](src: Ptr[T], dst: Ptr[T], count: I64)
     // ptr_copy[T](src: Ptr[T], dst: Ptr[T], count: I64) - alias
     // Copies count*sizeof(T) bytes from src to dst. Regions must NOT overlap.
     if (intrinsic_name == "copy_nonoverlapping" || intrinsic_name == "ptr_copy") {
         if (call.args.size() >= 3) {
             std::string src = gen_expr(*call.args[0]);
+            std::string src_type = last_expr_type_;
             std::string dst = gen_expr(*call.args[1]);
+            std::string dst_type = last_expr_type_;
             std::string count = gen_expr(*call.args[2]);
             std::string count_type = last_expr_type_;
 
@@ -648,6 +891,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                           std::to_string(elem_size));
             }
 
+            src = coerce_to_ptr(src, src_type);
+            dst = coerce_to_ptr(dst, dst_type);
             emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
                       byte_count + ", i1 false)");
             last_expr_type_ = "void";
@@ -661,7 +906,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     if (intrinsic_name == "copy") {
         if (call.args.size() >= 3) {
             std::string src = gen_expr(*call.args[0]);
+            std::string src_type = last_expr_type_;
             std::string dst = gen_expr(*call.args[1]);
+            std::string dst_type = last_expr_type_;
             std::string count = gen_expr(*call.args[2]);
             std::string count_type = last_expr_type_;
 
@@ -706,6 +953,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                           std::to_string(elem_size));
             }
 
+            src = coerce_to_ptr(src, src_type);
+            dst = coerce_to_ptr(dst, dst_type);
             emit_line("  call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
                       byte_count + ", i1 false)");
             last_expr_type_ = "void";
@@ -719,6 +968,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     if (intrinsic_name == "write_bytes") {
         if (call.args.size() >= 3) {
             std::string dst = gen_expr(*call.args[0]);
+            std::string dst_type = last_expr_type_;
             std::string val = gen_expr(*call.args[1]);
             std::string val_type = last_expr_type_;
             std::string count = gen_expr(*call.args[2]);
@@ -772,6 +1022,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                 emit_line("  " + val8 + " = trunc " + val_type + " " + val + " to i8");
             }
 
+            dst = coerce_to_ptr(dst, dst_type);
             emit_line("  call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val8 + ", i64 " +
                       byte_count + ", i1 false)");
             last_expr_type_ = "void";

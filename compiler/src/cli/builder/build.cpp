@@ -319,6 +319,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             }
         } else if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
+            // Generic functions require AST codegen for monomorphization
+            if (!func.generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
             if (func.return_type.has_value() && uses_generic_enum(*func.return_type)) {
                 has_local_generics = true;
                 break;

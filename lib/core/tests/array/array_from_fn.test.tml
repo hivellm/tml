@@ -1,0 +1,19 @@
+// Tests for array hash behavior
+use test::{assert, assert_eq}
+
+@test
+func test_array_hash_equal() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    assert_eq(a.hash(), b.hash(), "equal arrays should have equal hashes")
+    return 0
+}
+
+@test
+func test_array_hash_different() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [4, 5, 6]
+    // Different arrays should (usually) have different hashes
+    assert(a.hash() != b.hash(), "different arrays should have different hashes")
+    return 0
+}

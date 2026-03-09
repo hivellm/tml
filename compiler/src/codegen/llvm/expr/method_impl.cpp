@@ -643,7 +643,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
     // Skip 'this' argument for Unit type — Unit methods have no 'this' parameter
     // because void is not a valid LLVM parameter type (see impl.cpp void guard).
-    bool is_unit_type = (impl_llvm_type == "void");
+    bool is_unit_type = (impl_llvm_type == "void" || impl_llvm_type == "{}");
     if (!is_unit_type) {
         typed_args.push_back({this_arg_type, impl_receiver_val});
     }
@@ -952,7 +952,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     // Do NOT load the struct value and pass by value — that creates a type mismatch.
 
     // Skip 'this' argument for Unit type — Unit methods have no 'this' parameter
-    bool is_unit_type2 = (impl_llvm_type == "void");
+    bool is_unit_type2 = (impl_llvm_type == "void" || impl_llvm_type == "{}");
     if (!is_unit_type2) {
         typed_args.push_back({this_arg_type, impl_receiver_val});
     }

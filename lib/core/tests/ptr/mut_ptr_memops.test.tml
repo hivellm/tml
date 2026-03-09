@@ -1,55 +1,41 @@
 // Tests for RawMutPtr — copy_from, copy_from_nonoverlapping, write_bytes_val
-//
-// BLOCKED by codegen bug: the lowlevel intrinsics memmove, memcpy, memset
-// are not declared in generated LLVM IR.
-// Error: "use of undefined value '@tml_memcpy'" (and @tml_memmove, @tml_memset).
-//
-// Coverage functions blocked (3):
-//   - RawMutPtr::copy_from               -> lowlevel { memmove(...) }
-//   - RawMutPtr::copy_from_nonoverlapping -> lowlevel { memcpy(...) }
-//   - RawMutPtr::write_bytes_val          -> lowlevel { memset(...) }
-//
-// These tests document the intended behavior and will pass once the
-// intrinsics are declared in the codegen backend.
 use test::{assert, assert_eq}
-
-// --- Placeholder: tests below will compile once intrinsics are emitted ---
+use core::ptr::{RawPtr, RawMutPtr}
 
 @test
-func test_mut_ptr_memops_blocked() -> I32 {
-    // Real tests for these 3 functions:
-    //
-    // copy_from_nonoverlapping:
-    //   let src_buf: *Unit = alloc(16)
-    //   let dst_buf: *Unit = alloc(16)
-    //   let src: RawMutPtr[I64] = RawMutPtr::from_addr(src_buf as I64)
-    //   let dst: RawMutPtr[I64] = RawMutPtr::from_addr(dst_buf as I64)
-    //   src.write(42 as I64)
-    //   src.add(1 as I64).write(99 as I64)
-    //   dst.copy_from_nonoverlapping(src.as_const(), 2 as I64)
-    //   assert_eq(dst.read(), 42 as I64, "copy_from_nonoverlapping [0]")
-    //   assert_eq(dst.add(1 as I64).read(), 99 as I64, "copy_from_nonoverlapping [1]")
-    //   dealloc(src_buf)
-    //   dealloc(dst_buf)
-    //
-    // copy_from (overlapping):
-    //   let buf: *Unit = alloc(32)
-    //   let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
-    //   ptr.write(1 as I64)
-    //   ptr.add(1 as I64).write(2 as I64)
-    //   ptr.add(1 as I64).copy_from(ptr.as_const(), 2 as I64)
-    //   assert_eq(ptr.add(1 as I64).read(), 1 as I64, "copy_from overlap [1]")
-    //   assert_eq(ptr.add(2 as I64).read(), 2 as I64, "copy_from overlap [2]")
-    //   dealloc(buf)
-    //
-    // write_bytes_val:
-    //   let buf: *Unit = alloc(16)
-    //   let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
-    //   ptr.write_bytes_val(0, 2 as I64)
-    //   assert_eq(ptr.read(), 0 as I64, "write_bytes_val zero [0]")
-    //   assert_eq(ptr.add(1 as I64).read(), 0 as I64, "write_bytes_val zero [1]")
-    //   dealloc(buf)
-    //
-    assert(true, "blocked: memmove/memcpy/memset intrinsics not emitted in LLVM IR")
+func test_copy_from_nonoverlapping() -> I32 {
+    let src_buf = mem_alloc(16)
+    let dst_buf = mem_alloc(16)
+    let src: RawMutPtr[I64] = RawMutPtr::from_addr(src_buf as I64)
+    let dst: RawMutPtr[I64] = RawMutPtr::from_addr(dst_buf as I64)
+    src.write(42 as I64)
+    src.add(1 as I64).write(99 as I64)
+    dst.copy_from_nonoverlapping(src.as_const(), 2 as I64)
+    assert_eq(dst.read(), 42 as I64, "copy_from_nonoverlapping [0]")
+    assert_eq(dst.add(1 as I64).read(), 99 as I64, "copy_from_nonoverlapping [1]")
+    return 0
+}
+
+@test
+func test_copy_from_overlapping() -> I32 {
+    let buf = mem_alloc(32)
+    let p: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
+    p.write(1 as I64)
+    p.add(1 as I64).write(2 as I64)
+    p.add(1 as I64).copy_from(p.as_const(), 2 as I64)
+    assert_eq(p.add(1 as I64).read(), 1 as I64, "copy_from overlap [1]")
+    assert_eq(p.add(2 as I64).read(), 2 as I64, "copy_from overlap [2]")
+    return 0
+}
+
+@test
+func test_write_bytes_val_zero() -> I32 {
+    let buf = mem_alloc(16)
+    let p: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
+    p.write(12345 as I64)
+    p.add(1 as I64).write(67890 as I64)
+    p.write_bytes_val(0, 2 as I64)
+    assert_eq(p.read(), 0 as I64, "write_bytes_val zero [0]")
+    assert_eq(p.add(1 as I64).read(), 0 as I64, "write_bytes_val zero [1]")
     return 0
 }

@@ -20,6 +20,8 @@ TML_MODULE("compiler")
 #include "types/checker.hpp"
 #include "types/module.hpp"
 
+#include <functional>
+#include <set>
 #include <unordered_set>
 
 namespace tml::types {
@@ -398,12 +400,47 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (!sig.impl_self_type_args.empty() &&
                 sig.impl_self_type_args.size() == named.type_args.size()) {
                 for (const auto& sta : sig.impl_self_type_args) {
-                    // Only RefType patterns are truly specialized (e.g., impl[T] Pin[ref T]).
-                    // NamedType patterns like Maybe[T] in impl[T] Maybe[Maybe[T]] should
-                    // use positional mapping since T maps to the outer type_args.
+                    // RefType patterns are specialized (e.g., impl[T] Pin[ref T]).
                     if (sta->is<RefType>()) {
                         has_specialized_patterns = true;
                         break;
+                    }
+                    // NamedType patterns are specialized only when they contain
+                    // MULTIPLE distinct type params (e.g., Outcome[T,E] in
+                    // impl[T,E] Outcome[Outcome[T,E], E]). A NamedType with a
+                    // single type param like Maybe[T] in impl[T] Maybe[Maybe[T]]
+                    // should use positional mapping (T → Maybe[I32], not T → I32).
+                    if (sta->is<NamedType>()) {
+                        const auto& sta_named = sta->as<NamedType>();
+                        if (!sta_named.type_args.empty()) {
+                            // Count distinct type params from the impl that appear
+                            // in this self type arg's inner structure.
+                            std::set<std::string> params_in_arg;
+                            std::function<void(const TypePtr&)> collect_params;
+                            collect_params = [&](const TypePtr& t) {
+                                if (!t)
+                                    return;
+                                if (t->is<NamedType>()) {
+                                    const auto& n = t->as<NamedType>();
+                                    for (const auto& tp : sig.type_params) {
+                                        if (n.name == tp) {
+                                            params_in_arg.insert(tp);
+                                            return;
+                                        }
+                                    }
+                                    for (const auto& ta : n.type_args)
+                                        collect_params(ta);
+                                } else if (t->is<RefType>()) {
+                                    collect_params(t->as<RefType>().inner);
+                                }
+                            };
+                            for (const auto& ta : sta_named.type_args)
+                                collect_params(ta);
+                            if (params_in_arg.size() > 1) {
+                                has_specialized_patterns = true;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -1495,6 +1532,71 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         return func.return_type;
                     }
                     break;
+                }
+            }
+        }
+    }
+
+    // Last-resort behavior method lookup: if the method wasn't found by any
+    // lookup above, check if the receiver type implements a behavior that
+    // provides this method. This handles cases like Range::size_hint (from
+    // Iterator behavior), Peekable::next, List::extend, etc.
+    {
+        TypePtr behavior_receiver = receiver_type;
+        if (behavior_receiver->is<RefType>()) {
+            behavior_receiver = behavior_receiver->as<RefType>().inner;
+        }
+        if (behavior_receiver->is<NamedType>()) {
+            const auto& named = behavior_receiver->as<NamedType>();
+            auto behaviors = env_.get_behavior_impls(named.name);
+            // Also check module-level behavior_impls for imported types
+            if (behaviors.empty()) {
+                auto all_modules = env_.get_all_modules();
+                for (const auto& [mod_path, mod] : all_modules) {
+                    auto bi_it = mod.behavior_impls.find(named.name);
+                    if (bi_it != mod.behavior_impls.end()) {
+                        behaviors = bi_it->second;
+                        break;
+                    }
+                }
+            }
+            if (behaviors.empty()) {
+                for (const auto& [mod_path, mod] : GlobalModuleCache::instance().get_all()) {
+                    auto bi_it = mod.behavior_impls.find(named.name);
+                    if (bi_it != mod.behavior_impls.end()) {
+                        behaviors = bi_it->second;
+                        break;
+                    }
+                }
+            }
+            for (const auto& behavior_name : behaviors) {
+                auto behavior_def = env_.lookup_behavior(behavior_name);
+                if (!behavior_def)
+                    continue;
+                for (const auto& bmethod : behavior_def->methods) {
+                    if (bmethod.name != call.method)
+                        continue;
+                    // Found the method in a behavior definition.
+                    std::unordered_map<std::string, TypePtr> subs;
+                    auto self_type = std::make_shared<Type>();
+                    self_type->kind = NamedType{named.name, "", named.type_args};
+                    subs["Self"] = self_type;
+                    subs["This"] = self_type;
+                    if (!behavior_def->type_params.empty() && !named.type_args.empty()) {
+                        for (size_t i = 0;
+                             i < behavior_def->type_params.size() && i < named.type_args.size();
+                             ++i) {
+                            subs[behavior_def->type_params[i]] = named.type_args[i];
+                        }
+                    }
+                    for (const auto& assoc : behavior_def->associated_types) {
+                        std::string assoc_key = "This::" + assoc.name;
+                        if (assoc.name == "Item" && !named.type_args.empty()) {
+                            subs[assoc_key] = named.type_args[0];
+                            subs[assoc.name] = named.type_args[0];
+                        }
+                    }
+                    return substitute_type(bmethod.return_type, subs);
                 }
             }
         }

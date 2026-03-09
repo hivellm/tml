@@ -171,6 +171,96 @@ void TypeEnv::init_builtin_mem() {
                 false,
                 builtin_span});
 
+    // ============ Raw Memory Intrinsics (lowlevel) ============
+
+    // ptr_read[T](ptr: *Unit) -> T - Read value from pointer (generic, resolved at codegen)
+    // ptr_write[T](ptr: *Unit, value: T) - Write value to pointer
+    // ptr_read_volatile[T](ptr: *Unit) -> T - Volatile read
+    // ptr_write_volatile[T](ptr: *Unit, value: T) - Volatile write
+    // ptr_read_unaligned[T](ptr: *Unit) -> T - Unaligned read
+    // ptr_write_unaligned[T](ptr: *Unit, value: T) - Unaligned write
+    // These are generic intrinsics - the type checker registers them with *Unit params
+    // but codegen resolves the actual type from type parameters.
+
+    // ptr_read[T](ptr: *Unit) -> I32 (type resolved at codegen)
+    functions_["ptr_read"].push_back(FuncSig{"ptr_read",
+                                             {make_ptr(make_unit())},
+                                             make_primitive(PrimitiveKind::I32),
+                                             {},
+                                             false,
+                                             builtin_span});
+
+    // ptr_write[T](ptr: *Unit, value: I32) -> Unit
+    functions_["ptr_write"].push_back(
+        FuncSig{"ptr_write",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // ptr_read_volatile[T](ptr: *Unit) -> I32
+    functions_["ptr_read_volatile"].push_back(FuncSig{"ptr_read_volatile",
+                                                      {make_ptr(make_unit())},
+                                                      make_primitive(PrimitiveKind::I32),
+                                                      {},
+                                                      false,
+                                                      builtin_span});
+
+    // ptr_write_volatile[T](ptr: *Unit, value: I32) -> Unit
+    functions_["ptr_write_volatile"].push_back(
+        FuncSig{"ptr_write_volatile",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // ptr_read_unaligned[T](ptr: *Unit) -> I32
+    functions_["ptr_read_unaligned"].push_back(FuncSig{"ptr_read_unaligned",
+                                                       {make_ptr(make_unit())},
+                                                       make_primitive(PrimitiveKind::I32),
+                                                       {},
+                                                       false,
+                                                       builtin_span});
+
+    // ptr_write_unaligned[T](ptr: *Unit, value: I32) -> Unit
+    functions_["ptr_write_unaligned"].push_back(
+        FuncSig{"ptr_write_unaligned",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // memcpy(dst: *Unit, src: *Unit, size: I64) -> Unit
+    functions_["memcpy"].push_back(
+        FuncSig{"memcpy",
+                {make_ptr(make_unit()), make_ptr(make_unit()), make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // memmove(dst: *Unit, src: *Unit, size: I64) -> Unit
+    functions_["memmove"].push_back(
+        FuncSig{"memmove",
+                {make_ptr(make_unit()), make_ptr(make_unit()), make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // memset(dst: *Unit, value: I32, size: I64) -> Unit
+    functions_["memset"].push_back(
+        FuncSig{"memset",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32),
+                 make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
     // ============ Size/Alignment ============
 
     // size_of[T]() -> I64 - Get size of type (generic, resolved at compile time)

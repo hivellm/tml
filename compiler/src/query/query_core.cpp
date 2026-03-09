@@ -578,8 +578,13 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
                 }
             }
         } else if (decl->is<parser::FuncDecl>()) {
-            // Check if function uses generic enum types in signature or body
             const auto& func = decl->as<parser::FuncDecl>();
+            // Generic functions require AST codegen for monomorphization
+            if (!func.generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
+            // Check if function uses generic enum types in signature or body
             if (func.return_type.has_value() && uses_generic_enum(*func.return_type)) {
                 has_local_generics = true;
                 break;

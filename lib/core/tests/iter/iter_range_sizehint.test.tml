@@ -1,12 +1,27 @@
-// BLOCKED: Range::size_hint, RangeInclusive::size_hint, RangeFrom::size_hint
-// These are inside `impl[T: Step] Iterator for Range[T]` blocks.
-// Generic trait dispatch returns () instead of (I64, Maybe[I64]).
-// Error: "Type mismatch: expected (I64, Maybe[I64]), found ()"
-// Functions blocked: Range::size_hint, RangeInclusive::size_hint, RangeFrom::size_hint (all 3)
-use test::{assert}
+// Tests for Range/RangeInclusive/RangeFrom size_hint
+use test::{assert, assert_eq}
+use core::ops::range::{Range, RangeInclusive}
 
 @test
-func test_range_size_hint_blocked() -> I32 {
-    assert(true, "blocked: generic trait dispatch returns () for size_hint")
+func test_range_size_hint() -> I32 {
+    let r: Range[I32] = Range { start: 0, end: 10 }
+    let hint = r.size_hint()
+    assert_eq(hint.0, 10 as I64, "Range 0..10 lower bound should be 10")
+    return 0
+}
+
+@test
+func test_range_empty_size_hint() -> I32 {
+    let r: Range[I32] = Range { start: 5, end: 5 }
+    let hint = r.size_hint()
+    assert_eq(hint.0, 0 as I64, "Range 5..5 should be 0")
+    return 0
+}
+
+@test
+func test_range_inclusive_size_hint() -> I32 {
+    let r: RangeInclusive[I32] = RangeInclusive { start: 0, end: 9, exhausted: false }
+    let hint = r.size_hint()
+    assert_eq(hint.0, 10 as I64, "RangeInclusive 0..=9 should be 10")
     return 0
 }

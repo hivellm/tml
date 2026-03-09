@@ -1327,6 +1327,8 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     }
                 }
 
+                emit_line("; DEBUG LAZY type_name=" + info.type_name +
+                          " method=" + info.method->name);
                 gen_impl_method(info.type_name, *info.method);
                 current_type_subs_ = saved_type_subs;
                 options_.lazy_library_defs = true;

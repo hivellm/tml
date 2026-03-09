@@ -1,0 +1,29 @@
+// Tests for array additional behaviors
+use test::{assert, assert_eq}
+
+@test
+func test_array_partial_cmp() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 4]
+    let result = a.partial_cmp(ref b)
+    assert(result.is_just(), "partial_cmp should return Just")
+    return 0
+}
+
+@test
+func test_array_cmp() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    let result = a.cmp(ref b)
+    assert_eq(result.to_string(), "Equal", "equal arrays should compare Equal")
+    return 0
+}
+
+@test
+func test_array_duplicate() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b = a.duplicate()
+    assert_eq(b[0], 1, "duplicate preserves first")
+    assert_eq(b[2], 3, "duplicate preserves last")
+    return 0
+}

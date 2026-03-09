@@ -410,7 +410,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     // (eq, ne, partial_cmp, cmp, default) are handled through explicit impls.
     // Default behavior methods (lt, le, gt, ge, max, min, clamp) reference 'this'
     // which is void for Unit and cannot appear in LLVM IR data contexts.
-    if (llvm_type_name(type_name) == "void")
+    if (type_name == "Unit" || llvm_type_name(type_name) == "void")
         return false;
 
     // Skip methods with their own generic parameters
@@ -585,8 +585,8 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
              param_type.find(type_name) != std::string::npos)) {
             param_type = trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
         }
-        // Skip void parameters (Unit type as value — invalid in LLVM)
-        if (param_type == "void") {
+        // Skip void/{} parameters (Unit type as value — not useful in LLVM)
+        if (param_type == "void" || param_type == "{}") {
             continue;
         }
         params += param_type + " %" + param_name;

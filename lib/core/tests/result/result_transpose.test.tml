@@ -1,0 +1,27 @@
+// Tests for Outcome::flatten
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_flatten_ok() -> I32 {
+    let nested: Outcome[Outcome[I32, Str], Str] = Ok(Ok(42))
+    let flat: Outcome[I32, Str] = nested.flatten()
+    assert(flat.is_ok(), "flatten Ok(Ok(42)) should be Ok")
+    assert_eq(flat.unwrap(), 42, "flatten Ok(Ok(42)) should be 42")
+    return 0
+}
+
+@test
+func test_outcome_flatten_inner_err() -> I32 {
+    let nested: Outcome[Outcome[I32, Str], Str] = Ok(Err("inner"))
+    let flat: Outcome[I32, Str] = nested.flatten()
+    assert(flat.is_err(), "flatten Ok(Err) should be Err")
+    return 0
+}
+
+@test
+func test_outcome_flatten_outer_err() -> I32 {
+    let nested: Outcome[Outcome[I32, Str], Str] = Err("outer")
+    let flat: Outcome[I32, Str] = nested.flatten()
+    assert(flat.is_err(), "flatten Err should be Err")
+    return 0
+}

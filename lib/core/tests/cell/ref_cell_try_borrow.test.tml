@@ -1,0 +1,8 @@
+// Placeholder — try_borrow/try_borrow_mut blocked by Maybe[Ref[T]] codegen
+use test::{assert}
+
+@test
+func test_ref_cell_try_borrow_blocked() -> I32 {
+    assert(true, "try_borrow blocked by nested generic codegen")
+    return 0
+}

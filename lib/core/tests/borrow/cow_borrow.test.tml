@@ -1,0 +1,20 @@
+// Tests for Cow::borrow
+use test::{assert_eq}
+use core::borrow::{Cow, Borrow}
+
+@test
+func test_cow_owned_borrow() -> I32 {
+    let c: Cow[I32] = Cow::Owned(42)
+    let r: ref I32 = c.borrow()
+    assert_eq(*r, 42, "Cow::Owned borrow returns ref to value")
+    return 0
+}
+
+@test
+func test_cow_borrowed_borrow() -> I32 {
+    let val: I32 = 99
+    let c: Cow[I32] = Cow::Borrowed(ref val)
+    let r: ref I32 = c.borrow()
+    assert_eq(*r, 99, "Cow::Borrowed borrow returns ref")
+    return 0
+}

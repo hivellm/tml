@@ -40,6 +40,68 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Helper: Extract type parameter substitutions by pattern-matching a parser::Type pattern
+// (from an impl's self_type generics) against a concrete semantic type (from the mangled name).
+// For example: pattern=NamedType("Outcome", [T, E]), concrete=NamedType("Outcome", [I32, Str])
+// gives T=I32, E=Str.
+static void extract_type_params_from_parser(const parser::Type& pattern,
+                                            const types::TypePtr& concrete,
+                                            const std::vector<parser::GenericParam>& impl_generics,
+                                            std::unordered_map<std::string, types::TypePtr>& subs) {
+    if (!concrete)
+        return;
+
+    // Check if pattern is a NamedType (includes bare type params)
+    if (pattern.is<parser::NamedType>()) {
+        const auto& named = pattern.as<parser::NamedType>();
+        std::string name = named.path.segments.empty() ? "" : named.path.segments.back();
+
+        // Check if this is a bare type parameter name
+        bool is_type_param = false;
+        if (!named.generics.has_value() || named.generics->args.empty()) {
+            for (const auto& gp : impl_generics) {
+                if (gp.name == name) {
+                    is_type_param = true;
+                    break;
+                }
+            }
+        }
+
+        if (is_type_param) {
+            subs[name] = concrete;
+            return;
+        }
+
+        // If both are NamedType with same base name, recurse into type args
+        if (concrete->is<types::NamedType>()) {
+            const auto& concrete_named = concrete->as<types::NamedType>();
+            if (concrete_named.name == name && named.generics.has_value()) {
+                const auto& args = named.generics->args;
+                if (args.size() == concrete_named.type_args.size()) {
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (args[i].is_type()) {
+                            extract_type_params_from_parser(*args[i].as_type(),
+                                                            concrete_named.type_args[i],
+                                                            impl_generics, subs);
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // RefType pattern
+    if (pattern.is<parser::RefType>()) {
+        const auto& ref = pattern.as<parser::RefType>();
+        if (concrete->is<types::RefType>()) {
+            extract_type_params_from_parser(*ref.inner, concrete->as<types::RefType>().inner,
+                                            impl_generics, subs);
+        }
+        return;
+    }
+}
+
 // Helper: Parse a mangled type string back into a semantic type
 // e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
 static types::TypePtr parse_mangled_type_string(const std::string& s) {
@@ -482,43 +544,90 @@ void LLVMIRGen::generate_pending_instantiations() {
                         // For example: mangled_type_name="Range__I64", base_type_name="Range"
                         // Extract "I64" and map to impl generics (e.g., T -> I64)
                         auto effective_type_subs = pim.type_subs;
+                        emit_line("; DEBUG effective_type_subs.empty()=" +
+                                  std::to_string(effective_type_subs.empty()) +
+                                  " impl.generics.size()=" + std::to_string(impl.generics.size()));
                         if (effective_type_subs.empty() && !impl.generics.empty() &&
                             pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
-                            std::string suffix =
-                                pim.mangled_type_name.substr(pim.base_type_name.length());
-                            if (suffix.starts_with("__")) {
-                                suffix = suffix.substr(2);
-                                // For single type param, use entire suffix
-                                if (impl.generics.size() == 1) {
-                                    auto type_arg = parse_mangled_type_string(suffix);
-                                    if (type_arg) {
-                                        effective_type_subs[impl.generics[0].name] = type_arg;
-                                        TML_DEBUG_LN(
-                                            "[IMPL_INST] Recovered type_subs from mangled name: "
-                                            << impl.generics[0].name << " -> " << suffix);
-                                    }
-                                } else {
-                                    // Multiple type params - split on "__"
-                                    std::vector<std::string> parts;
-                                    size_t pos = 0;
-                                    while (pos < suffix.size()) {
-                                        size_t next = suffix.find("__", pos);
-                                        if (next == std::string::npos) {
-                                            parts.push_back(suffix.substr(pos));
-                                            break;
+
+                            // Check if this is a specialized impl (e.g., impl[T,E]
+                            // Outcome[Outcome[T,E], E]) where the self_type's type args contain
+                            // nested types, not just bare params.
+                            bool is_specialized_impl = false;
+                            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                                const auto& self_named = impl.self_type->as<parser::NamedType>();
+                                if (self_named.generics.has_value()) {
+                                    for (const auto& arg : self_named.generics->args) {
+                                        if (arg.is_type() &&
+                                            arg.as_type()->is<parser::NamedType>()) {
+                                            const auto& arg_named =
+                                                arg.as_type()->as<parser::NamedType>();
+                                            // A type arg with its own generics is a
+                                            // nested/specialized pattern
+                                            if (arg_named.generics.has_value() &&
+                                                !arg_named.generics->args.empty()) {
+                                                is_specialized_impl = true;
+                                                break;
+                                            }
                                         }
-                                        parts.push_back(suffix.substr(pos, next - pos));
-                                        pos = next + 2;
-                                    }
-                                    for (size_t i = 0; i < impl.generics.size() && i < parts.size();
-                                         ++i) {
-                                        auto type_arg = parse_mangled_type_string(parts[i]);
-                                        if (type_arg) {
-                                            effective_type_subs[impl.generics[i].name] = type_arg;
+                                        if (arg.is_type() && arg.as_type()->is<parser::RefType>()) {
+                                            is_specialized_impl = true;
+                                            break;
                                         }
                                     }
                                 }
                             }
+
+                            if (is_specialized_impl) {
+                                // Use pattern matching: parse the concrete type from mangled name,
+                                // then match impl self_type pattern against it to extract type
+                                // params.
+                                auto concrete_type =
+                                    parse_mangled_type_string(pim.mangled_type_name);
+                                if (concrete_type && impl.self_type) {
+                                    extract_type_params_from_parser(*impl.self_type, concrete_type,
+                                                                    impl.generics,
+                                                                    effective_type_subs);
+                                }
+                            } else {
+                                std::string suffix =
+                                    pim.mangled_type_name.substr(pim.base_type_name.length());
+                                if (suffix.starts_with("__")) {
+                                    suffix = suffix.substr(2);
+                                    // For single type param, use entire suffix
+                                    if (impl.generics.size() == 1) {
+                                        auto type_arg = parse_mangled_type_string(suffix);
+                                        if (type_arg) {
+                                            effective_type_subs[impl.generics[0].name] = type_arg;
+                                            TML_DEBUG_LN("[IMPL_INST] Recovered type_subs from "
+                                                         "mangled name: "
+                                                         << impl.generics[0].name << " -> "
+                                                         << suffix);
+                                        }
+                                    } else {
+                                        // Multiple type params - split on "__"
+                                        std::vector<std::string> parts;
+                                        size_t pos = 0;
+                                        while (pos < suffix.size()) {
+                                            size_t next = suffix.find("__", pos);
+                                            if (next == std::string::npos) {
+                                                parts.push_back(suffix.substr(pos));
+                                                break;
+                                            }
+                                            parts.push_back(suffix.substr(pos, next - pos));
+                                            pos = next + 2;
+                                        }
+                                        for (size_t i = 0;
+                                             i < impl.generics.size() && i < parts.size(); ++i) {
+                                            auto type_arg = parse_mangled_type_string(parts[i]);
+                                            if (type_arg) {
+                                                effective_type_subs[impl.generics[i].name] =
+                                                    type_arg;
+                                            }
+                                        }
+                                    }
+                                }
+                            } // end else (non-specialized)
                         }
 
                         // Resolve where clause type equalities to derive additional

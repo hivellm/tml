@@ -1425,9 +1425,9 @@ private:
     auto llvm_type(const parser::Type& type) -> std::string;
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;
     auto llvm_type_name(const std::string& name) -> std::string;
-    // for_data=true: use "{}" for Unit (when used as data field), false: use "void" (for return
-    // types)
-    auto llvm_type_from_semantic(const types::TypePtr& type, bool for_data = false) -> std::string;
+    // for_data=true (default): use "{}" for Unit (data contexts: alloca, store, load, args)
+    // for_data=false: use "void" for Unit (only for LLVM function return types)
+    auto llvm_type_from_semantic(const types::TypePtr& type, bool for_data = true) -> std::string;
     /// Ensures a type is defined in the LLVM IR output (emits type definition if needed)
     void ensure_type_defined(const parser::TypePtr& type);
 

@@ -117,6 +117,21 @@ auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<Be
             }
         }
     }
+
+    // Last resort: search GlobalModuleCache for behavior definitions.
+    // This handles standalone files (no 'use' imports) that reference behaviors
+    // like Hash, PartialEq, Display, etc. in generic type bounds.
+    // The GlobalModuleCache is populated by meta preload and contains all library modules.
+    {
+        auto& global_cache = GlobalModuleCache::instance();
+        for (const auto& [mod_path, mod] : global_cache.get_all()) {
+            auto bit = mod.behaviors.find(name);
+            if (bit != mod.behaviors.end()) {
+                return bit->second;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -401,6 +416,14 @@ auto TypeEnv::get_all_modules() const -> std::vector<std::pair<std::string, Modu
         }
     }
     return result;
+}
+
+std::vector<std::string> TypeEnv::get_behavior_impls(const std::string& type_name) const {
+    auto it = behavior_impls_.find(type_name);
+    if (it != behavior_impls_.end()) {
+        return it->second;
+    }
+    return {};
 }
 
 void TypeEnv::register_impl(const std::string& type_name, const std::string& behavior_name) {

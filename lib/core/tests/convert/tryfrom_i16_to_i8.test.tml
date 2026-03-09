@@ -1,0 +1,17 @@
+// Tests for TryFrom[I16] for I8
+use test::{assert, assert_eq}
+use core::convert::{TryFrom, TryFromIntError}
+
+@test
+func test_tryfrom_i16_to_i8_ok() -> I32 {
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(100 as I16)
+    assert(result.is_ok(), "100 fits in I8")
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_i8_overflow() -> I32 {
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(200 as I16)
+    assert(result.is_err(), "200 overflows I8")
+    return 0
+}

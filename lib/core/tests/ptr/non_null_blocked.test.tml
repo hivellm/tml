@@ -1,88 +1,45 @@
 // Tests for NonNull[T] — as_ref, as_mut, copy_from, copy_from_nonoverlapping
-//
-// BLOCKED by codegen bugs:
-//
-// 1. NonNull::as_ref / NonNull::as_mut
-//    Error: "'%tNN' defined with type 'i32' but expected 'ptr'"
-//    The lowlevel intrinsics ptr_as_ref[T] and ptr_as_mut[T] generate an i32
-//    return where a ptr is expected for `ref T` / `mut ref T`.
-//
-// 2. NonNull::copy_from / NonNull::copy_from_nonoverlapping
-//    Error: "use of undefined value '@tml_memcpy'"
-//    These delegate to RawMutPtr::copy_from / copy_from_nonoverlapping
-//    which use lowlevel memmove/memcpy that are not declared in LLVM IR.
-//
-// Coverage functions blocked (4):
-//   - NonNull::as_ref                   -> lowlevel { ptr_as_ref[T](...) }
-//   - NonNull::as_mut                   -> lowlevel { ptr_as_mut[T](...) }
-//   - NonNull::copy_from               -> RawMutPtr::copy_from -> memmove
-//   - NonNull::copy_from_nonoverlapping -> RawMutPtr::copy_from_nonoverlapping -> memcpy
-//
-// These tests document the intended behavior and will pass once the
-// codegen bugs are fixed.
 use test::{assert, assert_eq}
-
-// --- Placeholder: tests below will compile once codegen bugs are fixed ---
+use core::ptr::{RawPtr, RawMutPtr, NonNull}
 
 @test
 func test_non_null_as_ref_blocked() -> I32 {
-    // Real test:
-    //   let buf: *Unit = alloc(8)
-    //   let nn: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(buf as I64))
-    //   nn.write(42 as I64)
-    //   let r: ref I64 = nn.as_ref()
-    //   assert_eq(*r, 42 as I64, "as_ref should return ref to written value")
-    //   dealloc(buf)
+    // BLOCKED: ptr_as_ref returns i32 instead of ptr in LLVM IR
     assert(true, "blocked: ptr_as_ref returns i32 instead of ptr in LLVM IR")
     return 0
 }
 
 @test
 func test_non_null_as_mut_blocked() -> I32 {
-    // Real test:
-    //   let buf: *Unit = alloc(8)
-    //   let nn: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(buf as I64))
-    //   nn.write(10 as I64)
-    //   let m: mut ref I64 = nn.as_mut()
-    //   *m = 20 as I64
-    //   assert_eq(nn.read(), 20 as I64, "as_mut should allow mutation")
-    //   dealloc(buf)
+    // BLOCKED: ptr_as_mut returns i32 instead of ptr in LLVM IR
     assert(true, "blocked: ptr_as_mut returns i32 instead of ptr in LLVM IR")
     return 0
 }
 
 @test
-func test_non_null_copy_from_blocked() -> I32 {
-    // Real test:
-    //   let src_buf: *Unit = alloc(16)
-    //   let dst_buf: *Unit = alloc(16)
-    //   let src: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(src_buf as I64))
-    //   let dst: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(dst_buf as I64))
-    //   src.write(42 as I64)
-    //   src.add(1 as I64).write(99 as I64)
-    //   dst.copy_from(src, 2 as I64)
-    //   assert_eq(dst.read(), 42 as I64, "copy_from [0]")
-    //   assert_eq(dst.add(1 as I64).read(), 99 as I64, "copy_from [1]")
-    //   dealloc(src_buf)
-    //   dealloc(dst_buf)
-    assert(true, "blocked: memmove intrinsic not declared in LLVM IR")
+func test_non_null_copy_from() -> I32 {
+    let src_buf = mem_alloc(16)
+    let dst_buf = mem_alloc(16)
+    let src: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(src_buf as I64))
+    let dst: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(dst_buf as I64))
+    src.write(42 as I64)
+    src.add(1 as I64).write(99 as I64)
+    dst.copy_from(src, 2 as I64)
+    assert_eq(dst.read(), 42 as I64, "copy_from [0]")
+    assert_eq(dst.add(1 as I64).read(), 99 as I64, "copy_from [1]")
     return 0
 }
 
 @test
-func test_non_null_copy_from_nonoverlapping_blocked() -> I32 {
-    // Real test:
-    //   let src_buf: *Unit = alloc(16)
-    //   let dst_buf: *Unit = alloc(16)
-    //   let src: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(src_buf as I64))
-    //   let dst: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(dst_buf as I64))
-    //   src.write(11 as I64)
-    //   src.add(1 as I64).write(22 as I64)
-    //   dst.copy_from_nonoverlapping(src, 2 as I64)
-    //   assert_eq(dst.read(), 11 as I64, "copy_from_nonoverlapping [0]")
-    //   assert_eq(dst.add(1 as I64).read(), 22 as I64, "copy_from_nonoverlapping [1]")
-    //   dealloc(src_buf)
-    //   dealloc(dst_buf)
-    assert(true, "blocked: memcpy intrinsic not declared in LLVM IR")
+func test_non_null_copy_from_nonoverlapping() -> I32 {
+    let src_buf = mem_alloc(16)
+    let dst_buf = mem_alloc(16)
+    let src: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(src_buf as I64))
+    let dst: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(dst_buf as I64))
+    src.write(11 as I64)
+    src.add(1 as I64).write(22 as I64)
+    dst.copy_from_nonoverlapping(src, 2 as I64)
+    assert_eq(dst.read(), 11 as I64, "copy_from_nonoverlapping [0]")
+    assert_eq(dst.add(1 as I64).read(), 22 as I64, "copy_from_nonoverlapping [1]")
     return 0
 }

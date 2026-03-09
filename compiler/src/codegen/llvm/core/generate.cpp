@@ -1034,6 +1034,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             param_types += ", ";
                         }
                         std::string param_type = llvm_type_ptr(method.params[i].type);
+                        // Normalize void -> {} for Unit params (void invalid in LLVM data contexts)
+                        if (param_type == "void")
+                            param_type = "{}";
                         std::string param_name;
                         bool param_is_mut = false;
                         bool param_is_ref_sig = false;
@@ -1061,7 +1064,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         // resolves This to the concrete type (e.g. %struct.Counter), so the
                         // "This" literal is already gone by this point.
                         if (param_name == "this" || param_name == "self") {
-                            if (impl_llvm_type == "void") {
+                            if (impl_llvm_type == "void" || impl_llvm_type == "{}") {
                                 // Unit type: skip this param entirely
                                 continue;
                             } else if (is_primitive_impl && !param_is_mut && !param_is_ref_sig) {
@@ -1097,6 +1100,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     emit_line("");
                     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params +
                               ") #0 {");
+                    if (func_llvm_name.find("Mutex") != std::string::npos) {
+                        fprintf(stderr, "[INLINE_CODEGEN] %s type_name=%s\n",
+                                func_llvm_name.c_str(), type_name.c_str());
+                    }
                     emit_line("entry:");
 
                     // Register params in locals
@@ -1106,6 +1113,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     bool method_has_ref_this = false;
                     for (size_t i = 0; i < method.params.size(); ++i) {
                         std::string param_type = llvm_type_ptr(method.params[i].type);
+                        // Normalize void -> {} for Unit params (void invalid in LLVM data contexts)
+                        if (param_type == "void")
+                            param_type = "{}";
                         std::string param_name;
                         bool param_is_mut = false;
                         bool param_is_ref = false;

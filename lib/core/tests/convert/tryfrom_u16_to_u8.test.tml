@@ -1,0 +1,45 @@
+// Tests for TryFrom[U16] for U8, TryFrom[U32] for U16, TryFrom[U64] for U16
+use test::{assert, assert_eq}
+use core::convert::{TryFrom, TryFromIntError}
+
+@test
+func test_tryfrom_u16_to_u8_ok() -> I32 {
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(200 as U16)
+    assert(result.is_ok(), "200 fits in U8")
+    return 0
+}
+
+@test
+func test_tryfrom_u16_to_u8_overflow() -> I32 {
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(300 as U16)
+    assert(result.is_err(), "300 overflows U8")
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_u16_ok() -> I32 {
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(60000 as U32)
+    assert(result.is_ok(), "60000 fits in U16")
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_u16_overflow() -> I32 {
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(70000 as U32)
+    assert(result.is_err(), "70000 overflows U16")
+    return 0
+}
+
+@test
+func test_tryfrom_u64_to_u16_ok() -> I32 {
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(50000 as U64)
+    assert(result.is_ok(), "50000 fits in U16")
+    return 0
+}
+
+@test
+func test_tryfrom_u64_to_u16_overflow() -> I32 {
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(100000 as U64)
+    assert(result.is_err(), "100000 overflows U16")
+    return 0
+}

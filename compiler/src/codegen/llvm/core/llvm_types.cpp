@@ -72,7 +72,7 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "Str" || name == "String")
         return "ptr"; // String is a pointer to struct
     if (name == "Unit")
-        return "void";
+        return "{}"; // Unit as data type - empty struct (void only for function returns)
     if (name == "Never")
         return "void"; // Never type (bottom type) - represents no value
     // Platform-sized types (64-bit on 64-bit platforms)

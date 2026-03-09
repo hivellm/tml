@@ -152,6 +152,7 @@ static std::string get_param_name(const parser::FuncParam& param, size_t param_i
 }
 
 void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
+    emit_line("; DEBUG gen_impl_method type=" + type_name + " method=" + method.name);
     // Skip builtin types that have hard-coded implementations in method.cpp
     // These use lowlevel blocks in TML source but are handled directly by codegen
     if (type_name == "Ordering") {
@@ -328,6 +329,9 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string impl_linkage = options_.library_ir_only ? "" : "internal ";
     emit_line("define " + impl_linkage + ret_type + " @" + func_llvm_name + "(" + params +
               ") #0 {");
+    if (func_llvm_name.find("Mutex") != std::string::npos) {
+        fprintf(stderr, "[GEN_IMPL] %s type_name=%s\n", func_llvm_name.c_str(), type_name.c_str());
+    }
     emit_line("entry:");
 
     // Register 'this'/'self' in locals only for instance methods
@@ -477,6 +481,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Register other parameters in locals by creating allocas
     for (size_t i = param_start; i < method.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(method.params[i].type);
+        emit_line("  ; DEBUG gen_impl param_type=" + param_type);
+        // Normalize void -> {} for Unit parameters (void is invalid in LLVM data contexts)
+        if (param_type == "void")
+            param_type = "{}";
         // Function-typed parameters use fat pointer { ptr, ptr } to support closures
         if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
             param_type = "{ ptr, ptr }";
@@ -673,6 +681,8 @@ void LLVMIRGen::gen_impl_method_instantiation(
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
     const std::vector<parser::GenericParam>& impl_generics, const std::string& method_type_suffix,
     bool is_library_type, const std::string& base_type_name) {
+    emit_line("; XYZZY_DEBUG gen_impl_method_instantiation mangled=" + mangled_type_name +
+              " method=" + method.name + " nsubs=" + std::to_string(type_subs.size()));
     // Skip method-level generic methods without a concrete type suffix.
     // Without a suffix, type params (e.g. T) remain unresolved and produce
     // `alloca %struct.T` in the IR — an unsized type that LLVM rejects.
@@ -842,8 +852,8 @@ void LLVMIRGen::gen_impl_method_instantiation(
             // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
             this_type = llvm_type;
         }
-        // Skip 'this' parameter for Unit type (void is not valid in LLVM parameter lists)
-        if (this_type == "void") {
+        // Skip 'this' parameter for Unit type (void/{} are not useful in LLVM parameter lists)
+        if (this_type == "void" || this_type == "{}") {
             is_instance_method = false;
         } else {
             params = this_type + " %this";
@@ -913,6 +923,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string inst_linkage = options_.library_ir_only ? "" : "internal ";
     emit_line("define " + inst_linkage + ret_type + " @" + func_llvm_name + "(" + params +
               ") #0 {");
+    if (func_llvm_name.find("Mutex") != std::string::npos) {
+        fprintf(stderr, "[GEN_IMPL_INST] %s mangled=%s\n", func_llvm_name.c_str(),
+                mangled_type_name.c_str());
+    }
     emit_line("entry:");
 
     // Register 'this' in locals with proper semantic type for method resolution
@@ -970,6 +984,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
         std::string param_name = get_param_name(method.params[i], i);
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
+        emit_line("  ; DEBUG impl_inst param_type=" + param_type + " param_name=" + param_name);
+        // Normalize void -> {} for Unit parameters (void is invalid in LLVM data contexts)
+        if (param_type == "void")
+            param_type = "{}";
         // Function-typed parameters use fat pointer { ptr, ptr } to support closures
         if (resolved_param && resolved_param->is<types::FuncType>()) {
             param_type = "{ ptr, ptr }";

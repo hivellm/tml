@@ -1,0 +1,52 @@
+// Tests for Count::resolve and Count::debug_string
+use test::{assert, assert_eq}
+use core::fmt::rt::{Count, Argument, UnsafeArg}
+
+@test
+func test_count_is_resolve() -> I32 {
+    let c: Count = Count::Is(42)
+    let args: [Argument; 0] = []
+    let result = c.resolve(ref args)
+    assert(result.is_just(), "Count::Is should resolve to Just")
+    return 0
+}
+
+@test
+func test_count_implied_resolve() -> I32 {
+    let c: Count = Count::Implied
+    let args: [Argument; 0] = []
+    let result = c.resolve(ref args)
+    assert(result.is_nothing(), "Count::Implied should resolve to Nothing")
+    return 0
+}
+
+@test
+func test_count_is_debug_string() -> I32 {
+    let c: Count = Count::Is(10)
+    let s: Str = c.debug_string()
+    assert(s.len() > 0, "Count::Is debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_param_debug_string() -> I32 {
+    let c: Count = Count::Param(5)
+    let s: Str = c.debug_string()
+    assert(s.len() > 0, "Count::Param debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_implied_debug_string() -> I32 {
+    let c: Count = Count::Implied
+    let s: Str = c.debug_string()
+    assert(s.len() > 0, "Count::Implied debug_string should produce output")
+    return 0
+}
+
+@test
+func test_unsafe_arg_new() -> I32 {
+    let ua: UnsafeArg = UnsafeArg::new()
+    assert(true, "UnsafeArg::new should not crash")
+    return 0
+}

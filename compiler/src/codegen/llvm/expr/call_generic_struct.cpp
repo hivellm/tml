@@ -847,7 +847,8 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
 
                             if (param_semantic_type) {
                                 std::string llvm_param_type =
-                                    llvm_type_from_semantic(param_semantic_type);
+                                    llvm_type_from_semantic(param_semantic_type,
+                                                            /*for_data=*/true);
                                 // Set expected type for generic struct arguments
                                 if (llvm_param_type.find("%struct.") == 0 &&
                                     llvm_param_type.find("__") != std::string::npos) {
@@ -861,7 +862,8 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             std::string actual_type = last_expr_type_;
                             std::string arg_type = actual_type;
                             if (param_semantic_type) {
-                                arg_type = llvm_type_from_semantic(param_semantic_type);
+                                arg_type = llvm_type_from_semantic(param_semantic_type,
+                                                                   /*for_data=*/true);
                                 if (param_semantic_type->is<types::FuncType>()) {
                                     arg_type = "{ ptr, ptr }";
                                 }

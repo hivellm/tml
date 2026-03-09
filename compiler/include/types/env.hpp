@@ -536,6 +536,9 @@ public:
     /// Records that a type implements a behavior.
     void register_impl(const std::string& type_name, const std::string& behavior_name);
 
+    /// Returns all behavior names that a type implements.
+    [[nodiscard]] std::vector<std::string> get_behavior_impls(const std::string& type_name) const;
+
     /// Returns true if the type implements the behavior.
     [[nodiscard]] bool type_implements(const std::string& type_name,
                                        const std::string& behavior_name) const;

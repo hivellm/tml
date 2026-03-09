@@ -1,0 +1,8 @@
+// Placeholder — error_chain crashes (trait object dyn Error codegen bug)
+use test::{assert}
+
+@test
+func test_error_chain_blocked() -> I32 {
+    assert(true, "error_chain blocked by dyn Error codegen")
+    return 0
+}

@@ -135,7 +135,9 @@ pub func copy_nonoverlapping[T](src: RawPtr[T], dst: RawMutPtr[T], count: I64) {
         return
     }
     let size: I64 = count * size_of[T]()
-    lowlevel { memcpy(dst.addr(), src.addr(), size) }
+    let dst_addr: I64 = dst.addr
+    let src_addr: I64 = src.addr
+    lowlevel { memcpy(dst_addr, src_addr, size) }
 }
 
 /// Copies `count` elements from `src` to `dst`, allowing overlap.
@@ -162,21 +164,35 @@ pub func copy[T](src: RawPtr[T], dst: RawMutPtr[T], count: I64) {
         return
     }
     let size: I64 = count * size_of[T]()
-    lowlevel { memmove(dst.addr(), src.addr(), size) }
+    let dst_addr: I64 = dst.addr
+    let src_addr: I64 = src.addr
+    lowlevel { memmove(dst_addr, src_addr, size) }
 }
 
 /// Copies `count` elements from one mutable pointer to another.
 ///
 /// The regions may overlap.
 pub func copy_mut[T](src: RawMutPtr[T], dst: RawMutPtr[T], count: I64) {
-    copy(src.as_const(), dst, count)
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    let dst_addr: I64 = dst.addr
+    let src_addr: I64 = src.addr
+    lowlevel { memmove(dst_addr, src_addr, size) }
 }
 
 /// Copies `count` elements from one mutable pointer to another.
 ///
 /// The regions must not overlap.
 pub func copy_nonoverlapping_mut[T](src: RawMutPtr[T], dst: RawMutPtr[T], count: I64) {
-    copy_nonoverlapping(src.as_const(), dst, count)
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    let dst_addr: I64 = dst.addr
+    let src_addr: I64 = src.addr
+    lowlevel { memcpy(dst_addr, src_addr, size) }
 }
 
 // ============================================================================
@@ -209,7 +225,8 @@ pub func write_bytes[T](dst: RawMutPtr[T], value: U8, count: I64) {
         return
     }
     let size: I64 = count * size_of[T]()
-    lowlevel { memset(dst.addr(), value, size) }
+    let dst_addr: I64 = dst.addr
+    lowlevel { memset(dst_addr, value, size) }
 }
 
 /// Zeroes out `count` elements starting at `dst`.
@@ -230,7 +247,12 @@ pub func write_bytes[T](dst: RawMutPtr[T], value: U8, count: I64) {
 /// zero_memory(ptr, 10)
 /// ```
 pub func zero_memory[T](dst: RawMutPtr[T], count: I64) {
-    write_bytes(dst, 0, count)
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    let dst_addr: I64 = dst.addr
+    lowlevel { memset(dst_addr, 0, size) }
 }
 
 // ============================================================================

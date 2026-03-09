@@ -1,0 +1,31 @@
+// Tests for Ref::get, RefMut::get, RefMut::get_mut
+use test::{assert, assert_eq}
+use core::cell::ref_cell::{RefCell, Ref, RefMut}
+
+@test
+func test_ref_cell_borrow_get() -> I32 {
+    var cell: RefCell[I64] = RefCell::new(42 as I64)
+    let r: Ref[I64] = cell.borrow()
+    let val: ref I64 = r.get()
+    assert_eq(*val, 42 as I64, "Ref::get should return ref to value")
+    return 0
+}
+
+@test
+func test_ref_cell_borrow_mut_get() -> I32 {
+    var cell: RefCell[I64] = RefCell::new(10 as I64)
+    let mut r: RefMut[I64] = cell.borrow_mut()
+    let val: ref I64 = r.get()
+    assert_eq(*val, 10 as I64, "RefMut::get should return ref to value")
+    return 0
+}
+
+@test
+func test_ref_cell_borrow_mut_get_mut() -> I32 {
+    var cell: RefCell[I64] = RefCell::new(5 as I64)
+    let mut r: RefMut[I64] = cell.borrow_mut()
+    let val: mut ref I64 = r.get_mut()
+    *val = 99 as I64
+    assert_eq(*r.get(), 99 as I64, "RefMut::get_mut should allow mutation")
+    return 0
+}

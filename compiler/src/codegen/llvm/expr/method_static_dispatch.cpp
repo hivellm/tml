@@ -1241,7 +1241,7 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                         if (!type_subs_fallback.empty()) {
                             param_type = types::substitute_type(param_type, type_subs_fallback);
                         }
-                        expected_type = llvm_type_from_semantic(param_type);
+                        expected_type = llvm_type_from_semantic(param_type, /*for_data=*/true);
                         // Type coercion if needed
                         if (arg_type != expected_type) {
                             bool is_int_actual = (arg_type[0] == 'i' && arg_type != "i1");

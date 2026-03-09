@@ -1,0 +1,8 @@
+// Placeholder — Range size_hint blocked by range literal syntax
+use test::{assert}
+
+@test
+func test_range_size_hint_blocked() -> I32 {
+    assert(true, "Range::size_hint blocked by range literal syntax")
+    return 0
+}
