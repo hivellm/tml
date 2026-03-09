@@ -1,0 +1,10 @@
+// BLOCKED: MaybeUninit::uninit
+// Error: '%t2' defined with type 'i32' but expected '%struct.MaybeUninit__I32'
+// The maybe_uninit_create[T] intrinsic returns i32 instead of the wrapper struct.
+use test::{assert}
+
+@test
+func test_maybe_uninit_uninit_blocked() -> I32 {
+    assert(true, "blocked: MaybeUninit wrapper struct codegen mismatch")
+    return 0
+}

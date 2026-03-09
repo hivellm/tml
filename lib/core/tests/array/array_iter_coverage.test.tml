@@ -1,12 +1,9 @@
-// Tests for core::array::iter — ArrayIter coverage
-// BLOCKED: ArrayIter requires const generics codegen which is broken
-// Error: '[3 x i32]' but expected '[0 x %struct.T]'
-// Keeping file as placeholder until codegen is fixed
-use test::{assert, assert_eq}
+// See array_iter_new.test.tml for blocker documentation.
+// All array/iter functions blocked by const generic struct layout codegen.
+use test::{assert}
 
 @test
-func test_array_iter_placeholder() -> I32 {
-    // ArrayIter tests deferred — const generics codegen blocked
-    assert(true, "placeholder")
+func test_array_iter_cov_see_iter_new() -> I32 {
+    assert(true, "see array_iter_new.test.tml")
     return 0
 }

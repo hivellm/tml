@@ -1,31 +1,71 @@
-// Tests for slice/iter: Chunks, ChunksExact, Windows, SliceIter, SliceIterMut
-//
-// ALL 19 FUNCTIONS BLOCKED by two codegen bugs:
-//
-// 1. Cross-file impl resolution: Methods like chunks(), iter(), windows() are defined
-//    in `impl[T] Slice[T]` blocks in slice/iter.tml submodule. The compiler reports
-//    "Unknown method: chunks" (and iter, windows) even with `use core::slice::iter::*`.
-//    This affects: Slice::chunks, Slice::chunks_exact, Slice::windows, Slice::iter,
-//    MutSlice::iter, MutSlice::iter_mut (6 functions).
-//
-// 2. Named struct vs anonymous struct in codegen: Constructing structs that contain
-//    a Slice[T] field (like SliceIter, Chunks, Windows) emits `{ptr, i64}` anonymous
-//    type but the store instruction expects `%struct.Slice__I32 = type { ptr, i64 }`.
-//    LLVM IR error: "'%t16' defined with type '{ ptr, i64 }' but expected '%struct.Slice__I32'"
-//    This affects: ALL iterator types since they all contain Slice[T] fields (13 functions).
-//
-// Blocked functions (19 total):
-//   Chunks::next, Chunks::remainder, Slice::chunks, Slice::chunks_exact,
-//   ChunksExact::next, ChunksExact::remainder, Windows::next, Windows::remaining,
-//   Slice::windows, SliceIter::next, SliceIter::len, SliceIter::is_empty,
-//   SliceIter::as_slice, Slice::iter, SliceIterMut::next, SliceIterMut::len,
-//   SliceIterMut::is_empty, MutSlice::iter, MutSlice::iter_mut
-
+// Tests for Chunks, ChunksExact iterators (slice/iter module)
 use test
+use core::slice::{Slice, Chunks, ChunksExact}
 
 @test
-func test_slice_iter_blocked() -> I32 {
-    // All slice/iter tests blocked by codegen bugs documented above
-    assert(true, "placeholder - see file header for blockers")
-    return 0
+func test_chunks_basic() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+    atomic_store(ptr_offset(ptr, 16), 5)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 5 }
+    let mut iter = Chunks { slice: s, chunk_size: 2 }
+
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(chunk) => {
+            assert_eq(chunk.len(), 2)
+            count = count + 1
+        },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(chunk) => {
+            assert_eq(chunk.len(), 2)
+            count = count + 1
+        },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(chunk) => {
+            assert_eq(chunk.len(), 1)
+            count = count + 1
+        },
+        Nothing => {}
+    }
+    assert_eq(count, 3)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_chunks_remainder() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+    atomic_store(ptr_offset(ptr, 16), 5)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 5 }
+    let iter = Chunks { slice: s, chunk_size: 2 }
+    assert_eq(iter.remainder(), 3)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_chunks_empty() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(4)
+    let s: Slice[I32] = Slice { data: ptr, len: 0 }
+    let iter = Chunks { slice: s, chunk_size: 2 }
+    assert_eq(iter.remainder(), 0)
+
+    dealloc(ptr)
+    Ok(())
 }

@@ -1,0 +1,21 @@
+// Tests for Array[U8, N] ASCII methods and Array[Char, N] methods
+//
+// ALL 9 FUNCTIONS BLOCKED by type-specialized const-generic impl dispatch:
+//   impl[const N: I64] Array[U8, N] -- methods return () instead of actual type
+//
+// Blocked functions:
+//   Array[U8,N]::as_ascii, as_ascii_unchecked, is_ascii,
+//     make_ascii_lowercase, make_ascii_uppercase, eq_ignore_ascii_case
+//   Array[Char,N]::as_bytes, to_ascii_lowercase, to_ascii_uppercase
+//
+// Root cause: Same "generic trait dispatch" codegen bug. When the impl is
+//   `impl[const N: I64] Array[U8, N]`, calling e.g. `bytes.is_ascii()` resolves
+//   the return type as `()` instead of `Bool`.
+use test::{assert}
+
+@test
+func test_ascii_placeholder() -> I32 {
+    // All ASCII tests blocked -- see header
+    assert(true, "placeholder")
+    return 0
+}

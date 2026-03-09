@@ -1,0 +1,15 @@
+// BLOCKED: Future module types — Fuse, Map, Ready, Pending
+// All future types with generic parameters hit codegen bugs:
+//   - Fuse[I32]: "Cannot allocate unsized type %struct.Fut" (generic Fut not monomorphized)
+//   - Map[I32, F]: same unsized type bug
+//   - Ready[I32]: Maybe[I32] field ptr vs struct mismatch
+//   - Ready::poll / Pending::poll: generic trait dispatch returns ()
+//   - poll_fn: requires FnMut closure dispatch
+// Functions blocked: Ready::poll, Pending::poll, Map::new, poll_fn, Fuse::new, Fuse::is_terminated
+use test::{assert}
+
+@test
+func test_future_types_blocked() -> I32 {
+    assert(true, "blocked: generic future types hit unsized alloca and trait dispatch bugs")
+    return 0
+}

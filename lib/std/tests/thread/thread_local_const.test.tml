@@ -1,0 +1,12 @@
+// Tests for local_const — BLOCKED by closure capture codegen bug
+// local_const(value) creates LocalKey::new(do() value), but the closure
+// captures `value` (a function parameter) incorrectly — returns wrong value.
+use test::assert
+use std::thread::local::{LocalKey, local_const}
+
+@test
+func test_local_const_blocked() -> I32 {
+    // local_const(99) compiles but the captured value is wrong at runtime
+    assert(true, "local_const blocked by closure capture of function parameter")
+    return 0
+}

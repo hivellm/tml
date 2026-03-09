@@ -1,14 +1,50 @@
-// Additional test file for SliceIter/SliceIterMut - see slice_iter_chunks.test.tml
-// for full blocker documentation. This file is kept separate for when the
-// Slice struct codegen bug is fixed independently of the cross-file impl bug.
-//
-// BLOCKED: Constructing SliceIter{slice: s, index: 0} where s is Slice[I32]
-// emits anonymous {ptr, i64} vs named %struct.Slice__I32 type mismatch.
-
+// Tests for SliceIter (slice/iter module)
 use test
+use core::slice::{Slice, SliceIter}
 
 @test
-func test_slice_iter_elem_blocked() -> I32 {
-    assert(true, "placeholder - blocked by Slice struct codegen")
-    return 0
+func test_slice_iter_len() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+    let iter = SliceIter { slice: s, index: 0 }
+
+    assert_eq(iter.len(), 3)
+    assert_true(iter.is_empty() == false)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_slice_iter_empty() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(4)
+    let s: Slice[I32] = Slice { data: ptr, len: 0 }
+    let iter = SliceIter { slice: s, index: 0 }
+
+    assert_eq(iter.len(), 0)
+    assert_true(iter.is_empty())
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_slice_iter_as_slice() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+    // Start at index 1, so as_slice should give remaining 2 elements
+    let iter = SliceIter { slice: s, index: 1 }
+    let remaining = iter.as_slice()
+    assert_eq(remaining.len(), 2)
+
+    dealloc(ptr)
+    Ok(())
 }

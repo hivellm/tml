@@ -1,0 +1,66 @@
+// Tests for MutSlice::iter and MutSlice::iter_mut
+use test
+use core::slice::{MutSlice}
+
+@test
+func test_mutslice_iter() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let ms: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    let mut iter = ms.iter()
+
+    assert_eq(iter.len(), 3)
+
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    assert_eq(count, 3)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_mutslice_iter_mut() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+
+    let mut ms: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    let mut iter = ms.iter_mut()
+
+    assert_eq(iter.len(), 3)
+
+    // Just count iterations -- can't deref due to generic monomorphization bug
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    assert_eq(count, 3)
+
+    dealloc(ptr)
+    Ok(())
+}

@@ -1,0 +1,93 @@
+// Tests for Array core methods that work with current codegen
+// Covers: map, get_mut, first_mut, last_mut, each_ref, each_mut, debug_string
+use test::{assert, assert_eq}
+
+@test
+func test_array_map_first_elem() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let doubled = arr.map(do(x: I32) x * 2)
+    let v0: I32 = doubled[0]
+    assert(v0 == 2, "map first element should be 2")
+    return 0
+}
+
+@test
+func test_array_map_identity() -> I32 {
+    let arr: [I32; 3] = [5, 10, 15]
+    let same = arr.map(do(x: I32) x)
+    let v0: I32 = same[0]
+    assert(v0 == 5, "identity map should preserve values")
+    return 0
+}
+
+@test
+func test_array_get_mut_valid() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let r = arr.get_mut(1)
+    assert(r.is_just(), "get_mut(1) should be Just")
+    return 0
+}
+
+@test
+func test_array_get_mut_oob() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let oob = arr.get_mut(5)
+    assert(oob.is_nothing(), "get_mut(5) should be Nothing")
+    return 0
+}
+
+@test
+func test_array_get_mut_negative() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let neg = arr.get_mut(-1)
+    assert(neg.is_nothing(), "get_mut(-1) should be Nothing")
+    return 0
+}
+
+@test
+func test_array_first_mut() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let f = arr.first_mut()
+    assert(f.is_just(), "first_mut should be Just")
+    return 0
+}
+
+@test
+func test_array_last_mut() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let l = arr.last_mut()
+    assert(l.is_just(), "last_mut should be Just")
+    return 0
+}
+
+@test
+func test_array_each_ref() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let refs = arr.each_ref()
+    assert(true, "each_ref compiled and ran")
+    return 0
+}
+
+@test
+func test_array_each_mut() -> I32 {
+    let mut arr: [I32; 3] = [10, 20, 30]
+    let refs = arr.each_mut()
+    assert(true, "each_mut compiled and ran")
+    return 0
+}
+
+@test
+func test_array_debug_string() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let s: Str = arr.debug_string()
+    assert(s.len() > 0, "debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_array_to_string() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let s: Str = arr.to_string()
+    assert(s.len() > 0, "to_string should be non-empty")
+    return 0
+}

@@ -1,0 +1,73 @@
+// Tests for SliceIter::next and SliceIterMut
+// NOTE: SliceIter::next returns Maybe[ref T] -- pattern matching works
+// but dereferencing the ref inside the Just gives type T instead of I32
+// (generic monomorphization bug). We test what we can.
+use test
+use core::slice::{Slice, MutSlice, SliceIter, SliceIterMut}
+
+@test
+func test_slice_iter_next_count() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+    let mut iter = SliceIter { slice: s, index: 0 }
+
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    assert_eq(count, 3)
+
+    // Should be exhausted
+    let mut exhausted: Bool = false
+    when iter.next() {
+        Just(_) => {},
+        Nothing => { exhausted = true }
+    }
+    assert_true(exhausted)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_slice_iter_mut_len() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+
+    let ms: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    let iter = SliceIterMut { slice: ms, index: 0 }
+
+    assert_eq(iter.len(), 3)
+    assert_true(iter.is_empty() == false)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_slice_iter_mut_empty() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(4)
+    let ms: MutSlice[I32] = MutSlice { data: ptr, len: 0 }
+    let iter = SliceIterMut { slice: ms, index: 0 }
+
+    assert_eq(iter.len(), 0)
+    assert_true(iter.is_empty())
+
+    dealloc(ptr)
+    Ok(())
+}

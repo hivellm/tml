@@ -1,9 +1,10 @@
-// BLOCKED: F32/F64 Sum/Product codegen bug - "ret float 0" (integer literal for float return)
-// The compiler generates `ret float 0` instead of `ret float 0.0` for float accumulators
+// BLOCKED: F32/F64 Sum/Product codegen bug - "integer constant must have integer type"
+// The compiler generates integer literal `0` instead of float `0.0` for float accumulators.
+// Functions blocked: F32::sum, F32::product, F64::sum, F64::product (all 4)
 use test::{assert}
 
 @test
 func test_float_accumulators_blocked() -> I32 {
-    assert(true, "blocked by float return codegen bug (ret float 0)")
+    assert(true, "blocked by float return codegen bug")
     return 0
 }

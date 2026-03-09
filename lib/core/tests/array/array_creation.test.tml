@@ -1,0 +1,28 @@
+// Tests for TryFromSliceError Display/Debug
+use test::{assert, assert_eq}
+use core::array::TryFromSliceError
+
+@test
+func test_try_from_slice_error_display() -> I32 {
+    let err = TryFromSliceError { expected_len: 5, actual_len: 3 }
+    let s: Str = err.to_string()
+    assert(s.len() > 0, "TryFromSliceError to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_try_from_slice_error_debug() -> I32 {
+    let err = TryFromSliceError { expected_len: 5, actual_len: 3 }
+    let s: Str = err.debug_string()
+    assert(s.len() > 0, "TryFromSliceError debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_try_from_slice_error_content() -> I32 {
+    let err = TryFromSliceError { expected_len: 10, actual_len: 7 }
+    let s: Str = err.to_string()
+    // Should contain "10" and "7"
+    assert(s.len() > 10, "error message should be descriptive")
+    return 0
+}

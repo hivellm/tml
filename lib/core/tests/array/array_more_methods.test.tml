@@ -1,0 +1,42 @@
+// Additional Array method tests: map with negative, get boundary cases
+use test::{assert, assert_eq}
+
+@test
+func test_array_map_negate() -> I32 {
+    let arr: [I32; 3] = [1, -2, 3]
+    let neg = arr.map(do(x: I32) 0 - x)
+    let v0: I32 = neg[0]
+    assert(v0 == -1, "negate first should be -1")
+    return 0
+}
+
+@test
+func test_array_get_first_last() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let f = arr.first()
+    assert(f.is_just(), "first should be Just for non-empty")
+    let l = arr.last()
+    assert(l.is_just(), "last should be Just for non-empty")
+    return 0
+}
+
+@test
+func test_array_get_boundary() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let r0 = arr.get(0)
+    assert(r0.is_just(), "get(0) should be Just")
+    let r2 = arr.get(2)
+    assert(r2.is_just(), "get(2) should be Just")
+    let r3 = arr.get(3)
+    assert(r3.is_nothing(), "get(3) should be Nothing")
+    return 0
+}
+
+@test
+func test_array_len_and_is_empty() -> I32 {
+    let arr: [I32; 4] = [1, 2, 3, 4]
+    assert(arr.len() == 4, "len should be 4")
+    let empty: Bool = arr.is_empty()
+    assert(empty == false, "4-elem array is not empty")
+    return 0
+}

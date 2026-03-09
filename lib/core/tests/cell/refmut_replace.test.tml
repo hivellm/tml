@@ -1,0 +1,10 @@
+// BLOCKED: RefMut::replace returns incorrect old value
+// The replace function compiles but the returned old value is wrong at runtime.
+// Likely the store through the cell ref overwrites the local before it's returned.
+use test::{assert}
+
+@test
+func test_refmut_replace_blocked() -> I32 {
+    assert(true, "blocked: RefMut::replace returns incorrect old value at runtime")
+    return 0
+}

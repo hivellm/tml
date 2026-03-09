@@ -1,9 +1,35 @@
-// Tests for ChunksExact and Windows iterators (slice/iter module)
+// Test cross-file method dispatch for slice iter methods
+// Covers: Slice::chunks, Slice::chunks_exact, Slice::windows, Slice::iter
 use test
-use core::slice::{Slice, ChunksExact, Windows}
+use core::slice::{Slice}
 
 @test
-func test_chunks_exact_basic() -> Outcome[Unit, Str] {
+func test_slice_chunks_method() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+    let mut iter = s.chunks(2)
+
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    assert_eq(count, 2)
+
+    dealloc(ptr)
+    Ok(())
+}
+
+@test
+func test_slice_chunks_exact_method() -> Outcome[Unit, Str] {
     let ptr: *Unit = alloc(20)
     atomic_store(ptr, 1)
     atomic_store(ptr_offset(ptr, 4), 2)
@@ -12,12 +38,7 @@ func test_chunks_exact_basic() -> Outcome[Unit, Str] {
     atomic_store(ptr_offset(ptr, 16), 5)
 
     let s: Slice[I32] = Slice { data: ptr, len: 5 }
-    // chunks_exact(2): yields [1,2], [3,4], remainder [5]
-    let mut iter = ChunksExact {
-        slice: Slice { data: ptr, len: 4 },
-        chunk_size: 2,
-        remainder: Slice { data: ptr_offset(ptr, 16), len: 1 }
-    }
+    let mut iter = s.chunks_exact(2)
 
     let mut count: I32 = 0
     when iter.next() {
@@ -34,7 +55,7 @@ func test_chunks_exact_basic() -> Outcome[Unit, Str] {
         },
         Nothing => {}
     }
-    // Third call should be Nothing (only exact chunks)
+    // Third chunk should be Nothing (5 not evenly divisible by 2)
     let mut got_nothing: Bool = false
     when iter.next() {
         Just(_) => {},
@@ -43,7 +64,6 @@ func test_chunks_exact_basic() -> Outcome[Unit, Str] {
     assert_eq(count, 2)
     assert_true(got_nothing)
 
-    // Remainder should have the leftover element
     let rem = iter.remainder()
     assert_eq(rem.len(), 1)
 
@@ -52,7 +72,7 @@ func test_chunks_exact_basic() -> Outcome[Unit, Str] {
 }
 
 @test
-func test_windows_basic() -> Outcome[Unit, Str] {
+func test_slice_windows_method() -> Outcome[Unit, Str] {
     let ptr: *Unit = alloc(16)
     atomic_store(ptr, 1)
     atomic_store(ptr_offset(ptr, 4), 2)
@@ -60,7 +80,7 @@ func test_windows_basic() -> Outcome[Unit, Str] {
     atomic_store(ptr_offset(ptr, 12), 4)
 
     let s: Slice[I32] = Slice { data: ptr, len: 4 }
-    let mut iter = Windows { slice: s, window_size: 2, index: 0 }
+    let mut iter = s.windows(2)
 
     let mut count: I32 = 0
     when iter.next() {
@@ -84,7 +104,6 @@ func test_windows_basic() -> Outcome[Unit, Str] {
         },
         Nothing => {}
     }
-    // Fourth call should be Nothing
     let mut got_nothing: Bool = false
     when iter.next() {
         Just(_) => {},
@@ -98,16 +117,33 @@ func test_windows_basic() -> Outcome[Unit, Str] {
 }
 
 @test
-func test_windows_remaining() -> Outcome[Unit, Str] {
-    let ptr: *Unit = alloc(16)
-    atomic_store(ptr, 1)
-    atomic_store(ptr_offset(ptr, 4), 2)
-    atomic_store(ptr_offset(ptr, 8), 3)
-    atomic_store(ptr_offset(ptr, 12), 4)
+func test_slice_iter_method() -> Outcome[Unit, Str] {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
 
-    let s: Slice[I32] = Slice { data: ptr, len: 4 }
-    let iter = Windows { slice: s, window_size: 2, index: 0 }
-    assert_eq(iter.remaining(), 3)
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+    let mut iter = s.iter()
+
+    assert_eq(iter.len(), 3)
+    assert_true(iter.is_empty() == false)
+
+    let mut count: I32 = 0
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    when iter.next() {
+        Just(_) => { count = count + 1 },
+        Nothing => {}
+    }
+    assert_eq(count, 3)
+    assert_true(iter.is_empty())
 
     dealloc(ptr)
     Ok(())

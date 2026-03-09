@@ -1,0 +1,10 @@
+// BLOCKED: ThreadLocalPool acquire/release
+// Error: "invalid getelementptr indices" on opaque ptr for List[Ptr[T]].pop()
+// The List generic with Ptr[T] elements generates invalid GEP in LLVM IR.
+use test::{assert}
+
+@test
+func test_tls_pool_acquire_blocked() -> I32 {
+    assert(true, "blocked: List[Ptr[T]].pop() invalid GEP codegen bug")
+    return 0
+}

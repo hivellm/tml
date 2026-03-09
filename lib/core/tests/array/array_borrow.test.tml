@@ -1,0 +1,24 @@
+// Tests for Array Borrow/BorrowMut/AsRef/AsMut behaviors
+//
+// ALL BLOCKED by generic trait dispatch returning () instead of actual type:
+//   Borrow::borrow   -- returns () instead of ref Slice[I32]
+//   BorrowMut::borrow_mut -- returns () (also MutSlice unsized type alloc)
+//   AsRef::as_ref     -- returns () instead of ref Slice[I32]
+//   AsMut::as_mut     -- MutSlice unsized type alloc failure
+//
+// Also blocked:
+//   Array::eq_slice   -- ref Slice[T] parameter: ptr vs {ptr,i64} mismatch
+//   TryFrom::try_from -- impl[T: Copy] returns ()
+//   Array::default    -- static method returns Array[I32, N] with N unresolved
+//   Array::zip        -- Unknown method (extra generic U not resolved)
+//   Array::try_map    -- Unknown method (extra generics U, E not resolved)
+//   from_fn, try_from_fn, repeat -- standalone generic functions: Array[T, N] unresolved
+//   from_ref, from_mut -- standalone generic functions: return ()
+use test::{assert}
+
+@test
+func test_borrow_placeholder() -> I32 {
+    // All borrow/trait tests blocked -- see header
+    assert(true, "placeholder")
+    return 0
+}

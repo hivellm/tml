@@ -1,0 +1,13 @@
+// Test DefaultHasher::write with byte slice
+use test::{assert, assert_eq}
+use core::hash::{DefaultHasher, Hasher}
+
+@test
+func test_default_hasher_write() -> I32 {
+    var h: DefaultHasher = DefaultHasher::new()
+    let bytes: [U8; 3] = [1 as U8, 2 as U8, 3 as U8]
+    h.write(ref bytes)
+    let result: U64 = h.finish()
+    assert(result != 0, "hash should be non-zero after writing bytes")
+    return 0
+}

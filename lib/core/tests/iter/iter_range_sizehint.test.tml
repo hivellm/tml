@@ -1,10 +1,12 @@
 // BLOCKED: Range::size_hint, RangeInclusive::size_hint, RangeFrom::size_hint
-// These functions return (I64, Maybe[I64]) tuples, but tuple destructuring
-// from method calls is not yet supported: "Cannot destructure non-tuple type with tuple pattern"
+// These are inside `impl[T: Step] Iterator for Range[T]` blocks.
+// Generic trait dispatch returns () instead of (I64, Maybe[I64]).
+// Error: "Type mismatch: expected (I64, Maybe[I64]), found ()"
+// Functions blocked: Range::size_hint, RangeInclusive::size_hint, RangeFrom::size_hint (all 3)
 use test::{assert}
 
 @test
 func test_range_size_hint_blocked() -> I32 {
-    assert(true, "blocked: tuple destructuring from method return not supported")
+    assert(true, "blocked: generic trait dispatch returns () for size_hint")
     return 0
 }

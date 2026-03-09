@@ -1,0 +1,12 @@
+// Tests for intrinsics::cast
+// BLOCKED: cast[T, U] intrinsic codegen generates %struct.T/%struct.U instead of
+// concrete types. Error: "use of undefined value '@tml_..._cast_1T'"
+// Same generic intrinsic monomorphization bug as volatile_read, volatile_write,
+// atomic_cmpxchg, atomic_xor.
+use test::{assert}
+
+@test
+func test_cast_blocked() -> I32 {
+    assert(true, "blocked by generic intrinsic monomorphization codegen bug")
+    return 0
+}

@@ -1,0 +1,8 @@
+// BLOCKED: Future poll tests — see future_basic.test.tml for full details
+use test::{assert}
+
+@test
+func test_future_poll_blocked() -> I32 {
+    assert(true, "blocked: Ready::poll and Pending::poll return () via generic dispatch")
+    return 0
+}

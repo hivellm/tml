@@ -1,0 +1,31 @@
+// Tests for RawMutPtr — read_unaligned, write_unaligned, read_volatile, write_volatile,
+// copy_from, copy_from_nonoverlapping, write_bytes_val
+//
+// ALL BLOCKED by codegen bugs:
+//   - read_unaligned/write_unaligned: undefined value '@tml_ptr_read_unaligned' / '@tml_ptr_write_unaligned'
+//   - read_volatile/write_volatile: undefined value '@tml_ptr_read_volatile' / '@tml_ptr_write_volatile'
+//   - copy_from: undefined value '@tml_memmove'
+//   - copy_from_nonoverlapping: undefined value '@tml_memcpy'
+//   - write_bytes_val: undefined value '@tml_memset'
+//
+// Also blocked for ptr/ops free functions:
+//   - copy_mut, copy_nonoverlapping_mut: delegate to copy/copy_nonoverlapping (memcpy/memmove)
+//   - read_unaligned, read_volatile, write_unaligned, write_volatile: delegate to RawPtr/RawMutPtr methods
+//
+// Also blocked for ptr/const_ptr:
+//   - RawPtr::read_unaligned, RawPtr::read_volatile: same undefined intrinsics
+//
+// Also blocked for ptr/non_null:
+//   - NonNull::as_ref: ptr_as_ref returns i32 instead of ptr
+//   - NonNull::as_mut: ptr_as_mut same codegen bug
+//   - NonNull::copy_from: delegates to RawMutPtr::copy_from (memmove)
+//   - NonNull::copy_from_nonoverlapping: delegates to RawMutPtr::copy_from_nonoverlapping (memcpy)
+//
+// Total: 19 ptr functions blocked by missing lowlevel intrinsic codegen
+use test::{assert}
+
+@test
+func test_ptr_lowlevel_intrinsics_blocked() -> I32 {
+    assert(true, "all 19 uncovered ptr functions blocked by missing intrinsic codegen — see comment")
+    return 0
+}

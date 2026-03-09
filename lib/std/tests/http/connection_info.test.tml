@@ -1,0 +1,25 @@
+// Tests for ConnectionInfo methods (no network required)
+use test::{assert, assert_eq}
+use std::http::connection::ConnectionInfo
+
+@test
+func test_connection_info_none() -> I32 {
+    let info = ConnectionInfo::none()
+    assert_eq(info.get_tls_version(), "")
+    assert_eq(info.get_cipher(), "")
+    assert(not info.is_peer_verified(), "none() should have peer_verified=false")
+    return 0
+}
+
+@test
+func test_connection_info_accessors() -> I32 {
+    let info = ConnectionInfo {
+        tls_version: "TLSv1.3",
+        cipher: "AES-256-GCM",
+        peer_verified: true,
+    }
+    assert_eq(info.get_tls_version(), "TLSv1.3")
+    assert_eq(info.get_cipher(), "AES-256-GCM")
+    assert(info.is_peer_verified(), "should be peer_verified")
+    return 0
+}

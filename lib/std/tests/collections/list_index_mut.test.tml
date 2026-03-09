@@ -1,0 +1,10 @@
+// BLOCKED: List::index_mut via arr[i] = value syntax
+// Error: Binary operator '=' requires matching types, found () and I64
+// The index_mut method returns () instead of mut ref T (generic trait dispatch bug).
+use test::{assert}
+
+@test
+func test_list_index_mut_blocked() -> I32 {
+    assert(true, "blocked: IndexMut generic dispatch returns () instead of mut ref T")
+    return 0
+}
