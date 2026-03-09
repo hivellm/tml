@@ -637,24 +637,84 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                 // Extract type args from expected_enum_type_ like "%struct.Range__I64"
                 mangled_type_name = expected_enum_type_.substr(8); // Remove "%struct."
 
-                // Build type substitutions - try local impls first, then imported type params
-                std::vector<std::string> generic_names;
-                auto impl_it = pending_generic_impls_.find(type_name);
-                if (impl_it != pending_generic_impls_.end()) {
-                    for (const auto& g : impl_it->second->generics) {
-                        generic_names.push_back(g.name);
+                // Build type substitutions: count expected type args from the suffix,
+                // then find the impl with the matching number of generics AND the method.
+                std::string suffix = mangled_type_name.substr(type_name.length());
+                size_t expected_params = 0;
+                if (suffix.starts_with("__")) {
+                    // Count "__" separators to determine number of type args
+                    std::string args_str2 = suffix.substr(2);
+                    expected_params = 1;
+                    size_t pos2 = 0;
+                    while (pos2 < args_str2.size()) {
+                        size_t nxt = args_str2.find("__", pos2);
+                        if (nxt == std::string::npos)
+                            break;
+                        expected_params++;
+                        pos2 = nxt + 2;
                     }
-                } else if (!imported_type_params.empty()) {
-                    generic_names = imported_type_params;
                 }
 
-                // For simple cases like Range__I64, extract the type arg
-                std::string suffix = mangled_type_name.substr(type_name.length());
-                if (suffix.starts_with("__") && generic_names.size() == 1) {
-                    std::string type_arg_str = suffix.substr(2);
-                    types::TypePtr type_arg = str_to_type(type_arg_str);
-                    if (type_arg && !generic_names.empty()) {
-                        type_subs[generic_names[0]] = type_arg;
+                std::vector<std::string> generic_names;
+                // Search all impls for one that has the right method + param count
+                auto all_it = pending_generic_impls_all_.find(type_name);
+                if (all_it != pending_generic_impls_all_.end()) {
+                    for (const auto* cand : all_it->second) {
+                        if (expected_params > 0 && cand->generics.size() != expected_params)
+                            continue;
+                        // Prefer impls that contain the called method
+                        bool has_method = false;
+                        for (const auto& m : cand->methods) {
+                            if (m.name == method) {
+                                has_method = true;
+                                break;
+                            }
+                        }
+                        if (has_method || generic_names.empty()) {
+                            generic_names.clear();
+                            for (const auto& g : cand->generics)
+                                generic_names.push_back(g.name);
+                            if (has_method)
+                                break;
+                        }
+                    }
+                }
+                if (generic_names.empty()) {
+                    auto impl_it = pending_generic_impls_.find(type_name);
+                    if (impl_it != pending_generic_impls_.end()) {
+                        for (const auto& g : impl_it->second->generics)
+                            generic_names.push_back(g.name);
+                    }
+                }
+                if (generic_names.empty() && !imported_type_params.empty()) {
+                    generic_names = imported_type_params;
+                }
+                if (suffix.starts_with("__") && !generic_names.empty()) {
+                    std::string args_str = suffix.substr(2); // Drop leading "__"
+                    if (generic_names.size() == 1) {
+                        types::TypePtr type_arg = str_to_type(args_str);
+                        if (type_arg) {
+                            type_subs[generic_names[0]] = type_arg;
+                        }
+                    } else {
+                        // Multiple type params — split on "__" and map positionally
+                        std::vector<std::string> parts;
+                        size_t pos = 0;
+                        while (pos < args_str.size()) {
+                            size_t next = args_str.find("__", pos);
+                            if (next == std::string::npos) {
+                                parts.push_back(args_str.substr(pos));
+                                break;
+                            }
+                            parts.push_back(args_str.substr(pos, next - pos));
+                            pos = next + 2;
+                        }
+                        for (size_t i = 0; i < generic_names.size() && i < parts.size(); ++i) {
+                            types::TypePtr type_arg = str_to_type(parts[i]);
+                            if (type_arg) {
+                                type_subs[generic_names[i]] = type_arg;
+                            }
+                        }
                     }
                 }
             }

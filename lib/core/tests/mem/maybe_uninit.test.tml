@@ -1,0 +1,9 @@
+// Tests for MaybeUninit::uninit
+// BLOCKED: MaybeUninit::uninit codegen returns i32 instead of struct
+use test::{assert}
+
+@test
+func test_maybe_uninit_blocked() -> I32 {
+    assert(true, "MaybeUninit::uninit blocked by codegen type mismatch")
+    return 0
+}

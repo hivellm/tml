@@ -104,6 +104,9 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     // instead of `I16::from` (which is what the runtime coverage tracker emits).
     std::regex impl_regex(
         R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\[[^\]]*\])?\s*(?:for\s+(\w+))?)");
+    // Match: impl ... for (A, B) — tuple type targets that the regex can't capture
+    std::regex impl_for_tuple_regex(
+        R"(^\s*impl\s*(?:\[[^\]]*\])?\s*\w+(?:\[[^\]]*\])?\s+for\s+\()");
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
     std::regex class_regex(R"(^\s*(pub\s+)?class\s+(\w+))");
     std::regex interface_regex(R"(^\s*(pub\s+)?interface\s+(\w+))");
@@ -124,6 +127,15 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             in_behavior = true;
             in_class = false;
             in_interface = true;
+            impl_brace_depth = 0;
+        } else if (std::regex_search(line, impl_for_tuple_regex)) {
+            // impl ... for (A, B) — tuple types emit under concrete tuple names
+            // at runtime (Tuple2, etc.) which aren't directly matchable from source.
+            // Skip these like generic impls.
+            current_impl = "__generic_impl__";
+            in_behavior = false;
+            in_class = false;
+            in_interface = false;
             impl_brace_depth = 0;
         } else if (std::regex_search(line, match, impl_regex)) {
             if (match[2].matched) {
@@ -236,6 +248,20 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         }
         prev_line = line;
     }
+
+    // Deduplicate: multiple impls can emit the same qualified name
+    // (e.g., impl From[I8] for I32 and impl From[I16] for I32 both emit I32::from).
+    // Coverage runtime only tracks one hit per name, so duplicates cause false negatives.
+    {
+        std::vector<std::string> unique;
+        std::set<std::string> seen;
+        for (const auto& f : functions) {
+            if (seen.insert(f).second)
+                unique.push_back(f);
+        }
+        functions = std::move(unique);
+    }
+
     return functions;
 }
 

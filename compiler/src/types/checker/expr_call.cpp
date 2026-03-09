@@ -144,7 +144,7 @@ static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_ty
     }
 }
 
-auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
+auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type) -> TypePtr {
     // Check if this is a polymorphic builtin
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& name = call.callee->as<parser::IdentExpr>().name;
@@ -571,6 +571,11 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                             extract_type_params(param_type, arg_type, local_func->type_params,
                                                 substitutions);
                         }
+                        // Also infer from expected return type for unresolved params
+                        if (expected_type && !local_func->type_params.empty()) {
+                            extract_type_params(local_func->return_type, expected_type,
+                                                local_func->type_params, substitutions);
+                        }
                         return substitute_type(local_func->return_type, substitutions);
                     }
                     return local_func->return_type;
@@ -645,6 +650,13 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                                         substitutions);
                                 }
                             }
+                            // If substitutions still leave unresolved type params, try the
+                            // expected return type (e.g., Outcome[I32, Str] from let binding)
+                            // to fill remaining params like E in Outcome::from_output[T,E].
+                            if (expected_type && !func.type_params.empty()) {
+                                extract_type_params(func.return_type, expected_type,
+                                                    func.type_params, substitutions);
+                            }
                             if (!substitutions.empty()) {
                                 return substitute_type(func.return_type, substitutions);
                             }
@@ -696,6 +708,36 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
             } else if (param_type->is<GenericType>()) {
                 const auto& gen = param_type->as<GenericType>();
                 substitutions[gen.name] = arg_type;
+            }
+        }
+
+        // Also infer type params from expected return type for unresolved params
+        // (e.g., E in Outcome::from_output(42) with let r: Outcome[I32, Str])
+        if (expected_type) {
+            // Collect type param names from param types that look like single-char type vars
+            std::vector<std::string> type_params;
+            for (auto& [name, _] : substitutions) {
+                type_params.push_back(name);
+            }
+            // Also extract from return_type's unresolved NamedTypes
+            std::function<void(const TypePtr&)> collect_params = [&](const TypePtr& t) {
+                if (!t)
+                    return;
+                if (t->is<NamedType>()) {
+                    const auto& n = t->as<NamedType>();
+                    if (n.type_args.empty() && n.module_path.empty() && !n.name.empty()) {
+                        bool known = env_.lookup_struct(n.name) || env_.lookup_enum(n.name) ||
+                                     env_.builtin_types().count(n.name);
+                        if (!known && !substitutions.count(n.name))
+                            type_params.push_back(n.name);
+                    }
+                    for (auto& a : n.type_args)
+                        collect_params(a);
+                }
+            };
+            collect_params(func.return_type);
+            if (!type_params.empty()) {
+                extract_type_params(func.return_type, expected_type, type_params, substitutions);
             }
         }
 

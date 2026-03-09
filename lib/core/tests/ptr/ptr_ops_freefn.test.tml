@@ -1,0 +1,43 @@
+// Tests for ptr::ops free functions — read_unaligned, read_volatile, write_unaligned, write_volatile
+use test::{assert, assert_eq}
+use core::ptr::{RawPtr, RawMutPtr, read_unaligned, read_volatile, write_unaligned, write_volatile}
+
+@test
+func test_write_read_unaligned_i32() -> I32 {
+    let buf = mem_alloc(8)
+    let p: RawMutPtr[I32] = RawMutPtr::from_addr(buf as I64)
+    write_unaligned[I32](p, 789)
+    let v: I32 = read_unaligned[I32](p.as_const())
+    assert_eq(v, 789, "write/read_unaligned i32")
+    return 0
+}
+
+@test
+func test_write_read_volatile_i32() -> I32 {
+    let buf = mem_alloc(8)
+    let p: RawMutPtr[I32] = RawMutPtr::from_addr(buf as I64)
+    write_volatile[I32](p, 456)
+    let v: I32 = read_volatile[I32](p.as_const())
+    assert_eq(v, 456, "write/read_volatile i32")
+    return 0
+}
+
+@test
+func test_write_read_unaligned_i64() -> I32 {
+    let buf = mem_alloc(16)
+    let p: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
+    write_unaligned[I64](p, 123456789 as I64)
+    let v: I64 = read_unaligned[I64](p.as_const())
+    assert_eq(v, 123456789 as I64, "write/read_unaligned i64")
+    return 0
+}
+
+@test
+func test_write_read_volatile_i64() -> I32 {
+    let buf = mem_alloc(16)
+    let p: RawMutPtr[I64] = RawMutPtr::from_addr(buf as I64)
+    write_volatile[I64](p, 987654321 as I64)
+    let v: I64 = read_volatile[I64](p.as_const())
+    assert_eq(v, 987654321 as I64, "write/read_volatile i64")
+    return 0
+}

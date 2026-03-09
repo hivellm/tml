@@ -1,9 +1,4 @@
 // Tests for core::ops::try_trait — from_output, from_residual (Try + FromResidual impls)
-// PARTIALLY BLOCKED:
-//   - Outcome::from_output/from_residual: codegen produces Outcome__I32__E instead of
-//     Outcome__I32__Str or Outcome__I32__I32 — generic E not resolved in Try impl
-//   - Maybe::from_residual: codegen emits void param for Unit type — invalid LLVM IR
-//   - FromResidual impls: same root cause as above (generic E, void Unit)
 use test::{assert, assert_eq}
 use core::ops::try_trait::{ControlFlow}
 

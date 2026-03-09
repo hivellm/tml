@@ -161,7 +161,7 @@ private:
     auto check_ident(const parser::IdentExpr& ident, SourceSpan span) -> TypePtr;
     auto check_binary(const parser::BinaryExpr& binary) -> TypePtr;
     auto check_unary(const parser::UnaryExpr& unary) -> TypePtr;
-    auto check_call(const parser::CallExpr& call) -> TypePtr;
+    auto check_call(const parser::CallExpr& call, TypePtr expected_type = nullptr) -> TypePtr;
     auto check_method_call(const parser::MethodCallExpr& call) -> TypePtr;
     auto check_field_access(const parser::FieldExpr& field) -> TypePtr;
     auto check_index(const parser::IndexExpr& idx) -> TypePtr;

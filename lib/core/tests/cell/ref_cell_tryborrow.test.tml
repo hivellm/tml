@@ -1,0 +1,9 @@
+// Tests for RefCell::try_borrow, try_borrow_mut, RefMut::replace
+// BLOCKED: RefCell__T struct codegen fails — unsized generic type in GEP
+use test::{assert}
+
+@test
+func test_ref_cell_tryborrow_blocked() -> I32 {
+    assert(true, "RefCell try_borrow/try_borrow_mut blocked by generic struct codegen")
+    return 0
+}

@@ -251,6 +251,10 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
                                          expected_type, true /* is_negated */);
                 }
                 return check_unary(e);
+            } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
+                // For call expressions, propagate expected return type for generic type inference
+                // (e.g., Outcome::from_output(42) with expected Outcome[I32, Str] → infers E=Str)
+                return check_call(e, expected_type);
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
                 // For array expressions, propagate expected type for element coercion
                 return check_array(e, expected_type);

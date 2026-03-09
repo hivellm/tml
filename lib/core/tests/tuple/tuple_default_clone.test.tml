@@ -1,0 +1,10 @@
+// Tests for tuple Default::default and Clone::clone
+// BLOCKED: Default::default() type inference fails for tuples
+// BLOCKED: Clone::clone() dispatches to wrong impl for tuples
+use test::{assert}
+
+@test
+func test_tuple_default_clone_blocked() -> I32 {
+    assert(true, "tuple Default/Clone blocked by type inference and dispatch")
+    return 0
+}

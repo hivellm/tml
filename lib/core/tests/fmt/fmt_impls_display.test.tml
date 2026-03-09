@@ -1,0 +1,39 @@
+// Tests for fmt/impls — Display::to_string and Debug::debug_string for various types
+use test::{assert, assert_eq}
+
+@test
+func test_i32_to_string() -> I32 {
+    let v: I32 = 42
+    assert_eq(v.to_string(), "42", "I32::to_string")
+    return 0
+}
+
+@test
+func test_i64_to_string() -> I32 {
+    let v: I64 = 12345
+    assert_eq(v.to_string(), "12345", "I64::to_string")
+    return 0
+}
+
+@test
+func test_bool_to_string() -> I32 {
+    assert_eq(true.to_string(), "true", "Bool true to_string")
+    assert_eq(false.to_string(), "false", "Bool false to_string")
+    return 0
+}
+
+@test
+func test_i32_debug_string() -> I32 {
+    let v: I32 = 42
+    assert_eq(v.debug_string(), "42", "I32::debug_string")
+    return 0
+}
+
+@test
+func test_str_debug_string() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.debug_string(), "\"hello\"", "Str::debug_string")
+    return 0
+}
+
+// Unit to_string/debug_string blocked by type checker: "expected (), found ()"

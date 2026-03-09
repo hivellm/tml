@@ -1,14 +1,33 @@
 // Tests for core::ops::try_trait — FromResidual impls
-// BLOCKED: All FromResidual methods fail:
-//   - FromResidual::from_residual for Outcome[T,E]: "Type mismatch: expected Outcome[T,E], found ()"
-//     The behavior dispatch returns void instead of the concrete Outcome type
-//   - FromResidual::from_residual for Maybe[T]: void parameter for Unit type
-// These are the same codegen issues blocking Outcome::from_output/from_residual
-// in the Try impl (generic E not resolved, void for Unit)
-use test::{assert}
+use test::{assert, assert_eq}
+use core::ops::try_trait::Try
 
 @test
-func test_from_residual_blocked() -> I32 {
-    assert(true, "FromResidual impls blocked by generic behavior dispatch codegen")
+func test_outcome_from_residual_str() -> I32 {
+    let r: Outcome[I32, Str] = Outcome::from_residual("error msg")
+    when r {
+        Ok(_) => assert(false, "should be Err"),
+        Err(e) => assert_eq(e, "error msg", "from_residual value")
+    }
+    return 0
+}
+
+@test
+func test_outcome_from_residual_i32() -> I32 {
+    let r: Outcome[Str, I32] = Outcome::from_residual(42)
+    when r {
+        Ok(_) => assert(false, "should be Err"),
+        Err(e) => assert_eq(e, 42, "from_residual i32 value")
+    }
+    return 0
+}
+
+@test
+func test_maybe_from_residual_unit() -> I32 {
+    let r: Maybe[I32] = Maybe::from_residual(())
+    when r {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "from_residual returns Nothing")
+    }
     return 0
 }
