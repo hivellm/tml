@@ -510,6 +510,17 @@ void MirCodegen::emit_preamble() {
     emitln("}");
     emitln();
 
+    // Primitive to_string declarations (for devirtualized method calls)
+    emitln("declare ptr @tml_N4core2I89to_stringE(i8)");
+    emitln("declare ptr @tml_N4core3I169to_stringE(i16)");
+    emitln("declare ptr @tml_N4core3I329to_stringE(i32)");
+    emitln("declare ptr @tml_N4core3I649to_stringE(i64)");
+    emitln("declare ptr @tml_N4core4I1289to_stringE(i128)");
+    emitln("declare ptr @tml_N4core3F329to_stringE(float)");
+    emitln("declare ptr @tml_N4core3F649to_stringE(double)");
+    emitln("declare void @tml_str_free(ptr)");
+    emitln();
+
     // Black box functions (prevent optimization)
     emitln("declare i32 @black_box_i32(i32)");
     emitln("declare i64 @black_box_i64(i64)");

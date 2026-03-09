@@ -768,6 +768,119 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         return; // Skip all drops - they're no-ops
     }
 
+    // ========================================================================
+    // Inline array methods (devirtualized from MethodCallInst)
+    // When devirtualization converts array.len() to call "len"(array),
+    // the first arg is the array value. Detect array type from value_types_.
+    // ========================================================================
+    if (!i.args.empty()) {
+        std::string recv_vt;
+        auto vt_it = value_types_.find(i.args[0].id);
+        if (vt_it != value_types_.end())
+            recv_vt = vt_it->second;
+        if (recv_vt.size() > 2 && recv_vt[0] == '[') {
+            size_t x_pos = recv_vt.find(" x ");
+            if (x_pos != std::string::npos) {
+                std::string n_str = recv_vt.substr(1, x_pos - 1);
+                std::string elem_type = recv_vt.substr(x_pos + 3);
+                if (!elem_type.empty() && elem_type.back() == ']')
+                    elem_type.pop_back();
+                int64_t arr_size = std::stoll(n_str);
+                std::string receiver = get_value_reg(i.args[0]);
+
+                std::string method_name = i.func_name;
+                {
+                    size_t lc = method_name.rfind("::");
+                    if (lc != std::string::npos)
+                        method_name = method_name.substr(lc + 2);
+                }
+
+                if (method_name == "len" && !result_reg.empty()) {
+                    emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
+                    if (inst.result != mir::INVALID_VALUE)
+                        value_types_[inst.result] = "i64";
+                    return;
+                }
+
+                if (method_name == "hash" && !result_reg.empty()) {
+                    std::string id = std::to_string(temp_counter_++);
+                    std::string arr_ptr = "%arr_spill." + id;
+                    emitln("    " + arr_ptr + " = alloca " + recv_vt);
+                    emitln("    store " + recv_vt + " " + receiver + ", ptr " + arr_ptr);
+                    // FNV-1a hash
+                    std::string hash_reg = "%hash_init." + id;
+                    emitln("    " + hash_reg + " = add i64 0, -3750763034362895579");
+                    for (int64_t j = 0; j < arr_size; ++j) {
+                        std::string idx = std::to_string(j);
+                        std::string ep = "%arr_ep." + id + "." + idx;
+                        std::string ev = "%arr_ev." + id + "." + idx;
+                        emitln("    " + ep + " = getelementptr inbounds " + recv_vt + ", ptr " +
+                               arr_ptr + ", i32 0, i32 " + idx);
+                        emitln("    " + ev + " = load " + elem_type + ", ptr " + ep);
+                        std::string e64 = "%arr_e64." + id + "." + idx;
+                        if (elem_type == "i64") {
+                            e64 = ev;
+                        } else if (elem_type == "i32") {
+                            emitln("    " + e64 + " = sext i32 " + ev + " to i64");
+                        } else if (elem_type == "i16") {
+                            emitln("    " + e64 + " = sext i16 " + ev + " to i64");
+                        } else if (elem_type == "i8") {
+                            emitln("    " + e64 + " = sext i8 " + ev + " to i64");
+                        } else {
+                            emitln("    " + e64 + " = ptrtoint " + elem_type + " " + ev +
+                                   " to i64");
+                        }
+                        std::string xr = "%arr_hx." + id + "." + idx;
+                        std::string mr = "%arr_hm." + id + "." + idx;
+                        emitln("    " + xr + " = xor i64 " + hash_reg + ", " + e64);
+                        emitln("    " + mr + " = mul i64 " + xr + ", 1099511628211");
+                        hash_reg = mr;
+                    }
+                    emitln("    " + result_reg + " = add i64 0, " + hash_reg);
+                    if (inst.result != mir::INVALID_VALUE)
+                        value_types_[inst.result] = "i64";
+                    return;
+                }
+
+                if (method_name == "eq" && !result_reg.empty() && i.args.size() >= 2) {
+                    std::string id = std::to_string(temp_counter_++);
+                    std::string other = get_value_reg(i.args[1]);
+                    std::string a_ptr = "%eq_a." + id;
+                    std::string b_ptr = "%eq_b." + id;
+                    emitln("    " + a_ptr + " = alloca " + recv_vt);
+                    emitln("    store " + recv_vt + " " + receiver + ", ptr " + a_ptr);
+                    emitln("    " + b_ptr + " = alloca " + recv_vt);
+                    emitln("    %eq_bval." + id + " = load " + recv_vt + ", ptr " + other);
+                    emitln("    store " + recv_vt + " %eq_bval." + id + ", ptr " + b_ptr);
+                    std::string acc = "%eq_init." + id;
+                    emitln("    " + acc + " = add i1 0, 1");
+                    for (int64_t j = 0; j < arr_size; ++j) {
+                        std::string idx = std::to_string(j);
+                        std::string ap = "%eq_ap." + id + "." + idx;
+                        std::string bp = "%eq_bp." + id + "." + idx;
+                        std::string av = "%eq_av." + id + "." + idx;
+                        std::string bv = "%eq_bv." + id + "." + idx;
+                        emitln("    " + ap + " = getelementptr inbounds " + recv_vt + ", ptr " +
+                               a_ptr + ", i32 0, i32 " + idx);
+                        emitln("    " + bp + " = getelementptr inbounds " + recv_vt + ", ptr " +
+                               b_ptr + ", i32 0, i32 " + idx);
+                        emitln("    " + av + " = load " + elem_type + ", ptr " + ap);
+                        emitln("    " + bv + " = load " + elem_type + ", ptr " + bp);
+                        std::string cmp = "%eq_cmp." + id + "." + idx;
+                        emitln("    " + cmp + " = icmp eq " + elem_type + " " + av + ", " + bv);
+                        std::string new_acc = "%eq_acc." + id + "." + idx;
+                        emitln("    " + new_acc + " = and i1 " + acc + ", " + cmp);
+                        acc = new_acc;
+                    }
+                    emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
+                    if (inst.result != mir::INVALID_VALUE)
+                        value_types_[inst.result] = "i1";
+                    return;
+                }
+            }
+        }
+    }
+
     // Handle LLVM intrinsics (sqrt, sin, cos, etc.)
     std::string base_name = i.func_name;
     size_t last_colon = base_name.rfind("::");
@@ -867,6 +980,43 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             value_types_[inst.result] = "ptr";
         }
         return;
+    }
+
+    // ========================================================================
+    // Handle bare "to_string" / "debug_string" calls on primitive types
+    // These come from devirtualized/resolved method calls where func_name
+    // lost the type prefix. Detect receiver type from value_types_.
+    // ========================================================================
+    if ((i.func_name == "to_string" || i.func_name == "debug_string") && !i.args.empty() &&
+        !result_reg.empty()) {
+        std::string arg_vt;
+        auto avt = value_types_.find(i.args[0].id);
+        if (avt != value_types_.end())
+            arg_vt = avt->second;
+        std::string arg_reg = get_value_reg(i.args[0]);
+
+        // Map LLVM type to mangled TML to_string function name
+        // e.g., i64 -> tml_N4core3I649to_stringE
+        struct TypeMapping {
+            const char* llvm_type;
+            const char* mangled_name;
+        };
+        static const TypeMapping mappings[] = {
+            {"i8", "tml_N4core2I89to_stringE"},      {"i16", "tml_N4core3I169to_stringE"},
+            {"i32", "tml_N4core3I329to_stringE"},    {"i64", "tml_N4core3I649to_stringE"},
+            {"i128", "tml_N4core4I1289to_stringE"},  {"float", "tml_N4core3F329to_stringE"},
+            {"double", "tml_N4core3F649to_stringE"},
+        };
+
+        for (const auto& m : mappings) {
+            if (arg_vt == m.llvm_type) {
+                emitln("    " + result_reg + " = call ptr @" + std::string(m.mangled_name) + "(" +
+                       arg_vt + " " + arg_reg + ")");
+                if (inst.result != mir::INVALID_VALUE)
+                    value_types_[inst.result] = "ptr";
+                return;
+            }
+        }
     }
 
     // Check if this is an indirect call (function pointer parameter)

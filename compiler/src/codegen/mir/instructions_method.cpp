@@ -26,6 +26,122 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     std::string receiver = get_value_reg(i.receiver);
 
     // ==========================================================================
+    // Inline array methods (len, hash, eq)
+    // ==========================================================================
+    // Check if receiver is an array type from value_types_ (e.g., "[3 x i32]")
+    std::string receiver_vt;
+    {
+        auto vt_it = value_types_.find(i.receiver.id);
+        if (vt_it != value_types_.end())
+            receiver_vt = vt_it->second;
+    }
+    if (receiver_vt.size() > 2 && receiver_vt[0] == '[') {
+        // Parse "[N x T]" to extract N and T
+        size_t x_pos = receiver_vt.find(" x ");
+        if (x_pos != std::string::npos) {
+            std::string n_str = receiver_vt.substr(1, x_pos - 1);
+            std::string elem_type = receiver_vt.substr(x_pos + 3);
+            if (!elem_type.empty() && elem_type.back() == ']')
+                elem_type.pop_back();
+            int64_t arr_size = std::stoll(n_str);
+
+            if (i.method_name == "len" && !result_reg.empty()) {
+                emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "i64";
+                }
+                return;
+            }
+
+            if (i.method_name == "hash" && !result_reg.empty()) {
+                // FNV-1a hash over array elements
+                std::string id = std::to_string(temp_counter_++);
+                // Spill array to memory for element access
+                std::string arr_ptr = "%arr_spill." + id;
+                emitln("    " + arr_ptr + " = alloca " + receiver_vt);
+                emitln("    store " + receiver_vt + " " + receiver + ", ptr " + arr_ptr);
+
+                std::string hash_reg = "%hash_init." + id;
+                emitln("    " + hash_reg +
+                       " = add i64 0, -3750763034362895579"); // FNV offset basis
+                for (int64_t j = 0; j < arr_size; ++j) {
+                    std::string idx = std::to_string(j);
+                    std::string elem_ptr = "%arr_ep." + id + "." + idx;
+                    std::string elem_val = "%arr_ev." + id + "." + idx;
+                    emitln("    " + elem_ptr + " = getelementptr inbounds " + receiver_vt +
+                           ", ptr " + arr_ptr + ", i32 0, i32 " + idx);
+                    emitln("    " + elem_val + " = load " + elem_type + ", ptr " + elem_ptr);
+                    // Extend element to i64 if needed
+                    std::string elem_i64 = "%arr_e64." + id + "." + idx;
+                    if (elem_type == "i32") {
+                        emitln("    " + elem_i64 + " = sext i32 " + elem_val + " to i64");
+                    } else if (elem_type == "i64") {
+                        elem_i64 = elem_val;
+                    } else if (elem_type == "i8") {
+                        emitln("    " + elem_i64 + " = sext i8 " + elem_val + " to i64");
+                    } else if (elem_type == "i16") {
+                        emitln("    " + elem_i64 + " = sext i16 " + elem_val + " to i64");
+                    } else {
+                        emitln("    " + elem_i64 + " = sext i32 " + elem_val + " to i64");
+                    }
+                    std::string xor_reg = "%arr_hx." + id + "." + idx;
+                    std::string mul_reg = "%arr_hm." + id + "." + idx;
+                    emitln("    " + xor_reg + " = xor i64 " + hash_reg + ", " + elem_i64);
+                    emitln("    " + mul_reg + " = mul i64 " + xor_reg +
+                           ", 1099511628211"); // FNV prime
+                    hash_reg = mul_reg;
+                }
+                emitln("    " + result_reg + " = add i64 0, " + hash_reg);
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "i64";
+                }
+                return;
+            }
+
+            if (i.method_name == "eq" && !result_reg.empty() && i.args.size() == 1) {
+                // Element-by-element comparison
+                std::string id = std::to_string(temp_counter_++);
+                std::string other = get_value_reg(i.args[0]);
+                // Spill both arrays
+                std::string a_ptr = "%eq_a." + id;
+                std::string b_ptr = "%eq_b." + id;
+                emitln("    " + a_ptr + " = alloca " + receiver_vt);
+                emitln("    store " + receiver_vt + " " + receiver + ", ptr " + a_ptr);
+                emitln("    " + b_ptr + " = alloca " + receiver_vt);
+                // Load other if it's passed by ref
+                emitln("    %eq_bval." + id + " = load " + receiver_vt + ", ptr " + other);
+                emitln("    store " + receiver_vt + " %eq_bval." + id + ", ptr " + b_ptr);
+
+                std::string acc = "%eq_init." + id;
+                emitln("    " + acc + " = add i1 0, 1"); // start with true
+                for (int64_t j = 0; j < arr_size; ++j) {
+                    std::string idx = std::to_string(j);
+                    std::string ap = "%eq_ap." + id + "." + idx;
+                    std::string bp = "%eq_bp." + id + "." + idx;
+                    std::string av = "%eq_av." + id + "." + idx;
+                    std::string bv = "%eq_bv." + id + "." + idx;
+                    emitln("    " + ap + " = getelementptr inbounds " + receiver_vt + ", ptr " +
+                           a_ptr + ", i32 0, i32 " + idx);
+                    emitln("    " + bp + " = getelementptr inbounds " + receiver_vt + ", ptr " +
+                           b_ptr + ", i32 0, i32 " + idx);
+                    emitln("    " + av + " = load " + elem_type + ", ptr " + ap);
+                    emitln("    " + bv + " = load " + elem_type + ", ptr " + bp);
+                    std::string cmp = "%eq_cmp." + id + "." + idx;
+                    emitln("    " + cmp + " = icmp eq " + elem_type + " " + av + ", " + bv);
+                    std::string new_acc = "%eq_acc." + id + "." + idx;
+                    emitln("    " + new_acc + " = and i1 " + acc + ", " + cmp);
+                    acc = new_acc;
+                }
+                emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "i1";
+                }
+                return;
+            }
+        }
+    }
+
+    // ==========================================================================
     // Inline primitive behavior methods (cmp, partial_cmp)
     // ==========================================================================
     static const std::unordered_set<std::string> signed_int_types = {"I8", "I16", "I32", "I64",

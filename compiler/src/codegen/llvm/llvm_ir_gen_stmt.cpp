@@ -212,10 +212,6 @@ static bool is_ref_expr(const parser::Expr& expr) {
         const auto& un = expr.as<parser::UnaryExpr>();
         return un.op == parser::UnaryOp::Ref || un.op == parser::UnaryOp::RefMut;
     }
-    // Array literals return a list pointer
-    if (expr.is<parser::ArrayExpr>()) {
-        return true;
-    }
     // Check for functions that return pointers
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
@@ -1105,9 +1101,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     types::TypePtr semantic_type = nullptr;
     if (let.type_annotation) {
         semantic_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
-    } else if (let.init.has_value() && var_type.starts_with("{")) {
-        // For tuple types without type annotation, infer semantic type from the initializer
-        // This is needed for tuple field access (pair.0, pair.1) to work correctly
+    } else if (let.init.has_value() && (var_type.starts_with("{") || var_type.starts_with("["))) {
+        // For tuple/array types without type annotation, infer semantic type from the initializer
+        // This is needed for tuple field access and array method dispatch to work correctly
         semantic_type = infer_expr_type(*let.init.value());
     }
     // For ptr variables from method calls (e.g., let maybe_ptr = s.get_mut()),
