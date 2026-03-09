@@ -323,8 +323,13 @@ impl[T] Extend[T] for List[T] {
 ///
 /// This struct is created by the [`into_iter`](IntoIterator::into_iter) method
 /// on [`List`]. See its documentation for more.
+///
+/// Stores a raw handle to the list's internal data rather than the List itself,
+/// to avoid copying the List value (which would cause double-free on drop).
 pub type ListIter[T] {
-    list: List[T],
+    handle: *Unit,
+    len: I64,
+    stride: I64,
     index: I64
 }
 
@@ -332,10 +337,14 @@ impl[T] Iterator for ListIter[T] {
     type Item = T
 
     pub func next(mut this) -> Maybe[T] {
-        if this.index >= this.list.len() {
+        if this.index >= this.len {
             return Nothing
         }
-        let item: T = this.list.get(this.index)
+        // Read data pointer from handle offset 0
+        let data_addr: I64 = lowlevel { ptr_read[I64](this.handle as *I64) }
+        // Read element at data[index]
+        let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
+        let item: T = lowlevel { ptr_read[T](elem_ptr) }
         this.index = this.index + 1
         return Just(item)
     }
@@ -347,7 +356,10 @@ impl[T] IntoIterator for List[T] {
     type IntoIter = ListIter[T]
 
     pub func into_iter(this) -> ListIter[T] {
-        return ListIter { list: this, index: 0 }
+        let hdr: I64 = this.handle as I64
+        let len: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        return ListIter[T] { handle: this.handle, len: len, stride: stride, index: 0 }
     }
 }
 
@@ -363,7 +375,10 @@ impl[T] List[T] {
     /// }
     /// ```
     pub func iter(this) -> ListIter[T] {
-        return ListIter { list: this, index: 0 }
+        let hdr: I64 = this.handle as I64
+        let len: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        return ListIter[T] { handle: this.handle, len: len, stride: stride, index: 0 }
     }
 }
 

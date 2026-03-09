@@ -1,0 +1,19 @@
+use test::{assert, assert_eq}
+use std::thread::local::{LocalKey, local_const}
+
+@test
+func test_local_key_new() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 42)
+    assert(true, "LocalKey::new works")
+    return 0
+}
+
+@test
+func test_local_key_access() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 42)
+    let result = key.access(do(v: ref I32) {
+        return *v
+    })
+    assert_eq(result, 42)
+    return 0
+}

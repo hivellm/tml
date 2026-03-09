@@ -1,0 +1,30 @@
+use test::{assert, assert_eq}
+use std::thread::local::{LocalKey, TlsSlot}
+
+@test
+func test_find_slot_after_init() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 77)
+    // Initialize
+    key.access(do(v: ref I32) { return *v })
+    // find_slot should now find it
+    let slot = key.find_slot()
+    assert_eq(slot != null, true)
+    return 0
+}
+
+@test
+func test_get_or_init() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 55)
+    let slot = key.get_or_init()
+    assert_eq(slot != null, true)
+    return 0
+}
+
+@test
+func test_tls_slot_alloc_free() -> I32 {
+    let slot = TlsSlot::alloc[I32](1, 42)
+    assert_eq(slot != null, true)
+    TlsSlot::free[I32](slot)
+    assert(true, "alloc and free did not crash")
+    return 0
+}

@@ -1,0 +1,25 @@
+use test::{assert, assert_eq}
+use std::thread::local::LocalKey
+
+@test
+func test_find_slot_for_nonexistent() -> I32 {
+    let key: LocalKey[I32] = LocalKey::new(do() 0)
+    // No slot exists for thread ID 999999
+    let slot = key.find_slot_for(999999)
+    assert_eq(slot == null, true)
+    return 0
+}
+
+@test
+func test_find_slot_for_current() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 42)
+    // Initialize for current thread
+    key.access(do(v: ref I32) { return *v })
+    // find_slot should work (uses current thread id)
+    let slot = key.find_slot()
+    assert_eq(slot != null, true)
+    // find_slot_for with a bogus id should be null
+    let bogus = key.find_slot_for(999999999)
+    assert_eq(bogus == null, true)
+    return 0
+}

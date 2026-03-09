@@ -1,11 +1,12 @@
 // Tests for LazyCell::into_inner
-// BLOCKED: Maybe[I32] from OnceCell::into_inner() collides with Maybe[func() -> I32]
-// in the same compilation unit. Both have layout {i32, i32} but different LLVM type names.
-// Error: '%t24' defined with type '%struct.Maybe__I32__Fn' but expected '%struct.Maybe__I32'
+// BLOCKED: LazyCell__T__Fn vs LazyCell__I32 type name mismatch in codegen.
+// Generic monomorphization produces inconsistent struct names for LazyCell[I32]
+// when the type contains a function field (Maybe[func() -> I32]).
+// Error: '%t2' defined with type 'LazyCell__T__Fn' but expected 'LazyCell__I32'
 use test::{assert}
 
 @test
 func test_lazy_into_inner_blocked() -> I32 {
-    assert(true, "into_inner blocked by Maybe type collision in codegen")
+    assert(true, "into_inner blocked by LazyCell generic monomorphization bug")
     return 0
 }

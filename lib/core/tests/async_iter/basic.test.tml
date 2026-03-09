@@ -1,0 +1,20 @@
+use test::{assert, assert_eq}
+use core::async_iter::{Once, Empty, once, empty}
+
+// Test Once constructor and size_hint lower bound
+@test
+func test_once_size_hint() -> I32 {
+    let o: Once[I32] = once(42)
+    let hint = o.size_hint()
+    assert_eq(hint.0, 1)
+    return 0
+}
+
+// Test Empty constructor and size_hint lower bound
+@test
+func test_empty_size_hint() -> I32 {
+    let e: Empty[I32] = empty()
+    let hint = e.size_hint()
+    assert_eq(hint.0, 0)
+    return 0
+}

@@ -1,0 +1,12 @@
+// Tests for std::thread::scope
+// BLOCKED: Scope type contains Mutex[Unit] which triggers "void type only allowed
+// for function results" codegen bug (void zeroinitializer passed to Mutex::new).
+// All 8 functions (Scope::new, spawn, wait_all, thread_finished, mark_finished,
+// ScopedJoinHandle::join, is_finished, scope) are blocked by this.
+use test::{assert}
+
+@test
+func test_scope_blocked() -> I32 {
+    assert(true, "scope blocked by Mutex[Unit] void codegen bug")
+    return 0
+}

@@ -1,0 +1,34 @@
+use test::{assert, assert_eq}
+use std::thread::local::LocalKey
+
+@test
+func test_try_access_before_init() -> I32 {
+    let key: LocalKey[I32] = LocalKey::new(do() 42)
+    let result: Maybe[I32] = key.try_access(do(v: ref I32) {
+        return *v
+    })
+    // Before any access, try_access should return Nothing
+    assert_eq(result.is_nothing(), true)
+    return 0
+}
+
+@test
+func test_try_access_after_init() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 42)
+    // Initialize by accessing
+    key.access(do(v: ref I32) { return *v })
+    // Now try_access should find it
+    let result: Maybe[I32] = key.try_access(do(v: ref I32) {
+        return *v
+    })
+    assert_eq(result.is_just(), true)
+    return 0
+}
+
+@test
+func test_find_slot_before_init() -> I32 {
+    let key: LocalKey[I32] = LocalKey::new(do() 0)
+    let slot = key.find_slot()
+    assert_eq(slot == null, true)
+    return 0
+}

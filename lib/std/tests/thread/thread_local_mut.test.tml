@@ -1,0 +1,30 @@
+use test::{assert, assert_eq}
+use std::thread::local::LocalKey
+
+@test
+func test_local_key_access_mut() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 10)
+    // First access initializes to 10, then mutate
+    key.access_mut(do(v: mut ref I32) {
+        *v = *v + 5
+        return 0
+    })
+    // Now value should be 15
+    let result = key.access(do(v: ref I32) {
+        return *v
+    })
+    assert_eq(result, 15)
+    return 0
+}
+
+@test
+func test_local_key_is_initialized() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() 0)
+    assert_eq(key.is_initialized(), false)
+    // Access triggers initialization
+    key.access(do(v: ref I32) {
+        return *v
+    })
+    assert_eq(key.is_initialized(), true)
+    return 0
+}
