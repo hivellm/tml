@@ -12,6 +12,28 @@ use std::net::error::{NetError, NetErrorKind}
 /// Invalid socket handle value.
 pub const INVALID_SOCKET: I64 = -1
 
+// Windows WSAE* error codes
+const WSAEWOULDBLOCK: I32 = 10035
+const WSAEINPROGRESS: I32 = 10036
+const WSAEALREADY: I32 = 10037
+const WSAEISCONN: I32 = 10056
+const WSAECONNREFUSED: I32 = 10061
+
+/// Maps the last OS socket error to a NetErrorKind.
+func last_socket_error_kind() -> NetErrorKind {
+    let code: I32 = sys_get_last_error()
+    if code == WSAEWOULDBLOCK or code == WSAEINPROGRESS {
+        return NetErrorKind::WouldBlock()
+    }
+    if code == WSAEISCONN {
+        return NetErrorKind::AlreadyConnected()
+    }
+    if code == WSAECONNREFUSED {
+        return NetErrorKind::ConnectionRefused()
+    }
+    NetErrorKind::Other()
+}
+
 /// Socket address family constants.
 pub const AF_INET: I32 = 2           // IPv4
 pub const AF_INET6: I32 = 23         // IPv6 (10 on Unix, 23 on Windows)
@@ -319,7 +341,7 @@ impl RawSocket {
     pub func accept(this) -> Outcome[(RawSocket, SocketAddr), NetError] {
         let new_handle: I64 = lowlevel { sys_accept_v4(this.handle) }
         if new_handle < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
         let port: I32 = lowlevel { sys_sockaddr_get_port() }
@@ -340,7 +362,7 @@ impl RawSocket {
         let port: I32 = addr.inner.port() as I32
         let result: I32 = lowlevel { sys_connect_v4(this.handle, ip_bits, port) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::ConnectionRefused()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(())
     }
@@ -372,7 +394,7 @@ impl RawSocket {
         let len: I64 = buf.len() as I64
         let result: I64 = lowlevel { sys_send(this.handle, buf, len) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(result)
     }
@@ -381,7 +403,7 @@ impl RawSocket {
     pub func send_n(this, buf: ref [U8], n: I64) -> Outcome[I64, NetError] {
         let result: I64 = lowlevel { sys_send(this.handle, buf, n) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(result)
     }
@@ -401,7 +423,7 @@ impl RawSocket {
         let len: I64 = buf.len() as I64
         let result: I64 = lowlevel { sys_recv(this.handle, buf, len) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(result)
     }
@@ -411,7 +433,7 @@ impl RawSocket {
         let len: I64 = buf.len() as I64
         let result: I64 = lowlevel { sys_peek(this.handle, buf, len) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(result)
     }
@@ -423,7 +445,7 @@ impl RawSocket {
         let len: I64 = buf.len() as I64
         let result: I64 = lowlevel { sys_sendto_v4(this.handle, buf, len, ip_bits, port) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         Ok(result)
     }
@@ -433,7 +455,7 @@ impl RawSocket {
         let len: I64 = buf.len() as I64
         let result: I64 = lowlevel { sys_recvfrom_v4(this.handle, buf, len) }
         if result < 0 {
-            return Err(NetError::new(NetErrorKind::Other()))
+            return Err(NetError::new(last_socket_error_kind()))
         }
         let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
         let port: I32 = lowlevel { sys_sockaddr_get_port() }

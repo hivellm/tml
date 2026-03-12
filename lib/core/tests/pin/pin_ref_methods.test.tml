@@ -1,0 +1,94 @@
+// Tests for Pin[ref T] and Pin[mut ref T] methods
+use test::{assert_eq, assert}
+use core::pin::Pin
+
+// ============================================================================
+// Pin[ref T]::new and get_ref
+// ============================================================================
+
+@test
+func test_pin_ref_new_and_get_ref() -> I32 {
+    let x: I32 = 42
+    let pinned: Pin[ref I32] = Pin::new(ref x)
+    let r: ref I32 = pinned.get_ref()
+    assert_eq(*r, 42, "Pin::new + get_ref should return pinned value")
+    return 0
+}
+
+@test
+func test_pin_ref_get_ref_str() -> I32 {
+    let s: Str = "hello"
+    let pinned: Pin[ref Str] = Pin::new(ref s)
+    let r: ref Str = pinned.get_ref()
+    assert_eq(*r, "hello", "Pin[ref Str]::get_ref should work")
+    return 0
+}
+
+// ============================================================================
+// Pin[ref T] Deref
+// ============================================================================
+
+@test
+func test_pin_ref_deref() -> I32 {
+    let x: I32 = 99
+    let pinned: Pin[ref I32] = Pin::new(ref x)
+    let r: ref I32 = pinned.deref()
+    assert_eq(*r, 99, "Pin[ref T]::deref should return ref to value")
+    return 0
+}
+
+// ============================================================================
+// Pin[mut ref T]::new, get_ref, get_mut, get_unchecked_mut
+// ============================================================================
+
+@test
+func test_pin_mut_ref_new_and_get_ref() -> I32 {
+    let mut x: I32 = 10
+    let pinned: Pin[mut ref I32] = Pin::new(mut ref x)
+    let r: ref I32 = pinned.get_ref()
+    assert_eq(*r, 10, "Pin[mut ref T]::get_ref should work")
+    return 0
+}
+
+@test
+func test_pin_mut_ref_get_mut() -> I32 {
+    let mut x: I32 = 5
+    let mut pinned: Pin[mut ref I32] = Pin::new(mut ref x)
+    let r: mut ref I32 = pinned.get_mut()
+    *r = 20
+    assert_eq(x, 20, "Pin[mut ref T]::get_mut should allow mutation")
+    return 0
+}
+
+@test
+func test_pin_mut_ref_get_unchecked_mut() -> I32 {
+    let mut x: I32 = 7
+    let mut pinned: Pin[mut ref I32] = Pin::new(mut ref x)
+    let r: mut ref I32 = pinned.get_unchecked_mut()
+    *r = 42
+    assert_eq(x, 42, "get_unchecked_mut should allow mutation")
+    return 0
+}
+
+// ============================================================================
+// Pin[mut ref T] Deref and DerefMut
+// ============================================================================
+
+@test
+func test_pin_mut_ref_deref() -> I32 {
+    let mut x: I32 = 33
+    let pinned: Pin[mut ref I32] = Pin::new(mut ref x)
+    let r: ref I32 = pinned.deref()
+    assert_eq(*r, 33, "Pin[mut ref T]::deref should work")
+    return 0
+}
+
+@test
+func test_pin_mut_ref_deref_mut() -> I32 {
+    let mut x: I32 = 11
+    let mut pinned: Pin[mut ref I32] = Pin::new(mut ref x)
+    let r: mut ref I32 = pinned.deref_mut()
+    *r = 77
+    assert_eq(x, 77, "Pin[mut ref T]::deref_mut should allow mutation")
+    return 0
+}

@@ -1,0 +1,17 @@
+// Tests for Future Fuse type
+use test::{assert_eq, assert}
+use core::future::{Fuse}
+
+@test
+func test_fuse_new_not_terminated() -> I32 {
+    let f: Fuse[I32] = Fuse::new(42)
+    assert(not f.is_terminated(), "new Fuse should not be terminated")
+    return 0
+}
+
+@test
+func test_fuse_is_terminated_after_take() -> I32 {
+    let mut f: Fuse[I32] = Fuse { future: Nothing }
+    assert(f.is_terminated(), "Fuse with Nothing should be terminated")
+    return 0
+}
