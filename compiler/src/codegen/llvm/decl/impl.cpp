@@ -152,7 +152,6 @@ static std::string get_param_name(const parser::FuncParam& param, size_t param_i
 }
 
 void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
-    emit_line("; DEBUG gen_impl_method type=" + type_name + " method=" + method.name);
     // Skip builtin types that have hard-coded implementations in method.cpp
     // These use lowlevel blocks in TML source but are handled directly by codegen
     if (type_name == "Ordering") {
@@ -196,10 +195,41 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     expected_enum_type_.clear();
     expected_literal_type_.clear();
 
+    // Build type substitutions for monomorphized generic types.
+    // When type_name is e.g. "Take__Repeat__I32", we need to parse the type args
+    // and map them to the struct's generic params so that parameter types like "I"
+    // resolve to "%struct.Repeat__I32" instead of falling back to "i32".
+    // IMPORTANT: Only derive subs from mangled name if current_type_subs_ is empty.
+    // When called from gen_impl_method_instantiation, current_type_subs_ is already
+    // correctly set (with proper nested generics), and parse_mangled_type_string
+    // cannot handle nested generics like "Take__Repeat__I32" → Take[Repeat[I32]].
+    auto saved_type_subs = current_type_subs_;
+    auto pos_dunder = type_name.find("__");
+    if (pos_dunder != std::string::npos && current_type_subs_.empty()) {
+        std::string base_name = type_name.substr(0, pos_dunder);
+        auto struct_def = env_.lookup_struct(base_name);
+        if (struct_def.has_value() && !struct_def->type_params.empty()) {
+            auto parsed = parse_mangled_type_string(type_name);
+            if (parsed && parsed->is<types::NamedType>()) {
+                const auto& named = parsed->as<types::NamedType>();
+                for (size_t i = 0; i < struct_def->type_params.size() && i < named.type_args.size();
+                     ++i) {
+                    current_type_subs_[struct_def->type_params[i]] = named.type_args[i];
+                }
+            }
+        }
+    }
+
     // Determine return type
     std::string ret_type = "void";
     if (method.return_type.has_value()) {
-        ret_type = llvm_type_ptr(*method.return_type);
+        if (!current_type_subs_.empty()) {
+            auto resolved_ret =
+                resolve_parser_type_with_subs(**method.return_type, current_type_subs_);
+            ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/false);
+        } else {
+            ret_type = llvm_type_ptr(*method.return_type);
+        }
     }
     current_ret_type_ = ret_type;
 
@@ -273,10 +303,19 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             params += ", ";
             param_types += ", ";
         }
-        std::string param_type = llvm_type_ptr(method.params[i].type);
-        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
-        if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
-            param_type = "{ ptr, ptr }";
+        std::string param_type;
+        if (!current_type_subs_.empty() && method.params[i].type) {
+            auto resolved =
+                resolve_parser_type_with_subs(*method.params[i].type, current_type_subs_);
+            param_type = llvm_type_from_semantic(resolved, /*for_data=*/true);
+            if (resolved && resolved->is<types::FuncType>()) {
+                param_type = "{ ptr, ptr }";
+            }
+        } else {
+            param_type = llvm_type_ptr(method.params[i].type);
+            if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
+                param_type = "{ ptr, ptr }";
+            }
         }
         // For the first param (i == 0 when !is_instance_method), if it's a struct/enum,
         // use ptr. This is the "receiver-like" param for method-syntax calls.
@@ -385,13 +424,37 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (prim) {
             impl_semantic_type->kind = std::get<types::PrimitiveType>(prim->kind);
         } else {
-            // Parse mangled name like "Arc__I32" into NamedType{name="Arc", type_args=[I32]}
+            // Build semantic type for this impl type.
+            // When current_type_subs_ is available, use the struct definition's type params
+            // to build the correct NamedType. This handles nested generics like
+            // Take[Repeat[I32]] correctly, where naive __ splitting would produce
+            // Take[Repeat, I32].
             auto sep_pos = current_impl_type_.find("__");
-            if (sep_pos != std::string::npos) {
+            bool built_from_subs = false;
+            if (sep_pos != std::string::npos && !current_type_subs_.empty()) {
+                std::string base_name = current_impl_type_.substr(0, sep_pos);
+                auto struct_def = env_.lookup_struct(base_name);
+                if (struct_def.has_value() && !struct_def->type_params.empty()) {
+                    std::vector<types::TypePtr> type_args;
+                    for (const auto& param : struct_def->type_params) {
+                        auto it = current_type_subs_.find(param);
+                        if (it != current_type_subs_.end()) {
+                            type_args.push_back(it->second);
+                        }
+                    }
+                    if (type_args.size() == struct_def->type_params.size()) {
+                        impl_semantic_type->kind =
+                            types::NamedType{base_name, "", std::move(type_args)};
+                        built_from_subs = true;
+                    }
+                }
+            }
+            if (!built_from_subs && sep_pos != std::string::npos) {
                 std::string base_name = current_impl_type_.substr(0, sep_pos);
                 std::string args_str = current_impl_type_.substr(sep_pos + 2);
 
-                // Parse type args from mangled suffix
+                // Parse type args from mangled suffix (naive __ splitting - works for
+                // simple cases like Arc__I32, Maybe__I32__Str)
                 std::vector<types::TypePtr> type_args;
                 size_t pos = 0;
                 while (pos < args_str.size()) {
@@ -399,39 +462,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                     std::string arg = (next_sep == std::string::npos)
                                           ? args_str.substr(pos)
                                           : args_str.substr(pos, next_sep - pos);
-                    types::TypePtr arg_type;
-                    if (arg == "I32")
-                        arg_type = types::make_i32();
-                    else if (arg == "I64")
-                        arg_type = types::make_i64();
-                    else if (arg == "I8")
-                        arg_type = types::make_primitive(types::PrimitiveKind::I8);
-                    else if (arg == "I16")
-                        arg_type = types::make_primitive(types::PrimitiveKind::I16);
-                    else if (arg == "U8")
-                        arg_type = types::make_primitive(types::PrimitiveKind::U8);
-                    else if (arg == "U16")
-                        arg_type = types::make_primitive(types::PrimitiveKind::U16);
-                    else if (arg == "U32")
-                        arg_type = types::make_primitive(types::PrimitiveKind::U32);
-                    else if (arg == "U64")
-                        arg_type = types::make_primitive(types::PrimitiveKind::U64);
-                    else if (arg == "Usize")
-                        arg_type = types::make_primitive(types::PrimitiveKind::U64);
-                    else if (arg == "Isize")
-                        arg_type = types::make_primitive(types::PrimitiveKind::I64);
-                    else if (arg == "F32")
-                        arg_type = types::make_primitive(types::PrimitiveKind::F32);
-                    else if (arg == "F64")
-                        arg_type = types::make_f64();
-                    else if (arg == "Bool")
-                        arg_type = types::make_bool();
-                    else if (arg == "Str")
-                        arg_type = types::make_str();
-                    else {
-                        // Parse mangled type string properly (handles ptr_, nested generics, etc.)
-                        arg_type = parse_mangled_type_string(arg);
-                    }
+                    auto arg_type = parse_mangled_type_string(arg);
                     type_args.push_back(arg_type);
                     if (next_sep == std::string::npos)
                         break;
@@ -478,18 +509,27 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Register other parameters in locals by creating allocas
     for (size_t i = param_start; i < method.params.size(); ++i) {
-        std::string param_type = llvm_type_ptr(method.params[i].type);
-        emit_line("  ; DEBUG gen_impl param_type=" + param_type);
+        std::string param_type;
+        if (!current_type_subs_.empty() && method.params[i].type) {
+            auto resolved =
+                resolve_parser_type_with_subs(*method.params[i].type, current_type_subs_);
+            param_type = llvm_type_from_semantic(resolved, /*for_data=*/true);
+            if (resolved && resolved->is<types::FuncType>()) {
+                param_type = "{ ptr, ptr }";
+            }
+        } else {
+            param_type = llvm_type_ptr(method.params[i].type);
+            if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
+                param_type = "{ ptr, ptr }";
+            }
+        }
         // Normalize void -> {} for Unit parameters (void is invalid in LLVM data contexts)
         if (param_type == "void")
             param_type = "{}";
-        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
-        if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
-            param_type = "{ ptr, ptr }";
-        }
         std::string param_name = get_param_name(method.params[i], i);
         // Resolve semantic type for the parameter
-        types::TypePtr semantic_type = resolve_parser_type_with_subs(*method.params[i].type, {});
+        types::TypePtr semantic_type =
+            resolve_parser_type_with_subs(*method.params[i].type, current_type_subs_);
 
         // First non-this/self struct/enum param is passed as ptr (see signature loop).
         // Copy from ptr into a local alloca so field access (GEP) works correctly.
@@ -668,6 +708,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     current_func_.clear();
     current_ret_type_.clear();
     current_impl_type_.clear();
+    current_type_subs_ = saved_type_subs;
     current_scope_id_ = 0;
     current_debug_loc_id_ = 0;
 }
@@ -1006,7 +1047,6 @@ void LLVMIRGen::gen_impl_method_instantiation(
         std::string param_name = get_param_name(method.params[i], i);
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
-        emit_line("  ; DEBUG impl_inst param_type=" + param_type + " param_name=" + param_name);
         // Normalize void -> {} for Unit parameters (void is invalid in LLVM data contexts)
         if (param_type == "void")
             param_type = "{}";

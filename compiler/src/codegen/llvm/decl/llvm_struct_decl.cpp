@@ -163,9 +163,17 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
 
 // Request instantiation of a generic struct - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
-auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
+auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
                                              const std::vector<types::TypePtr>& type_args)
     -> std::string {
+    // Strip module qualifiers (e.g., "core::marker::PhantomData" -> "PhantomData")
+    // LLVM identifiers cannot contain "::" so we must use only the simple name.
+    std::string base_name = raw_name;
+    auto last_colon = base_name.rfind("::");
+    if (last_colon != std::string::npos) {
+        base_name = base_name.substr(last_colon + 2);
+    }
+
     // Check for unresolved generic types in type_args
     // If any type argument contains unresolved generics, we cannot instantiate yet
     // This prevents creating invalid struct types with incomplete type arguments
@@ -214,7 +222,34 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     // %struct.BTreeMap__I64 resolves to the same type as library functions using %struct.BTreeMap.
     // Without this, tml run/build fails with "Cannot allocate unsized type" because the mangled
     // type is never defined while the unmangled version is.
-    if (mangled != base_name && struct_types_.find(base_name) != struct_types_.end() &&
+    //
+    // IMPORTANT: Skip this shortcut for generic structs that have type-dependent field layouts.
+    // For types like Take[I] where field `inner: I` depends on the type parameter,
+    // copying the base type's fields would give wrong types (e.g., i32 instead of
+    // %struct.Repeat__I32). Only use this alias path for types where all instantiations
+    // share the same layout (like runtime-backed collections with { ptr } layout).
+    bool base_is_generic_struct = false;
+    if (env_.module_registry()) {
+        const auto& all_mods = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_mods) {
+            auto sit = mod.structs.find(base_name);
+            if (sit != mod.structs.end() && !sit->second.type_params.empty()) {
+                base_is_generic_struct = true;
+                break;
+            }
+            sit = mod.internal_structs.find(base_name);
+            if (sit != mod.internal_structs.end() && !sit->second.type_params.empty()) {
+                base_is_generic_struct = true;
+                break;
+            }
+        }
+    }
+    if (!base_is_generic_struct &&
+        pending_generic_structs_.find(base_name) != pending_generic_structs_.end()) {
+        base_is_generic_struct = true;
+    }
+    if (!base_is_generic_struct && mangled != base_name &&
+        struct_types_.find(base_name) != struct_types_.end() &&
         struct_types_.find(mangled) == struct_types_.end()) {
         // The base type already has a definition (e.g., library code emitted %struct.HashMapIter).
         // Emit the mangled type with the same field layout so both names are valid in IR.
@@ -281,7 +316,36 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
 
     // Register field info and generate type definition immediately
     auto decl_it = pending_generic_structs_.find(base_name);
-    if (decl_it != pending_generic_structs_.end()) {
+    // When multiple structs share the same simple name (e.g., iter::Take vs async_iter::Take),
+    // pending_generic_structs_ may have the wrong definition. Prefer the module registry when
+    // it has a matching generic struct, as it provides the correct semantic field definitions.
+    bool use_pending_generic = decl_it != pending_generic_structs_.end();
+    if (use_pending_generic && env_.module_registry()) {
+        // Check if multiple modules define a struct with this name — if so, there's
+        // ambiguity and pending_generic_structs_ may have the wrong one.
+        // Count how many modules have a generic struct with this base_name.
+        int module_count = 0;
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto sit = mod.structs.find(base_name);
+            if (sit != mod.structs.end() && !sit->second.type_params.empty()) {
+                ++module_count;
+            } else {
+                sit = mod.internal_structs.find(base_name);
+                if (sit != mod.internal_structs.end() && !sit->second.type_params.empty()) {
+                    ++module_count;
+                }
+            }
+        }
+        if (module_count > 1) {
+            // Multiple modules define this generic struct — pending_generic_structs_
+            // doesn't track which module, so fall through to module registry path
+            // which can disambiguate using type_args.
+            use_pending_generic = false;
+        }
+    }
+
+    if (use_pending_generic) {
         const parser::StructDecl* decl = decl_it->second;
 
         // Create substitution map and const generic values map
@@ -329,69 +393,100 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     else if (env_.module_registry()) {
         const auto& all_modules = env_.module_registry()->get_all_modules();
         bool found_in_registry = false;
-        for (const auto& [mod_name, mod] : all_modules) {
-            // Check public structs first
-            auto struct_it = mod.structs.find(base_name);
-            bool found = struct_it != mod.structs.end() && !struct_it->second.type_params.empty();
 
-            // Also check internal structs (for module-internal types like ArcInner)
-            if (!found) {
-                struct_it = mod.internal_structs.find(base_name);
-                found = struct_it != mod.internal_structs.end() &&
-                        !struct_it->second.type_params.empty();
-            }
-
-            if (found) {
-                found_in_registry = true;
-                // Found imported generic struct - use its semantic definition
-                const auto& struct_def = struct_it->second;
-
-                // Create substitution map from type params
-                std::unordered_map<std::string, types::TypePtr> subs;
-                for (size_t i = 0; i < struct_def.type_params.size() && i < final_type_args.size();
-                     ++i) {
-                    subs[struct_def.type_params[i]] = final_type_args[i];
-                }
-
-                // Register field info using the semantic struct definition
-                std::vector<FieldInfo> fields;
-                std::vector<std::string> field_types_vec;
-                int field_idx = 0;
-                for (const auto& field : struct_def.fields) {
-                    // Apply type substitution to field type
-                    types::TypePtr resolved_type = apply_type_substitutions(field.type, subs);
-                    std::string ft = llvm_type_from_semantic(resolved_type, true);
-                    fields.push_back({field.name, field_idx++, ft, resolved_type});
-                    field_types_vec.push_back(ft);
-                }
-                struct_fields_[mangled] = fields;
-
-                // Emit struct type definition
-                std::string type_name = "%struct." + mangled;
-                std::string def = type_name + " = type { ";
-                for (size_t i = 0; i < field_types_vec.size(); ++i) {
-                    if (i > 0)
-                        def += ", ";
-                    def += field_types_vec[i];
-                }
-                def += " }";
-                type_defs_buffer_ << def << "\n";
-                struct_types_[mangled] = type_name;
-
-                // Recursively instantiate type arguments that are generic types
-                // This ensures that types like LinkedListNode[I64] in List[LinkedListNode[I64]]
-                // are instantiated before they're used in method bodies
-                for (const auto& arg : final_type_args) {
-                    if (arg && arg->is<types::NamedType>()) {
-                        const auto& named = arg->as<types::NamedType>();
-                        if (!named.type_args.empty()) {
-                            require_struct_instantiation(named.name, named.type_args);
-                        }
+        // When multiple modules define the same struct name (e.g., iter::Take vs
+        // async_iter::Take), prefer the module that also contains the type_arg types.
+        // For Take[Repeat[I32]], if Repeat is in async_iter, prefer async_iter::Take.
+        std::string preferred_module;
+        for (const auto& arg : final_type_args) {
+            if (arg && arg->is<types::NamedType>()) {
+                const auto& arg_named = arg->as<types::NamedType>();
+                for (const auto& [mn, m] : all_modules) {
+                    if (m.structs.count(arg_named.name) || m.enums.count(arg_named.name)) {
+                        preferred_module = mn;
+                        break;
                     }
                 }
-                break;
+                if (!preferred_module.empty()) {
+                    break;
+                }
             }
         }
+
+        // First pass: try preferred module if set
+        // Second pass: try all modules
+        for (int pass = 0; pass < 2 && !found_in_registry; ++pass) {
+            for (const auto& [mod_name, mod] : all_modules) {
+                if (pass == 0 && !preferred_module.empty() && mod_name != preferred_module) {
+                    continue;
+                }
+                if (pass == 1 && mod_name == preferred_module) {
+                    continue; // Already tried in pass 0
+                }
+                // Check public structs first
+                auto struct_it = mod.structs.find(base_name);
+                bool found =
+                    struct_it != mod.structs.end() && !struct_it->second.type_params.empty();
+
+                // Also check internal structs (for module-internal types like ArcInner)
+                if (!found) {
+                    struct_it = mod.internal_structs.find(base_name);
+                    found = struct_it != mod.internal_structs.end() &&
+                            !struct_it->second.type_params.empty();
+                }
+
+                if (found) {
+                    found_in_registry = true;
+                    // Found imported generic struct - use its semantic definition
+                    const auto& struct_def = struct_it->second;
+
+                    // Create substitution map from type params
+                    std::unordered_map<std::string, types::TypePtr> subs;
+                    for (size_t i = 0;
+                         i < struct_def.type_params.size() && i < final_type_args.size(); ++i) {
+                        subs[struct_def.type_params[i]] = final_type_args[i];
+                    }
+
+                    // Register field info using the semantic struct definition
+                    std::vector<FieldInfo> fields;
+                    std::vector<std::string> field_types_vec;
+                    int field_idx = 0;
+                    for (const auto& field : struct_def.fields) {
+                        // Apply type substitution to field type
+                        types::TypePtr resolved_type = apply_type_substitutions(field.type, subs);
+                        std::string ft = llvm_type_from_semantic(resolved_type, true);
+                        fields.push_back({field.name, field_idx++, ft, resolved_type});
+                        field_types_vec.push_back(ft);
+                    }
+                    struct_fields_[mangled] = fields;
+
+                    // Emit struct type definition
+                    std::string type_name = "%struct." + mangled;
+                    std::string def = type_name + " = type { ";
+                    for (size_t i = 0; i < field_types_vec.size(); ++i) {
+                        if (i > 0)
+                            def += ", ";
+                        def += field_types_vec[i];
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                    struct_types_[mangled] = type_name;
+
+                    // Recursively instantiate type arguments that are generic types
+                    // This ensures that types like LinkedListNode[I64] in List[LinkedListNode[I64]]
+                    // are instantiated before they're used in method bodies
+                    for (const auto& arg : final_type_args) {
+                        if (arg && arg->is<types::NamedType>()) {
+                            const auto& named = arg->as<types::NamedType>();
+                            if (!named.type_args.empty()) {
+                                require_struct_instantiation(named.name, named.type_args);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        } // end pass loop
 
         // Fallback: if not found in registry, check if it's a known runtime-backed collection type
         // These types have well-defined layouts regardless of their type parameter

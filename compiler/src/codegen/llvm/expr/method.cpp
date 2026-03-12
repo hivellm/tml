@@ -426,7 +426,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         const auto& field_expr = call.receiver->as<parser::FieldExpr>();
         if (field_expr.object->is<parser::IdentExpr>()) {
             const auto& ident = field_expr.object->as<parser::IdentExpr>();
-            if (ident.name == "this" && !current_impl_type_.empty()) {
+            // Only override infer_expr_type result when it's missing or has no type args.
+            // When infer_expr_type already returned a correct NamedType with type_args
+            // (e.g., Repeat[I32] from locals_ semantic type + field substitution),
+            // don't override it with potentially wrong results from mangled name parsing.
+            bool already_has_type_args = false;
+            if (receiver_type && receiver_type->is<types::NamedType>()) {
+                already_has_type_args = !receiver_type->as<types::NamedType>().type_args.empty();
+            }
+            if (ident.name == "this" && !current_impl_type_.empty() && !already_has_type_args) {
                 // Parse the impl type to get base name and type args
                 std::string base_name = current_impl_type_;
                 std::vector<types::TypePtr> type_args;
@@ -467,12 +475,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
 
                 // Also try module registry for imported structs
-                // Check if receiver_type is valid (not a primitive fallback type like Str)
+                // Check if receiver_type needs override: null, primitive fallback (Str/I32/etc),
+                // or when pending_generic_structs_ had the wrong struct (name collision)
                 bool needs_registry_lookup =
-                    !receiver_type ||
-                    (receiver_type->is<types::PrimitiveType>() &&
-                     receiver_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str);
+                    !receiver_type || receiver_type->is<types::PrimitiveType>();
                 if (needs_registry_lookup && env_.module_registry()) {
+                    types::TypePtr registry_result;
                     const auto& all_modules = env_.module_registry()->get_all_modules();
                     for (const auto& [mod_name, mod] : all_modules) {
                         auto struct_it = mod.structs.find(base_name);
@@ -486,20 +494,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 subs[struct_def.type_params[i]] = type_args[i];
                             }
 
-                            // Find the field
+                            // Find the field — continue to next module if not found
+                            // (handles name collisions like iter::Take vs async_iter::Take)
                             for (const auto& field : struct_def.fields) {
                                 if (field.name == field_expr.field && field.type) {
                                     if (!subs.empty()) {
-                                        receiver_type = types::substitute_type(field.type, subs);
+                                        registry_result = types::substitute_type(field.type, subs);
                                     } else {
-                                        receiver_type = field.type;
+                                        registry_result = field.type;
                                     }
                                     break;
                                 }
                             }
-                            if (receiver_type)
+                            if (registry_result)
                                 break;
                         }
+                    }
+                    if (registry_result) {
+                        receiver_type = registry_result;
                     }
                 }
             }

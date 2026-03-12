@@ -173,15 +173,26 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                                 // Look up in functions_ first to get the correct LLVM name,
                                 // which may include a suite prefix (e.g., s0_CountUp_next)
                                 // that get_suite_prefix() doesn't return in library context.
+                                // For generic types (e.g., Repeat[I32]), use the mangled name
+                                // (Repeat__I32) for lookup since that's how the method was
+                                // registered.
+                                std::string mangled_concrete = concrete_type_name;
+                                if (sub_it != current_type_subs_.end() &&
+                                    sub_it->second->is<types::NamedType>()) {
+                                    const auto& sub_named = sub_it->second->as<types::NamedType>();
+                                    if (!sub_named.type_args.empty()) {
+                                        mangled_concrete =
+                                            mangle_struct_name(sub_named.name, sub_named.type_args);
+                                    }
+                                }
                                 std::string fn_name;
-                                std::string method_lookup = concrete_type_name + "_" + method;
+                                std::string method_lookup = mangled_concrete + "_" + method;
                                 auto fn_it = functions_.find(method_lookup);
                                 if (fn_it != functions_.end()) {
                                     fn_name = fn_it->second.llvm_name;
                                 } else {
-                                    fn_name = "@" + mangle_impl_method(concrete_type_name, method);
+                                    fn_name = "@" + mangle_impl_method(mangled_concrete, method);
                                 }
-
                                 // Build arguments
                                 std::vector<std::pair<std::string, std::string>> typed_args;
 
@@ -358,13 +369,24 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                 TML_DEBUG_LN("[METHOD 4b] func_sig found: " << (func_sig ? "yes" : "no"));
                 if (func_sig) {
                     // Look up in functions_ first for correct LLVM name (suite prefix).
+                    // For generic types (e.g., Repeat[I32]), use the mangled name
+                    // (Repeat__I32) since that's how the method was registered.
+                    std::string mangled_concrete2 = concrete_type_name;
+                    if (sub_it != current_type_subs_.end() &&
+                        sub_it->second->is<types::NamedType>()) {
+                        const auto& sub_named2 = sub_it->second->as<types::NamedType>();
+                        if (!sub_named2.type_args.empty()) {
+                            mangled_concrete2 =
+                                mangle_struct_name(sub_named2.name, sub_named2.type_args);
+                        }
+                    }
                     std::string fn_name;
-                    std::string method_lookup2 = concrete_type_name + "_" + method;
+                    std::string method_lookup2 = mangled_concrete2 + "_" + method;
                     auto fn_it2 = functions_.find(method_lookup2);
                     if (fn_it2 != functions_.end()) {
                         fn_name = fn_it2->second.llvm_name;
                     } else {
-                        fn_name = "@" + mangle_impl_method(concrete_type_name, method);
+                        fn_name = "@" + mangle_impl_method(mangled_concrete2, method);
                     }
 
                     std::vector<std::pair<std::string, std::string>> typed_args;

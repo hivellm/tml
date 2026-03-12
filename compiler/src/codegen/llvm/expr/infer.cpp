@@ -299,10 +299,32 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
         // Special handling for 'this' in impl methods when no semantic type is available
         if (ident.name == "this" && !current_impl_type_.empty()) {
-            auto result = std::make_shared<types::Type>();
-            // current_impl_type_ might be a mangled name like Maybe__I32
-            // Check if it contains __ separator (indicates generic type)
+            // When current_type_subs_ is available (from gen_impl_method's type sub setup),
+            // use it with the struct definition to build the correct semantic type.
+            // This handles nested generics like Take[Repeat[I32]] correctly,
+            // where parse_mangled_type_string("Take__Repeat__I32") would
+            // incorrectly produce Take[Repeat, I32].
             auto sep_pos = current_impl_type_.find("__");
+            if (sep_pos != std::string::npos && !current_type_subs_.empty()) {
+                std::string base_name = current_impl_type_.substr(0, sep_pos);
+                auto struct_def = env_.lookup_struct(base_name);
+                if (struct_def.has_value() && !struct_def->type_params.empty()) {
+                    std::vector<types::TypePtr> type_args;
+                    for (const auto& param : struct_def->type_params) {
+                        auto it = current_type_subs_.find(param);
+                        if (it != current_type_subs_.end()) {
+                            type_args.push_back(it->second);
+                        }
+                    }
+                    if (!type_args.empty()) {
+                        auto result = std::make_shared<types::Type>();
+                        result->kind = types::NamedType{base_name, "", std::move(type_args)};
+                        return result;
+                    }
+                }
+            }
+            auto result = std::make_shared<types::Type>();
+            // auto sep_pos already declared above
             if (sep_pos != std::string::npos) {
                 // Parse mangled name: Maybe__I32 -> Maybe[I32]
                 std::string base_name = current_impl_type_.substr(0, sep_pos);
@@ -788,21 +810,61 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // This preserves complex types like Maybe[ref dyn Error]
             auto struct_def = env_.lookup_struct(named.name);
 
+            // If the local lookup found a struct but it doesn't have the field we need,
+            // clear it so we search the module registry for a better match.
+            // This handles name collisions (e.g., core::iter::Take vs core::async_iter::Take).
+            if (struct_def) {
+                bool local_has_field = false;
+                for (const auto& fld : struct_def->fields) {
+                    if (fld.name == field.field) {
+                        local_has_field = true;
+                        break;
+                    }
+                }
+                if (!local_has_field) {
+                    struct_def = std::nullopt; // try module registry instead
+                }
+            }
+
             // If not found locally, search all modules in the registry
+            // When multiple modules define a struct with the same name (e.g., core::iter::Take
+            // vs core::async_iter::Take), prefer the one that has the field we're looking for.
             if (!struct_def && env_.module_registry()) {
+                std::optional<types::StructDef> first_match;
                 const auto& all_modules = env_.module_registry()->get_all_modules();
                 for (const auto& [mod_name, mod] : all_modules) {
+                    std::optional<types::StructDef> candidate;
                     auto mod_struct_it = mod.structs.find(named.name);
                     if (mod_struct_it != mod.structs.end()) {
-                        struct_def = mod_struct_it->second;
-                        break;
+                        candidate = mod_struct_it->second;
                     }
-                    // Also check internal_structs for module-internal types (e.g., ArcInner)
-                    auto internal_it = mod.internal_structs.find(named.name);
-                    if (internal_it != mod.internal_structs.end()) {
-                        struct_def = internal_it->second;
-                        break;
+                    if (!candidate) {
+                        auto internal_it = mod.internal_structs.find(named.name);
+                        if (internal_it != mod.internal_structs.end()) {
+                            candidate = internal_it->second;
+                        }
                     }
+                    if (candidate) {
+                        // Check if this candidate has the field we're looking for
+                        bool has_field = false;
+                        for (const auto& fld : candidate->fields) {
+                            if (fld.name == field.field) {
+                                has_field = true;
+                                break;
+                            }
+                        }
+                        if (has_field) {
+                            struct_def = candidate;
+                            break;
+                        }
+                        if (!first_match) {
+                            first_match = candidate;
+                        }
+                    }
+                }
+                // Fall back to first match if no candidate had the field
+                if (!struct_def && first_match) {
+                    struct_def = first_match;
                 }
             }
 

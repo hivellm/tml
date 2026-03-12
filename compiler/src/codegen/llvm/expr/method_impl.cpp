@@ -257,9 +257,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // If the library already emitted methods using the base type name
         // (e.g., tml_BTreeMap_insert from gen_impl_method), use the base name
         // so user code calls the existing function instead of a non-existent mangled one.
-        std::string base_fn_check = "@" + mangle_impl_method(named.name, method);
-        if (mangled_type_name != named.name && generated_functions_.count(base_fn_check) > 0) {
-            mangled_type_name = named.name;
+        // BUT: skip this fallback when inside a generic impl body (current_impl_type_
+        // contains "__"), because the inner type may be from a different module than the
+        // base-name function. E.g., inside Take__Repeat__I32::size_hint (async_iter module),
+        // Repeat::size_hint from iter module is irrelevant — we need Repeat__I32::size_hint.
+        bool inside_generic_impl = current_impl_type_.find("__") != std::string::npos;
+        if (mangled_type_name != named.name && !inside_generic_impl) {
+            std::string base_fn_check = "@" + mangle_impl_method(named.name, method);
+            if (generated_functions_.count(base_fn_check) > 0) {
+                mangled_type_name = named.name;
+            }
         }
 
         std::string method_for_key = method;
@@ -924,13 +931,24 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     }
 
     // Look up in functions_ to get the correct LLVM name
-    std::string method_lookup_key = named2.name + "_" + method;
+    // For generic types with type_args (e.g., Repeat[I32]), use the mangled name
+    std::string type_name_for_call = named2.name;
+    if (!named2.type_args.empty()) {
+        type_name_for_call = mangle_struct_name(named2.name, named2.type_args);
+    }
+    std::string method_lookup_key = type_name_for_call + "_" + method;
     auto method_it = functions_.find(method_lookup_key);
     std::string fn_name;
     if (method_it != functions_.end()) {
         fn_name = method_it->second.llvm_name;
     } else {
-        fn_name = "@" + mangle_impl_method(named2.name, method);
+        // Also try base name lookup for non-generic methods
+        method_it = functions_.find(named2.name + "_" + method);
+        if (method_it != functions_.end()) {
+            fn_name = method_it->second.llvm_name;
+        } else {
+            fn_name = "@" + mangle_impl_method(type_name_for_call, method);
+        }
     }
     std::string impl_receiver_val;
 
