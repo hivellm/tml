@@ -249,6 +249,9 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call, std::
         auto [target_llvm, target_bits, target_signed, target_float] = get_type_info(type_name);
 
         if (!target_llvm.empty()) {
+            // Coverage: track which From conversion was used
+            emit_coverage(type_name + "::from");
+
             // Generate the source value
             std::string src_val = gen_expr(*call.args[0]);
             std::string src_llvm = last_expr_type_;

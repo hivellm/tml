@@ -504,6 +504,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
             // Handle Type::from(value) calls for type conversion
             if (is_primitive_type && method == "from" && !call.args.empty()) {
+                // Coverage: track which From conversion was used
+                emit_coverage(type_name + "::from");
+
                 // Generate the source value
                 std::string src_val = gen_expr(*call.args[0]);
                 std::string src_type = last_expr_type_;
