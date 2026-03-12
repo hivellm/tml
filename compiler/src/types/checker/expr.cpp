@@ -598,6 +598,13 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             }
         }
 
+        // Check if it's a const generic parameter (e.g., N in impl[T, const N: I64])
+        auto const_param_it = current_const_params_.find(ident.name);
+        if (const_param_it != current_const_params_.end()) {
+            return const_param_it->second.value_type ? const_param_it->second.value_type
+                                                     : make_i64();
+        }
+
         // Build error message with suggestions
         std::string msg = "Undefined variable: " + ident.name;
         auto all_names = get_all_known_names();

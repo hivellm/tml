@@ -227,6 +227,16 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
     if (s == "Isize")
         return types::make_primitive(types::PrimitiveKind::I64);
 
+    // Check for const generic integer value (e.g., "3", "10", "-1")
+    if (!s.empty() && (std::isdigit(s[0]) || (s[0] == '-' && s.size() > 1 && std::isdigit(s[1])))) {
+        try {
+            int64_t val = std::stoll(s);
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::ConstGenericType{s, types::make_i64(), val};
+            return t;
+        } catch (...) {}
+    }
+
     // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
     if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
         std::string inner_str = s.substr(4);

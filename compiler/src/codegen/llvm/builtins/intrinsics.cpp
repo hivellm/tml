@@ -143,7 +143,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "simd_load", "simd_store", "simd_extract", "simd_insert", "simd_splat", "simd_load_ptr",
         "simd_bitmask",
         // Native SSE2 intrinsics
-        "sse2_cmpeq_epi8", "sse2_movemask_epi8"};
+        "sse2_cmpeq_epi8", "sse2_movemask_epi8",
+        // Array element intrinsics
+        "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
 
     // Extract base name for intrinsic matching - handles qualified paths like
     // "core::intrinsics::sqrt" by extracting just "sqrt"
@@ -1321,6 +1323,125 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             return result;
         }
         return "null";
+    }
+
+    // array_take[T](data: [T; N], index: I64) -> T
+    // Extracts an element from an array at a dynamic index (move semantics)
+    if (intrinsic_name == "array_take") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_;
+            std::string index = gen_expr(*call.args[1]);
+
+            // Infer element type from the array type (e.g., "[3 x i32]" -> "i32")
+            std::string elem_type = "i64"; // default
+            if (data_type.size() > 3 && data_type[0] == '[') {
+                auto x_pos = data_type.find(" x ");
+                if (x_pos != std::string::npos) {
+                    elem_type = data_type.substr(x_pos + 3);
+                    if (!elem_type.empty() && elem_type.back() == ']') {
+                        elem_type.pop_back();
+                    }
+                }
+            }
+
+            // Alloca the array, GEP to element, load
+            std::string arr_ptr = fresh_reg();
+            emit_line("  " + arr_ptr + " = alloca " + data_type);
+            emit_line("  store " + data_type + " " + data + ", ptr " + arr_ptr);
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + data_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + index);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + elem_type + ", ptr " + elem_ptr);
+            last_expr_type_ = elem_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // array_get[T](data: [T; N], index: I64) -> T
+    // Same as array_take but with copy semantics
+    if (intrinsic_name == "array_get") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_;
+            std::string index = gen_expr(*call.args[1]);
+
+            std::string elem_type = "i64";
+            if (data_type.size() > 3 && data_type[0] == '[') {
+                auto x_pos = data_type.find(" x ");
+                if (x_pos != std::string::npos) {
+                    elem_type = data_type.substr(x_pos + 3);
+                    if (!elem_type.empty() && elem_type.back() == ']') {
+                        elem_type.pop_back();
+                    }
+                }
+            }
+
+            std::string arr_ptr = fresh_reg();
+            emit_line("  " + arr_ptr + " = alloca " + data_type);
+            emit_line("  store " + data_type + " " + data + ", ptr " + arr_ptr);
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + data_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + index);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + elem_type + ", ptr " + elem_ptr);
+            last_expr_type_ = elem_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // array_get_ref[T](data: [T; N], index: I64) -> ref T
+    // Returns a pointer to an element in an array
+    if (intrinsic_name == "array_get_ref") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_;
+            std::string index = gen_expr(*call.args[1]);
+
+            std::string arr_ptr = fresh_reg();
+            emit_line("  " + arr_ptr + " = alloca " + data_type);
+            emit_line("  store " + data_type + " " + data + ", ptr " + arr_ptr);
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + data_type + ", ptr " +
+                      arr_ptr + ", i64 0, i64 " + index);
+            last_expr_type_ = "ptr";
+            return elem_ptr;
+        }
+        return "null";
+    }
+
+    // array_set[T](data: [T; N], index: I64, value: T) -> void
+    // Sets an element in an array at a dynamic index
+    if (intrinsic_name == "array_set") {
+        if (call.args.size() >= 3) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_;
+            std::string index = gen_expr(*call.args[1]);
+            std::string value = gen_expr(*call.args[2]);
+            std::string val_type = last_expr_type_;
+
+            // For array_set, data should be a pointer to the array (from struct field)
+            // We GEP into the array and store
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + data_type + ", ptr " + data +
+                      ", i64 0, i64 " + index);
+            emit_line("  store " + val_type + " " + value + ", ptr " + elem_ptr);
+            last_expr_type_ = "void";
+            return "";
+        }
+        return "";
+    }
+
+    // array_uninit[T; N]() -> [T; N]
+    // Creates an uninitialized array (undef)
+    if (intrinsic_name == "array_uninit") {
+        // Try to get the type from the variable being assigned to
+        // For now, return undef — the type will be resolved by the caller
+        last_expr_type_ = "i8"; // placeholder, will be overridden by assignment context
+        return "undef";
     }
 
     // ============================================================================

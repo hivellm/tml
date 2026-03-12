@@ -122,7 +122,22 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                 std::unordered_map<std::string, types::TypePtr> type_subs;
 
                 for (size_t i = 0; i < gen_args.size(); ++i) {
-                    if (gen_args[i].is_type()) {
+                    if (gen_args[i].is_const && gen_args[i].is_expr()) {
+                        // Const generic argument (e.g., 3 in ArrayIter[I32, 3])
+                        int64_t const_val = 0;
+                        const auto& expr = gen_args[i].as_expr();
+                        if (expr && expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                const_val = lit.token.int_value().value;
+                            }
+                        }
+                        auto const_type = std::make_shared<types::Type>();
+                        const_type->kind = types::ConstGenericType{std::to_string(const_val),
+                                                                   types::make_i64(), const_val};
+                        resolved_type_args.push_back(const_type);
+                        type_subs["T" + std::to_string(i)] = const_type;
+                    } else if (gen_args[i].is_type()) {
                         // Resolve using current_type_subs_ to handle T -> I32
                         auto resolved = resolve_parser_type_with_subs(*gen_args[i].as_type(),
                                                                       current_type_subs_);
@@ -402,12 +417,18 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                         if (struct_it != mod.structs.end() &&
                             !struct_it->second.type_params.empty()) {
                             imported_type_params = struct_it->second.type_params;
+                            for (const auto& cp : struct_it->second.const_params) {
+                                imported_type_params.push_back(cp.name);
+                            }
                             break;
                         }
                         auto internal_it = mod.internal_structs.find(type_name);
                         if (internal_it != mod.internal_structs.end() &&
                             !internal_it->second.type_params.empty()) {
                             imported_type_params = internal_it->second.type_params;
+                            for (const auto& cp : internal_it->second.const_params) {
+                                imported_type_params.push_back(cp.name);
+                            }
                             break;
                         }
                         // Check enums
@@ -522,7 +543,24 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                     std::vector<types::TypePtr> resolved_type_args;
 
                     for (size_t i = 0; i < gen_args.size(); ++i) {
-                        if (gen_args[i].is_type()) {
+                        if (gen_args[i].is_const && gen_args[i].is_expr()) {
+                            // Const generic argument (e.g., 3 in ArrayIter[I32, 3])
+                            int64_t const_val = 0;
+                            const auto& expr = gen_args[i].as_expr();
+                            if (expr && expr->is<parser::LiteralExpr>()) {
+                                const auto& lit = expr->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    const_val = lit.token.int_value().value;
+                                }
+                            }
+                            auto const_type = std::make_shared<types::Type>();
+                            const_type->kind = types::ConstGenericType{
+                                std::to_string(const_val), types::make_i64(), const_val};
+                            resolved_type_args.push_back(const_type);
+                            if (i < generic_names.size()) {
+                                type_subs[generic_names[i]] = const_type;
+                            }
+                        } else if (gen_args[i].is_type()) {
                             // Resolve using current_type_subs_ to handle T -> I32
                             auto resolved = resolve_parser_type_with_subs(*gen_args[i].as_type(),
                                                                           current_type_subs_);

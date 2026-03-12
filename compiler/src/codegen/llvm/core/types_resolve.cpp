@@ -164,6 +164,21 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                         if (arg.is_type()) {
                             type_args.push_back(
                                 resolve_parser_type_with_subs(*arg.as_type(), subs));
+                        } else if (arg.is_const && arg.is_expr()) {
+                            // Const generic argument (e.g., 3 in Wrapper[I32, 3])
+                            // const generic arg found
+                            int64_t const_val = 0;
+                            const auto& expr = arg.as_expr();
+                            if (expr && expr->template is<parser::LiteralExpr>()) {
+                                const auto& lit = expr->template as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    const_val = lit.token.int_value().value;
+                                }
+                            }
+                            auto const_type = std::make_shared<types::Type>();
+                            const_type->kind = types::ConstGenericType{
+                                std::to_string(const_val), types::make_i64(), const_val};
+                            type_args.push_back(const_type);
                         }
                     }
                 }
@@ -211,6 +226,26 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                     auto it = current_const_generic_values_.find(ident.name);
                     if (it != current_const_generic_values_.end()) {
                         arr_size = static_cast<size_t>(it->second);
+                    } else {
+                        // Also check current_type_subs_ for const generic values
+                        auto sub_it = subs.find(ident.name);
+                        if (sub_it != subs.end() && sub_it->second) {
+                            if (sub_it->second->template is<types::ConstGenericType>()) {
+                                const auto& cgt =
+                                    sub_it->second->template as<types::ConstGenericType>();
+                                if (cgt.resolved_value.has_value()) {
+                                    arr_size = static_cast<size_t>(*cgt.resolved_value);
+                                }
+                            } else if (sub_it->second->template is<types::NamedType>()) {
+                                // NamedType with numeric name (e.g., NamedType{"3"})
+                                const auto& named = sub_it->second->template as<types::NamedType>();
+                                if (!named.name.empty() && std::isdigit(named.name[0])) {
+                                    try {
+                                        arr_size = static_cast<size_t>(std::stoll(named.name));
+                                    } catch (...) {}
+                                }
+                            }
+                        }
                     }
                 }
                 auto result = std::make_shared<types::Type>();
@@ -367,8 +402,19 @@ auto LLVMIRGen::apply_type_substitutions(
     } else if (type->is<types::ArrayType>()) {
         const auto& arr = type->as<types::ArrayType>();
         auto new_elem = apply_type_substitutions(arr.element, subs);
-        if (new_elem != arr.element) {
-            return types::make_array(new_elem, arr.size);
+        // Resolve const generic array size (e.g., N -> 3)
+        size_t new_size = arr.size;
+        if (!arr.const_generic_param.empty()) {
+            auto it = subs.find(arr.const_generic_param);
+            if (it != subs.end() && it->second && it->second->is<types::ConstGenericType>()) {
+                const auto& cgt = it->second->as<types::ConstGenericType>();
+                if (cgt.resolved_value.has_value()) {
+                    new_size = static_cast<size_t>(*cgt.resolved_value);
+                }
+            }
+        }
+        if (new_elem != arr.element || new_size != arr.size) {
+            return types::make_array(new_elem, new_size);
         }
     } else if (type->is<types::SliceType>()) {
         const auto& slice = type->as<types::SliceType>();

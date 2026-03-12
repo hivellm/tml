@@ -546,6 +546,53 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                         gen_it->second = infer_expr_type(*s.fields[fi].second);
                     }
                 }
+                // Handle array field [T; N] — infer T from element type and N from array size
+                else if (field_decl.type && field_decl.type->is<parser::ArrayType>()) {
+                    const auto& arr_type = field_decl.type->as<parser::ArrayType>();
+                    // Infer element type T
+                    if (arr_type.element && arr_type.element->is<parser::NamedType>()) {
+                        const auto& elem_named = arr_type.element->as<parser::NamedType>();
+                        std::string elem_name =
+                            elem_named.path.segments.empty() ? "" : elem_named.path.segments.back();
+                        auto gen_it = inferred_generics.find(elem_name);
+                        if (gen_it != inferred_generics.end() && !gen_it->second) {
+                            // Infer element type from array literal elements
+                            const auto& field_value = *s.fields[fi].second;
+                            if (field_value.is<parser::ArrayExpr>()) {
+                                const auto& arr_expr = field_value.as<parser::ArrayExpr>();
+                                if (std::holds_alternative<std::vector<parser::ExprPtr>>(
+                                        arr_expr.kind) &&
+                                    !std::get<std::vector<parser::ExprPtr>>(arr_expr.kind)
+                                         .empty()) {
+                                    gen_it->second = infer_expr_type(
+                                        *std::get<std::vector<parser::ExprPtr>>(arr_expr.kind)[0]);
+                                }
+                            }
+                        }
+                    }
+                    // Infer const generic N from array literal size
+                    if (arr_type.size && arr_type.size->is<parser::IdentExpr>()) {
+                        const auto& size_ident = arr_type.size->as<parser::IdentExpr>();
+                        auto gen_it = inferred_generics.find(size_ident.name);
+                        if (gen_it != inferred_generics.end() && !gen_it->second) {
+                            const auto& field_value = *s.fields[fi].second;
+                            if (field_value.is<parser::ArrayExpr>()) {
+                                const auto& arr_expr = field_value.as<parser::ArrayExpr>();
+                                int64_t arr_size =
+                                    std::holds_alternative<std::vector<parser::ExprPtr>>(
+                                        arr_expr.kind)
+                                        ? static_cast<int64_t>(
+                                              std::get<std::vector<parser::ExprPtr>>(arr_expr.kind)
+                                                  .size())
+                                        : 0;
+                                auto const_type = std::make_shared<types::Type>();
+                                const_type->kind = types::ConstGenericType{
+                                    std::to_string(arr_size), types::make_i64(), arr_size};
+                                gen_it->second = const_type;
+                            }
+                        }
+                    }
+                }
             }
 
             // Build type_args in order

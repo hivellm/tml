@@ -189,7 +189,11 @@ auto type_to_string(const TypePtr& type) -> std::string {
             } else if constexpr (std::is_same_v<T, PtrType>) {
                 return (t.is_mut ? "*mut " : "*") + type_to_string(t.inner);
             } else if constexpr (std::is_same_v<T, ArrayType>) {
-                return "[" + type_to_string(t.element) + "; " + std::to_string(t.size) + "]";
+                std::string size_str = std::to_string(t.size);
+                if (!t.const_generic_param.empty()) {
+                    size_str += "@" + t.const_generic_param;
+                }
+                return "[" + type_to_string(t.element) + "; " + size_str + "]";
             } else if constexpr (std::is_same_v<T, SliceType>) {
                 return "[" + type_to_string(t.element) + "]";
             } else if constexpr (std::is_same_v<T, TupleType>) {
@@ -542,10 +546,34 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                 result->kind = PtrType{t.is_mut, substitute_type(t.inner, subs)};
                 return result;
             }
-            // ArrayType: substitute element type
+            // ArrayType: substitute element type and resolve const generic size
             else if constexpr (std::is_same_v<T, ArrayType>) {
+                auto new_element = substitute_type(t.element, subs);
+                size_t new_size = t.size;
+                std::string new_param = t.const_generic_param;
+                if (!t.const_generic_param.empty()) {
+                    auto it = subs.find(t.const_generic_param);
+                    if (it != subs.end() && it->second) {
+                        if (it->second->is<ConstGenericType>()) {
+                            const auto& cgt = it->second->as<ConstGenericType>();
+                            if (cgt.resolved_value.has_value()) {
+                                new_size = static_cast<size_t>(*cgt.resolved_value);
+                                new_param.clear();
+                            }
+                        } else if (it->second->is<NamedType>()) {
+                            // NamedType with numeric name (e.g., NamedType{"3"})
+                            const auto& named = it->second->as<NamedType>();
+                            if (!named.name.empty() && std::isdigit(named.name[0])) {
+                                try {
+                                    new_size = static_cast<size_t>(std::stoll(named.name));
+                                    new_param.clear();
+                                } catch (...) {}
+                            }
+                        }
+                    }
+                }
                 auto result = std::make_shared<Type>();
-                result->kind = ArrayType{substitute_type(t.element, subs), t.size};
+                result->kind = ArrayType{std::move(new_element), new_size, new_param};
                 return result;
             }
             // SliceType: substitute element type
@@ -783,11 +811,33 @@ auto substitute_type_with_consts(const TypePtr& type,
                 result->kind = NamedType{t.name, t.module_path, std::move(new_args)};
                 return result;
             }
-            // ArrayType: substitute element type and check for const generic size
+            // ArrayType: substitute element type and resolve const generic size
             else if constexpr (std::is_same_v<T, ArrayType>) {
                 auto new_element = substitute_type_with_consts(t.element, type_subs, const_subs);
+                size_t new_size = t.size;
+                std::string new_param = t.const_generic_param;
+                // Check const_subs for the size parameter
+                if (!t.const_generic_param.empty()) {
+                    auto cit = const_subs.find(t.const_generic_param);
+                    if (cit != const_subs.end()) {
+                        new_size = static_cast<size_t>(cit->second.as_i64());
+                        new_param.clear();
+                    }
+                    // Also check type_subs (ConstGenericType stored as TypePtr)
+                    if (new_param == t.const_generic_param) {
+                        auto tit = type_subs.find(t.const_generic_param);
+                        if (tit != type_subs.end() && tit->second &&
+                            tit->second->is<ConstGenericType>()) {
+                            const auto& cgt = tit->second->as<ConstGenericType>();
+                            if (cgt.resolved_value.has_value()) {
+                                new_size = static_cast<size_t>(*cgt.resolved_value);
+                                new_param.clear();
+                            }
+                        }
+                    }
+                }
                 auto result = std::make_shared<Type>();
-                result->kind = ArrayType{std::move(new_element), t.size};
+                result->kind = ArrayType{std::move(new_element), new_size, new_param};
                 return result;
             }
             // RefType: substitute inner type

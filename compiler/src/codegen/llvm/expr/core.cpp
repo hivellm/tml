@@ -558,7 +558,50 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         }
     }
 
-    report_error("Unknown variable: " + ident.name, ident.span, "C004");
+    // Check if it's a const generic parameter (e.g., N in ArrayIter[T, const N: I64])
+    auto const_gen_it = current_const_generic_values_.find(ident.name);
+    if (const_gen_it != current_const_generic_values_.end()) {
+        last_expr_type_ = "i64";
+        return std::to_string(const_gen_it->second);
+    }
+
+    // Also try current_type_subs_ for const generic params
+    auto type_sub_it = current_type_subs_.find(ident.name);
+    if (type_sub_it != current_type_subs_.end() && type_sub_it->second &&
+        type_sub_it->second->is<types::ConstGenericType>()) {
+        const auto& cgt = type_sub_it->second->as<types::ConstGenericType>();
+        if (cgt.resolved_value.has_value()) {
+            last_expr_type_ = "i64";
+            return std::to_string(*cgt.resolved_value);
+        }
+    }
+
+    // Check type_subs for any type that looks numeric (handles NamedType{"3"} case)
+    if (type_sub_it != current_type_subs_.end() && type_sub_it->second) {
+        const auto& ts = type_sub_it->second;
+        // NamedType with numeric name (e.g., NamedType{"3"}) — treat as const generic
+        if (ts->is<types::NamedType>()) {
+            const auto& named = ts->as<types::NamedType>();
+            if (!named.name.empty() && std::isdigit(named.name[0])) {
+                try {
+                    int64_t val = std::stoll(named.name);
+                    last_expr_type_ = "i64";
+                    return std::to_string(val);
+                } catch (...) {}
+            }
+        }
+    }
+
+    std::string diag = "Unknown variable: " + ident.name + " [const_gen_vals={";
+    for (const auto& [k, v] : current_const_generic_values_) {
+        diag += k + "=" + std::to_string(v) + ",";
+    }
+    diag += "} type_subs={";
+    for (const auto& [k, v] : current_type_subs_) {
+        diag += k + "=" + (v ? types::type_to_string(v) : "null") + ",";
+    }
+    diag += "}]";
+    report_error(diag, ident.span, "C004");
     last_expr_type_ = "i32";
     return "0";
 }

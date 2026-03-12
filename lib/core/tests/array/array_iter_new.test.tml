@@ -1,24 +1,169 @@
-// Tests for array/iter: ArrayIter and Array::iter/iter_mut/into_iter
-//
-// ALL 19 FUNCTIONS BLOCKED by two codegen bugs:
-//
-// 1. Const generic monomorphization in struct layout: ArrayIter[T, const N: I64]
-//    uses `data: [T; N]` field, but codegen always emits `[0 x %struct.T]` instead of
-//    `[N x i32]` for the concrete instantiation. LLVM IR error:
-//    "'%t6' defined with type '[3 x i32]' but expected '[0 x %struct.T]'"
-//    This affects all 16 ArrayIter methods.
-//
-// 2. Cross-file impl resolution: Array::iter, Array::iter_mut, Array::into_iter
-//    are defined in separate impl blocks in array/iter.tml. "Unknown method: iter"
-//
-// Blocked functions (19 total):
-//   ArrayIter::new, empty, as_slice, as_mut_slice, next, count, last, nth,
-//   advance_by, next_back, nth_back, advance_back_by, len, is_empty_exact,
-//   duplicate, debug_string, Array::into_iter, Array::iter, Array::iter_mut
-use test::{assert}
+use core::array::iter::ArrayIter
+use test::{assert, assert_eq}
 
 @test
-func test_array_iter_blocked() -> I32 {
-    assert(true, "placeholder - see file header for blockers")
+func test_array_iter_new() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    assert_eq(it.len(), 3)
+    assert_eq(it.is_empty_exact(), false)
+    return 0
+}
+
+@test
+func test_array_iter_next() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    let first: Maybe[I32] = it.next()
+    assert(first.is_just(), "first should be Just")
+    let second: Maybe[I32] = it.next()
+    assert(second.is_just(), "second should be Just")
+    let third: Maybe[I32] = it.next()
+    assert(third.is_just(), "third should be Just")
+    let fourth: Maybe[I32] = it.next()
+    assert(fourth.is_nothing(), "fourth should be Nothing")
+    return 0
+}
+
+@test
+func test_array_iter_len_tracking() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    assert_eq(it.len(), 3)
+    it.next()
+    assert_eq(it.len(), 2)
+    it.next()
+    assert_eq(it.len(), 1)
+    it.next()
+    assert_eq(it.len(), 0)
+    assert_eq(it.is_empty_exact(), true)
+    return 0
+}
+
+@test
+func test_array_iter_count() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    assert_eq(it.count(), 3)
+    return 0
+}
+
+@test
+func test_array_iter_count_after_next() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    it.next()
+    assert_eq(it.count(), 2)
+    return 0
+}
+
+@test
+func test_array_iter_last() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    let l: Maybe[I32] = it.last()
+    assert(l.is_just(), "last should be Just")
+    assert_eq(it.len(), 0)
+    return 0
+}
+
+@test
+func test_array_iter_nth() -> I32 {
+    let arr: [I32; 4] = [10, 20, 30, 40]
+    let mut it: ArrayIter[I32, 4] = ArrayIter::new(arr)
+    let second: Maybe[I32] = it.nth(1)
+    assert(second.is_just(), "nth(1) should be Just")
+    assert_eq(it.len(), 2)
+    return 0
+}
+
+@test
+func test_array_iter_nth_out_of_bounds() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    let result: Maybe[I32] = it.nth(10)
+    assert(result.is_nothing(), "nth(10) should be Nothing")
+    assert_eq(it.len(), 0)
+    return 0
+}
+
+@test
+func test_array_iter_advance_by() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let mut it: ArrayIter[I32, 5] = ArrayIter::new(arr)
+    let advanced: I64 = it.advance_by(3)
+    assert_eq(advanced, 3)
+    assert_eq(it.len(), 2)
+    return 0
+}
+
+@test
+func test_array_iter_next_back() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let mut it: ArrayIter[I32, 3] = ArrayIter::new(arr)
+    let last: Maybe[I32] = it.next_back()
+    assert(last.is_just(), "next_back should be Just")
+    assert_eq(it.len(), 2)
+    let second_last: Maybe[I32] = it.next_back()
+    assert(second_last.is_just(), "second next_back should be Just")
+    assert_eq(it.len(), 1)
+    return 0
+}
+
+@test
+func test_array_iter_nth_back() -> I32 {
+    let arr: [I32; 4] = [10, 20, 30, 40]
+    let mut it: ArrayIter[I32, 4] = ArrayIter::new(arr)
+    let result: Maybe[I32] = it.nth_back(1)
+    assert(result.is_just(), "nth_back(1) should be Just")
+    assert_eq(it.len(), 2)
+    return 0
+}
+
+@test
+func test_array_iter_advance_back_by() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let mut it: ArrayIter[I32, 5] = ArrayIter::new(arr)
+    let advanced: I64 = it.advance_back_by(2)
+    assert_eq(advanced, 2)
+    assert_eq(it.len(), 3)
+    return 0
+}
+
+// test_array_iter_as_slice: blocked by array_offset_ptr intrinsic resolution in library lowlevel blocks
+
+@test
+func test_array_iter_bidirectional() -> I32 {
+    let arr: [I32; 4] = [1, 2, 3, 4]
+    let mut it: ArrayIter[I32, 4] = ArrayIter::new(arr)
+    let front: Maybe[I32] = it.next()
+    assert(front.is_just(), "front should be Just")
+    let back: Maybe[I32] = it.next_back()
+    assert(back.is_just(), "back should be Just")
+    assert_eq(it.len(), 2)
+    return 0
+}
+
+@test
+func test_array_iter_exhaust_bidirectional() -> I32 {
+    let arr: [I32; 2] = [1, 2]
+    let mut it: ArrayIter[I32, 2] = ArrayIter::new(arr)
+    it.next()
+    it.next_back()
+    assert_eq(it.len(), 0)
+    let result: Maybe[I32] = it.next()
+    assert(result.is_nothing(), "exhausted iter should return Nothing")
+    return 0
+}
+
+@test
+func test_array_iter_fused() -> I32 {
+    let arr: [I32; 1] = [42]
+    let mut it: ArrayIter[I32, 1] = ArrayIter::new(arr)
+    it.next()
+    let a: Maybe[I32] = it.next()
+    assert(a.is_nothing(), "fused: first extra next is Nothing")
+    let b: Maybe[I32] = it.next()
+    assert(b.is_nothing(), "fused: second extra next is Nothing")
     return 0
 }

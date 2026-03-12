@@ -204,6 +204,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // correctly set (with proper nested generics), and parse_mangled_type_string
     // cannot handle nested generics like "Take__Repeat__I32" → Take[Repeat[I32]].
     auto saved_type_subs = current_type_subs_;
+    auto saved_const_generic_values_impl = current_const_generic_values_;
     auto pos_dunder = type_name.find("__");
     if (pos_dunder != std::string::npos && current_type_subs_.empty()) {
         std::string base_name = type_name.substr(0, pos_dunder);
@@ -216,6 +217,22 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                      ++i) {
                     current_type_subs_[struct_def->type_params[i]] = named.type_args[i];
                 }
+                // Also map const generic params (e.g., N -> ConstGenericType{3})
+                for (size_t i = 0; i < struct_def->const_params.size(); ++i) {
+                    size_t idx = struct_def->type_params.size() + i;
+                    if (idx < named.type_args.size()) {
+                        current_type_subs_[struct_def->const_params[i].name] = named.type_args[idx];
+                    }
+                }
+            }
+        }
+    }
+    // Extract const generic values from current type substitutions
+    for (const auto& [param_name, type_ptr] : current_type_subs_) {
+        if (type_ptr && type_ptr->is<types::ConstGenericType>()) {
+            const auto& cgt = type_ptr->as<types::ConstGenericType>();
+            if (cgt.resolved_value.has_value()) {
+                current_const_generic_values_[param_name] = *cgt.resolved_value;
             }
         }
     }
@@ -709,6 +726,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     current_ret_type_.clear();
     current_impl_type_.clear();
     current_type_subs_ = saved_type_subs;
+    current_const_generic_values_ = saved_const_generic_values_impl;
     current_scope_id_ = 0;
     current_debug_loc_id_ = 0;
 }
@@ -872,6 +890,19 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     current_type_subs_ = full_type_subs; // Set type substitutions for the method body
+
+    // Extract const generic values from type substitutions
+    // e.g., N -> ConstGenericType{resolved_value=3} means current_const_generic_values_["N"] = 3
+    auto saved_const_generic_values = current_const_generic_values_;
+    for (const auto& [param_name, type_ptr] : full_type_subs) {
+        if (type_ptr && type_ptr->is<types::ConstGenericType>()) {
+            const auto& cgt = type_ptr->as<types::ConstGenericType>();
+            if (cgt.resolved_value.has_value()) {
+                current_const_generic_values_[param_name] = *cgt.resolved_value;
+            }
+        }
+    }
+
     locals_.clear();
     block_terminated_ = false;
 
@@ -1240,6 +1271,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_ret_type_ = saved_ret_type;
     current_impl_type_ = saved_impl_type;
     current_type_subs_ = saved_type_subs;
+    current_const_generic_values_ = saved_const_generic_values;
     current_where_constraints_ = saved_where_constraints;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;

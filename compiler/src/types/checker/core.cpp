@@ -1133,7 +1133,13 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
 
     // Collect generic type parameter names (e.g., T in impl[T] ...)
     current_type_params_.clear();
+    current_const_params_.clear();
     for (const auto& param : impl.generics) {
+        if (param.is_const) {
+            // Const generic param (e.g., const N: I64) — register so N can be used as a value
+            TypePtr value_type = param.const_type ? resolve_type(**param.const_type) : make_i64();
+            current_const_params_[param.name] = ConstGenericParam{param.name, value_type};
+        }
         // For now, map generic params to a placeholder type
         auto type_var = std::make_shared<Type>();
         type_var->kind = NamedType{param.name, "", {}};
