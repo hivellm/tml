@@ -204,7 +204,13 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                 if (pos != std::string::npos) {
                     std::string module_path = type_import_path->substr(0, pos);
                     // Lookup "Type::method" in the module
-                    return module_registry_->lookup_function(module_path, name);
+                    auto result = module_registry_->lookup_function(module_path, name);
+                    if (result) {
+                        return result;
+                    }
+                    // Don't return early — extension impls may define this
+                    // method in a different module (e.g., async_tcp.tml defines
+                    // TcpListener::from_raw_socket but TcpListener is in tcp.tml)
                 }
             }
 
