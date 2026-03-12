@@ -4,7 +4,7 @@
  * This file provides wrapper functions that match the @extern names
  * used in the TML zlib module. It maps TML FFI names to internal C functions.
  *
- * IMPORTANT: Do not include external library headers (zlib.h, brotli/*.h, zstd.h)
+ * IMPORTANT: Do not include external library headers (zlib.h, brotli, zstd.h)
  * in this file to avoid symbol conflicts. All external types are treated as opaque void*.
  */
 

@@ -32,7 +32,7 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
     -> std::optional<std::string> {
 
     // Helper: check if function is defined as a TML module function (not a builtin)
-    auto is_module_func = [&](const std::string& name) -> bool {
+    [[maybe_unused]] auto is_module_func = [&](const std::string& name) -> bool {
         return env_.lookup_func(name).has_value();
     };
 

@@ -7,7 +7,9 @@ TML_MODULE("codegen_x86")
 //! spawning lld-link.exe / ld.lld as a subprocess.
 
 // Suppress MSVC warnings about getenv
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include "backend/lld_linker.hpp"
 

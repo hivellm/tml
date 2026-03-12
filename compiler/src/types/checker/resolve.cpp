@@ -97,6 +97,7 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
             } else if constexpr (std::is_same_v<T, parser::ArrayType>) {
                 // Evaluate array size from expression (must be compile-time constant)
                 size_t arr_size = 0;
+                std::string const_generic_param;
                 if (t.size) {
                     if (t.size->template is<parser::LiteralExpr>()) {
                         const auto& lit = t.size->template as<parser::LiteralExpr>();
@@ -104,9 +105,16 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                             const auto& val = lit.token.int_value();
                             arr_size = static_cast<size_t>(val.value);
                         }
+                    } else if (t.size->template is<parser::IdentExpr>()) {
+                        // Const generic parameter reference (e.g., N in [T; N])
+                        const_generic_param = t.size->template as<parser::IdentExpr>().name;
                     }
                 }
-                return make_array(resolve_type(*t.element), arr_size);
+                auto result = make_array(resolve_type(*t.element), arr_size);
+                if (!const_generic_param.empty()) {
+                    result->template as<ArrayType>().const_generic_param = const_generic_param;
+                }
+                return result;
             } else if constexpr (std::is_same_v<T, parser::SliceType>) {
                 return make_slice(resolve_type(*t.element));
             } else if constexpr (std::is_same_v<T, parser::InferType>) {

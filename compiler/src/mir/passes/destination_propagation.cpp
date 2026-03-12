@@ -37,7 +37,7 @@ struct AllocaUseInfo {
 };
 
 /// Check if a value is used as an operand in any instruction or terminator.
-auto count_value_uses(const Function& func, ValueId value_id) -> int {
+[[maybe_unused]] auto count_value_uses(const Function& func, ValueId value_id) -> int {
     int count = 0;
 
     for (const auto& block : func.blocks) {

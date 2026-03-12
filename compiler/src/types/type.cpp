@@ -554,15 +554,15 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                 if (!t.const_generic_param.empty()) {
                     auto it = subs.find(t.const_generic_param);
                     if (it != subs.end() && it->second) {
-                        if (it->second->is<ConstGenericType>()) {
-                            const auto& cgt = it->second->as<ConstGenericType>();
+                        if (it->second->template is<ConstGenericType>()) {
+                            const auto& cgt = it->second->template as<ConstGenericType>();
                             if (cgt.resolved_value.has_value()) {
                                 new_size = static_cast<size_t>(*cgt.resolved_value);
                                 new_param.clear();
                             }
-                        } else if (it->second->is<NamedType>()) {
+                        } else if (it->second->template is<NamedType>()) {
                             // NamedType with numeric name (e.g., NamedType{"3"})
-                            const auto& named = it->second->as<NamedType>();
+                            const auto& named = it->second->template as<NamedType>();
                             if (!named.name.empty() && std::isdigit(named.name[0])) {
                                 try {
                                     new_size = static_cast<size_t>(std::stoll(named.name));
@@ -827,8 +827,8 @@ auto substitute_type_with_consts(const TypePtr& type,
                     if (new_param == t.const_generic_param) {
                         auto tit = type_subs.find(t.const_generic_param);
                         if (tit != type_subs.end() && tit->second &&
-                            tit->second->is<ConstGenericType>()) {
-                            const auto& cgt = tit->second->as<ConstGenericType>();
+                            tit->second->template is<ConstGenericType>()) {
+                            const auto& cgt = tit->second->template as<ConstGenericType>();
                             if (cgt.resolved_value.has_value()) {
                                 new_size = static_cast<size_t>(*cgt.resolved_value);
                                 new_param.clear();

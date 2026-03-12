@@ -27,6 +27,7 @@ set "BUMP_MAJOR=0"
 set "BUMP_MINOR=0"
 set "ENABLE_MODULAR=ON"
 set "ENABLE_PACK=0"
+set "USE_ZIG_CC=0"
 
 :: Parse arguments
 :parse_args
@@ -43,6 +44,7 @@ if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_arg
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
 if /i "%~1"=="--monolithic" set "ENABLE_MODULAR=OFF" & shift & goto :parse_args
 if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
+if /i "%~1"=="--zig" set "USE_ZIG_CC=1" & shift & goto :parse_args
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
@@ -72,6 +74,7 @@ echo   --sanitize     Enable both ASan and UBSan
 echo   --cranelift    Enable Cranelift backend (fast debug builds)
 echo   --monolithic   Build single executable (default is modular with DLLs)
 echo   --pack         Pack plugins (compress DLLs + manifest); default modular build
+echo   --zig          Use Zig CC instead of MSVC (faster builds, no VS required)
 echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
 echo   --help         Show this help message
 echo.
@@ -149,6 +152,7 @@ echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
 echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
+if "%USE_ZIG_CC%"=="1" echo Compiler:    Zig CC
 if "%ENABLE_MODULAR%"=="ON" echo Modular:     Enabled
 if "%ENABLE_PACK%"=="1" echo Pack:        Enabled
 if "%ENABLE_CRANELIFT_BACKEND%"=="ON" echo Cranelift:   Enabled
@@ -193,30 +197,54 @@ if "%ENABLE_CRANELIFT_BACKEND%"=="ON" (
 set "CMAKE_BUILD_TYPE=Debug"
 if /i "%BUILD_TYPE%"=="release" set "CMAKE_BUILD_TYPE=Release"
 
-:: Detect Ninja for faster builds (requires cl.exe in PATH — run from Developer Prompt)
+:: Detect build toolchain
 set "CMAKE_GENERATOR_ARGS="
 set "USE_NINJA=0"
-where ninja.exe >nul 2>&1
-if %errorlevel%==0 (
-    where cl.exe >nul 2>&1
+set "TOOLCHAIN_ARGS="
+
+if "%USE_ZIG_CC%"=="1" (
+    :: Zig CC mode: use Ninja + zig cc/c++ via toolchain file
+    where ninja.exe >nul 2>&1
     if !errorlevel!==0 (
         set "USE_NINJA=1"
     ) else (
-        :: Try to initialize MSVC environment automatically
-        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
-            if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" (
-                call "%%i\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-                where cl.exe >nul 2>&1
-                if !errorlevel!==0 set "USE_NINJA=1"
+        echo ERROR: Ninja is required for --zig builds. Install ninja-build.
+        exit /b 1
+    )
+    where zig.exe >nul 2>&1
+    if !errorlevel!==0 (
+        echo Compiler:    Zig CC
+        set "TOOLCHAIN_ARGS=-DCMAKE_TOOLCHAIN_FILE=%ROOT_DIR%\cmake\toolchains\zig.cmake"
+    ) else (
+        echo ERROR: zig.exe not found in PATH. Install Zig or set PATH.
+        exit /b 1
+    )
+    echo Generator:   Ninja ^(zig cc^)
+    set "CMAKE_GENERATOR_ARGS=-G Ninja"
+) else (
+    :: MSVC mode: detect Ninja + cl.exe
+    where ninja.exe >nul 2>&1
+    if !errorlevel!==0 (
+        where cl.exe >nul 2>&1
+        if !errorlevel!==0 (
+            set "USE_NINJA=1"
+        ) else (
+            :: Try to initialize MSVC environment automatically
+            for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+                if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" (
+                    call "%%i\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+                    where cl.exe >nul 2>&1
+                    if !errorlevel!==0 set "USE_NINJA=1"
+                )
             )
         )
     )
-)
-if "!USE_NINJA!"=="1" (
-    echo Generator:   Ninja ^(fast^)
-    set "CMAKE_GENERATOR_ARGS=-G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
-) else (
-    echo Generator:   MSBuild ^(default^)
+    if "!USE_NINJA!"=="1" (
+        echo Generator:   Ninja ^(fast^)
+        set "CMAKE_GENERATOR_ARGS=-G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
+    ) else (
+        echo Generator:   MSBuild ^(default^)
+    )
 )
 
 :: Configure CMake
@@ -225,6 +253,7 @@ cd /d "%CACHE_DIR%"
 
 cmake "%ROOT_DIR%\compiler" ^
     %CMAKE_GENERATOR_ARGS% ^
+    %TOOLCHAIN_ARGS% ^
     -DTML_BUILD_TOKEN=tml_script_build_2026 ^
     -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^

@@ -122,8 +122,29 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
             -fpermissive                     # Allow template calls on dependent types without 'template' keyword
         )
     else()
-        # Clang: Use -Werror
-        add_compile_options(-Werror)
+        # Clang: Use -Werror with relaxed warnings for MSVC-compatible code
+        add_compile_options(-Werror
+            -Wno-unknown-warning-option               # Don't error on unrecognized -W flags
+            -Wno-missing-field-initializers           # Allow partial struct init with defaults
+            -Wno-missing-designated-field-initializers # Same for designated initializers
+            -Wno-unused-const-variable                # MSVC doesn't warn on unused const
+            -Wno-unused-but-set-variable              # MSVC doesn't warn on set-but-unused
+            -Wno-unused-lambda-capture                # MSVC doesn't warn on unused captures
+            -Wno-unused-private-field                 # MSVC doesn't warn on unused private fields
+            -Wno-unneeded-internal-declaration        # MSVC allows unused static functions
+            -Wno-missing-template-arg-list-after-template-kw # MSVC allows ->as<T>() without template kw
+            -fdelayed-template-parsing                # MSVC-compatible: delay template instantiation
+            -Wno-delayed-template-parsing-in-cxx20    # Allow delayed parsing in C++20 mode
+            -Wno-deprecated-declarations              # MSVC CRT deprecations (getenv, fopen, etc.)
+            -Wno-unused-function                      # MSVC allows unused static functions
+            -Wno-unused-parameter                     # MSVC doesn't warn on unused params
+            -Wno-gnu-zero-variadic-macro-arguments    # Allow ##__VA_ARGS__ GNU extension in C
+            -Wno-language-extension-token              # Allow __try/__except MSVC extensions
+            -Wno-visibility                            # C struct forward-decl visibility in function params
+            -Wno-incompatible-pointer-types            # C function pointer casts (GetProcAddress)
+            -Wno-cast-function-type-mismatch           # FARPROC casts in Win32 API
+        )
+        add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     endif()
     # Sanitizer support (GCC/Clang)
     if(TML_ENABLE_ASAN)
@@ -1686,7 +1707,11 @@ if(TML_BUILD_MODULAR)
     # ================================================================
     # 367KB binary that loads plugins on demand.
     # Links only the plugin loader — no compiler, no LLVM.
-    add_executable(tml src/launcher/main_launcher.cpp src/tml.rc)
+    if(TML_USE_ZIG_CC)
+        add_executable(tml src/launcher/main_launcher.cpp)
+    else()
+        add_executable(tml src/launcher/main_launcher.cpp src/tml.rc)
+    endif()
     target_include_directories(tml PRIVATE include src)
     target_link_libraries(tml PRIVATE tml_plugin_loader)
     message(STATUS "Launcher: tml.exe (thin, ~400KB, modular with plugins)")
@@ -1709,7 +1734,11 @@ endif()
 
 # MCP server executable (separate from main tml to avoid file locking issues)
 # When MCP server is running, tml.exe can still be rebuilt independently
-add_executable(tml_mcp src/main_mcp.cpp src/tml.rc)
+if(TML_USE_ZIG_CC)
+    add_executable(tml_mcp src/main_mcp.cpp)
+else()
+    add_executable(tml_mcp src/main_mcp.cpp src/tml.rc)
+endif()
 target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_doc tml_search tml_log)
 target_include_directories(tml_mcp PRIVATE include src)
 
