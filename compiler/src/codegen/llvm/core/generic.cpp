@@ -495,15 +495,20 @@ void LLVMIRGen::generate_pending_instantiations() {
         auto saved_module_name = current_module_name_;
         auto saved_submodule = current_submodule_name_;
 
+        int instantiation_round = 0;
         while (!pending_impl_method_instantiations_.empty()) {
             auto pending = std::move(pending_impl_method_instantiations_);
             pending_impl_method_instantiations_.clear();
+            ++instantiation_round;
+            if (instantiation_round > 100) {
+                TML_LOG_WARN("codegen", "Infinite instantiation loop detected after 100 rounds");
+                break;
+            }
 
             for (const auto& pim : pending) {
-                TML_LOG_TRACE("codegen", "[GENERIC_DBG] Processing pending: "
-                                             << pim.mangled_type_name << "::" << pim.method_name
-                                             << " (base=" << pim.base_type_name
-                                             << ", lib=" << (int)pim.is_library_type << ")");
+                TML_LOG_TRACE("codegen", "[GENERIC_DBG] R" << instantiation_round << " "
+                                                           << pim.mangled_type_name
+                                                           << "::" << pim.method_name);
                 // Build deduplication key
                 std::string method_key = pim.mangled_type_name + "::" + pim.method_name;
                 if (!pim.method_type_suffix.empty()) {

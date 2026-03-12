@@ -773,6 +773,24 @@ void LLVMIRGen::gen_impl_method_instantiation(
     // Build full type_subs including method-level type parameters
     auto full_type_subs = type_subs;
 
+    // Remap type_subs keys to match impl_generics names.
+    // The caller may have built type_subs with different param names (e.g., "I" from a
+    // blanket impl) but the method body uses the impl block's own param names (e.g., "Fut").
+    if (!impl_generics.empty() && !full_type_subs.empty()) {
+        std::vector<types::TypePtr> concrete_types;
+        for (const auto& [k, v] : full_type_subs) {
+            if (k != "Self" && k != "This" && v) {
+                concrete_types.push_back(v);
+            }
+        }
+        for (size_t i = 0; i < impl_generics.size(); ++i) {
+            const auto& gname = impl_generics[i].name;
+            if (full_type_subs.find(gname) == full_type_subs.end() && i < concrete_types.size()) {
+                full_type_subs[gname] = concrete_types[i];
+            }
+        }
+    }
+
     // Add method-level type parameters from method_type_suffix
     // method_type_suffix contains mangled types like "Str" or "I32__Str" for multi-param methods
     // IMPORTANT: For a single type parameter, the entire suffix is the mangled type.
@@ -813,11 +831,6 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     current_type_subs_ = full_type_subs; // Set type substitutions for the method body
-    // Debug: print type subs
-    for (const auto& [k, v] : full_type_subs) {
-        std::string vstr = v ? llvm_type_from_semantic(v) : "null";
-        emit_line("; DEBUG full_type_subs: " + k + " -> " + vstr);
-    }
     locals_.clear();
     block_terminated_ = false;
 

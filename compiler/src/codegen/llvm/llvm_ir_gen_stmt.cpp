@@ -1126,7 +1126,27 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 lst_matches = (named->name == base_check);
             }
             if (lst_matches) {
-                semantic_type = last_semantic_type_;
+                // Check for unresolved generic type args (e.g., K, V, T, E).
+                // If any type_arg is a bare generic parameter name, the semantic type
+                // is from an uninstantiated impl and we should fall through to parse
+                // the LLVM type name instead (which has the concrete types).
+                bool has_unresolved = false;
+                if (auto* named = std::get_if<types::NamedType>(&last_semantic_type_->kind)) {
+                    for (const auto& arg : named->type_args) {
+                        if (auto* arg_named = std::get_if<types::NamedType>(&arg->kind)) {
+                            const auto& n = arg_named->name;
+                            // Single uppercase letter or known generic param names
+                            if (n.size() <= 2 && std::isupper(n[0]) &&
+                                (n.size() == 1 || std::isupper(n[1]))) {
+                                has_unresolved = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!has_unresolved) {
+                    semantic_type = last_semantic_type_;
+                }
             }
         }
         if (!semantic_type && let.init.has_value()) {
@@ -1147,6 +1167,20 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     semantic_type = nullptr; // discard wrong type, let fallback handle it
                 }
             }
+            // Also check for unresolved generic type args from infer_expr_type
+            if (semantic_type) {
+                if (auto* named = std::get_if<types::NamedType>(&semantic_type->kind)) {
+                    for (const auto& arg : named->type_args) {
+                        if (auto* an = std::get_if<types::NamedType>(&arg->kind)) {
+                            if (an->name.size() <= 2 && std::isupper(an->name[0]) &&
+                                (an->name.size() == 1 || std::isupper(an->name[1]))) {
+                                semantic_type = nullptr;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
         // Fallback: parse the LLVM struct/union type name to infer semantic type
         // This handles cases like %struct.Maybe__Ordering from inline method codegen
@@ -1159,10 +1193,23 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             if (delim != std::string::npos) {
                 std::string base = mangled.substr(0, delim);
                 std::string arg_str = mangled.substr(delim + 2);
-                auto inner = std::make_shared<types::Type>();
-                inner->kind = types::NamedType{arg_str, "", {}};
+                // Split arg_str on "__" to handle multi-param generics
+                // e.g., "HashMap__Str__I64" → base="HashMap", args=["Str", "I64"]
+                std::vector<types::TypePtr> type_args;
+                size_t pos = 0;
+                while (pos < arg_str.size()) {
+                    auto next = arg_str.find("__", pos);
+                    std::string part = (next != std::string::npos) ? arg_str.substr(pos, next - pos)
+                                                                   : arg_str.substr(pos);
+                    auto arg_type = std::make_shared<types::Type>();
+                    arg_type->kind = types::NamedType{part, "", {}};
+                    type_args.push_back(arg_type);
+                    if (next == std::string::npos)
+                        break;
+                    pos = next + 2;
+                }
                 semantic_type = std::make_shared<types::Type>();
-                semantic_type->kind = types::NamedType{base, "", {inner}};
+                semantic_type->kind = types::NamedType{base, "", std::move(type_args)};
             } else {
                 semantic_type = std::make_shared<types::Type>();
                 semantic_type->kind = types::NamedType{mangled, "", {}};
