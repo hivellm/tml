@@ -2,8 +2,7 @@
 name: test-suite
 description: Run tests for a specific suite/module only. Use when the user says "testa core/str", "test std/json", "roda os testes de str", or wants to verify a specific module. Much faster than full suite.
 user-invocable: true
-allowed-tools: mcp__tml__test, Read, Grep, Glob
-argument-hint: suite name like core/str, std/json, std/collections
+argument-hint: "suite name like core/str, std/json, std/collections"
 ---
 
 ## Suite Test Workflow

@@ -2,9 +2,10 @@
 name: coverage
 description: Run tests with coverage and show coverage report. Use when the user says "coverage", "cobertura", or wants to see test coverage data.
 user-invocable: true
-allowed-tools: mcp__tml__test, mcp__tml__project_coverage, Read
-argument-hint: [optional module filter e.g. core::str, std::json]
+argument-hint: "[optional module filter e.g. core::str, std::json]"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `test-coverage-guardian` agent with `model: sonnet` for this task.
 
 ## Coverage Workflow
 

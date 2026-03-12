@@ -2,8 +2,7 @@
 name: emit-mir
 description: Emit MIR (Mid-level IR) for a TML source file. Use for debugging the MIR pipeline.
 user-invocable: true
-allowed-tools: mcp__tml__emit-mir
-argument-hint: <file.tml>
+argument-hint: "<file.tml>"
 ---
 
 ## Emit MIR

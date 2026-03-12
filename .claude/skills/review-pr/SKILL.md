@@ -2,9 +2,10 @@
 name: review-pr
 description: Review a pull request or the current branch changes. Use when the user says "review", "review pr", "revise", or wants code review feedback.
 user-invocable: true
-allowed-tools: Bash(git *), Bash(gh *), Read, Grep, Glob
-argument-hint: [optional PR number or branch name]
+argument-hint: "[optional PR number or branch name]"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `code-review` agent with `model: opus` for this task.
 
 ## PR Review Workflow
 

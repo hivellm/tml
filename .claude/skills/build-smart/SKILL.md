@@ -2,9 +2,10 @@
 name: build-smart
 description: Detect what changed and build only the necessary target. Use when the user says "build smart", "build inteligente", or wants an optimized build.
 user-invocable: true
-allowed-tools: mcp__tml__project_build, Bash(git diff *), Glob
-argument-hint: no arguments needed — auto-detects what changed
+argument-hint: "no arguments needed — auto-detects what changed"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `build-engineer` agent with `model: haiku` for this task.
 
 ## Smart Build Workflow
 

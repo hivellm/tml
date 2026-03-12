@@ -2,8 +2,7 @@
 name: affected-tests
 description: Detect which tests are affected by recent code changes. Use when the user wants to know what tests to run after making changes.
 user-invocable: true
-allowed-tools: mcp__tml__project_affected-tests
-argument-hint: [--run] [--base HEAD~1]
+argument-hint: "[--run] [--base HEAD~1]"
 ---
 
 ## Find Affected Tests

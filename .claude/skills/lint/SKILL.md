@@ -2,8 +2,7 @@
 name: lint
 description: Lint TML source files for style and potential issues. Use when the user says "lint" or wants to check code quality.
 user-invocable: true
-allowed-tools: mcp__tml__lint
-argument-hint: <file.tml or directory> [--fix]
+argument-hint: "<file.tml or directory> [--fix]"
 ---
 
 ## Lint TML Files

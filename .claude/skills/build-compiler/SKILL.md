@@ -1,10 +1,11 @@
 ---
-name: build
+name: build-compiler
 description: Build the TML compiler from C++ sources. Use when the user says "build", "compila", "rebuild", or needs to recompile the compiler after C++ changes.
 user-invocable: true
-allowed-tools: mcp__tml__project_build, Bash(cd * && cmd *)
-argument-hint: optional release, clean, all, mcp
+argument-hint: "optional release, clean, all, mcp"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `build-engineer` agent with `model: haiku` for this task.
 
 ## Build Workflow
 

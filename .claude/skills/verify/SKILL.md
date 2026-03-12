@@ -2,9 +2,10 @@
 name: verify
 description: Build the compiler and run targeted tests to verify changes. Use when the user says "verify", "verifica", "build and test", or after making compiler C++ changes that need validation.
 user-invocable: true
-allowed-tools: mcp__tml__project_build, mcp__tml__test, mcp__tml__project_affected_tests, Read, Grep, Glob
-argument-hint: optional suite names to test after build
+argument-hint: "optional suite names to test after build"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `test-coverage-guardian` agent with `model: sonnet` for this task.
 
 ## Verify Workflow
 

@@ -2,9 +2,10 @@
 name: compare-ir
 description: Full Rust-as-Reference IR comparison workflow. Write equivalent .rs/.tml files, compile both, compare IR side-by-side. Use when the user says "compare ir", "compara ir", "rust reference", or needs to debug codegen quality.
 user-invocable: true
-allowed-tools: mcp__tml__emit-ir, Bash(rustc *), Write, Read, Glob
-argument-hint: <feature-name> [func] — e.g. "compare-ir struct_init" or "compare-ir enum_match my_func"
+argument-hint: "<feature-name> [func]"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `codegen-debugger` agent with `model: opus` for this task.
 
 ## Compare IR Workflow (Rust-as-Reference Methodology)
 

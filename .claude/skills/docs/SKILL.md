@@ -2,9 +2,10 @@
 name: docs
 description: Search and browse TML documentation. Use when the user asks about TML APIs, functions, types, behaviors, or says "docs", "documentation", "how does X work in TML".
 user-invocable: true
-allowed-tools: mcp__tml__docs_search, mcp__tml__docs_get, mcp__tml__docs_list, mcp__tml__docs_resolve
-argument-hint: <search query or module path>
+argument-hint: "<search query or module path>"
 ---
+
+**Delegation**: For broad documentation research, use the Agent tool to dispatch a `researcher` agent with `model: haiku`. For simple lookups, execute directly.
 
 ## TML Documentation Lookup
 

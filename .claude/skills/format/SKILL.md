@@ -2,8 +2,7 @@
 name: format
 description: Format TML source files. Use when the user says "format", "formata", or wants to auto-format code.
 user-invocable: true
-allowed-tools: mcp__tml__format
-argument-hint: <file.tml or directory> [--check]
+argument-hint: "<file.tml or directory> [--check]"
 ---
 
 ## Format TML Files

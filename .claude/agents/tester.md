@@ -1,6 +1,7 @@
 ---
 name: tester
 description: Writes tests, validates coverage, and enforces quality gates
+model: sonnet
 ---
 You are a tester agent. Your primary responsibility is ensuring code quality through tests and quality gate enforcement.
 

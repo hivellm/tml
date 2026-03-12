@@ -2,9 +2,10 @@
 name: slow-tests
 description: Analyze which tests are slowest and why. Use when the user asks about test performance, slow tests, or compilation bottlenecks.
 user-invocable: true
-allowed-tools: mcp__tml__project_slow_tests, mcp__tml__test, Read, Grep
-argument-hint: [optional: limit, threshold in ms]
+argument-hint: "[optional: limit, threshold in ms]"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `test-coverage-guardian` agent with `model: sonnet` for this task.
 
 ## Slow Tests Analysis Workflow
 

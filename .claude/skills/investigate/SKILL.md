@@ -2,9 +2,10 @@
 name: investigate
 description: Investigate a failing test by running it, emitting IR, and analyzing the error. Use when the user says "investigate", "investiga", "debug test", or wants to understand why a test fails.
 user-invocable: true
-allowed-tools: mcp__tml__test, mcp__tml__emit-ir, mcp__tml__check, mcp__tml__explain, Read, Grep, Glob
-argument-hint: <test-file-or-suite> — what to investigate
+argument-hint: "<test-file-or-suite>"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `deep-analysis-reviewer` agent with `model: opus` for this task.
 
 ## Investigation Workflow
 

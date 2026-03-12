@@ -2,8 +2,7 @@
 name: artifacts
 description: List build artifacts with sizes and ages. Use when the user asks about build outputs, compiled binaries, or disk usage.
 user-invocable: true
-allowed-tools: mcp__tml__project_artifacts
-argument-hint: [executables|libraries|cache|coverage|all] [--release]
+argument-hint: "[executables|libraries|cache|coverage|all] [--release]"
 ---
 
 ## List Build Artifacts

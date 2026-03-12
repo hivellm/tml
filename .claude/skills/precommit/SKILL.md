@@ -2,9 +2,10 @@
 name: precommit
 description: Run format, lint, and affected tests before committing. Use when the user says "precommit", "pre-commit", "antes de comitar", or wants to validate changes before commit.
 user-invocable: true
-allowed-tools: mcp__tml__format, mcp__tml__lint, mcp__tml__project_affected-tests, mcp__tml__test, Bash(git diff *), Glob
-argument-hint: no arguments needed
+argument-hint: "no arguments needed"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `tester` agent with `model: sonnet` for this task.
 
 ## Pre-commit Validation Workflow
 

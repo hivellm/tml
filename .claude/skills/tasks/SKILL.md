@@ -2,8 +2,7 @@
 name: tasks
 description: List active Rulebook tasks with status and completion. Use when the user says "tasks", "tarefas", "list tasks", or wants to see what's in progress.
 user-invocable: true
-allowed-tools: mcp__rulebook__rulebook_task_list, Glob, Read
-argument-hint: [optional --all to include archived]
+argument-hint: "[optional --all to include archived]"
 ---
 
 ## List Tasks Workflow

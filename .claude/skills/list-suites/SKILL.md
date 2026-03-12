@@ -2,8 +2,7 @@
 name: list-suites
 description: List all available test suites with file and test counts. Use when user asks "what suites exist", "list suites", "quais suites", or needs to know available test modules.
 user-invocable: true
-allowed-tools: Bash(cd * && *)
-argument-hint: no arguments needed
+argument-hint: "no arguments needed"
 ---
 
 ## List Suites

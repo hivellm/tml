@@ -2,8 +2,7 @@
 name: cache-invalidate
 description: Invalidate compilation cache for specific source files. Use when cached results seem stale or after external changes to source files.
 user-invocable: true
-allowed-tools: mcp__tml__cache_invalidate
-argument-hint: <file1.tml> [file2.tml...]
+argument-hint: "<file1.tml> [file2.tml...]"
 ---
 
 ## Invalidate Cache

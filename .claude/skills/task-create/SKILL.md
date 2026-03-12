@@ -2,8 +2,7 @@
 name: task-create
 description: Create a new Rulebook task with proper template. Use when the user says "create task", "cria task", "nova task", or wants to start a new tracked work item.
 user-invocable: true
-allowed-tools: mcp__rulebook__rulebook_task_create, mcp__rulebook__rulebook_task_show, Write, Read
-argument-hint: <task-id> — kebab-case identifier e.g. "fix-closure-capture"
+argument-hint: "<task-id> — kebab-case identifier e.g. \"fix-closure-capture\""
 ---
 
 ## Task Create Workflow

@@ -2,9 +2,10 @@
 name: tdd
 description: Test-driven development loop. Run a test, show errors, fix, repeat until passing. Use when the user says "tdd", "test driven", or wants an iterative test-fix cycle.
 user-invocable: true
-allowed-tools: mcp__tml__test, mcp__tml__emit-ir, mcp__tml__check, Read, Edit, Write, Grep, Glob
-argument-hint: <test-file-path> — the test file to iterate on
+argument-hint: "<test-file-path>"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `tester` agent with `model: sonnet` for this task.
 
 ## TDD Loop Workflow
 

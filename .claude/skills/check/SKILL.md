@@ -2,8 +2,7 @@
 name: check
 description: Type check a TML source file without compiling. Use when the user wants to verify types, check for errors, or validate code without building.
 user-invocable: true
-allowed-tools: mcp__tml__check
-argument-hint: <file.tml>
+argument-hint: "<file.tml>"
 ---
 
 ## Type Check a TML File

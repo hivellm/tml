@@ -2,9 +2,10 @@
 name: status
 description: Project health dashboard showing test count, coverage, active tasks, and build status. Use when the user says "status", "dashboard", "estado do projeto", or wants a project overview.
 user-invocable: true
-allowed-tools: mcp__tml__project_coverage, mcp__tml__project_artifacts, mcp__tml__project_structure, mcp__rulebook__rulebook_task_list, Bash(git log *), Glob
-argument-hint: no arguments needed
+argument-hint: "no arguments needed"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `project-manager` agent with `model: haiku` for this task.
 
 ## Status Dashboard Workflow
 

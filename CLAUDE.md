@@ -424,3 +424,47 @@ All `rulebook/tasks/*/tasks.md` must be **simple checklists only** — no prose,
 ## File Editing Best Practices
 
 Read and edit files **sequentially** (Read file1 → Edit file1 → Read file2 → Edit file2). Never batch parallel reads before edits.
+
+## ⛔ MANDATORY: Agent Delegation & Model Optimization ⛔
+
+**The main conversation (opus) serves ONLY for coordination, planning, and user communication. ALL substantial work MUST be delegated to specialized agents with cost-appropriate models.**
+
+### Model Assignment by Complexity
+
+| Model | Cost | Use For |
+|-------|------|---------|
+| **opus** | $$$ | Compiler codegen bugs, deep analysis, code review of C++ core |
+| **sonnet** | $$ | Tests, TML library code, build system, specs, task management |
+| **haiku** | $ | Codebase exploration, documentation, research, file searches |
+
+### Agent → Model Mapping
+
+| Agent | Model | Rationale |
+|-------|-------|-----------|
+| `codegen-debugger` | opus | Traces values through compilation pipeline |
+| `deep-analysis-reviewer` | opus | Root cause analysis of complex bugs |
+| `compiler-optimizer` | opus | LLVM IR quality optimization |
+| `tml-library-engineer` | opus | Core/std library in TML (complex type system) |
+| `test-coverage-guardian` | sonnet | Test diagnosis follows established patterns |
+| `build-engineer` | haiku | Build scripts are mechanical/repetitive |
+| `c-to-tml-migrator` | sonnet | Migration follows clear patterns |
+| `spec-engineer` | sonnet | Documentation with technical accuracy |
+| `project-manager` | sonnet | Task tracking and coordination |
+| `researcher` | haiku | Read-only codebase exploration |
+| `implementer` | sonnet | Code following established patterns |
+| `tester` | sonnet | Test writing follows patterns |
+| `team-lead` | sonnet | Coordination and delegation |
+| `qa-code-analyst` | sonnet | Code quality analysis |
+
+### Delegation Rules
+
+1. **NEVER write substantial code directly in the main conversation** — delegate to the appropriate agent
+2. **NEVER do broad codebase exploration in the main conversation** — delegate to `researcher` (haiku, ~20x cheaper)
+3. **After implementing code, launch in parallel:**
+   - `test-coverage-guardian` to verify no regressions
+   - `spec-engineer` to update docs if needed
+4. **The main conversation handles ONLY:**
+   - Understanding user intent
+   - Choosing which agent(s) to dispatch
+   - Reporting results back to the user
+   - Quick, targeted edits (< 5 lines)

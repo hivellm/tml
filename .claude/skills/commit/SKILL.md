@@ -2,9 +2,10 @@
 name: commit
 description: Stage and commit changes with a well-crafted conventional commit message. Use when the user says "commit", "comite", or asks to save changes.
 user-invocable: true
-allowed-tools: Bash(git *), Read, Grep, Glob
-argument-hint: [optional commit message override]
+argument-hint: "[optional commit message override]"
 ---
+
+This skill runs directly in the main conversation (no agent delegation needed — git operations are lightweight).
 
 ## Commit Workflow
 

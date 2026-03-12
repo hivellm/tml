@@ -2,8 +2,7 @@
 name: run
 description: Build and execute a TML source file. Use when the user says "run", "roda", "execute", or wants to run a .tml file.
 user-invocable: true
-allowed-tools: mcp__tml__run
-argument-hint: <file.tml> [args...] [--release]
+argument-hint: "<file.tml> [args...] [--release]"
 ---
 
 ## Run a TML File

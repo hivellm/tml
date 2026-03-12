@@ -2,9 +2,10 @@
 name: migrate-c
 description: Analyze a C runtime file and suggest pure TML replacement. Use when the user says "migrate", "migra", "replace C", or wants to convert C runtime code to TML.
 user-invocable: true
-allowed-tools: Read, Grep, Glob, mcp__tml__docs_search
-argument-hint: <c-file-path> — the C runtime file to analyze
+argument-hint: "<c-file-path>"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `c-to-tml-migrator` agent with `model: sonnet` for this task.
 
 ## C-to-TML Migration Analysis Workflow
 

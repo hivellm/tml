@@ -2,8 +2,7 @@
 name: emit-ir
 description: Emit LLVM IR for a TML source file. Use when the user wants to see the generated IR, debug codegen, or compare IR output.
 user-invocable: true
-allowed-tools: mcp__tml__emit-ir
-argument-hint: <file.tml> [--function name] [--optimize O0|O1|O2|O3]
+argument-hint: "<file.tml> [--function name] [--optimize O0|O1|O2|O3]"
 ---
 
 ## Emit LLVM IR

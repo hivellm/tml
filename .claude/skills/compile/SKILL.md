@@ -2,8 +2,7 @@
 name: compile
 description: Compile a TML source file to executable. Use when the user wants to compile a .tml file.
 user-invocable: true
-allowed-tools: mcp__tml__compile
-argument-hint: <file.tml> [--release] [--optimize O0|O1|O2|O3]
+argument-hint: "<file.tml> [--release] [--optimize O0|O1|O2|O3]"
 ---
 
 ## Compile a TML File

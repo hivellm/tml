@@ -2,8 +2,7 @@
 name: rebuild
 description: Clean build of the TML compiler. Use when the user says "rebuild", "clean build", "build limpo", or needs a fresh compilation.
 user-invocable: true
-allowed-tools: mcp__tml__project_build
-argument-hint: [optional release]
+argument-hint: "[optional release]"
 ---
 
 ## Rebuild Workflow

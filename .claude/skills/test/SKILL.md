@@ -2,9 +2,10 @@
 name: test
 description: Run TML tests using the MCP test tool. Use when the user says "test", "roda os testes", "run tests", or wants to verify changes. Supports running specific test files, filtered tests, specific suites, or the full suite.
 user-invocable: true
-allowed-tools: mcp__tml__test, mcp__tml__cache_invalidate, Read, Grep, Glob
-argument-hint: optional suite name, file path, filter, no-cache, fast
+argument-hint: "optional suite name, file path, filter, no-cache, fast"
 ---
+
+**Delegation**: For large test runs or test analysis, use the Agent tool to dispatch a `tester` agent with `model: sonnet`. For quick single-file tests, execute directly.
 
 ## Test Workflow
 

@@ -2,8 +2,7 @@
 name: task-archive
 description: Archive a completed Rulebook task. Use when the user says "archive task", "arquiva task", or wants to move a completed task to the archive.
 user-invocable: true
-allowed-tools: mcp__rulebook__rulebook_task_update, mcp__rulebook__rulebook_task_archive, mcp__rulebook__rulebook_task_validate, Read
-argument-hint: <task-id> — the task to archive
+argument-hint: "<task-id> — the task to archive"
 ---
 
 ## Task Archive Workflow

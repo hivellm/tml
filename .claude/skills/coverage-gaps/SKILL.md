@@ -2,9 +2,10 @@
 name: coverage-gaps
 description: Show modules with lowest test coverage and suggest what to test next. Use when the user says "coverage gaps", "lacunas", "what needs tests", or wants to prioritize testing.
 user-invocable: true
-allowed-tools: mcp__tml__project_coverage, Read
-argument-hint: [optional limit e.g. 10] [optional threshold e.g. 50%]
+argument-hint: "[optional limit e.g. 10] [optional threshold e.g. 50%]"
 ---
+
+**Delegation**: Use the Agent tool to dispatch a `test-coverage-guardian` agent with `model: sonnet` for this task.
 
 ## Coverage Gaps Workflow
 
