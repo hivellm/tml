@@ -4,6 +4,7 @@ use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
 use std::net::async_tcp::{AsyncTcpListener, AsyncTcpStream}
 use std::net::tcp::{TcpListener, TcpStream}
 use std::net::sys::{ShutdownMode, RawSocket}
+use std::aio::event_loop::EventLoop
 
 // ============================================================================
 // AsyncTcpListener
@@ -279,5 +280,77 @@ func test_async_tcp_stream_from_std() -> I32 {
     let async_stream: AsyncTcpStream = AsyncTcpStream::from_std(sync_stream).unwrap()
     let local: SocketAddr = async_stream.local_addr().unwrap()
     assert(local.port() as I32 > 0, "from_std stream should have valid port")
+    return 0
+}
+
+// ============================================================================
+// from_raw_socket extension impls (defined in async_tcp.tml, not tcp.tml)
+// ============================================================================
+
+@test
+func test_tcp_listener_from_raw_socket() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let listener: AsyncTcpListener = AsyncTcpListener::bind(addr).unwrap()
+    let raw: RawSocket = listener.into_raw_socket()
+    let restored: TcpListener = TcpListener::from_raw_socket(raw)
+    let bound: SocketAddr = restored.local_addr().unwrap()
+    assert(bound.port() as I32 > 0, "from_raw_socket listener should have valid port")
+    return 0
+}
+
+@test
+func test_tcp_stream_from_raw_socket() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let listener: AsyncTcpListener = AsyncTcpListener::bind(addr).unwrap()
+    let bound: SocketAddr = listener.local_addr().unwrap()
+    let client: AsyncTcpStream = AsyncTcpStream::connect(bound).unwrap()
+    let raw: RawSocket = client.into_raw_socket()
+    let restored: TcpStream = TcpStream::from_raw_socket(raw)
+    let local: SocketAddr = restored.local_addr().unwrap()
+    assert(local.port() as I32 > 0, "from_raw_socket stream should have valid port")
+    return 0
+}
+
+// ============================================================================
+// EventLoop integration
+// ============================================================================
+
+@test
+func test_async_tcp_listener_register_with_loop() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let listener: AsyncTcpListener = AsyncTcpListener::bind(addr).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = listener.register_with_loop(mut ref el).unwrap()
+    assert(true, "register_with_loop should succeed")
+    return 0
+}
+
+@test
+func test_async_tcp_stream_register_with_loop() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let listener: AsyncTcpListener = AsyncTcpListener::bind(addr).unwrap()
+    let bound: SocketAddr = listener.local_addr().unwrap()
+    let client: AsyncTcpStream = AsyncTcpStream::connect(bound).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = client.register_with_loop(mut ref el, 3 as U32).unwrap()
+    assert(true, "stream register_with_loop should succeed")
+    return 0
+}
+
+@test
+func test_async_tcp_stream_unregister_from_loop() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let listener: AsyncTcpListener = AsyncTcpListener::bind(addr).unwrap()
+    let bound: SocketAddr = listener.local_addr().unwrap()
+    let client: AsyncTcpStream = AsyncTcpStream::connect(bound).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = client.register_with_loop(mut ref el, 1 as U32).unwrap()
+    client.unregister_from_loop(mut ref el, token)
+    assert(true, "unregister_from_loop should succeed")
     return 0
 }

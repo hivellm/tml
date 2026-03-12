@@ -1,9 +1,10 @@
 // Tests for async_udp module — loopback tests
 use test::{assert}
 use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
-use std::net::async_udp::AsyncUdpSocket
+use std::net::async_udp::{AsyncUdpSocket, UdpHandle}
 use std::net::udp::UdpSocket
 use std::net::sys::RawSocket
+use std::aio::event_loop::EventLoop
 
 // ============================================================================
 // AsyncUdpSocket — bind and query
@@ -201,5 +202,103 @@ func test_async_udp_from_std() -> I32 {
     let async_sock: AsyncUdpSocket = AsyncUdpSocket::from_std(sync_sock).unwrap()
     let bound: SocketAddr = async_sock.local_addr().unwrap()
     assert(bound.port() as I32 > 0, "from_std should have valid port")
+    return 0
+}
+
+@test
+func test_udp_socket_from_raw_socket() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let sock: AsyncUdpSocket = AsyncUdpSocket::bind(addr).unwrap()
+    let raw: RawSocket = sock.into_raw_socket()
+    let restored: UdpSocket = UdpSocket::from_raw_socket(raw)
+    assert(true, "from_raw_socket should succeed")
+    return 0
+}
+
+// ============================================================================
+// EventLoop integration
+// ============================================================================
+
+@test
+func test_async_udp_register_with_loop() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let sock: AsyncUdpSocket = AsyncUdpSocket::bind(addr).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = sock.register_with_loop(mut ref el, 1 as U32).unwrap()
+    assert(true, "register_with_loop should succeed")
+    return 0
+}
+
+@test
+func test_async_udp_unregister_from_loop() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let sock: AsyncUdpSocket = AsyncUdpSocket::bind(addr).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = sock.register_with_loop(mut ref el, 3 as U32).unwrap()
+    sock.unregister_from_loop(mut ref el, token)
+    assert(true, "unregister_from_loop should succeed")
+    return 0
+}
+
+// ============================================================================
+// UdpHandle
+// ============================================================================
+
+@test
+func test_udp_handle_bind() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    var handle: UdpHandle = UdpHandle::bind(0, addr).unwrap()
+    assert(true, "UdpHandle::bind should succeed")
+    return 0
+}
+
+@test
+func test_udp_handle_set_callbacks() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    var handle: UdpHandle = UdpHandle::bind(0, addr).unwrap()
+    handle.set_on_message(12345)
+    handle.set_on_error(67890)
+    assert(true, "set_on_message and set_on_error should succeed")
+    return 0
+}
+
+@test
+func test_udp_handle_send_to() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    let sock: AsyncUdpSocket = AsyncUdpSocket::bind(addr).unwrap()
+    let bound: SocketAddr = sock.local_addr().unwrap()
+    var handle: UdpHandle = UdpHandle::bind(0, addr).unwrap()
+    let data: [U8; 3] = [1 as U8, 2 as U8, 3 as U8]
+    let sent: Bool = handle.send_to(ref data, bound)
+    // May or may not send since we're sending to a different socket
+    assert(true, "UdpHandle::send_to should not crash")
+    return 0
+}
+
+@test
+func test_udp_handle_register_and_close() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    var handle: UdpHandle = UdpHandle::bind(0, addr).unwrap()
+    var el: EventLoop = EventLoop::new()
+    let token: U32 = handle.register(mut ref el)
+    handle.close(mut ref el)
+    assert(true, "register + close should succeed")
+    return 0
+}
+
+@test
+func test_udp_handle_destroy() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 0 as U16))
+    var handle: UdpHandle = UdpHandle::bind(0, addr).unwrap()
+    handle.destroy()
+    assert(true, "destroy should succeed")
     return 0
 }

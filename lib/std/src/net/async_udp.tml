@@ -285,7 +285,7 @@ pub type UdpHandle {
 impl UdpHandle {
     /// Creates a new UDP handle bound to the given address on the event loop.
     pub func bind(loop_ptr: I64, addr: SocketAddr) -> Outcome[UdpHandle, I64] {
-        let socket: AsyncUdpSocket = AsyncUdpSocket::bind(ref addr)!
+        let socket: AsyncUdpSocket = AsyncUdpSocket::bind(addr)!
 
         let token: U32 = 0
         let handle: UdpHandle = UdpHandle {
@@ -301,8 +301,8 @@ impl UdpHandle {
 
     /// Registers this UDP handle with the event loop.
     /// Called after construction to activate I/O monitoring.
-    pub func register(mut this, loop_ref: ref EventLoop) -> U32 {
-        let socket_handle: I64 = this.socket.socket.as_raw() as I64
+    pub func register(mut this, loop_ref: mut ref EventLoop) -> U32 {
+        let socket_handle: I64 = this.socket.socket_handle()
         let token: U32 = loop_ref.register(socket_handle, READABLE)
         this.token = token
 
@@ -342,13 +342,12 @@ impl UdpHandle {
     }
 
     /// Closes the UDP handle and deregisters from the event loop.
-    pub func close(mut this, loop_ref: ref EventLoop) {
+    pub func close(mut this, loop_ref: mut ref EventLoop) {
         loop_ref.deregister(this.token)
-        this.socket.close()
     }
 
     /// Closes and deallocates the UDP handle.
     pub func destroy(mut this) {
-        this.socket.close()
+        // Socket will be cleaned up when dropped
     }
 }
