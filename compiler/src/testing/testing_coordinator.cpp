@@ -491,7 +491,7 @@ TestRunResult run_tests(const TestConfig& config) {
             // Store for reuse in step 8
             suite_source_hashes[suite.name] = source_hashes;
 
-            if (cache.is_cached(suite.name, source_hashes, flags_hash)) {
+            if (!config.coverage && cache.is_cached(suite.name, source_hashes, flags_hash)) {
                 const auto* entry = cache.get(suite.name);
                 SuiteRunResult sr;
                 sr.name = suite.name;

@@ -561,7 +561,7 @@ std::string TestResultCache::compute_compiler_hash() {
 }
 
 std::string TestResultCache::compute_flags_hash(const TestConfig& config) {
-    // Combine all flags that affect test compilation/execution into a single string
+    // Combine flags that affect test grouping/execution into a single string.
     std::string flags;
     flags += "coverage=" + std::to_string(config.coverage ? 1 : 0);
     flags += ",max_per_suite=" + std::to_string(config.max_per_suite);

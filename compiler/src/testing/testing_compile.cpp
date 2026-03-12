@@ -28,8 +28,8 @@ TML_MODULE("test")
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
-#include <functional>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -39,6 +39,51 @@ namespace fs = std::filesystem;
 namespace tml::testing {
 
 using Clock = std::chrono::high_resolution_clock;
+
+// ============================================================================
+// Global thread budget (prevents CPU oversubscription)
+// ============================================================================
+
+/// Counting semaphore that limits total concurrent compile threads across all
+/// suite compilations. Without this, outer_threads × inner_threads can exceed
+/// hardware_concurrency() and cause CPU thrashing.
+class ThreadBudget {
+public:
+    static ThreadBudget& instance() {
+        static ThreadBudget budget;
+        return budget;
+    }
+
+    void acquire() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait(lock, [this] { return available_ > 0; });
+        --available_;
+    }
+
+    void release() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++available_;
+        cv_.notify_one();
+    }
+
+    int max_threads() const {
+        return max_;
+    }
+
+private:
+    ThreadBudget() {
+        int hw = static_cast<int>(std::thread::hardware_concurrency());
+        // Use at most half of logical cores (≈ physical core count),
+        // leaving headroom for the OS, IDE, and other user processes.
+        max_ = std::max(2, hw / 2);
+        available_ = max_;
+    }
+
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    int available_;
+    int max_;
+};
 
 // ============================================================================
 // Global compile environment (initialized once)
@@ -97,10 +142,8 @@ static void ensure_runtime_dlls(const fs::path& target_dir) {
     static const std::vector<fs::path> search_dirs = {
         "src/x64-windows/bin",
         "../src/x64-windows/bin",
-        "F:/Node/hivellm/tml/src/x64-windows/bin",
         "vcpkg_installed/x64-windows/bin",
         "../vcpkg_installed/x64-windows/bin",
-        "F:/Node/hivellm/tml/vcpkg_installed/x64-windows/bin",
     };
     static bool done = false;
     if (done)
@@ -161,15 +204,17 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     std::vector<FileCompileResult> file_results(suite.tests.size());
     std::atomic<int> next_file{0};
-    int hw = static_cast<int>(std::thread::hardware_concurrency());
-    int num_compile_threads = std::max(1, std::min(4, hw / 2));
-    num_compile_threads = std::min(num_compile_threads, static_cast<int>(suite.tests.size()));
+    auto& budget = ThreadBudget::instance();
+    int num_compile_threads = std::min(budget.max_threads(), static_cast<int>(suite.tests.size()));
+    num_compile_threads = std::max(1, num_compile_threads);
 
     auto file_worker = [&]() {
         while (true) {
             int i = next_file.fetch_add(1, std::memory_order_relaxed);
             if (i >= static_cast<int>(suite.tests.size()))
                 break;
+
+            budget.acquire();
 
             const auto& test = suite.tests[i];
             auto file_path = test.file_path;
@@ -186,8 +231,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             // compiled with a unique test_entry_index (tml_test_N), but incremental
             // cache entries were saved with index 0. Reusing them would produce
             // duplicate tml_test_0 symbols when multiple files are linked together.
+            // Note: coverage IS compatible with incremental cache because the
+            // fingerprint includes the coverage flag (query_incr.cpp:497-500).
             bool is_multi_file_suite = suite.tests.size() > 1;
-            qopts.incremental = !config.no_cache && !config.coverage && !is_multi_file_suite;
+            qopts.incremental = !config.no_cache && !is_multi_file_suite;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
@@ -220,6 +267,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 }
                 TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
                 fr.error_message = err;
+                budget.release();
                 continue;
             }
 
@@ -248,6 +296,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                     TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": "
                                                               << obj_result.error_message);
                     fr.error_message = obj_result.error_message;
+                    budget.release();
                     continue;
                 }
                 fr.object_file = obj_result.object_file;
@@ -268,6 +317,8 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             if (parsed && parsed->success && parsed->module) {
                 fr.parsed_module = parsed->module;
             }
+
+            budget.release();
         }
     };
 
@@ -400,16 +451,26 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         link_opts.link_flags.push_back("-ladvapi32");
         link_opts.link_flags.push_back("-luserenv");
     }
-    // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+    // Only link OpenSSL when the suite uses crypto modules
     {
-        auto openssl = cli::build::find_openssl();
-        if (openssl.found) {
-            link_opts.link_flags.push_back(
-                to_fwd_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
-            link_opts.link_flags.push_back(
-                to_fwd_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
-            link_opts.link_flags.push_back("/DEFAULTLIB:crypt32");
-            link_opts.link_flags.push_back("/DEFAULTLIB:ws2_32");
+        bool uses_crypto = false;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path == "std::crypto" || path.find("std::crypto::") == 0 ||
+                path == "std::net::tls" || path.find("std::net::tls::") == 0) {
+                uses_crypto = true;
+                break;
+            }
+        }
+        if (uses_crypto) {
+            auto openssl = cli::build::find_openssl();
+            if (openssl.found) {
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_opts.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_opts.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
         }
     }
     // Link sqlite3 library when sqlite modules are used
@@ -439,9 +500,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         }
         if (uses_search) {
             // Find tml_search_runtime.lib
-            std::vector<std::string> search_paths = {"build/debug", "build/release",
-                                                     "F:/Node/hivellm/tml/build/debug",
-                                                     "F:/Node/hivellm/tml/build/release"};
+            std::vector<std::string> search_paths = {"build/debug", "build/release"};
             for (const auto& sp : search_paths) {
                 fs::path lib_path = fs::path(sp) / "tml_search_runtime.lib";
                 if (fs::exists(lib_path)) {
@@ -497,7 +556,9 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     int num_threads = config.num_threads;
     if (num_threads <= 0) {
-        int hw2 = static_cast<int>(std::thread::hardware_concurrency());
+        // Use at most half the budget for outer threads, leaving room for
+        // inner file-level parallelism within each suite.
+        int hw2 = ThreadBudget::instance().max_threads();
         num_threads = std::max(1, std::min(4, hw2 / 2));
     }
     num_threads = std::min(num_threads, static_cast<int>(suites.size()));

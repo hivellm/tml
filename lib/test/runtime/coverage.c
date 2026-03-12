@@ -36,8 +36,8 @@
 #endif
 
 // Hash table parameters
-#define HASH_TABLE_SIZE 4093 // Prime number for better distribution
-#define MAX_NAME_LEN 192     // Function names rarely exceed this
+#define HASH_TABLE_SIZE 32771 // Prime number, ~50% load factor for 16000+ functions
+#define MAX_NAME_LEN 192      // Function names rarely exceed this
 
 // FNV-1a hash function for strings
 static uint32_t hash_string(const char* str) {

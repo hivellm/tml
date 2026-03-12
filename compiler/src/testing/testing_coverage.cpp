@@ -17,7 +17,6 @@ TML_MODULE("test")
 #include <fstream>
 #include <iomanip>
 #include <map>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -79,6 +78,122 @@ struct ModuleCoverage {
 };
 
 // ============================================================================
+// Hand-written keyword scanners (replaces std::regex for ~10x speedup)
+// ============================================================================
+
+/// Skip whitespace, return position of first non-whitespace char (or npos).
+static size_t skip_ws(const std::string& s, size_t pos = 0) {
+    while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t'))
+        ++pos;
+    return pos < s.size() ? pos : std::string::npos;
+}
+
+/// Extract a \w+ identifier starting at pos. Returns empty string if not an identifier.
+static std::string extract_ident(const std::string& s, size_t pos) {
+    size_t start = pos;
+    while (pos < s.size() && (std::isalnum(static_cast<unsigned char>(s[pos])) || s[pos] == '_'))
+        ++pos;
+    return pos > start ? s.substr(start, pos - start) : "";
+}
+
+/// Check if line matches: ^\s*(pub\s+)?keyword\s+(\w+)
+/// Returns the captured identifier (group 2), or empty string if no match.
+static std::string match_keyword_decl(const std::string& line, const char* keyword) {
+    size_t pos = skip_ws(line);
+    if (pos == std::string::npos)
+        return "";
+
+    // Optional "pub "
+    if (line.compare(pos, 3, "pub") == 0 && pos + 3 < line.size() &&
+        (line[pos + 3] == ' ' || line[pos + 3] == '\t')) {
+        pos = skip_ws(line, pos + 3);
+        if (pos == std::string::npos)
+            return "";
+    }
+
+    size_t kw_len = std::strlen(keyword);
+    if (line.compare(pos, kw_len, keyword) != 0)
+        return "";
+    pos += kw_len;
+    if (pos >= line.size() || (line[pos] != ' ' && line[pos] != '\t'))
+        return "";
+    pos = skip_ws(line, pos);
+    if (pos == std::string::npos)
+        return "";
+    return extract_ident(line, pos);
+}
+
+/// Skip optional generic bracket [...] at pos. Returns position after ] or pos if no bracket.
+static size_t skip_brackets(const std::string& s, size_t pos) {
+    if (pos < s.size() && s[pos] == '[') {
+        int depth = 1;
+        ++pos;
+        while (pos < s.size() && depth > 0) {
+            if (s[pos] == '[')
+                ++depth;
+            else if (s[pos] == ']')
+                --depth;
+            ++pos;
+        }
+    }
+    return pos;
+}
+
+struct ImplParseResult {
+    bool matched = false;
+    bool is_tuple_target = false;
+    std::string behavior_name; // first identifier (e.g., "From")
+    std::string for_type;      // type after "for" (e.g., "I16"), empty if no "for"
+};
+
+/// Parse: ^\s*impl\s*[optional_generics]?\s*BehaviorName[optional_type_args]?\s*(for\s+Type)?
+static ImplParseResult parse_impl_line(const std::string& line) {
+    ImplParseResult result;
+    size_t pos = skip_ws(line);
+    if (pos == std::string::npos)
+        return result;
+    if (line.compare(pos, 4, "impl") != 0)
+        return result;
+    pos += 4;
+    if (pos >= line.size() || (line[pos] != ' ' && line[pos] != '\t' && line[pos] != '['))
+        return result;
+
+    result.matched = true;
+
+    // Skip optional generic params: impl[T]
+    pos = skip_ws(line, pos);
+    if (pos == std::string::npos)
+        return result;
+    pos = skip_brackets(line, pos);
+    pos = skip_ws(line, pos);
+    if (pos == std::string::npos)
+        return result;
+
+    // Extract behavior name
+    result.behavior_name = extract_ident(line, pos);
+    pos += result.behavior_name.size();
+
+    // Skip optional type args: BehaviorName[I8]
+    pos = skip_brackets(line, pos);
+
+    // Check for "for"
+    pos = skip_ws(line, pos);
+    if (pos != std::string::npos && line.compare(pos, 3, "for") == 0 && pos + 3 < line.size() &&
+        (line[pos + 3] == ' ' || line[pos + 3] == '\t')) {
+        pos = skip_ws(line, pos + 3);
+        if (pos != std::string::npos) {
+            if (line[pos] == '(') {
+                result.is_tuple_target = true;
+            } else {
+                result.for_type = extract_ident(line, pos);
+            }
+        }
+    }
+
+    return result;
+}
+
+// ============================================================================
 // Function extractor
 // ============================================================================
 
@@ -97,82 +212,55 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         return functions;
 
     std::string line;
-    // Match: impl[optional_generics] BehaviorName[optional_type_args] for ConcreteType
-    // The extra (?:\[[^\]]*\])? after (\w+) consumes type args like [I8] in
-    // `impl From[I8] for I16`, so the `for ConcreteType` part is properly captured.
-    // Without this, `impl From[I8] for I16` incorrectly extracts `From::from`
-    // instead of `I16::from` (which is what the runtime coverage tracker emits).
-    std::regex impl_regex(
-        R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\[[^\]]*\])?\s*(?:for\s+(\w+))?)");
-    // Match: impl ... for (A, B) — tuple type targets that the regex can't capture
-    std::regex impl_for_tuple_regex(
-        R"(^\s*impl\s*(?:\[[^\]]*\])?\s*\w+(?:\[[^\]]*\])?\s+for\s+\()");
-    std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
-    std::regex class_regex(R"(^\s*(pub\s+)?class\s+(\w+))");
-    std::regex interface_regex(R"(^\s*(pub\s+)?interface\s+(\w+))");
-    std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
-    std::regex extern_regex(R"(@extern\()");
-    std::smatch match;
     std::string prev_line;
 
     while (std::getline(ifs, line)) {
-        if (std::regex_search(line, match, class_regex)) {
-            current_impl = match[2].str();
+        // Check for class/interface/behavior/impl declarations
+        std::string name;
+        if (!(name = match_keyword_decl(line, "class")).empty()) {
+            current_impl = name;
             in_behavior = false;
             in_class = true;
             in_interface = false;
             impl_brace_depth = 0;
-        } else if (std::regex_search(line, match, interface_regex)) {
-            current_impl = match[2].str();
+        } else if (!(name = match_keyword_decl(line, "interface")).empty()) {
+            current_impl = name;
             in_behavior = true;
             in_class = false;
             in_interface = true;
             impl_brace_depth = 0;
-        } else if (std::regex_search(line, impl_for_tuple_regex)) {
-            // impl ... for (A, B) — tuple types emit under concrete tuple names
-            // at runtime (Tuple2, etc.) which aren't directly matchable from source.
-            // Skip these like generic impls.
-            current_impl = "__generic_impl__";
-            in_behavior = false;
-            in_class = false;
-            in_interface = false;
-            impl_brace_depth = 0;
-        } else if (std::regex_search(line, match, impl_regex)) {
-            if (match[2].matched) {
-                std::string type_after_for = match[2].str();
-                if (type_after_for.size() == 1 && std::isupper(type_after_for[0])) {
-                    // impl Behavior[T] for T — generic type param as impl target.
-                    // Coverage emits concrete type names (I32::from), not behavior names.
-                    // Mark as "generic_impl" to skip these methods.
-                    current_impl = ""; // skip — use empty to ignore
-                    in_behavior = false;
-                    in_class = false;
-                    in_interface = false;
-                    impl_brace_depth = 0;
-                    // Track braces to know when this generic impl block ends
-                    // by processing it as a no-name block (empty current_impl)
-                    // which means functions inside won't get the type prefix
-                    // but we need to still track brace depth.
-                    // Reuse the existing "current_impl is empty" brace tracking below.
-                    // However we need to set current_impl to something so the brace
-                    // counter runs. Use a sentinel.
-                    current_impl = "__generic_impl__";
+        } else {
+            auto impl = parse_impl_line(line);
+            if (impl.matched && impl.is_tuple_target) {
+                // impl ... for (A, B) — tuple types emit under concrete tuple names
+                // at runtime (Tuple2, etc.) which aren't directly matchable from source.
+                current_impl = "__generic_impl__";
+                in_behavior = false;
+                in_class = false;
+                in_interface = false;
+                impl_brace_depth = 0;
+            } else if (impl.matched) {
+                if (!impl.for_type.empty()) {
+                    if (impl.for_type.size() == 1 && std::isupper(impl.for_type[0])) {
+                        // impl Behavior[T] for T — generic type param as impl target.
+                        current_impl = "__generic_impl__";
+                    } else {
+                        current_impl = impl.for_type;
+                    }
                 } else {
-                    current_impl = type_after_for;
+                    current_impl = impl.behavior_name;
                 }
-            } else {
-                current_impl = match[1].str();
+                in_behavior = false;
+                in_class = false;
+                in_interface = false;
+                impl_brace_depth = 0;
+            } else if (!(name = match_keyword_decl(line, "behavior")).empty()) {
+                current_impl = name;
+                in_behavior = true;
+                in_class = false;
+                in_interface = false;
+                impl_brace_depth = 0;
             }
-            in_behavior = false;
-            in_class = false;
-            in_interface = false;
-            impl_brace_depth = 0;
-        } else if (std::regex_search(line, match, behavior_regex)) {
-            current_impl = match[2].str();
-            in_behavior = true;
-            in_class = false;
-            in_interface = false;
-            impl_brace_depth = 0;
         }
 
         // Skip brace counting for comment/docstring lines — unbalanced braces
@@ -202,13 +290,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             }
         }
 
-        if (std::regex_search(line, match, func_regex)) {
-            std::string func_name = match[2].str();
+        std::string func_name = match_keyword_decl(line, "func");
+        if (!func_name.empty()) {
             if (func_name.rfind("test_", 0) == 0) {
                 prev_line = line;
                 continue;
             }
-            if (std::regex_search(prev_line, extern_regex)) {
+            if (prev_line.find("@extern(") != std::string::npos) {
                 prev_line = line;
                 continue;
             }
@@ -674,12 +762,22 @@ PreviousCoverage get_previous_coverage_from_json(const std::string& html_path) {
     // Parse total_functions and covered_functions from JSON
     // Format: "total_functions": N, "covered_functions": M, "coverage_percent": X.X
     auto extract_int = [&](const std::string& key) -> int {
-        std::string pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
-        std::regex re(pattern);
-        std::smatch match;
-        if (std::regex_search(content, match, re)) {
+        std::string needle = "\"" + key + "\"";
+        auto pos = content.find(needle);
+        if (pos == std::string::npos)
+            return 0;
+        pos += needle.size();
+        // Skip whitespace and colon
+        while (pos < content.size() && (content[pos] == ' ' || content[pos] == '\t' ||
+                                        content[pos] == ':' || content[pos] == '\n'))
+            ++pos;
+        // Extract digits
+        size_t start = pos;
+        while (pos < content.size() && std::isdigit(static_cast<unsigned char>(content[pos])))
+            ++pos;
+        if (pos > start) {
             try {
-                return std::stoi(match[1].str());
+                return std::stoi(content.substr(start, pos - start));
             } catch (...) {}
         }
         return 0;
