@@ -322,35 +322,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             if (type_sub_it != current_type_subs_.end()) {
                 type_name = types::type_to_string(type_sub_it->second);
             } else if (!current_type_subs_.empty()) {
-                // Handle trait name used as static dispatch in generic impl.
+                // Handle behavior name used as static dispatch in generic impl.
                 // e.g., Default::default() inside impl[T: Default] → T::default()
-                static const std::unordered_set<std::string> TRAIT_NAMES = {
-                    "Default",
-                    "Clone",
-                    "Duplicate",
-                    "Display",
-                    "Debug",
-                    "PartialEq",
-                    "Eq",
-                    "PartialOrd",
-                    "Ord",
-                    "Hash",
-                    "Deref",
-                    "DerefMut",
-                    "From",
-                    "Into",
-                    "TryFrom",
-                    "TryInto",
-                    "Iterator",
-                    "IntoIterator",
-                    "ExactSizeIterator",
-                    "ToString",
-                    "FromStr",
-                    "Copy",
-                    "Sized",
-                };
-                if (TRAIT_NAMES.count(type_name) > 0 && current_type_subs_.size() == 1) {
-                    type_name = types::type_to_string(current_type_subs_.begin()->second);
+                // e.g., Step::steps_between() inside impl[T: Step] → I32::steps_between()
+                // Use dynamic lookup instead of hardcoded set — any behavior qualifies.
+                // Find the generic type param (not Self/This) whose concrete type
+                // implements this behavior. Typically this is "T".
+                if (env_.lookup_behavior(type_name).has_value()) {
+                    for (const auto& [param, concrete] : current_type_subs_) {
+                        if (param == "Self" || param == "This")
+                            continue;
+                        type_name = types::type_to_string(concrete);
+                        fn_name = type_name + "::" + method;
+                        break;
+                    }
                 }
             }
 

@@ -228,9 +228,16 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         std::string type_name = fn_name.substr(0, sep_pos);
                         std::string method_name = fn_name.substr(sep_pos + 2);
 
-                        // Check if this type exists in the module
-                        bool is_type =
-                            mod.structs.count(type_name) > 0 || mod.enums.count(type_name) > 0;
+                        // Check if this type exists in the module (structs, enums, or primitives)
+                        auto is_primitive_type = [](const std::string& n) {
+                            return n == "I8" || n == "I16" || n == "I32" || n == "I64" ||
+                                   n == "I128" || n == "U8" || n == "U16" || n == "U32" ||
+                                   n == "U64" || n == "U128" || n == "F32" || n == "F64" ||
+                                   n == "Bool" || n == "Str" || n == "Char";
+                        };
+                        bool is_type = mod.structs.count(type_name) > 0 ||
+                                       mod.enums.count(type_name) > 0 ||
+                                       is_primitive_type(type_name);
 
                         // Skip generic types - they need type substitutions from context
                         // and are handled via expected_enum_type_ in method.cpp
@@ -379,7 +386,40 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 mangled = "@tml_" + mangle_tml_symbol(found_mod_name, bare, found_param_types);
             }
         } else {
-            mangled = "@tml_" + prefix + sanitized_name;
+            // Check if this is a Type::method call on a primitive type
+            // (e.g., I32::steps_between from behavior dispatch).
+            // Primitive types are not in module registry, so is_library_function is false,
+            // but we still need Itanium-mangled names and impl instantiation.
+            size_t sep_pos3 = fn_name.find("::");
+            if (sep_pos3 != std::string::npos) {
+                std::string first_seg = fn_name.substr(0, sep_pos3);
+                bool is_prim = first_seg == "I8" || first_seg == "I16" || first_seg == "I32" ||
+                               first_seg == "I64" || first_seg == "I128" || first_seg == "U8" ||
+                               first_seg == "U16" || first_seg == "U32" || first_seg == "U64" ||
+                               first_seg == "U128" || first_seg == "F32" || first_seg == "F64" ||
+                               first_seg == "Bool" || first_seg == "Str" || first_seg == "Char";
+                if (is_prim) {
+                    std::string method_name3 = fn_name.substr(sep_pos3 + 2);
+                    mangled = "@" + mangle_impl_method(first_seg, method_name3);
+                    // Queue impl instantiation
+                    std::string mangled_key = mangle_impl_method(first_seg, method_name3);
+                    if (generated_impl_methods_.find(mangled_key) ==
+                        generated_impl_methods_.end()) {
+                        pending_impl_method_instantiations_.push_back(
+                            PendingImplMethod{first_seg,
+                                              method_name3,
+                                              {},
+                                              first_seg,
+                                              "",
+                                              /*is_library_type=*/true});
+                        generated_impl_methods_.insert(mangled_key);
+                    }
+                } else {
+                    mangled = "@tml_" + prefix + sanitized_name;
+                }
+            } else {
+                mangled = "@tml_" + prefix + sanitized_name;
+            }
         }
     }
 

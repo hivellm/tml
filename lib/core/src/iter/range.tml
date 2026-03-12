@@ -469,7 +469,8 @@ impl[T: Step + PartialOrd] Iterator for RangeInclusive[T] {
 
     pub func size_hint(this) -> (I64, Maybe[I64]) {
         if this.exhausted {
-            return (0, Just(0))
+            let zero: I64 = 0
+            return (zero, Just(zero))
         }
         when Step::steps_between(ref this.start, ref this.end) {
             Just(n) => {
