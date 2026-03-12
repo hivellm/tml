@@ -329,9 +329,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string impl_linkage = options_.library_ir_only ? "" : "internal ";
     emit_line("define " + impl_linkage + ret_type + " @" + func_llvm_name + "(" + params +
               ") #0 {");
-    if (func_llvm_name.find("Mutex") != std::string::npos) {
-        fprintf(stderr, "[GEN_IMPL] %s type_name=%s\n", func_llvm_name.c_str(), type_name.c_str());
-    }
+    TML_LOG_TRACE("codegen", "[GEN_IMPL] " << func_llvm_name << " type_name=" << type_name);
     emit_line("entry:");
 
     // Register 'this'/'self' in locals only for instance methods
@@ -681,6 +679,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
     const std::vector<parser::GenericParam>& impl_generics, const std::string& method_type_suffix,
     bool is_library_type, const std::string& base_type_name, const parser::Type* impl_self_type) {
+    TML_LOG_TRACE("codegen", "[IMPL_INST_DBG] ENTER gen_impl_method_instantiation: "
+                                 << base_type_name << "::" << method.name
+                                 << " (mangled=" << mangled_type_name << ")");
     // Skip method-level generic methods without a concrete type suffix.
     // Without a suffix, type params (e.g. T) remain unresolved and produce
     // `alloca %struct.T` in the IR — an unsized type that LLVM rejects.
@@ -812,6 +813,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     current_type_subs_ = full_type_subs; // Set type substitutions for the method body
+    // Debug: print type subs
+    for (const auto& [k, v] : full_type_subs) {
+        std::string vstr = v ? llvm_type_from_semantic(v) : "null";
+        emit_line("; DEBUG full_type_subs: " + k + " -> " + vstr);
+    }
     locals_.clear();
     block_terminated_ = false;
 
@@ -1072,6 +1078,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     // Generate method body
+    TML_LOG_TRACE("codegen", "[IMPL_INST_DBG] BODY_START "
+                                 << mangled_type_name << "::" << method.name
+                                 << " body=" << (method.body.has_value() ? "yes" : "no"));
     if (method.body.has_value()) {
         // Push drop scope for method body (enables RAII for local variables)
         push_drop_scope();

@@ -1100,10 +1100,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     emit_line("");
                     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params +
                               ") #0 {");
-                    if (func_llvm_name.find("Mutex") != std::string::npos) {
-                        fprintf(stderr, "[INLINE_CODEGEN] %s type_name=%s\n",
-                                func_llvm_name.c_str(), type_name.c_str());
-                    }
+                    TML_LOG_TRACE("codegen", "[INLINE_CODEGEN] " << func_llvm_name
+                                                                 << " type_name=" << type_name);
                     emit_line("entry:");
 
                     // Register params in locals

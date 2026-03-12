@@ -500,6 +500,10 @@ void LLVMIRGen::generate_pending_instantiations() {
             pending_impl_method_instantiations_.clear();
 
             for (const auto& pim : pending) {
+                TML_LOG_TRACE("codegen", "[GENERIC_DBG] Processing pending: "
+                                             << pim.mangled_type_name << "::" << pim.method_name
+                                             << " (base=" << pim.base_type_name
+                                             << ", lib=" << (int)pim.is_library_type << ")");
                 // Build deduplication key
                 std::string method_key = pim.mangled_type_name + "::" + pim.method_name;
                 if (!pim.method_type_suffix.empty()) {

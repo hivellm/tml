@@ -236,10 +236,11 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
             // truncated value becomes a garbage/null pointer causing ACCESS_VIOLATION.
             // Emit a compile-time warning and still generate the code (user may know
             // the pointer fits in 32 bits for FFI interop).
-            fprintf(stderr,
-                    "warning: %s:%u:%u: casting pointer to I32 truncates the address on "
-                    "64-bit systems; use I64 instead to avoid ACCESS_VIOLATION\n",
-                    options_.source_file.c_str(), cast.span.start.line, cast.span.start.column);
+            TML_LOG_WARN("codegen",
+                         options_.source_file
+                             << ":" << cast.span.start.line << ":" << cast.span.start.column
+                             << ": casting pointer to I32 truncates the address on "
+                                "64-bit systems; use I64 instead to avoid ACCESS_VIOLATION");
             emit_line("  " + result + " = trunc i64 " + ptr_int + " to i32");
             last_expr_type_ = "i32";
             return result;
