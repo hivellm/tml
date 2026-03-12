@@ -52,12 +52,16 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
     types::TypePtr elem_type = slice_type.element;
 
     std::string elem_llvm_type = llvm_type_from_semantic(elem_type, true);
-    // SliceType is a fat pointer: { ptr, i64 }
-    std::string slice_llvm_type = "{ ptr, i64 }";
 
     // Generate receiver
     std::string slice_receiver = gen_expr(*call.receiver);
     std::string receiver_type = last_expr_type_;
+
+    // Use the receiver's actual type for consistency (may be %struct.Slice__T or { ptr, i64 })
+    std::string slice_llvm_type = receiver_type;
+    if (receiver_type == "ptr") {
+        slice_llvm_type = "{ ptr, i64 }";
+    }
     std::string slice_ptr;
 
     // If receiver is already a pointer, use it directly; otherwise alloca and store

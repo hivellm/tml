@@ -246,6 +246,19 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
         return mangled;
     }
 
+    // Slice[T] and MutSlice[T] are fat pointers — always { ptr, i64 }
+    if (base_name == "Slice" || base_name == "MutSlice") {
+        struct_instantiations_[mangled] =
+            GenericInstantiation{base_name, final_type_args, mangled, true};
+        std::string type_name = "%struct." + mangled;
+        std::string def = type_name + " = type { ptr, i64 }";
+        type_defs_buffer_ << def << "\n";
+        struct_types_[mangled] = type_name;
+        struct_fields_[mangled] = {{"data", 0, "ptr", types::make_ptr(types::make_unit())},
+                                   {"len", 1, "i64", types::make_i64()}};
+        return mangled;
+    }
+
     // RawPtr[T] and RawMutPtr[T] are type-erased pointer wrappers — always { i64 }
     // regardless of the type parameter. Handle them like other runtime-backed types
     // (List, HashMap) to ensure the type definition is always emitted correctly.

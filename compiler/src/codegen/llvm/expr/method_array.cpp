@@ -914,7 +914,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     // as_ref() returns Slice[T] (same as as_slice)
     if (method == "as_ref") {
         emit_coverage("Array::as_ref");
-        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string mangled = require_struct_instantiation("Slice", {elem_type});
+        std::string slice_llvm_type = "%struct." + mangled;
         std::string result_ptr = fresh_reg();
         emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
         std::string data_ptr = fresh_reg();
@@ -934,7 +935,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     // as_slice() returns Slice[T] (fat pointer { ptr, i64 })
     if (method == "as_slice") {
         emit_coverage("Array::as_slice");
-        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string mangled = require_struct_instantiation("Slice", {elem_type});
+        std::string slice_llvm_type = "%struct." + mangled;
         std::string result_ptr = fresh_reg();
         emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
 
@@ -959,7 +961,8 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     // as_mut_slice() returns MutSlice[T] (fat pointer { ptr, i64 })
     if (method == "as_mut_slice") {
         emit_coverage("Array::as_mut_slice");
-        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string mangled = require_struct_instantiation("MutSlice", {elem_type});
+        std::string slice_llvm_type = "%struct." + mangled;
         std::string result_ptr = fresh_reg();
         emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
 
