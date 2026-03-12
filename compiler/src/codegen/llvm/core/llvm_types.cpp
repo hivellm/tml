@@ -199,7 +199,7 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                 for (const auto& arg : named.generics->args) {
                     if (arg.is_type()) {
                         types::TypePtr semantic_type =
-                            resolve_parser_type_with_subs(*arg.as_type(), {});
+                            resolve_parser_type_with_subs(*arg.as_type(), current_type_subs_);
                         type_args.push_back(semantic_type);
                     } else if (arg.is_const && arg.is_expr()) {
                         // Const generic argument (e.g., 3 in MyStruct[I32, 3])

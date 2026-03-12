@@ -971,6 +971,20 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             auto return_type =
                                 types::substitute_type(func_sig->return_type, type_subs);
                             ret_type = llvm_type_from_semantic(return_type);
+                            // Fix: when func_sig comes from a wrong overload (e.g.,
+                            // Pin[mut ref T]::new overwrites Pin[ref T]::new in the
+                            // functions map), the substitution may leave unresolved
+                            // type params. If the return type is the same struct as
+                            // the caller, use the already-correct mangled_type_name.
+                            if (ret_type.find("_T") != std::string::npos ||
+                                ret_type.find("_E") != std::string::npos ||
+                                ret_type.find("_K") != std::string::npos ||
+                                ret_type.find("_V") != std::string::npos) {
+                                // Check if return type is the same base struct
+                                if (ret_type.find(type_name) != std::string::npos) {
+                                    ret_type = "%struct." + mangled_type_name;
+                                }
+                            }
                         } else if (local_method_decl &&
                                    local_method_decl->return_type.has_value()) {
                             auto return_type = resolve_parser_type_with_subs(
