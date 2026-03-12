@@ -150,6 +150,13 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     // Check global constants first
     auto const_it = global_constants_.find(ident.name);
     if (const_it != global_constants_.end()) {
+        // String constants are stored with "STR:" prefix — emit as string literal
+        if (const_it->second.value.rfind("STR:", 0) == 0) {
+            std::string str_val = const_it->second.value.substr(4);
+            std::string const_name = add_string_literal(str_val);
+            last_expr_type_ = "ptr";
+            return const_name;
+        }
         last_expr_type_ = const_it->second.llvm_type;
         return const_it->second.value;
     }
@@ -165,6 +172,12 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             if (module) {
                 auto const_it2 = module->constants.find(symbol_name);
                 if (const_it2 != module->constants.end()) {
+                    if (const_it2->second.tml_type == "Str") {
+                        // String constants need to be emitted as global string literals
+                        std::string const_name = add_string_literal(const_it2->second.value);
+                        last_expr_type_ = "ptr";
+                        return const_name;
+                    }
                     // Use the stored type, mapped to LLVM type
                     last_expr_type_ = llvm_type_name(const_it2->second.tml_type);
                     return const_it2->second.value;

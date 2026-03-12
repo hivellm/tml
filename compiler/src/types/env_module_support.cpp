@@ -141,6 +141,8 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
             return "null";
         if (lit.token.kind == lexer::TokenKind::CharLiteral)
             return std::to_string(static_cast<uint32_t>(lit.token.char_value().value));
+        if (lit.token.kind == lexer::TokenKind::StringLiteral)
+            return std::string(lit.token.string_value().value);
     }
     return "";
 }

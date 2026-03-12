@@ -1,13 +1,45 @@
-// Tests for report module — color functions SKIPPED
-// The color print functions (print_colored, print_green, print_red, print_yellow, print_bold)
-// use ANSI_* module-level constants that fail during codegen when imported across modules:
-//   "Unknown variable: ANSI_GREEN" — const values from imported modules are not resolved.
-// These functions cannot be tested until cross-module const resolution is fixed.
+// Tests for report module — color print functions
 use test::{assert}
+use test::report::{print_colored, print_green, print_red, print_yellow, print_bold}
 
 @test
-func test_color_functions_placeholder() -> I32 {
-    // Color functions blocked by const codegen issue (ANSI_* variables)
-    assert(true, "placeholder for blocked color tests")
+func test_print_colored_pass() -> I32 {
+    print_colored("PASS", true)
+    assert(true, "print_colored with passed=true should not crash")
+    return 0
+}
+
+@test
+func test_print_colored_fail() -> I32 {
+    print_colored("FAIL", false)
+    assert(true, "print_colored with passed=false should not crash")
+    return 0
+}
+
+@test
+func test_print_green() -> I32 {
+    print_green("green text")
+    assert(true, "print_green should not crash")
+    return 0
+}
+
+@test
+func test_print_red() -> I32 {
+    print_red("red text")
+    assert(true, "print_red should not crash")
+    return 0
+}
+
+@test
+func test_print_yellow() -> I32 {
+    print_yellow("yellow text")
+    assert(true, "print_yellow should not crash")
+    return 0
+}
+
+@test
+func test_print_bold() -> I32 {
+    print_bold("bold text")
+    assert(true, "print_bold should not crash")
     return 0
 }

@@ -136,6 +136,8 @@ static std::string get_const_llvm_type(const parser::TypePtr& type) {
                 return "i1";
             if (name == "Isize" || name == "Usize")
                 return "i64";
+            if (name == "Str")
+                return "ptr";
         }
     } else if (type->is<parser::TupleType>()) {
         const auto& tuple = type->as<parser::TupleType>();
@@ -190,6 +192,8 @@ static std::string try_extract_scalar_const(const parser::Expr* expr) {
             return lit.token.bool_value() ? "1" : "0";
         if (lit.token.kind == lexer::TokenKind::NullLiteral)
             return "null";
+        if (lit.token.kind == lexer::TokenKind::StringLiteral)
+            return "STR:" + std::string(lit.token.string_value().value);
     }
     return "";
 }
