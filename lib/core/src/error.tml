@@ -292,6 +292,7 @@ pub type NeverError {
 }
 
 impl Display for NeverError {
+    @no_coverage
     pub func to_string(this) -> Str {
         // This can never be called because NeverError cannot be constructed
         unreachable()
@@ -299,6 +300,7 @@ impl Display for NeverError {
 }
 
 impl Debug for NeverError {
+    @no_coverage
     pub func debug_string(this) -> Str {
         unreachable()
     }

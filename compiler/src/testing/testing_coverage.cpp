@@ -300,6 +300,11 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 prev_line = line;
                 continue;
             }
+            // Skip functions annotated with @no_coverage (genuinely untestable)
+            if (prev_line.find("@no_coverage") != std::string::npos) {
+                prev_line = line;
+                continue;
+            }
             if (func_name.rfind("ffi_", 0) == 0) {
                 prev_line = line;
                 continue;
