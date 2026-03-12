@@ -921,10 +921,6 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string inst_linkage = options_.library_ir_only ? "" : "internal ";
     emit_line("define " + inst_linkage + ret_type + " @" + func_llvm_name + "(" + params +
               ") #0 {");
-    if (func_llvm_name.find("Mutex") != std::string::npos) {
-        fprintf(stderr, "[GEN_IMPL_INST] %s mangled=%s\n", func_llvm_name.c_str(),
-                mangled_type_name.c_str());
-    }
     emit_line("entry:");
 
     // Register 'this' in locals with proper semantic type for method resolution

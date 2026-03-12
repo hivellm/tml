@@ -411,6 +411,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     types::TypePtr receiver_type = infer_expr_type(*call.receiver);
 
+    // Fallback: if infer_expr_type returned null (e.g., method chains), parse last_expr_type_
+    // This enables chained calls like a.partial_cmp(ref b).is_just() where the receiver
+    // is a method call result with a known LLVM type like %struct.Maybe__Ordering
+    if (!receiver_type && last_expr_type_.starts_with("%struct.")) {
+        std::string mangled = last_expr_type_.substr(8); // strip "%struct."
+        receiver_type = parse_mangled_type_string(mangled);
+    }
+
     // For FieldExpr receivers in generic impl blocks, try to get field type from
     // pending_generic_structs_ This handles cases where infer_expr_type returns an incorrect
     // fallback type

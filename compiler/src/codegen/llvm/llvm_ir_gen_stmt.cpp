@@ -1112,9 +1112,61 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // (wrong) type for nested generics like Maybe[Outcome[Maybe[I32],Str]].
     if (!semantic_type && (var_type.starts_with("%struct.") || var_type.starts_with("%union."))) {
         if (last_semantic_type_) {
-            semantic_type = last_semantic_type_;
-        } else if (let.init.has_value()) {
+            // Validate last_semantic_type_ matches the LLVM type to avoid cross-function leaks.
+            // E.g., last_semantic_type_ might be I64 from a previous function's as_nanos() call
+            // but current var_type is %struct.Instant — the mismatch means it's stale.
+            std::string mangled_check =
+                var_type.starts_with("%struct.") ? var_type.substr(8) : var_type.substr(7);
+            auto delim_check = mangled_check.find("__");
+            std::string base_check = delim_check != std::string::npos
+                                         ? mangled_check.substr(0, delim_check)
+                                         : mangled_check;
+            bool lst_matches = false;
+            if (auto* named = std::get_if<types::NamedType>(&last_semantic_type_->kind)) {
+                lst_matches = (named->name == base_check);
+            }
+            if (lst_matches) {
+                semantic_type = last_semantic_type_;
+            }
+        }
+        if (!semantic_type && let.init.has_value()) {
             semantic_type = infer_expr_type(*let.init.value());
+            // Validate: if infer_expr_type returned a type that doesn't match the LLVM type,
+            // discard it. E.g., for `let x = arr.partial_cmp(ref brr)`, infer returns
+            // ArrayType [I32;3] (the receiver) but var_type is %struct.Maybe__Ordering.
+            // In that case, fall through to parse the LLVM type name instead.
+            if (semantic_type && var_type.starts_with("%struct.")) {
+                std::string mangled = var_type.substr(8);
+                auto delim = mangled.find("__");
+                std::string base = delim != std::string::npos ? mangled.substr(0, delim) : mangled;
+                bool matches = false;
+                if (auto* named = std::get_if<types::NamedType>(&semantic_type->kind)) {
+                    matches = (named->name == base);
+                }
+                if (!matches) {
+                    semantic_type = nullptr; // discard wrong type, let fallback handle it
+                }
+            }
+        }
+        // Fallback: parse the LLVM struct/union type name to infer semantic type
+        // This handles cases like %struct.Maybe__Ordering from inline method codegen
+        // that doesn't set last_semantic_type_
+        if (!semantic_type) {
+            std::string mangled = var_type.starts_with("%struct.")  ? var_type.substr(8)
+                                  : var_type.starts_with("%union.") ? var_type.substr(7)
+                                                                    : var_type;
+            auto delim = mangled.find("__");
+            if (delim != std::string::npos) {
+                std::string base = mangled.substr(0, delim);
+                std::string arg_str = mangled.substr(delim + 2);
+                auto inner = std::make_shared<types::Type>();
+                inner->kind = types::NamedType{arg_str, "", {}};
+                semantic_type = std::make_shared<types::Type>();
+                semantic_type->kind = types::NamedType{base, "", {inner}};
+            } else {
+                semantic_type = std::make_shared<types::Type>();
+                semantic_type->kind = types::NamedType{mangled, "", {}};
+            }
         }
     }
     // For ptr variables from method calls (e.g., let maybe_ptr = s.get_mut()),
