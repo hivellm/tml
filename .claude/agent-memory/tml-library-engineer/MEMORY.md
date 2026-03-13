@@ -1,5 +1,41 @@
 # TML Library Engineer Memory
 
+## Array Module Coverage (2026-03-08) — 21/39 = 53.8%
+
+**Covered (21)**: len, is_empty, get, get_mut, first, first_mut, last, last_mut, map,
+as_slice, each_ref, each_mut, eq, partial_cmp, cmp, duplicate, hash, to_string,
+debug_string, TryFromSliceError::to_string, TryFromSliceError::debug_string
+
+**Blocked by generic trait dispatch returning () (10)**:
+- `try_map`, `zip` — "Unknown method" (extra generic params U/E not resolved)
+- `default` — static method returns `Array[I32, N]` with N unresolved
+- `from_fn`, `try_from_fn`, `repeat` — standalone generic functions: `Array[T, N]` unresolved
+- `from_ref`, `from_mut` — standalone generic functions return ()
+- `Borrow::borrow`, `AsRef::as_ref` — trait impl returns () instead of `ref Slice[T]`
+
+**Blocked by other codegen bugs (8)**:
+- `as_mut_slice` — `MutSlice` unsized type alloc failure
+- `BorrowMut::borrow_mut`, `AsMut::as_mut` — MutSlice unsized + trait dispatch ()
+- `TryFrom::try_from` — impl[T: Copy] returns ()
+- `eq_slice` — ref Slice param: `ptr` vs `{ptr, i64}` type mismatch
+- `index`, `index_mut` — coverage tool doesn't track built-in `arr[i]` codegen
+
+**array/iter (0/19)**: ALL blocked by ArrayIter const generic struct layout:
+  `[0 x %struct.T]` instead of `[N x i32]`. Also `Array::iter/iter_mut/into_iter`
+  "Unknown method" (cross-file impl resolution).
+
+**array/ascii (0/9)**: ALL blocked by type-specialized impl dispatch:
+  `impl[const N: I64] Array[U8, N]` methods return `()` instead of actual type.
+
+**Array re-index codegen bug**: `doubled[1]` after `arr.map()` loads whole `[3 x i32]`
+instead of indexing. Only `[0]` works for map results. Workaround: use `let v: I32 = result[0]`.
+
+## LazyCell Module Coverage (2026-03-08)
+
+4 of 5 functions now tested and passing: `new`, `get`, `is_initialized`, `get_mut`
+- `into_inner` BLOCKED: `Maybe[I32]` from `OnceCell::into_inner()` collides with `Maybe[func() -> I32]` — both `{i32, i32}` but different LLVM type names
+Test files: `lazy_cell.test.tml`, `lazy_into_inner.test.tml` (placeholder), `lazy_coverage.test.tml` (updated)
+
 ## Option Module Coverage Blockers (2026-03-07)
 
 4 functions blocked by compiler codegen bugs. Real tests written, will pass when bugs are fixed:
@@ -169,9 +205,40 @@ fails in suite mode but passes individually. Brace depth or Maybe codegen confli
 - `Outcome::from_output`/`from_residual` -- generic E not resolved (`Outcome__I32__E` vs `Outcome__I32__Str`).
 - `FromResidual` impls -- same root causes as above.
 
-## Test File Patterns for Streams
+## Parser Reserved Words (2026-03-07)
 
-- Test files in `lib/std/tests/stream/`
-- Return type `I32` (not `Outcome[Unit, Str]`) -- stream tests use the older test pattern
-- Use `use test::{assert, assert_eq, assert_true, assert_false}`
-- Listener callbacks are `func(data: I64)` typed as `I64` via `as I64` cast
+`base` is a reserved keyword in the TML parser. Using it as a variable name causes
+"Expected pattern" parse errors. Use `start`, `origin`, `p0`, or other names instead.
+
+## Intrinsics Module Coverage Blockers (2026-03-07)
+
+Newly covered this session (5 new test files, 21 new tests):
+- `checked_div`, `ptr_offset`, `copy`, `write_bytes`, `transmute`
+- `atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_and`, `atomic_or`
+- `field_count`, `variant_count`
+- `simd_store`, `simd_insert`, `simd_splat`
+
+Still blocked:
+- `cast[T,U]` / `volatile_read[T]` / `volatile_write[T]` / `atomic_cmpxchg[T]` / `atomic_xor[T]` -- generic intrinsic monomorphization emits `%struct.T` instead of concrete type
+- `field_name` -- returns empty string (codegen returns null/empty for field name data)
+- `field_type_id` / `field_offset` -- return 0 for all fields (codegen stub, not implemented)
+- `slice_swap` -- direct call via lowlevel cast `p as mut ref T` does not produce correct reference; covered transitively via `MutSlice.swap()`
+
+## Any Module Coverage Blockers (2026-03-07)
+
+All AnyValue methods (`from[T]`, `downcast[T]`, `downcast_mut[T]`, `into_inner[T]`, `drop`, `debug_string`)
+are blocked by `Cannot allocate unsized type %struct.T` codegen bug. Additionally, adding ANY new
+test file to `lib/core/tests/any/` triggers the suite merging codegen bug -- existing 7 files work
+but 8+ causes `%struct.T` symbol collision in merged IR.
+
+`TypeId::hash` is blocked by "Unknown method: write_u64" -- generic trait dispatch on `H: Hasher`
+cannot resolve `write_u64` method on the generic parameter.
+
+## Iterator Adapter Coverage Blockers (2026-03-08)
+
+- **peekable** (7 funcs) -- BLOCKED: nested `Maybe[Maybe[T]]` type layout mismatch
+- **cloned** (3 funcs) -- BLOCKED: `where I::Item = ref T` emits `%struct.T` not concrete type
+- **copied** (3 funcs) -- BLOCKED: same as cloned
+- **intersperse** (2 funcs) -- BLOCKED: "expected comma after load's type" IR parse error
+- **flatten** (2 funcs) -- BLOCKED: `Maybe[U]` Nothing init emits `store struct 0` not zeroinitializer
+- **flat_map** (2 funcs) -- PARTIAL: constructor + first next() work (1 test passing), but Maybe[U] field mutation bug prevents exhaustion/multi-element tests

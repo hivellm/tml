@@ -1,0 +1,33 @@
+use test::{assert_eq}
+use core::async_iter::{FromIter, from_iter}
+use core::iter::*
+
+// Test FromIter::new with OnceI64
+@test
+func test_from_iter_once() -> I32 {
+    let it: OnceI64 = once_i64(42)
+    let fi: FromIter[OnceI64] = FromIter::new(it)
+    let hint = fi.size_hint()
+    assert_eq(hint.0, 1)
+    return 0
+}
+
+// Test from_iter free function with EmptyI64
+@test
+func test_from_iter_empty() -> I32 {
+    let it: EmptyI64 = empty_i64()
+    let fi: FromIter[EmptyI64] = from_iter(it)
+    let hint = fi.size_hint()
+    assert_eq(hint.0, 0)
+    return 0
+}
+
+// Test FromIter with RepeatNI64
+@test
+func test_from_iter_repeat_n() -> I32 {
+    let it: RepeatNI64 = repeat_n_i64(7, 3)
+    let fi: FromIter[RepeatNI64] = FromIter::new(it)
+    let hint = fi.size_hint()
+    assert_eq(hint.0, 3)
+    return 0
+}

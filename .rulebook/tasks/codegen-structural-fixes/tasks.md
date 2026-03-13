@@ -1,11 +1,11 @@
 ## Phase 0: Diagnostic Hygiene
-- [ ] 0.1 Mark NeverError::to_string, NeverError::debug_string with @no_coverage
-- [ ] 0.2 Fix coverage key collision for From impls (fully-qualified symbol identity)
-- [ ] 0.3 Classify each of the 273 uncovered functions into: compiler / runtime / infra / tests-missing
+- [x] 0.1 Mark NeverError::to_string, NeverError::debug_string with @no_coverage (already done — commit ebaa006b)
+- [x] 0.2 Fix coverage key collision for From impls (already correct — uses "I32::from" qualified keys, convert module at 100%)
+- [x] 0.3 Classify each of the 273 uncovered functions into: compiler / runtime / infra / tests-missing (commit cdc7594a)
 - [ ] 0.4 Update baseline numbers after hygiene cleanup
 
 ## Phase 1: Codegen Representation Bugs (~52 functions)
-- [ ] 1.1 BUG-MAYBE: repro mínima — Maybe[I32] emitting i32 instead of struct
+- [ ] 1.1 BUG-MAYBE: repro mínima — Maybe[I32] emitting i32 instead of struct (IN PROGRESS — agent running)
 - [ ] 1.2 BUG-MAYBE: emit IR, compare with Rust equivalent
 - [ ] 1.3 BUG-MAYBE: fix enum/optional lowering
 - [ ] 1.4 BUG-MAYBE: verify std_lowlevel suite compiles and passes

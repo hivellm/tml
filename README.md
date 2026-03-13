@@ -24,6 +24,103 @@ func main() -> I32 {
 
 ---
 
+## Build and Run
+
+### Prerequisites
+
+- **Zig 0.14+** (recommended — fastest builds, no Visual Studio required)
+- **CMake 3.20+**
+- **Ninja** (required for Zig CC and Clang builds, recommended for MSVC)
+- **LLVM 15+** (pre-built static libraries)
+
+**Alternative compilers** (if Zig is not available):
+- MSVC 19.30+ (Visual Studio 2022+) — `scripts\build.bat --msvc`
+- Clang 15+ — `scripts\build.bat --clang`
+
+**Install Zig:**
+
+```bash
+# Windows (winget)
+winget install zig.zig
+
+# Windows (scoop)
+scoop install zig
+
+# Linux
+# Download from https://ziglang.org/download/
+
+# macOS (Homebrew)
+brew install zig
+```
+
+**Install Ninja:**
+
+```bash
+pip install ninja                 # Works everywhere
+winget install Ninja-build.Ninja  # Windows
+sudo apt install ninja-build      # Linux
+brew install ninja                # macOS
+```
+
+### Optional Dependencies
+
+| Module | Requires | Purpose |
+|--------|----------|---------|
+| `std::crypto` | OpenSSL 3.0+ | Cryptographic operations |
+| `std::zlib` | zlib, brotli, zstd | Compression algorithms |
+
+```bash
+vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-linux, arm64-osx
+```
+
+### Build
+
+The build system automatically selects the best available compiler:
+
+| Priority | Compiler | Flag | Requirements |
+|----------|----------|------|-------------|
+| 1 (default) | **Zig CC** (Clang 20) | `--zig` | `zig` + `ninja` in PATH |
+| 2 | **MSVC** (cl.exe) | `--msvc` | Visual Studio 2022+ |
+| 3 | **Clang** | `--clang` | `clang` + `ninja` in PATH |
+
+```bash
+# Windows — auto-detects best compiler (Zig CC > MSVC > Clang)
+scripts\build.bat              # Debug build
+scripts\build.bat release      # Release build
+
+# Force a specific compiler
+scripts\build.bat --zig        # Zig CC (fastest, default)
+scripts\build.bat --msvc       # MSVC cl.exe
+scripts\build.bat --clang      # System Clang
+
+# Other options
+scripts\build.bat --clean      # Clean rebuild
+scripts\build.bat --tests      # Build C++ unit tests
+scripts\build.bat --target tml # Build only tml.exe
+
+# Linux/Mac
+./scripts/build.sh debug
+./scripts/build.sh release
+```
+
+### Usage
+
+```bash
+tml build app.tml              # Compile to executable
+tml run app.tml                # Compile and run
+tml check app.tml              # Type-check only (fast)
+tml test                       # Run test suite
+tml test --suite=core/str      # Run one module's tests
+tml test --coverage            # Tests + coverage report
+tml fmt src/                   # Format code
+tml lint src/                  # Lint code
+tml mcp                        # Start MCP server
+tml build app.tml --emit-ir    # Emit LLVM IR
+tml build app.tml --release    # Optimized build
+```
+
+---
+
 ## What Makes TML Different
 
 ### 1. Native MCP Server in the Compiler
@@ -514,89 +611,6 @@ TML ships with a comprehensive standard library covering:
 | `std::log` | Structured logging with levels and sinks |
 | `std::search` | BM25 text index, HNSW vector index, TF-IDF vectorizer, SIMD distance |
 | `std::text` | Regex, Unicode utilities |
-
----
-
-## Build and Run
-
-### Prerequisites
-
-- **C++20 compiler** (GCC 11+, Clang 15+, MSVC 19.30+)
-- **CMake 3.20+**
-- **LLVM 15+**
-
-### Optional Dependencies
-
-| Module | Requires | Purpose |
-|--------|----------|---------|
-| `std::crypto` | OpenSSL 3.0+ | Cryptographic operations |
-| `std::zlib` | zlib, brotli, zstd | Compression algorithms |
-
-Install all optional deps with vcpkg:
-
-```bash
-vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-linux, arm64-osx
-```
-
-### Ninja (Recommended for Faster Builds)
-
-The build system automatically detects and uses [Ninja](https://ninja-build.org/) when available, providing **2–5x faster builds** compared to the default MSBuild generator.
-
-| Build type | MSBuild | Ninja | Speedup |
-|-----------|---------|-------|---------|
-| Incremental (no-op) | ~10.7s | ~4.6s | **2.3x** |
-| Clean build | ~34s | ~6.7s | **~5x** |
-
-**Install Ninja:**
-
-```bash
-# Via pip (recommended — works everywhere)
-pip install ninja
-
-# Via winget (Windows)
-winget install Ninja-build.Ninja
-
-# Via apt (Linux)
-sudo apt install ninja-build
-
-# Via Homebrew (macOS)
-brew install ninja
-```
-
-The build script (`scripts/build.bat`) will automatically:
-1. Detect `ninja.exe` in your PATH
-2. Initialize the MSVC environment via `vcvars64.bat` if `cl.exe` is not already in PATH
-3. Fall back to MSBuild if Ninja or MSVC are not available
-
-> **Tip:** For best results on Windows, run builds from a **Developer Command Prompt for VS** or let the script auto-detect Visual Studio via `vswhere`.
-
-### Build
-
-```bash
-# Windows
-scripts\build.bat              # Debug build
-scripts\build.bat release      # Release build
-
-# Linux/Mac
-./scripts/build.sh debug
-./scripts/build.sh release
-```
-
-### Usage
-
-```bash
-tml build app.tml              # Compile to executable
-tml run app.tml                # Compile and run
-tml check app.tml              # Type-check only (fast)
-tml test                       # Run test suite
-tml test --suite=core/str      # Run one module's tests
-tml test --coverage            # Tests + coverage report
-tml fmt src/                   # Format code
-tml lint src/                  # Lint code
-tml mcp                        # Start MCP server
-tml build app.tml --emit-ir    # Emit LLVM IR
-tml build app.tml --release    # Optimized build
-```
 
 ---
 

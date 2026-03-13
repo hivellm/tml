@@ -6,6 +6,80 @@
 - [builtin-enum-monomorphization.md](builtin-enum-monomorphization.md) - Maybe[T]::default() fails: built-in enums not recognized as library types
 - [array-mut-this-dispatch.md](array-mut-this-dispatch.md) - Array `mut this` method dispatch failure: 3 root causes
 
+## Recent Fixes
+
+### Constrained Generic Behavior Methods Returning () (2026-03-09) -- FIXED
+- **Bug**: `hash_it[T: Hash](val: ref T) -> I64` returned `()` instead of `I64`
+- **Two root causes**:
+  1. **Type checker**: `TypeEnv::lookup_behavior()` in `env_lookups.cpp` didn't search `GlobalModuleCache`
+     for standalone files (no `use` imports). Behavior definitions like Hash, PartialEq not found.
+     Fix: Added GlobalModuleCache fallback search after module_registry_ search (matching `lookup_func` pattern).
+  2. **Codegen routing**: `has_local_generics` detection in `query_core.cpp:583` and `build.cpp:323` only
+     checked for generic structs/enums, NOT generic functions. Files with `func foo[T: Hash](...)` went
+     through MIR codegen which can't monomorphize. Fix: Added `FuncDecl` generics check.
+- **Files**: `env_lookups.cpp` (type checker), `query_core.cpp` + `build.cpp` (codegen routing)
+- **Impact**: Unblocks ~57 library functions using constrained generics
+- **DLL locking workaround**: When zombie tml.exe processes lock `tml_compiler.dll`, manually link
+  to `.sandbox/` via `vcvarsall.bat x64 && link.exe @link.rsp` and use `TML_PLUGIN_DIR` or copy
+  exe+plugins to sandbox dir (exe looks for plugins at `exe.parent_path()/../plugins/`)
+
+### ListIter Double-Free Fix (2026-03-08) -- FIXED (library-level)
+- **Bug**: `ListIter[T]` stored `list: List[T]` by value. Since `List[T]` is `{ handle: *Unit }`,
+  copying it copies the handle. Both original and copy's Drop free the same handle → double-free.
+- **Fix**: Changed `ListIter` to store raw `handle: *Unit`, `len: I64`, `stride: I64`, `index: I64`
+  instead of `list: List[T]`. No ownership of List, no Drop conflict.
+- **File**: `lib/std/src/collections/behaviors.tml` lines 326-368
+- **Pattern**: Any iterator storing a collection by value will double-free. Use raw handle instead.
+- **Note**: This was a library fix, not a compiler fix. TML lacks move semantics, so `into_iter(this)`
+  always copies. Iterators must store raw pointers to avoid owning the container.
+
+### Specialized Impl Type Param Substitution: ref ref T Bug (2026-03-08) -- FIXED
+- **Bug**: `impl[T] Pin[ref T]` methods returned `ref ref I32` instead of `ref I32`
+- **Root cause**: `expr_call_method.cpp:399` positionally mapped impl type params to struct type_args
+  - For `Pin[ref I32]`, `named.type_args[0] = RefType(I32)`, mapped directly to T
+  - But T should be I32 (inner of ref), not ref I32 (the full type arg)
+- **Fix 1**: Added `impl_self_type_args` field to `FuncSig` (env.hpp)
+  - Stores impl self-type arg patterns (e.g., `[RefType(NamedType("T"))]` for `impl[T] Pin[ref T]`)
+  - Populated at: `core.cpp:check_impl_decl`, `env_module_support.cpp` module registration
+  - Serialized in: `module_binary.cpp/module_binary_read.cpp`
+- **Fix 2**: `build_receiver_subs` helper in `expr_call_method.cpp` uses `extract_type_params`
+  to pattern-match impl self-type args against concrete type args (instead of positional mapping)
+- **Fix 3**: `check_struct_expr` in `types_checker.cpp` now infers type_args for generic struct literals
+  (was returning empty type_args, causing all generic method calls on local structs to fail)
+- **Binary cache**: Format changed; old `.tml.meta` files must be cleared after this fix
+- **Still blocked**: AST codegen generates wrong struct type name `Pin__mutref_T` instead of `Pin__ref_I32`
+
+### Const Generic Monomorphization in Struct Layout (2026-03-08/12) -- FIXED
+- **Bug**: `[T; N]` fields in generic structs emitted `[0 x T]` instead of `[N x T]`
+- **Root causes** (multi-layered fix across sessions):
+  1. `resolve_simple_type` in `env_module_support.cpp:788` only handled `LiteralExpr` array sizes,
+     ignoring `IdentExpr("N")` for const generic params → `ArrayType{size=0, const_generic_param=""}`
+  2. `types::ArrayType` lacked `const_generic_param` field to track which const param controls size
+  3. `apply_type_substitutions` and `substitute_type` didn't resolve const generic sizes
+  4. `require_struct_instantiation` module registry path only mapped `type_params` to `subs`,
+     not `const_params` → const generic N never in substitution map
+  5. `module_binary_read.cpp` deserialization didn't parse `@ParamName` suffix from array size
+  6. Multiple codegen paths (type checker, HIR builder, gen_ident, method_static_dispatch,
+     call_generic_struct, runtime_modules deferred bodies, impl.cpp) needed const generic handling
+- **Files changed**: `type.hpp`, `type.cpp` (substitute_type + substitute_type_with_consts),
+  `env_module_support.cpp` (resolve_simple_type), `llvm_struct_decl.cpp` (const_params mapping),
+  `module_binary_read.cpp` (@ParamName parsing), `types_resolve.cpp`, `resolve.cpp`,
+  `llvm_types.cpp`, `llvm_struct_expr.cpp`, `core.cpp` (gen_ident), `method_static_dispatch.cpp`,
+  `call_generic_struct.cpp`, `runtime_modules.cpp`, `impl.cpp`
+- **Key discovery**: Library struct field types go through `resolve_simple_type` (NOT `resolve_type`)
+  in `env_module_support.cpp`. This is a lightweight resolver used during module registration.
+- **Cache impact**: Old `.tml.meta` files must be regenerated after this fix (field type format changed)
+
+### Struct Field ptr-to-struct Load Missing (2026-03-08) -- FIXED
+- **File**: `compiler/src/codegen/llvm/expr/llvm_struct_expr.cpp`
+- **Bug**: `gen_struct_expr_ptr` had 3 code paths for struct construction (Self, current_ret_type_, generic)
+  - Only the generic path (line ~701) had ptr-to-struct load fixup
+  - The Self path and current_ret_type_ path were missing it
+- **Symptom**: `into_iter(this)` on `List[T]` emitted `store %struct.List__I32 %this, ptr %field` where `%this` is `ptr` type
+- **Root cause**: Immutable `this` on structs is passed as `ptr`, but struct init field store used the ptr value directly as struct type
+- **Fix**: Added `if (last_expr_type_ == "ptr" && field_type.starts_with("%struct."))` load fixup to Self and current_ret_type_ paths
+- **Unblocked**: ListIter[T], into_iter, iter -- codegen correct, but runtime double-free remains (separate issue)
+
 ## Key Findings
 
 ### Generic Inference: FuncType vs ClosureType Mismatch (2026-03-03) -- FIXED
@@ -104,6 +178,16 @@
 - **Fix 1**: Check `pending_generic_enums_` in is_imported computation at method_static_dispatch.cpp:751
 - **Fix 2**: Check `mod.enums` in generic.cpp:569-572 has_struct computation
 - **Debug**: `TML_LOG=debug tml.exe build file.tml --emit-ir 2>&1 | grep IMPL_INST`
+
+### Nested Enum Layout: Maybe[Maybe[I32]] (2026-03-08) -- FIXED
+- **Bug**: `calc_type_size` in `enum.cpp:417-450` computed inner enum size using old `{ i32, [N x i64] }` formula
+  even though compact layout optimization (lines 480-498) produces `{ i32, i32 }` for small payloads
+- **Effect**: `Maybe[Maybe[I32]]` was `{ i32, [2 x i64] }` (20 bytes) instead of `{ i32, i64 }` (16 bytes)
+- **Root cause**: Inner enum payload size 4 -> `inner_num_i64=1` -> `return 8 + 1*8 = 16` bytes,
+  but this was the raw inner enum size, not accounting for compact layout
+- **Fix**: Replaced lines 444-450 with compact-layout-aware sizing (tag-only=4, <=4=8, <=8=16, else formula)
+- **Also fixed**: Non-generic `calc_type_size` (line 185-200) had no enum type lookup at all; added
+  `enum_instantiations_` + `enum_payload_type_` lookup for nested enum-in-enum cases
 
 ### Name Mangling for Primitives
 - `mangle_impl_method("I32", "to_owned")` always produces `tml_N4core3I328to_ownedE`

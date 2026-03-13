@@ -72,9 +72,22 @@
 - **File**: `compiler/src/thir/thir_lower.cpp`, lines 828-840
 - **Bug**: `needs_coercion()` returns IntWidening without checking bit widths
 
+### Unit Type "alloca void" Codegen Bug (2026-03-07) - FIXED
+- Root cause: `mir_primitive_to_llvm(Unit)` returns `"void"` but void is only valid as return type
+- Fix: Added void->`"{}"` guards at 8 emission sites across MIR codegen + AST codegen `for_data=true`
+- Files modified: `instructions.cpp` (load/store/alloca/call/tuple), `mir_codegen.cpp` (decl/def params),
+  `instructions_method.cpp` (method args/receiver), `instructions_misc.cpp` (phi/ConstUnit/TupleInit),
+  `terminators.cpp` (ret), `llvm_ir_gen_stmt.cpp` (let), `call_user.cpp` (call params)
+- Test suite: 1379/1380 passed, no regressions
+
+### Maybe[Unit] GEP Payload Bug (2026-03-07) - FIXED
+- Root cause: `when.cpp` GEP extracted payload at `i32 0, i32 1` but `Maybe[Unit] = { i32 }` has no index 1
+- Fix: `when.cpp:617-657` — detect Unit payload type, skip GEP, use `null` as dummy payload_ptr
+- Handles Maybe and Outcome variants, checks via `types::PrimitiveKind::Unit`
+
 ### MIR Constant Optimization
 - `ConstInt`/`ConstFloat` NOT emitted as instructions, stored as literals in value_regs_
-- `ConstUnit` produces no output at all
+- `ConstUnit` now maps to `zeroinitializer` with type `"{}"` (fixed 2026-03-07)
 
 ### Suite Prefix Naming Bug (2026-02-28) - FIXED
 - See previous notes for details

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Zig CC as Primary Compiler** (2026-03-12) — Zig CC (Clang 20.1.2 + bundled LLD) is now the default C/C++ compiler for building the TML compiler
+  - Auto-detected when `zig` and `ninja` are in PATH; falls back to MSVC or Clang
+  - `scripts\build.bat --zig` (default), `--msvc`, `--clang` to select compiler
+  - CMake toolchain file (`cmake/toolchains/zig.cmake`) with MSVC ABI target
+  - Wrapper scripts (`zig-cc.bat`, `zig-cxx.bat`) filter unsupported linker args
+  - All 423 C/C++ source files compile and link successfully
+  - Fixed Clang compatibility: template keywords in std::visit lambdas, char subscripts, CRT deprecations, GNU extensions
+
 - **Test Coverage Push to 93.1%** (2026-03-07) — Systematic coverage campaign adding 100+ test files and fixing compiler bugs
   - Coverage: 5113/5492 library functions covered (93.1%), 1378 tests passing, 205 modules at 100%
   - Coverage ceiling analysis: ~379 uncovered functions, ~98% theoretical max (blocked by codegen bugs)
