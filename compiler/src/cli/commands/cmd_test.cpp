@@ -153,6 +153,8 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             opts.features.push_back(arg.substr(10));
         } else if (arg == "--feature" && i + 1 < argc) {
             opts.features.push_back(argv[++i]);
+        } else if (arg.starts_with("--max-compile=")) {
+            opts.max_compile_suites = std::stoi(arg.substr(14));
         } else if (arg == "--new-runner") {
             // Ignored - new runner is now the default and only runner
         } else if (arg.starts_with("--output=")) {
@@ -258,6 +260,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.verbose = opts.verbose;
     tc.coverage = opts.coverage;
     tc.fail_fast = opts.coverage ? false : opts.fail_fast;
+    tc.max_compile_suites = opts.max_compile_suites;
     tc.list_suites = opts.list_suites;
 
     auto result = testing::run_tests(tc);

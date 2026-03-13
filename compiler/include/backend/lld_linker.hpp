@@ -76,6 +76,9 @@ struct LLDLinkOptions {
 
     /// Generate import library for DLLs (Windows).
     bool generate_import_lib = true;
+
+    /// Force subprocess LLD (skip in-process to avoid deadlocks).
+    bool force_subprocess = false;
 };
 
 /// Result of LLD linking.

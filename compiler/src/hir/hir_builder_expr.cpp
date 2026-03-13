@@ -658,11 +658,25 @@ auto HirBuilder::lower_struct_expr(const parser::StructExpr& struct_expr) -> Hir
         struct_name = struct_expr.path.segments.back();
     }
 
-    // Lower type arguments
+    // Lower type arguments (including const generic values)
     std::vector<HirType> type_args;
     if (struct_expr.generics) {
         for (const auto& arg : struct_expr.generics->args) {
-            if (arg.is_type()) {
+            if (arg.is_const && arg.is_expr()) {
+                // Const generic argument (e.g., 3 in Wrapper[I32, 3])
+                int64_t const_val = 0;
+                const auto& expr = arg.as_expr();
+                if (expr && expr->is<parser::LiteralExpr>()) {
+                    const auto& lit = expr->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        const_val = lit.token.int_value().value;
+                    }
+                }
+                auto const_type = std::make_shared<types::Type>();
+                const_type->kind = types::ConstGenericType{std::to_string(const_val),
+                                                           types::make_i64(), const_val};
+                type_args.push_back(const_type);
+            } else if (arg.is_type()) {
                 type_args.push_back(resolve_type(*arg.as_type()));
             }
         }

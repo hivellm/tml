@@ -93,6 +93,15 @@ public:
         compiler_hash_.clear();
     }
 
+    /// Downgrade all entries: clear all_passed but keep exe_path for reuse.
+    /// Used when compiler changes — exes need re-execution but may not need recompilation
+    /// if source is unchanged and the exe still exists on disk.
+    void downgrade_to_exe_reusable() {
+        for (auto& [name, entry] : entries_) {
+            entry.all_passed = false;
+        }
+    }
+
     // ========================================================================
     // Static utility functions
     // ========================================================================

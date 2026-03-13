@@ -893,7 +893,18 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             }
         }
 
+        // If type annotation provides a struct type, temporarily set current_ret_type_
+        // so struct literal codegen can use it for generic type resolution
+        // (e.g., let w: Wrapper[I32, 3] = Wrapper { data: [1,2,3] })
+        std::string saved_ret_type;
+        if (is_struct && !var_type.empty()) {
+            saved_ret_type = current_ret_type_;
+            current_ret_type_ = var_type;
+        }
         init_val = gen_expr(*let.init.value());
+        if (!saved_ret_type.empty() || (is_struct && !var_type.empty())) {
+            current_ret_type_ = saved_ret_type;
+        }
         expected_enum_type_.clear(); // Clear context after expression
         expected_literal_type_.clear();
         expected_literal_is_unsigned_ = false;

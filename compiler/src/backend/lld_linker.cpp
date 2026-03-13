@@ -34,7 +34,10 @@ LLD_HAS_DRIVER(macho)
 LLD_HAS_DRIVER(wasm)
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 
 // Global state: LLD uses global mutable state internally (CommonLinkerContext).
 // If canRunAgain=false is ever returned, subsequent calls may crash.
@@ -254,9 +257,13 @@ auto LLDLinker::build_windows_args(const std::vector<fs::path>& object_files,
         }
     }
 
-    // Extra flags
+    // Extra flags — convert Unix-style -l flags to /DEFAULTLIB: for lld-link
     for (const auto& flag : options.extra_flags) {
-        args.push_back(flag);
+        if (flag.size() > 2 && flag[0] == '-' && flag[1] == 'l') {
+            args.push_back("/DEFAULTLIB:" + flag.substr(2));
+        } else {
+            args.push_back(flag);
+        }
     }
 
     // Suppress logo
@@ -383,10 +390,62 @@ auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDL
 #endif
     };
 
-    lld::Result lld_result = lld::lldMain(argv, stdout_os, stderr_os, drivers);
+    // Run lldMain with a timeout to prevent hangs from killing the process.
+    // Some large suites (e.g., core_iter_3) cause LLD to hang indefinitely.
+    // We use heap-allocated state so the background thread can safely outlive
+    // this function if we time out.
+    constexpr int LLD_TIMEOUT_SECONDS = 15;
 
-    stdout_os.flush();
-    stderr_os.flush();
+    struct LldState {
+        std::string stdout_str;
+        std::string stderr_str;
+        std::vector<std::string> args_storage;
+        std::vector<const char*> argv_ptrs;
+        std::vector<lld::DriverDef> drivers;
+        lld::Result lld_result{};
+        std::atomic<bool> done{false};
+    };
+    auto state = std::make_shared<LldState>();
+    state->stdout_str = std::move(stdout_str);
+    state->stderr_str = std::move(stderr_str);
+    state->args_storage = args;
+    state->argv_ptrs.reserve(state->args_storage.size());
+    for (const auto& a : state->args_storage)
+        state->argv_ptrs.push_back(a.c_str());
+    state->drivers = std::move(drivers);
+
+    std::thread lld_thread([state]() {
+        llvm::raw_string_ostream so(state->stdout_str);
+        llvm::raw_string_ostream se(state->stderr_str);
+        state->lld_result = lld::lldMain(state->argv_ptrs, so, se, state->drivers);
+        so.flush();
+        se.flush();
+        state->done.store(true, std::memory_order_release);
+    });
+    lld_thread.detach();
+
+    // Poll-based timeout (condition_variable::wait_for fails to wake on MSVC
+    // when lldMain deadlocks internally)
+    {
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(LLD_TIMEOUT_SECONDS);
+        while (!state->done.load(std::memory_order_acquire)) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                TML_LOG_WARN("linker",
+                             "[lld] TIMEOUT after " << LLD_TIMEOUT_SECONDS << "s; poisoning LLD");
+                g_lld_poisoned.store(true, std::memory_order_release);
+                result.error_message =
+                    "In-process LLD timed out after " + std::to_string(LLD_TIMEOUT_SECONDS) + "s";
+                return result;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
+
+    // Move captured output back from the thread's state
+    stdout_str = std::move(state->stdout_str);
+    stderr_str = std::move(state->stderr_str);
+    lld::Result lld_result = state->lld_result;
 
     // Check canRunAgain — if false, LLD's global state is corrupted
     if (!lld_result.canRunAgain) {
@@ -479,8 +538,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
 
 #ifdef TML_HAS_LLD_EMBEDDED
     // Try in-process LLD linking first (fastest path, no subprocess)
-    if (!g_lld_poisoned.load(std::memory_order_acquire)) {
-        TML_LOG_DEBUG("linker", "[lld] Using in-process LLD");
+    if (!options.force_subprocess && !g_lld_poisoned.load(std::memory_order_acquire)) {
         result = link_in_process(args, options);
 
         // If in-process succeeded, we're done

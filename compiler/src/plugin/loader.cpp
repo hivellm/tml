@@ -108,8 +108,8 @@ Loader::~Loader() {
 void Loader::discover_paths() {
     auto exe = exe_dir();
 
-    // Plugins live at ../plugins/ relative to exe (build/debug/plugins/ when exe is in bin/)
-    plugins_dir_ = exe.parent_path() / "plugins";
+    // Plugins live at plugins/ relative to exe dir (build/debug/bin/plugins/)
+    plugins_dir_ = exe / "plugins";
 
     // Cache directory: cache/plugins/ next to executable
     cache_dir_ = exe / "cache" / "plugins";
@@ -146,10 +146,15 @@ auto Loader::load(const std::string& name) -> LoadedPlugin* {
     const std::string zst_ext = dll_ext + ".zst";
 
     // Search for compressed or uncompressed plugin
+    // Support both MSVC naming (tml_test.dll) and MinGW/Zig naming (libtml_test.dll)
     fs::path zst_path = plugins_dir_ / (name + zst_ext);
     fs::path raw_path = plugins_dir_ / (name + dll_ext);
+    fs::path lib_path = plugins_dir_ / ("lib" + name + dll_ext);
     fs::path cache_path = cache_dir_ / (name + dll_ext);
     fs::path load_path;
+
+    // Also check if plugins are in a sibling 'plugins' dir (Zig CC build layout)
+    auto sibling_plugins = plugins_dir_.parent_path().parent_path() / "plugins";
 
     if (fs::exists(zst_path)) {
         // Compressed plugin — decompress to cache if needed
@@ -163,6 +168,15 @@ auto Loader::load(const std::string& name) -> LoadedPlugin* {
     } else if (fs::exists(raw_path)) {
         // Uncompressed plugin — load directly
         load_path = raw_path;
+    } else if (fs::exists(lib_path)) {
+        // Zig CC / MinGW naming: libtml_test.dll
+        load_path = lib_path;
+    } else if (fs::exists(sibling_plugins / ("lib" + name + dll_ext))) {
+        // Zig CC build: plugins in build/debug/plugins/ (not bin/plugins/)
+        load_path = sibling_plugins / ("lib" + name + dll_ext);
+    } else if (fs::exists(sibling_plugins / (name + dll_ext))) {
+        // MSVC build: plugins in build/debug/plugins/
+        load_path = sibling_plugins / (name + dll_ext);
     } else if (fs::exists(cache_path)) {
         // Only in cache (dev mode: DLLs placed directly in cache)
         load_path = cache_path;

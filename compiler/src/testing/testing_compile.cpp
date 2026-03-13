@@ -94,6 +94,10 @@ static std::string g_clang_path;
 static bool g_env_initialized = false;
 static std::mutex g_env_mutex;
 
+/// Pre-built runtime archive path (set by compile_suites_parallel before spawning workers).
+/// When non-empty, compile_suite() uses this instead of calling get_runtime_objects() per suite.
+static std::string g_runtime_archive_path;
+
 /// LLVM fatal error → C++ exception instead of exit(1)
 struct LlvmFatalException : std::runtime_error {
     LlvmFatalException(const std::string& msg) : std::runtime_error(msg) {}
@@ -180,6 +184,114 @@ static void ensure_runtime_dlls(const fs::path& target_dir) {
 #else
     (void)target_dir;
 #endif
+}
+
+// ============================================================================
+// Runtime archive (pre-built static lib of all runtime .obj files)
+// ============================================================================
+
+/// Build a static archive containing all runtime .obj files.
+/// Called once before parallel suite compilation to avoid redundant per-suite linking.
+static std::string build_runtime_archive(const CompileConfig& config) {
+    init_compile_env();
+
+    // Determine cache directory (same as suite cache dir) — use absolute paths
+    fs::path cache_dir = fs::absolute(
+        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / ".test-cache");
+    fs::create_directories(cache_dir);
+
+    fs::path archive_path = cache_dir / "tml_test_runtime.lib";
+
+    // Build runtime objects using empty registry (base runtime, no crypto/net conditionals)
+    auto registry = std::make_shared<types::ModuleRegistry>();
+    parser::Module empty_module;
+    std::string deps_cache = to_fwd_slashes((cache_dir / "deps").string());
+
+    auto runtime_objs = cli::build::get_runtime_objects(registry, empty_module, deps_cache,
+                                                        g_clang_path, config.verbose);
+
+    if (runtime_objs.empty()) {
+        TML_LOG_ERROR("test", "No runtime objects found — cannot build archive");
+        return "";
+    }
+
+    // Check if archive is up-to-date (newer than all .obj files)
+    if (fs::exists(archive_path)) {
+        auto archive_time = fs::last_write_time(archive_path);
+        bool all_older = true;
+        for (const auto& obj : runtime_objs) {
+            if (fs::exists(obj) && fs::last_write_time(obj) > archive_time) {
+                all_older = false;
+                break;
+            }
+        }
+        if (all_older) {
+            TML_LOG_INFO("test", "Using cached runtime archive: " << archive_path.string() << " ("
+                                                                  << runtime_objs.size()
+                                                                  << " objects)");
+            return archive_path.string();
+        }
+    }
+
+    // Build static archive using llvm-ar directly
+    // (LLDLinker's find_lld() may not find llvm-ar if lld-link is embedded)
+    std::string ar_path;
+    {
+        // Search for llvm-ar in common locations
+        std::vector<std::string> ar_search = {
+            "F:/LLVM/bin/llvm-ar.exe",
+            "C:/Program Files/LLVM/bin/llvm-ar.exe",
+            "C:/LLVM/bin/llvm-ar.exe",
+        };
+        // Also check PATH
+        for (const auto& p : ar_search) {
+            if (fs::exists(p)) {
+                ar_path = p;
+                break;
+            }
+        }
+        if (ar_path.empty()) {
+            // Try `where` on Windows
+            auto pipe = _popen("where llvm-ar.exe 2>nul", "r");
+            if (pipe) {
+                char buf[512];
+                if (fgets(buf, sizeof(buf), pipe)) {
+                    ar_path = buf;
+                    // Trim trailing newline
+                    while (!ar_path.empty() && (ar_path.back() == '\n' || ar_path.back() == '\r'))
+                        ar_path.pop_back();
+                }
+                _pclose(pipe);
+            }
+        }
+    }
+
+    if (ar_path.empty()) {
+        TML_LOG_ERROR("test", "llvm-ar not found — cannot build runtime archive");
+        return "";
+    }
+
+    // llvm-ar rcs <output> <obj1> <obj2> ...
+    // Use native paths (backslashes on Windows) for std::system() via cmd.exe
+    std::ostringstream cmd;
+    cmd << "\"" << ar_path << "\" rcs " << fs::absolute(archive_path).string();
+    for (const auto& obj : runtime_objs) {
+        cmd << " " << fs::absolute(obj).string();
+    }
+
+    if (config.verbose) {
+        TML_LOG_DEBUG("test", "Archive command: " << cmd.str());
+    }
+
+    int ret = std::system(cmd.str().c_str());
+    if (ret != 0) {
+        TML_LOG_ERROR("test", "Failed to build runtime archive (exit " << ret << ")");
+        return "";
+    }
+
+    TML_LOG_INFO("test", "Built runtime archive: " << archive_path.string() << " ("
+                                                   << runtime_objs.size() << " objects)");
+    return archive_path.string();
 }
 
 // ============================================================================
@@ -458,7 +570,20 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     auto runtime_objs =
         cli::build::get_runtime_objects(registry, mod, deps_cache, g_clang_path, verbose);
-    all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
+
+    if (!g_runtime_archive_path.empty()) {
+        // Use pre-built archive for base runtime .obj files,
+        // but still include conditional .lib files (json, zlib, search, etc.)
+        all_object_files.push_back(fs::path(g_runtime_archive_path));
+        for (const auto& obj : runtime_objs) {
+            // Only add .lib files (pre-built libraries), skip .obj files (already in archive)
+            if (obj.extension() == ".lib" || obj.extension() == ".a") {
+                all_object_files.push_back(obj);
+            }
+        }
+    } else {
+        all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
+    }
 
     // Link to executable — remove stale exe to avoid "permission denied"
     auto exe_path = cache_dir / (suite.name + ".exe");
@@ -655,6 +780,12 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     // Ensure environment is initialized before spawning threads
     init_compile_env();
+
+    // Pre-build runtime archive once (all suites share the same base runtime objects)
+    g_runtime_archive_path = build_runtime_archive(config);
+    if (!g_runtime_archive_path.empty()) {
+        TML_LOG_INFO("test", "All suites will link against cached runtime archive");
+    }
 
     std::vector<CompileResult> results(suites.size());
 

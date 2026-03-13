@@ -100,6 +100,8 @@ struct PtrType {
 struct ArrayType {
     TypePtr element; ///< Element type.
     size_t size;     ///< Array size (known at compile time).
+    std::string
+        const_generic_param; ///< Name of const generic param (e.g., "N") if size is parameterized.
 };
 
 /// Slice type: `[T]`.

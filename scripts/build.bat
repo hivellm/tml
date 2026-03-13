@@ -27,7 +27,8 @@ set "BUMP_MAJOR=0"
 set "BUMP_MINOR=0"
 set "ENABLE_MODULAR=ON"
 set "ENABLE_PACK=0"
-set "USE_ZIG_CC=0"
+set "USE_ZIG_CC=auto"
+set "USE_CLANG=0"
 
 :: Parse arguments
 :parse_args
@@ -45,6 +46,8 @@ if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :par
 if /i "%~1"=="--monolithic" set "ENABLE_MODULAR=OFF" & shift & goto :parse_args
 if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
 if /i "%~1"=="--zig" set "USE_ZIG_CC=1" & shift & goto :parse_args
+if /i "%~1"=="--msvc" set "USE_ZIG_CC=0" & shift & goto :parse_args
+if /i "%~1"=="--clang" set "USE_ZIG_CC=0" & set "USE_CLANG=1" & shift & goto :parse_args
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
@@ -74,7 +77,9 @@ echo   --sanitize     Enable both ASan and UBSan
 echo   --cranelift    Enable Cranelift backend (fast debug builds)
 echo   --monolithic   Build single executable (default is modular with DLLs)
 echo   --pack         Pack plugins (compress DLLs + manifest); default modular build
-echo   --zig          Use Zig CC instead of MSVC (faster builds, no VS required)
+echo   --zig          Use Zig CC (default when available, fastest builds)
+echo   --msvc         Force MSVC compiler (cl.exe via Ninja or MSBuild)
+echo   --clang        Use system Clang (clang/clang++ via Ninja)
 echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
 echo   --help         Show this help message
 echo.
@@ -152,7 +157,8 @@ echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
 echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
-if "%USE_ZIG_CC%"=="1" echo Compiler:    Zig CC
+if "%USE_ZIG_CC%"=="1" echo Compiler:    Zig CC ^(Clang 20^)
+if "%USE_CLANG%"=="1" echo Compiler:    Clang
 if "%ENABLE_MODULAR%"=="ON" echo Modular:     Enabled
 if "%ENABLE_PACK%"=="1" echo Pack:        Enabled
 if "%ENABLE_CRANELIFT_BACKEND%"=="ON" echo Cranelift:   Enabled
@@ -202,25 +208,58 @@ set "CMAKE_GENERATOR_ARGS="
 set "USE_NINJA=0"
 set "TOOLCHAIN_ARGS="
 
+:: Auto-detect: prefer Zig CC when available (fastest builds)
+if "%USE_ZIG_CC%"=="auto" (
+    where zig.exe >nul 2>&1
+    if !errorlevel!==0 (
+        where ninja.exe >nul 2>&1
+        if !errorlevel!==0 (
+            set "USE_ZIG_CC=1"
+        ) else (
+            set "USE_ZIG_CC=0"
+        )
+    ) else (
+        set "USE_ZIG_CC=0"
+    )
+)
+
 if "%USE_ZIG_CC%"=="1" (
     :: Zig CC mode: use Ninja + zig cc/c++ via toolchain file
     where ninja.exe >nul 2>&1
     if !errorlevel!==0 (
         set "USE_NINJA=1"
     ) else (
-        echo ERROR: Ninja is required for --zig builds. Install ninja-build.
+        echo ERROR: Ninja is required for Zig CC builds. Install ninja-build.
         exit /b 1
     )
     where zig.exe >nul 2>&1
     if !errorlevel!==0 (
-        echo Compiler:    Zig CC
+        echo Compiler:    Zig CC ^(Clang 20^)
         set "TOOLCHAIN_ARGS=-DCMAKE_TOOLCHAIN_FILE=%ROOT_DIR%\cmake\toolchains\zig.cmake"
     ) else (
-        echo ERROR: zig.exe not found in PATH. Install Zig or set PATH.
+        echo ERROR: zig.exe not found in PATH. Install: winget install zig.zig
         exit /b 1
     )
     echo Generator:   Ninja ^(zig cc^)
     set "CMAKE_GENERATOR_ARGS=-G Ninja"
+) else if "%USE_CLANG%"=="1" (
+    :: System Clang mode: use Ninja + clang/clang++
+    where ninja.exe >nul 2>&1
+    if !errorlevel!==0 (
+        set "USE_NINJA=1"
+    ) else (
+        echo ERROR: Ninja is required for Clang builds. Install ninja-build.
+        exit /b 1
+    )
+    where clang.exe >nul 2>&1
+    if !errorlevel!==0 (
+        echo Compiler:    Clang
+    ) else (
+        echo ERROR: clang.exe not found in PATH.
+        exit /b 1
+    )
+    echo Generator:   Ninja ^(clang^)
+    set "CMAKE_GENERATOR_ARGS=-G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
 ) else (
     :: MSVC mode: detect Ninja + cl.exe
     where ninja.exe >nul 2>&1
@@ -240,10 +279,12 @@ if "%USE_ZIG_CC%"=="1" (
         )
     )
     if "!USE_NINJA!"=="1" (
-        echo Generator:   Ninja ^(fast^)
+        echo Compiler:    MSVC ^(cl.exe^)
+        echo Generator:   Ninja
         set "CMAKE_GENERATOR_ARGS=-G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
     ) else (
-        echo Generator:   MSBuild ^(default^)
+        echo Compiler:    MSVC ^(cl.exe^)
+        echo Generator:   MSBuild
     )
 )
 
@@ -293,6 +334,8 @@ if errorlevel 1 (
 if exist "compile_commands.json" (
     copy /y "compile_commands.json" "%ROOT_DIR%\" >nul 2>&1
 )
+
+:: Plugins now build directly to bin/plugins/ via CMake (TML_BIN_DIR/plugins)
 
 :: Pack plugins if requested
 if "%ENABLE_PACK%"=="1" (

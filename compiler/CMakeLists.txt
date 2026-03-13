@@ -290,6 +290,7 @@ set(TML_RUNTIME_SOURCES
     # os/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
     # crypto/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/hash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto_key.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto_x509.c
@@ -1621,14 +1622,15 @@ if(TML_BUILD_MODULAR)
         )
         set_target_properties(tml_codegen_x86_plugin PROPERTIES
             OUTPUT_NAME "tml_codegen_x86"
-            RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
-            LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+            PREFIX ""
+            RUNTIME_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
         )
         # Flatten multi-config output dirs
         foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
             set_target_properties(tml_codegen_x86_plugin PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
-                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
+                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
             )
         endforeach()
         message(STATUS "Plugin: tml_codegen_x86 (SHARED)")
@@ -1650,13 +1652,14 @@ if(TML_BUILD_MODULAR)
     )
     set_target_properties(tml_compiler_plugin PROPERTIES
         OUTPUT_NAME "tml_compiler"
-        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
-        LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+        PREFIX ""
+        RUNTIME_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
+        LIBRARY_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
     )
     foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
         set_target_properties(tml_compiler_plugin PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
-            LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+            RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
         )
     endforeach()
     message(STATUS "Plugin: tml_compiler (SHARED)")
@@ -1672,13 +1675,14 @@ if(TML_BUILD_MODULAR)
         target_link_libraries(tml_${PLUGIN_NAME}_plugin PRIVATE ${PLUGIN_DEPS})
         set_target_properties(tml_${PLUGIN_NAME}_plugin PROPERTIES
             OUTPUT_NAME "tml_${PLUGIN_NAME}"
-            RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
-            LIBRARY_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/plugins"
+            PREFIX ""
+            RUNTIME_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
+            LIBRARY_OUTPUT_DIRECTORY "${TML_BIN_DIR}/plugins"
         )
         foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
             set_target_properties(tml_${PLUGIN_NAME}_plugin PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
-                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_OUTPUT_DIR}/plugins"
+                RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
+                LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${TML_BIN_DIR}/plugins"
             )
         endforeach()
         message(STATUS "Plugin: tml_${PLUGIN_NAME} (SHARED)")
@@ -1882,6 +1886,12 @@ if(TML_BIN_DIR)
     copy_dll_if_exists("libcrypto-3-x64.dll")
     copy_dll_if_exists("libssl-3-x64.dll")
 
+    # Ensure plugins are built before the tml launcher's post-build copy step
+    add_dependencies(tml
+        tml_compiler_plugin tml_codegen_x86_plugin
+        tml_tools_plugin tml_test_plugin tml_mcp_plugin
+    )
+
     # Copy plugins next to tml.exe for modular build
     add_custom_command(TARGET tml POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:tml>/plugins"
@@ -1889,7 +1899,7 @@ if(TML_BIN_DIR)
     )
     add_custom_command(TARGET tml POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${TML_OUTPUT_DIR}/plugins"
+        "${TML_BIN_DIR}/plugins"
         "$<TARGET_FILE_DIR:tml>/plugins"
         COMMENT "Copying plugins to $<TARGET_FILE_DIR:tml>/plugins"
     )

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Test Runtime Archive** (2026-03-13) — Pre-build all ~15 runtime .obj files into a single `tml_test_runtime.lib` archive before test compilation
+  - Each test suite links against 1 .lib instead of ~15 individual .obj files, reducing linker I/O overhead
+  - Archive is cached and only rebuilt when source .obj files change
+  - Conditional libraries (json, zlib, search, crypto) still linked per-suite as needed
+  - Built via `llvm-ar rcs` with automatic path discovery
+
+- **Pure Hash Runtime Split** (2026-03-13) — Separated pure hash functions (FNV-1a, MurmurHash2, hex conversion) from OpenSSL-dependent `crypto.c` into standalone `hash.c`
+  - Always linked into every build (no OpenSSL dependency)
+  - Fixes undefined symbol errors for `crypto_fnv1a32`, `crypto_murmur2_*`, etc. in test linking
+
 - **Zig CC as Primary Compiler** (2026-03-12) — Zig CC (Clang 20.1.2 + bundled LLD) is now the default C/C++ compiler for building the TML compiler
   - Auto-detected when `zig` and `ninja` are in PATH; falls back to MSVC or Clang
   - `scripts\build.bat --zig` (default), `--msvc`, `--clang` to select compiler
@@ -28,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `class`/`interface` keyword handling for non-TML constructs in coverage extraction
 
 ### Fixed
+- **Zig CC Alignment Sanitizer Crash** (2026-03-13) — Added `-fno-sanitize=alignment` to Zig CC toolchain flags, fixing `load of misaligned address` runtime panics in `tml_compiler.dll`
+
+- **Plugin Loader Path Bug** (2026-03-13) — Fixed plugin DLL search path from `exe.parent_path()/plugins` to `exe/plugins`, preventing stale DLL loading from `build/debug/plugins/` instead of `build/debug/bin/plugins/`
+
 - **Parser Position Restore on Missing Else** (2026-03-04) — `parse_if_expr` consumed newlines looking for `else` without restoring `pos_` when no `else` found
   - Caused `*acc` on next line to be parsed as binary `*` (multiply) instead of unary deref
   - Fix: save/restore `pre_else_pos` in `parser_expr_complex.cpp`

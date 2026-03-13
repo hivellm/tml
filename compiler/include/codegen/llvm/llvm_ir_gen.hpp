@@ -1144,6 +1144,11 @@ private:
     std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
     std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
 
+    // Names of generic structs defined in the local (user) module.
+    // Used to prevent library structs with the same simple name from shadowing
+    // local definitions during generic struct instantiation.
+    std::unordered_set<std::string> local_generic_struct_names_;
+
     // All struct declarations (for accessing default field values during codegen)
     std::unordered_map<std::string, const parser::StructDecl*> struct_decls_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;

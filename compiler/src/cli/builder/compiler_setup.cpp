@@ -143,8 +143,20 @@ MSVCInfo find_msvc() {
 #endif
 
 std::string find_clang() {
-    std::string clang = "clang";
 #ifdef _WIN32
+    // 1. Check for zig cc wrapper (fastest builds, Clang 20)
+    std::vector<std::string> zig_cc_paths = {
+        "scripts/zig-cc.bat",
+        "../scripts/zig-cc.bat",
+        "F:/Node/hivellm/tml/scripts/zig-cc.bat",
+    };
+    for (const auto& p : zig_cc_paths) {
+        if (fs::exists(p)) {
+            return to_forward_slashes(fs::absolute(p).string());
+        }
+    }
+
+    // 2. Check for standalone clang installations
     std::vector<std::string> clang_paths = {
         "F:/LLVM/bin/clang.exe",
         "C:/Program Files/LLVM/bin/clang.exe",
@@ -156,7 +168,7 @@ std::string find_clang() {
         }
     }
 #endif
-    return clang;
+    return "clang";
 }
 
 std::string find_runtime() {

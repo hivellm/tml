@@ -643,10 +643,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
                 TML_LOG_ERROR("types", "=========================");
 
-                // Panic - abort compilation
-                TML_LOG_FATAL("types",
+                // Log fatal but don't abort — let caller handle the error
+                TML_LOG_ERROR("types",
                               "Cannot continue - module '" << module_path << "' failed to parse");
-                std::exit(1);
             } else {
                 TML_DEBUG_LN("[MODULE] Parse error in " << file_path << " (" << parsed.errors.size()
                                                         << " errors, skipping)");
@@ -660,9 +659,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // If any file in a directory module failed to parse, abort (unless in non-fatal mode)
     if (had_errors) {
         if (abort_on_module_error_) {
-            TML_LOG_FATAL("types",
+            TML_LOG_ERROR("types",
                           "Cannot continue - module '" << module_path << "' has parse errors");
-            std::exit(1);
+            return false;
         }
         // In non-fatal mode, continue with successfully parsed files if any
         if (all_parsed.empty()) {
@@ -674,9 +673,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     if (all_parsed.empty()) {
         if (abort_on_module_error_) {
-            TML_LOG_FATAL("types",
+            TML_LOG_ERROR("types",
                           "Module '" << module_path << "' is empty or all files failed to parse");
-            std::exit(1);
+            return false;
         }
         return false;
     }
@@ -788,15 +787,25 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         } else if (type.is<parser::ArrayType>()) {
             const auto& arr = type.as<parser::ArrayType>();
             auto element = resolve_simple_type(*arr.element);
-            // Extract array size from literal expression
+            // Extract array size from literal or const generic param
             size_t arr_size = 0;
-            if (arr.size && arr.size->is<parser::LiteralExpr>()) {
-                const auto& lit = arr.size->as<parser::LiteralExpr>();
-                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                    arr_size = static_cast<size_t>(lit.token.int_value().value);
+            std::string const_generic_param;
+            if (arr.size) {
+                if (arr.size->is<parser::LiteralExpr>()) {
+                    const auto& lit = arr.size->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        arr_size = static_cast<size_t>(lit.token.int_value().value);
+                    }
+                } else if (arr.size->is<parser::IdentExpr>()) {
+                    // Const generic parameter reference (e.g., N in [T; N])
+                    const_generic_param = arr.size->as<parser::IdentExpr>().name;
                 }
             }
-            return make_array(element, arr_size);
+            auto result = make_array(element, arr_size);
+            if (!const_generic_param.empty()) {
+                result->as<ArrayType>().const_generic_param = const_generic_param;
+            }
+            return result;
         } else if (type.is<parser::SliceType>()) {
             const auto& slice = type.as<parser::SliceType>();
             auto element = resolve_simple_type(*slice.element);

@@ -320,10 +320,12 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
     // pending_generic_structs_ may have the wrong definition. Prefer the module registry when
     // it has a matching generic struct, as it provides the correct semantic field definitions.
     bool use_pending_generic = decl_it != pending_generic_structs_.end();
-    if (use_pending_generic && env_.module_registry()) {
+
+    if (use_pending_generic && env_.module_registry() &&
+        local_generic_struct_names_.find(base_name) == local_generic_struct_names_.end()) {
         // Check if multiple modules define a struct with this name — if so, there's
         // ambiguity and pending_generic_structs_ may have the wrong one.
-        // Count how many modules have a generic struct with this base_name.
+        // Skip this check for local structs — the local definition always wins.
         int module_count = 0;
         const auto& all_modules = env_.module_registry()->get_all_modules();
         for (const auto& [mod_name, mod] : all_modules) {
@@ -440,11 +442,19 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
                     // Found imported generic struct - use its semantic definition
                     const auto& struct_def = struct_it->second;
 
-                    // Create substitution map from type params
+                    // Create substitution map from type params and const params
                     std::unordered_map<std::string, types::TypePtr> subs;
-                    for (size_t i = 0;
-                         i < struct_def.type_params.size() && i < final_type_args.size(); ++i) {
+                    // Map type params first: type_params[0..n] -> final_type_args[0..n]
+                    size_t type_param_count = struct_def.type_params.size();
+                    for (size_t i = 0; i < type_param_count && i < final_type_args.size(); ++i) {
                         subs[struct_def.type_params[i]] = final_type_args[i];
+                    }
+                    // Map const params: const_params[0..m] -> final_type_args[n..n+m]
+                    for (size_t i = 0; i < struct_def.const_params.size(); ++i) {
+                        size_t arg_idx = type_param_count + i;
+                        if (arg_idx < final_type_args.size()) {
+                            subs[struct_def.const_params[i].name] = final_type_args[arg_idx];
+                        }
                     }
 
                     // Register field info using the semantic struct definition

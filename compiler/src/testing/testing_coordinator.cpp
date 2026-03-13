@@ -43,6 +43,19 @@ namespace tml::testing {
 using Clock = std::chrono::high_resolution_clock;
 
 // ============================================================================
+// Crash-resilient cache save via atexit
+// ============================================================================
+
+static TestResultCache* g_atexit_cache = nullptr;
+static std::string g_atexit_cache_path;
+
+static void atexit_save_cache() {
+    if (g_atexit_cache && !g_atexit_cache_path.empty()) {
+        g_atexit_cache->save(g_atexit_cache_path);
+    }
+}
+
+// ============================================================================
 // Internal helpers
 // ============================================================================
 
@@ -380,7 +393,6 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 TestRunResult run_tests(const TestConfig& config) {
     TestRunResult result;
     auto total_start = Clock::now();
-
     // Redirect LLVM profraw from the main process to build/coverage/profraw/
     // Without this, LLVM's profiling runtime writes default.profraw to the project root.
     if (config.coverage) {
@@ -463,8 +475,9 @@ TestRunResult run_tests(const TestConfig& config) {
         flags_hash = TestResultCache::compute_flags_hash(config);
 
         if (!cache.compiler_hash().empty() && cache.compiler_hash() != compiler_hash) {
-            TML_LOG_DEBUG("test", "[cache] Compiler changed, invalidating cache");
-            cache.clear();
+            TML_LOG_INFO("test",
+                         "[cache] Compiler changed — downgrading cached suites to exe-reusable");
+            cache.downgrade_to_exe_reusable();
         }
         cache.set_compiler_hash(compiler_hash);
     }
@@ -491,21 +504,30 @@ TestRunResult run_tests(const TestConfig& config) {
             // Store for reuse in step 8
             suite_source_hashes[suite.name] = source_hashes;
 
-            if (!config.coverage && cache.is_cached(suite.name, source_hashes, flags_hash)) {
+            if (cache.is_cached(suite.name, source_hashes, flags_hash)) {
                 const auto* entry = cache.get(suite.name);
-                SuiteRunResult sr;
-                sr.name = suite.name;
-                sr.group = suite.group;
-                sr.test_count = entry->test_count;
-                sr.passed = entry->passed_count;
-                sr.failed = entry->failed_count;
-                sr.crashed = 0;
-                sr.compile_ok = true;
-                sr.cached = true;
-                sr.exec_time_us = entry->duration_us;
-                cached_results.push_back(std::move(sr));
-                TML_LOG_INFO("test",
-                             "  [cache] Suite " << suite.name << " is cached (passed, skipping)");
+                // In coverage mode, cached suites must still RUN to produce coverage data.
+                // Downgrade to exe-reusable: skip recompilation but re-execute.
+                if (config.coverage && !entry->exe_path.empty() && fs::exists(entry->exe_path)) {
+                    TML_LOG_INFO("test", "  [cache] Suite " << suite.name
+                                                            << " cached but coverage needs re-run");
+                    reuse_exe_paths.push_back(entry->exe_path);
+                    reuse_exe_suites.push_back(std::move(suite));
+                } else {
+                    SuiteRunResult sr;
+                    sr.name = suite.name;
+                    sr.group = suite.group;
+                    sr.test_count = entry->test_count;
+                    sr.passed = entry->passed_count;
+                    sr.failed = entry->failed_count;
+                    sr.crashed = 0;
+                    sr.compile_ok = true;
+                    sr.cached = true;
+                    sr.exec_time_us = entry->duration_us;
+                    cached_results.push_back(std::move(sr));
+                    TML_LOG_INFO("test", "  [cache] Suite " << suite.name
+                                                            << " is cached (passed, skipping)");
+                }
             } else if (auto exe = cache.get_reusable_exe(suite.name, source_hashes, flags_hash);
                        !exe.empty()) {
                 // Source unchanged + exe exists: skip recompilation, just re-run
@@ -515,7 +537,23 @@ TestRunResult run_tests(const TestConfig& config) {
                 reuse_exe_paths.push_back(std::move(exe));
                 reuse_exe_suites.push_back(std::move(suite));
             } else {
-                uncached_suites.push_back(std::move(suite));
+                // Fallback: check if exe exists on disk even without cache entry
+                // Only for non-coverage runs — coverage exes must be compiled with instrumentation
+                if (!config.coverage) {
+                    auto exe_cache_dir = fs::current_path() / "build" / "debug" / ".new-run-cache";
+                    auto disk_exe = exe_cache_dir / (suite.name + ".exe");
+                    if (fs::exists(disk_exe)) {
+                        TML_LOG_INFO("test", "  [cache] Suite "
+                                                 << suite.name
+                                                 << " exe found on disk (skip recompile)");
+                        reuse_exe_paths.push_back(disk_exe.string());
+                        reuse_exe_suites.push_back(std::move(suite));
+                    } else {
+                        uncached_suites.push_back(std::move(suite));
+                    }
+                } else {
+                    uncached_suites.push_back(std::move(suite));
+                }
             }
         }
 
@@ -529,20 +567,8 @@ TestRunResult run_tests(const TestConfig& config) {
         uncached_suites = std::move(suites);
     }
 
-    // 5c. Longest-job-first scheduling: sort uncached suites by estimated duration
-    // (descending) using timing data from the previous cache run. This minimises
-    // thread idle time at the tail of the compilation phase — inspired by LLVM LIT.
-    if (use_cache && !uncached_suites.empty()) {
-        std::stable_sort(uncached_suites.begin(), uncached_suites.end(),
-                         [&](const Suite& a, const Suite& b) {
-                             const auto* ea = cache.get(a.name);
-                             const auto* eb = cache.get(b.name);
-                             // Unknown suites go first (INT64_MAX) to avoid scheduling them last
-                             int64_t ta = ea ? (ea->duration_us + ea->compile_time_us) : INT64_MAX;
-                             int64_t tb = eb ? (eb->duration_us + eb->compile_time_us) : INT64_MAX;
-                             return ta > tb; // descending: longest first
-                         });
-    }
+    // 5c. Longest-job-first scheduling (disabled: caused memory issues with large cache)
+    // TODO: re-enable once the root cause of the sort-related crash is fixed
 
     // 6. Parallel compilation (independent pipeline via QueryContext)
     std::atomic<bool> should_stop{false};
@@ -550,30 +576,72 @@ TestRunResult run_tests(const TestConfig& config) {
     std::vector<CompileResult> compile_results; // kept in scope for cache update (compile_time_us)
     std::set<std::string> all_covered_functions;
 
-    if (!uncached_suites.empty()) {
-        CompileConfig compile_config;
-        compile_config.verbose = config.verbose;
-        compile_config.coverage = config.coverage;
-        compile_config.no_cache = config.no_cache;
-        compile_config.num_threads = config.compile_threads;
-
-        compile_results = compile_suites_parallel(uncached_suites, compile_config, should_stop);
-
-        // Count compilation errors
-        for (const auto& cr : compile_results) {
-            if (!cr.success)
-                result.compilation_errors++;
-        }
-
-        // 7. Parallel execution (with coverage collection if enabled)
-        exec_results =
-            execute_suites_parallel(uncached_suites, compile_results, config, should_stop,
-                                    config.coverage ? &all_covered_functions : nullptr);
+    // Cache file path for incremental saves
+    auto cache_file_path =
+        (fs::current_path() / "build" / "debug" / ".new-test-cache.json").string();
+    {
+        std::error_code ec;
+        fs::create_directories(fs::current_path() / "build" / "debug", ec);
     }
 
-    // 7b. Execute suites with reusable exe (source unchanged, exe cached — skip recompile)
+    // Register atexit handler to save cache even if LLVM calls exit()
+    if (use_cache) {
+        g_atexit_cache = &cache;
+        g_atexit_cache_path = cache_file_path;
+        static bool registered = false;
+        if (!registered) {
+            std::atexit(atexit_save_cache);
+            registered = true;
+        }
+    }
+
+    // Helper: update cache entries and flush to disk immediately.
+    // Called after compilation and execution to ensure crash-resilient caching.
+    auto update_cache_entries = [&](const std::vector<Suite>& flush_suites,
+                                    const std::vector<SuiteRunResult>* flush_results,
+                                    const std::vector<CompileResult>& flush_compile_results) {
+        for (int i = 0; i < static_cast<int>(flush_suites.size()); ++i) {
+            auto& suite = flush_suites[i];
+
+            std::vector<std::string> source_hashes;
+            auto hash_it = suite_source_hashes.find(suite.name);
+            if (hash_it != suite_source_hashes.end()) {
+                source_hashes = hash_it->second;
+            } else {
+                std::vector<std::string> file_paths;
+                file_paths.reserve(suite.tests.size());
+                for (const auto& t : suite.tests)
+                    file_paths.push_back(t.file_path);
+                source_hashes = TestResultCache::compute_source_hashes(file_paths);
+            }
+
+            SuiteCacheEntry entry;
+            entry.source_hashes = std::move(source_hashes);
+            entry.flags_hash = flags_hash;
+
+            if (flush_results && i < static_cast<int>(flush_results->size())) {
+                auto& sr = (*flush_results)[i];
+                entry.all_passed = sr.compile_ok && sr.failed == 0 && sr.crashed == 0 &&
+                                   sr.passed == sr.test_count;
+                entry.test_count = sr.test_count;
+                entry.passed_count = sr.passed;
+                entry.failed_count = sr.failed;
+                entry.duration_us = sr.exec_time_us;
+            }
+            if (i < static_cast<int>(flush_compile_results.size())) {
+                entry.compile_time_us = flush_compile_results[i].compile_time_us;
+                entry.exe_path = flush_compile_results[i].exe_path;
+            }
+
+            cache.update(suite.name, entry);
+        }
+        cache.save(cache_file_path);
+    };
+
+    // 6. Execute reuse-exe suites FIRST (ensures results are saved even if compilation crashes)
     if (!reuse_exe_suites.empty()) {
-        // Build CompileResults pointing at existing cached exes (no actual compilation)
+        TML_LOG_INFO("test", "[coordinator] Executing " << reuse_exe_suites.size()
+                                                        << " reuse-exe suites (skip recompile)");
         std::vector<CompileResult> reuse_compile_results;
         reuse_compile_results.reserve(reuse_exe_suites.size());
         for (const auto& exe : reuse_exe_paths) {
@@ -585,66 +653,129 @@ TestRunResult run_tests(const TestConfig& config) {
         auto reuse_exec =
             execute_suites_parallel(reuse_exe_suites, reuse_compile_results, config, should_stop,
                                     config.coverage ? &all_covered_functions : nullptr);
-        for (auto& r : reuse_exec)
+
+        // Flush cache with execution results (marks passing suites as all_passed)
+        update_cache_entries(reuse_exe_suites, &reuse_exec, reuse_compile_results);
+
+        for (auto& r : reuse_exec) {
             exec_results.push_back(std::move(r));
-        // Append to uncached_suites and compile_results for unified cache update in step 8
-        for (auto& s : reuse_exe_suites)
-            uncached_suites.push_back(std::move(s));
-        for (auto& cr : reuse_compile_results)
+        }
+    }
+
+    // 7. Compile + execute uncached suites
+    if (!uncached_suites.empty()) {
+        CompileConfig compile_config;
+        compile_config.verbose = config.verbose;
+        compile_config.coverage = config.coverage;
+        compile_config.no_cache = config.no_cache;
+        // Default to 1 compile thread for stability; user can override.
+        compile_config.num_threads = config.compile_threads > 0 ? config.compile_threads : 1;
+
+        // (incremental cache saves happen after each batch below)
+
+        // Compile in batches to avoid memory exhaustion / LLVM state corruption
+        // when compiling 100+ suites in a single process.
+        int batch_size = 40;
+        // Limit total suites compiled per run to avoid LLVM global state deadlocks
+        int total = static_cast<int>(uncached_suites.size());
+        if (config.max_compile_suites > 0 && total > config.max_compile_suites) {
+            total = config.max_compile_suites;
+            batch_size = std::min(batch_size, total);
+            TML_LOG_INFO("test", "[coordinator] Limiting to "
+                                     << total << " suites this run (--max-compile)");
+        }
+        std::vector<CompileResult> new_compile_results(uncached_suites.size());
+        for (int batch_start = 0; batch_start < total; batch_start += batch_size) {
+            int batch_end = std::min(batch_start + batch_size, total);
+            int batch_count = batch_end - batch_start;
+
+            // Create a sub-vector for this batch
+            std::vector<Suite> batch_suites(
+                std::make_move_iterator(uncached_suites.begin() + batch_start),
+                std::make_move_iterator(uncached_suites.begin() + batch_end));
+
+            TML_LOG_INFO("test", "[coordinator] Compiling batch "
+                                     << (batch_start / batch_size + 1) << " (" << batch_count
+                                     << " suites, " << batch_start << "-" << batch_end << " of "
+                                     << total << ")");
+
+            // Save cache after each suite compiles (crash resilience)
+            std::mutex cache_save_mtx;
+            CompileCallback batch_callback = nullptr;
+            if (use_cache) {
+                batch_callback = [&](int idx, const CompileResult& cr) {
+                    const auto& suite = batch_suites[idx];
+                    auto hash_it = suite_source_hashes.find(suite.name);
+                    SuiteCacheEntry entry;
+                    if (hash_it != suite_source_hashes.end()) {
+                        entry.source_hashes = hash_it->second;
+                    }
+                    entry.flags_hash = flags_hash;
+                    entry.compile_time_us = cr.compile_time_us;
+                    entry.exe_path = cr.exe_path;
+                    {
+                        std::lock_guard<std::mutex> lock(cache_save_mtx);
+                        cache.update(suite.name, entry);
+                        cache.save(cache_file_path);
+                    }
+                };
+            }
+
+            auto batch_results =
+                compile_suites_parallel(batch_suites, compile_config, should_stop, batch_callback);
+
+            // Move results into the main vector
+            for (int i = 0; i < batch_count; ++i) {
+                new_compile_results[batch_start + i] = std::move(batch_results[i]);
+            }
+
+            // Move suites back (they were moved out for the batch)
+            for (int i = 0; i < batch_count; ++i) {
+                uncached_suites[batch_start + i] = std::move(batch_suites[i]);
+            }
+
+            // Post-batch cache save (safety: callback already saved per-suite)
+            if (use_cache) {
+                cache.save(cache_file_path);
+                TML_LOG_INFO("test", "  [cache] Saved " << cache.size() << " entries after batch "
+                                                        << (batch_start / batch_size + 1));
+            }
+        }
+
+        // Count compilation errors
+        for (const auto& cr : new_compile_results) {
+            if (!cr.success) {
+                result.compilation_errors++;
+            }
+        }
+
+        // Final flush after compilation
+        if (use_cache) {
+            cache.save(cache_file_path);
+            TML_LOG_INFO("test",
+                         "  [cache] Flushed " << cache.size() << " entries after compilation");
+        }
+
+        // 7a. Parallel execution
+        auto new_exec_results =
+            execute_suites_parallel(uncached_suites, new_compile_results, config, should_stop,
+                                    config.coverage ? &all_covered_functions : nullptr);
+
+        // Flush cache after execution (saves pass/fail results)
+        update_cache_entries(uncached_suites, &new_exec_results, new_compile_results);
+        TML_LOG_INFO("test", "  [cache] Flushed " << cache.size() << " entries after execution");
+
+        for (auto& r : new_exec_results) {
+            exec_results.push_back(std::move(r));
+        }
+        for (auto& cr : new_compile_results) {
             compile_results.push_back(std::move(cr));
-    }
-
-    // 8. Update cache with new results
-    if (use_cache) {
-        for (size_t i = 0; i < uncached_suites.size(); ++i) {
-            auto& suite = uncached_suites[i];
-            auto& sr = exec_results[i];
-
-            // Reuse source hashes computed in step 5b (avoid re-reading all files)
-            std::vector<std::string> source_hashes;
-            auto hash_it = suite_source_hashes.find(suite.name);
-            if (hash_it != suite_source_hashes.end()) {
-                source_hashes = std::move(hash_it->second);
-            } else {
-                // Fallback: compute if not cached (shouldn't happen normally)
-                std::vector<std::string> file_paths;
-                file_paths.reserve(suite.tests.size());
-                for (const auto& t : suite.tests)
-                    file_paths.push_back(t.file_path);
-                source_hashes = TestResultCache::compute_source_hashes(file_paths);
-            }
-
-            SuiteCacheEntry entry;
-            entry.source_hashes = std::move(source_hashes);
-            entry.flags_hash = flags_hash;
-            entry.all_passed =
-                sr.compile_ok && sr.failed == 0 && sr.crashed == 0 && sr.passed == sr.test_count;
-            entry.test_count = sr.test_count;
-            entry.passed_count = sr.passed;
-            entry.failed_count = sr.failed;
-            entry.duration_us = sr.exec_time_us;
-            // Store compile time for longest-job-first scheduling on subsequent runs
-            if (i < compile_results.size()) {
-                entry.compile_time_us = compile_results[i].compile_time_us;
-                // Always store exe_path (even for failing suites) so get_reusable_exe()
-                // can skip recompilation on the next run if source is unchanged.
-                entry.exe_path = compile_results[i].exe_path;
-            }
-
-            cache.update(suite.name, entry);
-        }
-
-        auto build_dir = fs::current_path() / "build" / "debug";
-        std::error_code ec;
-        fs::create_directories(build_dir, ec);
-        auto cache_file = build_dir / ".new-test-cache.json";
-        if (cache.save(cache_file.string())) {
-            TML_LOG_INFO("test", "  [cache] Saved " << cache.size() << " suite entries to "
-                                                    << cache_file.string());
-        } else {
-            TML_LOG_INFO("test", "  [cache] Failed to save cache to " << cache_file.string());
         }
     }
+
+    // 8. Final cache save (all batches merged)
+    TML_LOG_INFO("test",
+                 "  [cache] Saved " << cache.size() << " suite entries to " << cache_file_path);
 
     // 9. Aggregate results (cached + executed)
     result.suites.reserve(cached_results.size() + exec_results.size());

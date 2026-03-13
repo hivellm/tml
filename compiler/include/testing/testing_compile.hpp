@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -53,10 +54,17 @@ void init_compile_env();
 /// generates NDJSON dispatcher IR, compiles to .obj, and links.
 CompileResult compile_suite(const Suite& suite, const CompileConfig& config);
 
+/// Callback invoked after each suite finishes compilation (thread-safe).
+/// @param idx  Index into suites vector
+/// @param cr   Compilation result for that suite
+using CompileCallback = std::function<void(int idx, const CompileResult& cr)>;
+
 /// Compile multiple suites in parallel using a thread pool.
 /// @param should_stop  Atomic flag for fail-fast abort
+/// @param on_complete  Optional per-suite callback for incremental cache saves
 std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& suites,
                                                    const CompileConfig& config,
-                                                   std::atomic<bool>& should_stop);
+                                                   std::atomic<bool>& should_stop,
+                                                   CompileCallback on_complete = nullptr);
 
 } // namespace tml::testing

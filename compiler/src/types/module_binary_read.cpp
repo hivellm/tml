@@ -233,10 +233,19 @@ static TypePtr deserialize_type_string(const std::string& str) {
                 size_str = size_str.substr(1);
             auto elem = deserialize_type_string(elem_str);
             size_t arr_size = 0;
+            std::string const_generic_param;
+            // Check for @ParamName suffix (e.g., "0@N")
+            auto at_pos = size_str.find('@');
+            if (at_pos != std::string::npos) {
+                const_generic_param = size_str.substr(at_pos + 1);
+                size_str = size_str.substr(0, at_pos);
+            }
             try {
                 arr_size = std::stoull(size_str);
             } catch (...) {}
-            return std::make_shared<Type>(Type{ArrayType{elem, arr_size}});
+            auto arr_type =
+                std::make_shared<Type>(Type{ArrayType{elem, arr_size, const_generic_param}});
+            return arr_type;
         }
         // Slice types: [T]
         auto elem = deserialize_type_string(inner);

@@ -94,6 +94,18 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
         }
     }
 
+    // Check if s is a numeric string (const generic value like "3")
+    if (!s.empty() && (std::isdigit(s[0]) || (s[0] == '-' && s.size() > 1 && std::isdigit(s[1])))) {
+        try {
+            int64_t val = std::stoll(s);
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::ConstGenericType{s, types::make_i64(), val};
+            return t;
+        } catch (...) {
+            // Not a valid number, fall through
+        }
+    }
+
     auto delim = s.find("__");
     if (delim != std::string::npos) {
         std::string base = s.substr(0, delim);
@@ -1294,6 +1306,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                 // set up type substitutions so the body can resolve type params.
                 // Extract base type and type args from the mangled type name.
                 auto saved_type_subs = current_type_subs_;
+                auto saved_const_generic_values = current_const_generic_values_;
                 auto dunder = info.type_name.find("__");
                 if (dunder != std::string::npos) {
                     std::string base = info.type_name.substr(0, dunder);
@@ -1306,6 +1319,15 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                             auto type_arg = parse_mangled_type_string(suffix);
                             if (type_arg) {
                                 current_type_subs_[impl_block.generics[0].name] = type_arg;
+                                // For const generic params, also set the value
+                                if (impl_block.generics[0].is_const &&
+                                    type_arg->is<types::ConstGenericType>()) {
+                                    const auto& cgt = type_arg->as<types::ConstGenericType>();
+                                    if (cgt.resolved_value.has_value()) {
+                                        current_const_generic_values_[impl_block.generics[0].name] =
+                                            *cgt.resolved_value;
+                                    }
+                                }
                             }
                         } else if (impl_block.generics.size() > 1) {
                             // Multi-param: split on "__"
@@ -1325,6 +1347,16 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                                 auto type_arg = parse_mangled_type_string(parts[gi]);
                                 if (type_arg) {
                                     current_type_subs_[impl_block.generics[gi].name] = type_arg;
+                                    // For const generic params, also set the value
+                                    if (impl_block.generics[gi].is_const &&
+                                        type_arg->is<types::ConstGenericType>()) {
+                                        const auto& cgt = type_arg->as<types::ConstGenericType>();
+                                        if (cgt.resolved_value.has_value()) {
+                                            current_const_generic_values_[impl_block.generics[gi]
+                                                                              .name] =
+                                                *cgt.resolved_value;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1335,6 +1367,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                           " method=" + info.method->name);
                 gen_impl_method(info.type_name, *info.method);
                 current_type_subs_ = saved_type_subs;
+                current_const_generic_values_ = saved_const_generic_values;
                 options_.lazy_library_defs = true;
                 continue;
             }

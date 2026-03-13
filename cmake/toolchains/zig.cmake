@@ -36,7 +36,7 @@ set(CMAKE_RC_COMPILER "rc" CACHE FILEPATH "" FORCE)
 # Zig CC default is static CRT; -D_DLL -D_MT selects dynamic CRT headers
 # --dependent-lib=msvcrt tells the linker to link msvcrt.lib (dynamic CRT)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "" FORCE)
-set(CMAKE_C_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt -fno-sanitize=alignment" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt -fno-sanitize=alignment" CACHE STRING "" FORCE)
 
 set(TML_USE_ZIG_CC ON CACHE BOOL "Using Zig CC toolchain" FORCE)

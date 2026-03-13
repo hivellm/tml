@@ -578,7 +578,24 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     // Build mangled name and type_subs from explicit generics
                     for (size_t i = 0; i < pe.generics->args.size(); ++i) {
                         const auto& arg = pe.generics->args[i];
-                        if (arg.is_type()) {
+                        if (arg.is_const && arg.is_expr()) {
+                            // Const generic argument (e.g., 3 in ArrayIter[I32, 3])
+                            int64_t const_val = 0;
+                            const auto& expr = arg.as_expr();
+                            if (expr && expr->is<parser::LiteralExpr>()) {
+                                const auto& lit = expr->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    const_val = lit.token.int_value().value;
+                                }
+                            }
+                            auto const_type = std::make_shared<types::Type>();
+                            const_type->kind = types::ConstGenericType{
+                                std::to_string(const_val), types::make_i64(), const_val};
+                            mangled_type_name += "__" + std::to_string(const_val);
+                            if (i < generic_names.size()) {
+                                type_subs[generic_names[i]] = const_type;
+                            }
+                        } else if (arg.is_type()) {
                             // Resolve type argument using current_type_subs_ (handles T -> I32)
                             auto resolved =
                                 resolve_parser_type_with_subs(*arg.as_type(), current_type_subs_);

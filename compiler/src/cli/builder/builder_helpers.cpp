@@ -330,10 +330,9 @@ SQLite3Paths find_sqlite3() {
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
     if (!registry)
         return false;
-    // Check non-crypto modules that depend on OpenSSL
-    // Note: std::hash is pure TML (FNV, Murmur) and does NOT need OpenSSL
-    if (registry->has_module("std::net::tls") || registry->has_module("std::http::connection") ||
-        registry->has_module("std::http::client"))
+    // Check modules that depend on crypto C runtime (crypto.c contains FNV/Murmur hash + OpenSSL)
+    if (registry->has_module("std::hash") || registry->has_module("std::net::tls") ||
+        registry->has_module("std::http::connection") || registry->has_module("std::http::client"))
         return true;
     // Check any std::crypto submodule (covers constants, error, and future additions)
     for (const auto& [path, _] : registry->get_all_modules()) {
@@ -646,7 +645,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (use_precompiled) {
         // Use pre-compiled runtime library (no clang needed)
         objects.push_back(fs::path(runtime_lib));
-        TML_LOG_DEBUG("build", "Using pre-compiled runtime: " << runtime_lib);
+        TML_LOG_INFO("build", "[runtime] Using pre-compiled runtime: " << runtime_lib);
     } else {
         // Fall back to compiling individual C files with clang
         // Essential runtime (IO functions)
@@ -770,46 +769,38 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
             // thread.c removed — replaced by sync.c (Phase 30)
 
-            // crypto/ - crypto.c, crypto_key.c, crypto_x509.c, etc.
-            // Only include crypto runtime objects when crypto modules are actually used
+            // crypto/hash.c — pure hash functions (FNV1a, Murmur2, hex)
+            // Always included: no external dependencies, needed by std::hash
+            fs::path hash_c = runtime_dir / "crypto" / "hash.c";
+            if (fs::exists(hash_c)) {
+                std::string hash_obj = ensure_c_compiled(to_forward_slashes(hash_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(hash_obj));
+                TML_LOG_DEBUG("build", "Including hash runtime: " << hash_obj);
+            }
+
+            // crypto/*.c + tls.c — OpenSSL-dependent, only when crypto modules are used
             if (has_crypto_modules(registry)) {
                 std::string crypto_extra_flags;
                 {
                     auto openssl = find_openssl();
-                    // Always pass -DTML_HAS_OPENSSL=1 - stubs have been removed
                     crypto_extra_flags = "-DTML_HAS_OPENSSL=1";
                     if (openssl.found) {
                         crypto_extra_flags +=
                             " -I\"" + to_forward_slashes(openssl.include_dir.string()) + "\"";
                     }
                 }
-                fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
-                if (fs::exists(crypto_c)) {
-                    std::string crypto_obj =
-                        ensure_c_compiled(to_forward_slashes(crypto_c.string()), deps_cache, clang,
-                                          verbose, crypto_extra_flags);
-                    objects.push_back(fs::path(crypto_obj));
-                    TML_LOG_DEBUG("build", "Including crypto runtime: " << crypto_obj);
-                }
-                fs::path crypto_key_c = runtime_dir / "crypto" / "crypto_key.c";
-                if (fs::exists(crypto_key_c)) {
-                    std::string crypto_key_obj =
-                        ensure_c_compiled(to_forward_slashes(crypto_key_c.string()), deps_cache,
-                                          clang, verbose, crypto_extra_flags);
-                    objects.push_back(fs::path(crypto_key_obj));
-                    TML_LOG_DEBUG("build", "Including crypto_key runtime: " << crypto_key_obj);
-                }
-                // Compile all additional crypto runtime files
-                for (const auto& crypto_file : {"crypto_x509.c", "crypto_dh.c", "crypto_ecdh.c",
-                                                "crypto_kdf.c", "crypto_rsa.c", "crypto_sign.c"}) {
-                    fs::path crypto_extra_c = runtime_dir / "crypto" / crypto_file;
-                    if (fs::exists(crypto_extra_c)) {
-                        std::string crypto_extra_obj =
-                            ensure_c_compiled(to_forward_slashes(crypto_extra_c.string()),
-                                              deps_cache, clang, verbose, crypto_extra_flags);
-                        objects.push_back(fs::path(crypto_extra_obj));
-                        TML_LOG_DEBUG("build", "Including " << crypto_file
-                                                            << " runtime: " << crypto_extra_obj);
+                for (const auto& crypto_file :
+                     {"crypto.c", "crypto_key.c", "crypto_x509.c", "crypto_dh.c", "crypto_ecdh.c",
+                      "crypto_kdf.c", "crypto_rsa.c", "crypto_sign.c"}) {
+                    fs::path crypto_c = runtime_dir / "crypto" / crypto_file;
+                    if (fs::exists(crypto_c)) {
+                        std::string crypto_obj =
+                            ensure_c_compiled(to_forward_slashes(crypto_c.string()), deps_cache,
+                                              clang, verbose, crypto_extra_flags);
+                        objects.push_back(fs::path(crypto_obj));
+                        TML_LOG_DEBUG("build",
+                                      "Including " << crypto_file << " runtime: " << crypto_obj);
                     }
                 }
 

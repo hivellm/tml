@@ -408,48 +408,70 @@ bool TestResultCache::save(const std::string& cache_file) const {
         fs::create_directories(path.parent_path(), ec);
     }
 
-    std::ofstream ofs(cache_file);
-    if (!ofs)
-        return false;
-
-    ofs << "{\n";
-    ofs << "  \"version\": 1,\n";
-    ofs << "  \"compiler_hash\": ";
-    write_json_string(ofs, compiler_hash_);
-    ofs << ",\n";
-    ofs << "  \"suites\": {\n";
+    // Build the entire JSON in memory first, then write atomically
+    std::ostringstream ss;
+    ss << "{\n";
+    ss << "  \"version\": 1,\n";
+    ss << "  \"compiler_hash\": ";
+    write_json_string(ss, compiler_hash_);
+    ss << ",\n";
+    ss << "  \"suites\": {\n";
 
     size_t idx = 0;
     for (const auto& [name, entry] : entries_) {
-        ofs << "    ";
-        write_json_string(ofs, name);
-        ofs << ": {\n";
-        ofs << "      \"source_hashes\": ";
-        write_json_string_array(ofs, entry.source_hashes);
-        ofs << ",\n";
-        ofs << "      \"flags_hash\": ";
-        write_json_string(ofs, entry.flags_hash);
-        ofs << ",\n";
-        ofs << "      \"all_passed\": " << (entry.all_passed ? "true" : "false") << ",\n";
-        ofs << "      \"test_count\": " << entry.test_count << ",\n";
-        ofs << "      \"passed_count\": " << entry.passed_count << ",\n";
-        ofs << "      \"failed_count\": " << entry.failed_count << ",\n";
-        ofs << "      \"duration_us\": " << entry.duration_us << ",\n";
-        ofs << "      \"compile_time_us\": " << entry.compile_time_us << ",\n";
-        ofs << "      \"exe_path\": ";
-        write_json_string(ofs, entry.exe_path);
-        ofs << "\n";
-        ofs << "    }";
-        if (++idx < entries_.size())
-            ofs << ",";
-        ofs << "\n";
+        ss << "    ";
+        write_json_string(ss, name);
+        ss << ": {\n";
+        ss << "      \"source_hashes\": ";
+        write_json_string_array(ss, entry.source_hashes);
+        ss << ",\n";
+        ss << "      \"flags_hash\": ";
+        write_json_string(ss, entry.flags_hash);
+        ss << ",\n";
+        ss << "      \"all_passed\": " << (entry.all_passed ? "true" : "false") << ",\n";
+        ss << "      \"test_count\": " << entry.test_count << ",\n";
+        ss << "      \"passed_count\": " << entry.passed_count << ",\n";
+        ss << "      \"failed_count\": " << entry.failed_count << ",\n";
+        ss << "      \"duration_us\": " << entry.duration_us << ",\n";
+        ss << "      \"compile_time_us\": " << entry.compile_time_us << ",\n";
+        ss << "      \"exe_path\": ";
+        write_json_string(ss, entry.exe_path);
+        ss << "\n";
+        ss << "    }";
+        if (++idx < entries_.size()) {
+            ss << ",";
+        }
+        ss << "\n";
     }
 
-    ofs << "  }\n";
-    ofs << "}\n";
+    ss << "  }\n";
+    ss << "}\n";
+
+    // Write to temp file, then rename for atomicity
+    std::string tmp_file = cache_file + ".tmp";
+    {
+        std::ofstream ofs(tmp_file, std::ios::binary | std::ios::trunc);
+        if (!ofs) {
+            return false;
+        }
+        std::string content = ss.str();
+        ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
+        ofs.flush();
+        if (!ofs.good()) {
+            return false;
+        }
+    } // close file before rename
+
+    std::error_code ec;
+    fs::rename(tmp_file, cache_file, ec);
+    if (ec) {
+        // rename failed (cross-device?), try copy
+        fs::copy_file(tmp_file, cache_file, fs::copy_options::overwrite_existing, ec);
+        fs::remove(tmp_file, ec);
+    }
 
     TML_LOG_DEBUG("test", "[cache] Saved " << entries_.size() << " suite entries");
-    return ofs.good();
+    return true;
 }
 
 bool TestResultCache::is_cached(const std::string& suite_name,
@@ -524,39 +546,52 @@ void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntr
 // ============================================================================
 
 std::string TestResultCache::compute_compiler_hash() {
-    // Find the compiler executable
-    // The coordinator is running inside tml.exe, so we hash the running binary
     std::error_code ec;
 
+    // Build candidate paths to fingerprint
+    std::vector<fs::path> candidates;
+
 #ifdef _WIN32
-    // On Windows, get the path to the running executable
     char path[MAX_PATH];
     DWORD len = GetModuleFileNameA(nullptr, path, MAX_PATH);
     if (len > 0 && len < MAX_PATH) {
-        std::string exe_path(path, len);
-        auto hash = crc32c_file(exe_path);
-        if (!hash.empty())
-            return hash;
+        fs::path exe(std::string(path, len));
+        candidates.push_back(exe.parent_path() / "plugins" / "tml_compiler.dll");
+        candidates.push_back(exe);
     }
 #else
-    // On Unix, read /proc/self/exe
     auto exe_path = fs::read_symlink("/proc/self/exe", ec);
     if (!ec) {
-        auto hash = crc32c_file(exe_path.string());
-        if (!hash.empty())
-            return hash;
+        candidates.push_back(exe_path);
     }
 #endif
 
-    // Fallback: hash a known compiler binary path
+    // Also try CWD-relative paths
     auto cwd = fs::current_path(ec);
     if (!ec) {
-        fs::path tml_exe = cwd / "build" / "debug" / "bin" / "tml.exe";
-        if (fs::exists(tml_exe)) {
-            return crc32c_file(tml_exe.string());
-        }
+        candidates.push_back(cwd / "build" / "debug" / "bin" / "plugins" / "tml_compiler.dll");
+        candidates.push_back(cwd / "build" / "debug" / "bin" / "tml.exe");
     }
 
+    for (const auto& p : candidates) {
+        if (!fs::exists(p, ec) || ec) {
+            continue;
+        }
+        auto fsize = fs::file_size(p, ec);
+        if (ec || fsize == 0) {
+            continue;
+        }
+        auto ftime = fs::last_write_time(p, ec);
+        if (ec) {
+            continue;
+        }
+        // Use mtime + size as fast fingerprint
+        auto time_val = ftime.time_since_epoch().count();
+        std::string fp = std::to_string(time_val) + ":" + std::to_string(fsize);
+        return crc32c_hex(fp.data(), fp.size());
+    }
+
+    TML_LOG_WARN("test", "[cache] Could not compute compiler hash from any candidate");
     return "unknown";
 }
 
