@@ -243,6 +243,7 @@ static std::string try_extract_const_value(const parser::Expr* expr, const parse
 
 auto LLVMIRGen::generate(const parser::Module& module)
     -> Result<std::string, std::vector<LLVMGenError>> {
+    // (debug prints removed)
     errors_.clear();
     output_.str("");
     type_defs_buffer_.str(""); // Clear type definitions buffer
@@ -359,6 +360,24 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     std::string imported_func_code;
     std::string imported_type_defs;
+
+    // Pre-register local generic structs into pending_generic_structs_ BEFORE
+    // library module registration/emission. This ensures that when library code
+    // triggers require_struct_instantiation (e.g., for Node[I32]), the local
+    // definition is used instead of a library struct with the same simple name
+    // but different fields (e.g., local Node{value: T} vs library Node{value: Maybe[T]}).
+    local_generic_struct_names_.clear();
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::StructDecl>()) {
+            const auto& s = decl->as<parser::StructDecl>();
+            if (!s.generics.empty()) {
+                local_generic_struct_names_.insert(s.name);
+                // Pre-register so require_struct_instantiation uses local fields
+                pending_generic_structs_[s.name] = &s;
+                struct_decls_[s.name] = &s;
+            }
+        }
+    }
 
     if (options_.cached_library_state && options_.cached_library_state->valid) {
         // FAST PATH: Restore pre-computed library state instead of regenerating.
@@ -573,8 +592,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 for (const auto& decl : cached_ast->decls) {
                     if (decl->is<parser::StructDecl>()) {
                         const auto& s = decl->as<parser::StructDecl>();
-                        if (!s.generics.empty() && pending_generic_structs_.find(s.name) ==
-                                                       pending_generic_structs_.end()) {
+                        if (!s.generics.empty() &&
+                            pending_generic_structs_.find(s.name) ==
+                                pending_generic_structs_.end() &&
+                            local_generic_struct_names_.find(s.name) ==
+                                local_generic_struct_names_.end()) {
                             pending_generic_structs_[s.name] = &s;
                         }
                         if (struct_decls_.find(s.name) == struct_decls_.end()) {
@@ -1014,6 +1036,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     current_impl_type_ = type_name; // Track impl self type for 'this' access
                     locals_.clear();
                     block_terminated_ = false;
+                    last_semantic_type_ = nullptr;
 
                     // Determine return type
                     std::string ret_type = "void";

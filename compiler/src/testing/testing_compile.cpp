@@ -30,6 +30,7 @@ TML_MODULE("test")
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <llvm/Support/ErrorHandling.h>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -93,6 +94,16 @@ static std::string g_clang_path;
 static bool g_env_initialized = false;
 static std::mutex g_env_mutex;
 
+/// LLVM fatal error → C++ exception instead of exit(1)
+struct LlvmFatalException : std::runtime_error {
+    LlvmFatalException(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+[[maybe_unused]] static void llvm_fatal_handler(void* /*user_data*/, const char* reason,
+                                                bool /*gen_crash_diag*/) {
+    throw LlvmFatalException(reason ? reason : "unknown LLVM fatal error");
+}
+
 void init_compile_env() {
     std::lock_guard<std::mutex> lock(g_env_mutex);
     if (g_env_initialized)
@@ -101,6 +112,10 @@ void init_compile_env() {
     // Pre-load library module metadata
     int loaded = types::preload_all_meta_caches();
     TML_LOG_DEBUG("test", "[compile] Preloaded " << loaded << " library meta caches");
+
+    // NOTE: LLVM fatal error handler disabled temporarily for debugging
+    // llvm::install_fatal_error_handler(llvm_fatal_handler, nullptr);
+    // llvm::install_bad_alloc_error_handler(llvm_fatal_handler, nullptr);
 
     // Discover clang
     g_clang_path = cli::find_clang();
@@ -204,17 +219,16 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     std::vector<FileCompileResult> file_results(suite.tests.size());
     std::atomic<int> next_file{0};
-    auto& budget = ThreadBudget::instance();
-    int num_compile_threads = std::min(budget.max_threads(), static_cast<int>(suite.tests.size()));
-    num_compile_threads = std::max(1, num_compile_threads);
+    // Force single-threaded per-file compilation to avoid LLVM global state corruption.
+    // Each file gets its own QueryContext/LLVMContext, but shared LLVM globals
+    // (target registry, pass managers) are not thread-safe in all configurations.
+    int num_compile_threads = 1;
 
     auto file_worker = [&]() {
         while (true) {
             int i = next_file.fetch_add(1, std::memory_order_relaxed);
             if (i >= static_cast<int>(suite.tests.size()))
                 break;
-
-            budget.acquire();
 
             const auto& test = suite.tests[i];
             auto file_path = test.file_path;
@@ -251,7 +265,38 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 qctx.load_incremental_cache(build_dir);
             }
 
-            auto codegen_result = qctx.codegen_unit(file_path, module_name);
+            // Run codegen with a timeout to avoid hangs from LLVM global state
+            // corruption after compiling many files in the same process.
+            constexpr int CODEGEN_TIMEOUT_SECONDS = 30;
+            std::atomic<bool> codegen_done{false};
+            query::CodegenUnitResult codegen_result;
+
+            std::thread codegen_thread([&]() {
+                codegen_result = qctx.codegen_unit(file_path, module_name);
+                codegen_done.store(true, std::memory_order_release);
+            });
+
+            bool timed_out = false;
+            {
+                const auto deadline = std::chrono::steady_clock::now() +
+                                      std::chrono::seconds(CODEGEN_TIMEOUT_SECONDS);
+                while (!codegen_done.load(std::memory_order_acquire)) {
+                    if (std::chrono::steady_clock::now() >= deadline) {
+                        codegen_thread.detach();
+                        timed_out = true;
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                if (!timed_out && codegen_thread.joinable())
+                    codegen_thread.join();
+            }
+
+            if (timed_out) {
+                fr.error_message =
+                    "Codegen timed out after " + std::to_string(CODEGEN_TIMEOUT_SECONDS) + "s";
+                continue;
+            }
 
             if (!codegen_result.success) {
                 std::string err = codegen_result.error_message;
@@ -267,7 +312,6 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 }
                 TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
                 fr.error_message = err;
-                budget.release();
                 continue;
             }
 
@@ -296,7 +340,6 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                     TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": "
                                                               << obj_result.error_message);
                     fr.error_message = obj_result.error_message;
-                    budget.release();
                     continue;
                 }
                 fr.object_file = obj_result.object_file;
@@ -317,8 +360,6 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             if (parsed && parsed->success && parsed->module) {
                 fr.parsed_module = parsed->module;
             }
-
-            budget.release();
         }
     };
 
@@ -419,13 +460,18 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         cli::build::get_runtime_objects(registry, mod, deps_cache, g_clang_path, verbose);
     all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
 
-    // Link to executable
+    // Link to executable — remove stale exe to avoid "permission denied"
     auto exe_path = cache_dir / (suite.name + ".exe");
+    std::error_code ec;
+    fs::remove(exe_path, ec);
 
     cli::LinkOptions link_opts;
     link_opts.output_type = cli::LinkOptions::OutputType::Executable;
     link_opts.verbose = verbose;
     link_opts.coverage = config.coverage;
+    // Force subprocess LLD: in-process lldMain deadlocks after compiling
+    // many suites in a single process due to accumulated LLVM global state.
+    link_opts.force_subprocess_lld = true;
 
     // Add link libraries from @link() attributes
     for (const auto& lib : all_link_libs) {
@@ -451,16 +497,9 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         link_opts.link_flags.push_back("-ladvapi32");
         link_opts.link_flags.push_back("-luserenv");
     }
-    // Only link OpenSSL when the suite uses crypto modules
+    // Only link OpenSSL when the suite uses crypto modules (including std::hash)
     {
-        bool uses_crypto = false;
-        for (const auto& [path, _] : registry->get_all_modules()) {
-            if (path == "std::crypto" || path.find("std::crypto::") == 0 ||
-                path == "std::net::tls" || path.find("std::net::tls::") == 0) {
-                uses_crypto = true;
-                break;
-            }
-        }
+        bool uses_crypto = cli::build::has_crypto_modules(registry);
         if (uses_crypto) {
             auto openssl = cli::build::find_openssl();
             if (openssl.found) {
@@ -542,12 +581,77 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 }
 
 // ============================================================================
+// Crash-safe compilation wrapper
+// ============================================================================
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <eh.h>
+#include <windows.h>
+
+/// SEH exception translated to C++ exception for crash isolation.
+struct SehException : std::runtime_error {
+    DWORD code;
+    SehException(DWORD c) : std::runtime_error("SEH exception"), code(c) {}
+};
+
+static void __cdecl seh_translator(unsigned int code, struct _EXCEPTION_POINTERS*) {
+    throw SehException(static_cast<DWORD>(code));
+}
+
+/// Wraps compile_suite to catch crashes (access violations, stack overflows, etc.)
+static CompileResult compile_suite_safe(const Suite& suite, const CompileConfig& config) {
+    // Install per-thread SEH translator
+    _se_translator_function prev = _set_se_translator((_se_translator_function)seh_translator);
+    CompileResult result;
+    try {
+        result = compile_suite(suite, config);
+    } catch (const SehException& e) {
+        result.success = false;
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Suite compilation crashed (SEH 0x%08lX)", e.code);
+        result.error_message = buf;
+        TML_LOG_ERROR("test", "  [compile] CRASH " << suite.name << ": " << result.error_message);
+    } catch (const LlvmFatalException& e) {
+        result.success = false;
+        result.error_message = std::string("LLVM fatal: ") + e.what();
+        TML_LOG_ERROR("test", "  [compile] CRASH " << suite.name << ": " << result.error_message);
+    } catch (const std::exception& e) {
+        result.success = false;
+        result.error_message = std::string("Suite compilation threw: ") + e.what();
+        TML_LOG_ERROR("test", "  [compile] CRASH " << suite.name << ": " << result.error_message);
+    }
+    _set_se_translator(prev);
+    return result;
+}
+#else
+static CompileResult compile_suite_safe(const Suite& suite, const CompileConfig& config) {
+    CompileResult result;
+    try {
+        result = compile_suite(suite, config);
+    } catch (const LlvmFatalException& e) {
+        result.success = false;
+        result.error_message = std::string("LLVM fatal: ") + e.what();
+        TML_LOG_ERROR("test", "  [compile] CRASH " << suite.name << ": " << result.error_message);
+    } catch (const std::exception& e) {
+        result.success = false;
+        result.error_message = std::string("Suite compilation threw: ") + e.what();
+        TML_LOG_ERROR("test", "  [compile] CRASH " << suite.name << ": " << result.error_message);
+    }
+    return result;
+}
+#endif
+
+// ============================================================================
 // Parallel compilation
 // ============================================================================
 
 std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& suites,
                                                    const CompileConfig& config,
-                                                   std::atomic<bool>& should_stop) {
+                                                   std::atomic<bool>& should_stop,
+                                                   CompileCallback on_complete) {
 
     // Ensure environment is initialized before spawning threads
     init_compile_env();
@@ -556,10 +660,10 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     int num_threads = config.num_threads;
     if (num_threads <= 0) {
-        // Use at most half the budget for outer threads, leaving room for
-        // inner file-level parallelism within each suite.
+        // Use up to 8 threads for suite compilation (main bottleneck).
+        // LLVM backend is the slowest step; more parallelism = faster overall.
         int hw2 = ThreadBudget::instance().max_threads();
-        num_threads = std::max(1, std::min(4, hw2 / 2));
+        num_threads = std::max(1, std::min(8, hw2));
     }
     num_threads = std::min(num_threads, static_cast<int>(suites.size()));
 
@@ -571,11 +675,11 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
             if (idx >= static_cast<int>(suites.size()))
                 break;
 
-            TML_LOG_DEBUG("test", "[compile] Compiling suite: " << suites[idx].name << " ("
-                                                                << suites[idx].tests.size()
-                                                                << " tests)");
+            results[idx] = compile_suite_safe(suites[idx], config);
 
-            results[idx] = compile_suite(suites[idx], config);
+            if (on_complete) {
+                on_complete(idx, results[idx]);
+            }
 
             if (!results[idx].success && config.no_cache) {
                 // In fail-fast mode with no-cache, signal stop

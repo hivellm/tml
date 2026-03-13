@@ -175,8 +175,33 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
         }
     }
 
-    if (slice_type_ptr) {
-        std::string elem_llvm_type = llvm_type_from_semantic(slice_type_ptr->element, true);
+    // Also check for NamedType("Slice") / NamedType("MutSlice") which are the named struct
+    // versions of slices (as opposed to the parser [T] SliceType syntax).
+    // Both represent fat pointers: { ptr, i64 }.
+    std::string named_slice_elem_llvm_type;
+    bool is_named_slice = false;
+    if (!slice_type_ptr && obj_type && obj_type->is<types::NamedType>()) {
+        const auto& named = obj_type->as<types::NamedType>();
+        if ((named.name == "Slice" || named.name == "MutSlice") && !named.type_args.empty()) {
+            named_slice_elem_llvm_type = llvm_type_from_semantic(named.type_args[0], true);
+            is_named_slice = true;
+        }
+    } else if (!slice_type_ptr && obj_type && obj_type->is<types::RefType>()) {
+        const auto& ref_type = obj_type->as<types::RefType>();
+        if (ref_type.inner && ref_type.inner->is<types::NamedType>()) {
+            const auto& named = ref_type.inner->as<types::NamedType>();
+            if ((named.name == "Slice" || named.name == "MutSlice") && !named.type_args.empty()) {
+                named_slice_elem_llvm_type = llvm_type_from_semantic(named.type_args[0], true);
+                is_named_slice = true;
+                is_ref_slice = true;
+            }
+        }
+    }
+
+    if (slice_type_ptr || is_named_slice) {
+        std::string elem_llvm_type = is_named_slice
+                                         ? named_slice_elem_llvm_type
+                                         : llvm_type_from_semantic(slice_type_ptr->element, true);
 
         // Generate the slice value (this gives us the fat pointer struct or a ptr to it)
         std::string slice_val = gen_expr(*idx.object);
@@ -189,12 +214,23 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
             slice_ptr = slice_val;
         } else {
             // Need to store the slice struct to get a ptr
-            slice_ptr = fresh_reg();
-            emit_line("  " + slice_ptr + " = alloca { ptr, i64 }");
-            emit_line("  store { ptr, i64 } " + slice_val + ", ptr " + slice_ptr);
+            // For named Slice[T] types, last_expr_type_ may be %struct.Slice__X
+            // We need to use the correct LLVM type for the store
+            std::string slice_struct_type = last_expr_type_;
+            if (slice_struct_type.starts_with("%struct.")) {
+                // Named slice struct — store as the struct type, then treat as { ptr, i64 }
+                slice_ptr = fresh_reg();
+                emit_line("  " + slice_ptr + " = alloca " + slice_struct_type);
+                emit_line("  store " + slice_struct_type + " " + slice_val + ", ptr " + slice_ptr);
+            } else {
+                slice_ptr = fresh_reg();
+                emit_line("  " + slice_ptr + " = alloca { ptr, i64 }");
+                emit_line("  store { ptr, i64 } " + slice_val + ", ptr " + slice_ptr);
+            }
         }
 
         // Extract the data pointer from the slice struct (field 0)
+        // Use { ptr, i64 } layout for GEP regardless of named struct type
         std::string data_ptr_ptr = fresh_reg();
         emit_line("  " + data_ptr_ptr + " = getelementptr inbounds { ptr, i64 }, ptr " + slice_ptr +
                   ", i32 0, i32 0");

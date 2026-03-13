@@ -469,6 +469,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     pending_str_temps_.clear();
     expected_enum_type_.clear();
     expected_literal_type_.clear();
+    last_semantic_type_ = nullptr;
 
     // Store the return type for use in gen_return
     current_ret_type_ = ret_type;
@@ -945,6 +946,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     pending_str_temps_.clear();
     expected_enum_type_.clear();
     expected_literal_type_.clear();
+    last_semantic_type_ = nullptr;
     current_type_subs_ = subs;
 
     // Extract where constraints for bounded generic method dispatch

@@ -191,6 +191,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     locals_.clear();
     block_terminated_ = false;
     temp_drops_.clear();
+    last_semantic_type_ = nullptr;
     pending_str_temps_.clear();
     expected_enum_type_.clear();
     expected_literal_type_.clear();
@@ -824,6 +825,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_impl_type_ = mangled_type_name;
     locals_.clear();
     block_terminated_ = false;
+    last_semantic_type_ = nullptr;
     temp_drops_.clear();
     pending_str_temps_.clear();
     expected_enum_type_.clear();
@@ -905,6 +907,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
     locals_.clear();
     block_terminated_ = false;
+    last_semantic_type_ = nullptr;
 
     // Determine return type with substitution
     std::string ret_type = "void";

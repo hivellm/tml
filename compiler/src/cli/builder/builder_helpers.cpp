@@ -331,8 +331,9 @@ bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) 
     if (!registry)
         return false;
     // Check non-crypto modules that depend on OpenSSL
-    if (registry->has_module("std::hash") || registry->has_module("std::net::tls") ||
-        registry->has_module("std::http::connection") || registry->has_module("std::http::client"))
+    // Note: std::hash is pure TML (FNV, Murmur) and does NOT need OpenSSL
+    if (registry->has_module("std::net::tls") || registry->has_module("std::http::connection") ||
+        registry->has_module("std::http::client"))
         return true;
     // Check any std::crypto submodule (covers constants, error, and future additions)
     for (const auto& [path, _] : registry->get_all_modules()) {
