@@ -22,6 +22,7 @@ TML_MODULE("test")
 #include "common.hpp"
 #include "log/log.hpp"
 #include "query/query_context.hpp"
+#include "query/query_fingerprint.hpp"
 #include "query/query_key.hpp"
 #include "testing/testing_dispatcher_gen.hpp"
 #include "types/module_binary.hpp"
@@ -353,14 +354,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.verbose = verbose;
             qopts.coverage = config.coverage;
             qopts.optimization_level = config.optimization_level;
-            // Disable incremental cache for multi-file suites: each file is
-            // compiled with a unique test_entry_index (tml_test_N), but incremental
-            // cache entries were saved with index 0. Reusing them would produce
-            // duplicate tml_test_0 symbols when multiple files are linked together.
-            // Note: coverage IS compatible with incremental cache because the
-            // fingerprint includes the coverage flag (query_incr.cpp:497-500).
+            // Incremental IR cache disabled for multi-file suites to prevent
+            // duplicate symbol errors from stale cache entries.
             bool is_multi_file_suite = suite.tests.size() > 1;
-            qopts.incremental = !config.no_cache && !is_multi_file_suite;
+            qopts.incremental = !is_multi_file_suite;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
@@ -446,16 +443,38 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 fr.object_file = codegen_result.object_file;
                 fr.success = true;
             } else {
-                auto obj_result = cli::compile_ir_string_to_object(codegen_result.llvm_ir, obj_path,
-                                                                   g_clang_path, obj_opts);
-                if (!obj_result.success) {
-                    TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": "
-                                                              << obj_result.error_message);
-                    fr.error_message = obj_result.error_message;
-                    continue;
+                // Object cache: hash IR → check for cached .obj → skip LLVM backend
+                auto obj_cache_dir = cache_dir / "obj_cache";
+                auto ir_fp = query::fingerprint_bytes(codegen_result.llvm_ir.data(),
+                                                      codegen_result.llvm_ir.size());
+                auto cached_obj =
+                    obj_cache_dir / (ir_fp.to_hex().substr(0, 16) + cli::get_object_extension());
+                bool used_cache = false;
+                if (fs::exists(cached_obj)) {
+                    std::error_code ec;
+                    fs::copy_file(cached_obj, obj_path, fs::copy_options::overwrite_existing, ec);
+                    if (!ec) {
+                        fr.object_file = obj_path.string();
+                        fr.success = true;
+                        used_cache = true;
+                    }
                 }
-                fr.object_file = obj_result.object_file;
-                fr.success = true;
+                if (!used_cache) {
+                    auto obj_result = cli::compile_ir_string_to_object(
+                        codegen_result.llvm_ir, obj_path, g_clang_path, obj_opts);
+                    if (!obj_result.success) {
+                        TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": "
+                                                                  << obj_result.error_message);
+                        fr.error_message = obj_result.error_message;
+                        continue;
+                    }
+                    fr.object_file = obj_result.object_file;
+                    fr.success = true;
+                    // Save to obj cache
+                    std::error_code ec;
+                    fs::create_directories(obj_cache_dir, ec);
+                    fs::copy_file(obj_path, cached_obj, fs::copy_options::overwrite_existing, ec);
+                }
             }
 
             // Collect link libraries

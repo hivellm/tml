@@ -144,8 +144,9 @@ MirBuildResult QueryContext::mir_build(const std::string& file_path,
 
 CodegenUnitResult QueryContext::codegen_unit(const std::string& file_path,
                                              const std::string& module_name) {
-    return force<CodegenUnitResult>(
-        CodegenUnitKey{file_path, module_name, options_.optimization_level, options_.debug_info});
+    return force<CodegenUnitResult>(CodegenUnitKey{file_path, module_name,
+                                                   options_.optimization_level, options_.debug_info,
+                                                   options_.test_entry_index});
 }
 
 void QueryContext::invalidate_file(const std::string& file_path) {
@@ -291,7 +292,14 @@ bool QueryContext::save_incremental_cache(const fs::path& build_dir) {
         fs::create_directories(incr_cache_dir_);
     }
 
+    // Merge with existing cache entries so parallel/sequential QueryContexts
+    // don't overwrite each other's entries (each context only records its own).
     auto cache_file = incr_cache_dir_ / "incr.bin";
+    PrevSessionCache existing;
+    if (existing.load(cache_file) && existing.options_hash() == options_hash_) {
+        incr_writer_->merge_from(existing);
+    }
+
     bool ok = incr_writer_->write(cache_file, options_hash_);
 
     if (ok) {

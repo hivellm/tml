@@ -26,6 +26,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace tml::query {
@@ -83,6 +84,11 @@ public:
         return entries_.size();
     }
 
+    /// Get all entries (for merging into writer).
+    [[nodiscard]] const auto& entries() const {
+        return entries_;
+    }
+
 private:
     std::unordered_map<QueryKey, PrevSessionEntry, QueryKeyHash, QueryKeyEqual> entries_;
     uint32_t options_hash_ = 0;
@@ -112,6 +118,9 @@ public:
     /// Write all entries to the binary cache file.
     bool write(const std::filesystem::path& cache_file, uint32_t options_hash);
 
+    /// Merge entries from a previous session (entries not already recorded).
+    void merge_from(const PrevSessionCache& prev);
+
     /// Get number of recorded entries.
     [[nodiscard]] size_t entry_count() const {
         return entries_.size();
@@ -119,6 +128,7 @@ public:
 
 private:
     std::vector<PrevSessionEntry> entries_;
+    std::unordered_set<QueryKey, QueryKeyHash, QueryKeyEqual> recorded_keys_;
 };
 
 // ============================================================================

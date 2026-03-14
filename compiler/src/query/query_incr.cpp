@@ -111,6 +111,7 @@ std::vector<uint8_t> serialize_query_key(const QueryKey& key) {
                 write_string(oss, k.module_name);
                 write_i32(oss, static_cast<int32_t>(k.optimization_level));
                 write_u8(oss, k.debug_info ? 1 : 0);
+                write_i32(oss, static_cast<int32_t>(k.test_entry_index));
             } else {
                 // ParseModuleKey, TypecheckModuleKey, BorrowcheckModuleKey,
                 // HirLowerKey, MirBuildKey all have file_path + module_name
@@ -183,11 +184,15 @@ std::optional<QueryKey> deserialize_query_key(const uint8_t* data, size_t len, Q
         std::string file_path, module_name;
         int32_t opt_level = 0;
         uint8_t debug_info = 0;
+        int32_t test_entry_index = -1;
         if (!read_str(file_path) || !read_str(module_name) || !read_i32(iss, opt_level) ||
             !read_u8(iss, debug_info))
             return std::nullopt;
+        // test_entry_index was added later; missing bytes = -1 (default)
+        read_i32(iss, test_entry_index);
         return QueryKey{CodegenUnitKey{std::move(file_path), std::move(module_name),
-                                       static_cast<int>(opt_level), debug_info != 0}};
+                                       static_cast<int>(opt_level), debug_info != 0,
+                                       static_cast<int>(test_entry_index)}};
     }
     default:
         return std::nullopt;
@@ -322,12 +327,22 @@ const PrevSessionEntry* PrevSessionCache::lookup(const QueryKey& key) const {
 
 void IncrCacheWriter::record(const QueryKey& key, Fingerprint input_fp, Fingerprint output_fp,
                              std::vector<QueryKey> deps) {
+    recorded_keys_.insert(key);
     PrevSessionEntry entry;
     entry.key = key;
     entry.input_fingerprint = input_fp;
     entry.output_fingerprint = output_fp;
     entry.dependencies = std::move(deps);
     entries_.push_back(std::move(entry));
+}
+
+void IncrCacheWriter::merge_from(const PrevSessionCache& prev) {
+    for (const auto& [key, entry] : prev.entries()) {
+        if (recorded_keys_.count(key) == 0) {
+            recorded_keys_.insert(key);
+            entries_.push_back(entry);
+        }
+    }
 }
 
 bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {

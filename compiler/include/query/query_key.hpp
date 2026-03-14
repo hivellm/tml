@@ -114,6 +114,7 @@ struct CodegenUnitKey {
     std::string module_name;
     int optimization_level = 0;
     bool debug_info = false;
+    int test_entry_index = -1;
     bool operator==(const CodegenUnitKey&) const = default;
 };
 
