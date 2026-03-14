@@ -550,7 +550,7 @@ std::string get_ir_cache_filename(const QueryKey& key) {
     auto fp = fingerprint_bytes(key_data.data(), key_data.size());
     // Include query kind in the name for debugging
     auto kind = query_kind(key);
-    return std::string(query_kind_name(kind)) + "_" + fp.to_hex().substr(0, 16);
+    return std::string(query_kind_name(kind)) + "_" + fp.to_hex();
 }
 
 } // namespace tml::query

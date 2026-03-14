@@ -94,6 +94,7 @@ private:
 static std::string g_clang_path;
 static bool g_env_initialized = false;
 static std::mutex g_env_mutex;
+static std::mutex g_incr_cache_mutex;
 
 /// Pre-built runtime archive path (set by compile_suites_parallel before spawning workers).
 /// When non-empty, compile_suite() uses this instead of calling get_runtime_objects() per suite.
@@ -354,10 +355,9 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.verbose = verbose;
             qopts.coverage = config.coverage;
             qopts.optimization_level = config.optimization_level;
-            // Incremental IR cache disabled for multi-file suites to prevent
-            // duplicate symbol errors from stale cache entries.
-            bool is_multi_file_suite = suite.tests.size() > 1;
-            qopts.incremental = !is_multi_file_suite;
+            // Incremental IR cache: test_entry_index in CodegenUnitKey
+            // differentiates cache entries per file within a suite.
+            qopts.incremental = true;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
@@ -424,8 +424,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 continue;
             }
 
-            // Save incremental cache
+            // Save incremental cache (mutex protects concurrent suite workers
+            // from corrupting the shared incr.bin file)
             if (qopts.incremental) {
+                std::lock_guard<std::mutex> lock(g_incr_cache_mutex);
                 auto build_dir = cli::build::get_build_dir(false);
                 qctx.save_incremental_cache(build_dir);
             }
@@ -450,7 +452,8 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 auto cached_obj =
                     obj_cache_dir / (ir_fp.to_hex().substr(0, 16) + cli::get_object_extension());
                 bool used_cache = false;
-                if (fs::exists(cached_obj)) {
+                bool obj_exists = fs::exists(cached_obj);
+                if (obj_exists) {
                     std::error_code ec;
                     fs::copy_file(cached_obj, obj_path, fs::copy_options::overwrite_existing, ec);
                     if (!ec) {
@@ -459,6 +462,8 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                         used_cache = true;
                     }
                 }
+                TML_LOG_DEBUG("test", "  [obj-cache] " << suite.tests[i].test_name << " exists="
+                                                       << obj_exists << " hit=" << used_cache);
                 if (!used_cache) {
                     auto obj_result = cli::compile_ir_string_to_object(
                         codegen_result.llvm_ir, obj_path, g_clang_path, obj_opts);
