@@ -473,6 +473,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Store the return type for use in gen_return
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
     current_func_is_async_ = func.is_async;
 
     // @no_mangle: use the bare function name without any mangling or prefixes.
@@ -931,6 +932,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     // Save current context
     std::string saved_func = current_func_;
     std::string saved_ret_type = current_ret_type_;
+    std::string saved_func_ret = func_ret_type_;
     bool saved_terminated = block_terminated_;
     auto saved_locals = locals_;
     auto saved_consumed = consumed_vars_;
@@ -1048,6 +1050,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
     }
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
 
     // 4. Build parameter list with substituted types
     std::string params;
@@ -1279,6 +1282,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     // Restore context
     current_func_ = saved_func;
     current_ret_type_ = saved_ret_type;
+    func_ret_type_ = saved_func_ret;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
     consumed_vars_ = saved_consumed;

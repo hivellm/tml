@@ -250,6 +250,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         }
     }
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
 
     // Build parameter list
     std::string params;
@@ -771,6 +772,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     // Save current context
     std::string saved_func = current_func_;
     std::string saved_ret_type = current_ret_type_;
+    std::string saved_func_ret = func_ret_type_;
     std::string saved_impl_type = current_impl_type_;
     bool saved_terminated = block_terminated_;
     auto saved_locals = locals_;
@@ -917,6 +919,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
         ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
     }
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
 
     // Build parameter list
     std::string params;
@@ -1272,6 +1275,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     // Restore context
     current_func_ = saved_func;
     current_ret_type_ = saved_ret_type;
+    func_ret_type_ = saved_func_ret;
     current_impl_type_ = saved_impl_type;
     current_type_subs_ = saved_type_subs;
     current_const_generic_values_ = saved_const_generic_values;

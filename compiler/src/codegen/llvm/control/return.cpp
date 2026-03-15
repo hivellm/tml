@@ -84,6 +84,14 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     std::string val;
     std::string val_type;
     if (ret.value.has_value()) {
+        // Restore current_ret_type_ to the true function return type.
+        // It may have been temporarily overridden (e.g., by a let statement's
+        // struct type hint). The return value expression (e.g., Err(e)) needs
+        // the real function return type to construct the correct enum variant.
+        std::string saved_hint_type = current_ret_type_;
+        if (!func_ret_type_.empty()) {
+            current_ret_type_ = func_ret_type_;
+        }
         val = gen_expr(*ret.value.value());
         val_type = last_expr_type_;
 

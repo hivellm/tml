@@ -1044,6 +1044,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         ret_type = llvm_type_ptr(*method.return_type);
                     }
                     current_ret_type_ = ret_type;
+                    func_ret_type_ = ret_type;
 
                     // Build parameter list (including 'this')
                     std::string params;

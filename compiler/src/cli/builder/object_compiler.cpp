@@ -849,9 +849,12 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
         std::string profile_rt = find_llvm_profile_runtime();
         if (!profile_rt.empty()) {
             all_objects.push_back(fs::path(profile_rt));
+            // Export the profile write function so we can call it before DLL unload
+            // Only for DLLs — executables don't need explicit exports
+            if (options.output_type == LinkOptions::OutputType::DynamicLib) {
+                lld_opts.extra_flags.push_back("/EXPORT:__llvm_profile_write_file");
+            }
         }
-        // Export the profile write function so we can call it before DLL unload
-        lld_opts.extra_flags.push_back("/EXPORT:__llvm_profile_write_file");
     }
 
     // For DLLs (test suites), export core test functions

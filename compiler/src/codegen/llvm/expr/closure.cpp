@@ -216,6 +216,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     output_.str("");
     auto saved_locals = locals_;
     auto saved_ret_type = current_ret_type_;
+    auto saved_func_ret = func_ret_type_;
     bool saved_terminated = block_terminated_;
     auto saved_expected_enum_type = expected_enum_type_;
     // Save alloca hoisting state (closure is independent function)
@@ -238,6 +239,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Start new function — closure is an independent scope
     locals_.clear();
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
     block_terminated_ = false;
     expected_enum_type_.clear();
 
@@ -328,6 +330,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     output_.seekp(0, std::ios_base::end);
     locals_ = saved_locals;
     current_ret_type_ = saved_ret_type;
+    func_ret_type_ = saved_func_ret;
     block_terminated_ = saved_terminated;
     expected_enum_type_ = saved_expected_enum_type;
     // Restore alloca hoisting state

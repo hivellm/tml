@@ -550,6 +550,7 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
         }
     }
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
 
     // Build parameter list
     std::string params;

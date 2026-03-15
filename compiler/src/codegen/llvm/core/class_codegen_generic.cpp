@@ -189,7 +189,9 @@ void LLVMIRGen::gen_class_method_instantiation(
 
     // Save and set current return type for gen_return() to use
     std::string saved_ret_type = current_ret_type_;
+    std::string saved_func_ret_type = func_ret_type_;
     current_ret_type_ = ret_type;
+    func_ret_type_ = ret_type;
     block_terminated_ = false;
 
     // Set up locals - mark as direct parameters (not allocas)
@@ -245,6 +247,7 @@ void LLVMIRGen::gen_class_method_instantiation(
 
     // Restore return type and type substitutions
     current_ret_type_ = saved_ret_type;
+    func_ret_type_ = saved_func_ret_type;
     current_type_subs_ = saved_subs;
 
     // Clean up locals
@@ -319,6 +322,7 @@ void LLVMIRGen::gen_generic_class_static_method(
     if (method.body) {
         current_func_ = func_name;
         current_ret_type_ = ret_type;
+        func_ret_type_ = ret_type;
         block_terminated_ = false;
 
         for (const auto& stmt : method.body->stmts) {
@@ -499,6 +503,7 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
     if (method.body) {
         current_func_ = func_name;
         current_ret_type_ = ret_type;
+        func_ret_type_ = ret_type;
         block_terminated_ = false; // Reset for new method body
 
         for (const auto& stmt : method.body->stmts) {

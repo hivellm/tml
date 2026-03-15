@@ -385,7 +385,9 @@ private:
 
     // Current function context
     std::string current_func_;
-    std::string current_ret_type_;        // Return type of current function
+    std::string
+        current_ret_type_;      // Return type of current function (may be temporarily overridden)
+    std::string func_ret_type_; // True function return type (never overridden by let hints)
     bool current_func_is_async_ = false;  // Whether current function is async
     std::string current_poll_type_;       // Poll[T] type for async functions
     std::string current_poll_inner_type_; // Inner T type for Poll[T] in async functions
