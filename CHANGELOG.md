@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Object Cache for LLVM Backend** (2026-03-14) — Hash-based `.obj` cache skips LLVM backend (IR→obj) on repeated runs
+  - Cache key: SHA-256 of LLVM IR content; hit = skip entire backend compilation
+  - Reduces re-test time for unchanged suites from seconds to milliseconds
+
+- **Incremental IR Cache for Test Suites** (2026-03-14) — `CodegenUnitKey` now includes `test_entry_index` for correct incremental caching in multi-file test suites
+  - Previously, suite mode shared a single cache entry causing stale IR reuse
+  - Each test file in a suite now gets its own cache slot
+
+- **MIR Closure/Lambda Codegen** (2026-03-14) — Implemented MIR codegen path for closures and lambdas (was previously an unimplemented stub)
+  - THIR builder generates correct closure capture and invocation instructions
+  - Enables MIR pipeline for functional patterns (`map`, `filter`, `fold`, etc.)
+
 - **Test Runtime Archive** (2026-03-13) — Pre-build all ~15 runtime .obj files into a single `tml_test_runtime.lib` archive before test compilation
   - Each test suite links against 1 .lib instead of ~15 individual .obj files, reducing linker I/O overhead
   - Archive is cached and only rebuilt when source .obj files change
@@ -38,6 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `class`/`interface` keyword handling for non-TML constructs in coverage extraction
 
 ### Fixed
+- **Coverage Runs to Completion** (2026-03-15) — Fixed 6 codegen/build bugs blocking the full coverage run (99%, 16298/16398 functions, 1438/1457 tests)
+  - `Ptr[U8]` mangling mismatch: `mangle_type_code()` now handles `Ptr` as NamedType, producing `Ph` consistently
+  - Incremental cache + `--no-cache`: `qopts.incremental` now respects `config.no_cache` flag, preventing stale `tml_test_N` symbol collisions
+  - Runtime library discovery: `find_*_runtime()` checks both `.lib` and `.a` on Windows (Zig CC produces `.a` archives)
+  - Maybe/Outcome double-load on FieldExpr: removed incorrect FieldExpr receiver condition in method.cpp
+  - Generic struct type_subs remap: positional remap when `pending_generic_impls_` stores wrong impl block (e.g., Iterator overwrites Fuse)
+  - Phantom generic parameters: unresolved generics (e.g., `T` in `LazyFuture[F, T]`) now included in mangled type names so call site matches definition
+
+- **Generic Struct Type Conflicts in Suite Merging** (2026-03-14) — Fixed type redefinition errors when multiple test files in a suite instantiate the same generic struct with different type arguments
+
+- **UBSan Checks Disabled** (2026-03-14) — Disabled all UBSan checks in Zig CC toolchain (not just alignment), preventing false-positive runtime crashes in optimized C++ code
+
 - **Zig CC Alignment Sanitizer Crash** (2026-03-13) — Added `-fno-sanitize=alignment` to Zig CC toolchain flags, fixing `load of misaligned address` runtime panics in `tml_compiler.dll`
 
 - **Plugin Loader Path Bug** (2026-03-13) — Fixed plugin DLL search path from `exe.parent_path()/plugins` to `exe/plugins`, preventing stale DLL loading from `build/debug/plugins/` instead of `build/debug/bin/plugins/`
