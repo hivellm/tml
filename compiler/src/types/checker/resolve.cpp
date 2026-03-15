@@ -240,6 +240,17 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
         // Handle T::AssociatedType where T is a type parameter (e.g., T::Owned, I::Item)
         auto param_it = current_type_params_.find(first);
         if (param_it != current_type_params_.end()) {
+            // Check if a where-clause type equality provides a resolution for this path.
+            // For example, `where I::Item = ref T` stores the mapping under key "I::Item".
+            // This is safe because where-clause equalities use the full qualified key
+            // (e.g., "I::Item"), not the bare assoc name (e.g., "Item"), so there's no
+            // risk of conflating with the current impl's own type bindings.
+            std::string qualified_key = first + "::" + second;
+            auto where_it = current_associated_types_.find(qualified_key);
+            if (where_it != current_associated_types_.end()) {
+                return where_it->second;
+            }
+
             // T is a generic type parameter. We must NOT use current_associated_types_ here
             // because those hold the CURRENT impl's associated type bindings (e.g., MyEnum's
             // "Item = (I64, I::Item)"), not the inner type T's bindings (e.g., Counter's

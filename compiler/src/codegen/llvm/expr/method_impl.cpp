@@ -20,11 +20,25 @@ TML_MODULE("codegen_x86")
 namespace tml::codegen {
 
 // Helper: Recursively match a parser type pattern against a concrete semantic type
-// to extract type parameter bindings. Handles nested generics like Maybe[T] -> Maybe[I32].
+// to extract type parameter bindings. Handles nested generics like Maybe[T] -> Maybe[I32],
+// and reference types like ref T -> ref I32.
 static void match_where_pattern(const parser::Type& pattern, const types::TypePtr& concrete,
                                 std::unordered_map<std::string, types::TypePtr>& type_subs) {
     if (!concrete)
         return;
+
+    // Handle RefType pattern: `ref T` matches against `RefType{inner=I32}` -> T = I32
+    if (pattern.is<parser::RefType>()) {
+        const auto& ref_pattern = pattern.as<parser::RefType>();
+        if (ref_pattern.inner && concrete->is<types::RefType>()) {
+            const auto& concrete_ref = concrete->as<types::RefType>();
+            if (concrete_ref.inner) {
+                match_where_pattern(*ref_pattern.inner, concrete_ref.inner, type_subs);
+            }
+        }
+        return;
+    }
+
     if (!pattern.is<parser::NamedType>())
         return;
     const auto& named = pattern.as<parser::NamedType>();
@@ -33,8 +47,17 @@ static void match_where_pattern(const parser::Type& pattern, const types::TypePt
     const std::string& name = named.path.segments.back();
     bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
     if (!has_type_args) {
-        // Simple name like "T" — add mapping if not already present
-        if (type_subs.find(name) == type_subs.end()) {
+        // Simple name like "T" — add mapping if not already present, or override placeholder
+        auto existing = type_subs.find(name);
+        bool is_placeholder = false;
+        if (existing != type_subs.end() && existing->second &&
+            existing->second->is<types::NamedType>()) {
+            const auto& existing_named = existing->second->as<types::NamedType>();
+            if (existing_named.name == name && existing_named.type_args.empty()) {
+                is_placeholder = true;
+            }
+        }
+        if (existing == type_subs.end() || is_placeholder) {
             type_subs[name] = concrete;
         }
     } else if (concrete->is<types::NamedType>()) {

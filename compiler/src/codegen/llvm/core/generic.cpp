@@ -37,6 +37,7 @@ TML_MODULE("codegen_x86")
 #include "types/module_binary.hpp"
 
 #include <fstream>
+#include <functional>
 
 namespace tml::codegen {
 
@@ -154,11 +155,40 @@ parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::st
     }
 
     if (is_type_param) {
-        // Read exactly one token as this param's value (handles primitive types).
-        // For complex concrete types (e.g., T = Maybe[I32]) this reads only the base name;
-        // that case requires a registry-aware parser which is out of scope here.
-        std::string token = tokens[pos++];
-        auto t = parse_mangled_type_string(token);
+        // Consume tokens for this type parameter.
+        // A bare type param can map to a generic type like SliceIter[I32] which is
+        // encoded as multiple tokens ["SliceIter", "I32"] in the mangled name.
+        // We need to figure out how many tokens to consume.
+        //
+        // Strategy: look up the base type name in the module registry to find its
+        // arity (number of generic params). Consume 1 + arity tokens.
+        std::string base_token = tokens[pos++];
+
+        // A bare type param can map to a generic type like SliceIter[I32] which is
+        // encoded as multiple tokens ["SliceIter", "I32"] in the mangled name.
+        // Strategy: join all remaining tokens with "__" and use parse_mangled_type_string
+        // which handles Name__Arg1__Arg2 patterns correctly.
+        if (pos < tokens.size()) {
+            std::string full_mangled = base_token;
+            size_t saved_pos = pos;
+            // Consume remaining tokens that belong to this type parameter.
+            // Since we don't know the arity, tentatively consume all remaining tokens
+            // and let parse_mangled_type_string handle nested types.
+            // The caller will check if pos is valid after return.
+            while (pos < tokens.size()) {
+                full_mangled += "__" + tokens[pos++];
+            }
+            auto t = parse_mangled_type_string(full_mangled);
+            if (t && subs.find(name) == subs.end()) {
+                subs[name] = t;
+            }
+            if (t)
+                return t;
+            // If parsing the full string failed, fall back to just the base token
+            pos = saved_pos;
+        }
+
+        auto t = parse_mangled_type_string(base_token);
         if (t && subs.find(name) == subs.end()) {
             subs[name] = t;
         }
@@ -328,10 +358,23 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
 // to extract type parameter bindings. For example:
 //   pattern = Maybe[T], concrete = Maybe[I32] -> extracts T = I32
 //   pattern = T, concrete = I32 -> extracts T = I32
+//   pattern = ref T, concrete = ref I32 -> extracts T = I32
 static void match_pattern_type(const parser::Type& pattern, const types::TypePtr& concrete,
                                std::unordered_map<std::string, types::TypePtr>& type_subs) {
     if (!concrete)
         return;
+
+    // Handle RefType pattern: `ref T` matches against `RefType{inner=I32}` -> T = I32
+    if (pattern.is<parser::RefType>()) {
+        const auto& ref_pattern = pattern.as<parser::RefType>();
+        if (ref_pattern.inner && concrete->is<types::RefType>()) {
+            const auto& concrete_ref = concrete->as<types::RefType>();
+            if (concrete_ref.inner) {
+                match_pattern_type(*ref_pattern.inner, concrete_ref.inner, type_subs);
+            }
+        }
+        return;
+    }
 
     if (pattern.is<parser::NamedType>()) {
         const auto& named = pattern.as<parser::NamedType>();
@@ -343,7 +386,18 @@ static void match_pattern_type(const parser::Type& pattern, const types::TypePtr
 
         if (!has_type_args) {
             // Simple name like "T" — check if it's a type parameter (not already resolved)
-            if (type_subs.find(name) == type_subs.end()) {
+            auto existing = type_subs.find(name);
+            bool is_placeholder = false;
+            if (existing != type_subs.end() && existing->second &&
+                existing->second->is<types::NamedType>()) {
+                // Check if the existing mapping is a self-referential placeholder
+                // (e.g., T -> NamedType{"T"}) which means it hasn't been resolved yet
+                const auto& existing_named = existing->second->as<types::NamedType>();
+                if (existing_named.name == name && existing_named.type_args.empty()) {
+                    is_placeholder = true;
+                }
+            }
+            if (existing == type_subs.end() || is_placeholder) {
                 type_subs[name] = concrete;
                 TML_DEBUG_LN("[WHERE_EQ] Resolved " << name << " via pattern matching");
             }
@@ -373,9 +427,21 @@ static void match_pattern_type(const parser::Type& pattern, const types::TypePtr
 // Helper: Extract additional type substitutions from where clause type equalities.
 // For example, given `where F = func() -> Maybe[T]` and `F` mapped to `func() -> Maybe[I32]`,
 // this will extract `T -> I32` by recursively matching the pattern against the concrete type.
+//
+// Also handles associated type equalities like `where I::Item = ref T`:
+// Given I -> SliceIter[I32] in type_subs, resolves SliceIter[I32]::Item -> ref I32,
+// then matches pattern `ref T` against `ref I32` to derive T -> I32.
+//
+// The assoc_type_lookup callback resolves associated types for concrete types.
+// It takes (concrete_type, assoc_name) and returns the fully substituted type, or nullptr.
+// The concrete_type is the full NamedType (with type_args) so the callback can
+// build the right substitution map for the inner type's generic params.
+using AssocTypeLookupFn = std::function<types::TypePtr(const types::TypePtr&, const std::string&)>;
+
 static void
 resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& where_clause,
-                                     std::unordered_map<std::string, types::TypePtr>& type_subs) {
+                                     std::unordered_map<std::string, types::TypePtr>& type_subs,
+                                     AssocTypeLookupFn assoc_type_lookup = nullptr) {
     if (!where_clause || where_clause->type_equalities.empty())
         return;
 
@@ -383,12 +449,43 @@ resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& w
         if (!lhs || !rhs)
             continue;
 
-        // LHS should be a simple name like "F" that's already in type_subs
         if (!lhs->is<parser::NamedType>())
             continue;
         const auto& lhs_named = lhs->as<parser::NamedType>();
         if (lhs_named.path.segments.empty())
             continue;
+
+        // Case 1: Two-segment path like I::Item (associated type equality)
+        // LHS = I::Item, RHS = ref T (pattern)
+        // Resolve: look up I in type_subs to get the concrete type (e.g., SliceIter[I32]),
+        // then find what "Item" resolves to for that concrete type (e.g., ref I32),
+        // then match RHS pattern (ref T) against that to derive T = I32.
+        if (lhs_named.path.segments.size() >= 2) {
+            const std::string& param_name = lhs_named.path.segments[0];
+            const std::string& assoc_name = lhs_named.path.segments.back();
+
+            // Find the concrete type that param maps to
+            auto param_it = type_subs.find(param_name);
+            if (param_it == type_subs.end() || !param_it->second)
+                continue;
+
+            // Resolve the associated type using the callback, which handles
+            // both lookup and substitution of the inner type's generic params.
+            types::TypePtr concrete_assoc;
+            if (assoc_type_lookup) {
+                concrete_assoc = assoc_type_lookup(param_it->second, assoc_name);
+            }
+
+            if (concrete_assoc) {
+                TML_DEBUG_LN("[WHERE_EQ] Resolved "
+                             << param_name << "::" << assoc_name
+                             << " to concrete type, matching against RHS pattern");
+                match_pattern_type(*rhs, concrete_assoc, type_subs);
+            }
+            continue;
+        }
+
+        // Case 2: Simple name like "F" that's already in type_subs
         const std::string& param_name = lhs_named.path.segments.back();
 
         auto it = type_subs.find(param_name);
@@ -399,7 +496,10 @@ resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& w
         // The concrete type is it->second
         const auto& concrete = it->second;
 
-        // Match func types: where F = func(params...) -> ReturnPattern
+        // Match the RHS pattern against the concrete type to extract type params
+        match_pattern_type(*rhs, concrete, type_subs);
+
+        // Also handle func types specially for parameter/return matching
         if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
             const auto& pattern_func = rhs->as<parser::FuncType>();
             const auto& concrete_func = concrete->as<types::FuncType>();
@@ -650,14 +750,28 @@ void LLVMIRGen::generate_pending_instantiations() {
                         // Extract "I64" and map to impl generics (e.g., T -> I64)
                         auto effective_type_subs = pim.type_subs;
 
-                        // Detect specialized impls: e.g., impl[T,E] Outcome[Outcome[T,E], E]
-                        // where the self_type's type args contain nested types, not just bare
-                        // params. For these, the passed type_subs may use the outer type's generic
-                        // params (wrong); we must re-derive from the mangled name and impl pattern.
+                        // Detect specialized impls that need token-based parsing:
+                        // 1. Self-type args contain nested types: impl[T,E] Outcome[Outcome[T,E],
+                        // E]
+                        // 2. Self-type args contain RefType: impl[T] Pin[ref T]
+                        // 3. Self-type has fewer generic args than impl generics:
+                        //    impl[I, T] Iterator for Cloned[I] where I::Item = ref T
+                        //    The mangled name only encodes I (not T), so naive "__" splitting
+                        //    would misparse "SliceIter__I32" as two separate params instead of
+                        //    one nested generic type.
                         bool is_specialized_impl = false;
                         if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
                             const auto& self_named = impl.self_type->as<parser::NamedType>();
                             if (self_named.generics.has_value()) {
+                                // Count how many impl generics appear in the self_type's args
+                                size_t self_type_arity = self_named.generics->args.size();
+                                if (self_type_arity < impl.generics.size()) {
+                                    // More impl generics than self_type args — extra params
+                                    // are derived from where clauses, not the mangled name.
+                                    // Use token-based parser so it consumes all tokens for the
+                                    // self_type args rather than splitting naively.
+                                    is_specialized_impl = true;
+                                }
                                 for (const auto& arg : self_named.generics->args) {
                                     if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
                                         const auto& arg_named =
@@ -695,7 +809,13 @@ void LLVMIRGen::generate_pending_instantiations() {
                                                               impl.generics, new_subs);
                                 }
                                 if (!new_subs.empty()) {
-                                    effective_type_subs = new_subs;
+                                    // Merge new_subs into effective_type_subs, overriding
+                                    // existing entries. This preserves entries from pim.type_subs
+                                    // (like Self, This, associated types) that aren't derived
+                                    // from the mangled name.
+                                    for (const auto& [k, v] : new_subs) {
+                                        effective_type_subs[k] = v;
+                                    }
                                 }
                             } else if (effective_type_subs.empty()) {
                                 std::string suffix =
@@ -740,9 +860,13 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                         // Resolve where clause type equalities to derive additional
                         // type substitutions (e.g., `where F = func() -> T` with F=func()->I32
-                        // derives T=I32)
-                        resolve_where_clause_type_equalities(impl.where_clause,
-                                                             effective_type_subs);
+                        // derives T=I32; `where I::Item = ref T` derives T from I's Item)
+                        resolve_where_clause_type_equalities(
+                            impl.where_clause, effective_type_subs,
+                            [this](const types::TypePtr& concrete_type,
+                                   const std::string& assoc_name) -> types::TypePtr {
+                                return resolve_assoc_type_for_concrete(concrete_type, assoc_name);
+                            });
 
                         // Now resolve the impl's own type bindings with the substitutions
                         for (const auto& binding : impl.type_bindings) {
@@ -990,6 +1114,12 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 impl_decl.self_type->is<parser::NamedType>()) {
                                 const auto& sn = impl_decl.self_type->as<parser::NamedType>();
                                 if (sn.generics.has_value()) {
+                                    // If self_type has fewer generic args than impl generics,
+                                    // the extra params come from where clauses, not the mangled
+                                    // name.
+                                    if (sn.generics->args.size() < impl_decl.generics.size()) {
+                                        is_specialized_impl_imp = true;
+                                    }
                                     for (const auto& arg : sn.generics->args) {
                                         if (arg.is_type() &&
                                             arg.as_type()->is<parser::NamedType>()) {
@@ -1066,8 +1196,13 @@ void LLVMIRGen::generate_pending_instantiations() {
                             }
 
                             // Resolve where clause type equalities for imported impls
-                            resolve_where_clause_type_equalities(impl_decl.where_clause,
-                                                                 effective_type_subs);
+                            resolve_where_clause_type_equalities(
+                                impl_decl.where_clause, effective_type_subs,
+                                [this](const types::TypePtr& concrete_type,
+                                       const std::string& assoc_name) -> types::TypePtr {
+                                    return resolve_assoc_type_for_concrete(concrete_type,
+                                                                           assoc_name);
+                                });
 
                             // Then resolve the impl's own type bindings
                             for (const auto& binding : impl_decl.type_bindings) {
@@ -1387,6 +1522,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     impl_decl.self_type->is<parser::NamedType>()) {
                                     const auto& sn = impl_decl.self_type->as<parser::NamedType>();
                                     if (sn.generics.has_value()) {
+                                        if (sn.generics->args.size() < impl_decl.generics.size()) {
+                                            is_spec_gc = true;
+                                        }
                                         for (const auto& arg : sn.generics->args) {
                                             if (arg.is_type() &&
                                                 arg.as_type()->is<parser::NamedType>()) {
@@ -1423,8 +1561,13 @@ void LLVMIRGen::generate_pending_instantiations() {
                                         effective_type_subs_gc = new_subs;
                                     }
                                 }
-                                resolve_where_clause_type_equalities(impl_decl.where_clause,
-                                                                     effective_type_subs_gc);
+                                resolve_where_clause_type_equalities(
+                                    impl_decl.where_clause, effective_type_subs_gc,
+                                    [this](const types::TypePtr& concrete_type,
+                                           const std::string& assoc_name) -> types::TypePtr {
+                                        return resolve_assoc_type_for_concrete(concrete_type,
+                                                                               assoc_name);
+                                    });
                                 for (const auto& binding : impl_decl.type_bindings) {
                                     current_associated_types_[binding.name] =
                                         resolve_parser_type_with_subs(*binding.type,

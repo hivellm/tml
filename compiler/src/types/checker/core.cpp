@@ -975,6 +975,21 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         current_associated_types_[binding.name] = resolve_type(*binding.type);
     }
 
+    // Also record where-clause type equalities (e.g., `where I::Item = ref T`)
+    // so method signature resolution can see them.
+    if (impl.where_clause) {
+        for (const auto& [lhs, rhs] : impl.where_clause->type_equalities) {
+            if (!lhs || !rhs || !lhs->is<parser::NamedType>())
+                continue;
+            const auto& lhs_named = lhs->as<parser::NamedType>();
+            if (lhs_named.path.segments.size() >= 2) {
+                const std::string& param = lhs_named.path.segments[0];
+                const std::string& assoc = lhs_named.path.segments.back();
+                current_associated_types_[param + "::" + assoc] = resolve_type(*rhs);
+            }
+        }
+    }
+
     // Register all constants in the impl block
     for (const auto& const_decl : impl.constants) {
         std::string qualified_name = type_name + "::" + const_decl.name;
@@ -1228,6 +1243,24 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
                 }
                 current_where_constraints_.push_back(WhereConstraint{
                     type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+
+        // Process where clause type equalities (e.g., `where I::Item = ref T`).
+        // For each equality, record the mapping so that references to the associated
+        // type path (e.g., I::Item) can resolve to the RHS type within the impl body.
+        for (const auto& [lhs, rhs] : impl.where_clause->type_equalities) {
+            if (!lhs || !rhs || !lhs->is<parser::NamedType>())
+                continue;
+            const auto& lhs_named = lhs->as<parser::NamedType>();
+            if (lhs_named.path.segments.size() >= 2) {
+                // Two-segment path like I::Item — store as associated type binding
+                // so resolve_type_path can find it when checking method bodies.
+                const std::string& param = lhs_named.path.segments[0];
+                const std::string& assoc = lhs_named.path.segments.back();
+                std::string key = param + "::" + assoc;
+                TypePtr resolved_rhs = resolve_type(*rhs);
+                current_associated_types_[key] = resolved_rhs;
             }
         }
     }

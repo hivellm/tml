@@ -841,4 +841,86 @@ auto LLVMIRGen::lookup_associated_type(const std::string& type_name, const std::
     return nullptr;
 }
 
+auto LLVMIRGen::resolve_assoc_type_for_concrete(const types::TypePtr& concrete_type,
+                                                const std::string& assoc_name) -> types::TypePtr {
+    if (!concrete_type || !concrete_type->is<types::NamedType>())
+        return nullptr;
+
+    const auto& named = concrete_type->as<types::NamedType>();
+
+    // Try the fully monomorphized name first (e.g., SliceIter__I32::Item)
+    // which may already be registered as a concrete binding in type_associated_types_.
+    if (!named.type_args.empty()) {
+        std::string mangled = named.name;
+        for (const auto& arg : named.type_args) {
+            if (arg && arg->is<types::NamedType>()) {
+                mangled += "__" + arg->as<types::NamedType>().name;
+            } else if (arg && arg->is<types::PrimitiveType>()) {
+                mangled +=
+                    "__" + types::primitive_kind_to_string(arg->as<types::PrimitiveType>().kind);
+            }
+        }
+        auto result = lookup_associated_type(mangled, assoc_name);
+        if (result)
+            return result;
+    }
+
+    // Look up the base type name (e.g., SliceIter::Item)
+    // This returns the raw binding which may contain generic placeholders
+    auto raw = lookup_associated_type(named.name, assoc_name);
+    if (!raw)
+        return nullptr;
+
+    // If the concrete type has type args, we need to substitute the generic params
+    // in the raw binding with the concrete type args.
+    // For example: SliceIter[I32] has `type Item = ref T`, so substitute T -> I32
+    // to get `ref I32`.
+    if (named.type_args.empty())
+        return raw;
+
+    // Build substitution map: we need the struct's generic param names.
+    // Look up the struct definition in the type env or module registry.
+    std::unordered_map<std::string, types::TypePtr> inner_subs;
+
+    // Try the type env first
+    auto struct_def = env_.lookup_struct(named.name);
+    if (struct_def && !struct_def->type_params.empty()) {
+        for (size_t i = 0; i < struct_def->type_params.size() && i < named.type_args.size(); ++i) {
+            inner_subs[struct_def->type_params[i]] = named.type_args[i];
+        }
+    }
+
+    // If not found in type env, try to find the struct in pending_generic_impls_
+    // and use the impl's generics as a proxy for the struct's generic params.
+    if (inner_subs.empty()) {
+        auto impl_it = pending_generic_impls_.find(named.name);
+        if (impl_it != pending_generic_impls_.end()) {
+            const auto& impl = *impl_it->second;
+            for (size_t i = 0; i < impl.generics.size() && i < named.type_args.size(); ++i) {
+                inner_subs[impl.generics[i].name] = named.type_args[i];
+            }
+        }
+    }
+
+    // If still not found, try the module registry
+    if (inner_subs.empty() && env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto sit = mod.structs.find(named.name);
+            if (sit != mod.structs.end()) {
+                const auto& sdef = sit->second;
+                for (size_t i = 0; i < sdef.type_params.size() && i < named.type_args.size(); ++i) {
+                    inner_subs[sdef.type_params[i]] = named.type_args[i];
+                }
+                break;
+            }
+        }
+    }
+
+    if (inner_subs.empty())
+        return raw;
+    // Substitute the generic params in the raw binding
+    return types::substitute_type(raw, inner_subs);
+}
+
 } // namespace tml::codegen

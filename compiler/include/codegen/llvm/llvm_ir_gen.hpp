@@ -1494,6 +1494,13 @@ private:
     auto lookup_associated_type(const std::string& type_name, const std::string& assoc_name)
         -> types::TypePtr;
 
+    /// Resolve an associated type for a concrete generic type.
+    /// Given a concrete type like SliceIter[I32] and assoc name "Item",
+    /// looks up the raw binding (ref T) and substitutes the type args (T=I32)
+    /// to produce the fully resolved type (ref I32).
+    auto resolve_assoc_type_for_concrete(const types::TypePtr& concrete_type,
+                                         const std::string& assoc_name) -> types::TypePtr;
+
     // Module structure
     void emit_header();
     void emit_runtime_decls();
