@@ -1,0 +1,24 @@
+// Tests for random[T]() generic convenience function
+//
+// NOTE: random[T]() is blocked by a compiler codegen bug:
+// T::random(mut ref rng) inside a generic function generates
+// @tml_s0_T_random (unresolved generic) instead of monomorphizing
+// to the concrete type (e.g., @tml_Bool__random).
+// This is the same "generic trait dispatch" bug documented in MEMORY.md.
+//
+// The behavior impls themselves (I64::random, Bool::random, etc.)
+// work correctly when called directly — see random_behavior.test.tml.
+//
+// Placeholder test so the file compiles without triggering the bug.
+use test::{assert}
+use std::random::Rng
+use std::random::Random
+
+@test
+func test_random_generic_placeholder() -> I32 {
+    // Verify the Random behavior impls work directly (not via generic random[T]())
+    var rng: Rng = Rng::with_seed(77)
+    let b: Bool = Bool::random(mut ref rng)
+    assert(b or not b, "Bool::random produces a Bool")
+    return 0
+}

@@ -25,6 +25,7 @@
 //! ```
 
 use std::collections::List
+use core::intrinsics::ptr_read
 
 // ============================================================================
 // ArrayList[T] - Dynamic array
@@ -258,6 +259,88 @@ impl[T] HashSet[T] {
     /// Destroys the set and frees all associated memory.
     pub func destroy(mut this) {
         this.data.destroy()
+    }
+
+    /// Returns an iterator over the elements of the set.
+    ///
+    /// The iterator yields elements in insertion order (not sorted).
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let set: HashSet[I64] = HashSet::create[I64]()
+    /// set.add(10)
+    /// set.add(20)
+    /// var iter = set.iter()
+    /// loop (iter.has_next()) {
+    ///     let val = iter.current()
+    ///     iter.advance()
+    /// }
+    /// ```
+    pub func iter(this) -> HashSetIter[T] {
+        // Store raw handle pointer to avoid List[T] Drop double-free
+        let hdr: I64 = this.data.handle as I64
+        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        return HashSetIter[T] {
+            list_handle: this.data.handle,
+            stride: stride,
+            length: this.length,
+            index: 0,
+        }
+    }
+}
+
+/// An iterator over the elements of a [`HashSet`].
+///
+/// Created by calling [`iter()`](HashSet::iter) on a HashSet.
+/// Yields elements in insertion order.
+///
+/// Stores a raw handle to the backing list's internal data to avoid
+/// copying the List (which would cause double-free on drop).
+pub type HashSetIter[T] {
+    /// Raw handle to the backing list (not owned — no Drop)
+    list_handle: *Unit,
+    /// Cached stride (element size in bytes)
+    stride: I64,
+    /// Number of elements in the set
+    length: I64,
+    /// Current iteration index
+    index: I64
+}
+
+impl[T] HashSetIter[T] {
+    /// Returns `true` if there are more elements to iterate.
+    pub func has_next(this) -> Bool {
+        this.index < this.length
+    }
+
+    /// Returns the current element.
+    pub func current(this) -> T {
+        let hdr: I64 = this.list_handle as I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
+        lowlevel { ptr_read[T](elem_ptr) }
+    }
+
+    /// Advances the iterator to the next element.
+    pub func advance(mut this) {
+        if this.index < this.length {
+            this.index = this.index + 1
+        }
+    }
+
+    /// Returns the next element, advancing the iterator.
+    /// Returns Nothing if the iterator is exhausted.
+    pub func next_item(mut this) -> Maybe[T] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let hdr: I64 = this.list_handle as I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
+        let item: T = lowlevel { ptr_read[T](elem_ptr) }
+        this.index = this.index + 1
+        return Just(item)
     }
 }
 

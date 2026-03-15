@@ -358,6 +358,166 @@ impl Bernoulli {
     }
 }
 
+// ============================================================================
+// Distribution behavior
+// ============================================================================
+
+/// A behavior for types that can produce samples from a statistical distribution.
+///
+/// Implement this behavior to integrate custom distributions with the random
+/// infrastructure. The two built-in implementors are [`Uniform`] (producing
+/// `I64` values) and [`Bernoulli`] (producing `Bool` values).
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::{Rng, Uniform, Distribution}
+///
+/// var rng: Rng = Rng::new()
+/// let d: Uniform = Uniform::new(1, 7)  // die roll
+/// let roll: I64 = d.sample(mut ref rng)
+/// ```
+pub behavior Distribution[T] {
+    /// Draw a single sample from this distribution using the given Rng.
+    func sample(this, rng: mut ref Rng) -> T
+}
+
+/// `Uniform` implements `Distribution[I64]`.
+impl Distribution[I64] for Uniform {
+    func sample(this, rng: mut ref Rng) -> I64 {
+        return rng.range(this.low, this.high)
+    }
+}
+
+/// `Bernoulli` implements `Distribution[Bool]`.
+impl Distribution[Bool] for Bernoulli {
+    func sample(this, rng: mut ref Rng) -> Bool {
+        return rng.next_f64() < this.p
+    }
+}
+
+// ============================================================================
+// Random behavior and generic convenience
+// ============================================================================
+
+/// A behavior for types that can be uniformly randomly generated.
+///
+/// Implement this to enable the `random[T]()` convenience function for
+/// your type.
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::{Rng, Random}
+///
+/// // Implement for a custom type:
+/// impl Random for MyType {
+///     func random(rng: mut ref Rng) -> MyType {
+///         return MyType { value: rng.next_i64() }
+///     }
+/// }
+/// ```
+pub behavior Random {
+    /// Generate a uniformly random value of this type.
+    func random(rng: mut ref Rng) -> Self
+}
+
+/// `I64` implements `Random` — produces any I64 value.
+impl Random for I64 {
+    func random(rng: mut ref Rng) -> I64 {
+        return rng.next_i64()
+    }
+}
+
+/// `I32` implements `Random` — produces a non-negative I32 value.
+impl Random for I32 {
+    func random(rng: mut ref Rng) -> I32 {
+        return rng.next_i32()
+    }
+}
+
+/// `Bool` implements `Random` — produces a uniformly random Bool.
+impl Random for Bool {
+    func random(rng: mut ref Rng) -> Bool {
+        return rng.next_bool()
+    }
+}
+
+/// `F64` implements `Random` — produces a value in [0.0, 1.0).
+impl Random for F64 {
+    func random(rng: mut ref Rng) -> F64 {
+        return rng.next_f64()
+    }
+}
+
+/// Returns a random value of type T using a fresh Rng.
+///
+/// T must implement the `Random` behavior.
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::random
+///
+/// let n: I64 = random[I64]()
+/// let b: Bool = random[Bool]()
+/// ```
+pub func random[T: Random]() -> T {
+    var rng: Rng = Rng::new()
+    return T::random(mut ref rng)
+}
+
+// ============================================================================
+// choose — random element selection from a List
+// ============================================================================
+
+/// Returns a random element from a `List[I64]`, or `Nothing` if the list is empty.
+///
+/// # Example
+///
+/// ```tml
+/// use std::random::{Rng, choose_i64}
+/// use std::collections::List
+///
+/// var rng: Rng = Rng::new()
+/// var nums: List[I64] = List[I64].new(3)
+/// nums.push(10)
+/// nums.push(20)
+/// nums.push(30)
+/// when choose_i64(nums, mut ref rng) {
+///     Just(v)  => println(v.to_string()),
+///     Nothing => println("empty")
+/// }
+/// ```
+pub func choose_i64(list: List[I64], rng: mut ref Rng) -> Maybe[I64] {
+    let n: I64 = list.len()
+    if n == 0 {
+        return Nothing
+    }
+    let idx: I64 = rng.range(0, n)
+    return Just(list.get(idx))
+}
+
+/// Returns a random element from a `List[I32]`, or `Nothing` if the list is empty.
+pub func choose_i32(list: List[I32], rng: mut ref Rng) -> Maybe[I32] {
+    let n: I64 = list.len()
+    if n == 0 {
+        return Nothing
+    }
+    let idx: I64 = rng.range(0, n)
+    return Just(list.get(idx))
+}
+
+/// Returns a random element from a `List[Str]`, or `Nothing` if the list is empty.
+pub func choose_str(list: List[Str], rng: mut ref Rng) -> Maybe[Str] {
+    let n: I64 = list.len()
+    if n == 0 {
+        return Nothing
+    }
+    let idx: I64 = rng.range(0, n)
+    return Just(list.get(idx))
+}
+
 /// Rotate left for xoshiro.
 func rotl(x: I64, k: I64) -> I64 {
     return (x << k) | (x >> (64 - k))

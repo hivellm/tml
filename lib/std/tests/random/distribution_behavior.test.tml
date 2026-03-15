@@ -1,0 +1,39 @@
+// Tests for Distribution[T] behavior
+use test::{assert, assert_eq}
+use std::random::Rng
+use std::random::Uniform
+use std::random::Bernoulli
+use std::random::Distribution
+
+@test
+func test_distribution_uniform_via_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(42)
+    let d: Uniform = Uniform::new(0, 10)
+    // Call through the Distribution[I64] behavior
+    let v: I64 = d.sample(mut ref rng)
+    assert(v >= 0 and v < 10, "Distribution[I64] sample in [0,10)")
+    return 0
+}
+
+@test
+func test_distribution_bernoulli_via_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(99)
+    let d: Bernoulli = Bernoulli::new(1.0)
+    // Call through the Distribution[Bool] behavior
+    let b: Bool = d.sample(mut ref rng)
+    assert(b, "Distribution[Bool] p=1.0 is always true")
+    return 0
+}
+
+@test
+func test_distribution_uniform_multiple_samples() -> I32 {
+    var rng: Rng = Rng::with_seed(7)
+    let d: Uniform = Uniform::new(100, 200)
+    var i: I32 = 0
+    loop (i < 20) {
+        let v: I64 = d.sample(mut ref rng)
+        assert(v >= 100 and v < 200, "sample in [100,200)")
+        i = i + 1
+    }
+    return 0
+}

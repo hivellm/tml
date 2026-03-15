@@ -1,0 +1,61 @@
+// Edge case tests for HashSet iterator
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+
+@test
+func test_hashset_iter_i32() -> I32 {
+    // Test with I32 type (not just I64)
+    var set: HashSet[I32] = HashSet::create[I32]()
+    set.add(1)
+    set.add(2)
+    set.add(3)
+
+    var iter: HashSetIter[I32] = set.iter()
+    var sum: I32 = 0
+    loop (iter.has_next()) {
+        sum = sum + iter.current()
+        iter.advance()
+    }
+    assert_eq(sum, 6, "sum of 1+2+3 should be 6")
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_single_element() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(999)
+
+    var iter: HashSetIter[I64] = set.iter()
+    assert(iter.has_next(), "should have one element")
+
+    let v: Maybe[I64] = iter.next()
+    assert(v == Just(999 as I64), "should yield 999")
+
+    let v2: Maybe[I64] = iter.next()
+    assert(v2 == Nothing, "should be exhausted")
+
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_multiple_iters() -> I32 {
+    // Create two independent iterators from the same set
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+
+    var iter1: HashSetIter[I64] = set.iter()
+    var iter2: HashSetIter[I64] = set.iter()
+
+    // Advance iter1 once
+    iter1.advance()
+
+    // iter2 should still be at the beginning
+    assert_eq(iter2.current(), 10 as I64, "iter2 should still be at first element")
+    assert_eq(iter1.current(), 20 as I64, "iter1 should be at second element")
+
+    set.destroy()
+    return 0
+}

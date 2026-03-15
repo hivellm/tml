@@ -1,0 +1,77 @@
+// Tests for HashSet Iterator behavior impl and IntoIterator
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+
+@test
+func test_hashset_iterator_next() -> I32 {
+    // Test the Iterator::next() behavior method
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    set.add(30)
+
+    var iter: HashSetIter[I64] = set.iter()
+
+    let v1: Maybe[I64] = iter.next()
+    assert(v1 == Just(10 as I64), "first next should be Just(10)")
+
+    let v2: Maybe[I64] = iter.next()
+    assert(v2 == Just(20 as I64), "second next should be Just(20)")
+
+    let v3: Maybe[I64] = iter.next()
+    assert(v3 == Just(30 as I64), "third next should be Just(30)")
+
+    let v4: Maybe[I64] = iter.next()
+    assert(v4 == Nothing, "fourth next should be Nothing")
+
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iterator_sum_loop() -> I32 {
+    // Test using Iterator::next() in a loop pattern
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(1)
+    set.add(2)
+    set.add(3)
+    set.add(4)
+
+    var iter: HashSetIter[I64] = set.iter()
+    var sum: I64 = 0
+    loop (true) {
+        when iter.next() {
+            Just(v) => sum = sum + v,
+            Nothing => break
+        }
+    }
+    assert_eq(sum, 10 as I64, "sum of 1+2+3+4 should be 10")
+
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iterator_after_remove() -> I32 {
+    // Test iterator on a set after removing elements
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    set.add(30)
+    set.remove(20)
+    // After remove, set has [10, 30] (swap-remove puts last at removed pos)
+
+    var iter: HashSetIter[I64] = set.iter()
+    var sum: I64 = 0
+    var count: I64 = 0
+    loop (iter.has_next()) {
+        sum = sum + iter.current()
+        count = count + 1
+        iter.advance()
+    }
+    assert_eq(count, 2 as I64, "should iterate 2 elements")
+    assert_eq(sum, 40 as I64, "sum should be 40 (10 + 30)")
+
+    set.destroy()
+    return 0
+}

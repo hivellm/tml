@@ -1,0 +1,52 @@
+// Tests for BTreeSetIter — ordered iteration over BTreeSet elements
+use test::{assert, assert_eq}
+use std::collections::{BTreeSet, BTreeSetIter}
+
+@test
+func test_btreeset_iter_empty() -> I32 {
+    let s: BTreeSet = BTreeSet::create()
+    var it: BTreeSetIter = s.iter()
+    assert(not it.has_next(), "empty set iterator should have no next")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_iter_single() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(99)
+    var it: BTreeSetIter = s.iter()
+    assert(it.has_next(), "should have first element")
+    assert_eq(it.value(), 99, "value should be 99")
+    it.next()
+    assert(not it.has_next(), "should be exhausted after single element")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_btreeset_iter_sorted_order() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    // Insert out of order — iterator must yield in sorted order
+    s.insert(50)
+    s.insert(10)
+    s.insert(30)
+    s.insert(20)
+    s.insert(40)
+    var it: BTreeSetIter = s.iter()
+
+    assert_eq(it.value(), 10, "1st should be 10")
+    it.next()
+    assert_eq(it.value(), 20, "2nd should be 20")
+    it.next()
+    assert_eq(it.value(), 30, "3rd should be 30")
+    it.next()
+    assert_eq(it.value(), 40, "4th should be 40")
+    it.next()
+    assert_eq(it.value(), 50, "5th should be 50")
+    it.next()
+
+    assert(not it.has_next(), "should be exhausted after 5 elements")
+    s.destroy()
+    return 0
+}

@@ -1,0 +1,47 @@
+// Tests for choose_i64, choose_i32, choose_str — random element selection
+use test::{assert, assert_eq}
+use std::random::Rng
+use std::random::{choose_i64, choose_i32, choose_str}
+use std::collections::List
+
+@test
+func test_choose_i64_empty() -> I32 {
+    var rng: Rng = Rng::with_seed(10)
+    var empty: List[I64] = List[I64].new(0)
+    let result: Maybe[I64] = choose_i64(empty, mut ref rng)
+    assert(result.is_nothing(), "choose from empty list returns Nothing")
+    empty.destroy()
+    return 0
+}
+
+@test
+func test_choose_i64_single() -> I32 {
+    var rng: Rng = Rng::with_seed(11)
+    var list: List[I64] = List[I64].new(1)
+    list.push(42)
+    let result: Maybe[I64] = choose_i64(list, mut ref rng)
+    assert(result.is_just(), "choose from single-element list returns Just")
+    assert_eq(result.unwrap(), 42, "single element is 42")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_choose_i64_in_list() -> I32 {
+    var rng: Rng = Rng::with_seed(12)
+    var list: List[I64] = List[I64].new(3)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    // Sample 15 times — every result must be one of 10, 20, 30
+    var i: I32 = 0
+    loop (i < 15) {
+        let r: Maybe[I64] = choose_i64(list, mut ref rng)
+        assert(r.is_just(), "non-empty list always returns Just")
+        let v: I64 = r.unwrap()
+        assert(v == 10 or v == 20 or v == 30, "element is from the list")
+        i = i + 1
+    }
+    list.destroy()
+    return 0
+}

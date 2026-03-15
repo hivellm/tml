@@ -203,6 +203,15 @@ impl[T] List[T] {
         this.len() == 0
     }
 
+    /// Returns the raw data pointer as an I64 integer address.
+    ///
+    /// Used by iterators to avoid repeated header indirection.
+    /// The caller must not outlive the list or mutate the list while using this pointer.
+    pub func data_ptr(this) -> I64 {
+        let hdr: I64 = this.handle as I64
+        lowlevel { ptr_read[I64](hdr as *I64) }
+    }
+
     /// Returns the first element of the list.
     pub func first(this) -> T {
         this.get(0)
@@ -236,6 +245,109 @@ impl[T] List[T] {
         // Free header
         lowlevel { mem_free(this.handle) }
         this.handle = 0 as *Unit
+    }
+
+    /// Retains only the elements for which the predicate returns `true`.
+    ///
+    /// Elements are visited in order. Elements for which `pred` returns `false`
+    /// are removed. The relative order of retained elements is preserved.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let list = List[I32]::new(4)
+    /// list.push(1)
+    /// list.push(2)
+    /// list.push(3)
+    /// list.push(4)
+    /// list.retain(do(x: ref I32) *x > 2)  // list is now [3, 4]
+    /// ```
+    pub func retain(this, pred: func(ref T) -> Bool) {
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Read data pointer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+        // Two-pointer compaction: write_idx tracks where to write next
+        var write_idx: I64 = 0
+        var read_idx: I64 = 0
+        loop (read_idx < cur_len) {
+            let elem_ptr: *T = (data_addr + read_idx * stride) as *T
+            let elem: T = lowlevel { ptr_read[T](elem_ptr) }
+            if pred(ref elem) {
+                // Keep this element — write it at write_idx
+                if write_idx != read_idx {
+                    let dst_ptr: *T = (data_addr + write_idx * stride) as *T
+                    lowlevel { ptr_write[T](dst_ptr, elem) }
+                }
+                write_idx = write_idx + 1
+            }
+            read_idx = read_idx + 1
+        }
+
+        // Update length
+        lowlevel { ptr_write[I64](p_len, write_idx) }
+    }
+
+    /// Removes and returns elements in the range `[start, end)` as a new list.
+    ///
+    /// Elements after the drained range are shifted left to fill the gap.
+    /// The returned list owns the removed elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let list = List[I32]::new(8)
+    /// list.push(1)
+    /// list.push(2)
+    /// list.push(3)
+    /// list.push(4)
+    /// list.push(5)
+    /// let drained = list.drain(1, 3)  // drained = [2, 3], list = [1, 4, 5]
+    /// ```
+    pub func drain(this, start: I64, end: I64) -> List[T] {
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Read data pointer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+        // Calculate drain count
+        let drain_count: I64 = end - start
+
+        // Create result list with the drained elements
+        let result: List[T] = List[T].new(drain_count)
+        var i: I64 = 0
+        loop (i < drain_count) {
+            let src_ptr: *T = (data_addr + (start + i) * stride) as *T
+            let elem: T = lowlevel { ptr_read[T](src_ptr) }
+            result.push(elem)
+            i = i + 1
+        }
+
+        // Shift remaining elements left to fill the gap
+        let tail_count: I64 = cur_len - end
+        if tail_count > 0 {
+            let dst: *Unit = (data_addr + start * stride) as *Unit
+            let src: *Unit = (data_addr + end * stride) as *Unit
+            let byte_count: I64 = tail_count * stride
+            lowlevel { copy_nonoverlapping(src, dst, byte_count) }
+        }
+
+        // Update length
+        let new_len: I64 = cur_len - drain_count
+        lowlevel { ptr_write[I64](p_len, new_len) }
+
+        result
     }
 }
 

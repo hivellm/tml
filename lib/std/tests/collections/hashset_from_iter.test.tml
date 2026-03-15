@@ -1,0 +1,93 @@
+// Tests for HashSet from_iter (FromIterator behavior)
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+use std::collections::List
+
+@test
+func test_hashset_from_list_iter() -> I32 {
+    // Build a list with some duplicates
+    var list: List[I64] = List[I64].new(8)
+    list.push(10)
+    list.push(20)
+    list.push(10)
+    list.push(30)
+    list.push(20)
+
+    // Build a HashSet from the list iterator manually
+    var set: HashSet[I64] = HashSet::create[I64]()
+    var i: I64 = 0
+    loop (i < list.len()) {
+        set.add(list.get(i))
+        i = i + 1
+    }
+
+    assert_eq(set.count(), 3 as I64, "set should have 3 unique elements")
+    assert(set.contains(10), "should contain 10")
+    assert(set.contains(20), "should contain 20")
+    assert(set.contains(30), "should contain 30")
+
+    set.destroy()
+    list.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_collect_to_list() -> I32 {
+    // Create a set and iterate to a list
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(5)
+    set.add(10)
+    set.add(15)
+
+    // Manually collect via iterator
+    var result: List[I64] = List[I64].new(8)
+    var iter: HashSetIter[I64] = set.iter()
+    loop (iter.has_next()) {
+        result.push(iter.current())
+        iter.advance()
+    }
+
+    assert_eq(result.len(), 3 as I64, "collected list should have 3 elements")
+
+    // Sum should be 30 (order is insertion order: 5, 10, 15)
+    var sum: I64 = 0
+    var j: I64 = 0
+    loop (j < result.len()) {
+        sum = sum + result.get(j)
+        j = j + 1
+    }
+    assert_eq(sum, 30 as I64, "sum should be 30")
+
+    result.destroy()
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_preserves_insertion_order() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(42)
+    set.add(7)
+    set.add(99)
+
+    var iter: HashSetIter[I64] = set.iter()
+
+    // First element should be 42 (first inserted)
+    assert(iter.has_next(), "should have first")
+    assert_eq(iter.current(), 42 as I64, "first should be 42")
+    iter.advance()
+
+    // Second element should be 7
+    assert(iter.has_next(), "should have second")
+    assert_eq(iter.current(), 7 as I64, "second should be 7")
+    iter.advance()
+
+    // Third element should be 99
+    assert(iter.has_next(), "should have third")
+    assert_eq(iter.current(), 99 as I64, "third should be 99")
+    iter.advance()
+
+    assert(not iter.has_next(), "should be exhausted")
+    set.destroy()
+    return 0
+}

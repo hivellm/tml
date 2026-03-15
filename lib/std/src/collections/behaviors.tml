@@ -69,7 +69,8 @@
 //! let value = map["key"]  // 42
 //! ```
 
-use std::collections::{List, HashMap, HashMapIter}
+use std::collections::{List, HashMap, HashMapIter, HashSet, HashSetIter}
+use core::intrinsics::ptr_read
 
 // ============================================================================
 // List[T] - Duplicate (Clone)
@@ -469,5 +470,92 @@ impl[K, V] Index[K] for HashMap[K, V] {
 
     pub func index(this, key: K) -> V {
         return this.get(key)
+    }
+}
+
+// ============================================================================
+// HashSet[T] - Iterator for HashSetIter[T]
+// ============================================================================
+
+/// Iterator implementation for HashSetIter.
+///
+/// Yields elements of the set in insertion order.
+impl[T] Iterator for HashSetIter[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let hdr: I64 = this.list_handle as I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
+        let item: T = lowlevel { ptr_read[T](elem_ptr) }
+        this.index = this.index + 1
+        return Just(item)
+    }
+}
+
+// ============================================================================
+// HashSet[T] - IntoIterator
+// ============================================================================
+
+/// Enables using a HashSet in `for` loops.
+///
+/// # Example
+///
+/// ```tml
+/// let set: HashSet[I64] = HashSet::create[I64]()
+/// set.add(10)
+/// set.add(20)
+/// for item in set {
+///     println(item.to_string())
+/// }
+/// ```
+impl[T] IntoIterator for HashSet[T] {
+    type Item = T
+    type IntoIter = HashSetIter[T]
+
+    pub func into_iter(this) -> HashSetIter[T] {
+        let hdr: I64 = this.data.handle as I64
+        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        return HashSetIter[T] {
+            list_handle: this.data.handle,
+            stride: stride,
+            length: this.length,
+            index: 0,
+        }
+    }
+}
+
+// ============================================================================
+// HashSet[T] - FromIterator
+// ============================================================================
+
+/// Builds a HashSet by collecting unique elements from an iterator.
+///
+/// Duplicate elements are silently ignored (only the first occurrence is kept).
+///
+/// # Example
+///
+/// ```tml
+/// let items = List[I64]::new(8)
+/// items.push(1)
+/// items.push(2)
+/// items.push(1)  // duplicate
+/// let set: HashSet[I64] = HashSet::from_iter(items.iter())
+/// assert(set.count() == 2)
+/// ```
+impl[T: PartialEq] FromIterator[T] for HashSet[T] {
+    pub func from_iter[I: Iterator](iter: I) -> HashSet[T] where I::Item = T {
+        let mut result: HashSet[T] = HashSet::create[T]()
+        var it: I = iter
+        loop (true) {
+            when it.next() {
+                Just(item) => { result.add(item) },
+                Nothing => break
+            }
+        }
+        return result
     }
 }

@@ -19,6 +19,7 @@
 //! ```
 
 use std::collections::List
+use core::intrinsics::ptr_read
 
 /// A sorted key-value map using parallel sorted arrays.
 ///
@@ -240,5 +241,91 @@ impl BTreeMap {
 impl Drop for BTreeMap {
     func drop(mut this) {
         this.destroy()
+    }
+}
+
+/// An iterator over BTreeMap entries in sorted key order.
+///
+/// Created by calling `iter()` on a BTreeMap.
+/// Yields (key, value) pairs in ascending key order.
+///
+/// Stores raw data pointers extracted from the List headers at construction.
+/// The BTreeMap must not be mutated while the iterator is alive.
+///
+/// # Example
+///
+/// ```tml
+/// var m: BTreeMap = BTreeMap::create()
+/// m.insert(1, 10)
+/// m.insert(2, 20)
+/// var it: BTreeMapIter = m.iter()
+/// loop (it.has_next()) {
+///     let k: I64 = it.key()
+///     let v: I64 = it.value()
+///     it.next()
+/// }
+/// ```
+pub type BTreeMapIter {
+    /// Raw pointer to the keys data buffer (I64 array).
+    keys_data: I64,
+    /// Raw pointer to the values data buffer (I64 array).
+    values_data: I64,
+    /// Total number of entries.
+    length: I64,
+    /// Current position.
+    index: I64
+}
+
+impl BTreeMapIter {
+    /// Returns `true` if there are more entries to iterate.
+    pub func has_next(this) -> Bool {
+        return this.index < this.length
+    }
+
+    /// Returns the key of the current entry.
+    /// Panics if the iterator is exhausted.
+    pub func key(this) -> I64 {
+        if this.index >= this.length {
+            panic("BTreeMapIter::key: iterator exhausted")
+        }
+        // keys are I64 (8 bytes each), stride = 8
+        let stride: I64 = 8
+        return lowlevel { ptr_read[I64]((this.keys_data + this.index * stride) as *I64) }
+    }
+
+    /// Returns the value of the current entry.
+    /// Panics if the iterator is exhausted.
+    pub func value(this) -> I64 {
+        if this.index >= this.length {
+            panic("BTreeMapIter::value: iterator exhausted")
+        }
+        // values are I64 (8 bytes each), stride = 8
+        let stride: I64 = 8
+        return lowlevel { ptr_read[I64]((this.values_data + this.index * stride) as *I64) }
+    }
+
+    /// Advances the iterator to the next entry.
+    pub func next(mut this) {
+        if this.index < this.length {
+            this.index = this.index + 1
+        }
+    }
+}
+
+impl BTreeMap {
+    /// Returns an iterator over entries in sorted key order.
+    ///
+    /// Extracts raw data pointers from the List[I64] headers.
+    /// List header layout: offset 0 = data ptr (I64), offset 8 = len, offset 16 = cap, offset 24 = stride.
+    /// The BTreeMap must not be mutated while the iterator is alive.
+    pub func iter(this) -> BTreeMapIter {
+        let keys_data: I64 = this.keys.data_ptr()
+        let values_data: I64 = this.values.data_ptr()
+        return BTreeMapIter {
+            keys_data: keys_data,
+            values_data: values_data,
+            length: this.length,
+            index: 0
+        }
     }
 }

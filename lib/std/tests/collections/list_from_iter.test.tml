@@ -1,0 +1,64 @@
+// Tests for List::from_iter (FromIterator behavior) and List::iter
+use test::{assert, assert_eq}
+use std::collections::List
+
+@test
+func test_list_iter_basic() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+
+    // Iterate and sum
+    var sum: I64 = 0
+    var iter = list.iter()
+    loop (true) {
+        when iter.next() {
+            Just(val) => sum = sum + val,
+            Nothing => break
+        }
+    }
+
+    assert_eq(sum, 60 as I64, "sum of [10, 20, 30] should be 60")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_drain_all() -> I32 {
+    let list: List[I32] = List[I32].new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    // Drain everything
+    let drained: List[I32] = list.drain(0, 3)
+
+    assert_eq(drained.len(), 3 as I64, "drained all 3")
+    assert(list.is_empty(), "original should be empty")
+
+    drained.destroy()
+    list.destroy()
+    return 0
+}
+
+@test
+func test_retain_even_numbers() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    list.push(5)
+    list.push(6)
+
+    // Keep only even numbers
+    list.retain(do(x: ref I32) *x % 2 == 0)
+
+    assert_eq(list.len(), 3 as I64, "should have 3 even numbers")
+    assert_eq(list.get(0), 2 as I64, "first even is 2")
+    assert_eq(list.get(1), 4 as I64, "second even is 4")
+    assert_eq(list.get(2), 6 as I64, "third even is 6")
+    list.destroy()
+    return 0
+}

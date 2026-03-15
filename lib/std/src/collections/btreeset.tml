@@ -15,7 +15,8 @@
 //! assert(s.contains(2))
 //! ```
 
-use std::collections::BTreeMap
+use std::collections::{BTreeMap, BTreeMapIter}
+use core::intrinsics::ptr_read
 
 /// A sorted set of `I64` values, backed by a `BTreeMap`.
 ///
@@ -183,5 +184,54 @@ impl BTreeSet {
 impl Drop for BTreeSet {
     func drop(mut this) {
         this.destroy()
+    }
+}
+
+impl BTreeSet {
+    /// Returns an iterator over elements in sorted ascending order.
+    ///
+    /// The BTreeSet must not be mutated while the iterator is alive.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var s: BTreeSet = BTreeSet::create()
+    /// s.insert(3)
+    /// s.insert(1)
+    /// s.insert(2)
+    /// var it: BTreeSetIter = s.iter()
+    /// loop (it.has_next()) {
+    ///     let v: I64 = it.value()
+    ///     it.next()
+    /// }
+    /// ```
+    pub func iter(this) -> BTreeSetIter {
+        let map_iter: BTreeMapIter = this.map.iter()
+        return BTreeSetIter { inner: map_iter }
+    }
+}
+
+/// An iterator over BTreeSet elements in sorted ascending order.
+///
+/// Created by calling `iter()` on a BTreeSet.
+pub type BTreeSetIter {
+    inner: BTreeMapIter
+}
+
+impl BTreeSetIter {
+    /// Returns `true` if there are more elements to iterate.
+    pub func has_next(this) -> Bool {
+        return this.inner.has_next()
+    }
+
+    /// Returns the current element value.
+    /// Panics if the iterator is exhausted.
+    pub func value(this) -> I64 {
+        return this.inner.key()
+    }
+
+    /// Advances the iterator to the next element.
+    pub func next(mut this) {
+        this.inner.next()
     }
 }

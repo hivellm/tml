@@ -1,0 +1,46 @@
+// Tests for HashSet[T] iterator — has_next, current, advance, next_item
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+
+@test
+func test_hashset_iter_empty() -> I32 {
+    let set: HashSet[I64] = HashSet::create[I64]()
+    var iter: HashSetIter[I64] = set.iter()
+    assert(not iter.has_next(), "empty set iter should not have next")
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_single() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(42)
+    var iter: HashSetIter[I64] = set.iter()
+    assert(iter.has_next(), "should have next")
+    let val: I64 = iter.current()
+    assert_eq(val, 42 as I64, "current should be 42")
+    iter.advance()
+    assert(not iter.has_next(), "should be exhausted after one element")
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_multiple() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    set.add(30)
+    var iter: HashSetIter[I64] = set.iter()
+    var sum: I64 = 0
+    var count: I64 = 0
+    loop (iter.has_next()) {
+        sum = sum + iter.current()
+        count = count + 1
+        iter.advance()
+    }
+    assert_eq(count, 3 as I64, "should iterate 3 elements")
+    assert_eq(sum, 60 as I64, "sum should be 60")
+    set.destroy()
+    return 0
+}

@@ -39,7 +39,7 @@ pub mod behaviors
 pub use std::collections::list::List
 pub use std::collections::hashmap::{HashMap, HashMapIter}
 pub use std::collections::buffer::Buffer
-pub use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, LinkedList, Vec}
+pub use std::collections::class_collections::{ArrayList, HashSet, HashSetIter, Queue, Stack, LinkedList, Vec}
 pub use std::collections::deque::Deque
-pub use std::collections::btreemap::BTreeMap
-pub use std::collections::btreeset::BTreeSet
+pub use std::collections::btreemap::{BTreeMap, BTreeMapIter}
+pub use std::collections::btreeset::{BTreeSet, BTreeSetIter}

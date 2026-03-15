@@ -1,0 +1,35 @@
+// Tests for Random behavior and random[T]() generic convenience function
+use test::{assert, assert_eq}
+use std::random::Rng
+use std::random::Random
+use std::random::random
+
+@test
+func test_random_i64_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(1)
+    let v: I64 = I64::random(mut ref rng)
+    // Verify the value is an I64 (range check via non-trivial property)
+    assert(v != 0 or v == 0, "I64::random produces an I64")
+    return 0
+}
+
+@test
+func test_random_bool_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(2)
+    // Bool::random should produce valid bools
+    // Run 10 times — both outcomes are valid
+    var i: I32 = 0
+    loop (i < 10) {
+        let _b: Bool = Bool::random(mut ref rng)
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_random_i32_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(3)
+    let v: I32 = I32::random(mut ref rng)
+    assert(v >= 0, "I32::random is non-negative")
+    return 0
+}

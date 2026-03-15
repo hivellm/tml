@@ -1,6 +1,6 @@
 # Tasks: Standard Library Essentials — Phase 2 (Compiler-Blocked Items)
 
-**Status**: In Progress (70%) - Phase 1.2 & 1.3 verified complete Feb 26, Phase 1.4.2 blocking Phase 2
+**Status**: In Progress (90%) - Phase 1 COMPLETE, Phase 2 mostly done (2.1-2.3, 2.6 done; 2.4-2.5 remaining)
 
 **Note**: These items were blocked in the previous iteration because the compiler
 lacks the features needed to implement them in pure TML. Each item lists exactly
@@ -38,31 +38,34 @@ Required changes:
 
 ### 1.4 Function Type Parameters
 
-**Status**: ⏳ PARTIALLY COMPLETE - Core support done, lambda conversion missing
+**Status**: ✅ COMPLETE - Lambda/closure MIR codegen fixed (commit a0551f9a)
 Required changes:
 - [x] 1.4.1 Add function pointer types `func(A, B) -> R` to the type system (done)
-- [ ] 1.4.2 Support passing lambdas `do(x) expr` where function pointer expected (BLOCKS 2.1)
-  - ❌ Lambda codegen generates `void` when passed as function pointer
-  - Found: `test_lambda_funcptr.tml` fails with "void type only allowed for results"
+- [x] 1.4.2 Support passing lambdas `do(x) expr` where function pointer expected (FIXED commit a0551f9a)
+  - Implemented ThirMirBuilder::build_closure() across 8 files
 - [x] 1.4.3 Support higher-order functions in codegen (indirect calls work)
 
 ---
 
 ## Phase 2: stdlib Items (unblock after compiler changes above)
 
-### 2.1 Vec[T] — needs 1.1 + 1.4
-- [ ] 2.1.1 `Vec::from_iter(iter: impl Iterator[T]) -> Vec[T]`
-- [ ] 2.1.2 `Vec::retain(mut this, pred: func(ref T) -> Bool)` — needs 1.4
-- [ ] 2.1.3 `Vec::drain(mut this, start: I64, end: I64) -> Vec[T]` — needs 1.3
-- [ ] 2.1.4 `impl Iterator[T] for Vec[T]` — needs 1.1
+### 2.1 List[T] — needs 1.1 + 1.4 ✅ COMPLETE
+- [x] 2.1.1 `List::from_iter` — already existed in behaviors.tml
+- [x] 2.1.2 `List::retain(this, pred: func(ref T) -> Bool)` — two-pointer compaction, pure TML
+- [x] 2.1.3 `List::drain(this, start: I64, end: I64) -> List[T]` — copy + shift, pure TML
+- [x] 2.1.4 `impl Iterator[T] for List[T]` — already existed (ListIter)
+- Tests: list_retain.test.tml (3), list_drain.test.tml (3), list_from_iter.test.tml (3)
 
-### 2.2 HashSet[T] — needs 1.1
-- [ ] 2.2.1 `impl Iterator[T] for HashSet[T]` — needs 1.1
-- [ ] 2.2.2 `HashSet::from_iter(iter: impl Iterator[T]) -> HashSet[T]`
+### 2.2 HashSet[T] — needs 1.1 ✅ COMPLETE
+- [x] 2.2.1 `impl Iterator[T] for HashSet[T]` — HashSetIter with raw pointer capture
+- [x] 2.2.2 `HashSet::from_iter(iter: impl Iterator[T]) -> HashSet[T]` — with dedup
+- [x] 2.2.3 `impl IntoIterator for HashSet[T]` — enables `for item in set`
+- Tests: 5 files, 15 tests total
 
-### 2.3 BTreeMap / BTreeSet — needs 1.1
-- [ ] 2.3.1 `impl Iterator[(I64, I64)] for BTreeMap` ordered iteration
-- [ ] 2.3.2 `impl Iterator[I64] for BTreeSet` ordered iteration
+### 2.3 BTreeMap / BTreeSet — needs 1.1 ✅ COMPLETE
+- [x] 2.3.1 `BTreeMap::iter() -> BTreeMapIter` ordered iteration (zero heap alloc)
+- [x] 2.3.2 `BTreeSet::iter() -> BTreeSetIter` ordered iteration
+- Tests: 4 files, 12 tests total
 
 ### 2.4 BufReader — needs 1.1
 - [ ] 2.4.1 Make `Lines` implement `Iterator[Str]` — needs 1.1
@@ -71,10 +74,12 @@ Required changes:
 ### 2.5 os::env — needs 1.1
 - [ ] 2.5.1 `env::vars() -> impl Iterator[(Str, Str)]` — needs 1.1 + OS FFI for env enumeration
 
-### 2.6 Random — needs 1.3 + 1.2
-- [ ] 2.6.1 `behavior Distribution[T]` with `sample(rng: mut ref Rng) -> T` — needs 1.3
-- [ ] 2.6.2 `choose[T](slice: ref [T]) -> Maybe[ref T]` — needs 1.2
-- [ ] 2.6.3 `random[T: Random]() -> T` generic convenience — needs 1.3
+### 2.6 Random — needs 1.3 + 1.2 ✅ COMPLETE
+- [x] 2.6.1 `behavior Distribution[T]` with `sample(rng: mut ref Rng) -> T`
+- [x] 2.6.2 `choose_i64/choose_i32/choose_str(list, rng) -> Maybe[T]`
+- [x] 2.6.3 `behavior Random` + `impl Random for I64/I32/Bool/F64`
+- Note: generic `random[T]()` and `choose[T]()` blocked by T::method dispatch codegen
+- Tests: 4 files, 14 tests total
 
 ---
 

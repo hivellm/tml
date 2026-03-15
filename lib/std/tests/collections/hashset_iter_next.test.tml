@@ -1,0 +1,57 @@
+// Tests for HashSet iterator next_item and Iterator behavior
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+
+@test
+func test_hashset_iter_next_item() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(100)
+    set.add(200)
+    var iter: HashSetIter[I64] = set.iter()
+
+    let v1: Maybe[I64] = iter.next_item()
+    assert(v1 == Just(100 as I64), "first next_item should be 100")
+
+    let v2: Maybe[I64] = iter.next_item()
+    assert(v2 == Just(200 as I64), "second next_item should be 200")
+
+    let v3: Maybe[I64] = iter.next_item()
+    assert(v3 == Nothing, "third next_item should be Nothing")
+
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_sum_via_next_item() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(1)
+    set.add(2)
+    set.add(3)
+    set.add(4)
+    set.add(5)
+    var iter: HashSetIter[I64] = set.iter()
+
+    var sum: I64 = 0
+    var item: Maybe[I64] = iter.next_item()
+    loop (item != Nothing) {
+        when item {
+            Just(v) => sum = sum + v,
+            Nothing => {}
+        }
+        item = iter.next_item()
+    }
+    assert_eq(sum, 15 as I64, "sum of 1..5 should be 15")
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_iter_empty_next_item() -> I32 {
+    let set: HashSet[I64] = HashSet::create[I64]()
+    var iter: HashSetIter[I64] = set.iter()
+    let v: Maybe[I64] = iter.next_item()
+    assert(v == Nothing, "next_item on empty set should be Nothing")
+    set.destroy()
+    return 0
+}
