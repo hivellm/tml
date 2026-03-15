@@ -100,6 +100,11 @@ static std::mutex g_incr_cache_mutex;
 /// When non-empty, compile_suite() uses this instead of calling get_runtime_objects() per suite.
 static std::string g_runtime_archive_path;
 
+/// Set of object file stems that are included in the pre-built runtime archive.
+/// Used to identify which objects from get_runtime_objects() are already in the archive
+/// vs. conditional objects (file.obj, glob.obj, etc.) that must be linked separately.
+static std::set<std::string> g_archive_obj_stems;
+
 /// LLVM fatal error → C++ exception instead of exit(1)
 struct LlvmFatalException : std::runtime_error {
     LlvmFatalException(const std::string& msg) : std::runtime_error(msg) {}
@@ -228,6 +233,13 @@ static std::string build_runtime_archive(const CompileConfig& config) {
             }
         }
         if (all_older) {
+            // Record which object stems are in the archive (same as when building)
+            g_archive_obj_stems.clear();
+            for (const auto& obj : runtime_objs) {
+                if (obj.extension() == ".obj" || obj.extension() == ".o") {
+                    g_archive_obj_stems.insert(obj.stem().string());
+                }
+            }
             TML_LOG_INFO("test", "Using cached runtime archive: " << archive_path.string() << " ("
                                                                   << runtime_objs.size()
                                                                   << " objects)");
@@ -289,6 +301,15 @@ static std::string build_runtime_archive(const CompileConfig& config) {
     if (ret != 0) {
         TML_LOG_ERROR("test", "Failed to build runtime archive (exit " << ret << ")");
         return "";
+    }
+
+    // Record which object stems went into the archive so compile_suite() can
+    // identify conditional objects that need separate linking.
+    g_archive_obj_stems.clear();
+    for (const auto& obj : runtime_objs) {
+        if (obj.extension() == ".obj" || obj.extension() == ".o") {
+            g_archive_obj_stems.insert(obj.stem().string());
+        }
     }
 
     TML_LOG_INFO("test", "Built runtime archive: " << archive_path.string() << " ("
@@ -589,6 +610,31 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     if (!registry) {
         registry = std::make_shared<types::ModuleRegistry>();
     }
+
+    // When the registry is empty (e.g., due to incremental cache hits where typecheck
+    // results aren't re-executed), we can't determine which conditional runtimes are needed.
+    // In this case, register synthetic modules based on the suite's test file paths so that
+    // get_runtime_objects() includes the correct conditional objects (file.obj, glob.obj, etc.).
+    if (registry->get_all_modules().empty()) {
+        // Map test directory patterns to the module they require
+        static const std::pair<std::string, std::string> path_module_map[] = {
+            {"std/tests/file/", "std::file"},
+            {"std/tests/glob/", "std::glob"},
+            {"std/tests/json/", "std::json"},
+            {"std/tests/crypto/", "std::crypto"},
+        };
+        for (const auto& test : suite.tests) {
+            auto fwd = to_fwd_slashes(test.file_path);
+            for (const auto& [pattern, mod_name] : path_module_map) {
+                if (fwd.find(pattern) != std::string::npos && !registry->has_module(mod_name)) {
+                    types::Module synth;
+                    synth.name = mod_name;
+                    registry->register_module(mod_name, synth);
+                }
+            }
+        }
+    }
+
     parser::Module empty_module;
     const auto& mod = parsed_module_holder ? *parsed_module_holder : empty_module;
 
@@ -597,13 +643,24 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     if (!g_runtime_archive_path.empty()) {
         // Use pre-built archive for base runtime .obj files,
-        // but still include conditional .lib files (json, zlib, search, etc.)
+        // but still include conditional .lib/.obj files not in the base archive.
+        // The archive was built with an empty registry (no std::file, std::json, etc.),
+        // so conditional runtime objects (file.obj, glob.obj, crypto, etc.) must be
+        // added separately when the test suite imports those modules.
         all_object_files.push_back(fs::path(g_runtime_archive_path));
         for (const auto& obj : runtime_objs) {
-            // Only add .lib files (pre-built libraries), skip .obj files (already in archive)
+            // Always add .lib/.a files (pre-built libraries like json, zlib)
             if (obj.extension() == ".lib" || obj.extension() == ".a") {
                 all_object_files.push_back(obj);
+                continue;
             }
+            // Skip .obj files that are already in the base archive
+            auto stem = obj.stem().string();
+            if (g_archive_obj_stems.count(stem)) {
+                continue;
+            }
+            // This is a conditional .obj not in the archive — include it
+            all_object_files.push_back(obj);
         }
     } else {
         all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());

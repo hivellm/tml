@@ -1,4 +1,4 @@
-// Tests for BufReader::lines() iterator
+// Tests for BufReader::lines() iterator (Iterator behavior)
 use test::{assert, assert_eq}
 use std::file::file::File
 use std::file::bufio::BufReader
@@ -6,31 +6,50 @@ use std::file::bufio::Lines
 use std::file::path::Path
 
 @test
-func test_lines_basic() -> I32 {
+func test_lines_next_returns_lines() -> I32 {
     let tmp: Str = "build/debug/_test_lines_basic.tmp"
     File::write_all(tmp, "alpha\nbeta\ngamma\n")
     var br: BufReader = BufReader::open(tmp)
     var it: Lines = br.lines()
-    let line1: Str = it.next()
-    let line2: Str = it.next()
-    let line3: Str = it.next()
+    let r1: Maybe[Str] = it.next()
+    let r2: Maybe[Str] = it.next()
+    let r3: Maybe[Str] = it.next()
+    assert(r1.is_just(), "line1 should be Just")
+    assert(r2.is_just(), "line2 should be Just")
+    assert(r3.is_just(), "line3 should be Just")
+    assert_eq(r1.unwrap(), "alpha", "line1")
+    assert_eq(r2.unwrap(), "beta", "line2")
+    assert_eq(r3.unwrap(), "gamma", "line3")
     it.close()
-    assert_eq(line1, "alpha", "line1")
-    assert_eq(line2, "beta", "line2")
-    assert_eq(line3, "gamma", "line3")
     Path::remove(tmp)
     return 0
 }
 
 @test
-func test_lines_has_next() -> I32 {
+func test_lines_eof_returns_nothing() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_eof.tmp"
+    File::write_all(tmp, "one\ntwo\n")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    let _l1: Maybe[Str] = it.next()
+    let _l2: Maybe[Str] = it.next()
+    let l3: Maybe[Str] = it.next()
+    assert(l3.is_nothing(), "after EOF should be Nothing")
+    it.close()
+    Path::remove(tmp)
+    return 0
+}
+
+@test
+func test_lines_has_next_compat() -> I32 {
     let tmp: Str = "build/debug/_test_lines_hasnext.tmp"
     File::write_all(tmp, "one\ntwo\n")
     var br: BufReader = BufReader::open(tmp)
     var it: Lines = br.lines()
     var count: I64 = 0
     loop (it.has_next()) {
-        let _line: Str = it.next()
+        let line: Maybe[Str] = it.next()
+        assert(line.is_just(), "line in has_next loop should be Just")
         count = count + 1
         if count > 10 {
             break  // safety guard

@@ -143,6 +143,28 @@ pub type Lines {
     _next_line: Str
 }
 
+impl Iterator for Lines {
+    type Item = Str
+
+    /// Advances the iterator and returns the next line, or `Nothing` at EOF.
+    ///
+    /// The returned string does not include the trailing newline.
+    pub func next(mut this) -> Maybe[Str] {
+        if this._peeked {
+            this._peeked = false
+            return Just(this._next_line)
+        }
+        if this._reader.is_eof() {
+            return Nothing
+        }
+        let line: Str = this._reader.read_line()
+        if this._reader.is_eof() and line.len() == 0 {
+            return Nothing
+        }
+        return Just(line)
+    }
+}
+
 impl Lines {
     /// Returns true if there are more lines to read.
     pub func has_next(mut this) -> Bool {
@@ -155,17 +177,6 @@ impl Lines {
         this._next_line = this._reader.read_line()
         this._peeked = true
         return not this._reader.is_eof() or this._next_line.len() > 0
-    }
-
-    /// Returns the next line (without trailing newline).
-    pub func next(mut this) -> Str {
-        if not this._peeked {
-            this._next_line = this._reader.read_line()
-            this._peeked = false
-            return this._next_line
-        }
-        this._peeked = false
-        return this._next_line
     }
 
     /// Closes the underlying reader.

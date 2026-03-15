@@ -1,0 +1,90 @@
+use test::{assert, assert_eq}
+use std::os
+use std::os::{env_vars, env_set, env_get, env_unset, EnvVars}
+
+@test
+func test_env_vars_returns_non_empty() -> I32 {
+    var vars: EnvVars = env_vars()
+    assert(vars.len() > 0, "env_vars() should return at least one variable")
+    return 0
+}
+
+@test
+func test_env_vars_has_next_initially() -> I32 {
+    var vars: EnvVars = env_vars()
+    assert(vars.has_next(), "env_vars() should have at least one entry")
+    return 0
+}
+
+@test
+func test_env_vars_iterate_first_entry() -> I32 {
+    var vars: EnvVars = env_vars()
+    let key: Str = vars.next_key()
+    let value: Str = vars.next_value()
+    // First entry should have a non-empty key
+    assert(key.len() > 0, "first env var key should be non-empty")
+    return 0
+}
+
+@test
+func test_env_vars_contains_path() -> I32 {
+    // PATH is always present on Windows and most Unix systems
+    var vars: EnvVars = env_vars()
+    var found_path: Bool = false
+    loop (vars.has_next()) {
+        let key: Str = vars.next_key()
+        let _value: Str = vars.next_value()
+        if key == "PATH" or key == "Path" {
+            found_path = true
+        }
+    }
+    assert(found_path, "env_vars should contain PATH")
+    return 0
+}
+
+@test
+func test_env_vars_set_then_find() -> I32 {
+    // Set a unique test variable, then find it via env_vars
+    env_set("TML_ENV_VARS_TEST_42", "hello_world")
+    var vars: EnvVars = env_vars()
+    var found: Bool = false
+    loop (vars.has_next()) {
+        let key: Str = vars.next_key()
+        let value: Str = vars.next_value()
+        if key == "TML_ENV_VARS_TEST_42" {
+            assert_eq(value, "hello_world")
+            found = true
+        }
+    }
+    assert(found, "should find TML_ENV_VARS_TEST_42 in env_vars")
+    env_unset("TML_ENV_VARS_TEST_42")
+    return 0
+}
+
+@test
+func test_env_vars_reset() -> I32 {
+    var vars: EnvVars = env_vars()
+    // Consume the first entry
+    let key1: Str = vars.next_key()
+    let _val1: Str = vars.next_value()
+    // Reset and get the first entry again
+    vars.reset()
+    let key2: Str = vars.next_key()
+    let _val2: Str = vars.next_value()
+    assert_eq(key1, key2)
+    return 0
+}
+
+@test
+func test_env_vars_len_matches_iteration_count() -> I32 {
+    var vars: EnvVars = env_vars()
+    let expected_len: I32 = vars.len()
+    var actual_count: I32 = 0
+    loop (vars.has_next()) {
+        let _key: Str = vars.next_key()
+        let _value: Str = vars.next_value()
+        actual_count = actual_count + 1
+    }
+    assert_eq(actual_count, expected_len)
+    return 0
+}

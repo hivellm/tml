@@ -1,0 +1,60 @@
+// Advanced tests for Lines Iterator behavior
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::bufio::BufReader
+use std::file::bufio::Lines
+use std::file::path::Path
+
+@test
+func test_lines_single_line_file() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_single.tmp"
+    File::write_all(tmp, "only line\n")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    let r1: Maybe[Str] = it.next()
+    let r2: Maybe[Str] = it.next()
+    assert(r1.is_just(), "single line should be Just")
+    assert_eq(r1.unwrap(), "only line", "should read 'only line'")
+    assert(r2.is_nothing(), "second read should be Nothing")
+    it.close()
+    Path::remove(tmp)
+    return 0
+}
+
+@test
+func test_lines_empty_file() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_empty.tmp"
+    File::write_all(tmp, "")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    let r1: Maybe[Str] = it.next()
+    assert(r1.is_nothing(), "empty file should return Nothing")
+    it.close()
+    Path::remove(tmp)
+    return 0
+}
+
+@test
+func test_lines_multiple_consecutive_reads() -> I32 {
+    let tmp: Str = "build/debug/_test_lines_multi.tmp"
+    File::write_all(tmp, "line1\nline2\nline3\nline4\nline5\n")
+    var br: BufReader = BufReader::open(tmp)
+    var it: Lines = br.lines()
+    var count: I64 = 0
+    var done: Bool = false
+    loop (not done) {
+        let r: Maybe[Str] = it.next()
+        if r.is_nothing() {
+            done = true
+        } else {
+            count = count + 1
+        }
+        if count > 20 {
+            done = true  // safety guard
+        }
+    }
+    assert_eq(count, 5 as I64, "should read exactly 5 lines")
+    it.close()
+    Path::remove(tmp)
+    return 0
+}

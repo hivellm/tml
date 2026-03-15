@@ -703,6 +703,119 @@ TML_EXPORT int32_t tml_os_env_unset(const char* name) {
 #endif
 }
 
+TML_EXPORT int32_t tml_os_env_count(void) {
+#ifdef _WIN32
+    /* GetEnvironmentStringsA returns a double-null-terminated block:
+       "KEY1=VAL1\0KEY2=VAL2\0\0" */
+    char* env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return 0;
+    int32_t count = 0;
+    const char* p = env_block;
+    while (*p) {
+        count++;
+        p += strlen(p) + 1;
+    }
+    FreeEnvironmentStringsA(env_block);
+    return count;
+#else
+    extern char** environ;
+    int32_t count = 0;
+    if (environ) {
+        while (environ[count])
+            count++;
+    }
+    return count;
+#endif
+}
+
+TML_EXPORT const char* tml_os_env_key(int32_t index) {
+#ifdef _WIN32
+    char* env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return "";
+    const char* p = env_block;
+    int32_t i = 0;
+    while (*p) {
+        if (i == index) {
+            /* Find '=' separator */
+            const char* eq = strchr(p, '=');
+            if (!eq) {
+                FreeEnvironmentStringsA(env_block);
+                return "";
+            }
+            size_t key_len = (size_t)(eq - p);
+            char* result = (char*)mem_alloc((int64_t)(key_len + 1));
+            memcpy(result, p, key_len);
+            result[key_len] = '\0';
+            FreeEnvironmentStringsA(env_block);
+            return result;
+        }
+        p += strlen(p) + 1;
+        i++;
+    }
+    FreeEnvironmentStringsA(env_block);
+    return "";
+#else
+    extern char** environ;
+    if (!environ || !environ[index])
+        return "";
+    const char* entry = environ[index];
+    const char* eq = strchr(entry, '=');
+    if (!eq)
+        return "";
+    size_t key_len = (size_t)(eq - entry);
+    char* result = (char*)mem_alloc((int64_t)(key_len + 1));
+    memcpy(result, entry, key_len);
+    result[key_len] = '\0';
+    return result;
+#endif
+}
+
+TML_EXPORT const char* tml_os_env_value(int32_t index) {
+#ifdef _WIN32
+    char* env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return "";
+    const char* p = env_block;
+    int32_t i = 0;
+    while (*p) {
+        if (i == index) {
+            const char* eq = strchr(p, '=');
+            if (!eq) {
+                FreeEnvironmentStringsA(env_block);
+                return "";
+            }
+            const char* val = eq + 1;
+            size_t val_len = strlen(val);
+            char* result = (char*)mem_alloc((int64_t)(val_len + 1));
+            memcpy(result, val, val_len);
+            result[val_len] = '\0';
+            FreeEnvironmentStringsA(env_block);
+            return result;
+        }
+        p += strlen(p) + 1;
+        i++;
+    }
+    FreeEnvironmentStringsA(env_block);
+    return "";
+#else
+    extern char** environ;
+    if (!environ || !environ[index])
+        return "";
+    const char* entry = environ[index];
+    const char* eq = strchr(entry, '=');
+    if (!eq)
+        return "";
+    const char* val = eq + 1;
+    size_t val_len = strlen(val);
+    char* result = (char*)mem_alloc((int64_t)(val_len + 1));
+    memcpy(result, val, val_len);
+    result[val_len] = '\0';
+    return result;
+#endif
+}
+
 /* ========================================================================== */
 /* Process Priority                                                            */
 /* ========================================================================== */

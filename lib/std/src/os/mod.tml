@@ -129,6 +129,17 @@ func ffi_env_set(name: Str, value: Str) -> I32
 @extern("tml_os_env_unset")
 func ffi_env_unset(name: Str) -> I32
 
+@extern("tml_os_env_count")
+func ffi_env_count() -> I32
+
+@allocates
+@extern("tml_os_env_key")
+func ffi_env_key(index: I32) -> Str
+
+@allocates
+@extern("tml_os_env_value")
+func ffi_env_value(index: I32) -> Str
+
 @extern("tml_os_exit")
 func ffi_exit(code: I32)
 
@@ -303,6 +314,82 @@ pub func env_set(name: Str, value: Str) -> Bool {
 /// Removes an environment variable. Returns `true` on success.
 pub func env_unset(name: Str) -> Bool {
     return ffi_env_unset(name) == 0
+}
+
+/// An iterator over all environment variables as `(Str, Str)` key-value pairs.
+///
+/// Created by [`env_vars()`]. Iterates over a snapshot of the environment
+/// taken at the time `env_vars()` was called.
+///
+/// # Example
+///
+/// ```tml
+/// use std::os
+///
+/// var vars: EnvVars = os::env_vars()
+/// loop (vars.has_next()) {
+///     let pair: (Str, Str) = vars.next()
+///     print(pair.0 + "=" + pair.1 + "\n")
+/// }
+/// ```
+pub type EnvVars {
+    _index: I32,
+    _count: I32
+}
+
+impl EnvVars {
+    /// Returns `true` if there are more environment variables to iterate.
+    pub func has_next(this) -> Bool {
+        return this._index < this._count
+    }
+
+    /// Returns the next `(key, value)` pair and advances the iterator.
+    pub func next_key(mut this) -> Str {
+        let key: Str = ffi_env_key(this._index)
+        return key
+    }
+
+    /// Returns the value for the current entry and advances the iterator.
+    pub func next_value(mut this) -> Str {
+        let value: Str = ffi_env_value(this._index)
+        this._index = this._index + 1
+        return value
+    }
+
+    /// Resets the iterator to the beginning.
+    pub func reset(mut this) {
+        this._index = 0
+    }
+
+    /// Returns the total number of environment variables.
+    pub func len(this) -> I32 {
+        return this._count
+    }
+}
+
+/// Returns an iterator over all environment variables.
+///
+/// Each call to `next_key()` and `next_value()` returns the key and value
+/// of the current environment variable. Call `next_value()` to advance
+/// to the next entry.
+///
+/// # Example
+///
+/// ```tml
+/// use std::os
+///
+/// var vars: EnvVars = os::env_vars()
+/// loop (vars.has_next()) {
+///     let key: Str = vars.next_key()
+///     let value: Str = vars.next_value()
+///     // key and value are now available
+/// }
+/// ```
+pub func env_vars() -> EnvVars {
+    return EnvVars {
+        _index: 0,
+        _count: ffi_env_count()
+    }
 }
 
 // ============================================================================
