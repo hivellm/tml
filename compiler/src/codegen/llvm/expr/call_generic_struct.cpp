@@ -841,13 +841,21 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             }
                         }
 
-                        // Update mangled type name from inferred type_subs
+                        // Update mangled type name from inferred type_subs.
+                        // Include ALL generic params: resolved ones get concrete types,
+                        // unresolved (phantom) ones keep their bare name (e.g., T)
+                        // so the call site matches the definition's mangled name.
                         if (!type_subs.empty()) {
                             std::vector<types::TypePtr> type_args;
                             for (const auto& gname : generic_names) {
                                 auto it = type_subs.find(gname);
                                 if (it != type_subs.end()) {
                                     type_args.push_back(it->second);
+                                } else {
+                                    // Phantom/unresolved generic — use bare name
+                                    auto phantom = std::make_shared<types::Type>();
+                                    phantom->kind = types::NamedType{gname};
+                                    type_args.push_back(phantom);
                                 }
                             }
                             if (!type_args.empty()) {

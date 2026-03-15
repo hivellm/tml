@@ -602,6 +602,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         std::vector<fs::path> cached_objects;
 
         for (const auto& cgu : partition_result.cgus) {
+            // DEBUG: dump CGU IR
             std::string fp12 = cgu.fingerprint.substr(0, 12);
             std::string cgu_name =
                 module_name + ".cgu" + std::to_string(cgu.cgu_index) + "." + fp12 + obj_ext;
