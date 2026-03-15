@@ -199,8 +199,122 @@ auto ThirMirBuilder::build_cast(const thir::ThirCastExpr& cast) -> Value {
     return emit(std::move(inst), result_type, cast.span);
 }
 
-auto ThirMirBuilder::build_closure(const thir::ThirClosureExpr& /*closure*/) -> Value {
-    return const_unit();
+auto ThirMirBuilder::build_closure(const thir::ThirClosureExpr& closure) -> Value {
+    // Convert the closure's overall function/closure type to get accurate param and return types.
+    // Individual param types from closure.params may be Unit when the closure has no type
+    // annotations (e.g., `do(x) x + 1`), but the overall type from the type checker has
+    // the correct inferred types.
+    auto result_type = convert_type(closure.type);
+    MirTypePtr return_type = make_unit_type();
+    std::vector<MirTypePtr> param_types;
+
+    if (auto* ft = std::get_if<MirFunctionType>(&result_type->kind)) {
+        if (ft->return_type) {
+            return_type = ft->return_type;
+        }
+        param_types = ft->params;
+    }
+
+    // Fall back to individual param types if function type doesn't have them
+    if (param_types.empty()) {
+        for (const auto& param : closure.params) {
+            param_types.push_back(convert_type(param.second));
+        }
+    }
+
+    // Generate unique name for the closure function
+    static uint32_t closure_counter = 0;
+    std::string func_name = "__closure_" + std::to_string(closure_counter++);
+
+    // Create the closure function
+    Function closure_func;
+    closure_func.name = func_name;
+    closure_func.return_type = return_type;
+
+    // Add parameters
+    ValueId value_id = 0;
+    for (size_t i = 0; i < closure.params.size(); ++i) {
+        std::string param_name = closure.params[i].first;
+        closure_func.params.push_back({param_name, param_types[i], value_id});
+        value_id++;
+    }
+
+    // Create entry block
+    closure_func.blocks.emplace_back();
+    closure_func.blocks[0].id = 0;
+    closure_func.blocks[0].name = "entry";
+    closure_func.next_block_id = 1;
+    closure_func.next_value_id = value_id;
+
+    // Save current builder context.
+    // ctx_.current_func points into module_.functions (set by build_function at line 122),
+    // so push_back can invalidate it. Save the index for safe restore.
+    size_t saved_func_idx = static_cast<size_t>(ctx_.current_func - module_.functions.data());
+    auto saved_block = ctx_.current_block;
+    auto saved_vars = ctx_.variables;
+    auto saved_return_type = current_return_type_;
+
+    // Switch to the closure function context
+    ctx_.current_func = &closure_func;
+    ctx_.current_block = 0;
+    ctx_.variables.clear();
+    current_return_type_ = nullptr;
+
+    // Bind parameters to variables
+    for (size_t i = 0; i < closure.params.size(); ++i) {
+        Value param_val;
+        param_val.id = closure_func.params[i].value_id;
+        param_val.type = param_types[i];
+        ctx_.variables[closure.params[i].first] = param_val;
+    }
+
+    // Build the closure body
+    Value body_val = build_expr(closure.body);
+
+    // Add return if not already terminated
+    if (!is_terminated()) {
+        if (!return_type->is_unit()) {
+            emit_return(body_val);
+        } else {
+            emit_return();
+        }
+    }
+
+    // Add closure function to module (may reallocate module_.functions)
+    module_.functions.push_back(std::move(closure_func));
+
+    // Restore context using saved index (pointer may have been invalidated)
+    ctx_.current_func = &module_.functions[saved_func_idx];
+    ctx_.current_block = saved_block;
+    ctx_.variables = saved_vars;
+    current_return_type_ = saved_return_type;
+
+    // Build captured values for the ClosureInitInst
+    std::vector<std::pair<std::string, Value>> captured_values;
+    std::vector<std::pair<std::string, MirTypePtr>> capture_types;
+
+    for (const auto& cap : closure.captures) {
+        Value cap_value = get_variable(cap.name);
+        MirTypePtr cap_type = convert_type(cap.type);
+
+        if (!cap.by_move && cap.is_mut) {
+            captured_values.push_back({cap.name, cap_value});
+            capture_types.push_back({cap.name, make_pointer_type(cap_type, true)});
+        } else {
+            captured_values.push_back({cap.name, cap_value});
+            capture_types.push_back({cap.name, cap_type});
+        }
+    }
+
+    // Emit ClosureInitInst to create the fat pointer { func_ptr, env_ptr }
+    ClosureInitInst inst;
+    inst.func_name = func_name;
+    inst.captures = std::move(captured_values);
+    inst.cap_types = std::move(capture_types);
+    inst.func_type = result_type;
+    inst.result_type = result_type;
+
+    return emit(std::move(inst), result_type, closure.span);
 }
 
 auto ThirMirBuilder::build_try(const thir::ThirTryExpr& try_expr) -> Value {

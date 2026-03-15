@@ -273,6 +273,35 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
                     element_types.push_back(check_expr(*e.elements[i], expected_elem));
                 }
                 return make_tuple(std::move(element_types));
+            } else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
+                // For closures, propagate expected type to resolve untyped params
+                auto result = check_closure(e);
+                // If expected type is a FuncType, unify closure param types with it
+                if (expected_type && result) {
+                    if (expected_type->template is<FuncType>() &&
+                        result->template is<ClosureType>()) {
+                        const auto& func = expected_type->template as<FuncType>();
+                        const auto& clos = result->template as<ClosureType>();
+                        for (size_t i = 0; i < func.params.size() && i < clos.params.size(); ++i) {
+                            env_.unify(clos.params[i], func.params[i]);
+                        }
+                        if (func.return_type && clos.return_type) {
+                            env_.unify(clos.return_type, func.return_type);
+                        }
+                    }
+                }
+                // Re-store inferred types after unification
+                if (result && result->template is<ClosureType>()) {
+                    const auto& clos = result->template as<ClosureType>();
+                    e.inferred_param_types.clear();
+                    for (const auto& pt : clos.params) {
+                        e.inferred_param_types.push_back(
+                            std::static_pointer_cast<void>(env_.resolve(pt)));
+                    }
+                    e.inferred_return_type =
+                        std::static_pointer_cast<void>(env_.resolve(clos.return_type));
+                }
+                return result;
             } else {
                 // For other expressions, fall back to regular check_expr
                 return check_expr(expr);

@@ -397,6 +397,18 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
                 }
             }
         }
+
+        // Fallback: callee may be a variable with function type (function pointer call)
+        // e.g., `f(x)` where `f: func(I32) -> I32` is a parameter or local variable
+        if (return_type && return_type->is<types::PrimitiveType>() &&
+            return_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit) {
+            auto callee_type = get_expr_type(*call.callee);
+            if (callee_type && callee_type->is<types::FuncType>()) {
+                return_type = type_env_.resolve(callee_type->as<types::FuncType>().return_type);
+            } else if (callee_type && callee_type->is<types::ClosureType>()) {
+                return_type = type_env_.resolve(callee_type->as<types::ClosureType>().return_type);
+            }
+        }
     }
 
     // Mangle func_name for class static methods: "Class::method" -> "Class__method"
@@ -941,8 +953,11 @@ auto HirBuilder::lower_continue(const parser::ContinueExpr& cont) -> HirExprPtr 
 auto HirBuilder::lower_closure(const parser::ClosureExpr& closure) -> HirExprPtr {
     std::vector<std::pair<std::string, HirType>> params;
 
-    // Lower parameters
-    for (const auto& [pattern, type_opt] : closure.params) {
+    // Lower parameters.
+    // For untyped closure params (e.g., `do(x) x + 1`), the type checker stores
+    // inferred types in the AST's `inferred_param_types` field.
+    for (size_t pi = 0; pi < closure.params.size(); ++pi) {
+        const auto& [pattern, type_opt] = closure.params[pi];
         std::string name = "_";
         if (pattern->is<parser::IdentPattern>()) {
             name = pattern->as<parser::IdentPattern>().name;
@@ -951,6 +966,11 @@ auto HirBuilder::lower_closure(const parser::ClosureExpr& closure) -> HirExprPtr
         HirType type = types::make_unit();
         if (type_opt) {
             type = resolve_type(**type_opt);
+        } else if (pi < closure.inferred_param_types.size() && closure.inferred_param_types[pi]) {
+            // Use type checker's inferred type (resolved from type variables)
+            auto inferred = std::static_pointer_cast<types::Type>(closure.inferred_param_types[pi]);
+            type = type_env_.resolve(inferred);
+        } else {
         }
 
         params.emplace_back(name, type);
@@ -975,6 +995,14 @@ auto HirBuilder::lower_closure(const parser::ClosureExpr& closure) -> HirExprPtr
         param_types.push_back(type);
     }
     HirType return_type = body->type();
+    // Use inferred return type from type checker if body type is null/unit
+    if ((!return_type ||
+         (return_type->is<types::PrimitiveType>() &&
+          return_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit)) &&
+        closure.inferred_return_type) {
+        auto inferred = std::static_pointer_cast<types::Type>(closure.inferred_return_type);
+        return_type = type_env_.resolve(inferred);
+    }
 
     std::vector<types::CapturedVar> captured_vars;
     for (const auto& cap : captures) {

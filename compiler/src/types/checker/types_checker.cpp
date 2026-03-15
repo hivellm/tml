@@ -305,6 +305,14 @@ auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
 
     env_.pop_scope();
 
+    // Store inferred types in AST for HIR builder to use (mutable annotations).
+    // Use shared_ptr<void> for type erasure since parser headers can't include types headers.
+    closure.inferred_param_types.clear();
+    for (const auto& pt : param_types) {
+        closure.inferred_param_types.push_back(std::static_pointer_cast<void>(pt));
+    }
+    closure.inferred_return_type = std::static_pointer_cast<void>(return_type);
+
     return make_closure(std::move(param_types), return_type, std::move(captures));
 }
 

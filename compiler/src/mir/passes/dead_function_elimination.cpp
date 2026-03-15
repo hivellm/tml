@@ -131,6 +131,11 @@ void DeadFunctionEliminationPass::build_call_graph(const Module& module) {
                         call_graph_[func.name].insert(func_ref->func_name);
                     }
                 }
+                // Check for closure initializations — the closure body function
+                // is referenced by name and must be kept alive.
+                else if (auto* closure_init = std::get_if<ClosureInitInst>(&inst.inst)) {
+                    call_graph_[func.name].insert(closure_init->func_name);
+                }
             }
         }
     }

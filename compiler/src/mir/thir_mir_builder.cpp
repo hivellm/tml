@@ -250,6 +250,32 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
         return mir_type;
     }
 
+    if (type->is<types::ClosureType>()) {
+        const auto& clos = type->as<types::ClosureType>();
+        std::vector<MirTypePtr> params;
+        // resolve() is non-const but only reads substitutions_ — safe to const_cast here
+        auto& env_mut = const_cast<types::TypeEnv&>(env_);
+        for (const auto& p : clos.params) {
+            // Resolve type variables before converting (closures may have inferred types)
+            auto resolved = env_mut.resolve(p);
+            params.push_back(convert_type(resolved));
+        }
+        auto resolved_ret = env_mut.resolve(clos.return_type);
+        auto ret = convert_type(resolved_ret);
+        auto mir_type = std::make_shared<MirType>();
+        mir_type->kind = MirFunctionType{std::move(params), std::move(ret)};
+        return mir_type;
+    }
+
+    // Resolve type variables (from type inference) before giving up
+    if (type->is<types::TypeVar>()) {
+        auto& env_mut = const_cast<types::TypeEnv&>(env_);
+        auto resolved = env_mut.resolve(type);
+        if (resolved && !resolved->is<types::TypeVar>()) {
+            return convert_type(resolved);
+        }
+    }
+
     if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
         // Check if it's an enum or struct

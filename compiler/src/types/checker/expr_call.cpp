@@ -685,6 +685,33 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
             // Pass expected parameter type for numeric literal coercion
             auto arg_type = check_expr(*call.args[i], param_type);
 
+            // If the arg is a closure and the param expects a function type,
+            // unify the closure's param/return types with the function's types.
+            // This resolves inferred closure param types (e.g., `do(x) x + 1`
+            // where x's type is inferred from the function signature).
+            if (arg_type && param_type && arg_type->is<ClosureType>() &&
+                param_type->is<FuncType>()) {
+                const auto& clos = arg_type->as<ClosureType>();
+                const auto& expected_func = param_type->as<FuncType>();
+                for (size_t j = 0; j < clos.params.size() && j < expected_func.params.size(); ++j) {
+                    env_.unify(clos.params[j], expected_func.params[j]);
+                }
+                if (clos.return_type && expected_func.return_type) {
+                    env_.unify(clos.return_type, expected_func.return_type);
+                }
+                // Update the stored inferred types in the AST (for HIR builder)
+                if (call.args[i]->is<parser::ClosureExpr>()) {
+                    auto& closure_ast = call.args[i]->as<parser::ClosureExpr>();
+                    closure_ast.inferred_param_types.clear();
+                    for (const auto& pt : clos.params) {
+                        closure_ast.inferred_param_types.push_back(
+                            std::static_pointer_cast<void>(env_.resolve(pt)));
+                    }
+                    closure_ast.inferred_return_type =
+                        std::static_pointer_cast<void>(env_.resolve(clos.return_type));
+                }
+            }
+
             // If the parameter type is a NamedType that could be a type parameter (T, U, etc.)
             // and it has no type_args, it might be a generic type parameter
             if (param_type->is<NamedType>()) {

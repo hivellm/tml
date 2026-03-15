@@ -566,6 +566,11 @@ struct ClosureExpr {
     SourceSpan span;                    ///< Source location.
     mutable std::vector<std::string>
         captured_vars; ///< Captured variables (filled by type checker).
+    mutable std::vector<std::shared_ptr<void>>
+        inferred_param_types; ///< Inferred parameter types as types::TypePtr (filled by type
+                              ///< checker).
+    mutable std::shared_ptr<void>
+        inferred_return_type; ///< Inferred return type as types::TypePtr (filled by type checker).
 };
 
 /// Range expression: `a to b`, `a through b`, `to b`, `a to`.
