@@ -39,7 +39,8 @@ struct Suite {
 std::vector<TestFileInfo> discover_tests(const std::string& root_dir);
 
 /// Group discovered test files into suites by directory structure.
-/// @param max_per_suite Tests per suite (default 1, avoids codegen bug)
+/// @param max_per_suite Tests per suite (default 1; safe to increase now that
+///        the struct alias shortcut checks field layout stability)
 std::vector<Suite> group_into_suites(const std::vector<TestFileInfo>& tests,
                                      size_t max_per_suite = 1);
 

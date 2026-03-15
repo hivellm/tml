@@ -248,13 +248,35 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
         pending_generic_structs_.find(base_name) != pending_generic_structs_.end()) {
         base_is_generic_struct = true;
     }
+    // Secondary check: if the base type has fields whose LLVM types could vary
+    // with generic parameters (e.g., %struct.X fields), mark as generic to avoid
+    // the alias shortcut producing inconsistent layouts across compilation units.
+    // This fixes suite merging symbol collisions when max_per_suite > 1.
+    if (!base_is_generic_struct && mangled != base_name) {
+        auto base_fields_check = struct_fields_.find(base_name);
+        if (base_fields_check != struct_fields_.end()) {
+            for (const auto& field : base_fields_check->second) {
+                const auto& ft = field.llvm_type;
+                // A field type is layout-stable if it's a primitive LLVM type
+                // that doesn't depend on generic parameters. If any field has
+                // a struct type (%struct.*) or other complex type, the layout
+                // may vary with different generic instantiations.
+                if (ft.find("%struct.") != std::string::npos ||
+                    ft.find("%union.") != std::string::npos ||
+                    ft.find("%enum.") != std::string::npos) {
+                    base_is_generic_struct = true;
+                    break;
+                }
+            }
+        }
+    }
     if (!base_is_generic_struct && mangled != base_name &&
         struct_types_.find(base_name) != struct_types_.end() &&
         struct_types_.find(mangled) == struct_types_.end()) {
-        // The base type already has a definition (e.g., library code emitted %struct.HashMapIter).
-        // Emit the mangled type with the same field layout so both names are valid in IR.
-        // Without this, code paths that use the mangled name directly (e.g., struct literal
-        // construction via current_ret_type_) would reference an undefined type.
+        // The base type already has a definition with layout-stable fields
+        // (all primitives like ptr, i64, etc. — no %struct.* references).
+        // Safe to create a type alias since all instantiations share the same layout.
+        // Examples: BTreeMap { ptr }, HashMapIter { ptr, ptr, i64, i64 }, etc.
         std::string mangled_type = "%struct." + mangled;
         // Build field list from the base type's registered fields
         auto base_fields_it = struct_fields_.find(base_name);
