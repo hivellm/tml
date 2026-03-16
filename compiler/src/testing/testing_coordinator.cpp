@@ -604,11 +604,14 @@ TestRunResult run_tests(const TestConfig& config) {
     TML_LOG_DEBUG("test", "[coordinator] After filtering: " << test_files.size() << " test files");
 
     // 4. Suite grouping
-    // For full suite runs (no filters), use larger suites to reduce link count.
-    // 206 suites → ~30 suites saves ~170 link steps (~5 minutes).
+    // For full suite runs (no filters) WITHOUT coverage, use larger suites to
+    // reduce link count. 206 suites → ~30 suites saves ~170 link steps.
+    // Coverage mode keeps max_per_suite=1: each test .obj has internal linkage
+    // for stdlib functions, and vtables (which are external/linkonce_odr) reference
+    // those internal functions — linking multiple .objs causes undefined symbols.
     int effective_max_per_suite = config.max_per_suite;
     bool is_full_run = config.suite_filters.empty() && config.patterns.empty();
-    if (is_full_run && effective_max_per_suite <= 10) {
+    if (is_full_run && !config.coverage && effective_max_per_suite <= 10) {
         effective_max_per_suite = 50; // ~30 suites instead of ~206
         TML_LOG_INFO("test",
                      "[coordinator] Full suite: using max_per_suite=50 for fewer link steps");
