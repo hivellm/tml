@@ -9,9 +9,11 @@ TML_MODULE("codegen_x86")
 #include "log/log.hpp"
 #include "version_generated.hpp"
 
+#include <chrono>
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#include <thread>
 
 // LLVM C API headers
 #include <llvm-c/Analysis.h>
@@ -271,12 +273,46 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
         LLVMDisposeMessage(error);
     }
 
-    // Emit object file
+    // Emit object file with retry on Windows file locking errors.
+    // During concurrent compilation (e.g., test suites), the output .obj file
+    // may be temporarily locked by another process (linker, antivirus, etc.).
+    // "The requested operation cannot be performed on a file with a user-mapped
+    // section open" is a transient Windows error that resolves on retry.
     std::string output_str = output_path.string();
     error = nullptr;
-    if (LLVMTargetMachineEmitToFile(target_machine, module, output_str.c_str(), LLVMObjectFile,
-                                    &error) != 0) {
-        result.error_message = "Failed to emit object file: " + consume_error_message(error);
+    constexpr int max_retries = 3;
+    constexpr int retry_delay_ms = 100;
+    bool emit_ok = false;
+    for (int attempt = 0; attempt < max_retries; ++attempt) {
+        error = nullptr;
+        if (LLVMTargetMachineEmitToFile(target_machine, module, output_str.c_str(), LLVMObjectFile,
+                                        &error) == 0) {
+            emit_ok = true;
+            break;
+        }
+        std::string err_msg = error ? error : "";
+        if (error) {
+            LLVMDisposeMessage(error);
+            error = nullptr;
+        }
+        // Only retry on Windows file locking errors
+        if (err_msg.find("user-mapped section") != std::string::npos ||
+            err_msg.find("being used by another process") != std::string::npos) {
+            TML_LOG_DEBUG("backend", "Object file locked (attempt "
+                                         << (attempt + 1) << "/" << max_retries << "), retrying in "
+                                         << retry_delay_ms << "ms: " << output_path);
+            std::this_thread::sleep_for(std::chrono::milliseconds(retry_delay_ms * (attempt + 1)));
+            continue;
+        }
+        // Non-retryable error
+        result.error_message = "Failed to emit object file: " + err_msg;
+        LLVMDisposeTargetMachine(target_machine);
+        LLVMDisposeModule(module);
+        return result;
+    }
+    if (!emit_ok) {
+        result.error_message = "Failed to emit object file after " + std::to_string(max_retries) +
+                               " retries (file locked): " + output_str;
         LLVMDisposeTargetMachine(target_machine);
         LLVMDisposeModule(module);
         return result;

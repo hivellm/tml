@@ -452,10 +452,40 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                 std::unordered_map<std::string, types::TypePtr> type_subs;
                 std::vector<std::string> generic_names;
 
-                // Get generic parameter names
+                // Get generic parameter names.
+                // IMPORTANT: Prefer the struct/enum definition's generic names over
+                // impl block names. A type may have multiple impl blocks with different
+                // generic parameter names (e.g., `type Fuse[Fut]` has `impl[Fut] Fuse[Fut]`
+                // but also `impl[I] IntoFuture for Fuse[I]`). The struct definition and
+                // imported_type_params use the canonical names that match FuncSig type_params.
+                // pending_generic_impls_ only stores ONE impl per type, which may be a
+                // behavior impl with different parameter names.
+
+                // 1. Try imported_type_params first (from module registry)
+                if (!imported_type_params.empty()) {
+                    generic_names = imported_type_params;
+                }
+                // 2. Try struct definition
+                if (generic_names.empty()) {
+                    auto struct_it = pending_generic_structs_.find(type_name);
+                    if (struct_it != pending_generic_structs_.end()) {
+                        for (const auto& g : struct_it->second->generics) {
+                            generic_names.push_back(g.name);
+                        }
+                    }
+                }
+                // 3. Try enum definition
+                if (generic_names.empty()) {
+                    auto enum_it = pending_generic_enums_.find(type_name);
+                    if (enum_it != pending_generic_enums_.end()) {
+                        for (const auto& g : enum_it->second->generics) {
+                            generic_names.push_back(g.name);
+                        }
+                    }
+                }
+                // 4. Fallback to impl block generics
                 auto impl_it = pending_generic_impls_.find(type_name);
-                if (impl_it != pending_generic_impls_.end()) {
-                    // First try impl-level generics (impl[T] Foo[T])
+                if (generic_names.empty() && impl_it != pending_generic_impls_.end()) {
                     for (const auto& g : impl_it->second->generics) {
                         generic_names.push_back(g.name);
                     }
@@ -477,26 +507,6 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
-                } else if (!imported_type_params.empty()) {
-                    generic_names = imported_type_params;
-                } else {
-                    // Fallback: check pending_generic_structs_ for type params
-                    auto struct_it = pending_generic_structs_.find(type_name);
-                    if (struct_it != pending_generic_structs_.end()) {
-                        for (const auto& g : struct_it->second->generics) {
-                            generic_names.push_back(g.name);
-                        }
-                    }
-                    // Also check pending_generic_enums_ for built-in generic enums
-                    // (Outcome[T,E], Maybe[T], Poll[T]) which are not in module registry
-                    if (generic_names.empty()) {
-                        auto enum_it = pending_generic_enums_.find(type_name);
-                        if (enum_it != pending_generic_enums_.end()) {
-                            for (const auto& g : enum_it->second->generics) {
-                                generic_names.push_back(g.name);
                             }
                         }
                     }

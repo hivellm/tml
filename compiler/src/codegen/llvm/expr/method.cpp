@@ -973,7 +973,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (enum_type_name == "ptr") {
                 // Nullable pointer optimization: tag is null-check
                 // null = Nothing (tag 1), non-null = Just (tag 0)
-                if (call.receiver->is<parser::FieldExpr>()) {
+                // Only load from pointer if receiver is actually a pointer to a Maybe,
+                // not an already-loaded value. FieldExpr receivers are pre-loaded by the
+                // field access handler above, so they must NOT be loaded again.
+                if (last_expr_type_ == "ptr" && !call.receiver->is<parser::FieldExpr>()) {
                     std::string loaded = fresh_reg();
                     emit_line("  " + loaded + " = load ptr, ptr " + receiver);
                     maybe_val = loaded;
@@ -984,9 +987,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 emit_line("  " + tag_val + " = zext i1 " + is_null + " to i32");
             } else {
                 // Standard struct-based Maybe: extract tag from field 0
-                // Load from ptr if receiver is a field access or ref param
-                if (enum_type_name.starts_with("%struct.") &&
-                    (call.receiver->is<parser::FieldExpr>() || last_expr_type_ == "ptr")) {
+                // Load from ptr if receiver is an unloaded pointer (e.g., ref param).
+                // FieldExpr receivers are pre-loaded by the field access handler above,
+                // so they must NOT be loaded again (that would cause a double-load bug).
+                if (enum_type_name.starts_with("%struct.") && last_expr_type_ == "ptr" &&
+                    !call.receiver->is<parser::FieldExpr>()) {
                     std::string loaded = fresh_reg();
                     emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                     maybe_val = loaded;
@@ -1005,10 +1010,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (named.name == "Outcome" && named.type_args.size() >= 2) {
             std::string enum_type_name = llvm_type_from_semantic(receiver_type, true);
 
-            // If receiver is a pointer (field access or ref param), load struct first
+            // If receiver is an unloaded pointer (e.g., ref param), load struct first.
+            // FieldExpr receivers are pre-loaded by the field access handler above,
+            // so they must NOT be loaded again (that would cause a double-load bug).
             std::string outcome_val = receiver;
-            if (enum_type_name.starts_with("%struct.") &&
-                (call.receiver->is<parser::FieldExpr>() || last_expr_type_ == "ptr")) {
+            if (enum_type_name.starts_with("%struct.") && last_expr_type_ == "ptr" &&
+                !call.receiver->is<parser::FieldExpr>()) {
                 std::string loaded = fresh_reg();
                 emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                 outcome_val = loaded;

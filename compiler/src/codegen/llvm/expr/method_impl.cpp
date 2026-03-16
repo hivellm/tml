@@ -123,6 +123,21 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         effective_receiver = synth;
     }
 
+    // Convert ArrayType to a synthetic NamedType("Array") for dispatch.
+    // Array impls (e.g., impl[const N: I64] Array[U8, N]) are registered
+    // under "Array::method" in the module functions map. The element type
+    // is stored as a type arg so specialized impls can be matched.
+    if (receiver_type && receiver_type->is<types::ArrayType>()) {
+        const auto& arr = receiver_type->as<types::ArrayType>();
+        std::vector<types::TypePtr> type_args;
+        if (arr.element) {
+            type_args.push_back(arr.element);
+        }
+        auto synth = std::make_shared<types::Type>();
+        synth->kind = types::NamedType{"Array", "", type_args};
+        effective_receiver = synth;
+    }
+
     // Only handle NamedType receivers (including synthesized tuple types)
     if (!effective_receiver || !effective_receiver->is<types::NamedType>()) {
         return std::nullopt;
@@ -889,11 +904,26 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     -> std::optional<std::string> {
     const std::string& method = call.method;
 
-    if (!(receiver_type && receiver_type->is<types::NamedType>())) {
+    // Convert ArrayType to synthetic NamedType("Array") for dispatch,
+    // same as in try_gen_impl_method_call. This enables dispatch of
+    // specialized Array methods like impl[const N: I64] Array[U8, N]::is_ascii().
+    types::TypePtr effective_receiver = receiver_type;
+    if (receiver_type && receiver_type->is<types::ArrayType>()) {
+        const auto& arr = receiver_type->as<types::ArrayType>();
+        std::vector<types::TypePtr> type_args;
+        if (arr.element) {
+            type_args.push_back(arr.element);
+        }
+        auto synth = std::make_shared<types::Type>();
+        synth->kind = types::NamedType{"Array", "", type_args};
+        effective_receiver = synth;
+    }
+
+    if (!(effective_receiver && effective_receiver->is<types::NamedType>())) {
         return std::nullopt;
     }
 
-    const auto& named2 = receiver_type->as<types::NamedType>();
+    const auto& named2 = effective_receiver->as<types::NamedType>();
     bool is_builtin_type2 = (named2.name == "File" || named2.name == "Path");
     if (is_builtin_type2) {
         return std::nullopt;
