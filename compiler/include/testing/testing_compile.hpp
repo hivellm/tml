@@ -4,8 +4,9 @@
 //! instead of the old sequential lex→parse→typecheck→codegen flow.
 //! Zero dependency on cli/tester/. Part of the v3 independent test system.
 //!
-//! Pipeline per suite:
-//!   QueryContext::codegen_unit() → NDJSON dispatcher IR → compile to .obj → link → .exe
+//! Two compilation modes:
+//!   1. Per-suite: compile_suite() → one .exe per suite (for filtered runs)
+//!   2. Unified:   compile_unified_binary() → one .exe for ALL tests (Zig model)
 
 #pragma once
 
@@ -33,6 +34,9 @@ struct CompileResult {
         std::string error;
     };
     std::vector<FileError> per_file_errors;
+
+    /// Total number of tests successfully compiled (for unified binary).
+    int compiled_test_count = 0;
 };
 
 /// Configuration for the compilation pipeline.
@@ -66,5 +70,31 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
                                                    const CompileConfig& config,
                                                    std::atomic<bool>& should_stop,
                                                    CompileCallback on_complete = nullptr);
+
+// ============================================================================
+// Unified binary compilation (Zig model)
+// ============================================================================
+
+/// Mapping from global test index to suite/test position.
+struct UnifiedTestMapping {
+    int global_index;        ///< Index in the unified binary (0..N-1)
+    int suite_index;         ///< Index into the suites vector
+    int test_index_in_suite; ///< Index within that suite's tests vector
+    std::string test_name;
+    std::string file_path;
+};
+
+/// Compile ALL test suites into a single unified executable.
+/// This is the Zig-model compilation: stdlib compiled once, all test files
+/// compiled with library_decls_only, everything linked into one .exe.
+///
+/// @param suites       All discovered suites
+/// @param config       Compilation configuration
+/// @param should_stop  Atomic flag for fail-fast abort
+/// @param out_mapping  Output: global index → suite/test mapping
+/// @return CompileResult with the unified .exe path
+CompileResult compile_unified_binary(const std::vector<Suite>& suites, const CompileConfig& config,
+                                     std::atomic<bool>& should_stop,
+                                     std::vector<UnifiedTestMapping>& out_mapping);
 
 } // namespace tml::testing

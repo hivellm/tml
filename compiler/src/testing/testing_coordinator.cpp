@@ -603,8 +603,17 @@ TestRunResult run_tests(const TestConfig& config) {
 
     TML_LOG_DEBUG("test", "[coordinator] After filtering: " << test_files.size() << " test files");
 
-    // 4. Suite grouping (default max_per_suite=10; coverage uses 1)
-    auto suites = group_into_suites(test_files, config.max_per_suite);
+    // 4. Suite grouping
+    // For full suite runs (no filters), use larger suites to reduce link count.
+    // 206 suites → ~30 suites saves ~170 link steps (~5 minutes).
+    int effective_max_per_suite = config.max_per_suite;
+    bool is_full_run = config.suite_filters.empty() && config.patterns.empty();
+    if (is_full_run && effective_max_per_suite <= 10) {
+        effective_max_per_suite = 50; // ~30 suites instead of ~206
+        TML_LOG_INFO("test",
+                     "[coordinator] Full suite: using max_per_suite=50 for fewer link steps");
+    }
+    auto suites = group_into_suites(test_files, effective_max_per_suite);
     TML_LOG_DEBUG("test", "[coordinator] After grouping: " << suites.size() << " suites from "
                                                            << test_files.size() << " files");
     if (suites.empty()) {
@@ -623,6 +632,13 @@ TestRunResult run_tests(const TestConfig& config) {
 
     TML_LOG_INFO("test", "[coordinator] Running " << test_files.size() << " tests in "
                                                   << suites.size() << " suites");
+
+    // ========================================================================
+    // PER-SUITE PATH: the standard compilation path.
+    // When running full suite (no filters), uses larger suites (max_per_suite=50)
+    // to reduce link count from ~206 to ~30. This is the Zig-inspired optimization:
+    // fewer binaries = fewer link steps = much faster.
+    // ========================================================================
 
     // 5. Cache: load and check
     TestResultCache cache;

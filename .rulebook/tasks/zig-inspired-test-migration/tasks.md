@@ -1,69 +1,69 @@
 # Tasks: Zig-Inspired Test Migration
 
-**Status**: Pending (0%) — All phases pending.
+**Status**: In Progress (Phase 1-2 infrastructure complete, blocked on codegen bottleneck)
 
-## 1. Stdlib Pre-Compiled Object Cache
+## Key Findings (2026-03-16)
 
-- [ ] 1.1 Extract stdlib compilation from `compile_suite()` into standalone `compile_stdlib_objects()` function
-- [ ] 1.2 Implement stdlib IR generation: single `QueryContext::codegen_unit()` pass for all core/std modules
-- [ ] 1.3 Compile stdlib IR → `.obj` files (one per module or one monolithic)
-- [ ] 1.4 Cache stdlib `.obj` with fingerprint (hash of all lib/core/src + lib/std/src source files)
-- [ ] 1.5 Invalidate stdlib cache when any library source file changes
-- [ ] 1.6 Modify `compile_suite()` to skip stdlib codegen — only codegen test file code, link against cached stdlib `.obj`
-- [ ] 1.7 Handle conditional runtime objects (crypto, sqlite, zlib) — detect which suites need them, link selectively
-- [ ] 1.8 Verify: all 1452 tests pass with pre-compiled stdlib
-- [ ] 1.9 Benchmark: measure wall time reduction vs current system
+### Architecture Implemented
+- `cached_library_state` + `library_ir_only` + `capture_library_state()` pipeline works
+- `compile_unified_binary()` with 4 parallel codegen threads implemented
+- Mega-binary coordinator path with NDJSON event parsing implemented
+- `emit_referenced_library_declarations()` fallback to `functions_` map for cached state
 
-## 2. Suite Aggregation (Mega-Binary)
+### Blockers Discovered
+1. **`library_decls_only=true` incomplete**: Lazy library functions (core::char, core::encoding, etc.) not declared when not in bootstrap's imports. Fix: comprehensive stdlib .obj with all modules, but building that hangs (287 modules causes codegen to take 10+ minutes with no termination)
+2. **`library_decls_only=false` too large**: Each test .obj = ~900KB with full library defs. 500+ objects = ~450MB → LLD OOM/crash
+3. **`cached_library_state` scope limited**: Only covers bootstrap file's imports (core::str, core::option, core::fmt). Tests using core::char, core::encoding, std::file etc. fail with undefined symbols
+4. **Per-file QueryContext overhead**: Each `codegen_unit()` takes ~250ms even with incremental GREEN cache. 1483 files × 250ms = ~370s irreducible
 
-- [ ] 2.1 Design mega-suite grouping: `core_all`, `std_all`, `compiler_all` (or finer: `core_str_all`, `core_iter_all`)
-- [ ] 2.2 Detect and resolve symbol collisions between test files in same mega-suite
-- [ ] 2.3 Implement mega-dispatcher IR generation: single dispatcher referencing all `tml_test_N` across files
-- [ ] 2.4 Handle test index remapping: global index across all files in mega-suite
-- [ ] 2.5 Compile all test `.obj` files + mega-dispatcher + stdlib `.obj` → single `.exe` per module group
-- [ ] 2.6 Update coordinator to launch 3-5 mega-binaries instead of 206 suite binaries
-- [ ] 2.7 Update cache system: suite-level cache → mega-suite-level cache with per-file invalidation
-- [ ] 2.8 Handle compiler/tests separately (forced max_per_suite=1 due to symbol collisions)
-- [ ] 2.9 Verify: all 1452 tests pass with mega-binary architecture
-- [ ] 2.10 Benchmark: measure link time reduction (206 links → 3-5 links)
+### What Works
+- Per-suite compilation path (original) — no regressions
+- `max_per_suite=50` for full suite runs — reduces suites from 350 → 268
+- Incremental cache for codegen results
+- Runtime archive pre-build (shared across suites)
 
-## 3. Incremental Object Cache
+## 1. Stdlib Pre-Compiled Object Cache — BLOCKED
 
-- [ ] 3.1 Implement per-file `.obj` cache keyed by IR fingerprint (already partially exists in testing_compile.cpp)
-- [ ] 3.2 Promote existing `obj_cache/` from per-suite to global shared cache
-- [ ] 3.3 On incremental run: hash each test file → check obj cache → skip LLVM backend for unchanged files
-- [ ] 3.4 Incremental re-link: only re-link mega-binary when any constituent `.obj` changed
-- [ ] 3.5 Implement dependency tracking: test file imports → if imported module changed, invalidate test `.obj`
-- [ ] 3.6 Verify: change 1 test file → only that file recompiles, rest served from cache
-- [ ] 3.7 Benchmark: incremental run time (target: <5s for single file change)
+- [x] 1.1 `build_stdlib_object()` function with `library_ir_only=true`
+- [x] 1.2 `capture_library_state()` for codegen state
+- [x] 1.3 Cache stdlib .obj with mtime fingerprint
+- [x] 1.4 `cached_library_state` in QueryOptions
+- [x] 1.5 `provide_codegen_unit()` passthrough to LLVMIRGen
+- [x] 1.6 `emit_referenced_library_declarations()` fallback to functions_ map
+- [ ] 1.7 Fix `library_decls_only=true` to declare ALL library functions (not just bootstrap imports)
+- [ ] 1.8 Fix comprehensive stdlib .obj build (287 modules hangs — needs incremental/batched approach)
+- [ ] 1.9 Verify all 1483 tests pass with library_decls_only=true + stdlib .obj
 
-## 4. In-Process Execution Mode
+## 2. Suite Aggregation (Mega-Binary) — IMPLEMENTED, BLOCKED ON 1.7
 
-- [ ] 4.1 Add `--in-process` CLI flag to TestConfig
-- [ ] 4.2 Compile test mega-binary as shared library (.dll/.so) instead of .exe
-- [ ] 4.3 Implement test DLL loader: dlopen/LoadLibrary → resolve `run_all_tests` symbol → call
-- [ ] 4.4 Implement crash isolation: SEH handler (Windows) / sigaction+siglongjmp (Unix) per test
-- [ ] 4.5 Implement output capture: redirect stdout/stderr per test for NDJSON-compatible reporting
-- [ ] 4.6 Fallback: on crash, re-run remaining tests via subprocess mode
-- [ ] 4.7 Verify: all 1452 tests pass in-process mode
-- [ ] 4.8 Benchmark: measure subprocess overhead elimination
+- [x] 2.1 `compile_unified_binary()` with parallel 4-thread codegen
+- [x] 2.2 `UnifiedTestMapping` for global index → suite/test mapping
+- [x] 2.3 Mega-dispatcher generation (reuses existing infrastructure)
+- [x] 2.4 Coordinator mega-binary execution with NDJSON std::visit parsing
+- [x] 2.5 `max_per_suite=50` for full suite runs (reduces link count)
+- [ ] 2.6 Fix LLD link: needs library_decls_only=true (fix 1.7 first)
+- [ ] 2.7 Verify all tests pass in mega-binary mode
+- [ ] 2.8 Benchmark vs per-suite baseline
 
-## 5. Unified Test Binary (Zig Model)
+## 3-9. Remaining phases — pending Phase 1-2 completion
 
-- [ ] 5.1 Compile ALL test files (1452) + stdlib into single compilation unit
-- [ ] 5.2 Resolve all cross-file symbol collisions (module-scoped globals, duplicate type impls)
-- [ ] 5.3 Generate unified dispatcher IR with 1452-entry test table
-- [ ] 5.4 Single link step: all `.obj` + stdlib `.obj` + runtime → one `.exe`
-- [ ] 5.5 Implement test selection: `--filter=core/str` runs subset without recompilation
-- [ ] 5.6 Implement parallel test execution within single binary (thread pool + catch per test)
-- [ ] 5.7 Implement crash-resilient execution: SEH/signal per test, skip crashed, continue remaining
-- [ ] 5.8 Update cache: single binary cache invalidated by any source change, but obj cache still works per-file
-- [ ] 5.9 Verify: all 1452 tests pass in unified binary
-- [ ] 5.10 Benchmark: target <30s full suite, <5s incremental
+(See previous version for full phase list)
 
-## 6. Optional Native Backend (Future/Deferred)
+## Files Modified
 
-- [ ] 6.1 Research: evaluate Cranelift, custom x86 emitter, or MIR interpreter for debug test builds
-- [ ] 6.2 Implement lightweight IR → native code path (skip LLVM for test builds)
-- [ ] 6.3 Integrate with unified test binary pipeline
-- [ ] 6.4 Benchmark: target <5s full suite compile+run
+| File | Changes |
+|------|---------|
+| `compiler/include/query/query_context.hpp` | Added `cached_library_state`, `library_decls_only` to QueryOptions |
+| `compiler/src/query/query_core.cpp` | Pass cached state to AST codegen path |
+| `compiler/src/testing/testing_compile.cpp` | `build_stdlib_object()`, `compile_unified_binary()`, globals |
+| `compiler/include/testing/testing_compile.hpp` | `UnifiedTestMapping`, `compile_unified_binary()` declaration |
+| `compiler/src/testing/testing_coordinator.cpp` | `max_per_suite=50` for full runs |
+| `compiler/src/codegen/llvm/core/runtime_modules.cpp` | `emit_referenced_library_declarations()` fallback to functions_ |
+| `compiler/include/codegen/llvm/llvm_ir_gen.hpp` | Reference only (existing infrastructure) |
+
+## Next Steps (Priority Order)
+
+1. **Fix comprehensive stdlib .obj** — batch the 287 modules into groups of 20-30 and build partial stdlib .obj files, or find why the full pass hangs
+2. **Fix `library_decls_only` declarations** — ensure all lazy functions get declare stubs
+3. **Test mega-binary end-to-end** — with fixed stdlib .obj + declarations
+4. **Benchmark** — compare total time: per-suite (current) vs mega-binary (new)

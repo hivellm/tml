@@ -709,6 +709,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
             // at link time.
             llvm_gen_options.force_internal_linkage = true;
         }
+        // Pre-compiled stdlib: skip emit_module_pure_tml_functions() and use
+        // declarations only. The full definitions come from a pre-compiled .obj.
+        if (ctx.options().cached_library_state) {
+            llvm_gen_options.cached_library_state = ctx.options().cached_library_state;
+            llvm_gen_options.library_decls_only = ctx.options().library_decls_only;
+        }
 
         codegen::LLVMIRGen llvm_gen(*tc.env, llvm_gen_options);
         auto gen_result = llvm_gen.generate(*parsed.module);

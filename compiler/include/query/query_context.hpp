@@ -26,6 +26,10 @@
 #include <type_traits>
 #include <unordered_map>
 
+namespace tml::codegen {
+struct CodegenLibraryState;
+} // namespace tml::codegen
+
 namespace tml::query {
 
 /// Options passed to QueryContext from the build system.
@@ -59,6 +63,15 @@ struct QueryOptions {
     // Default: true (standalone executable). Set to false for v3 test suites.
     bool generate_exe_main = true;
     int test_entry_index = -1; // -1 = tml_test_entry, >=0 = tml_test_N
+
+    /// Pre-compiled stdlib state. When set, the AST codegen path uses this
+    /// to skip emit_module_pure_tml_functions() and emits only declarations.
+    /// The stdlib definitions come from a pre-compiled .obj linked at link time.
+    std::shared_ptr<const codegen::CodegenLibraryState> cached_library_state;
+
+    /// When true AND cached_library_state is set, emit only `declare` stubs
+    /// for library functions (definitions come from pre-compiled stdlib .obj).
+    bool library_decls_only = false;
 };
 
 /// Central query context for the compilation session.

@@ -19,6 +19,7 @@ TML_MODULE("test")
 #include "cli/builder/builder_internal.hpp"
 #include "cli/builder/compiler_setup.hpp"
 #include "cli/builder/object_compiler.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
 #include "query/query_context.hpp"
@@ -105,6 +106,14 @@ static std::string g_runtime_archive_path;
 /// Used to identify which objects from get_runtime_objects() are already in the archive
 /// vs. conditional objects (file.obj, glob.obj, etc.) that must be linked separately.
 static std::set<std::string> g_archive_obj_stems;
+
+/// Pre-compiled stdlib object path. When non-empty, compile_suite() passes the
+/// cached library state to QueryContext so AST codegen skips emit_module_pure_tml_functions().
+static std::string g_stdlib_obj_path;
+
+/// Captured library codegen state from the stdlib pre-compilation pass.
+/// Shared across all compile_suite() workers to skip per-suite stdlib IR generation.
+static std::shared_ptr<const codegen::CodegenLibraryState> g_stdlib_codegen_state;
 
 /// LLVM fatal error → C++ exception instead of exit(1)
 struct LlvmFatalException : std::runtime_error {
@@ -319,6 +328,205 @@ static std::string build_runtime_archive(const CompileConfig& config) {
 }
 
 // ============================================================================
+// Stdlib pre-compiled object cache
+// ============================================================================
+
+/// Build a pre-compiled stdlib object containing all TML library function
+/// definitions. This runs the AST codegen path with library_ir_only=true
+/// on a minimal test file, then compiles the resulting IR to a .obj file.
+/// The captured CodegenLibraryState is stored globally so compile_suite()
+/// workers can skip emit_module_pure_tml_functions() entirely.
+///
+/// Returns the path to the cached .obj file, or empty string on failure.
+static std::string build_stdlib_object(const CompileConfig& config) {
+    init_compile_env();
+
+    fs::path cache_dir = fs::absolute(
+        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / ".test-cache");
+    fs::create_directories(cache_dir);
+
+    // Cache key includes coverage mode (coverage instruments functions differently)
+    std::string suffix = config.coverage ? "_cov" : "";
+    fs::path obj_path = cache_dir / ("stdlib_precompiled" + suffix + ".obj");
+
+    // Check if cached .obj is up-to-date: newer than all lib/ .meta files and compiler binary
+    bool cache_valid = false;
+    if (fs::exists(obj_path)) {
+        auto obj_time = fs::last_write_time(obj_path);
+        cache_valid = true;
+
+        // Check all library .meta files
+        for (const auto& lib_dir : {"lib/core/src", "lib/std/src", "lib/test/src"}) {
+            if (!fs::exists(lib_dir))
+                continue;
+            for (const auto& entry : fs::recursive_directory_iterator(lib_dir)) {
+                if (entry.is_regular_file()) {
+                    auto ext = entry.path().extension().string();
+                    if (ext == ".meta" || ext == ".tml") {
+                        if (entry.last_write_time() > obj_time) {
+                            cache_valid = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!cache_valid)
+                break;
+        }
+
+        // Check compiler binary
+        if (cache_valid) {
+            auto exe_path = fs::path("build") /
+                            (config.optimization_level > 0 ? "release" : "debug") / "bin" /
+                            "tml.exe";
+            if (fs::exists(exe_path) && fs::last_write_time(exe_path) > obj_time) {
+                cache_valid = false;
+            }
+        }
+    }
+
+    if (cache_valid) {
+        // We still need the CodegenLibraryState even with a cached .obj.
+        // We have to regenerate it (can't serialize/deserialize easily).
+        // But this is fast compared to compiling to .obj.
+        TML_LOG_INFO("test", "Stdlib .obj is up-to-date, regenerating codegen state...");
+    } else {
+        TML_LOG_INFO("test", "Building pre-compiled stdlib object...");
+    }
+
+    auto start = Clock::now();
+
+    // Create a minimal test file that imports nothing specific.
+    // The codegen path will pick up all registered library modules via
+    // emit_module_pure_tml_functions() when library_ir_only=false.
+    // We need a real test file to trigger the AST codegen path.
+    // Use the first available test file's parse/typecheck environment.
+
+    // Set up QueryContext to do a library-only codegen pass.
+    // We compile a minimal synthetic module — the important thing is that
+    // the TypeEnv has all library modules registered.
+    query::QueryOptions qopts;
+    qopts.verbose = config.verbose;
+    qopts.coverage = config.coverage;
+    qopts.optimization_level = config.optimization_level;
+    qopts.generate_exe_main = false;
+    qopts.incremental = false; // Don't pollute incremental cache
+
+    // Find a representative test file to bootstrap the TypeEnv with all library modules.
+    // Any test file that imports core modules will work — the library_ir_only mode
+    // processes ALL registered library modules regardless of what the test imports.
+    std::string bootstrap_file;
+    for (const auto& dir : {"lib/core/tests/str", "lib/core/tests/option", "lib/core/tests/fmt"}) {
+        if (!fs::exists(dir))
+            continue;
+        for (const auto& entry : fs::directory_iterator(dir)) {
+            if (entry.path().extension() == ".tml") {
+                bootstrap_file = entry.path().string();
+                break;
+            }
+        }
+        if (!bootstrap_file.empty())
+            break;
+    }
+
+    if (bootstrap_file.empty()) {
+        TML_LOG_ERROR("test", "No test file found to bootstrap stdlib codegen");
+        return "";
+    }
+
+    auto source_dir = fs::path(bootstrap_file).parent_path();
+    qopts.source_directory = source_dir.string();
+
+    query::QueryContext qctx(qopts);
+
+    // Parse and typecheck the bootstrap file to populate library module registry
+    std::string module_name = fs::path(bootstrap_file).stem().string();
+    auto tc = qctx.typecheck_module(bootstrap_file, module_name);
+    if (!tc.success) {
+        TML_LOG_ERROR("test", "Failed to typecheck bootstrap file for stdlib codegen: "
+                                  << (tc.errors.empty() ? "unknown" : tc.errors[0]));
+        return "";
+    }
+
+    auto parsed = qctx.parse_module(bootstrap_file, module_name);
+    if (!parsed.success || !parsed.module) {
+        TML_LOG_ERROR("test", "Failed to parse bootstrap file for stdlib codegen");
+        return "";
+    }
+
+    // NOTE: We only use the bootstrap file's imports for the cached_library_state.
+    // This captures the core library modules (str, fmt, option, result, iter, etc.)
+    // which is sufficient for the fast path. Per-file codegen adds missing modules
+    // on-demand via emit_module_pure_tml_functions() (which is fast with cached state).
+
+    // Generate library IR using the AST codegen path with library_ir_only=true.
+    codegen::LLVMGenOptions lib_opts;
+    lib_opts.coverage_enabled = config.coverage;
+    lib_opts.library_ir_only = true;
+    lib_opts.lazy_library_defs = true;
+    lib_opts.emit_comments = config.verbose;
+#ifdef _WIN32
+    lib_opts.target_triple = "x86_64-pc-windows-msvc";
+#else
+    lib_opts.target_triple = "x86_64-unknown-linux-gnu";
+#endif
+
+    codegen::LLVMIRGen lib_gen(*tc.env, lib_opts);
+    auto lib_result = lib_gen.generate(*parsed.module);
+
+    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(lib_result)) {
+        const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(lib_result);
+        TML_LOG_ERROR(
+            "test", "Stdlib codegen failed: " << (errors.empty() ? "unknown" : errors[0].message));
+        return "";
+    }
+
+    std::string lib_ir = std::get<std::string>(lib_result);
+
+    // Capture the library state for workers to use
+    // Extract preamble headers (everything before first "define" or "declare" from library funcs)
+    std::string preamble;
+    auto first_define = lib_ir.find("\ndefine ");
+    if (first_define != std::string::npos) {
+        preamble = lib_ir.substr(0, first_define);
+    }
+    g_stdlib_codegen_state = lib_gen.capture_library_state(lib_ir, preamble);
+
+    auto state_time = Clock::now();
+    auto state_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(state_time - start).count();
+    TML_LOG_INFO("test", "Stdlib codegen state captured in " << (state_us / 1000) << "ms"
+                                                             << " (IR: " << lib_ir.size() / 1024
+                                                             << "KB)");
+
+    if (cache_valid) {
+        // .obj is up-to-date, we only needed the codegen state
+        return obj_path.string();
+    }
+
+    // Compile the library IR to a .obj file
+    cli::ObjectCompileOptions obj_opts;
+    obj_opts.optimization_level = config.optimization_level;
+    obj_opts.verbose = config.verbose;
+    obj_opts.coverage = config.coverage;
+
+    auto obj_result = cli::compile_ir_string_to_object(lib_ir, obj_path, g_clang_path, obj_opts);
+
+    if (!obj_result.success) {
+        TML_LOG_ERROR("test",
+                      "Failed to compile stdlib IR to object: " << obj_result.error_message);
+        return "";
+    }
+
+    auto end = Clock::now();
+    auto total_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    TML_LOG_INFO("test", "Pre-compiled stdlib object built in " << (total_us / 1000)
+                                                                << "ms: " << obj_path.string());
+
+    return obj_path.string();
+}
+
+// ============================================================================
 // Single suite compilation
 // ============================================================================
 
@@ -381,6 +589,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             // differentiates cache entries per file within a suite.
             qopts.incremental = true;
             qopts.generate_exe_main = false;
+            // NOTE: cached_library_state NOT used in per-suite mode.
+            // The cached state only covers the bootstrap file's imports (core::str, etc.)
+            // but test files may import any module. Per-suite runs the full
+            // emit_module_pure_tml_functions() per file to discover all imports.
             qopts.test_entry_index = static_cast<int>(i);
 
             auto source_dir = fs::path(file_path).parent_path();
@@ -701,6 +913,9 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
     }
 
+    // No stdlib .obj in per-suite mode — each test .obj contains its own library
+    // definitions via the full emit_module_pure_tml_functions() path.
+
     // Link to executable — remove stale exe to avoid "permission denied"
     auto exe_path = cache_dir / (suite.name + ".exe");
     std::error_code ec;
@@ -944,6 +1159,11 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
+    // NOTE: cached_library_state is NOT used in per-suite mode because the bootstrap
+    // file's imports don't cover all modules tests might need. Each suite runs the
+    // full emit_module_pure_tml_functions() which correctly discovers all imports.
+    // The stdlib .obj and cached state are only used by compile_unified_binary().
+
     std::vector<CompileResult> results(suites.size());
 
     int num_threads = config.num_threads;
@@ -990,6 +1210,472 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
     }
 
     return results;
+}
+
+// ============================================================================
+// Unified binary compilation (Zig model)
+// ============================================================================
+
+CompileResult compile_unified_binary(const std::vector<Suite>& suites, const CompileConfig& config,
+                                     std::atomic<bool>& should_stop,
+                                     std::vector<UnifiedTestMapping>& out_mapping) {
+    CompileResult result;
+    auto start = Clock::now();
+
+    init_compile_env();
+
+    auto cache_dir = get_test_exe_cache_dir();
+    ensure_runtime_dlls(cache_dir);
+    auto deps_dir = cli::build::get_deps_cache_dir();
+    std::string deps_cache = to_fwd_slashes(deps_dir.string());
+    bool verbose = config.verbose;
+
+    // ---- Step 1: Build runtime archive (C runtime .obj files) ----
+    g_runtime_archive_path = build_runtime_archive(config);
+
+    // ---- Step 2: Build stdlib codegen state (for fast library state restoration) ----
+    // NOTE: We don't use the stdlib .obj in mega-binary mode (library_decls_only=false).
+    // Each test .obj gets full library defs with internal linkage.
+    // But we still capture codegen state to skip emit_module_pure_tml_functions() per file.
+    if (!g_stdlib_codegen_state) {
+        g_stdlib_obj_path = build_stdlib_object(config);
+    }
+    if (g_stdlib_codegen_state) {
+        TML_LOG_INFO("test", "[unified] Stdlib codegen state available (fast path enabled)");
+    } else {
+        TML_LOG_WARN("test", "[unified] No stdlib codegen state; per-file codegen will be slower");
+    }
+
+    // ---- Step 3: Flatten suites into global test list + build mapping ----
+    out_mapping.clear();
+    int global_index = 0;
+    for (int si = 0; si < static_cast<int>(suites.size()); ++si) {
+        for (int ti = 0; ti < static_cast<int>(suites[si].tests.size()); ++ti) {
+            UnifiedTestMapping m;
+            m.global_index = global_index;
+            m.suite_index = si;
+            m.test_index_in_suite = ti;
+            m.test_name = suites[si].tests[ti].test_name;
+            m.file_path = suites[si].tests[ti].file_path;
+            out_mapping.push_back(m);
+            ++global_index;
+        }
+    }
+    int total_files = global_index;
+    TML_LOG_INFO("test", "[unified] " << total_files << " test files across " << suites.size()
+                                      << " suites");
+
+    // ---- Step 4: Per-file codegen (parallel, using cached library state) ----
+    struct FileResult {
+        bool success = false;
+        fs::path object_file;
+        std::string error_message;
+        std::string file_path;
+        std::set<std::string> link_libs;
+        std::shared_ptr<types::ModuleRegistry> registry;
+    };
+
+    std::vector<FileResult> file_results(total_files);
+    std::atomic<int> next_file{0};
+    std::atomic<int> compiled_count{0};
+    std::atomic<int> error_count{0};
+    // Use up to 4 parallel codegen threads (each gets its own QueryContext)
+    int num_codegen_threads = std::max(1, std::min(4, ThreadBudget::instance().max_threads()));
+    TML_LOG_INFO("test", "[unified] Using " << num_codegen_threads << " codegen threads");
+
+    auto codegen_worker = [&]() {
+        while (!should_stop.load(std::memory_order_relaxed)) {
+            int i = next_file.fetch_add(1, std::memory_order_relaxed);
+            if (i >= total_files)
+                break;
+
+            const auto& m = out_mapping[i];
+            auto file_path = m.file_path;
+            auto module_name = m.test_name;
+            auto& fr = file_results[i];
+            fr.file_path = file_path;
+
+            // Setup QueryOptions with cached library state
+            query::QueryOptions qopts;
+            qopts.verbose = verbose;
+            qopts.coverage = config.coverage;
+            qopts.optimization_level = config.optimization_level;
+            qopts.incremental = true;
+            qopts.generate_exe_main = false;
+            qopts.test_entry_index = i;
+            qopts.cached_library_state = g_stdlib_codegen_state;
+            // library_decls_only=true: emit only declare stubs for library functions.
+            // Definitions come from the pre-compiled stdlib .obj.
+            // This keeps each test .obj tiny (~5-60KB) so LLD can handle 500+ objects.
+            qopts.library_decls_only = true;
+
+            auto source_dir = fs::path(file_path).parent_path();
+            if (source_dir.empty())
+                source_dir = fs::current_path();
+            qopts.source_directory = source_dir.string();
+
+            query::QueryContext qctx(qopts);
+            if (qopts.incremental) {
+                auto build_dir = cli::build::get_build_dir(false);
+                qctx.load_incremental_cache(build_dir);
+            }
+
+            // Run codegen (no timeout thread — rely on incremental cache for speed)
+            auto codegen_result = qctx.codegen_unit(file_path, module_name);
+
+            if (!codegen_result.success) {
+                std::string err = codegen_result.error_message;
+                if (err.empty()) {
+                    auto tc_r = qctx.cache().lookup<query::TypecheckResult>(
+                        query::TypecheckModuleKey{file_path, module_name});
+                    if (tc_r && !tc_r->success && !tc_r->errors.empty())
+                        err = tc_r->errors[0];
+                    auto pr = qctx.cache().lookup<query::ParseModuleResult>(
+                        query::ParseModuleKey{file_path, module_name});
+                    if (pr && !pr->success && !pr->errors.empty())
+                        err = pr->errors[0];
+                }
+                fr.error_message = err;
+                error_count.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            }
+
+            // Save incremental cache
+            if (qopts.incremental) {
+                std::lock_guard<std::mutex> lock(g_incr_cache_mutex);
+                auto build_dir = cli::build::get_build_dir(false);
+                qctx.save_incremental_cache(build_dir);
+            }
+
+            // Compile IR to .obj (with object cache)
+            auto obj_path =
+                cache_dir / ("unified_test_" + std::to_string(i) + cli::get_object_extension());
+
+            if (codegen_result.has_object_file()) {
+                fr.object_file = codegen_result.object_file;
+                fr.success = true;
+            } else {
+                auto obj_cache_dir = cache_dir / "obj_cache";
+                auto ir_fp = query::fingerprint_bytes(codegen_result.llvm_ir.data(),
+                                                      codegen_result.llvm_ir.size());
+                auto cached_obj =
+                    obj_cache_dir / (ir_fp.to_hex().substr(0, 16) + cli::get_object_extension());
+                bool used_cache = false;
+                if (fs::exists(cached_obj)) {
+                    std::error_code ec;
+                    fs::copy_file(cached_obj, obj_path, fs::copy_options::overwrite_existing, ec);
+                    if (!ec) {
+                        fr.object_file = obj_path;
+                        fr.success = true;
+                        used_cache = true;
+                    }
+                }
+                if (!used_cache) {
+                    cli::ObjectCompileOptions obj_opts;
+                    obj_opts.optimization_level = config.optimization_level;
+                    obj_opts.verbose = verbose;
+                    obj_opts.coverage = config.coverage;
+
+                    auto obj_result = cli::compile_ir_string_to_object(
+                        codegen_result.llvm_ir, obj_path, g_clang_path, obj_opts);
+                    if (!obj_result.success) {
+                        fr.error_message = obj_result.error_message;
+                        error_count.fetch_add(1, std::memory_order_relaxed);
+                        continue;
+                    }
+                    fr.object_file = obj_result.object_file;
+                    fr.success = true;
+                    std::error_code ec;
+                    fs::create_directories(obj_cache_dir, ec);
+                    fs::copy_file(obj_path, cached_obj, fs::copy_options::overwrite_existing, ec);
+                }
+            }
+
+            // Collect link libraries
+            fr.link_libs = codegen_result.link_libs;
+
+            // Extract registry
+            auto tc = qctx.cache().lookup<query::TypecheckResult>(
+                query::TypecheckModuleKey{file_path, module_name});
+            if (tc && tc->success && tc->registry) {
+                fr.registry = tc->registry;
+            }
+
+            int cc = compiled_count.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (cc % 200 == 0 || cc == total_files) {
+                TML_LOG_INFO("test", "[unified] Compiled " << cc << "/" << total_files << " files ("
+                                                           << error_count.load() << " errors)");
+            }
+        }
+    };
+
+    // Launch parallel codegen workers
+    {
+        std::vector<std::thread> threads;
+        threads.reserve(num_codegen_threads);
+        for (int t = 0; t < num_codegen_threads; ++t) {
+            threads.emplace_back(codegen_worker);
+        }
+        for (auto& t : threads) {
+            t.join();
+        }
+    }
+
+    // Collect results from parallel compilation
+    std::vector<fs::path> all_object_files;
+    std::set<std::string> all_link_libs;
+    auto master_registry = std::make_shared<types::ModuleRegistry>();
+
+    for (int i = 0; i < total_files; ++i) {
+        auto& fr = file_results[i];
+        if (fr.success) {
+            all_object_files.push_back(fr.object_file);
+            all_link_libs.insert(fr.link_libs.begin(), fr.link_libs.end());
+            if (fr.registry) {
+                for (const auto& [mod_path, mod_info] : fr.registry->get_all_modules()) {
+                    if (!master_registry->has_module(mod_path)) {
+                        master_registry->register_module(mod_path, mod_info);
+                    }
+                }
+            }
+        } else if (!fr.error_message.empty()) {
+            result.per_file_errors.push_back({fr.file_path, fr.error_message});
+        }
+    }
+
+    if (compiled_count == 0) {
+        result.error_message = "All files failed to compile";
+        auto end = Clock::now();
+        result.compile_time_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        return result;
+    }
+
+    // ---- Step 5: Generate mega-dispatcher ----
+    std::vector<DispatcherTestInfo> dispatcher_infos;
+    // Build dispatcher info only for files that compiled successfully
+    // We need to track which global indices succeeded
+    std::set<int> compiled_indices;
+    for (int i = 0; i < total_files; ++i) {
+        // Check if this file had an error
+        bool had_error = false;
+        for (const auto& fe : result.per_file_errors) {
+            if (fe.file_path == out_mapping[i].file_path) {
+                had_error = true;
+                break;
+            }
+        }
+        if (!had_error) {
+            compiled_indices.insert(i);
+            dispatcher_infos.push_back({out_mapping[i].test_name, out_mapping[i].file_path, i});
+        }
+    }
+
+    std::string dispatcher_ir = generate_ndjson_dispatcher_ir(dispatcher_infos, "tml_unified");
+    auto dispatcher_obj_path = cache_dir / ("unified_dispatcher" + cli::get_object_extension());
+    cli::ObjectCompileOptions disp_opts;
+    disp_opts.optimization_level = 0;
+    disp_opts.verbose = verbose;
+
+    auto disp_result = cli::compile_ir_string_to_object(dispatcher_ir, dispatcher_obj_path,
+                                                        g_clang_path, disp_opts);
+    if (!disp_result.success) {
+        result.error_message =
+            "Unified dispatcher compilation failed: " + disp_result.error_message;
+        auto end = Clock::now();
+        result.compile_time_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        return result;
+    }
+    all_object_files.push_back(fs::path(disp_result.object_file));
+
+    // ---- Step 6: Collect runtime objects ----
+    // Scan all test files for imports to build master registry (fallback)
+    if (master_registry->get_all_modules().empty()) {
+        static const std::pair<std::string, std::string> import_module_map[] = {
+            {"use std::zlib", "std::zlib"},     {"use std::json", "std::json"},
+            {"use std::search", "std::search"}, {"use std::profiler", "std::profiler"},
+            {"use std::crypto", "std::crypto"}, {"use std::file", "std::file"},
+            {"use std::glob", "std::glob"},     {"use std::net", "std::net"},
+            {"use std::os", "std::os"},         {"use std::sqlite", "std::sqlite"},
+        };
+        for (const auto& m : out_mapping) {
+            try {
+                std::ifstream file(m.file_path);
+                if (!file.is_open())
+                    continue;
+                std::string line;
+                int line_count = 0;
+                while (std::getline(file, line) && line_count < 30) {
+                    ++line_count;
+                    for (const auto& [import_prefix, mod_name] : import_module_map) {
+                        if (line.find(import_prefix) != std::string::npos &&
+                            !master_registry->has_module(mod_name)) {
+                            types::Module synth;
+                            synth.name = mod_name;
+                            master_registry->register_module(mod_name, synth);
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+    }
+
+    parser::Module empty_module;
+    auto runtime_objs = cli::build::get_runtime_objects(master_registry, empty_module, deps_cache,
+                                                        g_clang_path, verbose);
+
+    // Add runtime archive or individual objects
+    if (!g_runtime_archive_path.empty()) {
+        all_object_files.push_back(fs::path(g_runtime_archive_path));
+        for (const auto& obj : runtime_objs) {
+            if (obj.extension() == ".lib" || obj.extension() == ".a") {
+                all_object_files.push_back(obj);
+                continue;
+            }
+            auto stem = obj.stem().string();
+            if (g_archive_obj_stems.count(stem))
+                continue;
+            all_object_files.push_back(obj);
+        }
+    } else {
+        all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
+    }
+
+    // Add pre-compiled stdlib .obj (contains library function definitions).
+    // Test .obj files only have declare stubs (library_decls_only=true).
+    if (!g_stdlib_obj_path.empty()) {
+        all_object_files.push_back(fs::path(g_stdlib_obj_path));
+    }
+
+    // ---- Step 7: Link everything into one .exe ----
+    auto exe_path = cache_dir / "tml_unified.exe";
+    {
+        std::error_code ec;
+        fs::remove(exe_path, ec);
+    }
+
+    cli::LinkOptions link_opts;
+    link_opts.output_type = cli::LinkOptions::OutputType::Executable;
+    link_opts.verbose = verbose;
+    link_opts.coverage = config.coverage;
+    link_opts.force_subprocess_lld = true;
+
+    for (const auto& lib : all_link_libs) {
+        link_opts.link_flags.push_back(lib);
+    }
+
+#ifdef _WIN32
+    // Platform-specific linking (same as compile_suite but using master_registry)
+    if (master_registry->has_module("std::net") || master_registry->has_module("std::net::sys") ||
+        master_registry->has_module("std::net::tcp") ||
+        master_registry->has_module("std::net::udp")) {
+        link_opts.link_flags.push_back("-lws2_32");
+    }
+    if (master_registry->has_module("std::os")) {
+        link_opts.link_flags.push_back("-ladvapi32");
+        link_opts.link_flags.push_back("-luserenv");
+    }
+    {
+        bool uses_crypto = cli::build::has_crypto_modules(master_registry);
+        if (uses_crypto) {
+            auto openssl = cli::build::find_openssl();
+            if (openssl.found) {
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_opts.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_opts.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
+        }
+    }
+    {
+        bool uses_sqlite = false;
+        for (const auto& [path, _] : master_registry->get_all_modules()) {
+            if (path == "std::sqlite" || path.find("std::sqlite::") == 0) {
+                uses_sqlite = true;
+                break;
+            }
+        }
+        if (uses_sqlite) {
+            auto sqlite = cli::build::find_sqlite3();
+            if (sqlite.found) {
+                link_opts.link_flags.push_back(to_fwd_slashes(sqlite.lib_path.string()));
+            }
+        }
+    }
+    {
+        bool uses_search = false;
+        for (const auto& [path, _] : master_registry->get_all_modules()) {
+            if (path == "std::search" || path.find("std::search::") == 0) {
+                uses_search = true;
+                break;
+            }
+        }
+        if (uses_search) {
+            std::vector<std::string> search_paths = {"build/debug", "build/release"};
+            for (const auto& sp : search_paths) {
+                fs::path lib_path = fs::path(sp) / "tml_search_runtime.lib";
+                if (fs::exists(lib_path)) {
+                    all_object_files.push_back(fs::absolute(lib_path));
+                    auto lib_subdir = fs::path(sp) / "lib" / "tml_search.lib";
+                    if (fs::exists(lib_subdir)) {
+                        all_object_files.push_back(fs::absolute(lib_subdir));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    {
+        bool uses_zlib = false;
+        for (const auto& [path, _] : master_registry->get_all_modules()) {
+            if (path == "std::zlib" || path.find("std::zlib::") == 0) {
+                uses_zlib = true;
+                break;
+            }
+        }
+        if (uses_zlib) {
+            auto vcpkg_lib = fs::path("vcpkg_installed/x64-windows/lib");
+            if (fs::exists(vcpkg_lib / "zlib.lib")) {
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "zlib.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "zstd.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlidec.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlienc.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlicommon.lib").string()));
+            }
+        }
+    }
+    // Larger stack for unified binary (all tests share one stack)
+    link_opts.link_flags.push_back("/STACK:134217728");
+#endif
+
+    TML_LOG_INFO("test", "[unified] Linking " << all_object_files.size() << " objects...");
+    auto link_result = cli::link_objects(all_object_files, exe_path, g_clang_path, link_opts);
+
+    auto end = Clock::now();
+    result.compile_time_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    if (!link_result.success) {
+        result.error_message = "Unified binary linking failed: " + link_result.error_message;
+        return result;
+    }
+
+    result.success = true;
+    result.exe_path = link_result.output_file.string();
+    result.compiled_test_count = compiled_count;
+    TML_LOG_INFO("test", "[unified] Built " << result.exe_path << " with " << compiled_count
+                                            << " tests in " << (result.compile_time_us / 1000000)
+                                            << "s");
+
+    return result;
 }
 
 } // namespace tml::testing

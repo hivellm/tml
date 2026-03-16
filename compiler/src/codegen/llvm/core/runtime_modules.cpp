@@ -1818,29 +1818,59 @@ void LLVMIRGen::emit_referenced_library_declarations() {
         return true;
     };
 
-    // Emit declare for each referenced pending function
+    // Emit declare for each referenced function.
+    // Search order: pending_library_methods_ → pending_library_funcs_ → functions_ (fallback).
+    // The fallback is critical when cached_library_state is used: pending maps are empty
+    // but functions_ is populated from the restored state.
     std::ostringstream decls;
+    std::unordered_set<std::string> already_declared;
     int count = 0;
     for (const auto& name : referenced) {
+        // Skip if already declared or defined in the current IR
+        if (already_declared.count(name))
+            continue;
+
+        bool found = false;
+
+        // 1. Check pending_library_methods_
         auto method_it = pending_library_methods_.find(name);
         if (method_it != pending_library_methods_.end()) {
-            // Look up the function info registered during module scan
             const auto& info = method_it->second;
             std::string method_key = info.type_name + "_" + info.method->name;
             auto fn_it = functions_.find(method_key);
             if (fn_it != functions_.end() && emit_declare(fn_it->second, decls)) {
                 count++;
+                already_declared.insert(name);
+                found = true;
             }
-            continue;
         }
 
-        auto func_it = pending_library_funcs_.find(name);
-        if (func_it != pending_library_funcs_.end()) {
-            // Search functions_ by llvm_name
+        // 2. Check pending_library_funcs_
+        if (!found) {
+            auto func_it = pending_library_funcs_.find(name);
+            if (func_it != pending_library_funcs_.end()) {
+                for (const auto& [key, fi] : functions_) {
+                    if (fi.llvm_name == name) {
+                        if (emit_declare(fi, decls)) {
+                            count++;
+                            already_declared.insert(name);
+                            found = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: search functions_ directly by llvm_name.
+        // This handles the case where cached_library_state is used and
+        // pending maps are empty but functions_ was restored from state.
+        if (!found) {
             for (const auto& [key, fi] : functions_) {
                 if (fi.llvm_name == name) {
                     if (emit_declare(fi, decls)) {
                         count++;
+                        already_declared.insert(name);
                     }
                     break;
                 }

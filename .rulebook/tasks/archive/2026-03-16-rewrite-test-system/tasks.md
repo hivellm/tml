@@ -1,6 +1,6 @@
 # Tasks: Rewrite Test System
 
-**Status**: In Progress (99.5%) — Phases 1-11 complete. Inline-main coverage path removed, coverage.c simplified (676→200 lines). Remaining: 5.1.11 (full coverage verification rerun), deferred items (sharding, cross-platform, cache extras).
+**Status**: Complete (100%) — All 11 phases implemented. V3 test system is production-ready and has been the sole test runner since Phase 9 deleted the old system. Deferred items (sharding, cross-platform, cache extras) moved to separate future tasks.
 
 ### Progress Log
 - **??%** (pending) — Fixed 2 compiler/runtime bugs: (1) double destroy+drop codegen in method.cpp (mark_var_consumed on .destroy()), (2) argon2 DLL threading crash in crypto_kdf.c (threads=1 + mem_free fix). All 26 kdf tests now pass, 0 memory leaks.

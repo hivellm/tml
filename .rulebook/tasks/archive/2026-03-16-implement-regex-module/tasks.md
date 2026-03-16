@@ -1,6 +1,8 @@
 # Tasks: Implement Regex Module
 
-**Status**: Proposed (0%)
+**Status**: SUPERSEDED — Regex implemented as pure TML in `lib/std/src/regex.tml` (stdlib-essentials task). This task proposed a C++ NFA engine + C FFI wrapper, which violates the "Minimize C/C++ Code" mandate. The pure TML implementation uses Thompson's NFA and is already working with tests.
+
+**All phases below are obsolete. See `lib/std/src/regex.tml` and `lib/std/tests/regex/` for the actual implementation.**
 
 ## Phase 1: C++ Regex Engine Core
 
