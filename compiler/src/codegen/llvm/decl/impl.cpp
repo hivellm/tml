@@ -371,14 +371,20 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // This prevents duplicate generation from re-exports across modules.
     generated_functions_.insert(llvm_name);
 
-    // In library_decls_only mode (without lazy), emit a declare statement for library methods
-    // instead of the full definition. The implementations come from the shared library object.
+    // In library_decls_only mode (without lazy), emit declare for library methods
+    // that exist in the pre-compiled stdlib.obj. Methods NOT in the stdlib (e.g.,
+    // generic instantiations with test types) get full definitions.
     if (options_.library_decls_only) {
-        emit_line("");
-        emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
-        current_func_.clear();
-        current_impl_type_.clear();
-        return;
+        bool in_stdlib = options_.cached_library_state &&
+                         options_.cached_library_state->generated_functions.count(llvm_name);
+        if (in_stdlib) {
+            emit_line("");
+            emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+            current_func_.clear();
+            current_impl_type_.clear();
+            return;
+        }
+        // Fall through to emit full definition for methods not in stdlib.obj
     }
 
     emit_line("");

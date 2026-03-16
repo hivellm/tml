@@ -443,12 +443,17 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
     std::string func_type_str = ret_type + " (" + param_types_str + ")";
     functions_[method_key] = FuncInfo{func_name, func_type_str, ret_type, param_types};
 
-    // In library_decls_only mode, emit a declare statement for library class methods
-    // instead of the full definition. The implementations come from the shared library object.
+    // In library_decls_only mode, emit declare for library class methods that exist
+    // in the pre-compiled stdlib.obj. Methods NOT in the stdlib get full definitions.
     if (options_.library_decls_only && !current_module_prefix_.empty()) {
-        emit_line("");
-        emit_line("declare " + ret_type + " " + func_name + "(" + param_types_str + ")");
-        return;
+        bool in_stdlib = options_.cached_library_state &&
+                         options_.cached_library_state->generated_functions.count(func_name);
+        if (in_stdlib) {
+            emit_line("");
+            emit_line("declare " + ret_type + " " + func_name + "(" + param_types_str + ")");
+            return;
+        }
+        // Fall through to emit full definition for methods not in stdlib.obj
     }
 
     // Function signature - use internal linkage in suite mode to prevent duplicates

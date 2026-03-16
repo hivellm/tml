@@ -621,12 +621,18 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     }
 
     // In library_decls_only mode (without lazy), emit a declare statement for library functions
-    // instead of the full definition. The function info is already registered above.
-    // Library functions have a non-empty current_module_prefix_.
+    // that exist in the pre-compiled stdlib.obj. Functions NOT in the stdlib (e.g., generic
+    // instantiations with test-specific types) must be emitted as full definitions.
     if (options_.library_decls_only && !current_module_prefix_.empty()) {
-        emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
-        current_func_.clear();
-        return;
+        bool in_stdlib =
+            options_.cached_library_state &&
+            options_.cached_library_state->generated_functions.count("@" + func_llvm_name);
+        if (in_stdlib) {
+            emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+            current_func_.clear();
+            return;
+        }
+        // Fall through to emit full definition for functions not in stdlib.obj
     }
 
     // Create debug scope for function (if debug info enabled)
