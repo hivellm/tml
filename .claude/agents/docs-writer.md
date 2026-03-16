@@ -48,3 +48,13 @@ You are a docs-writer agent. Your primary responsibility is creating and maintai
 - Do NOT modify source code or test files
 - Preserve existing documentation structure and conventions
 - Use {{language}} code examples when demonstrating usage
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

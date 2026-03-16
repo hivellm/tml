@@ -1,0 +1,37 @@
+// Tests for Buffer::swap32 and Buffer::swap64
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_swap32() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // Write 0x01020304 in LE: stored as 04 03 02 01
+    buf.write_u32_le(0x01020304, 0)
+    buf.swap32()
+    // After swap32, 4-byte groups are reversed: 04 03 02 01 -> 01 02 03 04
+    let b0: I32 = buf.read_u8(0)
+    let b1: I32 = buf.read_u8(1)
+    let b2: I32 = buf.read_u8(2)
+    let b3: I32 = buf.read_u8(3)
+    assert_eq(b0, 0x01, "swap32 byte 0 should be 0x01")
+    assert_eq(b1, 0x02, "swap32 byte 1 should be 0x02")
+    assert_eq(b2, 0x03, "swap32 byte 2 should be 0x03")
+    assert_eq(b3, 0x04, "swap32 byte 3 should be 0x04")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_swap64() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    // Write 0x0102030405060708 in LE: stored as 08 07 06 05 04 03 02 01
+    buf.write_u64_le(0x0102030405060708, 0)
+    buf.swap64()
+    // After swap64, 8-byte groups reversed: 08 07 06 05 04 03 02 01 -> 01 02 03 04 05 06 07 08
+    let b0: I32 = buf.read_u8(0)
+    let b7: I32 = buf.read_u8(7)
+    assert_eq(b0, 0x01, "swap64 byte 0 should be 0x01")
+    assert_eq(b7, 0x08, "swap64 byte 7 should be 0x08")
+    buf.destroy()
+    return 0
+}

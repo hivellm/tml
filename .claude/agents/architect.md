@@ -60,3 +60,13 @@ Each architectural recommendation must include:
 - Scalability claims must be backed by capacity calculations, not assumptions
 - Cross-cutting concerns (auth, logging, tracing) decided at architecture level, not left to individual services
 - All ADRs require a stated trade-off; ADRs without acknowledged trade-offs are incomplete
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

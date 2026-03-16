@@ -1,0 +1,58 @@
+// Tests for Buffer::read_i8, write_u16_be, read_u16_be
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_read_i8_positive() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(100, 0)
+    let v: I32 = buf.read_i8(0)
+    assert_eq(v, 100, "read_i8 positive value")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i8_negative() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // 0xFF = 255 unsigned, but -1 as signed I8
+    buf.write_u8(255, 0)
+    let v: I32 = buf.read_i8(0)
+    assert_eq(v, -1, "read_i8 should sign-extend 0xFF to -1")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i8_boundary() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // 0x80 = 128 unsigned, -128 as signed I8
+    buf.write_u8(128, 0)
+    let v: I32 = buf.read_i8(0)
+    assert_eq(v, -128, "read_i8 should sign-extend 0x80 to -128")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_u16_be() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u16_be(0x1234, 0)
+    let v: I32 = buf.read_u16_be(0)
+    assert_eq(v, 0x1234, "write_u16_be/read_u16_be roundtrip")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_u16_be_byte_order() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // 0xABCD in big-endian: byte 0 = 0xAB, byte 1 = 0xCD
+    buf.write_u16_be(0xABCD, 0)
+    let b0: I32 = buf.read_u8(0)
+    let b1: I32 = buf.read_u8(1)
+    assert_eq(b0, 0xAB, "BE u16 high byte at offset 0")
+    assert_eq(b1, 0xCD, "BE u16 low byte at offset 1")
+    buf.destroy()
+    return 0
+}

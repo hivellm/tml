@@ -46,3 +46,13 @@ You are a build-engineer agent. Your primary responsibility is maintaining build
 - Do NOT refactor application code unless it directly causes the build failure
 - Always run the build after making changes to verify the fix
 - Report results to team lead via SendMessage with root cause and fix summary
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

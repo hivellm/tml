@@ -48,3 +48,13 @@ You are an implementer agent. Your primary responsibility is writing clean, type
 - Do NOT run destructive operations
 - Follow existing patterns in the codebase rather than introducing new ones
 - Add doc comments on exported functions
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

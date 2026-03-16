@@ -58,3 +58,13 @@ For each optimization, provide:
 - Do not introduce complexity that harms readability unless gain exceeds 20%
 - Cache invalidation logic must be documented and tested explicitly
 - Optimization PRs must include a reproducible benchmark in the repo
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

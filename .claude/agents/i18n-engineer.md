@@ -51,3 +51,13 @@ maxTurns: 15
 - Do not hardcode locale-specific assumptions (date order, currency symbol position)
 - Images containing text must have locale-specific variants or use text overlays
 - Translation files must be valid JSON/YAML; CI must reject malformed files
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

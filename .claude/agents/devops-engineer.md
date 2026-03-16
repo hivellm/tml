@@ -51,3 +51,13 @@ maxTurns: 25
 - Infrastructure changes require a plan review step before apply
 - Use `latest` tag only in development; production must use pinned versions
 - All Kubernetes workloads must declare resource limits
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

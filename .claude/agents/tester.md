@@ -55,3 +55,13 @@ Before reporting completion, verify:
 - Only create or modify test files
 - Do NOT modify production code -- report issues to the team lead
 - Use {{test_framework}} following existing test file naming and organization patterns
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

@@ -50,3 +50,13 @@ maxTurns: 20
 - All schema changes must be backward-compatible for at least one release cycle
 - Query optimization proposals must include EXPLAIN/EXPLAIN ANALYZE evidence
 - Avoid stored procedures for business logic; keep logic in {{language}} application code
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

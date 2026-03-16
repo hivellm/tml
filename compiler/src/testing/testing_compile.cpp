@@ -585,16 +585,12 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.verbose = verbose;
             qopts.coverage = config.coverage;
             qopts.optimization_level = config.optimization_level;
-            // Incremental IR cache: test_entry_index in CodegenUnitKey
-            // differentiates cache entries per file within a suite.
-            qopts.incremental = true;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
-            // NOTE: cached_library_state NOT used in per-suite mode.
-            // The cached state's generated_functions set interferes with
-            // tml_test_N entry generation (marks functions as already generated).
-            // Each suite runs full emit_module_pure_tml_functions() per file.
+            qopts.incremental = true;
+            // TODO(perf): cached_library_state causes off-by-1 in test_entry_index.
+            // Needs investigation before re-enabling.
 
             auto source_dir = fs::path(file_path).parent_path();
             if (source_dir.empty())
@@ -1159,9 +1155,7 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
-    // NOTE: cached_library_state is NOT used in per-suite mode because the
-    // cached state's generated_functions set interferes with tml_test_N entry
-    // generation. Each suite runs full emit_module_pure_tml_functions() per file.
+    // TODO(perf): cached_library_state disabled — off-by-1 bug in test_entry_index.
     // The stdlib .obj and cached state are only used by compile_unified_binary().
 
     std::vector<CompileResult> results(suites.size());

@@ -52,3 +52,13 @@ maxTurns: 15
 - Every critical finding must include a concrete, implementable remediation
 - Validate findings against actual user task flows, not isolated components
 - Prioritize findings by user impact, not implementation effort
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

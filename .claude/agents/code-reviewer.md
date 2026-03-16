@@ -57,3 +57,13 @@ For each finding, include:
 - Distinguish blockers (must fix) from suggestions (nice to have)
 - Reference specific lines and files in feedback
 - Report findings to team lead via SendMessage
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

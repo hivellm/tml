@@ -51,3 +51,13 @@ maxTurns: 25
 - Framework upgrades require full test suite passing before merge
 - Data migrations must process in batches to avoid locking production tables
 - Document estimated duration and row count for every data migration step
+
+
+## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
+
+**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
+
+1. Find the task that corresponds to your work
+2. Mark completed items with `- [x]`
+3. Add any new findings or blockers as new items
+4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions
