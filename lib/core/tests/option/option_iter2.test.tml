@@ -1,0 +1,32 @@
+// Retesting MaybeIter::next — was blocked, testing if now fixed
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_iter_just_value() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    let mut it = x.iter()
+    let first: Maybe[I32] = it.next()
+    assert(first.is_just(), "first next() on Just should return Just")
+    assert_eq(first.unwrap(), 42, "value should be 42")
+    return 0
+}
+
+@test
+func test_maybe_iter_exhausted() -> I32 {
+    let x: Maybe[I32] = Just(10)
+    let mut it = x.iter()
+    let first: Maybe[I32] = it.next()
+    assert(first.is_just(), "first call should yield value")
+    let second: Maybe[I32] = it.next()
+    assert(second.is_nothing(), "second call should be exhausted")
+    return 0
+}
+
+@test
+func test_maybe_iter_nothing_value() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let mut it = x.iter()
+    let first: Maybe[I32] = it.next()
+    assert(first.is_nothing(), "iter on Nothing should yield nothing")
+    return 0
+}

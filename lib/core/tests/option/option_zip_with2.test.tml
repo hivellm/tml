@@ -1,0 +1,30 @@
+// Tests for Maybe::zip_with — previously blocked by tuple struct codegen bug
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_zip_with_both_just() -> I32 {
+    let x: Maybe[I32] = Just(10)
+    let y: Maybe[I32] = Just(3)
+    let r: Maybe[I32] = x.zip_with(y, do(a, b) a + b)
+    assert(r.is_just(), "zip_with on two Just values should return Just")
+    assert_eq(r.unwrap(), 13, "zip_with should apply function to values")
+    return 0
+}
+
+@test
+func test_maybe_zip_with_first_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(5)
+    let r: Maybe[I32] = x.zip_with(y, do(a, b) a + b)
+    assert(r.is_nothing(), "zip_with with first Nothing should return Nothing")
+    return 0
+}
+
+@test
+func test_maybe_zip_with_second_nothing() -> I32 {
+    let x: Maybe[I32] = Just(7)
+    let y: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.zip_with(y, do(a, b) a * b)
+    assert(r.is_nothing(), "zip_with with second Nothing should return Nothing")
+    return 0
+}

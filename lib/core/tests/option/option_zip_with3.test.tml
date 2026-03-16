@@ -1,0 +1,11 @@
+// Additional zip_with tests — both Nothing case
+use test::{assert}
+
+@test
+func test_maybe_zip_with_both_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.zip_with(y, do(a, b) a + b)
+    assert(r.is_nothing(), "zip_with with both Nothing should return Nothing")
+    return 0
+}

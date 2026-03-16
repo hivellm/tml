@@ -1,0 +1,14 @@
+// Testing Maybe::transpose — was blocked by nested generic type layout mismatch
+// Testing if now fixed after compiler improvements
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_transpose_just_ok() -> I32 {
+    let x: Maybe[Outcome[I32, Str]] = Just(Ok(42))
+    let r: Outcome[Maybe[I32], Str] = x.transpose()
+    assert(r.is_ok(), "transpose Just(Ok(42)) should be Ok")
+    let inner: Maybe[I32] = r.unwrap()
+    assert(inner.is_just(), "inner should be Just")
+    assert_eq(inner.unwrap(), 42, "inner value should be 42")
+    return 0
+}

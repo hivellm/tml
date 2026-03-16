@@ -1,0 +1,32 @@
+// Tests for RefCell::try_borrow and try_borrow_mut
+// Previously blocked by nullable-ptr optimization codegen bug
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_try_borrow_success() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(42)
+    let r = cell.try_borrow()
+    assert(r.is_just(), "try_borrow on unused cell should return Just")
+    return 0
+}
+
+@test
+func test_try_borrow_reads_value() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(99)
+    let r = cell.try_borrow()
+    assert(r.is_just(), "try_borrow should succeed")
+    let borrow = r.unwrap()
+    let v: ref I32 = borrow.get()
+    assert_eq(*v, 99, "try_borrow should give access to cell value")
+    return 0
+}
+
+@test
+func test_try_borrow_fails_when_writing() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(10)
+    let _mut_borrow = cell.borrow_mut()
+    let r = cell.try_borrow()
+    assert(r.is_nothing(), "try_borrow should fail when cell is mutably borrowed")
+    return 0
+}
