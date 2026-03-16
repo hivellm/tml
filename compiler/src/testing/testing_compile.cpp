@@ -591,15 +591,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
-            // Use cached library state with library_decls_only=true.
-            // Test .obj gets declare stubs for stdlib functions (~50KB IR vs ~900KB).
-            // Full definitions are in the pre-compiled stdlib.obj at link time.
-            // Generic instantiations with test types are emitted as define
-            // (smart check in gen_func_decl/gen_impl_method).
-            if (g_stdlib_codegen_state) {
-                qopts.cached_library_state = g_stdlib_codegen_state;
-                qopts.library_decls_only = true;
-            }
+            // NOTE: cached_library_state NOT used in per-suite mode.
+            // The cached state's generated_functions set interferes with
+            // tml_test_N entry generation (marks functions as already generated).
+            // Each suite runs full emit_module_pure_tml_functions() per file.
 
             auto source_dir = fs::path(file_path).parent_path();
             if (source_dir.empty())
@@ -919,11 +914,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
     }
 
-    // Add pre-compiled stdlib .obj when using library_decls_only mode.
-    // Test .obj files only have declare stubs; definitions come from stdlib .obj.
-    if (!g_stdlib_obj_path.empty() && g_stdlib_codegen_state) {
-        all_object_files.push_back(fs::path(g_stdlib_obj_path));
-    }
+    // No stdlib .obj linked — each test .obj has full library defs (internal linkage).
 
     // Link to executable — remove stale exe to avoid "permission denied"
     auto exe_path = cache_dir / (suite.name + ".exe");
@@ -1168,17 +1159,10 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
-    // Pre-build stdlib codegen state once. This captures all library IR so each
-    // per-file codegen can skip emit_module_pure_tml_functions() entirely (~2-3s savings).
-    // The state is shared read-only across all worker threads.
-    // Skip for coverage mode: coverage instrumentation makes stdlib codegen very slow
-    // (~10min) and the per-suite path handles coverage correctly without caching.
-    if (!g_stdlib_codegen_state && !config.coverage) {
-        build_stdlib_object(config);
-    }
-    if (g_stdlib_codegen_state) {
-        TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
-    }
+    // NOTE: cached_library_state is NOT used in per-suite mode because the
+    // cached state's generated_functions set interferes with tml_test_N entry
+    // generation. Each suite runs full emit_module_pure_tml_functions() per file.
+    // The stdlib .obj and cached state are only used by compile_unified_binary().
 
     std::vector<CompileResult> results(suites.size());
 
