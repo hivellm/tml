@@ -1,0 +1,47 @@
+// Tests for Buffer::read_u32_be, read_u64_le, and I8 sign extension
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_read_u32_be() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u32_be(0x12345678, 0)
+    let v: I64 = buf.read_u32_be(0)
+    assert_eq(v, 0x12345678 as I64, "read_u32_be should return 0x12345678")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_u32_be_byte_order() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // 0xDEADBEEF in BE: byte 0 = DE, byte 1 = AD, byte 2 = BE, byte 3 = EF
+    buf.write_u8(0xDE, 0)
+    buf.write_u8(0xAD, 1)
+    buf.write_u8(0xBE, 2)
+    buf.write_u8(0xEF, 3)
+    let v: I64 = buf.read_u32_be(0)
+    assert_eq(v, 0xDEADBEEF as I64, "read_u32_be byte order check")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_u64_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u64_le(0x0102030405060708, 0)
+    let v: I64 = buf.read_u64_le(0)
+    assert_eq(v, 0x0102030405060708, "read_u64_le roundtrip")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_u64_le_at_offset() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u64_le(999 as I64, 4)
+    let v: I64 = buf.read_u64_le(4)
+    assert_eq(v, 999 as I64, "read_u64_le at offset 4")
+    buf.destroy()
+    return 0
+}

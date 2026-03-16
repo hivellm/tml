@@ -1,0 +1,88 @@
+// Tests for Buffer::compare, equals, copy_to
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_compare_equal() -> I32 {
+    let a: Buffer = Buffer.new(8)
+    let b: Buffer = Buffer.new(8)
+    a.write_u8(0x01, 0)
+    a.write_u8(0x02, 1)
+    b.write_u8(0x01, 0)
+    b.write_u8(0x02, 1)
+    let cmp: I32 = a.compare(ref b)
+    assert_eq(cmp, 0, "equal buffers should compare as 0")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_buffer_compare_less() -> I32 {
+    let a: Buffer = Buffer.new(8)
+    let b: Buffer = Buffer.new(8)
+    a.write_u8(0x01, 0)
+    b.write_u8(0x02, 0)
+    let cmp: I32 = a.compare(ref b)
+    assert(cmp < 0, "0x01 buffer should be less than 0x02 buffer")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_buffer_compare_greater() -> I32 {
+    let a: Buffer = Buffer.new(8)
+    let b: Buffer = Buffer.new(8)
+    a.write_u8(0xFF, 0)
+    b.write_u8(0x01, 0)
+    let cmp: I32 = a.compare(ref b)
+    assert(cmp > 0, "0xFF buffer should be greater than 0x01 buffer")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_buffer_equals_true() -> I32 {
+    let a: Buffer = Buffer.new(8)
+    let b: Buffer = Buffer.new(8)
+    a.write_u8(0xAB, 0)
+    a.write_u8(0xCD, 1)
+    b.write_u8(0xAB, 0)
+    b.write_u8(0xCD, 1)
+    assert(a.equals(ref b), "identical buffers should be equal")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_buffer_equals_false() -> I32 {
+    let a: Buffer = Buffer.new(8)
+    let b: Buffer = Buffer.new(8)
+    a.write_u8(0x01, 0)
+    b.write_u8(0x02, 0)
+    assert(not a.equals(ref b), "different buffers should not be equal")
+    a.destroy()
+    b.destroy()
+    return 0
+}
+
+@test
+func test_buffer_copy_to() -> I32 {
+    let src: Buffer = Buffer.new(8)
+    let dst: Buffer = Buffer.new(8)
+    src.write_u8(0x10, 0)
+    src.write_u8(0x20, 1)
+    src.write_u8(0x30, 2)
+    src.write_u8(0x40, 3)
+    // Copy bytes 1-3 from src to dst at offset 0
+    let copied: I64 = src.copy_to(ref dst, 0, 1, 3)
+    assert_eq(copied, 2 as I64, "copy_to should return number of bytes copied")
+    assert_eq(dst.read_u8(0), 0x20, "dst byte 0 should be src byte 1")
+    assert_eq(dst.read_u8(1), 0x30, "dst byte 1 should be src byte 2")
+    src.destroy()
+    dst.destroy()
+    return 0
+}
