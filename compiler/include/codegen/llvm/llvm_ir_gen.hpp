@@ -42,6 +42,7 @@
 
 #include <atomic>
 #include <deque>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -677,6 +678,12 @@ private:
 
     // External function declarations already emitted (for default implementations)
     std::set<std::string> declared_externals_;
+
+    // Late-discovered @extern declarations encountered during user-code generation.
+    // Keyed by symbol name; value is the full "declare ... @symbol(...)" IR text.
+    // These are emitted at module level (not inline) to avoid injecting declarations
+    // inside function bodies when using cached library state.
+    std::map<std::string, std::string> pending_late_extern_decls_;
 
     // Register an impl block for vtable generation
     void register_impl(const parser::ImplDecl* impl);

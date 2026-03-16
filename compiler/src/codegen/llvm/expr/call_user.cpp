@@ -162,12 +162,14 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             param_types_vec.push_back(pt);
         }
 
-        // Emit declare if not already declared
+        // Buffer declare for module-level emission (must not emit inline inside a function body,
+        // as that causes "expected instruction opcode" LLVM parse errors).
         if (declared_externals_.find(symbol_name) == declared_externals_.end()) {
             declared_externals_.insert(symbol_name);
-            emit_line("");
-            emit_line("; @extern (late-emitted) " + func_sig->name);
-            emit_line("declare " + ext_ret_type + " @" + symbol_name + "(" + param_types + ")");
+            std::string decl_text = "; @extern (late-emitted) " + func_sig->name + "\n" +
+                                    "declare " + ext_ret_type + " @" + symbol_name + "(" +
+                                    param_types + ")";
+            pending_late_extern_decls_[symbol_name] = std::move(decl_text);
         }
 
         // Register in functions_ map so future calls find it immediately

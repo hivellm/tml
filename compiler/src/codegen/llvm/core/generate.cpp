@@ -453,6 +453,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     nullable_maybe_types_.insert(k);
                 }
             }
+            // Pre-populate instantiation guards so require_struct_instantiation()
+            // and gen_enum_instantiation() return early without re-emitting type
+            // definitions already present in the cached library IR.
+            if (struct_instantiations_.find(k) == struct_instantiations_.end()) {
+                struct_instantiations_[k] = GenericInstantiation{"", {}, k, true};
+            }
+            if (enum_instantiations_.find(k) == enum_instantiations_.end()) {
+                enum_instantiations_[k] = GenericInstantiation{"", {}, k, true};
+            }
         }
         for (const auto& k : state.union_types) {
             union_types_.insert(k);
@@ -1453,6 +1462,17 @@ auto LLVMIRGen::generate(const parser::Module& module)
         output_ << type_defs;
     }
     emit_line("");
+
+    // 2b. Late-emitted @extern declarations discovered during function codegen
+    //     These must appear at module level, not inline inside function bodies.
+    if (!pending_late_extern_decls_.empty()) {
+        emit_line("; Late-emitted @extern declarations");
+        for (const auto& [sym, decl_text] : pending_late_extern_decls_) {
+            emit_line(decl_text);
+        }
+        emit_line("");
+        pending_late_extern_decls_.clear();
+    }
 
     // 3. Generic functions (instantiated class constructors/methods) - MUST come before
     //    non-generic functions that call them, to ensure correct forward reference handling

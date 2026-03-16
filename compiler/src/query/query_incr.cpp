@@ -112,6 +112,7 @@ std::vector<uint8_t> serialize_query_key(const QueryKey& key) {
                 write_i32(oss, static_cast<int32_t>(k.optimization_level));
                 write_u8(oss, k.debug_info ? 1 : 0);
                 write_i32(oss, static_cast<int32_t>(k.test_entry_index));
+                write_u8(oss, k.has_cached_library_state ? 1 : 0);
             } else {
                 // ParseModuleKey, TypecheckModuleKey, BorrowcheckModuleKey,
                 // HirLowerKey, MirBuildKey all have file_path + module_name
@@ -185,14 +186,18 @@ std::optional<QueryKey> deserialize_query_key(const uint8_t* data, size_t len, Q
         int32_t opt_level = 0;
         uint8_t debug_info = 0;
         int32_t test_entry_index = -1;
+        uint8_t has_cached_library_state = 0;
         if (!read_str(file_path) || !read_str(module_name) || !read_i32(iss, opt_level) ||
             !read_u8(iss, debug_info))
             return std::nullopt;
         // test_entry_index was added later; missing bytes = -1 (default)
         read_i32(iss, test_entry_index);
+        // has_cached_library_state was added later; missing bytes = 0 (default)
+        read_u8(iss, has_cached_library_state);
         return QueryKey{CodegenUnitKey{std::move(file_path), std::move(module_name),
                                        static_cast<int>(opt_level), debug_info != 0,
-                                       static_cast<int>(test_entry_index)}};
+                                       static_cast<int>(test_entry_index), false,
+                                       has_cached_library_state != 0}};
     }
     default:
         return std::nullopt;

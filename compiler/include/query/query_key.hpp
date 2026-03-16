@@ -115,6 +115,8 @@ struct CodegenUnitKey {
     int optimization_level = 0;
     bool debug_info = false;
     int test_entry_index = -1;
+    bool library_decls_only = false;
+    bool has_cached_library_state = false;
     bool operator==(const CodegenUnitKey&) const = default;
 };
 

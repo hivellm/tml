@@ -144,9 +144,10 @@ MirBuildResult QueryContext::mir_build(const std::string& file_path,
 
 CodegenUnitResult QueryContext::codegen_unit(const std::string& file_path,
                                              const std::string& module_name) {
-    return force<CodegenUnitResult>(CodegenUnitKey{file_path, module_name,
-                                                   options_.optimization_level, options_.debug_info,
-                                                   options_.test_entry_index});
+    return force<CodegenUnitResult>(
+        CodegenUnitKey{file_path, module_name, options_.optimization_level, options_.debug_info,
+                       options_.test_entry_index, options_.library_decls_only,
+                       options_.cached_library_state != nullptr});
 }
 
 void QueryContext::invalidate_file(const std::string& file_path) {

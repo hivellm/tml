@@ -588,9 +588,14 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
 
-            qopts.incremental = true;
-            // TODO(perf): cached_library_state causes off-by-1 in test_entry_index.
-            // Needs investigation before re-enabling.
+            // Use cached library state to skip emit_module_pure_tml_functions().
+            // Disable incremental cache when using cached state to avoid stale hits.
+            if (g_stdlib_codegen_state) {
+                qopts.cached_library_state = g_stdlib_codegen_state;
+                qopts.incremental = false;
+            } else {
+                qopts.incremental = true;
+            }
 
             auto source_dir = fs::path(file_path).parent_path();
             if (source_dir.empty())
@@ -1155,8 +1160,23 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
-    // TODO(perf): cached_library_state disabled — off-by-1 bug in test_entry_index.
-    // The stdlib .obj and cached state are only used by compile_unified_binary().
+    // Pre-build stdlib codegen state once (skips emit_module_pure_tml_functions per file).
+    // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
+    if (!g_stdlib_codegen_state && !config.coverage) {
+        build_stdlib_object(config);
+    }
+    if (g_stdlib_codegen_state) {
+        TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
+        // Clear obj_cache to prevent stale .obj files from runs without cached state.
+        // The IR fingerprint can collide (truncated to 16 hex chars) between cached
+        // and non-cached runs, returning .obj files missing tml_test_N entries.
+        auto obj_cache = get_test_exe_cache_dir() / "obj_cache";
+        if (fs::exists(obj_cache)) {
+            std::error_code ec;
+            fs::remove_all(obj_cache, ec);
+            TML_LOG_DEBUG("test", "Cleared obj_cache to prevent stale hits");
+        }
+    }
 
     std::vector<CompileResult> results(suites.size());
 
