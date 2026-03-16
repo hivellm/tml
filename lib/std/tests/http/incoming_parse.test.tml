@@ -1,0 +1,25 @@
+// Tests for std::http::incoming — request parsing (basic fields)
+use test::{assert, assert_eq}
+use std::http::incoming::{IncomingMessage, parse_request}
+
+@test
+func test_parse_get_with_query() -> I32 {
+    let raw: Str = "GET /search?q=hello&page=2 HTTP/1.1\r\nHost: example.com\r\nAccept: text/html\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            assert_eq(msg.method(), "GET", "method")
+            assert_eq(msg.url(), "/search?q=hello&page=2", "full url")
+            assert(msg.complete(), "is complete")
+            assert_eq(msg.http_version(), "HTTP/1.1", "version")
+            assert_eq(msg.path(), "/search", "path")
+            assert_eq(msg.query(), "q=hello&page=2", "query")
+            assert_eq(msg.header_count(), 2, "2 headers")
+            assert_eq(msg.body(), "", "no body for GET")
+        },
+        Err(e) => {
+            assert(false, "parse should succeed")
+        },
+    }
+    return 0
+}

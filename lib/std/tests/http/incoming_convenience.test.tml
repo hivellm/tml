@@ -1,0 +1,23 @@
+// Tests for std::http::incoming — convenience accessors
+use test::{assert, assert_eq}
+use std::http::incoming::{IncomingMessage, parse_request}
+
+@test
+func test_convenience_accessors() -> I32 {
+    let raw: Str = "GET /api HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\nAccept: application/json\r\nConnection: keep-alive\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            assert_eq(msg.host(), "example.com", "host")
+            assert_eq(msg.content_type(), "text/plain", "content-type")
+            assert_eq(msg.accept(), "application/json", "accept")
+            assert_eq(msg.connection(), "keep-alive", "connection")
+            assert(msg.is_keep_alive(), "is keep-alive")
+            assert_eq(msg.content_length(), -1 as I64, "no content-length")
+        },
+        Err(e) => {
+            assert(false, "parse should succeed")
+        },
+    }
+    return 0
+}

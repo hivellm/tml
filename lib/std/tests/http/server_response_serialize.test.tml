@@ -1,0 +1,19 @@
+// Tests for std::http::server_response — serialization
+use test::{assert, assert_eq}
+use core::str
+use std::http::server_response::ServerResponse
+
+@test
+func test_serialize_simple_200() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.set_header("content-type", "text/plain")
+    resp.write("Hello, World!")
+    let wire: Str = resp.serialize()
+    // Check status line
+    assert(str::starts_with(wire, "HTTP/1.1 200 OK\r\n"), "status line")
+    // Check body is present
+    assert(str::contains(wire, "Hello, World!"), "body present")
+    // Check content-length
+    assert(str::contains(wire, "content-length: 13"), "content-length")
+    return 0
+}

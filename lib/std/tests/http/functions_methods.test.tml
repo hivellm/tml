@@ -1,0 +1,28 @@
+// Tests for std::http::functions — METHODS list
+use test::{assert, assert_eq}
+use std::http::functions::methods
+use std::collections::List
+
+@test
+func test_methods_list() -> I32 {
+    let m: List[Str] = methods()
+    // Should have standard HTTP methods
+    assert(m.len() > 9, "at least 9 standard methods")
+    // Check some known methods are present
+    var found_get: Bool = false
+    var found_post: Bool = false
+    var found_delete: Bool = false
+    var i: I64 = 0
+    loop (i < m.len()) {
+        let method: Str = m.get(i)
+        if method == "GET" { found_get = true }
+        if method == "POST" { found_post = true }
+        if method == "DELETE" { found_delete = true }
+        i = i + 1
+    }
+    assert(found_get, "has GET")
+    assert(found_post, "has POST")
+    assert(found_delete, "has DELETE")
+    m.destroy()
+    return 0
+}

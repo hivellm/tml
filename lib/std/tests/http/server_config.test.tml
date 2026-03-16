@@ -1,0 +1,18 @@
+// Tests for std::http::server — HttpServer configuration
+use test::{assert, assert_eq}
+use std::http::server::HttpServer
+
+@test
+func test_server_defaults() -> I32 {
+    let server: HttpServer = HttpServer::new()
+    assert(not server.listening(), "not listening by default")
+    assert_eq(server.get_port(), 0, "no port yet")
+    assert_eq(server.get_host(), "0.0.0.0", "default host")
+    assert_eq(server.get_headers_timeout(), 60000, "headers timeout 60s")
+    assert_eq(server.get_keep_alive_timeout(), 5000, "keep-alive timeout 5s")
+    assert_eq(server.get_request_timeout(), 300000, "request timeout 5min")
+    assert_eq(server.get_max_headers_count(), 2000, "max headers 2000")
+    assert_eq(server.get_max_requests_per_socket(), 0, "unlimited requests")
+    assert_eq(server.get_timeout(), 0, "no general timeout")
+    return 0
+}

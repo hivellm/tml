@@ -1,0 +1,285 @@
+//! HTTP chunked transfer encoding — read and write.
+//!
+//! Implements chunked transfer encoding per RFC 7230 Section 4.1.
+//! Used when the total content length is unknown at the time headers are sent.
+//!
+//! Format:
+//!   chunk-size (hex)\r\n
+//!   chunk-data\r\n
+//!   ...
+//!   0\r\n
+//!   trailer-headers\r\n
+//!   \r\n
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use std::http::headers::Headers
+
+// ============================================================================
+// Hex helpers
+// ============================================================================
+
+/// Converts an I64 to a lowercase hexadecimal string (no prefix).
+func i64_to_hex(n: I64) -> Str {
+    if n == 0 { return "0" }
+    let hex_chars: Str = "0123456789abcdef"
+    var result: Str = ""
+    var val: I64 = n
+    loop (val > 0) {
+        let digit: I64 = val % 16
+        let ch: Str = str::substring(hex_chars, digit, digit + 1)
+        result = "{ch}{result}"
+        val = val / 16
+    }
+    return result
+}
+
+/// Parses a hex string to I64. Returns -1 on invalid input.
+func hex_to_i64(hex: Str) -> I64 {
+    let hex_len: I64 = str::len(hex)
+    if hex_len == 0 { return -1 as I64 }
+    var result: I64 = 0
+    var i: I64 = 0
+    loop (i < hex_len) {
+        let c: I32 = str::char_at(hex, i)
+        var digit: I64 = 0
+        if c >= 48 and c <= 57 {          // '0'-'9'
+            digit = (c - 48) as I64
+        } else if c >= 97 and c <= 102 {  // 'a'-'f'
+            digit = (c - 87) as I64
+        } else if c >= 65 and c <= 70 {   // 'A'-'F'
+            digit = (c - 55) as I64
+        } else {
+            return -1 as I64  // invalid hex character
+        }
+        result = result * 16 + digit
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Chunked Encoding (Writer)
+// ============================================================================
+
+/// Encodes a body string as a single chunk in chunked transfer encoding.
+/// Returns: "hex-size\r\ndata\r\n"
+pub func encode_chunk(data: Str) -> Str {
+    let data_len: I64 = str::len(data)
+    if data_len == 0 {
+        return ""
+    }
+    let hex: Str = i64_to_hex(data_len)
+    return "{hex}\r\n{data}\r\n"
+}
+
+/// Returns the final chunk marker (zero-length chunk).
+/// Returns: "0\r\n\r\n"
+pub func encode_final_chunk() -> Str {
+    return "0\r\n\r\n"
+}
+
+/// Returns the final chunk marker with trailer headers.
+/// Returns: "0\r\nTrailer: value\r\n\r\n"
+pub func encode_final_chunk_with_trailers(trailers: ref Headers) -> Str {
+    var result: Str = "0\r\n"
+    result = "{result}{trailers.serialize()}"
+    result = "{result}\r\n"
+    return result
+}
+
+/// Encodes an entire body as chunked transfer encoding.
+/// The body is sent as a single chunk followed by the final chunk.
+pub func encode_body_chunked(body: Str) -> Str {
+    let body_len: I64 = str::len(body)
+    if body_len == 0 {
+        return encode_final_chunk()
+    }
+    var result: Str = encode_chunk(body)
+    result = "{result}{encode_final_chunk()}"
+    return result
+}
+
+/// Encodes a body in multiple chunks of the specified size.
+pub func encode_body_multi_chunk(body: Str, chunk_size: I64) -> Str {
+    let body_len: I64 = str::len(body)
+    if body_len == 0 {
+        return encode_final_chunk()
+    }
+    var result: Str = ""
+    var pos: I64 = 0
+    loop (pos < body_len) {
+        var end: I64 = pos + chunk_size
+        if end > body_len {
+            end = body_len
+        }
+        let chunk_data: Str = str::substring(body, pos, end)
+        result = "{result}{encode_chunk(chunk_data)}"
+        pos = end
+    }
+    result = "{result}{encode_final_chunk()}"
+    return result
+}
+
+// ============================================================================
+// Chunked Decoding (Reader)
+// ============================================================================
+
+/// Result of decoding a chunked body.
+pub type ChunkedResult {
+    body: Str,
+    trailers: Headers,
+    complete: Bool,
+    bytes_consumed: I64,
+}
+
+/// Decodes a chunked transfer-encoded body.
+///
+/// Input is the raw data after the header section (everything after \r\n\r\n).
+/// Returns the decoded body, any trailer headers, and whether decoding is complete.
+pub func decode_chunked(data: Str) -> ChunkedResult {
+    let data_len: I64 = str::len(data)
+    var pos: I64 = 0
+
+    // Accumulate body in a growing buffer
+    var buf_cap: I64 = 4096
+    var buf: I64 = lowlevel { mem_alloc(buf_cap) } as I64
+    var buf_len: I64 = 0
+
+    let trailers: Headers = Headers::new()
+
+    loop (pos < data_len) {
+        // Find end of chunk size line (\r\n)
+        var line_end: I64 = pos
+        loop (line_end < data_len - 1) {
+            if str::char_at(data, line_end) == 13 and str::char_at(data, line_end + 1) == 10 {
+                break
+            }
+            line_end = line_end + 1
+        }
+        if line_end >= data_len - 1 {
+            // Incomplete chunk header
+            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
+            return ChunkedResult {
+                body: buf as Str,
+                trailers: trailers,
+                complete: false,
+                bytes_consumed: pos,
+            }
+        }
+
+        // Parse chunk size (hex) — may have chunk extension after ';'
+        let size_line: Str = str::substring(data, pos, line_end)
+        // Strip chunk extensions (anything after ';')
+        var semicolon: I64 = 0
+        let size_line_len: I64 = str::len(size_line)
+        loop (semicolon < size_line_len) {
+            if str::char_at(size_line, semicolon) == 59 { break }  // ';'
+            semicolon = semicolon + 1
+        }
+        let hex_str: Str = str::substring(size_line, 0, semicolon)
+        // Trim whitespace from hex string
+        let trimmed: Str = str::trim(hex_str)
+        let chunk_size: I64 = hex_to_i64(trimmed)
+
+        if chunk_size < 0 {
+            // Invalid chunk size
+            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
+            return ChunkedResult {
+                body: buf as Str,
+                trailers: trailers,
+                complete: false,
+                bytes_consumed: pos,
+            }
+        }
+
+        pos = line_end + 2  // skip \r\n after size line
+
+        if chunk_size == 0 {
+            // Final chunk — parse trailers if any
+            loop (pos < data_len - 1) {
+                // Check for empty line (end of trailers)
+                if str::char_at(data, pos) == 13 and str::char_at(data, pos + 1) == 10 {
+                    pos = pos + 2
+                    break
+                }
+                // Parse trailer header line
+                var tline_end: I64 = pos
+                loop (tline_end < data_len - 1) {
+                    if str::char_at(data, tline_end) == 13 and str::char_at(data, tline_end + 1) == 10 {
+                        break
+                    }
+                    tline_end = tline_end + 1
+                }
+                var colon: I64 = pos
+                loop (colon < tline_end and str::char_at(data, colon) != 58) {
+                    colon = colon + 1
+                }
+                if colon < tline_end {
+                    let key: Str = str::substring(data, pos, colon)
+                    var val_start: I64 = colon + 1
+                    loop (val_start < tline_end and str::char_at(data, val_start) == 32) {
+                        val_start = val_start + 1
+                    }
+                    let val: Str = str::substring(data, val_start, tline_end)
+                    trailers.set(key, val)
+                }
+                pos = tline_end + 2
+            }
+
+            // Null-terminate and return
+            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
+            return ChunkedResult {
+                body: buf as Str,
+                trailers: trailers,
+                complete: true,
+                bytes_consumed: pos,
+            }
+        }
+
+        // Read chunk_size bytes of data
+        if pos + chunk_size > data_len {
+            // Not enough data yet
+            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
+            return ChunkedResult {
+                body: buf as Str,
+                trailers: trailers,
+                complete: false,
+                bytes_consumed: pos,
+            }
+        }
+
+        // Grow buffer if needed
+        if buf_len + chunk_size + 1 >= buf_cap {
+            var new_cap: I64 = buf_cap * 2
+            loop (new_cap < buf_len + chunk_size + 1) {
+                new_cap = new_cap * 2
+            }
+            let new_buf: I64 = lowlevel { mem_alloc(new_cap) } as I64
+            lowlevel { copy_nonoverlapping(buf as *Unit, new_buf as *Unit, buf_len) }
+            lowlevel { mem_free(buf as *Unit) }
+            buf = new_buf
+            buf_cap = new_cap
+        }
+
+        // Copy chunk data to buffer
+        let src: I64 = (data as I64) + pos
+        lowlevel { copy_nonoverlapping(src as *Unit, (buf + buf_len) as *Unit, chunk_size) }
+        buf_len = buf_len + chunk_size
+        pos = pos + chunk_size
+
+        // Skip trailing \r\n after chunk data
+        if pos + 1 < data_len and str::char_at(data, pos) == 13 and str::char_at(data, pos + 1) == 10 {
+            pos = pos + 2
+        }
+    }
+
+    // Ran out of data without final chunk
+    lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
+    return ChunkedResult {
+        body: buf as Str,
+        trailers: trailers,
+        complete: false,
+        bytes_consumed: pos,
+    }
+}

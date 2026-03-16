@@ -416,7 +416,10 @@ static std::string build_stdlib_object(const CompileConfig& config) {
     // Any test file that imports core modules will work — the library_ir_only mode
     // processes ALL registered library modules regardless of what the test imports.
     std::string bootstrap_file;
-    for (const auto& dir : {"lib/core/tests/str", "lib/core/tests/option", "lib/core/tests/fmt"}) {
+    // Use std test files first (they import more modules including std::http, std::json, etc.)
+    // Fallback to core tests if no std tests available.
+    for (const auto& dir : {"lib/std/tests/http", "lib/std/tests/json", "lib/std/tests/collections",
+                            "lib/core/tests/str", "lib/core/tests/option", "lib/core/tests/fmt"}) {
         if (!fs::exists(dir))
             continue;
         for (const auto& entry : fs::directory_iterator(dir)) {
@@ -1162,9 +1165,11 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     // Pre-build stdlib codegen state once (skips emit_module_pure_tml_functions per file).
     // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
-    if (!g_stdlib_codegen_state && !config.coverage) {
-        build_stdlib_object(config);
-    }
+    // TEMPORARILY DISABLED: cached state doesn't include all modules when new modules
+    // are added to the stdlib (e.g., std::http::incoming). Need to fix module discovery.
+    // if (!g_stdlib_codegen_state && !config.coverage) {
+    //     build_stdlib_object(config);
+    // }
     if (g_stdlib_codegen_state) {
         TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
         // Clear obj_cache to prevent stale .obj files from runs without cached state.

@@ -1,0 +1,13 @@
+// Tests for std::http::server_response — basic construction
+use test::{assert, assert_eq}
+use std::http::server_response::ServerResponse
+
+@test
+func test_new_response_defaults() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    assert_eq(resp.status_code(), 200, "default 200")
+    assert_eq(resp.status_message(), "OK", "default OK")
+    assert(not resp.is_headers_sent(), "headers not sent yet")
+    assert(not resp.is_finished(), "not finished yet")
+    return 0
+}

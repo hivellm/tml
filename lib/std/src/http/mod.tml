@@ -1,20 +1,6 @@
-//! HTTP client, routing, and shared protocol types.
+//! HTTP client, server, routing, and shared protocol types.
 //!
-//! Organized following cmmv-server architecture: shared types are separate
-//! from client/server logic so they can be reused by both.
-//!
-//! # Modules
-//!
-//! | Module | Description | Shared? |
-//! |--------|-------------|---------|
-//! | [`method`] | HTTP request methods (GET, POST, PUT, etc.) | Yes |
-//! | [`status`] | HTTP response status codes (full IANA registry) | Yes |
-//! | [`version`] | HTTP protocol versions (1.0, 1.1, 2, 3) | Yes |
-//! | [`headers`] | Case-insensitive header map | Yes |
-//! | [`error`] | HTTP error types (HttpError, HttpErrorKind) | Yes |
-//! | [`encoding`] | Content-Encoding compress/decompress dispatch | Yes |
-//! | [`cookie`] | Cookie parsing and serialization (RFC 6265) | Yes |
-//! | [`router`] | Radix tree router with parametric and wildcard support | Server |
+//! Full HTTP/1.1 implementation inspired by Node.js `http` module.
 
 // ── Shared protocol types ───────────────────────────────────
 pub mod method
@@ -24,6 +10,8 @@ pub mod headers
 pub mod error
 pub mod encoding
 pub mod cookie
+pub mod chunked
+pub mod functions
 
 // ── Connection, Request, Response, Client ─────────────────────
 pub mod connection
@@ -31,8 +19,19 @@ pub mod request
 pub mod response
 pub mod client
 
+// ── Server ───────────────────────────────────────────────────
+pub mod incoming
+pub mod server_response
+pub mod server
+
+// ── Connection Pooling ──────────────────────────────────────
+pub mod agent
+
 // ── Routing ─────────────────────────────────────────────────
 pub mod router
+
+// ── Multipart ───────────────────────────────────────────────
+pub mod multipart
 
 // ── Re-exports ──────────────────────────────────────────────
 pub use std::http::method::Method
@@ -47,3 +46,10 @@ pub use std::http::connection::{Connection, ConnectionInfo}
 pub use std::http::request::Request
 pub use std::http::response::Response
 pub use std::http::client::HttpClient
+pub use std::http::incoming::{IncomingMessage, parse_request}
+pub use std::http::server_response::ServerResponse
+pub use std::http::chunked::{encode_chunk, encode_final_chunk, encode_body_chunked, decode_chunked, ChunkedResult}
+pub use std::http::multipart::{MultipartBuilder, MultipartPart}
+pub use std::http::functions::{methods, status_codes, validate_header_name, validate_header_value, MAX_HEADER_SIZE}
+pub use std::http::server::HttpServer
+pub use std::http::agent::{Agent, AgentOptions}

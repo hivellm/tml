@@ -1,0 +1,235 @@
+//! HTTP server — listens for connections and dispatches requests.
+//!
+//! Corresponds to Node.js `http.Server`. Binds to a TCP port,
+//! accepts connections, parses incoming HTTP requests, and provides
+//! request/response pairs for handling.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::TcpListener
+use std::net::sys::RawSocket
+use std::http::incoming::{IncomingMessage, parse_request}
+use std::http::server_response::ServerResponse
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// FFI declarations — all return I64 to avoid i32 codegen issues
+@extern("c")
+func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
+
+@extern("c")
+func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
+
+@extern("tml_sys_close")
+func server_close_fd(handle: I64) -> I64
+
+@extern("tml_sys_accept_v4")
+func server_accept_fd(handle: I64) -> I64
+
+/// Maximum request size to prevent OOM (1 MB).
+const MAX_REQUEST_SIZE: I64 = 1048576
+
+/// An HTTP server that listens for incoming connections.
+pub type HttpServer {
+    listener: I64,
+    is_listening: Bool,
+    port: I64,
+    host: Str,
+    headers_timeout: I64,
+    keep_alive_timeout: I64,
+    request_timeout: I64,
+    max_headers_count: I64,
+    max_requests_per_socket: I64,
+    timeout: I64,
+}
+
+impl HttpServer {
+    /// Creates a new HTTP server with default settings.
+    pub func new() -> HttpServer {
+        HttpServer {
+            listener: 0,
+            is_listening: false,
+            port: 0,
+            host: "0.0.0.0",
+            headers_timeout: 60000,
+            keep_alive_timeout: 5000,
+            request_timeout: 300000,
+            max_headers_count: 2000,
+            max_requests_per_socket: 0,
+            timeout: 0,
+        }
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────
+
+    /// Starts listening on the specified port.
+    pub func listen(mut this, port: I64) -> Outcome[Unit, HttpError] {
+        let addr: SocketAddr = SocketAddr::V4(
+            SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port as U16)
+        )
+        let listener_result = TcpListener::bind(addr)
+        when listener_result {
+            Err(e) => return Err(HttpError::connection_failed("failed to bind to port")),
+            Ok(l) => {
+                let raw: RawSocket = l.into_raw_socket()
+                this.listener = raw.handle
+                this.is_listening = true
+                this.port = port
+                return Ok(())
+            },
+        }
+    }
+
+    /// Returns true if the server is currently listening.
+    pub func listening(this) -> Bool {
+        this.is_listening
+    }
+
+    /// Returns the port the server is listening on.
+    pub func get_port(this) -> I64 { this.port }
+
+    /// Returns the host the server is bound to.
+    pub func get_host(this) -> Str { this.host }
+
+    /// Stops accepting new connections and closes the server.
+    pub func close(mut this) {
+        if this.is_listening and this.listener != 0 {
+            server_close_fd(this.listener)
+            this.is_listening = false
+            this.listener = 0
+        }
+    }
+
+    // ── Configuration ────────────────────────────────────────────
+
+    pub func set_timeout(mut this, ms: I64) { this.timeout = ms }
+    pub func set_headers_timeout(mut this, ms: I64) { this.headers_timeout = ms }
+    pub func set_keep_alive_timeout(mut this, ms: I64) { this.keep_alive_timeout = ms }
+    pub func set_request_timeout(mut this, ms: I64) { this.request_timeout = ms }
+    pub func set_max_headers_count(mut this, count: I64) { this.max_headers_count = count }
+    pub func set_max_requests_per_socket(mut this, count: I64) { this.max_requests_per_socket = count }
+
+    pub func get_headers_timeout(this) -> I64 { this.headers_timeout }
+    pub func get_keep_alive_timeout(this) -> I64 { this.keep_alive_timeout }
+    pub func get_request_timeout(this) -> I64 { this.request_timeout }
+    pub func get_max_headers_count(this) -> I64 { this.max_headers_count }
+    pub func get_max_requests_per_socket(this) -> I64 { this.max_requests_per_socket }
+    pub func get_timeout(this) -> I64 { this.timeout }
+
+    // ── Accept & Handle ──────────────────────────────────────────
+
+    /// Accepts a single connection and reads the HTTP request.
+    pub func accept(this) -> Outcome[(IncomingMessage, ServerResponse), HttpError] {
+        if not this.is_listening or this.listener == 0 {
+            return Err(HttpError::connection_failed("server is not listening"))
+        }
+
+        let client_fd: I64 = server_accept_fd(this.listener)
+        if client_fd < 0 {
+            return Err(HttpError::connection_failed("accept failed"))
+        }
+
+        let raw_result = read_request(client_fd)
+        when raw_result {
+            Err(e) => {
+                server_close_fd(client_fd)
+                return Err(e)
+            },
+            Ok(raw_data) => {
+                let msg_result = parse_request(raw_data)
+                when msg_result {
+                    Err(e) => {
+                        server_close_fd(client_fd)
+                        return Err(e)
+                    },
+                    Ok(msg) => {
+                        let method_str: Str = msg.method()
+                        let resp: ServerResponse = ServerResponse::for_request(client_fd, method_str)
+                        return Ok((msg, resp))
+                    },
+                }
+            },
+        }
+    }
+
+    /// Sends a ServerResponse over the connection and closes the socket.
+    pub func send_response(this, resp: ref ServerResponse) -> Outcome[Unit, HttpError] {
+        let fd: I64 = resp.socket_fd
+        if fd < 0 {
+            return Err(HttpError::connection_failed("no socket for response"))
+        }
+
+        let wire: Str = resp.serialize()
+        let wire_len: I64 = str::len(wire)
+        let sent: I64 = tml_sys_send(fd, wire as *Unit, wire_len)
+        if sent < 0 {
+            return Err(HttpError::connection_failed("failed to send response"))
+        }
+
+        server_close_fd(fd)
+        return Ok(())
+    }
+}
+
+/// Reads raw HTTP request data from a socket into a heap buffer.
+func read_request(fd: I64) -> Outcome[Str, HttpError] {
+    var capacity: I64 = 8192
+    var data_ptr: I64 = lowlevel { mem_alloc(capacity) } as I64
+    var total: I64 = 0
+
+    let chunk_size: I64 = 4096
+    let chunk_ptr: I64 = lowlevel { mem_alloc(chunk_size) } as I64
+
+    loop (total < MAX_REQUEST_SIZE) {
+        let n: I64 = tml_sys_recv(fd, chunk_ptr as *Unit, chunk_size)
+        if n <= 0 { break }
+
+        // Grow buffer if needed
+        if total + n >= capacity {
+            let new_cap: I64 = capacity * 2
+            let new_data: I64 = lowlevel { mem_alloc(new_cap) } as I64
+            lowlevel { copy_nonoverlapping(data_ptr as *Unit, new_data as *Unit, total) }
+            lowlevel { mem_free(data_ptr as *Unit) }
+            data_ptr = new_data
+            capacity = new_cap
+        }
+
+        // Copy chunk
+        lowlevel { copy_nonoverlapping(chunk_ptr as *Unit, (data_ptr + total) as *Unit, n) }
+        total = total + n
+
+        // Check for end of headers: scan for \r\n\r\n in the last few bytes
+        if has_header_end(data_ptr, total) {
+            lowlevel { mem_free(chunk_ptr as *Unit) }
+            lowlevel { ptr_write[U8]((data_ptr + total) as *U8, 0 as U8) }
+            return Ok(data_ptr as Str)
+        }
+    }
+
+    lowlevel { mem_free(chunk_ptr as *Unit) }
+
+    if total == 0 {
+        lowlevel { mem_free(data_ptr as *Unit) }
+        return Err(HttpError::connection_failed("no data received"))
+    }
+
+    lowlevel { ptr_write[U8]((data_ptr + total) as *U8, 0 as U8) }
+    return Ok(data_ptr as Str)
+}
+
+/// Checks if the buffer contains \r\n\r\n (end of HTTP headers).
+func has_header_end(buf: I64, len: I64) -> Bool {
+    if len < 4 { return false }
+    var i: I64 = 3
+    loop (i < len) {
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
+        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
+        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
+        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}

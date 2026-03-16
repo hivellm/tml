@@ -1,0 +1,12 @@
+// Tests for std::http::chunked — decoding
+use test::{assert, assert_eq}
+use std::http::chunked::{decode_chunked}
+
+@test
+func test_decode_simple() -> I32 {
+    let data: Str = "5\r\nHello\r\n7\r\n World!\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.complete, "is complete")
+    assert_eq(result.body, "Hello World!", "decoded body")
+    return 0
+}

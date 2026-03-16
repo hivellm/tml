@@ -1,0 +1,234 @@
+//! HTTP Agent — connection pooling and reuse configuration.
+//!
+//! Corresponds to Node.js `http.Agent`. Stores configuration for
+//! connection pooling behavior. The actual socket pool is managed
+//! via I64 file descriptors in simple arrays.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+
+/// Configuration options for an HTTP Agent.
+pub type AgentOptions {
+    keep_alive: Bool,
+    keep_alive_msecs: I64,
+    max_sockets: I64,
+    max_total_sockets: I64,
+    max_free_sockets: I64,
+    scheduling: Str,
+    timeout: I64,
+    default_port: I64,
+    protocol: Str,
+}
+
+impl AgentOptions {
+    /// Creates default agent options.
+    pub func new() -> AgentOptions {
+        AgentOptions {
+            keep_alive: false,
+            keep_alive_msecs: 1000,
+            max_sockets: -1 as I64,
+            max_total_sockets: -1 as I64,
+            max_free_sockets: 256,
+            scheduling: "lifo",
+            timeout: 0,
+            default_port: 80,
+            protocol: "http:",
+        }
+    }
+
+    pub func with_keep_alive(this, enabled: Bool) -> AgentOptions {
+        AgentOptions {
+            keep_alive: enabled,
+            keep_alive_msecs: this.keep_alive_msecs,
+            max_sockets: this.max_sockets,
+            max_total_sockets: this.max_total_sockets,
+            max_free_sockets: this.max_free_sockets,
+            scheduling: this.scheduling,
+            timeout: this.timeout,
+            default_port: this.default_port,
+            protocol: this.protocol,
+        }
+    }
+
+    pub func with_max_sockets(this, n: I64) -> AgentOptions {
+        AgentOptions {
+            keep_alive: this.keep_alive,
+            keep_alive_msecs: this.keep_alive_msecs,
+            max_sockets: n,
+            max_total_sockets: this.max_total_sockets,
+            max_free_sockets: this.max_free_sockets,
+            scheduling: this.scheduling,
+            timeout: this.timeout,
+            default_port: this.default_port,
+            protocol: this.protocol,
+        }
+    }
+
+    pub func with_max_free_sockets(this, n: I64) -> AgentOptions {
+        AgentOptions {
+            keep_alive: this.keep_alive,
+            keep_alive_msecs: this.keep_alive_msecs,
+            max_sockets: this.max_sockets,
+            max_total_sockets: this.max_total_sockets,
+            max_free_sockets: n,
+            scheduling: this.scheduling,
+            timeout: this.timeout,
+            default_port: this.default_port,
+            protocol: this.protocol,
+        }
+    }
+
+    pub func with_timeout(this, ms: I64) -> AgentOptions {
+        AgentOptions {
+            keep_alive: this.keep_alive,
+            keep_alive_msecs: this.keep_alive_msecs,
+            max_sockets: this.max_sockets,
+            max_total_sockets: this.max_total_sockets,
+            max_free_sockets: this.max_free_sockets,
+            scheduling: this.scheduling,
+            timeout: ms,
+            default_port: this.default_port,
+            protocol: this.protocol,
+        }
+    }
+
+    pub func with_scheduling(this, strategy: Str) -> AgentOptions {
+        AgentOptions {
+            keep_alive: this.keep_alive,
+            keep_alive_msecs: this.keep_alive_msecs,
+            max_sockets: this.max_sockets,
+            max_total_sockets: this.max_total_sockets,
+            max_free_sockets: this.max_free_sockets,
+            scheduling: strategy,
+            timeout: this.timeout,
+            default_port: this.default_port,
+            protocol: this.protocol,
+        }
+    }
+}
+
+/// An HTTP Agent manages connection pooling configuration.
+///
+/// Uses a simple array-based pool stored as I64 pointers.
+/// Pool entries: {name_ptr: I64, fd: I64} pairs.
+pub type Agent {
+    opts: AgentOptions,
+    pool_ptr: I64,       // array of {name_i64, fd} pairs
+    pool_count: I64,
+    pool_cap: I64,
+    total_active: I64,
+}
+
+impl Agent {
+    /// Creates a new Agent with the given options.
+    pub func new(opts: AgentOptions) -> Agent {
+        let cap: I64 = 16
+        Agent {
+            opts: opts,
+            pool_ptr: lowlevel { mem_alloc(cap * 16) } as I64,
+            pool_count: 0,
+            pool_cap: cap,
+            total_active: 0,
+        }
+    }
+
+    /// Creates an Agent with default options.
+    pub func default() -> Agent {
+        Agent::new(AgentOptions::new())
+    }
+
+    /// Returns a unique pool key for the given connection parameters.
+    pub func get_name(this, host: Str, port: I64, is_tls: Bool) -> Str {
+        if is_tls {
+            return "{host}:{port}:tls"
+        }
+        return "{host}:{port}:"
+    }
+
+    /// Returns true if keep-alive is enabled.
+    pub func is_keep_alive(this) -> Bool { this.opts.keep_alive }
+
+    /// Returns the max sockets per host.
+    pub func max_sockets(this) -> I64 { this.opts.max_sockets }
+
+    /// Returns the max total sockets.
+    pub func max_total_sockets(this) -> I64 { this.opts.max_total_sockets }
+
+    /// Returns the max free sockets per host.
+    pub func max_free_sockets(this) -> I64 { this.opts.max_free_sockets }
+
+    /// Returns the scheduling strategy.
+    pub func scheduling(this) -> Str { this.opts.scheduling }
+
+    /// Returns the timeout.
+    pub func get_timeout(this) -> I64 { this.opts.timeout }
+
+    /// Returns true if a new connection can be created.
+    pub func can_create_connection(this) -> Bool {
+        if this.opts.max_total_sockets > 0 {
+            if this.total_active >= this.opts.max_total_sockets {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Returns the count of pooled (free) sockets.
+    pub func free_count(this) -> I64 { this.pool_count }
+
+    /// Returns the total active socket count.
+    pub func active_count(this) -> I64 { this.total_active }
+
+    /// Adds a socket fd to the free pool.
+    pub func return_to_pool(mut this, name: Str, fd: I64) {
+        if not this.opts.keep_alive { return }
+        if this.pool_count >= this.opts.max_free_sockets { return }
+
+        // Grow if needed
+        if this.pool_count >= this.pool_cap {
+            let new_cap: I64 = this.pool_cap * 2
+            let new_ptr: I64 = lowlevel { mem_alloc(new_cap * 16) } as I64
+            lowlevel { copy_nonoverlapping(this.pool_ptr as *Unit, new_ptr as *Unit, this.pool_cap * 16) }
+            lowlevel { mem_free(this.pool_ptr as *Unit) }
+            this.pool_ptr = new_ptr
+            this.pool_cap = new_cap
+        }
+
+        let offset: I64 = this.pool_count * 16
+        lowlevel { ptr_write[I64]((this.pool_ptr + offset) as *I64, name as I64) }
+        lowlevel { ptr_write[I64]((this.pool_ptr + offset + 8) as *I64, fd) }
+        this.pool_count = this.pool_count + 1
+    }
+
+    /// Gets a free socket fd for the given name, or -1 if none available.
+    pub func get_from_pool(mut this, name: Str) -> I64 {
+        var i: I64 = this.pool_count - 1
+        loop (i >= 0) {
+            let offset: I64 = i * 16
+            let entry_name: Str = lowlevel { ptr_read[I64]((this.pool_ptr + offset) as *I64) } as Str
+            if entry_name == name {
+                let fd: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + offset + 8) as *I64) }
+                // Remove by swapping with last
+                let last: I64 = this.pool_count - 1
+                if i != last {
+                    let last_offset: I64 = last * 16
+                    let ln: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + last_offset) as *I64) }
+                    let lf: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + last_offset + 8) as *I64) }
+                    lowlevel { ptr_write[I64]((this.pool_ptr + offset) as *I64, ln) }
+                    lowlevel { ptr_write[I64]((this.pool_ptr + offset + 8) as *I64, lf) }
+                }
+                this.pool_count = this.pool_count - 1
+                return fd
+            }
+            i = i - 1
+        }
+        return -1 as I64
+    }
+
+    /// Frees pool memory (does NOT close sockets).
+    pub func destroy(this) {
+        if this.pool_ptr != 0 {
+            lowlevel { mem_free(this.pool_ptr as *Unit) }
+        }
+    }
+}

@@ -1,0 +1,20 @@
+// Tests for std::http::functions — invalid header validation
+use test::{assert, assert_eq}
+use std::http::functions::{validate_header_name, validate_header_value}
+
+@test
+func test_validate_header_name_invalid() -> I32 {
+    // Empty name
+    let r1 = validate_header_name("")
+    when r1 {
+        Ok(_) => assert(false, "empty name should be invalid"),
+        Err(e) => assert(true, "empty name rejected"),
+    }
+    // Name with space
+    let r2 = validate_header_name("Content Type")
+    when r2 {
+        Ok(_) => assert(false, "space in name should be invalid"),
+        Err(e) => assert(true, "space rejected"),
+    }
+    return 0
+}

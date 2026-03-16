@@ -1,0 +1,11 @@
+// Tests for std::http::chunked — encoding and decoding
+use test::{assert, assert_eq}
+use std::http::chunked::{encode_chunk, encode_final_chunk, encode_body_chunked, encode_body_multi_chunk, decode_chunked}
+
+@test
+func test_encode_chunk() -> I32 {
+    assert_eq(encode_chunk("Hello"), "5\r\nHello\r\n", "encode Hello")
+    assert_eq(encode_chunk(""), "", "encode empty")
+    assert_eq(encode_chunk("AB"), "2\r\nAB\r\n", "encode AB")
+    return 0
+}

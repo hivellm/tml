@@ -1,0 +1,27 @@
+// Tests for std::http::incoming — header access
+use test::{assert, assert_eq}
+use std::http::incoming::{IncomingMessage, parse_request}
+
+@test
+func test_get_header() -> I32 {
+    let raw: Str = "POST /api HTTP/1.1\r\nHost: api.test\r\nContent-Type: application/json\r\nContent-Length: 5\r\nUser-Agent: test/1.0\r\nAuthorization: Bearer abc\r\n\r\nhello"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            assert_eq(msg.method(), "POST", "method")
+            assert_eq(msg.url(), "/api", "url")
+            assert_eq(msg.header_count(), 5, "5 headers")
+            assert_eq(msg.get_header("host"), "api.test", "host")
+            assert_eq(msg.get_header("content-type"), "application/json", "content-type")
+            assert_eq(msg.get_header("user-agent"), "test/1.0", "user-agent")
+            assert_eq(msg.get_header("authorization"), "Bearer abc", "authorization")
+            assert_eq(msg.body(), "hello", "body")
+            assert(msg.has_header("host"), "has host")
+            assert(not msg.has_header("x-missing"), "no x-missing")
+        },
+        Err(e) => {
+            assert(false, "parse should succeed")
+        },
+    }
+    return 0
+}

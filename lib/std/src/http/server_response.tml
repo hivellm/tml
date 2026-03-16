@@ -1,0 +1,316 @@
+//! HTTP server response — builds and sends responses to clients.
+//!
+//! Corresponds to Node.js `http.ServerResponse`. Provides a builder
+//! interface for setting status, headers, and body, then serializes
+//! and sends the complete HTTP/1.1 response.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use std::http::headers::Headers
+use std::http::error::{HttpError, HttpErrorKind}
+use core::fmt::helpers::i64_to_str
+
+/// Returns the standard reason phrase for an HTTP status code.
+func get_reason_phrase(code: I64) -> Str {
+    if code == 100 { return "Continue" }
+    if code == 101 { return "Switching Protocols" }
+    if code == 102 { return "Processing" }
+    if code == 103 { return "Early Hints" }
+    if code == 200 { return "OK" }
+    if code == 201 { return "Created" }
+    if code == 202 { return "Accepted" }
+    if code == 204 { return "No Content" }
+    if code == 206 { return "Partial Content" }
+    if code == 301 { return "Moved Permanently" }
+    if code == 302 { return "Found" }
+    if code == 303 { return "See Other" }
+    if code == 304 { return "Not Modified" }
+    if code == 307 { return "Temporary Redirect" }
+    if code == 308 { return "Permanent Redirect" }
+    if code == 400 { return "Bad Request" }
+    if code == 401 { return "Unauthorized" }
+    if code == 403 { return "Forbidden" }
+    if code == 404 { return "Not Found" }
+    if code == 405 { return "Method Not Allowed" }
+    if code == 408 { return "Request Timeout" }
+    if code == 409 { return "Conflict" }
+    if code == 413 { return "Payload Too Large" }
+    if code == 415 { return "Unsupported Media Type" }
+    if code == 422 { return "Unprocessable Entity" }
+    if code == 429 { return "Too Many Requests" }
+    if code == 500 { return "Internal Server Error" }
+    if code == 501 { return "Not Implemented" }
+    if code == 502 { return "Bad Gateway" }
+    if code == 503 { return "Service Unavailable" }
+    if code == 504 { return "Gateway Timeout" }
+    return "Unknown"
+}
+
+// ── Header helpers (lowlevel, avoid Headers struct reconstruction) ──
+
+/// Sets a header in the raw headers block pointed to by hdr_ptr.
+func headers_set_raw(hdr_ptr: I64, name: Str, value: Str) {
+    if hdr_ptr == 0 { return }
+    // We use a temporary Headers wrapper. The compiler generates this
+    // as a stack alloca for the wrapper — the handle is the pointer.
+    // Since Headers is just {handle: *Unit} (8 bytes), this is safe.
+    let hdrs: Headers = Headers::new()
+    // Overwrite handle with our stored pointer
+    let hdrs_addr: I64 = (ref hdrs) as I64
+    lowlevel { ptr_write[I64](hdrs_addr as *I64, hdr_ptr) }
+    hdrs.set(name, value)
+}
+
+/// Gets a header from the raw headers block.
+func headers_get_raw(hdr_ptr: I64, name: Str) -> Str {
+    if hdr_ptr == 0 { return "" }
+    let lower: Str = str::to_lowercase(name)
+    let keys_addr: I64 = lowlevel { ptr_read[I64](hdr_ptr as *I64) }
+    let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr_ptr + 8) as *I64) }
+    let cur_len: I64 = lowlevel { ptr_read[I64]((hdr_ptr + 16) as *I64) }
+    var i: I64 = 0
+    loop (i < cur_len) {
+        let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+        if existing_key == lower {
+            let val_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+            return val_ptr as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Checks if a header exists in the raw headers block.
+func headers_has_raw(hdr_ptr: I64, name: Str) -> Bool {
+    if hdr_ptr == 0 { return false }
+    let lower: Str = str::to_lowercase(name)
+    let keys_addr: I64 = lowlevel { ptr_read[I64](hdr_ptr as *I64) }
+    let cur_len: I64 = lowlevel { ptr_read[I64]((hdr_ptr + 16) as *I64) }
+    var i: I64 = 0
+    loop (i < cur_len) {
+        let existing_key: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+        if existing_key == lower {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Serializes all headers to wire format.
+func headers_serialize_raw(hdr_ptr: I64) -> Str {
+    if hdr_ptr == 0 { return "" }
+    let keys_addr: I64 = lowlevel { ptr_read[I64](hdr_ptr as *I64) }
+    let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr_ptr + 8) as *I64) }
+    let cur_len: I64 = lowlevel { ptr_read[I64]((hdr_ptr + 16) as *I64) }
+    var result: Str = ""
+    var i: I64 = 0
+    loop (i < cur_len) {
+        let k: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
+        let v_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
+        let v: Str = v_ptr as Str
+        result = "{result}{k}: {v}\r\n"
+        i = i + 1
+    }
+    return result
+}
+
+/// An HTTP response being constructed on the server side.
+pub type ServerResponse {
+    resp_status_code: I64,
+    resp_status_message: Str,
+    resp_headers_ptr: I64,
+    body_chunks: I64,
+    body_chunk_count: I64,
+    body_chunk_cap: I64,
+    body_total_len: I64,
+    headers_sent: Bool,
+    finished: Bool,
+    send_date: Bool,
+    socket_fd: I64,
+    req_method: Str,
+}
+
+impl ServerResponse {
+    /// Creates a new ServerResponse with default 200 OK status.
+    pub func new() -> ServerResponse {
+        let hdrs: Headers = Headers::new()
+        let hdrs_addr: I64 = (ref hdrs) as I64
+        let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+        ServerResponse {
+            resp_status_code: 200,
+            resp_status_message: "",
+            resp_headers_ptr: hdrs_ptr,
+            body_chunks: lowlevel { mem_alloc(64) } as I64,
+            body_chunk_count: 0,
+            body_chunk_cap: 8,
+            body_total_len: 0,
+            headers_sent: false,
+            finished: false,
+            send_date: true,
+            socket_fd: -1 as I64,
+            req_method: "",
+        }
+    }
+
+    /// Creates a ServerResponse tied to a socket and request method.
+    pub func for_request(fd: I64, method: Str) -> ServerResponse {
+        let hdrs: Headers = Headers::new()
+        let hdrs_addr: I64 = (ref hdrs) as I64
+        let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+        ServerResponse {
+            resp_status_code: 200,
+            resp_status_message: "",
+            resp_headers_ptr: hdrs_ptr,
+            body_chunks: lowlevel { mem_alloc(64) } as I64,
+            body_chunk_count: 0,
+            body_chunk_cap: 8,
+            body_total_len: 0,
+            headers_sent: false,
+            finished: false,
+            send_date: true,
+            socket_fd: fd,
+            req_method: method,
+        }
+    }
+
+    // ── Status ───────────────────────────────────────────────────
+
+    pub func set_status(mut this, code: I64) { this.resp_status_code = code }
+    pub func status_code(this) -> I64 { this.resp_status_code }
+    pub func set_status_message(mut this, message: Str) { this.resp_status_message = message }
+
+    pub func status_message(this) -> Str {
+        if str::len(this.resp_status_message) > 0 {
+            return this.resp_status_message
+        }
+        return get_reason_phrase(this.resp_status_code)
+    }
+
+    // ── Headers ──────────────────────────────────────────────────
+
+    pub func set_header(this, name: Str, value: Str) {
+        headers_set_raw(this.resp_headers_ptr, name, value)
+    }
+
+    pub func get_header(this, name: Str) -> Str {
+        return headers_get_raw(this.resp_headers_ptr, name)
+    }
+
+    pub func has_header(this, name: Str) -> Bool {
+        return headers_has_raw(this.resp_headers_ptr, name)
+    }
+
+    pub func is_headers_sent(this) -> Bool { this.headers_sent }
+    pub func set_send_date(mut this, send: Bool) { this.send_date = send }
+
+    // ── Write Head ───────────────────────────────────────────────
+
+    pub func write_head(mut this, code: I64, message: Str) {
+        this.resp_status_code = code
+        if str::len(message) > 0 {
+            this.resp_status_message = message
+        }
+        this.headers_sent = true
+    }
+
+    pub func write_head_simple(mut this, code: I64) {
+        this.resp_status_code = code
+        this.headers_sent = true
+    }
+
+    // ── Body Writing ─────────────────────────────────────────────
+
+    pub func write(mut this, chunk: Str) {
+        let chunk_len: I64 = str::len(chunk)
+        if chunk_len == 0 { return }
+
+        if this.body_chunk_count >= this.body_chunk_cap {
+            let new_cap: I64 = this.body_chunk_cap * 2
+            let new_chunks: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
+            lowlevel { copy_nonoverlapping(this.body_chunks as *Unit, new_chunks as *Unit, this.body_chunk_cap * 8) }
+            lowlevel { mem_free(this.body_chunks as *Unit) }
+            this.body_chunks = new_chunks
+            this.body_chunk_cap = new_cap
+        }
+
+        let chunk_copy: I64 = lowlevel { mem_alloc(chunk_len + 1) } as I64
+        lowlevel { copy_nonoverlapping(chunk as *Unit, chunk_copy as *Unit, chunk_len) }
+        lowlevel { ptr_write[U8]((chunk_copy + chunk_len) as *U8, 0 as U8) }
+
+        lowlevel { ptr_write[I64]((this.body_chunks + this.body_chunk_count * 8) as *I64, chunk_copy) }
+        this.body_chunk_count = this.body_chunk_count + 1
+        this.body_total_len = this.body_total_len + chunk_len
+
+        if not this.headers_sent { this.headers_sent = true }
+    }
+
+    pub func end(mut this, data: Str) {
+        if str::len(data) > 0 { this.write(data) }
+        this.finished = true
+        if not this.headers_sent { this.headers_sent = true }
+    }
+
+    pub func end_empty(mut this) {
+        this.finished = true
+        if not this.headers_sent { this.headers_sent = true }
+    }
+
+    pub func is_finished(this) -> Bool { this.finished }
+
+    // ── Special Response Methods ─────────────────────────────────
+
+    pub func write_continue() -> Str { "HTTP/1.1 100 Continue\r\n\r\n" }
+    pub func write_processing() -> Str { "HTTP/1.1 102 Processing\r\n\r\n" }
+
+    pub func write_early_hints(link: Str) -> Str {
+        return "HTTP/1.1 103 Early Hints\r\nLink: {link}\r\n\r\n"
+    }
+
+    pub func flush_headers(mut this) { this.headers_sent = true }
+
+    // ── Serialization ────────────────────────────────────────────
+
+    pub func serialize(this) -> Str {
+        let status_code: I64 = this.resp_status_code
+        let status_msg: Str = this.status_message()
+
+        var result: Str = "HTTP/1.1 {i64_to_str(status_code)} {status_msg}\r\n"
+
+        if this.body_total_len > 0 and not this.has_header("content-length") {
+            this.set_header("content-length", i64_to_str(this.body_total_len))
+        }
+        if this.body_total_len == 0 and not this.has_header("content-length")
+            and not this.has_header("transfer-encoding") {
+            this.set_header("content-length", "0")
+        }
+        if not this.has_header("connection") {
+            this.set_header("connection", "close")
+        }
+
+        result = "{result}{headers_serialize_raw(this.resp_headers_ptr)}"
+        result = "{result}\r\n"
+
+        if this.req_method != "HEAD" and this.body_chunk_count > 0 {
+            var i: I64 = 0
+            loop (i < this.body_chunk_count) {
+                let chunk_ptr: I64 = lowlevel { ptr_read[I64]((this.body_chunks + i * 8) as *I64) }
+                let chunk_str: Str = chunk_ptr as Str
+                result = "{result}{chunk_str}"
+                i = i + 1
+            }
+        }
+
+        return result
+    }
+
+    pub func destroy(this) {
+        var i: I64 = 0
+        loop (i < this.body_chunk_count) {
+            let chunk_ptr: I64 = lowlevel { ptr_read[I64]((this.body_chunks + i * 8) as *I64) }
+            if chunk_ptr != 0 { lowlevel { mem_free(chunk_ptr as *Unit) } }
+            i = i + 1
+        }
+        if this.body_chunks != 0 { lowlevel { mem_free(this.body_chunks as *Unit) } }
+    }
+}

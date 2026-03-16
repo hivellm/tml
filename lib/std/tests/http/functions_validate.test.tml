@@ -1,0 +1,18 @@
+// Tests for std::http::functions — validation
+use test::{assert, assert_eq}
+use std::http::functions::{validate_header_name, validate_header_value, MAX_HEADER_SIZE}
+
+@test
+func test_validate_header_name_valid() -> I32 {
+    let r1 = validate_header_name("Content-Type")
+    when r1 {
+        Ok(_) => assert(true, "Content-Type is valid"),
+        Err(e) => assert(false, "Content-Type should be valid"),
+    }
+    let r2 = validate_header_name("X-Custom-Header")
+    when r2 {
+        Ok(_) => assert(true, "X-Custom-Header is valid"),
+        Err(e) => assert(false, "X-Custom-Header should be valid"),
+    }
+    return 0
+}

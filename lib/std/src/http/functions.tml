@@ -1,0 +1,198 @@
+//! HTTP module-level functions and constants.
+//!
+//! Corresponds to Node.js module-level API:
+//! - `http.METHODS` — list of all HTTP methods
+//! - `http.STATUS_CODES` — map of status code to reason phrase
+//! - `http.validateHeaderName()` — validates header names
+//! - `http.validateHeaderValue()` — validates header values
+//! - `http.maxHeaderSize` — maximum header size
+//! - `http.createServer()` — convenience server factory
+
+use core::str
+use std::collections::List
+use std::collections::hashmap::HashMap
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// Maximum size of HTTP headers in bytes (16 KB).
+/// Corresponds to Node.js `http.maxHeaderSize`.
+pub const MAX_HEADER_SIZE: I64 = 16384
+
+/// Returns a list of all standard HTTP methods.
+/// Corresponds to Node.js `http.METHODS`.
+pub func methods() -> List[Str] {
+    let m: List[Str] = List[Str]::new(9)
+    m.push("ACL")
+    m.push("BIND")
+    m.push("CHECKOUT")
+    m.push("CONNECT")
+    m.push("COPY")
+    m.push("DELETE")
+    m.push("GET")
+    m.push("HEAD")
+    m.push("LINK")
+    m.push("LOCK")
+    m.push("M-SEARCH")
+    m.push("MERGE")
+    m.push("MKACTIVITY")
+    m.push("MKCALENDAR")
+    m.push("MKCOL")
+    m.push("MOVE")
+    m.push("NOTIFY")
+    m.push("OPTIONS")
+    m.push("PATCH")
+    m.push("POST")
+    m.push("PROPFIND")
+    m.push("PROPPATCH")
+    m.push("PURGE")
+    m.push("PUT")
+    m.push("REBIND")
+    m.push("REPORT")
+    m.push("SEARCH")
+    m.push("SOURCE")
+    m.push("SUBSCRIBE")
+    m.push("TRACE")
+    m.push("UNBIND")
+    m.push("UNLINK")
+    m.push("UNLOCK")
+    m.push("UNSUBSCRIBE")
+    return m
+}
+
+/// Returns a HashMap mapping status codes (as Str) to reason phrases.
+/// Corresponds to Node.js `http.STATUS_CODES`.
+pub func status_codes() -> HashMap[Str, Str] {
+    let m: HashMap[Str, Str] = HashMap::new[Str, Str](64)
+    // 1xx
+    m.set("100", "Continue")
+    m.set("101", "Switching Protocols")
+    m.set("102", "Processing")
+    m.set("103", "Early Hints")
+    // 2xx
+    m.set("200", "OK")
+    m.set("201", "Created")
+    m.set("202", "Accepted")
+    m.set("203", "Non-Authoritative Information")
+    m.set("204", "No Content")
+    m.set("205", "Reset Content")
+    m.set("206", "Partial Content")
+    m.set("207", "Multi-Status")
+    m.set("208", "Already Reported")
+    m.set("226", "IM Used")
+    // 3xx
+    m.set("300", "Multiple Choices")
+    m.set("301", "Moved Permanently")
+    m.set("302", "Found")
+    m.set("303", "See Other")
+    m.set("304", "Not Modified")
+    m.set("305", "Use Proxy")
+    m.set("307", "Temporary Redirect")
+    m.set("308", "Permanent Redirect")
+    // 4xx
+    m.set("400", "Bad Request")
+    m.set("401", "Unauthorized")
+    m.set("402", "Payment Required")
+    m.set("403", "Forbidden")
+    m.set("404", "Not Found")
+    m.set("405", "Method Not Allowed")
+    m.set("406", "Not Acceptable")
+    m.set("407", "Proxy Authentication Required")
+    m.set("408", "Request Timeout")
+    m.set("409", "Conflict")
+    m.set("410", "Gone")
+    m.set("411", "Length Required")
+    m.set("412", "Precondition Failed")
+    m.set("413", "Payload Too Large")
+    m.set("414", "URI Too Long")
+    m.set("415", "Unsupported Media Type")
+    m.set("416", "Range Not Satisfiable")
+    m.set("417", "Expectation Failed")
+    m.set("418", "I'm a Teapot")
+    m.set("421", "Misdirected Request")
+    m.set("422", "Unprocessable Entity")
+    m.set("423", "Locked")
+    m.set("424", "Failed Dependency")
+    m.set("425", "Too Early")
+    m.set("426", "Upgrade Required")
+    m.set("428", "Precondition Required")
+    m.set("429", "Too Many Requests")
+    m.set("431", "Request Header Fields Too Large")
+    m.set("451", "Unavailable For Legal Reasons")
+    // 5xx
+    m.set("500", "Internal Server Error")
+    m.set("501", "Not Implemented")
+    m.set("502", "Bad Gateway")
+    m.set("503", "Service Unavailable")
+    m.set("504", "Gateway Timeout")
+    m.set("505", "HTTP Version Not Supported")
+    m.set("506", "Variant Also Negotiates")
+    m.set("507", "Insufficient Storage")
+    m.set("508", "Loop Detected")
+    m.set("509", "Bandwidth Limit Exceeded")
+    m.set("510", "Not Extended")
+    m.set("511", "Network Authentication Required")
+    return m
+}
+
+/// Validates an HTTP header name.
+/// Returns Ok(()) if valid, Err(HttpError) if invalid.
+///
+/// Header names must be valid tokens per RFC 7230:
+/// - Only visible ASCII chars (33-126)
+/// - No separator chars: ()<>@,;:\"/[]?={}
+///
+/// Corresponds to Node.js `http.validateHeaderName(name)`.
+pub func validate_header_name(name: Str) -> Outcome[Unit, HttpError] {
+    let name_len: I64 = str::len(name)
+    if name_len == 0 {
+        return Err(HttpError::new(HttpErrorKind::InvalidHeader(), "header name must not be empty"))
+    }
+
+    var i: I64 = 0
+    loop (i < name_len) {
+        let c: I32 = str::char_at(name, i)
+        // Must be visible ASCII (33-126) and not a separator
+        if c < 33 or c > 126 {
+            return Err(HttpError::new(HttpErrorKind::InvalidHeader(), "header name contains invalid character"))
+        }
+        // Check separators: ()<>@,;:\"/[]?={}
+        if c == 40 or c == 41 or c == 60 or c == 62 or c == 64
+            or c == 44 or c == 59 or c == 58 or c == 92 or c == 34
+            or c == 47 or c == 91 or c == 93 or c == 63 or c == 61
+            or c == 123 or c == 125 {
+            return Err(HttpError::new(HttpErrorKind::InvalidHeader(), "header name contains separator character"))
+        }
+        i = i + 1
+    }
+    return Ok(())
+}
+
+/// Validates an HTTP header value.
+/// Returns Ok(()) if valid, Err(HttpError) if invalid.
+///
+/// Header values must not contain NUL (0), CR (13), or LF (10).
+///
+/// Corresponds to Node.js `http.validateHeaderValue(name, value)`.
+pub func validate_header_value(name: Str, value: Str) -> Outcome[Unit, HttpError] {
+    let val_len: I64 = str::len(value)
+
+    var i: I64 = 0
+    loop (i < val_len) {
+        let c: I32 = str::char_at(value, i)
+        if c == 0 {
+            return Err(HttpError::new(HttpErrorKind::InvalidHeader(),
+                "header \"{name}\" value contains NUL character"))
+        }
+        if c == 13 {
+            return Err(HttpError::new(HttpErrorKind::InvalidHeader(),
+                "header \"{name}\" value contains CR character"))
+        }
+        if c == 10 {
+            return Err(HttpError::new(HttpErrorKind::InvalidHeader(),
+                "header \"{name}\" value contains LF character"))
+        }
+        i = i + 1
+    }
+    return Ok(())
+}
+
+// create_server() will be added when HttpServer is enabled in mod.tml

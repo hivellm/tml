@@ -1,0 +1,26 @@
+// Tests for std::http::agent — pool operations
+use test::{assert, assert_eq}
+use std::http::agent::{Agent, AgentOptions}
+
+@test
+func test_agent_pool_operations() -> I32 {
+    let opts: AgentOptions = AgentOptions::new().with_keep_alive(true).with_max_free_sockets(4)
+    var agent: Agent = Agent::new(opts)
+    let name: Str = agent.get_name("example.com", 80, false)
+    assert_eq(name, "example.com:80:", "pool name")
+
+    // Pool starts empty
+    assert_eq(agent.get_from_pool(name), -1 as I64, "empty pool returns -1")
+
+    // Return a socket to pool
+    agent.return_to_pool(name, 42)
+    assert_eq(agent.free_count(), 1, "1 socket in pool")
+
+    // Get it back
+    let fd: I64 = agent.get_from_pool(name)
+    assert_eq(fd, 42, "got fd 42 back")
+    assert_eq(agent.free_count(), 0, "pool empty again")
+
+    agent.destroy()
+    return 0
+}

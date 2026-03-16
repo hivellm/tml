@@ -1,0 +1,17 @@
+// Tests for std::http::agent — AgentOptions and Agent basics
+use test::{assert, assert_eq}
+use std::http::agent::{Agent, AgentOptions}
+
+@test
+func test_agent_defaults() -> I32 {
+    let opts: AgentOptions = AgentOptions::new()
+    let agent: Agent = Agent::new(opts)
+    assert(not agent.is_keep_alive(), "default no keep-alive")
+    assert_eq(agent.max_sockets(), -1 as I64, "default unlimited sockets")
+    assert_eq(agent.max_free_sockets(), 256, "default 256 free sockets")
+    assert_eq(agent.scheduling(), "lifo", "default lifo")
+    assert_eq(agent.free_count(), 0, "no free sockets")
+    assert(agent.can_create_connection(), "can create connection")
+    agent.destroy()
+    return 0
+}
