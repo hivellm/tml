@@ -31,6 +31,7 @@ TML_MODULE("test")
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <fstream>
 #include <llvm/Support/ErrorHandling.h>
 #include <mutex>
 #include <set>
@@ -622,6 +623,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             {"std/tests/glob/", "std::glob"},
             {"std/tests/json/", "std::json"},
             {"std/tests/crypto/", "std::crypto"},
+            {"std/tests/zlib/", "std::zlib"},
+            {"std/tests/search/", "std::search"},
+            {"std/tests/profiler/", "std::profiler"},
+            {"std/tests/io/", "std::json"}, // std::io imports std::json indirectly
         };
         for (const auto& test : suite.tests) {
             auto fwd = to_fwd_slashes(test.file_path);
@@ -632,6 +637,36 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                     registry->register_module(mod_name, synth);
                 }
             }
+        }
+
+        // Also scan test file contents for `use std::*` imports to handle
+        // tests in non-standard locations (e.g., compiler/tests/) that import
+        // library modules requiring conditional runtime linking.
+        static const std::pair<std::string, std::string> import_module_map[] = {
+            {"use std::zlib", "std::zlib"},     {"use std::json", "std::json"},
+            {"use std::search", "std::search"}, {"use std::profiler", "std::profiler"},
+            {"use std::crypto", "std::crypto"}, {"use std::file", "std::file"},
+            {"use std::glob", "std::glob"},
+        };
+        for (const auto& test : suite.tests) {
+            try {
+                std::ifstream file(test.file_path);
+                if (!file.is_open())
+                    continue;
+                std::string line;
+                int line_count = 0;
+                while (std::getline(file, line) && line_count < 30) {
+                    ++line_count;
+                    for (const auto& [import_prefix, mod_name] : import_module_map) {
+                        if (line.find(import_prefix) != std::string::npos &&
+                            !registry->has_module(mod_name)) {
+                            types::Module synth;
+                            synth.name = mod_name;
+                            registry->register_module(mod_name, synth);
+                        }
+                    }
+                }
+            } catch (...) {}
         }
     }
 

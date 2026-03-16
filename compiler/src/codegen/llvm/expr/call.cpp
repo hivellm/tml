@@ -48,6 +48,41 @@ static void match_where_pattern_call(const parser::Type& pattern, const types::T
         }
         return;
     }
+    // Handle FuncType patterns: e.g., func() -> Maybe[T]
+    if (pattern.is<parser::FuncType>()) {
+        const auto& func_pattern = pattern.as<parser::FuncType>();
+        if (concrete->is<types::FuncType>()) {
+            const auto& concrete_func = concrete->as<types::FuncType>();
+            // Match return types
+            if (func_pattern.return_type && concrete_func.return_type) {
+                match_where_pattern_call(*func_pattern.return_type, concrete_func.return_type,
+                                         type_subs);
+            }
+            // Match parameter types
+            for (size_t pi = 0; pi < func_pattern.params.size() && pi < concrete_func.params.size();
+                 ++pi) {
+                if (func_pattern.params[pi] && concrete_func.params[pi]) {
+                    match_where_pattern_call(*func_pattern.params[pi], concrete_func.params[pi],
+                                             type_subs);
+                }
+            }
+        } else if (concrete->is<types::ClosureType>()) {
+            // Also handle ClosureType (closures are FuncType-like)
+            const auto& concrete_closure = concrete->as<types::ClosureType>();
+            if (func_pattern.return_type && concrete_closure.return_type) {
+                match_where_pattern_call(*func_pattern.return_type, concrete_closure.return_type,
+                                         type_subs);
+            }
+            for (size_t pi = 0;
+                 pi < func_pattern.params.size() && pi < concrete_closure.params.size(); ++pi) {
+                if (func_pattern.params[pi] && concrete_closure.params[pi]) {
+                    match_where_pattern_call(*func_pattern.params[pi], concrete_closure.params[pi],
+                                             type_subs);
+                }
+            }
+        }
+        return;
+    }
     if (!pattern.is<parser::NamedType>())
         return;
     const auto& named = pattern.as<parser::NamedType>();

@@ -960,10 +960,12 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (uses_json_module()) {
         // Find the JSON runtime library (built alongside tml.exe)
         auto find_json_runtime = []() -> std::optional<fs::path> {
+            // Try both .lib (MSVC) and .a (Zig CC/Clang) naming conventions
+            std::vector<std::string> lib_names;
 #ifdef _WIN32
-            std::string lib_name = "tml_json_runtime.lib";
+            lib_names = {"tml_json_runtime.lib", "libtml_json_runtime.a"};
 #else
-            std::string lib_name = "libtml_json_runtime.a";
+            lib_names = {"libtml_json_runtime.a", "tml_json_runtime.lib"};
 #endif
             // Search locations: prioritize release when optimizing, debug otherwise
             std::vector<std::string> search_paths;
@@ -993,9 +995,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
 
             for (const auto& search_path : search_paths) {
-                fs::path lib_path = fs::path(search_path) / lib_name;
-                if (fs::exists(lib_path)) {
-                    return fs::absolute(lib_path);
+                for (const auto& ln : lib_names) {
+                    fs::path lib_path = fs::path(search_path) / ln;
+                    if (fs::exists(lib_path)) {
+                        return fs::absolute(lib_path);
+                    }
                 }
             }
             return std::nullopt;
@@ -1008,16 +1012,25 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             // Also need to link tml_json.lib which contains the actual JSON parser
             // (tml_json_runtime.lib depends on it)
             auto json_lib_dir = json_lib->parent_path();
+            std::vector<std::string> json_core_names;
 #ifdef _WIN32
-            auto tml_json_lib = json_lib_dir / "tml_json.lib";
+            json_core_names = {"tml_json.lib", "libtml_json.a"};
 #else
-            auto tml_json_lib = json_lib_dir / "libtml_json.a";
+            json_core_names = {"libtml_json.a", "tml_json.lib"};
 #endif
-            if (fs::exists(tml_json_lib)) {
-                objects.push_back(tml_json_lib);
-                TML_LOG_DEBUG("build", "Including JSON parser library: " << tml_json_lib.string());
-            } else {
-                TML_LOG_WARN("build", "tml_json library not found at " << tml_json_lib.string());
+            bool json_core_found = false;
+            for (const auto& jn : json_core_names) {
+                auto tml_json_lib = json_lib_dir / jn;
+                if (fs::exists(tml_json_lib)) {
+                    objects.push_back(tml_json_lib);
+                    TML_LOG_DEBUG("build",
+                                  "Including JSON parser library: " << tml_json_lib.string());
+                    json_core_found = true;
+                    break;
+                }
+            }
+            if (!json_core_found) {
+                TML_LOG_WARN("build", "tml_json library not found in " << json_lib_dir.string());
             }
         } else {
             TML_LOG_WARN("build", "std::json imported but tml_json_runtime library not found");
@@ -1134,10 +1147,12 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (registry->has_module("std::profiler")) {
         // Find the profiler runtime library (built alongside tml.exe)
         auto find_profiler_runtime = []() -> std::optional<fs::path> {
+            // Try both .lib (MSVC) and .a (Zig CC/Clang) naming conventions
+            std::vector<std::string> lib_names;
 #ifdef _WIN32
-            std::string lib_name = "tml_profiler.lib";
+            lib_names = {"tml_profiler.lib", "libtml_profiler.a"};
 #else
-            std::string lib_name = "libtml_profiler.a";
+            lib_names = {"libtml_profiler.a", "tml_profiler.lib"};
 #endif
             // Search locations: prioritize release when optimizing, debug otherwise
             std::vector<std::string> search_paths;
@@ -1166,9 +1181,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
 
             for (const auto& search_path : search_paths) {
-                fs::path lib_path = fs::path(search_path) / lib_name;
-                if (fs::exists(lib_path)) {
-                    return fs::absolute(lib_path);
+                for (const auto& ln : lib_names) {
+                    fs::path lib_path = fs::path(search_path) / ln;
+                    if (fs::exists(lib_path)) {
+                        return fs::absolute(lib_path);
+                    }
                 }
             }
             return std::nullopt;
@@ -1180,26 +1197,33 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                           "Including profiler runtime library: " << profiler_lib->string());
 
             // Also link tml_log dependency (profiler uses TML_LOG_* macros)
+            std::vector<std::string> log_lib_names;
 #ifdef _WIN32
-            std::string log_lib_name = "tml_log.lib";
+            log_lib_names = {"tml_log.lib", "libtml_log.a"};
 #else
-            std::string log_lib_name = "libtml_log.a";
+            log_lib_names = {"libtml_log.a", "tml_log.lib"};
 #endif
             auto profiler_lib_dir = profiler_lib->parent_path();
-            // Search: same dir as profiler, then recursively in parent/cache
+            // Search: same dir as profiler, then lib/ subdir, then recursively in parent/cache
             bool log_found = false;
             // Check same directory first
-            auto log_same_dir = profiler_lib_dir / log_lib_name;
-            if (fs::exists(log_same_dir)) {
-                objects.push_back(fs::absolute(log_same_dir));
-                log_found = true;
+            for (const auto& lln : log_lib_names) {
+                auto log_same_dir = profiler_lib_dir / lln;
+                if (fs::exists(log_same_dir)) {
+                    objects.push_back(fs::absolute(log_same_dir));
+                    log_found = true;
+                    break;
+                }
             }
             // Check lib/ subdirectory (CMake outputs to build/debug/lib/)
             if (!log_found) {
-                auto log_lib_subdir = profiler_lib_dir / "lib" / log_lib_name;
-                if (fs::exists(log_lib_subdir)) {
-                    objects.push_back(fs::absolute(log_lib_subdir));
-                    log_found = true;
+                for (const auto& lln : log_lib_names) {
+                    auto log_lib_subdir = profiler_lib_dir / "lib" / lln;
+                    if (fs::exists(log_lib_subdir)) {
+                        objects.push_back(fs::absolute(log_lib_subdir));
+                        log_found = true;
+                        break;
+                    }
                 }
             }
             // Search build cache directory (CMake puts libs in cache/*/Debug/)
@@ -1208,11 +1232,16 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 if (fs::exists(cache_base)) {
                     try {
                         for (auto& p : fs::recursive_directory_iterator(cache_base)) {
-                            if (p.path().filename().string() == log_lib_name) {
-                                objects.push_back(fs::absolute(p.path()));
-                                log_found = true;
-                                break;
+                            auto fname = p.path().filename().string();
+                            for (const auto& lln : log_lib_names) {
+                                if (fname == lln) {
+                                    objects.push_back(fs::absolute(p.path()));
+                                    log_found = true;
+                                    break;
+                                }
                             }
+                            if (log_found)
+                                break;
                         }
                     } catch (...) {}
                 }
@@ -1241,10 +1270,12 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     };
     if (uses_search_module()) {
         auto find_search_runtime = []() -> std::optional<fs::path> {
+            // Try both .lib (MSVC) and .a (Zig CC/Clang) naming conventions
+            std::vector<std::string> lib_names;
 #ifdef _WIN32
-            std::string lib_name = "tml_search_runtime.lib";
+            lib_names = {"tml_search_runtime.lib", "libtml_search_runtime.a"};
 #else
-            std::string lib_name = "libtml_search_runtime.a";
+            lib_names = {"libtml_search_runtime.a", "tml_search_runtime.lib"};
 #endif
             std::vector<std::string> search_paths;
             bool is_release = CompilerOptions::optimization_level >= 1;
@@ -1271,9 +1302,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
 
             for (const auto& search_path : search_paths) {
-                fs::path lib_path = fs::path(search_path) / lib_name;
-                if (fs::exists(lib_path)) {
-                    return fs::absolute(lib_path);
+                for (const auto& ln : lib_names) {
+                    fs::path lib_path = fs::path(search_path) / ln;
+                    if (fs::exists(lib_path)) {
+                        return fs::absolute(lib_path);
+                    }
                 }
             }
             return std::nullopt;
@@ -1285,10 +1318,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
             // Also link tml_search.lib (search_engine.cpp depends on it)
             auto search_lib_dir = search_lib->parent_path();
+            std::vector<std::string> search_core_names;
 #ifdef _WIN32
-            std::string search_core_name = "tml_search.lib";
+            search_core_names = {"tml_search.lib", "libtml_search.a"};
 #else
-            std::string search_core_name = "libtml_search.a";
+            search_core_names = {"libtml_search.a", "tml_search.lib"};
 #endif
             // Search in cache directory (CMake puts libs there)
             bool core_found = false;
@@ -1296,30 +1330,41 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             if (fs::exists(cache_base)) {
                 try {
                     for (auto& p : fs::recursive_directory_iterator(cache_base)) {
-                        if (p.path().filename().string() == search_core_name) {
-                            objects.push_back(fs::absolute(p.path()));
-                            core_found = true;
-                            TML_LOG_DEBUG("build",
-                                          "Including search core library: " << p.path().string());
-                            break;
+                        auto fname = p.path().filename().string();
+                        for (const auto& scn : search_core_names) {
+                            if (fname == scn) {
+                                objects.push_back(fs::absolute(p.path()));
+                                core_found = true;
+                                TML_LOG_DEBUG("build", "Including search core library: "
+                                                           << p.path().string());
+                                break;
+                            }
                         }
+                        if (core_found)
+                            break;
                     }
                 } catch (...) {}
             }
             if (!core_found) {
                 // Check same directory
-                auto same_dir = search_lib_dir / search_core_name;
-                if (fs::exists(same_dir)) {
-                    objects.push_back(fs::absolute(same_dir));
-                    core_found = true;
+                for (const auto& scn : search_core_names) {
+                    auto same_dir = search_lib_dir / scn;
+                    if (fs::exists(same_dir)) {
+                        objects.push_back(fs::absolute(same_dir));
+                        core_found = true;
+                        break;
+                    }
                 }
             }
             if (!core_found) {
                 // Check lib/ subdirectory (CMake outputs to build/debug/lib/)
-                auto lib_dir = search_lib_dir / "lib" / search_core_name;
-                if (fs::exists(lib_dir)) {
-                    objects.push_back(fs::absolute(lib_dir));
-                    core_found = true;
+                for (const auto& scn : search_core_names) {
+                    auto lib_dir = search_lib_dir / "lib" / scn;
+                    if (fs::exists(lib_dir)) {
+                        objects.push_back(fs::absolute(lib_dir));
+                        core_found = true;
+                        break;
+                    }
                 }
             }
             if (!core_found) {

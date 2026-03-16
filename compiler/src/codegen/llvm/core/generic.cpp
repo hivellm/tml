@@ -132,7 +132,8 @@ static types::TypePtr parse_mangled_type_string(const std::string& s);
 static types::TypePtr
 parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::string>& tokens,
                           size_t& pos, const std::vector<parser::GenericParam>& impl_generics,
-                          std::unordered_map<std::string, types::TypePtr>& subs) {
+                          std::unordered_map<std::string, types::TypePtr>& subs,
+                          size_t remaining_siblings = 0) {
 
     if (pos >= tokens.size())
         return nullptr;
@@ -160,21 +161,20 @@ parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::st
         // encoded as multiple tokens ["SliceIter", "I32"] in the mangled name.
         // We need to figure out how many tokens to consume.
         //
-        // Strategy: look up the base type name in the module registry to find its
-        // arity (number of generic params). Consume 1 + arity tokens.
+        // When remaining_siblings > 0 (more type params after this one), consume
+        // exactly 1 token to avoid stealing tokens from subsequent params.
+        // Example: Map[I, F] with tokens ["Counter", "Fn"] → I=Counter, F=Fn.
+        //
+        // When remaining_siblings == 0 (last type param), consume ALL remaining
+        // tokens to handle generic types like SliceIter[I32] encoded as
+        // ["SliceIter", "I32"]. Example: Cloned[I] with tokens ["SliceIter", "I32"]
+        // → I=SliceIter__I32 = SliceIter[I32].
         std::string base_token = tokens[pos++];
 
-        // A bare type param can map to a generic type like SliceIter[I32] which is
-        // encoded as multiple tokens ["SliceIter", "I32"] in the mangled name.
-        // Strategy: join all remaining tokens with "__" and use parse_mangled_type_string
-        // which handles Name__Arg1__Arg2 patterns correctly.
-        if (pos < tokens.size()) {
+        if (remaining_siblings == 0 && pos < tokens.size()) {
+            // Last (or only) type param: try consuming all remaining tokens
             std::string full_mangled = base_token;
             size_t saved_pos = pos;
-            // Consume remaining tokens that belong to this type parameter.
-            // Since we don't know the arity, tentatively consume all remaining tokens
-            // and let parse_mangled_type_string handle nested types.
-            // The caller will check if pos is valid after return.
             while (pos < tokens.size()) {
                 full_mangled += "__" + tokens[pos++];
             }
@@ -184,7 +184,7 @@ parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::st
             }
             if (t)
                 return t;
-            // If parsing the full string failed, fall back to just the base token
+            // Multi-token parse failed, fall back to base token
             pos = saved_pos;
         }
 
@@ -203,12 +203,22 @@ parse_tokens_with_pattern(const parser::Type& pattern, const std::vector<std::st
     // Recursively parse type args based on pattern arity
     std::vector<types::TypePtr> type_args;
     if (named.generics.has_value()) {
+        // Count remaining type args to pass as remaining_siblings so each
+        // bare type param knows how many tokens to leave for subsequent args.
+        size_t total_type_args = 0;
+        for (const auto& arg : named.generics->args) {
+            if (arg.is_type())
+                total_type_args++;
+        }
+        size_t type_arg_index = 0;
         for (const auto& arg : named.generics->args) {
             if (arg.is_type()) {
-                auto arg_type =
-                    parse_tokens_with_pattern(*arg.as_type(), tokens, pos, impl_generics, subs);
+                size_t siblings_after = total_type_args - type_arg_index - 1;
+                auto arg_type = parse_tokens_with_pattern(*arg.as_type(), tokens, pos,
+                                                          impl_generics, subs, siblings_after);
                 if (arg_type)
                     type_args.push_back(arg_type);
+                type_arg_index++;
             }
         }
     }
@@ -256,6 +266,17 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
         return types::make_primitive(types::PrimitiveKind::U64);
     if (s == "Isize")
         return types::make_primitive(types::PrimitiveKind::I64);
+
+    // Function types are mangled as "Fn" (see llvm_types.cpp:1063).
+    // Return a NamedType("Fn") which llvm_type_from_semantic maps to "{ ptr, ptr }"
+    // (fat pointer). We can't recover the actual FuncType signature from just "Fn",
+    // so we use NamedType as a marker. When used as a closure call's semantic_type,
+    // the call codegen falls back to "i32" return type (default).
+    if (s == "Fn") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{"Fn", "", {}};
+        return t;
+    }
 
     // Check for const generic integer value (e.g., "3", "10", "-1")
     if (!s.empty() && (std::isdigit(s[0]) || (s[0] == '-' && s.size() > 1 && std::isdigit(s[1])))) {
@@ -813,7 +834,18 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     // existing entries. This preserves entries from pim.type_subs
                                     // (like Self, This, associated types) that aren't derived
                                     // from the mangled name.
+                                    // Exception: don't override a rich FuncType (with actual
+                                    // params/return) with a degenerate NamedType("Fn") recovered
+                                    // from mangling, which loses all signature information.
                                     for (const auto& [k, v] : new_subs) {
+                                        auto existing = effective_type_subs.find(k);
+                                        if (existing != effective_type_subs.end() &&
+                                            existing->second && v &&
+                                            existing->second->is<types::FuncType>() &&
+                                            v->is<types::NamedType>() &&
+                                            v->as<types::NamedType>().name == "Fn") {
+                                            continue; // Keep the richer FuncType entry
+                                        }
                                         effective_type_subs[k] = v;
                                     }
                                 }
@@ -1152,7 +1184,19 @@ void LLVMIRGen::generate_pending_instantiations() {
                                                                   new_subs);
                                     }
                                     if (!new_subs.empty()) {
-                                        effective_type_subs = new_subs;
+                                        // Merge new_subs into effective_type_subs, preserving
+                                        // rich FuncType entries over degenerate NamedType("Fn").
+                                        for (const auto& [k, v] : new_subs) {
+                                            auto existing = effective_type_subs.find(k);
+                                            if (existing != effective_type_subs.end() &&
+                                                existing->second && v &&
+                                                existing->second->is<types::FuncType>() &&
+                                                v->is<types::NamedType>() &&
+                                                v->as<types::NamedType>().name == "Fn") {
+                                                continue; // Keep the richer FuncType entry
+                                            }
+                                            effective_type_subs[k] = v;
+                                        }
                                     }
                                 } else if (effective_type_subs.empty()) {
                                     std::string suffix =
