@@ -129,6 +129,35 @@ This is a HARD REQUIREMENT because rushing to execute tasks without analysis lea
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ ABSOLUTE PROHIBITION: No Shortcuts, Stubs, Placeholders, or Simplified Logic ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM TAKING SHORTCUTS TO DELIVER RESULTS FASTER.**
+
+Response time is NOT important. What matters is the QUALITY of the final result. When given a task, you MUST find the correct way to implement it and deliver a proper, complete implementation — regardless of complexity.
+
+**This is NON-NEGOTIABLE. You MUST follow these rules:**
+
+1. **NEVER simplify logic** to make implementation easier or faster
+2. **NEVER add TODO/FIXME/HACK comments** as placeholders for unfinished work
+3. **NEVER create stubs** — implement the real functionality
+4. **NEVER create placeholder implementations** that "work for now" but aren't correct
+5. **NEVER alter existing logic** to avoid dealing with complexity
+6. **NEVER reduce scope** of what was requested to deliver something quicker
+7. **NEVER skip edge cases** or error handling that the correct implementation requires
+8. **NEVER deliver partial implementations** claiming "the rest can be added later"
+
+**What you MUST do instead:**
+
+- ✅ **Research the correct approach** — read existing code, understand patterns, find the right solution
+- ✅ **Implement completely** — the full functionality as requested, with all edge cases
+- ✅ **Take as long as needed** — there is no time pressure, only quality pressure
+- ✅ **Ask for clarification** if the task is ambiguous, rather than guessing and delivering something wrong
+- ✅ **Fix root causes** — never patch symptoms to make things "appear to work"
+
+**WHY:** Quick, incomplete implementations create technical debt, hide bugs, and require rework. A proper implementation done once is always better than a quick hack that needs to be redone. The user explicitly values correctness and completeness over speed.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Minimize C and C++ Code ⛔
 
 **The TML project is actively migrating away from C/C++ toward pure TML. You MUST NOT add new C or C++ code unless absolutely necessary.**

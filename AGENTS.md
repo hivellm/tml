@@ -104,6 +104,28 @@ Then the system MUST return a JWT token
 
 ---
 
+## ⛔ ABSOLUTE PROHIBITION: No Shortcuts, Stubs, Placeholders, or Simplified Logic ⛔
+
+**ALL AGENTS ARE EXPRESSLY FORBIDDEN FROM TAKING SHORTCUTS TO DELIVER RESULTS FASTER.**
+
+Response time is NOT important. What matters is the QUALITY of the final result. When assigned a task, you MUST find the correct way to implement it and deliver a proper, complete implementation — regardless of complexity.
+
+**Rules (apply to ALL agents — implementer, tester, tml-library-engineer, codegen-debugger, etc.):**
+
+1. **NEVER simplify logic** to make implementation easier or faster
+2. **NEVER add TODO/FIXME/HACK comments** as placeholders for unfinished work
+3. **NEVER create stubs or placeholder implementations**
+4. **NEVER alter existing logic** to avoid dealing with complexity
+5. **NEVER reduce scope** of what was requested to deliver something quicker
+6. **NEVER skip edge cases** or error handling that the correct implementation requires
+7. **NEVER deliver partial implementations** claiming "the rest can be added later"
+
+**Instead:** Research the correct approach, implement completely, take as long as needed, fix root causes.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+---
+
 ## Core Rules
 
 This project uses @hivellm/rulebook standards.

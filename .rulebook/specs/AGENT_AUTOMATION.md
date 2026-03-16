@@ -3,6 +3,24 @@
 
 **CRITICAL**: Mandatory workflow that AI agents MUST execute after EVERY implementation.
 
+## ⛔ ABSOLUTE PROHIBITION: No Shortcuts, Stubs, or Placeholders ⛔
+
+**Response time is NOT important. Only the QUALITY of the final result matters.**
+
+ALL agents MUST:
+- **Research the correct approach** before implementing — read existing code, understand patterns
+- **Implement completely** — full functionality with all edge cases, never partial
+- **Fix root causes** — never patch symptoms to make things "appear to work"
+
+ALL agents are FORBIDDEN from:
+- Simplifying logic to deliver faster
+- Adding TODO/FIXME/HACK placeholders
+- Creating stubs or placeholder implementations
+- Altering existing logic to avoid complexity
+- Reducing requested scope
+- Skipping edge cases or error handling
+- Delivering partial implementations
+
 ## ⚠️ TOKEN OPTIMIZATION (MANDATORY FOR HAIKU)
 
 **Claude Haiku has limited context. Every token counts.**

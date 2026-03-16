@@ -71,4 +71,16 @@ All agent teams must adhere to the project's quality gates:
 - Coverage thresholds must be met
 
 The tester agent is responsible for running these checks before the team lead marks a task as complete.
+
+## ⛔ No Shortcuts Policy (ALL Agents)
+
+**Response time is NOT important. Only the QUALITY of the final result matters.**
+
+Every agent in the team is FORBIDDEN from:
+- Simplifying logic, creating stubs, or adding TODO/FIXME/HACK placeholders
+- Delivering partial implementations or reducing requested scope
+- Altering existing logic to avoid dealing with complexity
+- Skipping edge cases or error handling
+
+Every agent MUST: research the correct approach, implement completely, fix root causes, and take as long as needed. If a task is ambiguous, ask the team lead for clarification rather than guessing.
 <!-- MULTI_AGENT:END -->

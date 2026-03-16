@@ -147,5 +147,33 @@
 - Mutations to `var` arrays via index assignment are silently lost
 - Affects: encode_utf8/encode_utf16 in types_encoding.test.tml
 
+### AST Codegen: current_ret_type_ Override in Let Statement (2026-03-15) - FIXED
+- `llvm_ir_gen_stmt.cpp:900-906`: `let x: StructType = expr` temporarily sets `current_ret_type_ = var_type`
+- If `expr` contains `return Err(e)` inside a `when` arm, the return uses the WRONG type
+- `Err(e)` constructor falls back to `types::make_i32()` for uninferable `T` (call.cpp:1184-1186)
+- Produces `Outcome__I32__LayoutError` instead of correct `Outcome__tuple_Layout_I64__LayoutError`
+- Fix: Added `func_ret_type_` field (never overridden by let hints) to `llvm_ir_gen.hpp:389`
+- `gen_return` restores `current_ret_type_` to `func_ret_type_` before evaluating return expression
+- Set `func_ret_type_` in all 10 function-entry points: func.cpp(2), impl.cpp(2), closure.cpp, class_codegen_generic.cpp(3), dyn.cpp, generate.cpp
+- Affected: core/alloc suite (6 files), any code with `return Err(e)` inside `when` in a `let` init
+
+### Coverage Linker: /EXPORT on Executable (2026-03-15) - FIXED
+- `object_compiler.cpp:854`: `/EXPORT:__llvm_profile_write_file` was added for ALL output types
+- For executables (test system), this forced linker to resolve symbol even when nothing references it
+- LLVM backend compiles IR without `-fprofile-instr-generate`, so objects don't reference profile symbols
+- Fix: moved `/EXPORT` inside `OutputType::DynamicLib` check, only when profile runtime is found
+
+### Coverage Mode: once_lock_get_or_init Crash (2026-03-15) - ACTIVE (coverage artifact)
+- `lib/std/tests/sync/once_lock_get_or_init.test.tml` passes without coverage, crashes with
+- Assertion: `get_or_init should return 42` — closure return value corrupted by coverage instrumentation
+- TML coverage adds `call void @tml_cover_func(ptr ...)` at function entry
+- Likely ABI fragility in closure/reference codegen exposed by changed stack layout
+
+### Incremental Cache Gotcha
+- `incr.bin` cache keys by source hash + options, NOT by compiler binary hash
+- After rebuilding the compiler, old cached IR is still served as "GREEN"
+- Must rename/delete `build/debug/.incr-cache/incr.bin` after compiler changes
+- `mcp__tml__cache_invalidate` only invalidates test suite cache, NOT incr.bin
+
 ### MCP Server Stale Binary Gotcha
 - `tml_mcp.exe` links compiler libraries statically; can't rebuild while running

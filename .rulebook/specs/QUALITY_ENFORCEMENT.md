@@ -29,9 +29,19 @@
 ### Problem Solving Approach - REQUIRED
 - DO NOT seek the simplest bypass or workaround
 - DO NOT be creative with shortcuts that compromise quality
+- DO NOT simplify logic to make implementation easier or faster
+- DO NOT add TODO/FIXME/HACK comments as placeholders for unfinished work
+- DO NOT create stubs or placeholder implementations that "work for now"
+- DO NOT alter existing logic to avoid dealing with complexity
+- DO NOT reduce scope of what was requested to deliver something quicker
+- DO NOT skip edge cases or error handling that the correct implementation requires
+- DO NOT deliver partial implementations claiming "the rest can be added later"
 - DO solve problems properly following best practices
 - DO use proven, established solutions from decades of experience
 - DO fix root causes, not symptoms
+- DO research the correct approach before implementing
+- DO implement completely — the full functionality as requested, with all edge cases
+- DO take as long as needed — response time is NOT important, only quality matters
 
 ### Temporary Files and Scripts - STRICTLY FORBIDDEN
 - **NEVER** create temporary files in project root or any directory outside `/scripts`
