@@ -1,5 +1,6 @@
 // Comprehensive tests for methods on primitive types
 // Tests the codegen fix for passing 'this' by value instead of pointer
+// Tests I32::MIN constant with correct sign extension
 use test
 
 // ============================================================================

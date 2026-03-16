@@ -1,3 +1,5 @@
+use test
+
 func arr100() -> I32 {
     let arr: [I32; 100] = [0; 100]
     return arr[0]

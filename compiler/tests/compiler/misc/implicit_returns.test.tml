@@ -2,6 +2,8 @@
 // Phase 11 of lang-ergonomics task
 
 // Test: Simple expression as implicit return
+use test
+
 func add(a: I32, b: I32) -> I32 {
     a + b
 }

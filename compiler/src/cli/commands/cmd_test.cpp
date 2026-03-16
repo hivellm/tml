@@ -155,6 +155,10 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             opts.features.push_back(argv[++i]);
         } else if (arg.starts_with("--max-compile=")) {
             opts.max_compile_suites = std::stoi(arg.substr(14));
+        } else if (arg == "--no-suite") {
+            opts.suite_mode = false; // Individual mode: 1 DLL per test file
+        } else if (arg == "--suite-mode") {
+            opts.suite_mode = true; // Suite mode: multiple tests per DLL
         } else if (arg == "--new-runner") {
             // Ignored - new runner is now the default and only runner
         } else if (arg.starts_with("--output=")) {
@@ -252,7 +256,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     testing::TestConfig tc;
     tc.patterns = opts.patterns;
     tc.suite_filters = opts.suite_filters;
-    tc.max_per_suite = 10;
+    tc.max_per_suite = opts.suite_mode ? 10 : 1;
     tc.compile_threads = opts.test_threads;
     tc.exec_concurrent = 0; // auto
     tc.timeout_seconds = opts.timeout_seconds;

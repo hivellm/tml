@@ -2,6 +2,8 @@
 // Phase 9 of lang-ergonomics task
 
 // Simple struct with default value
+use test
+
 type Config {
     name: Str,
     port: I32 = 8080,

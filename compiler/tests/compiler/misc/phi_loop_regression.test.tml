@@ -1,6 +1,8 @@
 // Minimal repro for PHI node regression in loops with if-else chains
 // Test: phi_loop_regression
 
+use test
+
 sealed class Circle {
     radius: F64
 

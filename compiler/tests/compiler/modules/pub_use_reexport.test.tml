@@ -16,6 +16,8 @@
 // The UseDecl struct has a Visibility field that stores whether
 // the use declaration is pub or not.
 
+use test
+
 @test
 func test_pub_use_parsing() {
     // Test that the infrastructure is in place

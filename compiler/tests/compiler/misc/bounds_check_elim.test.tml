@@ -1,4 +1,5 @@
 // Test bounds check elimination for array indexing
+use test
 
 func sum_array() -> I32 {
     // Create a fixed-size array

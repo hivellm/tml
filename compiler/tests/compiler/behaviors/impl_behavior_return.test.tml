@@ -2,6 +2,8 @@
 // This test verifies the parsing of impl Behavior syntax works correctly
 
 // Define a simple behavior
+use test
+
 behavior Counter {
     func count(this: ref This) -> I32
 }

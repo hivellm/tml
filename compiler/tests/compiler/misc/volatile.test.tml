@@ -1,5 +1,7 @@
 // Test volatile variable support
 
+use test
+
 @test
 func test_volatile_let() {
     let volatile x: I32 = 42

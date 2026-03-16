@@ -2,6 +2,8 @@
 // Tests parsing and type checking of associated types with generic parameters
 
 // Behavior with a GAT (Generic Associated Type)
+use test
+
 behavior Container {
     // GAT: Item is parameterized by the element type
     type Item[E]

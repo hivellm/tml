@@ -406,6 +406,8 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
 
     if (!const_value.empty()) {
         // Use the stored type if available, otherwise fall back to path-based type inference
+        // Also determine signedness from the type name for correct sext/zext in comparisons
+        bool is_unsigned = false;
         if (!const_llvm_type.empty()) {
             last_expr_type_ = const_llvm_type;
         } else if (path.path.segments.size() >= 1) {
@@ -420,18 +422,23 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
                 last_expr_type_ = "i64";
             } else if (type_name == "U8") {
                 last_expr_type_ = "i8";
+                is_unsigned = true;
             } else if (type_name == "U16") {
                 last_expr_type_ = "i16";
+                is_unsigned = true;
             } else if (type_name == "U32") {
                 last_expr_type_ = "i32";
+                is_unsigned = true;
             } else if (type_name == "U64") {
                 last_expr_type_ = "i64";
+                is_unsigned = true;
             } else {
                 last_expr_type_ = "i64"; // Default to i64
             }
         } else {
             last_expr_type_ = "i64";
         }
+        last_expr_is_unsigned_ = is_unsigned;
         return const_value;
     }
 

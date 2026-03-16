@@ -1,3 +1,5 @@
+use test
+
 func test_arr_loop() -> I32 {
     let arr: [I32; 100] = [0; 100]
     var sum: I32 = 0

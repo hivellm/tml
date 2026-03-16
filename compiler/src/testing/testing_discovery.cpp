@@ -203,19 +203,27 @@ std::vector<Suite> group_into_suites(const std::vector<TestFileInfo>& tests, siz
                       return a->file_path < b->file_path;
                   });
 
+        // Force individual mode for compiler tests — they define impl blocks
+        // on primitive types (e.g., impl I32 { const MIN... }) that produce
+        // external symbols which collide when multiple files are merged.
+        size_t effective_max = max_per_suite;
+        if (key.find("compiler_compiler") != std::string::npos) {
+            effective_max = 1;
+        }
+
         // Split into chunks of max_per_suite
-        size_t chunk_count = (file_ptrs.size() + max_per_suite - 1) / max_per_suite;
+        size_t chunk_count = (file_ptrs.size() + effective_max - 1) / effective_max;
 
         for (size_t chunk = 0; chunk < chunk_count; ++chunk) {
             Suite suite;
             // Derive group from first file in chunk
-            size_t start_idx = chunk * max_per_suite;
-            size_t end_idx = std::min(start_idx + max_per_suite, file_ptrs.size());
+            size_t start_idx = chunk * effective_max;
+            size_t end_idx = std::min(start_idx + effective_max, file_ptrs.size());
 
             suite.group = file_ptrs[start_idx]->group;
 
             // Build suite name
-            if (max_per_suite == 1) {
+            if (effective_max == 1) {
                 // Individual mode: use group_testname for uniqueness
                 suite.name = key + "_" + file_ptrs[start_idx]->test_name;
             } else if (chunk_count > 1) {

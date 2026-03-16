@@ -2,6 +2,8 @@
 // Tests parsing of the crate-level visibility modifier
 
 // A struct with pub(crate) visibility - visible within crate but not outside
+use test
+
 pub(crate) type InternalHelper {
     value: I32
 }
