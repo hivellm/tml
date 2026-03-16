@@ -1,0 +1,61 @@
+// Test that Headers::get() works after set() — validates ptr_read[Str] fix
+use test::{assert, assert_eq}
+use std::http::headers::Headers
+
+@test
+func test_headers_get_value() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Host", "example.com")
+    let val: Str = h.get("host")
+    assert_eq(val, "example.com", "get should return set value")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_get_multiple() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Content-Type", "text/html")
+    h.set("Accept", "application/json")
+    h.set("X-Custom", "my-value")
+    assert_eq(h.get("content-type"), "text/html", "content-type")
+    assert_eq(h.get("accept"), "application/json", "accept")
+    assert_eq(h.get("x-custom"), "my-value", "x-custom")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_get_missing() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Host", "example.com")
+    let missing: Str = h.get("nonexistent")
+    assert_eq(missing, "", "missing key should return empty string")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_convenience_accessors() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Host", "example.com")
+    h.set("Content-Type", "text/plain")
+    h.set("Connection", "keep-alive")
+    assert_eq(h.host(), "example.com", "host accessor")
+    assert_eq(h.content_type(), "text/plain", "content_type accessor")
+    assert_eq(h.connection(), "keep-alive", "connection accessor")
+    assert(h.is_keep_alive(), "should be keep-alive")
+    h.destroy()
+    return 0
+}
+
+@test
+func test_headers_overwrite_get() -> I32 {
+    let h: Headers = Headers::new()
+    h.set("Host", "old.com")
+    h.set("Host", "new.com")
+    assert_eq(h.get("host"), "new.com", "overwritten value")
+    assert_eq(h.len(), 1 as I64, "len unchanged after overwrite")
+    h.destroy()
+    return 0
+}
