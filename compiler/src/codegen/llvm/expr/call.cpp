@@ -31,6 +31,60 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Static helper: match a parser type pattern against a concrete semantic type
+// to extract type parameter bindings. Used for where-clause type equality resolution.
+// e.g., pattern `ref T` matched against concrete `ref I32` derives T = I32.
+static void match_where_pattern_call(const parser::Type& pattern, const types::TypePtr& concrete,
+                                     std::unordered_map<std::string, types::TypePtr>& type_subs) {
+    if (!concrete)
+        return;
+    if (pattern.is<parser::RefType>()) {
+        const auto& ref_pattern = pattern.as<parser::RefType>();
+        if (ref_pattern.inner && concrete->is<types::RefType>()) {
+            const auto& concrete_ref = concrete->as<types::RefType>();
+            if (concrete_ref.inner) {
+                match_where_pattern_call(*ref_pattern.inner, concrete_ref.inner, type_subs);
+            }
+        }
+        return;
+    }
+    if (!pattern.is<parser::NamedType>())
+        return;
+    const auto& named = pattern.as<parser::NamedType>();
+    if (named.path.segments.empty())
+        return;
+    const std::string& name = named.path.segments.back();
+    bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
+    if (!has_type_args) {
+        auto existing = type_subs.find(name);
+        bool is_placeholder = false;
+        if (existing != type_subs.end() && existing->second &&
+            existing->second->is<types::NamedType>()) {
+            const auto& existing_named = existing->second->as<types::NamedType>();
+            if (existing_named.name == name && existing_named.type_args.empty()) {
+                is_placeholder = true;
+            }
+        }
+        if (existing == type_subs.end() || is_placeholder) {
+            type_subs[name] = concrete;
+        }
+    } else if (concrete->is<types::NamedType>()) {
+        const auto& concrete_named = concrete->as<types::NamedType>();
+        if (concrete_named.name == name) {
+            const auto& pattern_args = named.generics->args;
+            size_t min_args = std::min(pattern_args.size(), concrete_named.type_args.size());
+            for (size_t i = 0; i < min_args; ++i) {
+                if (pattern_args[i].is_type() && concrete_named.type_args[i]) {
+                    const auto& pt = pattern_args[i].as_type();
+                    if (pt) {
+                        match_where_pattern_call(*pt, concrete_named.type_args[i], type_subs);
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Static helper to parse mangled type strings like "Mutex__I32" into proper TypePtr
 // This is used for nested generic type inference and avoids expensive std::function lambdas
 static types::TypePtr parse_mangled_type_string(const std::string& s) {
@@ -1782,9 +1836,38 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
         // Infer any remaining type arguments using unification
         // For each argument, unify the parameter type pattern with the argument type
+        // Also save arg types for where-clause resolution (unify_types may store
+        // a different representation than infer_expr_type returns).
+        std::vector<types::TypePtr> arg_types_for_where;
         for (size_t i = 0; i < call.args.size() && i < gen_func.params.size(); ++i) {
             types::TypePtr arg_type = infer_expr_type(*call.args[i]);
+            arg_types_for_where.push_back(arg_type);
             unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
+        }
+        // After unification, check if any bindings lost type_args.
+        // unify_types may store a clone without type_args (e.g., SliceIter instead of
+        // SliceIter[I32]) if the TypePtr is shared and later modified. Re-apply from
+        // the saved arg types to ensure full type information is preserved.
+        for (size_t i = 0; i < gen_func.params.size() && i < arg_types_for_where.size(); ++i) {
+            if (!gen_func.params[i].type->is<parser::NamedType>())
+                continue;
+            const auto& pt = gen_func.params[i].type->as<parser::NamedType>();
+            if (pt.path.segments.empty())
+                continue;
+            const std::string& param_name = pt.path.segments.back();
+            if (generic_names.count(param_name) == 0)
+                continue;
+            auto& bound = bindings[param_name];
+            if (bound && arg_types_for_where[i] && arg_types_for_where[i]->is<types::NamedType>() &&
+                bound->is<types::NamedType>()) {
+                const auto& arg_named = arg_types_for_where[i]->as<types::NamedType>();
+                const auto& bound_named = bound->as<types::NamedType>();
+                if (bound_named.name == arg_named.name && bound_named.type_args.empty() &&
+                    !arg_named.type_args.empty()) {
+                    // Binding lost type_args — restore from the saved arg type
+                    bound = arg_types_for_where[i];
+                }
+            }
         }
 
         // If some generic parameters couldn't be inferred from arguments,
@@ -1806,6 +1889,60 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 types::TypePtr expected_ret = semantic_type_from_llvm(expected_enum_type_);
                 if (expected_ret) {
                     unify_types(**gen_func.return_type, expected_ret, generic_names, bindings);
+                }
+            }
+        }
+
+        // Resolve where-clause type equalities to derive additional bindings.
+        // For example: `func cloned[I: Iterator, T: Duplicate](iter: I) where I::Item = ref T`
+        // After inferring I = SliceIter[I32] from args, resolve I::Item = ref I32,
+        // then match pattern `ref T` to derive T = I32.
+        if (gen_func.where_clause && !gen_func.where_clause->type_equalities.empty()) {
+            for (const auto& [lhs, rhs] : gen_func.where_clause->type_equalities) {
+                if (!lhs || !rhs)
+                    continue;
+                if (!lhs->is<parser::NamedType>())
+                    continue;
+                const auto& lhs_named = lhs->as<parser::NamedType>();
+                if (lhs_named.path.segments.size() >= 2) {
+                    // Associated type equality: e.g., I::Item = ref T
+                    const std::string& param_name = lhs_named.path.segments[0];
+                    const std::string& assoc_name = lhs_named.path.segments.back();
+                    // Find the concrete type for this param. Prefer the saved arg type
+                    // (from infer_expr_type) over the binding, because unify_types may
+                    // store a type without full type_args.
+                    types::TypePtr concrete_param;
+                    for (size_t ai = 0; ai < gen_func.params.size(); ++ai) {
+                        if (gen_func.params[ai].type->is<parser::NamedType>()) {
+                            const auto& pt = gen_func.params[ai].type->as<parser::NamedType>();
+                            if (!pt.path.segments.empty() &&
+                                pt.path.segments.back() == param_name &&
+                                ai < arg_types_for_where.size()) {
+                                concrete_param = arg_types_for_where[ai];
+                                break;
+                            }
+                        }
+                    }
+                    if (!concrete_param) {
+                        auto param_it = bindings.find(param_name);
+                        if (param_it != bindings.end())
+                            concrete_param = param_it->second;
+                    }
+                    if (!concrete_param)
+                        continue;
+                    types::TypePtr concrete_assoc =
+                        resolve_assoc_type_for_concrete(concrete_param, assoc_name);
+                    if (concrete_assoc) {
+                        // Match RHS pattern against concrete to extract type params
+                        match_where_pattern_call(*rhs, concrete_assoc, bindings);
+                    }
+                } else if (lhs_named.path.segments.size() == 1) {
+                    // Simple equality: e.g., F = func() -> T
+                    const std::string& param_name = lhs_named.path.segments[0];
+                    auto param_it = bindings.find(param_name);
+                    if (param_it == bindings.end() || !param_it->second)
+                        continue;
+                    match_where_pattern_call(*rhs, param_it->second, bindings);
                 }
             }
         }

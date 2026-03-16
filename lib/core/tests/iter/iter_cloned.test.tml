@@ -1,12 +1,86 @@
 // Tests for core::iter::adapters::cloned — Cloned[I] adapter
-// BLOCKED: Generic monomorphization bug -- `where I::Item = ref T` constraint
-// causes codegen to emit `load %struct.T` instead of concrete type.
-// Same root cause as copied adapter and generic trait dispatch codegen bug.
-// Functions blocked: next, size_hint, cloned (all 3)
-use test::{assert}
+// Tests the Cloned iterator adapter which clones borrowed elements,
+// converting an iterator over references to an iterator over owned values.
+// Uses direct struct construction (Cloned { iter: ... }) since the
+// standalone `cloned()` constructor function has separate monomorphization issues
+// with where-clause type parameter resolution.
+
+use test::{assert, assert_eq}
+use core::iter::Iterator
+use core::iter::adapters::cloned::Cloned
+use core::option::{Maybe, Just, Nothing}
+use core::slice::{Slice, SliceIter}
 
 @test
-func test_cloned_blocked_codegen() -> I32 {
-    assert(true, "cloned blocked by generic T monomorphization in where clause")
+func test_cloned_basic() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let slice: Slice[I32] = Slice { data: ref arr as *Unit, len: 3 }
+    let iter: SliceIter[I32] = SliceIter { slice: slice, index: 0 }
+    let mut cloned: Cloned[SliceIter[I32]] = Cloned { iter: iter }
+
+    let first: Maybe[I32] = cloned.next()
+    when first {
+        Just(v) => assert_eq(v, 10, "first element should be 10"),
+        Nothing => assert(false, "first element should not be Nothing")
+    }
+
+    let second: Maybe[I32] = cloned.next()
+    when second {
+        Just(v) => assert_eq(v, 20, "second element should be 20"),
+        Nothing => assert(false, "second element should not be Nothing")
+    }
+
+    let third: Maybe[I32] = cloned.next()
+    when third {
+        Just(v) => assert_eq(v, 30, "third element should be 30"),
+        Nothing => assert(false, "third element should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_cloned_exhaustion() -> I32 {
+    let arr: [I32; 2] = [1, 2]
+    let slice: Slice[I32] = Slice { data: ref arr as *Unit, len: 2 }
+    let iter: SliceIter[I32] = SliceIter { slice: slice, index: 0 }
+    let mut cloned: Cloned[SliceIter[I32]] = Cloned { iter: iter }
+
+    let first: Maybe[I32] = cloned.next()
+    let second: Maybe[I32] = cloned.next()
+    let third: Maybe[I32] = cloned.next()
+
+    when first {
+        Just(v) => assert_eq(v, 1, "first should be 1"),
+        Nothing => assert(false, "first should not be Nothing")
+    }
+
+    when second {
+        Just(v) => assert_eq(v, 2, "second should be 2"),
+        Nothing => assert(false, "second should not be Nothing")
+    }
+
+    when third {
+        Just(_) => assert(false, "third should be Nothing after exhaustion"),
+        Nothing => assert(true, "third is Nothing — iterator exhausted")
+    }
+
+    return 0
+}
+
+@test
+func test_cloned_empty() -> I32 {
+    let arr: [I32; 1] = [0]
+    // Create a slice with len=0 to simulate empty
+    let slice: Slice[I32] = Slice { data: ref arr as *Unit, len: 0 }
+    let iter: SliceIter[I32] = SliceIter { slice: slice, index: 0 }
+    let mut cloned: Cloned[SliceIter[I32]] = Cloned { iter: iter }
+
+    let first: Maybe[I32] = cloned.next()
+    when first {
+        Just(_) => assert(false, "empty iterator should yield Nothing"),
+        Nothing => assert(true, "empty iterator yields Nothing")
+    }
+
     return 0
 }

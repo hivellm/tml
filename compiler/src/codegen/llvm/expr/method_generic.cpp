@@ -193,6 +193,94 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                                 } else {
                                     fn_name = "@" + mangle_impl_method(mangled_concrete, method);
                                 }
+
+                                // Queue instantiation for the concrete method if generic.
+                                // Same logic as the required_behaviors path below.
+                                if (mangled_concrete != concrete_type_name) {
+                                    std::string mangled_method_name =
+                                        mangle_impl_method(mangled_concrete, method);
+                                    if (generated_impl_methods_.find(mangled_method_name) ==
+                                        generated_impl_methods_.end()) {
+                                        std::unordered_map<std::string, types::TypePtr>
+                                            inner_type_subs;
+                                        if (sub_it != current_type_subs_.end() &&
+                                            sub_it->second->is<types::NamedType>()) {
+                                            const auto& sub_named =
+                                                sub_it->second->as<types::NamedType>();
+                                            auto inner_impl_it =
+                                                pending_generic_impls_.find(concrete_type_name);
+                                            if (inner_impl_it != pending_generic_impls_.end()) {
+                                                const auto& inner_impl = *inner_impl_it->second;
+                                                for (size_t gi = 0;
+                                                     gi < inner_impl.generics.size() &&
+                                                     gi < sub_named.type_args.size();
+                                                     ++gi) {
+                                                    inner_type_subs[inner_impl.generics[gi].name] =
+                                                        sub_named.type_args[gi];
+                                                }
+                                            }
+                                            if (inner_type_subs.empty() && env_.module_registry()) {
+                                                const auto& all_modules =
+                                                    env_.module_registry()->get_all_modules();
+                                                for (const auto& [mn, mod] : all_modules) {
+                                                    auto sit = mod.structs.find(concrete_type_name);
+                                                    if (sit != mod.structs.end() &&
+                                                        !sit->second.type_params.empty()) {
+                                                        for (size_t gi = 0;
+                                                             gi < sit->second.type_params.size() &&
+                                                             gi < sub_named.type_args.size();
+                                                             ++gi) {
+                                                            inner_type_subs[sit->second
+                                                                                .type_params[gi]] =
+                                                                sub_named.type_args[gi];
+                                                        }
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        bool is_inner_library = false;
+                                        if (env_.module_registry()) {
+                                            const auto& all_modules =
+                                                env_.module_registry()->get_all_modules();
+                                            for (const auto& [mn, mod] : all_modules) {
+                                                if (mod.structs.count(concrete_type_name) > 0 ||
+                                                    mod.enums.count(concrete_type_name) > 0) {
+                                                    is_inner_library = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        TML_DEBUG_LN(
+                                            "[METHOD 4b] QUEUING inner instantiation (param): "
+                                            << mangled_concrete << "::" << method
+                                            << " is_library=" << is_inner_library);
+                                        pending_impl_method_instantiations_.push_back(
+                                            PendingImplMethod{
+                                                mangled_concrete, method, inner_type_subs,
+                                                concrete_type_name,
+                                                /*method_type_suffix=*/"",
+                                                /*is_library_type=*/is_inner_library});
+                                        generated_impl_methods_.insert(mangled_method_name);
+                                    }
+                                } else if (is_lib_type && fn_it == functions_.end()) {
+                                    std::string mangled_method_name =
+                                        mangle_impl_method(concrete_type_name, method);
+                                    if (generated_impl_methods_.find(mangled_method_name) ==
+                                        generated_impl_methods_.end()) {
+                                        TML_DEBUG_LN("[METHOD 4b] QUEUING library method (param): "
+                                                     << concrete_type_name << "::" << method);
+                                        pending_impl_method_instantiations_.push_back(
+                                            PendingImplMethod{concrete_type_name,
+                                                              method,
+                                                              {},
+                                                              concrete_type_name,
+                                                              /*method_type_suffix=*/"",
+                                                              /*is_library_type=*/true});
+                                        generated_impl_methods_.insert(mangled_method_name);
+                                    }
+                                }
+
                                 // Build arguments
                                 std::vector<std::pair<std::string, std::string>> typed_args;
 
@@ -387,6 +475,94 @@ auto LLVMIRGen::gen_method_bounded_generic_dispatch(
                         fn_name = fn_it2->second.llvm_name;
                     } else {
                         fn_name = "@" + mangle_impl_method(mangled_concrete2, method);
+                    }
+
+                    // Queue instantiation for the concrete method if it's a generic type.
+                    // METHOD 4b dispatches to concrete impls for bounded generic receivers
+                    // (e.g., I: Iterator → SliceIter[I32]::next), but without this, the
+                    // function body is never generated — only the call site is emitted.
+                    if (mangled_concrete2 != concrete_type_name) {
+                        // Generic type — need to instantiate the method
+                        std::string mangled_method_name =
+                            mangle_impl_method(mangled_concrete2, method);
+                        if (generated_impl_methods_.find(mangled_method_name) ==
+                            generated_impl_methods_.end()) {
+                            // Build type_subs for the inner type's generic params
+                            std::unordered_map<std::string, types::TypePtr> inner_type_subs;
+                            if (sub_it != current_type_subs_.end() &&
+                                sub_it->second->is<types::NamedType>()) {
+                                const auto& sub_named = sub_it->second->as<types::NamedType>();
+                                // Look up the impl for the concrete type to get generic param names
+                                auto inner_impl_it =
+                                    pending_generic_impls_.find(concrete_type_name);
+                                if (inner_impl_it != pending_generic_impls_.end()) {
+                                    const auto& inner_impl = *inner_impl_it->second;
+                                    for (size_t gi = 0; gi < inner_impl.generics.size() &&
+                                                        gi < sub_named.type_args.size();
+                                         ++gi) {
+                                        inner_type_subs[inner_impl.generics[gi].name] =
+                                            sub_named.type_args[gi];
+                                    }
+                                }
+                                // Also try imported types from module registry
+                                if (inner_type_subs.empty() && env_.module_registry()) {
+                                    const auto& all_modules =
+                                        env_.module_registry()->get_all_modules();
+                                    for (const auto& [mn, mod] : all_modules) {
+                                        auto sit = mod.structs.find(concrete_type_name);
+                                        if (sit != mod.structs.end() &&
+                                            !sit->second.type_params.empty()) {
+                                            for (size_t gi = 0;
+                                                 gi < sit->second.type_params.size() &&
+                                                 gi < sub_named.type_args.size();
+                                                 ++gi) {
+                                                inner_type_subs[sit->second.type_params[gi]] =
+                                                    sub_named.type_args[gi];
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            // Determine if the type is from a library module
+                            bool is_inner_library = false;
+                            if (env_.module_registry()) {
+                                const auto& all_modules = env_.module_registry()->get_all_modules();
+                                for (const auto& [mn, mod] : all_modules) {
+                                    if (mod.structs.count(concrete_type_name) > 0 ||
+                                        mod.enums.count(concrete_type_name) > 0) {
+                                        is_inner_library = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            TML_DEBUG_LN("[METHOD 4b] QUEUING inner instantiation: "
+                                         << mangled_concrete2 << "::" << method
+                                         << " is_library=" << is_inner_library);
+                            pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                mangled_concrete2, method, inner_type_subs, concrete_type_name,
+                                /*method_type_suffix=*/"",
+                                /*is_library_type=*/is_inner_library});
+                            generated_impl_methods_.insert(mangled_method_name);
+                        }
+                    } else if (is_from_library && fn_it2 == functions_.end()) {
+                        // Non-generic library type — ensure the method is queued for
+                        // lazy generation if it's not already registered in functions_
+                        std::string mangled_method_name =
+                            mangle_impl_method(concrete_type_name, method);
+                        if (generated_impl_methods_.find(mangled_method_name) ==
+                            generated_impl_methods_.end()) {
+                            TML_DEBUG_LN("[METHOD 4b] QUEUING library method: "
+                                         << concrete_type_name << "::" << method);
+                            pending_impl_method_instantiations_.push_back(
+                                PendingImplMethod{concrete_type_name,
+                                                  method,
+                                                  {},
+                                                  concrete_type_name,
+                                                  /*method_type_suffix=*/"",
+                                                  /*is_library_type=*/true});
+                            generated_impl_methods_.insert(mangled_method_name);
+                        }
                     }
 
                     std::vector<std::pair<std::string, std::string>> typed_args;

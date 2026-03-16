@@ -1131,6 +1131,28 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         is_unit_variant = true;
                     }
                 }
+                // For nullable Maybe (ptr-optimized), check the semantic type.
+                // When scrutinee_type is "ptr" (nullable pointer optimization),
+                // "Nothing" is a unit variant, not a variable binding.
+                if (!is_unit_variant && is_nullable_maybe && scrutinee_semantic &&
+                    scrutinee_semantic->is<types::NamedType>()) {
+                    const auto& named = scrutinee_semantic->as<types::NamedType>();
+                    // Check if the ident is a known unit variant of the enum
+                    for (const auto& [en, edecl] : pending_generic_enums_) {
+                        if (en == named.name) {
+                            for (const auto& v : edecl->variants) {
+                                bool is_unit =
+                                    (!v.tuple_fields.has_value() || v.tuple_fields->empty()) &&
+                                    (!v.struct_fields.has_value() || v.struct_fields->empty());
+                                if (v.name == ident.name && is_unit) {
+                                    is_unit_variant = true;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
 
                 if (!is_unit_variant) {
                     // Bind the entire scrutinee to the variable
