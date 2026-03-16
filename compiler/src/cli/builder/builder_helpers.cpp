@@ -1039,10 +1039,12 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (uses_zlib_module()) {
         // Find the zlib runtime library (built alongside tml.exe)
         auto find_zlib_runtime = []() -> std::optional<fs::path> {
+            // Try both .lib (MSVC) and .a (Zig CC/Clang) naming conventions
+            std::vector<std::string> lib_names;
 #ifdef _WIN32
-            std::string lib_name = "tml_zlib_runtime.lib";
+            lib_names = {"tml_zlib_runtime.lib", "libtml_zlib_runtime.a"};
 #else
-            std::string lib_name = "libtml_zlib_runtime.a";
+            lib_names = {"libtml_zlib_runtime.a", "tml_zlib_runtime.lib"};
 #endif
             // Search locations: prioritize release when optimizing, debug otherwise
             std::vector<std::string> search_paths;
@@ -1070,9 +1072,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
 
             for (const auto& search_path : search_paths) {
-                fs::path lib_path = fs::path(search_path) / lib_name;
-                if (fs::exists(lib_path)) {
-                    return fs::absolute(lib_path);
+                for (const auto& ln : lib_names) {
+                    fs::path lib_path = fs::path(search_path) / ln;
+                    if (fs::exists(lib_path)) {
+                        return fs::absolute(lib_path);
+                    }
                 }
             }
             return std::nullopt;

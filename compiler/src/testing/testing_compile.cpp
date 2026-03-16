@@ -765,6 +765,47 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             }
         }
     }
+    // Link zlib/brotli/zstd libraries when zlib modules are used
+    {
+        bool uses_zlib = false;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path == "std::zlib" || path.find("std::zlib::") == 0) {
+                uses_zlib = true;
+                break;
+            }
+        }
+        if (uses_zlib) {
+            auto vcpkg_lib = fs::path("vcpkg_installed/x64-windows/lib");
+            if (fs::exists(vcpkg_lib / "zlib.lib")) {
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "zlib.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "zstd.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlidec.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlienc.lib").string()));
+                link_opts.link_flags.push_back(
+                    to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlicommon.lib").string()));
+            }
+        }
+    }
+    // Link json runtime when json modules are used
+    {
+        bool uses_json = false;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path == "std::json" || path.find("std::json::") == 0) {
+                uses_json = true;
+                break;
+            }
+        }
+        if (uses_json) {
+            // json runtime .obj files are compiled by get_runtime_objects(),
+            // but we also need to ensure vcpkg json lib is linked if available
+            auto vcpkg_lib = fs::path("vcpkg_installed/x64-windows/lib");
+            // No additional vcpkg lib needed — json uses C runtime only
+        }
+    }
     // Increase default stack size (debug codegen uses many allocas)
     link_opts.link_flags.push_back("/STACK:67108864");
 #endif
