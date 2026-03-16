@@ -1171,7 +1171,9 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
     // Pre-build stdlib codegen state once. This captures all library IR so each
     // per-file codegen can skip emit_module_pure_tml_functions() entirely (~2-3s savings).
     // The state is shared read-only across all worker threads.
-    if (!g_stdlib_codegen_state) {
+    // Skip for coverage mode: coverage instrumentation makes stdlib codegen very slow
+    // (~10min) and the per-suite path handles coverage correctly without caching.
+    if (!g_stdlib_codegen_state && !config.coverage) {
         build_stdlib_object(config);
     }
     if (g_stdlib_codegen_state) {
