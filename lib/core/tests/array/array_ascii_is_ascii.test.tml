@@ -1,0 +1,25 @@
+// Tests for Array[U8, N]::is_ascii
+use test::{assert, assert_eq}
+
+@test
+func test_array_u8_is_ascii_all_valid() -> I32 {
+    // All bytes <= 127 should be valid ASCII
+    let hello: [U8; 5] = [72, 101, 108, 108, 111]  // "Hello"
+    assert(hello.is_ascii(), "all ASCII bytes should return true")
+    return 0
+}
+
+@test
+func test_array_u8_is_ascii_contains_invalid() -> I32 {
+    // Byte 200 > 127, not valid ASCII
+    let invalid: [U8; 3] = [200, 101, 108]
+    assert(not invalid.is_ascii(), "byte > 127 should return false")
+    return 0
+}
+
+@test
+func test_array_u8_is_ascii_boundary_127() -> I32 {
+    let at_boundary: [U8; 3] = [0, 127, 65]
+    assert(at_boundary.is_ascii(), "bytes 0-127 are valid ASCII")
+    return 0
+}
