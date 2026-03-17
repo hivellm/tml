@@ -1,0 +1,299 @@
+//! Event Loop — cross-platform I/O multiplexing for TML.
+//!
+//! Provides a high-level abstraction over WSAPoll (Windows) and epoll (Linux)
+//! for building event-driven servers, proxies, and networking tools.
+//!
+//! # Architecture
+//!
+//! ```text
+//! ┌──────────────────────────────────────┐
+//! │              EventLoop               │
+//! │  ┌─────────┐  ┌──────────────────┐   │
+//! │  │  Poller  │  │  Token → Source  │   │
+//! │  │ (epoll/  │  │    mapping      │   │
+//! │  │ WSAPoll) │  │                  │   │
+//! │  └─────────┘  └──────────────────┘   │
+//! └──────────────────────────────────────┘
+//!         │                  │
+//!    poll_wait()        on_event()
+//!         │                  │
+//!    ┌────▼────┐       ┌────▼────┐
+//!    │ POLLIN  │       │ Handler │
+//!    │ POLLOUT │       │ callback│
+//!    │ POLLERR │       │         │
+//!    └─────────┘       └─────────┘
+//! ```
+//!
+//! # Example — Echo Server
+//!
+//! ```tml
+//! use std::net::eventloop::{EventLoop, Interest, Token, Event}
+//!
+//! let ev: EventLoop = EventLoop::new(1024)
+//! let listener_fd: I64 = bind_and_listen(3000)
+//! ev.register(listener_fd, Token(0), Interest::Readable)
+//!
+//! loop (true) {
+//!     let count: I64 = ev.poll(100)
+//!     var i: I64 = 0
+//!     loop (i < count) {
+//!         let event: Event = ev.event_at(i)
+//!         if event.token() == 0 {
+//!             // Accept new connection
+//!             let fd: I64 = accept(listener_fd)
+//!             ev.register(fd, Token(next_token), Interest::Readable)
+//!         } else if event.is_readable() {
+//!             // Handle read
+//!         } else if event.is_writable() {
+//!             // Handle write
+//!         }
+//!         i = i + 1
+//!     }
+//! }
+//! ev.destroy()
+//! ```
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+
+// ── FFI to tml_poll_* (WSAPoll on Windows, epoll on Linux) ──────
+@extern("c") func tml_poll_create() -> I64
+@extern("c") func tml_poll_destroy(poller: I64)
+@extern("c") func tml_poll_add(poller: I64, socket: I64, token: U32, interests: U32) -> I32
+@extern("c") func tml_poll_modify(poller: I64, socket: I64, token: U32, interests: U32) -> I32
+@extern("c") func tml_poll_remove(poller: I64, socket: I64) -> I32
+@extern("c") func tml_poll_wait(poller: I64, events_out: *Unit, max_events: I32, timeout_ms: I32) -> I32
+@extern("c") func tml_sys_set_nonblocking(handle: I64, nonblocking: I32) -> I32
+
+// ════════════════════════════════════════════════════════════════════
+// Interest — what events to listen for
+// ════════════════════════════════════════════════════════════════════
+
+const INTEREST_READABLE: U32 = 1 as U32
+const INTEREST_WRITABLE: U32 = 2 as U32
+const INTEREST_ERROR: U32 = 4 as U32
+const INTEREST_HUP: U32 = 8 as U32
+
+/// What I/O events to listen for on a source.
+pub type Interest {
+    bits: U32,
+}
+
+impl Interest {
+    /// Listen for readable events (data available to read).
+    pub func readable() -> Interest { Interest { bits: INTEREST_READABLE } }
+
+    /// Listen for writable events (buffer space available to write).
+    pub func writable() -> Interest { Interest { bits: INTEREST_WRITABLE } }
+
+    /// Listen for both readable and writable events.
+    pub func both() -> Interest {
+        Interest { bits: (INTEREST_READABLE as I64 + INTEREST_WRITABLE as I64) as U32 }
+    }
+
+    pub func raw(this) -> U32 { this.bits }
+}
+
+impl Display for Interest {
+    pub func to_string(this) -> Str {
+        let r: Bool = (this.bits as I64) == 1 or (this.bits as I64) == 3
+        let w: Bool = (this.bits as I64) == 2 or (this.bits as I64) == 3
+        if r and w { return "ReadWrite" }
+        if r { return "Readable" }
+        if w { return "Writable" }
+        return "None"
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Event — a ready I/O notification
+// ════════════════════════════════════════════════════════════════════
+
+// PollEvent layout from poll.c: { token: U32, flags: U32 } = 8 bytes
+const EVENT_SIZE: I64 = 8
+
+/// An I/O event returned by the poller.
+/// Each event identifies which source is ready and what operations are available.
+pub type Event {
+    token_val: I64,
+    flags_val: I64,
+}
+
+impl Event {
+    /// The token identifying which source this event is for.
+    pub func token(this) -> I64 { this.token_val }
+
+    /// The raw event flags.
+    pub func flags(this) -> I64 { this.flags_val }
+
+    /// Is data available to read?
+    pub func is_readable(this) -> Bool {
+        (this.flags_val as U32 as I64) == 1 or (this.flags_val as U32 as I64) == 3
+    }
+
+    /// Is buffer space available to write?
+    pub func is_writable(this) -> Bool {
+        (this.flags_val as U32 as I64) == 2 or (this.flags_val as U32 as I64) == 3
+    }
+
+    /// Did an error occur on this source?
+    pub func is_error(this) -> Bool {
+        let f: I64 = this.flags_val
+        // POLL_ERROR = 4
+        f >= 4 and f < 8
+    }
+
+    /// Was the connection hung up (peer closed)?
+    pub func is_hup(this) -> Bool {
+        let f: I64 = this.flags_val
+        // POLL_HUP = 8
+        f >= 8
+    }
+
+    /// Is this event for the given token?
+    pub func is_token(this, t: I64) -> Bool { this.token_val == t }
+}
+
+impl Display for Event {
+    pub func to_string(this) -> Str {
+        return "Event(token=" + this.token_val.to_string() + ", flags=" + this.flags_val.to_string() + ")"
+    }
+}
+
+impl Debug for Event {
+    pub func debug_string(this) -> Str { this.to_string() }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// EventLoop — the main abstraction
+// ════════════════════════════════════════════════════════════════════
+
+const DEFAULT_MAX_EVENTS: I64 = 256
+
+/// Cross-platform I/O event loop.
+///
+/// Wraps WSAPoll (Windows) or epoll (Linux) with a clean API.
+/// Register file descriptors with tokens, poll for events, iterate results.
+///
+/// # Thread Safety
+///
+/// An EventLoop is NOT thread-safe. Each thread should have its own EventLoop.
+/// Use a shared accept thread to distribute connections to per-thread loops.
+/// Read event at index from raw event buffer.
+func evloop_read_event(events_buf: I64, index: I64) -> Event {
+    let off: I64 = events_buf + index * EVENT_SIZE
+    let raw: I64 = lowlevel { ptr_read[I64](off as *I64) }
+    // PollEvent = { token: U32, flags: U32 } — little-endian on x86
+    // low 32 bits = token, high 32 bits = flags
+    let mask: I64 = 4294967295  // 0xFFFFFFFF
+    let tok: I64 = raw - ((raw / 4294967296) * 4294967296)  // raw & mask
+    let flg: I64 = raw / 4294967296                          // raw >> 32
+    return Event { token_val: tok, flags_val: flg }
+}
+
+pub type EventLoop {
+    poller: I64,
+    events_buf: I64,
+    max_events: I64,
+    last_count: I64,
+}
+
+impl EventLoop {
+    /// Create a new event loop.
+    ///
+    /// `capacity` is the maximum number of events returned per poll call.
+    /// Typical values: 256 for servers, 64 for clients.
+    pub func new(capacity: I64) -> EventLoop {
+        let poller: I64 = tml_poll_create()
+        let max_ev: I64 = capacity
+        if max_ev <= 0 { return EventLoop { poller: 0, events_buf: 0, max_events: 0, last_count: 0 } }
+        let buf: I64 = lowlevel { mem_alloc(max_ev * EVENT_SIZE) } as I64
+        return EventLoop {
+            poller: poller,
+            events_buf: buf,
+            max_events: max_ev,
+            last_count: 0,
+        }
+    }
+
+    /// Create an event loop with the default capacity (256 events).
+    pub func with_defaults() -> EventLoop {
+        EventLoop::new(DEFAULT_MAX_EVENTS)
+    }
+
+    /// Register a file descriptor for I/O events.
+    ///
+    /// - `fd`: the socket/file descriptor (must be set to non-blocking first)
+    /// - `token`: a user-defined integer to identify this source in events
+    /// - `interest`: what events to listen for (Readable, Writable, or Both)
+    ///
+    /// Returns 0 on success, negative on error.
+    pub func register(this, fd: I64, token: I64, interest: Interest) -> I32 {
+        tml_poll_add(this.poller, fd, token as U32, interest.raw())
+    }
+
+    /// Change what events a registered source listens for.
+    ///
+    /// The source must have been previously registered with `register()`.
+    pub func reregister(this, fd: I64, token: I64, interest: Interest) -> I32 {
+        tml_poll_modify(this.poller, fd, token as U32, interest.raw())
+    }
+
+    /// Remove a source from the event loop.
+    ///
+    /// After this call, the source will no longer generate events.
+    pub func deregister(this, fd: I64) -> I32 {
+        tml_poll_remove(this.poller, fd)
+    }
+
+    /// Set a file descriptor to non-blocking mode.
+    ///
+    /// Convenience method — wraps `tml_sys_set_nonblocking`.
+    /// Must be called before registering the fd.
+    pub func make_nonblocking(this, fd: I64) -> I32 {
+        tml_sys_set_nonblocking(fd, 1)
+    }
+
+    /// Poll for I/O events, blocking up to `timeout_ms` milliseconds.
+    ///
+    /// Returns the number of ready events (0 on timeout, negative on error).
+    /// Access individual events with `event_at(index)`.
+    ///
+    /// A timeout of 0 returns immediately (non-blocking poll).
+    /// A timeout of -1 blocks indefinitely until an event arrives.
+    pub func poll(mut this, timeout_ms: I32) -> I64 {
+        let n: I32 = tml_poll_wait(this.poller, this.events_buf as *Unit, this.max_events as I32, timeout_ms)
+        this.last_count = n as I64
+        return n as I64
+    }
+
+    /// Get the event at the given index from the last `poll()` call.
+    ///
+    /// Index must be in range `0..poll_result`.
+    pub func event_at(this, index: I64) -> Event {
+        evloop_read_event(this.events_buf, index)
+    }
+
+    /// Number of events returned by the last `poll()` call.
+    pub func event_count(this) -> I64 { this.last_count }
+
+    /// Destroy the event loop and free all resources.
+    pub func destroy(this) {
+        if this.poller != 0 {
+            tml_poll_destroy(this.poller)
+        }
+        if this.events_buf != 0 {
+            lowlevel { mem_free(this.events_buf as *Unit) }
+        }
+    }
+}
+
+impl Display for EventLoop {
+    pub func to_string(this) -> Str {
+        return "EventLoop(max_events=" + this.max_events.to_string() + ")"
+    }
+}
+
+impl Debug for EventLoop {
+    pub func debug_string(this) -> Str { this.to_string() }
+}

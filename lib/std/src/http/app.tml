@@ -31,6 +31,7 @@
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use std::http::router::{RouteMatch, NODE_STATIC, insert, find_in_tree, node_new}
+use std::net::eventloop::{EventLoop, Interest, Event}
 
 // ── FFI ─────────────────────────────────────────────────────────
 @extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
@@ -56,21 +57,7 @@ use std::http::router::{RouteMatch, NODE_STATIC, insert, find_in_tree, node_new}
 @extern("c") func tml_condvar_notify_one(cvar: *Unit) -> I32
 @extern("c") func tml_condvar_wait(cvar: *Unit, mutex: *Unit) -> I32
 
-// I/O Poller FFI (WSAPoll on Windows, epoll on Linux)
-@extern("c") func tml_poll_create() -> I64
-@extern("c") func tml_poll_destroy(poller: I64)
-@extern("c") func tml_poll_add(poller: I64, socket: I64, token: U32, interests: U32) -> I32
-@extern("c") func tml_poll_modify(poller: I64, socket: I64, token: U32, interests: U32) -> I32
-@extern("c") func tml_poll_remove(poller: I64, socket: I64) -> I32
-@extern("c") func tml_poll_wait(poller: I64, events_out: *Unit, max_events: I32, timeout_ms: I32) -> I32
-@extern("c") func tml_sys_set_nonblocking(handle: I64, nonblocking: I32) -> I32
-
-const POLL_READABLE: U32 = 1 as U32
-const POLL_WRITABLE: U32 = 2 as U32
-const POLL_ERROR: U32 = 4 as U32
-// PollEvent = { token: U32, flags: U32 } = 8 bytes
-const POLL_EVENT_SIZE: I64 = 8
-const MAX_POLL_EVENTS: I32 = 256
+// EventLoop re-exports from std::net::eventloop handle all poll FFI
 
 const AF_INET: I32 = 2
 const SOCK_STREAM: I32 = 1
@@ -301,15 +288,17 @@ impl App {
     /// Set idle timeout in milliseconds (default: 60000)
     pub func set_idle_timeout(mut this, ms: I64) { this.idle_timeout = ms }
 
+    /// Start server with thread pool (default — highest throughput).
     pub func listen(this, port: I64) {
-        app_listen_evloop(this.table, this.count, this.trees, this.mw_table, this.mw_count,
-                          this.read_timeout, this.write_timeout, this.idle_timeout, port)
-    }
-
-    /// Listen using the blocking thread pool (fallback for compatibility)
-    pub func listen_blocking(this, port: I64) {
         app_listen(this.table, this.count, this.trees, this.mw_table, this.mw_count,
                    this.read_timeout, this.write_timeout, this.idle_timeout, port)
+    }
+
+    /// Start server with non-blocking event loop (scales to more concurrent connections).
+    /// Uses std::net::eventloop internally — WSAPoll on Windows, epoll on Linux.
+    pub func listen_async(this, port: I64) {
+        app_listen_evloop(this.table, this.count, this.trees, this.mw_table, this.mw_count,
+                          this.read_timeout, this.write_timeout, this.idle_timeout, port)
     }
 }
 
@@ -633,13 +622,12 @@ pub func app_listen(table: I64, count: I64, trees: I64, mw_table: I64, mw_count:
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Event Loop — non-blocking I/O with WSAPoll/epoll
+// Event Loop — non-blocking I/O via std::net::eventloop
 // ════════════════════════════════════════════════════════════════════
 
-// Per-connection state in the event loop worker
-// Layout: [0] fd (I64), [8] buf_ptr (I64), [16] buf_used (I64), [24] state (I64: 0=reading, 1=writing)
-// [32] resp_ptr (I64), [40] resp_len (I64), [48] resp_sent (I64)
-const CONN_SIZE: I64 = 56
+// Per-connection state: [0] fd, [8] buf, [16] used, [24] state (0=read,1=write)
+// [32] resp_ptr, [40] resp_len, [48] resp_sent
+const CONN_STRIDE_EV: I64 = 56
 const CONN_FD: I64 = 0
 const CONN_BUF: I64 = 8
 const CONN_USED: I64 = 16
@@ -647,44 +635,37 @@ const CONN_STATE: I64 = 24
 const CONN_RESP: I64 = 32
 const CONN_RESP_LEN: I64 = 40
 const CONN_RESP_SENT: I64 = 48
-const CONN_STATE_READING: I64 = 0
-const CONN_STATE_WRITING: I64 = 1
 const MAX_CONNS_PER_WORKER: I64 = 1024
 
-// Worker event loop state passed as thread arg:
-// [0] shared (I64), [8] poller (I64), [16] conns (I64 ptr to conn table),
-// [24] conn_count (I64), [32] mutex (I64 ptr), [40] new_fds_buf (I64),
-// [48] new_fds_count (I64), [56] new_fds_cap (I64)
-const WSTATE_SIZE: I64 = 64
+// Worker state: [0] shared, [8] mutex_ptr, [16] new_fds_buf, [24] new_fds_count, [32] new_fds_cap
+const WSTATE_SIZE: I64 = 40
 const WS_SHARED: I64 = 0
-const WS_POLLER: I64 = 8
-const WS_CONNS: I64 = 16
-const WS_CONN_COUNT: I64 = 24
-const WS_MUTEX: I64 = 32
-const WS_NEW_FDS: I64 = 40
-const WS_NEW_FDS_COUNT: I64 = 48
-const WS_NEW_FDS_CAP: I64 = 56
+const WS_MUTEX: I64 = 8
+const WS_NEW_FDS: I64 = 16
+const WS_NEW_FDS_COUNT: I64 = 24
+const WS_NEW_FDS_CAP: I64 = 32
 
-func evloop_conn_get(conns: I64, idx: I64, field: I64) -> I64 {
-    lowlevel { ptr_read[I64]((conns + idx * CONN_SIZE + field) as *I64) }
+func conn_get(conns: I64, idx: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64) }
 }
 
-func evloop_conn_set(conns: I64, idx: I64, field: I64, val: I64) {
-    lowlevel { ptr_write[I64]((conns + idx * CONN_SIZE + field) as *I64, val) }
+func conn_set(conns: I64, idx: I64, field: I64, val: I64) {
+    lowlevel { ptr_write[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64, val) }
 }
 
-/// Event loop worker thread. Each worker has its own poller and connection table.
+/// Event loop worker thread. Each worker owns an EventLoop + connection table.
 pub func app_evloop_worker(arg: *Unit) {
     let ws: I64 = arg as I64
     let shared: I64 = lowlevel { ptr_read[I64]((ws + WS_SHARED) as *I64) }
-    let poller: I64 = lowlevel { ptr_read[I64]((ws + WS_POLLER) as *I64) }
-    let conns: I64 = lowlevel { ptr_read[I64]((ws + WS_CONNS) as *I64) }
     let mutex_ptr: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
 
-    let events: I64 = lowlevel { mem_alloc(MAX_POLL_EVENTS as I64 * POLL_EVENT_SIZE) } as I64
+    // Each worker creates its own EventLoop — thread-local, no sharing needed
+    var ev: EventLoop = EventLoop::new(256)
+    let conns_mem: I64 = MAX_CONNS_PER_WORKER * CONN_STRIDE_EV
+    let conns: I64 = lowlevel { mem_alloc(conns_mem) } as I64
+    var conn_count: I64 = 0
 
     loop (true) {
-        // Check for shutdown
         let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
         if shutdown != 0 { break }
 
@@ -692,61 +673,54 @@ pub func app_evloop_worker(arg: *Unit) {
         tml_mutex_lock(mutex_ptr as *Unit)
         let new_count: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_COUNT) as *I64) }
         let new_buf: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS) as *I64) }
-        var conn_count: I64 = lowlevel { ptr_read[I64]((ws + WS_CONN_COUNT) as *I64) }
         var ni: I64 = 0
         loop (ni < new_count and conn_count < MAX_CONNS_PER_WORKER) {
             let fd: I64 = lowlevel { ptr_read[I64]((new_buf + ni * 8) as *I64) }
-            tml_sys_set_nonblocking(fd, 1)
+            ev.make_nonblocking(fd)
             tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-            // Init connection slot
             let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
-            evloop_conn_set(conns, conn_count, CONN_FD, fd)
-            evloop_conn_set(conns, conn_count, CONN_BUF, buf)
-            evloop_conn_set(conns, conn_count, CONN_USED, 0)
-            evloop_conn_set(conns, conn_count, CONN_STATE, CONN_STATE_READING)
-            evloop_conn_set(conns, conn_count, CONN_RESP, 0)
-            evloop_conn_set(conns, conn_count, CONN_RESP_LEN, 0)
-            evloop_conn_set(conns, conn_count, CONN_RESP_SENT, 0)
-            // Register with poller
-            tml_poll_add(poller, fd, conn_count as U32, POLL_READABLE)
+            conn_set(conns, conn_count, CONN_FD, fd)
+            conn_set(conns, conn_count, CONN_BUF, buf)
+            conn_set(conns, conn_count, CONN_USED, 0)
+            conn_set(conns, conn_count, CONN_STATE, 0)
+            conn_set(conns, conn_count, CONN_RESP, 0)
+            conn_set(conns, conn_count, CONN_RESP_LEN, 0)
+            conn_set(conns, conn_count, CONN_RESP_SENT, 0)
+            ev.register(fd, conn_count, Interest::readable())
             conn_count = conn_count + 1
             ni = ni + 1
         }
         lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
-        lowlevel { ptr_write[I64]((ws + WS_CONN_COUNT) as *I64, conn_count) }
         tml_mutex_unlock(mutex_ptr as *Unit)
 
-        // Poll for events (10ms timeout to check for new connections)
-        let n: I32 = tml_poll_wait(poller, events as *Unit, MAX_POLL_EVENTS, 10)
+        // Poll for I/O events (10ms timeout)
+        let n: I64 = ev.poll(10)
         if n <= 0 { continue }
 
         var ei: I64 = 0
-        loop (ei < n as I64) {
-            let token: U32 = lowlevel { ptr_read[U32]((events + ei * POLL_EVENT_SIZE) as *U32) }
-            let flags: U32 = lowlevel { ptr_read[U32]((events + ei * POLL_EVENT_SIZE + 4) as *U32) }
-            let idx: I64 = token as I64
+        loop (ei < n) {
+            let event: Event = ev.event_at(ei)
+            let idx: I64 = event.token()
 
             if idx < 0 or idx >= conn_count { ei = ei + 1; continue }
-            let fd: I64 = evloop_conn_get(conns, idx, CONN_FD)
+            let fd: I64 = conn_get(conns, idx, CONN_FD)
             if fd <= 0 { ei = ei + 1; continue }
 
-            let state: I64 = evloop_conn_get(conns, idx, CONN_STATE)
+            let state: I64 = conn_get(conns, idx, CONN_STATE)
 
-            if state == CONN_STATE_READING and (flags as I64) > 0 {
-                // Read data
-                let buf: I64 = evloop_conn_get(conns, idx, CONN_BUF)
-                let used: I64 = evloop_conn_get(conns, idx, CONN_USED)
+            if state == 0 and event.is_readable() {
+                // ── Reading request ──
+                let buf: I64 = conn_get(conns, idx, CONN_BUF)
+                let used: I64 = conn_get(conns, idx, CONN_USED)
                 let n_read: I64 = tml_sys_recv(fd, (buf + used) as *Unit, BUF_SIZE - used - 1)
                 if n_read <= 0 {
-                    // Connection closed or error — close and mark slot free
-                    tml_poll_remove(poller, fd)
+                    ev.deregister(fd)
                     sys_close(fd)
                     lowlevel { mem_free(buf as *Unit) }
-                    evloop_conn_set(conns, idx, CONN_FD, 0)
+                    conn_set(conns, idx, CONN_FD, 0)
                 } else {
                     let new_used: I64 = used + n_read
-                    evloop_conn_set(conns, idx, CONN_USED, new_used)
-                    // Check if we have a complete request
+                    conn_set(conns, idx, CONN_USED, new_used)
                     if app_has_header_end(buf, new_used) {
                         lowlevel { ptr_write[U8]((buf + new_used) as *U8, 0 as U8) }
                         let method: Str = app_zerocopy_method(buf, new_used)
@@ -754,37 +728,35 @@ pub func app_evloop_worker(arg: *Unit) {
                         let body: Str = app_extract_body(buf, new_used)
                         let response: Str = app_dispatch(shared, method, path, body)
                         let resp_len: I64 = str::len(response)
-                        // Switch to writing
-                        evloop_conn_set(conns, idx, CONN_STATE, CONN_STATE_WRITING)
-                        evloop_conn_set(conns, idx, CONN_RESP, response as I64)
-                        evloop_conn_set(conns, idx, CONN_RESP_LEN, resp_len)
-                        evloop_conn_set(conns, idx, CONN_RESP_SENT, 0)
-                        evloop_conn_set(conns, idx, CONN_USED, 0)
-                        tml_poll_modify(poller, fd, token, POLL_WRITABLE)
+                        conn_set(conns, idx, CONN_STATE, 1)
+                        conn_set(conns, idx, CONN_RESP, response as I64)
+                        conn_set(conns, idx, CONN_RESP_LEN, resp_len)
+                        conn_set(conns, idx, CONN_RESP_SENT, 0)
+                        conn_set(conns, idx, CONN_USED, 0)
+                        ev.reregister(fd, idx, Interest::writable())
                     }
                 }
-            } else if state == CONN_STATE_WRITING and (flags as I64) > 0 {
-                // Write response
-                let resp: I64 = evloop_conn_get(conns, idx, CONN_RESP)
-                let resp_len: I64 = evloop_conn_get(conns, idx, CONN_RESP_LEN)
-                let sent: I64 = evloop_conn_get(conns, idx, CONN_RESP_SENT)
+            } else if state == 1 and event.is_writable() {
+                // ── Writing response ──
+                let resp: I64 = conn_get(conns, idx, CONN_RESP)
+                let resp_len: I64 = conn_get(conns, idx, CONN_RESP_LEN)
+                let sent: I64 = conn_get(conns, idx, CONN_RESP_SENT)
                 let remaining: I64 = resp_len - sent
                 if remaining > 0 {
                     let n_sent: I64 = tml_sys_send(fd, (resp + sent) as *Unit, remaining)
                     if n_sent <= 0 {
-                        // Write error — close
-                        tml_poll_remove(poller, fd)
+                        ev.deregister(fd)
                         sys_close(fd)
-                        let buf: I64 = evloop_conn_get(conns, idx, CONN_BUF)
+                        let buf: I64 = conn_get(conns, idx, CONN_BUF)
                         lowlevel { mem_free(buf as *Unit) }
-                        evloop_conn_set(conns, idx, CONN_FD, 0)
+                        conn_set(conns, idx, CONN_FD, 0)
                     } else {
-                        evloop_conn_set(conns, idx, CONN_RESP_SENT, sent + n_sent)
+                        conn_set(conns, idx, CONN_RESP_SENT, sent + n_sent)
                         if sent + n_sent >= resp_len {
-                            // Response fully sent — switch back to reading (keep-alive)
-                            evloop_conn_set(conns, idx, CONN_STATE, CONN_STATE_READING)
-                            evloop_conn_set(conns, idx, CONN_RESP, 0)
-                            tml_poll_modify(poller, fd, token, POLL_READABLE)
+                            // Response done → back to reading (keep-alive)
+                            conn_set(conns, idx, CONN_STATE, 0)
+                            conn_set(conns, idx, CONN_RESP, 0)
+                            ev.reregister(fd, idx, Interest::readable())
                         }
                     }
                 }
@@ -793,19 +765,19 @@ pub func app_evloop_worker(arg: *Unit) {
         }
     }
 
-    // Cleanup all connections
+    // Cleanup
     var ci: I64 = 0
     loop (ci < conn_count) {
-        let fd: I64 = evloop_conn_get(conns, ci, CONN_FD)
+        let fd: I64 = conn_get(conns, ci, CONN_FD)
         if fd > 0 {
             sys_close(fd)
-            let buf: I64 = evloop_conn_get(conns, ci, CONN_BUF)
+            let buf: I64 = conn_get(conns, ci, CONN_BUF)
             lowlevel { mem_free(buf as *Unit) }
         }
         ci = ci + 1
     }
-    lowlevel { mem_free(events as *Unit) }
-    tml_poll_destroy(poller)
+    lowlevel { mem_free(conns as *Unit) }
+    ev.destroy()
 }
 
 /// Event-loop based listen. Each worker runs its own poller.
@@ -854,23 +826,18 @@ pub func app_listen_evloop(table: I64, count: I64, trees: I64, mw_table: I64, mw
     lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
     lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
 
-    // Create per-worker state
+    // Create per-worker state (lightweight — worker creates its own EventLoop)
     let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
     var w: I64 = 0
     loop (w < num_workers) {
         let ws: I64 = lowlevel { mem_alloc(WSTATE_SIZE) } as I64
         var wz: I64 = 0
         loop (wz < WSTATE_SIZE) { lowlevel { ptr_write[U8]((ws + wz) as *U8, 0 as U8) }; wz = wz + 1 }
-        let poller: I64 = tml_poll_create()
-        let conns: I64 = lowlevel { mem_alloc(MAX_CONNS_PER_WORKER * CONN_SIZE) } as I64
         let mutex: I64 = lowlevel { mem_alloc(64) } as I64
         tml_mutex_init(mutex as *Unit)
         let new_fds_cap: I64 = 256
-        let new_fds: I64 = lowlevel { mem_alloc(new_fds_cap * 8) } as I64
+        let new_fds: I64 = lowlevel { mem_alloc(2048) } as I64
         lowlevel { ptr_write[I64]((ws + WS_SHARED) as *I64, shared) }
-        lowlevel { ptr_write[I64]((ws + WS_POLLER) as *I64, poller) }
-        lowlevel { ptr_write[I64]((ws + WS_CONNS) as *I64, conns) }
-        lowlevel { ptr_write[I64]((ws + WS_CONN_COUNT) as *I64, 0 as I64) }
         lowlevel { ptr_write[I64]((ws + WS_MUTEX) as *I64, mutex) }
         lowlevel { ptr_write[I64]((ws + WS_NEW_FDS) as *I64, new_fds) }
         lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }

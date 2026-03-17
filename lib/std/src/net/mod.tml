@@ -131,6 +131,7 @@ pub mod tls
 pub mod parser
 pub mod async_tcp
 pub mod async_udp
+pub mod eventloop
 
 // Re-export main types
 pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
@@ -143,3 +144,4 @@ pub use tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
 pub use parser::{AddrParseError, AddrParseErrorKind}
 pub use async_tcp::{AsyncTcpListener, AsyncTcpStream}
 pub use async_udp::{AsyncUdpSocket, UdpHandle}
+pub use eventloop::{EventLoop, Interest, Event}
