@@ -461,6 +461,7 @@ private:
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
     bool last_expr_is_unsigned_ = false;          // Track if last expression was unsigned type
+    bool suppress_mut_ref_auto_deref_ = false;    // Suppress auto-deref in gen_ident for mut ref
     types::TypePtr last_semantic_type_ = nullptr; // Semantic type for deref assignments
 
     // Expected type context for enum constructors (used in gen_call_expr)

@@ -801,7 +801,11 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
             }
         }
 
+        // Suppress auto-deref in gen_ident for mut ref operands — the explicit
+        // deref here will do the load, so gen_ident should only return the pointer.
+        suppress_mut_ref_auto_deref_ = true;
         std::string ptr = gen_expr(*unary.operand);
+        suppress_mut_ref_auto_deref_ = false;
         std::string result = fresh_reg();
         emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + ptr);
         last_expr_type_ = inner_llvm_type;

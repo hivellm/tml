@@ -217,7 +217,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             // e.g., `count: mut ref I64` → alloca holds ptr, ptr points to i64.
             //   load ptr, ptr %alloca  → pointer to the i64
             //   load i64, ptr %ptr     → the actual i64 value
-            if (var.type == "ptr" && var.semantic_type && var.semantic_type->is<types::RefType>()) {
+            if (var.type == "ptr" && var.semantic_type && var.semantic_type->is<types::RefType>() &&
+                !suppress_mut_ref_auto_deref_) {
                 const auto& ref = var.semantic_type->as<types::RefType>();
                 if (ref.is_mut && ref.inner) {
                     std::string inner_type = llvm_type_from_semantic(ref.inner);

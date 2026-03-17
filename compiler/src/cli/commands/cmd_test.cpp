@@ -258,7 +258,9 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.suite_filters = opts.suite_filters;
     tc.max_per_suite = opts.suite_mode ? 10 : 1;
     tc.compile_threads = opts.test_threads;
-    tc.exec_concurrent = 0; // auto
+    // In coverage mode, limit to 2 concurrent test processes to avoid
+    // resource exhaustion crashes (each EXE loads ~100MB of runtime DLLs).
+    tc.exec_concurrent = opts.coverage ? 2 : 0; // 2 for coverage, auto otherwise
     tc.timeout_seconds = opts.timeout_seconds;
     tc.no_cache = opts.no_cache;
     tc.verbose = opts.verbose;

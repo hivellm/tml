@@ -230,7 +230,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 }
 
                 // Get the pointer (not the dereferenced value!)
+                // Suppress auto-deref so gen_ident returns the pointer, not the value.
+                suppress_mut_ref_auto_deref_ = true;
                 std::string ptr = gen_expr(*unary.operand);
+                suppress_mut_ref_auto_deref_ = false;
 
                 if (operand_type) {
                     if (operand_type->is<types::RefType>()) {
