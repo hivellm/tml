@@ -1,67 +1,67 @@
-# Plano: Corrigir os 4 bugs de codegen que falham nos testes
+# Plan: Fix the 4 codegen bugs failing in tests
 
-## Diagnóstico
+## Diagnosis
 
-Todos os 4 bugs são **PRE-EXISTENTES no codegen** — o novo test system funciona corretamente.
-O último estado bom foi 28/fev: 1096 passed, 45 failed, 73.47% coverage.
+All 4 bugs are **PRE-EXISTING in codegen** — the new test system works correctly.
+The last known good state was Feb 28: 1096 passed, 45 failed, 73.47% coverage.
 
-Os 45 failures se dividem em 4 categorias com raiz identificada:
-
----
-
-## Bug 1: `toowned_assoc` (1 test) — FÁCIL, ~10 linhas
-
-**Erro**: `'%this' defined with type 'i32' but expected 'ptr'`
-
-**Causa**: `compiler/src/codegen/llvm/decl/impl.cpp:234-246` — quando `this: ref This` com `This = I32`, o codegen verifica apenas `is_mut_this` para decidir se usa `ptr`. Mas `ref This` é referência pelo TYPE, não pelo mut flag. Resultado: define `(i32 %this)` mas o body gera `load i32, ptr %this`.
-
-**Fix**: Na linha ~234 de `impl.cpp`, adicionar check se o tipo do primeiro parâmetro é `RefType`. Se for, forçar `this_type = "ptr"`.
+The 45 failures break down into 4 categories with identified root causes:
 
 ---
 
-## Bug 2: `union_basic` (1 test) — FÁCIL (workaround), ~15 linhas
+## Bug 1: `toowned_assoc` (1 test) — EASY, ~10 lines
 
-**Erro**: `invalid type for undef constant` — `%struct.IntOrPtr undef`
+**Error**: `'%this' defined with type 'i32' but expected 'ptr'`
 
-**Causa**: HIR builder e THIR lowering NÃO suportam `UnionDecl`. O tipo nunca é declarado no LLVM IR. O MIR codegen tenta usar `insertvalue` (errado para unions) com um tipo que não existe.
+**Cause**: `compiler/src/codegen/llvm/decl/impl.cpp:234-246` — when `this: ref This` with `This = I32`, the codegen only checks `is_mut_this` to decide whether to use `ptr`. But `ref This` is a reference by TYPE, not by the mut flag. Result: defines `(i32 %this)` but the body generates `load i32, ptr %this`.
 
-**Fix (workaround rápido)**: Em `query_core.cpp:551-603`, adicionar detecção de `UnionDecl` que força fallback para AST codegen (que já suporta unions via `gen_union_decl`).
-
----
-
-## Bug 3: `core/mem/*` (9 tests) — MÉDIO, ~20 linhas
-
-**Erro**: `assertion failed at :19: into_inner should return original value`
-
-**Causa**: `compiler/src/codegen/llvm/expr/method_impl.cpp:585` — ao chamar `ManuallyDrop::into_inner(slot)`, o call site assume que o primeiro arg é sempre `ptr` para tipos não-primitivos. Mas `into_inner` tem `slot: ManuallyDrop[T]` (by-value, não `this`). Define `(%struct.ManuallyDrop__I32 %slot)` mas chama com `(ptr %t1)`. ABI mismatch → garbage.
-
-**Fix**: No call site (~linha 585), verificar a assinatura da função. Se o primeiro parâmetro NÃO é `this`/`self`, usar o tipo real do struct ao invés de hardcoded `"ptr"`.
+**Fix**: At line ~234 of `impl.cpp`, add a check if the first parameter type is `RefType`. If so, force `this_type = "ptr"`.
 
 ---
 
-## Bug 4: `core/any/*` (4 tests) — DIFÍCIL, ~50+ linhas
+## Bug 2: `union_basic` (1 test) — EASY (workaround), ~15 lines
 
-**Erro**: `UNRESOLVED reference: @tml_N4core3any2ofE`
+**Error**: `invalid type for undef constant` — `%struct.IntOrPtr undef`
 
-**Causa**: `TypeId::of[T]()` é uma função genérica estática. O sistema lazy library (`runtime_modules.cpp`) encontra a referência em pending mas não consegue instanciar porque não faz monomorphization de genéricos.
+**Cause**: HIR builder and THIR lowering DO NOT support `UnionDecl`. The type is never declared in LLVM IR. The MIR codegen tries to use `insertvalue` (wrong for unions) with a type that doesn't exist.
 
-**Fix**: No lazy resolution pass de `runtime_modules.cpp`, quando uma referência está em pending mas é genérica, realizar a instanciação com os tipos concretos derivados do call site.
+**Fix (quick workaround)**: In `query_core.cpp:551-603`, add detection of `UnionDecl` that forces fallback to AST codegen (which already supports unions via `gen_union_decl`).
 
 ---
 
-## Ordem de execução (do mais fácil ao mais difícil)
+## Bug 3: `core/mem/*` (9 tests) — MEDIUM, ~20 lines
 
-1. **Bug 1 (toowned_assoc)** — Fix em `impl.cpp` — 5 min
-2. **Bug 2 (union_basic)** — Workaround em `query_core.cpp` — 5 min
-3. **Bug 3 (core/mem)** — Fix em `method_impl.cpp` — 15 min
-4. **Bug 4 (core/any)** — Fix em `runtime_modules.cpp` — 30 min
+**Error**: `assertion failed at :19: into_inner should return original value`
 
-**DEPOIS de todos os 4 fixes**: rebuild compiler UMA VEZ, rodar testes UMA VEZ.
+**Cause**: `compiler/src/codegen/llvm/expr/method_impl.cpp:585` — when calling `ManuallyDrop::into_inner(slot)`, the call site assumes the first arg is always `ptr` for non-primitive types. But `into_inner` has `slot: ManuallyDrop[T]` (by-value, not `this`). Defines `(%struct.ManuallyDrop__I32 %slot)` but calls with `(ptr %t1)`. ABI mismatch → garbage.
 
-## Estratégia anti-lentidão
+**Fix**: At the call site (~line 585), check the function signature. If the first parameter is NOT `this`/`self`, use the actual struct type instead of hardcoded `"ptr"`.
 
-- **NÃO rebuildar entre cada fix** — fazer todos os 4 fixes no C++ primeiro
-- **Rebuildar o compilador 1 vez** após todos os edits
-- **Rodar testes 1 vez** após rebuild para validar tudo
-- Se algum fix estiver errado, corrigir e rebuildar de novo
-- Objetivo: máximo 2 ciclos build+test
+---
+
+## Bug 4: `core/any/*` (4 tests) — HARD, ~50+ lines
+
+**Error**: `UNRESOLVED reference: @tml_N4core3any2ofE`
+
+**Cause**: `TypeId::of[T]()` is a generic static function. The lazy library system (`runtime_modules.cpp`) finds the reference in pending but can't instantiate it because it doesn't do monomorphization of generics.
+
+**Fix**: In the lazy resolution pass of `runtime_modules.cpp`, when a reference is in pending but is generic, perform instantiation with the concrete types derived from the call site.
+
+---
+
+## Execution order (easiest to hardest)
+
+1. **Bug 1 (toowned_assoc)** — Fix in `impl.cpp` — 5 min
+2. **Bug 2 (union_basic)** — Workaround in `query_core.cpp` — 5 min
+3. **Bug 3 (core/mem)** — Fix in `method_impl.cpp` — 15 min
+4. **Bug 4 (core/any)** — Fix in `runtime_modules.cpp` — 30 min
+
+**AFTER all 4 fixes**: rebuild compiler ONCE, run tests ONCE.
+
+## Anti-slowness strategy
+
+- **DO NOT rebuild between each fix** — make all 4 C++ fixes first
+- **Rebuild the compiler 1 time** after all edits
+- **Run tests 1 time** after rebuild to validate everything
+- If any fix is wrong, correct and rebuild again
+- Goal: maximum 2 build+test cycles

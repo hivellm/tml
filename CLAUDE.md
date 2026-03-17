@@ -497,3 +497,39 @@ Read and edit files **sequentially** (Read file1 → Edit file1 → Read file2 �
    - Choosing which agent(s) to dispatch
    - Reporting results back to the user
    - Quick, targeted edits (< 5 lines)
+
+### ⛔ MANDATORY: Use Teams for Multi-Agent Work ⛔
+
+**When launching 2 or more agents that need to work in parallel, you MUST use Teams (via `team-lead` agent or `TeamCreate`) instead of spawning individual agents.**
+
+This is a HARD REQUIREMENT. Teams provide:
+- **Named agents** addressable via `SendMessage({to: name})`
+- **Coordinated execution** with shared context and handoff
+- **Resource efficiency** — avoids duplicate work between agents
+- **Visibility** — the user can see all agents and their status
+
+**Rules:**
+
+1. **2+ parallel agents = MUST use a Team** — never spawn multiple independent agents when a team can coordinate them
+2. **Use `team-lead` (sonnet)** as the orchestrator — it dispatches to specialists and aggregates results
+3. **Name each agent** in the team for clear identification (e.g., `name: "tester"`, `name: "reviewer"`)
+4. **Single agent = no team needed** — only use teams for genuinely parallel multi-agent work
+
+**WRONG:**
+```
+# ❌ Spawning 3 independent agents without coordination
+Agent(prompt="run tests", subagent_type="tester")
+Agent(prompt="review code", subagent_type="code-reviewer")
+Agent(prompt="update docs", subagent_type="docs-writer")
+```
+
+**CORRECT:**
+```
+# ✅ Team-led coordinated execution
+Agent(prompt="Coordinate: (1) run tests, (2) review code, (3) update docs",
+      subagent_type="team-lead", name="coordinator")
+```
+
+**WHY:** Independent agents duplicate research, compete for resources, and produce inconsistent results. Teams share context, avoid duplicate work, and produce coherent output. The overhead of team setup is negligible compared to the waste of uncoordinated parallel agents.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
