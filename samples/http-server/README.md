@@ -1,21 +1,20 @@
 # TML HTTP Server Sample
 
-A concurrent HTTP/1.1 server with JSON support, designed for benchmarking with [autocannon](https://github.com/mcollina/autocannon).
+A concurrent HTTP/1.1 server with JSON support, keep-alive, and threading.
 
 ## Benchmark Results
 
 ```
-55,020 req/s | 1.18ms avg latency | 3ms p99 | 0 errors
-100 concurrent connections, 10 seconds, 550K total requests
+41,329 req/s | 1.92ms avg latency | 4ms p99 | 0 errors
+100 concurrent connections, 10 seconds, 413K total requests
 ```
 
 ## Architecture
 
-- **Thread-per-connection** with OS threads (via `tml_thread_spawn` FFI)
+- **Thread-per-connection** via OS threads (`tml_thread_spawn` FFI)
 - **HTTP/1.1 keep-alive** — multiple requests per TCP connection
-- **TCP_NODELAY** — no Nagle buffering, minimal latency
-- **Direct socket I/O** — `recv` / `send` with no intermediate layers
-- **Handler dispatch** — route matching via simple string comparison
+- **TCP_NODELAY** — Nagle disabled for low-latency responses
+- **Static route dispatch** — method+path string matching
 
 ## Routes
 
@@ -23,7 +22,7 @@ A concurrent HTTP/1.1 server with JSON support, designed for benchmarking with [
 |--------|------|----------|
 | GET | `/` | `{"status":"ok","message":"TML HTTP Server"}` |
 | GET | `/health` | `{"status":"ok"}` |
-| POST | `/api/echo` | Echoes the request body as JSON |
+| POST | `/api/echo` | Echoes the request body |
 
 ## Build and Run
 
@@ -35,49 +34,39 @@ build/debug/server.exe
 ## Benchmark
 
 ```bash
-# Basic (100 connections, 10 seconds)
 npx autocannon -c 100 -d 10 http://localhost:3000/
-
-# High concurrency
-npx autocannon -c 500 -d 30 http://localhost:3000/
-
-# POST with JSON body
-npx autocannon -c 100 -d 10 -m POST \
-  -H "Content-Type: application/json" \
-  -b '{"name":"test","value":42}' \
-  http://localhost:3000/api/echo
 ```
 
-## Current Limitations
+## API Pattern
 
-This sample uses raw FFI because the `std::http::HttpServer` API does not yet support:
-
-1. **Keep-alive** — `HttpServer.send_response()` always closes the connection
-2. **Concurrent connections** — no built-in threading in the accept loop
-3. **Closure-based handlers** — `thread::spawn` cannot take closures yet (lambda blocker in `call.cpp`)
-
-Once these are resolved, the server will simplify to:
+Routes are registered with lambdas and dispatched via string matching:
 
 ```tml
-use std::http::{HttpServer, Request, Response}
+// Route registration (lambdas compile and work!)
+count = route_add(table, count, "GET", "/", do(ctx: HandlerContext) -> Str {
+    json_response(200, "{\"status\":\"ok\"}")
+})
 
-pub func main() -> I32 {
-    let server = HttpServer.new()
-    server.get("/", do(req, resp) { resp.json("{\"status\":\"ok\"}") })
-    server.listen(3000)
-    return 0
-}
+// Dispatch is static (string comparison)
+// Dynamic fn-ptr dispatch is blocked by a codegen bug (fn ptrs in locals)
 ```
 
-## What's Missing vs Tokio/Hyper
+## Known Limitations
 
-| Feature | TML (current) | Tokio/Hyper |
-|---------|---------------|-------------|
-| I/O model | Thread-per-connection (blocking) | epoll/IOCP async (non-blocking) |
-| Thread management | OS thread per connection | Thread pool + task scheduler |
-| Connection limit | OS thread limit (~2K-10K) | 100K+ connections |
-| HTTP parsing | Manual byte scanning | Optimized state machine |
-| Memory | Allocates per-request strings | Zero-copy with bytes crate |
-| Backpressure | None | Built-in flow control |
+| Feature | Status | Blocker |
+|---------|--------|---------|
+| Lambda route handlers | Registration works | Dispatch via stored fn ptrs fails (MIR codegen treats local fn vars as global names) |
+| Event loop (epoll/WSAPoll) | Runtime exists | Not integrated with HTTP server yet |
+| `std::http::HttpServer` keep-alive | Not implemented | `send_response()` always closes socket |
+| Async I/O | Poller + EventLoop exist | No async/await syntax in closures |
 
-The thread-per-connection model works well up to ~1K concurrent connections. For higher concurrency, TML needs async I/O primitives (`epoll`/`IOCP` bindings).
+## Comparison
+
+| Framework | req/s | Model |
+|-----------|-------|-------|
+| **TML (this)** | **41K** | Thread-per-connection, blocking |
+| Node.js http | ~35K | Event loop, non-blocking |
+| Go net/http | ~80K | Goroutines, multiplexed |
+| Rust/Hyper | ~150K | Tokio, epoll/IOCP async |
+
+TML is competitive with Node.js. To reach Go/Rust levels, needs epoll/IOCP integration.
