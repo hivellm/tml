@@ -1480,6 +1480,287 @@ os::get_priority(pid: I32) -> I32
 os::set_priority(pid: I32, priority: I32) -> Bool
 ```
 
+## 16. HTTP Module
+
+> **Status:** Fully implemented as of March 2026 (commit 1655f1ee). Provides Node.js-parity HTTP APIs for both clients and servers, plus a complete middleware ecosystem.
+
+The HTTP module lives at `lib/std/src/http/` and is organized into three layers: core types, client, server, and middleware.
+
+### 16.1 Module Map
+
+```
+std::http
+├── mod              # Re-exports, HttpError, common types
+├── methods          # HttpMethod enum (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, CONNECT, TRACE)
+├── status           # HttpStatus enum with reason phrases (1xx–5xx)
+├── headers          # Headers map: get, set, append, remove, contains, iter
+├── cookie           # Cookie and SetCookie types: parse, serialize, attributes
+├── version          # HttpVersion (HTTP/1.0, HTTP/1.1, HTTP/2, HTTP/3)
+├── error            # HttpError enum and Display
+├── helpers          # Shared utilities: parse_content_type, parse_accept, mime_for_extension
+│
+├── client
+│   ├── connection   # TcpStream-backed HTTP/1.1 connection: connect, send, recv
+│   ├── request      # ClientRequest builder: method, url, headers, body
+│   ├── response     # ClientResponse: status, headers, body bytes/text/json
+│   └── agent        # HttpAgent: connection pooling, base URL, default headers, timeout
+│
+├── server
+│   ├── server       # HttpServer: bind, listen, handle, middleware stack, shutdown
+│   ├── server_response # ServerResponse builder: status, headers, body, send
+│   ├── incoming     # IncomingRequest: method, path, query, headers, body
+│   └── parse_request # Raw HTTP/1.1 request parser
+│
+└── middleware
+    ├── router        # Router: GET/POST/PUT/DELETE/PATCH routes, params, wildcards
+    ├── cors          # CORS: origins, methods, headers, credentials, preflight
+    ├── compression   # Gzip/deflate/br response compression (zlib FFI)
+    ├── security      # Security headers: HSTS, X-Frame-Options, CSP, XSS-Protection
+    ├── etag          # ETag generation (FNV hash) and If-None-Match conditional cache
+    ├── body_parser   # JSON, form-urlencoded, and raw body parsing with size limit
+    ├── content_type  # Content-Type enforcement and MIME negotiation
+    ├── stream        # Server-Sent Events (SSE): EventSource, event loop
+    ├── range         # HTTP Range requests (206 Partial Content) for static assets
+    ├── cache_control # Cache-Control header builder: max-age, no-cache, public/private
+    ├── rate_limit    # Token-bucket rate limiter per IP with configurable window
+    ├── static_server # Static file server with MIME detection, ETag, Range, index.html
+    ├── chunked       # Chunked transfer encoding encoder/decoder
+    ├── encoding      # Content-Encoding pipeline: gzip, deflate, identity
+    └── multipart     # Multipart/form-data parser: parts, filenames, content types
+```
+
+### 16.2 HttpServer
+
+```tml
+use std::http::server::HttpServer
+use std::http::middleware::router::Router
+
+func main() {
+    var router: Router = Router::new()
+    router.get("/hello", do(req, res) {
+        res.status(200).text("Hello, TML!").send()
+    })
+    router.post("/echo", do(req, res) {
+        res.status(200).json(req.body_json()!).send()
+    })
+
+    var server: HttpServer = HttpServer::new()
+    server.use(router.into_middleware())
+    server.listen(3000)
+}
+```
+
+### 16.3 HttpAgent (Client)
+
+```tml
+use std::http::client::agent::HttpAgent
+
+func fetch_user(id: I64) -> Outcome[JsonValue, HttpError] {
+    var agent: HttpAgent = HttpAgent::new("https://api.example.com")
+    agent.set_header("Authorization", "Bearer {token}")
+    agent.set_timeout(Duration::from_secs(10))
+
+    let response = agent.get("/users/{id}")!
+    return response.json()
+}
+```
+
+### 16.4 Middleware Composition
+
+```tml
+use std::http::server::HttpServer
+use std::http::middleware::{cors::Cors, compression::Compression, security::Security}
+use std::http::middleware::{rate_limit::RateLimit, body_parser::BodyParser}
+
+var server: HttpServer = HttpServer::new()
+server.use(Security::defaults())
+server.use(Cors::allow_all())
+server.use(Compression::gzip())
+server.use(RateLimit::per_ip(100, Duration::from_secs(60)))
+server.use(BodyParser::json(1024 * 1024))   // 1 MB limit
+server.use(router.into_middleware())
+server.listen(8080)
+```
+
+### 16.5 Server-Sent Events (SSE)
+
+```tml
+use std::http::middleware::stream::EventSource
+
+router.get("/events", do(req, res) {
+    var source: EventSource = EventSource::new(res)
+    source.send_event("update", "{\"count\": 1}")
+    source.send_event("update", "{\"count\": 2}")
+    source.close()
+})
+```
+
+---
+
+## 17. Stream Module
+
+The stream module (`lib/std/src/stream/`) provides composable byte-stream abstractions in two layers.
+
+### 17.1 Layer 1 — Byte Streams
+
+Low-level building blocks backed directly by I/O handles.
+
+| Type | Description |
+|------|-------------|
+| `Readable` | Behavior: `read(buf) -> Outcome[U64, IoError]`, `read_exact`, `read_to_end` |
+| `Writable` | Behavior: `write(buf) -> Outcome[U64, IoError]`, `write_all`, `flush` |
+| `ByteStream` | Owned byte buffer implementing both `Readable` and `Writable` |
+| `BufferedReader` | Wraps any `Readable` with a fixed-size read buffer |
+| `BufferedWriter` | Wraps any `Writable` with flush-on-full buffering |
+
+```tml
+use std::stream::{BufferedReader, BufferedWriter, pipe}
+
+// Copy from reader to writer with buffering
+let reader: BufferedReader = BufferedReader::new(file_in, 8192)
+let writer: BufferedWriter = BufferedWriter::new(file_out, 8192)
+pipe(ref reader, ref writer)!
+```
+
+### 17.2 Layer 2 — Higher-Level Streams
+
+Higher-level composable streams for data transformation pipelines.
+
+| Type | Description |
+|------|-------------|
+| `ReadableStream` | Push-based readable; supports `on_data`, `on_end`, `on_error` callbacks |
+| `WritableStream` | Push-based writable; supports `write`, `end`, backpressure |
+| `DuplexStream` | Both readable and writable ends independent of each other |
+| `TransformStream` | Readable + writable with a transform function applied in-flight |
+| `PassThroughStream` | Identity transform (useful for observing or splitting a pipeline) |
+
+```tml
+use std::stream::{TransformStream, pipeline}
+
+// Compress then write
+let compress: TransformStream = Compression::gzip_transform()
+pipeline([file_readable, compress, socket_writable])!
+```
+
+### 17.3 Utilities
+
+| Function | Description |
+|----------|-------------|
+| `pipeline(streams)` | Chain N streams: errors propagate, each stage drains before close |
+| `from_string(s)` | Create a `ReadableStream` from a `String` |
+| `finished_readable(r)` | `Outcome[Unit, IoError]` that resolves when a readable closes |
+| `finished_writable(w)` | `Outcome[Unit, IoError]` that resolves when a writable finishes |
+
+---
+
+## 18. AIO Module
+
+The AIO module (`lib/std/src/aio/`) provides the async I/O event loop used by the HTTP server and other I/O-intensive subsystems.
+
+### 18.1 EventLoop
+
+```tml
+use std::aio::EventLoop
+
+var loop: EventLoop = EventLoop::new()
+loop.run()         // blocks current thread until all tasks complete
+loop.run_once()    // single iteration (useful for embedding)
+loop.stop()        // signal shutdown
+```
+
+`EventLoop` dispatches readiness events from the OS poller to registered handlers. The HTTP server calls `EventLoop::new()` internally; applications do not need to manage it directly unless integrating custom async sources.
+
+### 18.2 Poller
+
+Platform-specific I/O readiness notification.
+
+| Platform | Backend |
+|----------|---------|
+| Windows | IOCP (I/O Completion Ports) |
+| Linux | epoll |
+| macOS | kqueue |
+
+```tml
+use std::aio::Poller
+
+var poller: Poller = Poller::new()
+poller.register(fd, Interest.Readable)
+let events: List[Event] = poller.poll(Duration::from_millis(100))!
+```
+
+### 18.3 TimerWheel
+
+Efficient O(1) amortized timer management for timeout-heavy workloads (e.g., rate limiters, connection keepalive).
+
+```tml
+use std::aio::TimerWheel
+
+var timers: TimerWheel = TimerWheel::new(Duration::from_millis(1))
+let handle = timers.insert(Duration::from_secs(5), do() { cleanup() })
+timers.cancel(handle)
+timers.advance(Duration::from_millis(100))
+```
+
+---
+
+## 19. SQLite Module
+
+The SQLite module (`lib/std/src/sqlite/`) provides a safe TML wrapper over the SQLite C library via `@extern("c")` FFI.
+
+### 19.1 Opening a Database
+
+```tml
+use std::sqlite::Database
+
+let db: Database = Database::open("app.db")!
+let mem: Database = Database::open(":memory:")!
+```
+
+### 19.2 Executing Statements
+
+```tml
+// DDL
+db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")!
+
+// Parameterized DML
+db.execute_with("INSERT INTO users (name) VALUES (?)", ["Alice"])!
+```
+
+### 19.3 Querying
+
+```tml
+use std::sqlite::{Database, Row}
+
+let stmt = db.prepare("SELECT id, name FROM users WHERE id > ?")!
+stmt.bind(1, 0)!
+
+loop while stmt.step()! {
+    let row: Row = stmt.current_row()
+    let id: I64 = row.get_i64(0)
+    let name: String = row.get_text(1)
+    println("{id}: {name}")
+}
+stmt.reset()
+```
+
+### 19.4 Transactions
+
+```tml
+db.begin()!
+db.execute_with("UPDATE users SET name = ? WHERE id = ?", ["Bob", 1])!
+db.commit()!
+// or db.rollback()!
+```
+
+### 19.5 Type Summary
+
+| Type | Description |
+|------|-------------|
+| `Database` | Opened database connection |
+| `Statement` | Prepared statement with parameter binding |
+| `Row` | Current row from a `step()` call |
+| `Value` | SQLite value variant: `Null`, `Integer(I64)`, `Real(F64)`, `Text(String)`, `Blob(List[U8])` |
+
 ---
 
 *Previous: [19-RUNTIME.md](./19-RUNTIME.md)*

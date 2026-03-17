@@ -23,19 +23,19 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::net](./02-NET.md) | Low-level networking (TCP/UDP) | `io::network` |
 | [std::buffer](./03-BUFFER.md) | Binary buffers and streams | None |
 | [std::tls](./06-TLS.md) | TLS/SSL connections | `io::network.tls` |
-| [std::http](./07-HTTP.md) | HTTP client and server (HttpClient, routing, headers, cookies) | `io::network.http` |
+| [std::http](./07-HTTP.md) | HTTP/1.1 client, server, and middleware ecosystem (HttpClient, HttpServer, IncomingMessage, ServerResponse, Router, CORS, Compression, Security, ETag, BodyParser, ContentType, SSE/Stream, Range, CacheControl, RateLimit, StaticServer) | `io::network.http` |
 | [std::stream](./23-STREAM.md) | Streaming byte I/O (Readable, Writable, BufferedReader, BufferedWriter, ByteStream, DuplexStream, PassThroughStream, PipelineStream, pipe) | None |
 
 ### Concurrency and Async I/O Packages
 
-| Package | Description | Capabilities Required |
-|---------|-------------|----------------------|
-| [std::aio](./27-AIO.md) | Async I/O event loop (Poller, TimerWheel, EventLoop) | `io::network` (for socket polling) |
-| [std::sync](./13-SYNC.md) | Channels and synchronization | None |
-| [std::async](./14-ASYNC.md) | Async runtime and futures | `io::time` (for timers) |
-| [std::events](./25-EVENTS.md) | Publish/subscribe event emitter (Node.js-style) | None |
-| [std::thread](./31-THREAD.md) | Native threads (spawn, join, sleep, park) | `io::process` |
-| [std::runtime](./39-RUNTIME.md) | Async runtime (executor, timers, channels) | `io::time` |
+| Package | File | Description | Capabilities Required |
+|---------|------|-------------|----------------------|
+| [std::aio](./27-AIO.md) | 27-AIO.md | Async I/O event loop (Poller, TimerWheel, EventLoop) | `io::network` (for socket polling) |
+| [std::sync](./13-SYNC.md) | 13-SYNC.md | Channels and synchronization | None |
+| [std::async](./14-ASYNC.md) | 14-ASYNC.md | Async runtime and futures | `io::time` (for timers) |
+| [std::events](./25-EVENTS.md) | 25-EVENTS.md | Publish/subscribe event emitter (Node.js-style) | None |
+| [std::thread](./31-THREAD.md) | 31-THREAD.md | Native threads (spawn, join, sleep, park) | `io::process` |
+| [std::runtime](./39-RUNTIME.md) | 39-RUNTIME.md | Async runtime (executor, timers, channels) | `io::time` |
 
 ### Database Packages
 
@@ -61,12 +61,12 @@ This directory contains specifications for TML's standard library packages. Thes
 
 ### Math and Science Packages
 
-| Package | Description | Capabilities Required |
-|---------|-------------|----------------------|
-| [std::math](./26-MATH.md) | Mathematical functions (sin, cos, sqrt, pow, etc.) | None |
-| [std::random](./27-RANDOM.md) | Random number generation (Xoshiro256, ThreadRng) | None |
-| [std::search](./29-SEARCH.md) | Search algorithms (BM25, HNSW, cosine distance) | None |
-| [std::hash](./28-HASH.md) | Non-cryptographic hashing (FNV-1a, MurmurHash2) | None |
+| Package | File | Description | Capabilities Required |
+|---------|------|-------------|----------------------|
+| [std::math](./26-MATH.md) | 26-MATH.md | Mathematical functions (sin, cos, sqrt, pow, etc.) | None |
+| [std::random](./27-RANDOM.md) | 27-RANDOM.md | Random number generation (Xoshiro256, ThreadRng) | None |
+| [std::search](./29-SEARCH.md) | 29-SEARCH.md | Search algorithms (BM25, HNSW, cosine distance) | None |
+| [std::hash](./28-HASH.md) | 28-HASH.md | Non-cryptographic hashing (FNV-1a, MurmurHash2) | None |
 
 ### Utility Packages
 

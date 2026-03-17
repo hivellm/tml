@@ -72,6 +72,20 @@
 - [x] 5.6 Create extension README with setup and usage instructions
 - [ ] 5.7 Verify extension passes VSCode marketplace validation
 
+## Phase 6: Documentation Accuracy (2026-03-17)
+
+- [x] 6.1 Audit README for features falsely presented as implemented
+- [x] 6.2 Mark OOP section (class/interface/extends/implements/override/virtual/abstract/sealed) as RESERVED/PROPOSED
+- [x] 6.3 Mark Effects section (with pure/io/throws) as RESERVED/PROPOSED
+- [x] 6.4 Update standard library module list to include http, stream, sqlite, aio, buffer (40+ modules)
+- [x] 6.5 Add Standard Library Modules reference table to README
+- [x] 6.6 Replace OOP example in working-features section with Behaviors example
+- [x] 6.7 Add HTTP framework usage example
+- [x] 6.8 Fix @test snippet to show correct return type (-> I32, return 0)
+- [x] 6.9 Add note to Known Issues about OOP/effects being highlighted but not implemented
+- [x] 6.10 Add CHANGELOG [Unreleased] entry documenting documentation fixes
+- [x] 6.11 Expand .vscode/copilot-instructions.md from 4 lines to full language guide
+
 ## Additional Tooling (Implemented outside this task)
 
 - [x] Code Formatter (`tml fmt`) — AST-based, 6 source files in `compiler/src/format/`

@@ -2,6 +2,19 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [Unreleased]
+
+### Updated
+- README updated to clarify reserved vs implemented features
+- Marked OOP (class, interface, extends, implements, override, virtual, abstract, sealed) section as proposed/reserved syntax not yet implemented in the compiler
+- Marked Effects (with, pure, io, async, throws) section as proposed/reserved syntax not yet implemented in the compiler
+- Updated standard library module list to include http, stream, sqlite, aio, buffer (40+ modules total)
+- Updated module completion count from 35+ to 40+ to reflect HTTP framework additions
+- Corrected @test snippet example to match actual test function signature (returns I32)
+- Added Standard Library Modules reference table
+- Added Behaviors example replacing the OOP snippet in the working-features section
+- Added HTTP framework usage example
+
 ## [0.18.0] - 2026-02-21
 
 ### Added

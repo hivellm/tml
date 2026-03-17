@@ -24,33 +24,25 @@ Syntax highlighting, autocompletion, and language support for TML (To Machine La
   - Markdown code blocks (```tml)
 
 - **IntelliSense / Autocompletion**:
-  - All TML keywords (57 including OOP keywords)
+  - All 57 TML keywords (including reserved OOP and effects keywords)
   - Primitive and collection types (Vec, HashMap, HashSet, BTreeMap, BTreeSet, Deque, Buffer)
   - Wrapper types (Maybe, Outcome, Heap, Shared, Sync, Text)
   - Builtin functions (print, println, panic, assert, assert_eq, assert_ne, assert_true, etc.)
-  - 35+ module completions for `use` statements (std::json, std::regex, std::crypto, etc.)
-  - Code snippets for common patterns (func, class, interface, when, etc.)
-  - OOP snippets (override, virtual, abstract, extends, implements)
-  - Import statement completion (`use std::json::*`, `use std::regex::*`)
-  - Effects (pure, io, async, throws, unsafe, alloc, diverges, nondet)
-  - Capabilities (Read, Write, Fs, Net, Env, Time, Random, Exec)
-  - Contracts (requires, ensures, invariant, assert, assume)
+  - 40+ module completions for `use` statements (std::json, std::http, std::crypto, std::stream, std::sqlite, std::aio, etc.)
+  - Code snippets for common patterns (func, type, behavior, when, etc.)
+  - Import statement completion (`use std::json::*`, `use std::http::*`)
 
 - **Hover Information**:
   - Keyword descriptions
   - Type documentation
   - Function signatures
   - Variant documentation
-  - Effect and capability documentation with usage examples
-  - Contract syntax examples
   - Module exports
 
 - **Semantic Highlighting** (via LSP):
   - Function declarations and calls
   - Type declarations and references
   - Decorators (@test, @bench, etc.)
-  - Effects in `with` clauses
-  - Capabilities and contracts
 
 - **Build Integration**:
   - `TML: Build` command (Ctrl+Shift+B)
@@ -138,11 +130,25 @@ func first[T](list: List[T]) -> Maybe[T] {
 }
 ```
 
+### Behaviors (Traits)
+```tml
+behavior Display {
+    func to_string(this) -> Str
+}
+
+impl Display for Point {
+    func to_string(this) -> Str {
+        return `({this.x}, {this.y})`
+    }
+}
+```
+
 ### Directives
 ```tml
 @test
-func test_addition() {
+func test_addition() -> I32 {
     assert_eq(2 + 2, 4, "Math works!")
+    return 0
 }
 
 @when(os: linux)
@@ -164,11 +170,26 @@ func pointer_example() {
 }
 ```
 
-### OOP - Classes and Interfaces
+### HTTP Framework
+```tml
+use std::http::*
+
+func main() {
+    let app = App::new()
+    app.get("/hello", do(req, res) {
+        res.send("Hello, world!")
+    })
+    app.listen(3000)
+}
+```
+
+### OOP — Classes and Interfaces (RESERVED / PROPOSED)
+
+> **Note**: The keywords `class`, `interface`, `extends`, `implements`, `override`, `virtual`, `abstract`, and `sealed` are reserved in the TML grammar and receive syntax highlighting, but the OOP object model they represent is **not yet implemented** in the compiler. The following example shows proposed syntax for a future release.
+
 ```tml
 interface Drawable {
     func draw(this)
-    prop color: Color { get }
 }
 
 class Shape {
@@ -182,13 +203,6 @@ class Shape {
 class Circle extends Shape implements Drawable {
     radius: F64
 
-    func new(r: F64, c: Color) -> This {
-        return This {
-            base: Shape::new(c),
-            radius: r,
-        }
-    }
-
     override func area(this) -> F64 {
         return 3.14159 * this.radius * this.radius
     }
@@ -199,9 +213,12 @@ class Circle extends Shape implements Drawable {
 }
 ```
 
-### Effects and Capabilities
+### Effects and Capabilities (RESERVED / PROPOSED)
+
+> **Note**: The `with` keyword and effect annotations (`pure`, `io`, `async`, `throws`, etc.) are reserved and highlighted by the extension, but the effect system is **not yet implemented** in the compiler. The following example shows proposed syntax for a future release.
+
 ```tml
-// Effects declare side effects
+// Proposed: effects declare side effects
 func read_file(path: Str) -> Str with io {
     // Function may perform I/O
 }
@@ -209,28 +226,17 @@ func read_file(path: Str) -> Str with io {
 func pure_add(a: I32, b: I32) -> I32 with pure {
     return a + b
 }
-
-// Capabilities grant specific permissions
-func process_data(fs: Fs, net: Net) -> Outcome[Data, Error] {
-    // Has file system and network access
-}
 ```
 
-### Contracts
-```tml
-func divide(a: I32, b: I32) -> I32
-    requires b != 0
-    ensures result * b == a
-{
-    return a / b
-}
+## Standard Library Modules
 
-func binary_search[T](list: List[T], target: T) -> Maybe[I32]
-    requires list.is_sorted()
-{
-    // Implementation
-}
-```
+The TML standard library ships 40+ modules. The extension provides `use` statement completions for all of them:
+
+| Namespace | Modules |
+|-----------|---------|
+| `std::` | json, http, stream, sqlite, aio, buffer, crypto, compress, random, search, regex, datetime, os, url, uuid, semver, glob, text, process, path, log |
+| `core::` | str, fmt, iter, slice, alloc, error, encoding |
+| `net::` | tcp, udp, tls |
 
 ## Installation
 
@@ -256,6 +262,7 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 
 - Syntax validation requires the TML compiler (`tml`) to be installed and available in PATH
 - Diagnostics are disabled if the compiler is not found
+- OOP and effects syntax (class, interface, with) is highlighted but not yet implemented in the compiler
 
 ## Release Notes
 
@@ -266,7 +273,7 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 - **Extended Assertions** - 10 new builtins: `assert_true`, `assert_false`, `assert_lt`, `assert_gt`, `assert_lte`, `assert_gte`, `assert_in_range`, `assert_str_len`, `assert_str_empty`, `assert_str_not_empty`
 - **Compile-Time Constants** - `__FILE__`, `__DIRNAME__`, `__LINE__`
 - **Backtick Auto-Closing** - Template literal backticks now auto-close
-- **35+ Module Completions** - std::json, std::regex, std::crypto, std::compress, std::random, std::search, std::datetime, std::os, std::url, std::uuid, std::semver, std::glob, and more
+- **40+ Module Completions** - std::json, std::http, std::stream, std::sqlite, std::aio, std::buffer, std::crypto, std::compress, std::random, std::search, std::regex, std::datetime, std::os, std::url, std::uuid, std::semver, std::glob, and more
 - **Collection & Wrapper Types** - Vec, HashMap, HashSet, BTreeMap, BTreeSet, Deque, Buffer, Text
 - **New Directives** - `@derive`, `@simd`, `@should_panic`
 - **Extended Preprocessor Symbols** - ANDROID, IOS, FREEBSD, UNIX, POSIX, WASM32, RISCV64, PTR_32, PTR_64, and more
@@ -280,7 +287,7 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 ### 0.12.0
 
 - **Import Statement Completion** - Smart completions for `use` statements
-- **Effect & Capability Support** - Completions, hover, and highlighting for effects and capabilities
+- **Effect & Capability Support** - Completions, hover, and highlighting for reserved effect keywords
 - **Contract Support** - Completions and documentation for requires, ensures, invariant
 - **Module Hover** - See module documentation and exports on hover
 
@@ -297,7 +304,7 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 - **IntelliSense** - Autocompletion for keywords, types, builtins, and snippets
 - **Hover Information** - Documentation on hover for all TML constructs
 - **Markdown Support** - Syntax highlighting in ```tml code blocks
-- **OOP Support** - Class, interface, extends, implements keywords
+- **OOP keyword support** - Class, interface, extends, implements keywords highlighted (reserved syntax)
 
 ### 0.6.0
 
@@ -377,4 +384,4 @@ Apache 2.0
 
 ## About TML
 
-TML (To Machine Language) is a programming language specification designed specifically for LLM code generation and analysis. Learn more at the [TML repository](https://github.com/yourusername/tml).
+TML (To Machine Language) is a compiled, statically typed programming language with an LLVM backend, designed specifically for LLM code generation and analysis. It features ownership and borrowing (without lifetime annotations), a behavior system (similar to traits), and 40+ standard library modules. Learn more at the [TML repository](https://github.com/yourusername/tml).

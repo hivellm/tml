@@ -47,48 +47,76 @@
 
 ## Specification Index
 
-### Core Language
+### Language Core
 
 | Document | Description |
 |----------|-------------|
-| [01-OVERVIEW.md](./01-OVERVIEW.md) | Philosophy and principles |
-| [02-LEXICAL.md](./02-LEXICAL.md) | Tokens, keywords, operators |
-| [03-GRAMMAR.md](./03-GRAMMAR.md) | Complete EBNF grammar |
-| [04-TYPES.md](./04-TYPES.md) | Type system |
-| [05-SEMANTICS.md](./05-SEMANTICS.md) | Ownership, error handling, evaluation |
-| [06-MEMORY.md](./06-MEMORY.md) | Ownership and borrowing |
-| [07-MODULES.md](./07-MODULES.md) | Module system |
+| [01-OVERVIEW.md](./01-OVERVIEW.md) | Philosophy, design principles, and implementation status |
+| [02-LEXICAL.md](./02-LEXICAL.md) | Tokens, keywords, literals, and operators |
+| [03-GRAMMAR.md](./03-GRAMMAR.md) | Complete EBNF grammar (LL(1)) |
+| [04-TYPES.md](./04-TYPES.md) | Type system: primitives, generics, behaviors |
+| [05-SEMANTICS.md](./05-SEMANTICS.md) | Ownership model, evaluation order, error propagation |
+| [06-MEMORY.md](./06-MEMORY.md) | Memory model, borrowing, lifetimes |
+| [07-MODULES.md](./07-MODULES.md) | Module system, visibility, imports |
+| [15-ERROR-HANDLING.md](./15-ERROR-HANDLING.md) | Error handling: `!`, `catch`, `Outcome[T,E]` |
+
+### Standard Library
+
+| Document | Description |
+|----------|-------------|
+| [20-STDLIB.md](./20-STDLIB.md) | Full standard library reference (core, std, HTTP, streams, SQLite) |
+| [13-BUILTINS.md](./13-BUILTINS.md) | Built-in types and compiler-provided functions |
+| [14-EXAMPLES.md](./14-EXAMPLES.md) | Complete worked examples |
+
+### Compiler Architecture
+
+| Document | Description |
+|----------|-------------|
+| [16-COMPILER-ARCHITECTURE.md](./16-COMPILER-ARCHITECTURE.md) | Query-based incremental compilation pipeline |
 | [08-IR.md](./08-IR.md) | Canonical IR for semantic analysis |
-| [30-MIR.md](./30-MIR.md) | Mid-level IR for optimization (SSA form) |
+| [30-MIR.md](./30-MIR.md) | Mid-level IR: SSA form and optimization passes |
+| [31-HIR.md](./31-HIR.md) | High-level IR: desugared AST representation |
+| [27-AST.md](./27-AST.md) | Abstract syntax tree node definitions |
+| [28-CHECKER.md](./28-CHECKER.md) | Type checker and borrow checker internals |
+| [26-FORMATTER.md](./26-FORMATTER.md) | Canonical code formatter (`tml fmt`) |
 
 ### Toolchain
 
 | Document | Description |
 |----------|-------------|
-| [09-CLI.md](./09-CLI.md) | Commands `tml build`, `tml test`, etc. |
-| [10-TESTING.md](./10-TESTING.md) | Native testing framework |
-| [11-DEBUG.md](./11-DEBUG.md) | Debug and structured messages |
-| [12-ERRORS.md](./12-ERRORS.md) | Error catalog |
-| [18-RLIB-FORMAT.md](./18-RLIB-FORMAT.md) | RLIB library format and metadata |
-| [19-MANIFEST.md](./19-MANIFEST.md) | Package manifest (tml.toml) |
+| [09-CLI.md](./09-CLI.md) | CLI commands: `tml build`, `tml run`, `tml test`, etc. |
+| [10-TESTING.md](./10-TESTING.md) | Native testing framework and test runner |
+| [11-DEBUG.md](./11-DEBUG.md) | Debug output, structured messages, backtraces |
+| [12-ERRORS.md](./12-ERRORS.md) | Compiler error catalog and diagnostic format |
+| [LOGGING.md](./LOGGING.md) | Logging system and log level conventions |
 
-### Standard Library
-
-| Library | Description |
-|---------|-------------|
-| `core` | Core types, iterators, slices, numeric operations |
-| `std` | Collections, file I/O, networking, JSON |
-| `test` | Testing framework (`assert`, `assert_eq`, `@test`) |
-| `backtrace` | Stack trace capture and symbol resolution |
-
-### Reference
+### Advanced Topics
 
 | Document | Description |
 |----------|-------------|
-| [13-BUILTINS.md](./13-BUILTINS.md) | Builtin types and functions |
-| [14-EXAMPLES.md](./14-EXAMPLES.md) | Complete examples |
-| [15-ERROR-HANDLING.md](./15-ERROR-HANDLING.md) | Error handling system |
-| [25-DECORATORS.md](./25-DECORATORS.md) | Custom decorators system |
+| [22-LOW-LEVEL.md](./22-LOW-LEVEL.md) | `lowlevel` blocks, raw pointers, memory intrinsics |
+| [23-INTRINSICS.md](./23-INTRINSICS.md) | Compiler intrinsics: SIMD, atomics, overflow checks |
+| [24-SYSCALL.md](./24-SYSCALL.md) | Direct system call interface |
+| [32-CONCURRENCY.md](./32-CONCURRENCY.md) | Concurrency model: threads, channels, atomics |
+| [25-DECORATORS.md](./25-DECORATORS.md) | `@directives` system and custom decorators |
+
+### Interoperability
+
+| Document | Description |
+|----------|-------------|
+| [17-FFI.md](./17-FFI.md) | Foreign function interface: `@extern("c")`, `@link` |
+| [18-ABI.md](./18-ABI.md) | TML ABI: calling conventions, struct layout, name mangling |
+| [21-TARGETS.md](./21-TARGETS.md) | Cross-compilation targets and platform support |
+| [19-RUNTIME.md](./19-RUNTIME.md) | Runtime library: allocator, panic handler, I/O |
+
+### Package System
+
+| Document | Description |
+|----------|-------------|
+| [29-PACKAGES.md](./29-PACKAGES.md) | Package management: `tml add`, `tml update`, registry |
+| [19-MANIFEST.md](./19-MANIFEST.md) | Package manifest format (`tml.toml`) |
+| [18-RLIB-FORMAT.md](./18-RLIB-FORMAT.md) | RLIB library archive format and metadata |
+| [PACKAGE-TEMPLATE.md](./PACKAGE-TEMPLATE.md) | Template and conventions for new packages |
 
 ## Quick Start
 
@@ -408,7 +436,7 @@ Backtrace:
 | v0.5 | ✅ Active | Bootstrap compiler with LLVM backend |
 | v1.0 | 🔄 In Progress | Self-hosted compiler |
 
-### Implementation Status (Feb 2026)
+### Implementation Status (March 2026)
 
 | Feature | Status |
 |---------|--------|
@@ -423,7 +451,7 @@ Backtrace:
 | Where Clauses | ✅ Complete |
 | String Interpolation | ✅ Complete |
 | LLVM Backend | ✅ Complete |
-| **Cranelift Backend** | 🧪 Experimental (in development, not ready for use) |
+| **Cranelift Backend** | Experimental (in development, not ready for use) |
 | Test Framework | ✅ Complete |
 | FFI Support | ✅ Complete (@extern, @link) |
 | Borrow Checker (NLL) | ✅ Complete (reborrows, two-phase) |
@@ -433,6 +461,10 @@ Backtrace:
 | **C#-Style OOP** | ✅ Complete (classes, inheritance, interfaces, vtables) |
 | Package Management | ✅ Complete (`tml add`, `tml update`) |
 | Backtrace Library | ✅ Complete (stack capture, symbol resolution, panic integration) |
+| **HTTP Framework** | ✅ Complete (31 submodules, client + server + 17 middleware, 82+ tests) |
+| **SQLite Support** | ✅ Complete (prepared statements, transactions, typed rows) |
+| **Async I/O (AIO)** | ✅ Complete (event loop, OS poller, timer wheel) |
+| **Stream Utilities** | ✅ Complete (byte streams, transform streams, pipeline) |
 
 ## License
 
