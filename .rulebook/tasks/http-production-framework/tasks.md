@@ -11,9 +11,9 @@
 - [x] 1.5 AppContext.html(), .redirect() response helpers
 - [x] 1.6 Queue overflow protection (503 when full)
 - [x] 1.7 Wire Router radix-tree to app_dispatch (hybrid: exact match fast path + radix tree fallback)
-- [ ] 1.8 AppContext.param("name") working with RouteMatch
-- [ ] 1.9 Buffer-based response builder (eliminate string concat)
-- [ ] 1.10 Pre-built common headers (Date, Server, Connection)
+- [x] 1.8 AppContext.param("name") working with RouteMatch (stack-allocated, zero heap)
+- [x] 1.9 Buffer-based response builder (single alloc + copy_nonoverlapping)
+- [x] 1.10 Pre-built common headers (Server: TML, Connection: keep-alive)
 - [x] 1.11 Request size limits (BUF_SIZE=8KB header cap, MAX_BODY_SIZE=1MB constant)
 - [ ] 1.12 Error recovery (catch handler panics, return 500)
 
@@ -30,11 +30,11 @@
 
 ## Phase 3: Async I/O (target: 400K req/s)
 
-- [ ] 3.1 IOCP wrapper for Windows (FFI to kernel32 CreateIoCompletionPort)
-- [ ] 3.2 epoll wrapper for Linux (FFI to sys_epoll_create/ctl/wait)
-- [ ] 3.3 Event loop runtime (poll for readiness, dispatch to handlers)
-- [ ] 3.4 Async accept (non-blocking listener socket)
-- [ ] 3.5 Async recv/send (non-blocking data sockets)
+- [x] 3.1 WSAPoll/epoll wrapper (std::net::eventloop — EventLoop, Interest, Event)
+- [x] 3.2 Event loop runtime (per-worker EventLoop with connection table)
+- [x] 3.3 Async accept (non-blocking listener + round-robin distribution)
+- [x] 3.4 Async recv (non-blocking read with header detection)
+- [x] 3.5 Async send (non-blocking write with state machine buffering)
 - [ ] 3.6 Timer wheel for timeout management (no per-socket setsockopt)
 - [ ] 3.7 Work-stealing thread pool (multiple event loops)
 - [ ] 3.8 Backpressure: pause accept when all workers busy

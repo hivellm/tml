@@ -1,7 +1,8 @@
-// TML HTTP Server — Thread pool, middleware, timeouts
+// TML HTTP Server — Express-like with path params, middleware, thread pool
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
+// Test:   curl http://localhost:3000/users/42
 // Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
 
 mod server
@@ -9,28 +10,24 @@ mod server
 use core::str
 use std::http::app::{App, AppContext}
 
-// ── Middleware ──────────────────────────────────────────────────
-
-func logger(ctx: AppContext) -> Str {
-    println(ctx.method() + " " + ctx.path())
-    return ""
-}
-
 // ── Handlers ───────────────────────────────────────────────────
 
 func handle_root(ctx: AppContext) -> Str {
-    ctx.json(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
+    ctx.json(200, "{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
 }
 
 func handle_health(ctx: AppContext) -> Str {
-    ctx.json(200, "{" + "\"status\":\"ok\"" + "}")
+    ctx.json(200, "{\"status\":\"ok\"}")
+}
+
+func handle_user(ctx: AppContext) -> Str {
+    let id: Str = ctx.param("id")
+    ctx.json(200, "{\"user_id\":\"" + id + "\"}")
 }
 
 func handle_echo(ctx: AppContext) -> Str {
     let body: Str = ctx.body()
-    if str::len(body) == 0 {
-        return ctx.json(200, "{}")
-    }
+    if str::len(body) == 0 { return ctx.json(200, "{}") }
     ctx.json(200, body)
 }
 
@@ -39,14 +36,9 @@ func handle_echo(ctx: AppContext) -> Str {
 pub func main() -> I32 {
     var app: App = App::new()
 
-    // Timeouts
-    app.set_read_timeout(30000)
-    app.set_write_timeout(30000)
-    app.set_idle_timeout(60000)
-
-    // Routes
     app.get("/", handle_root)
     app.get("/health", handle_health)
+    app.get("/users/:id", handle_user)
     app.post("/api/echo", handle_echo)
 
     app.listen(3000)
