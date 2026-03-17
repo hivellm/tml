@@ -841,6 +841,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             {"std/tests/json/", "std::json"},
             {"std/tests/crypto/", "std::crypto"},
             {"std/tests/zlib/", "std::zlib"},
+            {"std/tests/http/", "std::zlib"}, // HTTP encoding/compression depends on zlib
             {"std/tests/search/", "std::search"},
             {"std/tests/profiler/", "std::profiler"},
             {"std/tests/io/", "std::json"}, // std::io imports std::json indirectly
@@ -1023,9 +1024,23 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     {
         bool uses_zlib = false;
         for (const auto& [path, _] : registry->get_all_modules()) {
-            if (path == "std::zlib" || path.find("std::zlib::") == 0) {
+            if (path == "std::zlib" || path.find("std::zlib::") == 0 ||
+                path == "std::http::encoding" || path == "std::http::compression") {
                 uses_zlib = true;
+                TML_LOG_DEBUG("test", "  zlib detected via module: " << path);
                 break;
+            }
+        }
+        if (!uses_zlib) {
+            // Also check source file imports for indirect zlib usage
+            for (const auto& [path, _] : registry->get_all_modules()) {
+                if (path.find("std::http") == 0) {
+                    // Any HTTP module may transitively depend on zlib
+                    // via encoding.tml -> zlib imports
+                    uses_zlib = true;
+                    TML_LOG_DEBUG("test", "  zlib inferred from http module: " << path);
+                    break;
+                }
             }
         }
         if (uses_zlib) {
@@ -1041,6 +1056,18 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                     to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlienc.lib").string()));
                 link_opts.link_flags.push_back(
                     to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlicommon.lib").string()));
+            }
+            // Link tml_zlib_runtime (C wrappers for zlib/brotli/zstd streams)
+            auto zlib_base =
+                fs::path("build") / (config.optimization_level > 0 ? "release" : "debug");
+            for (const auto& zlib_lib_name : {"libtml_zlib_runtime.a", "lib/libtml_zlib_runtime.a",
+                                              "tml_zlib_runtime.lib", "lib/tml_zlib_runtime.lib"}) {
+                auto zlib_lib_path = zlib_base / zlib_lib_name;
+                if (fs::exists(zlib_lib_path)) {
+                    link_opts.link_flags.push_back(
+                        to_fwd_slashes(fs::absolute(zlib_lib_path).string()));
+                    break;
+                }
             }
         }
     }
@@ -1668,6 +1695,18 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
                     to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlienc.lib").string()));
                 link_opts.link_flags.push_back(
                     to_fwd_slashes(fs::absolute(vcpkg_lib / "brotlicommon.lib").string()));
+            }
+            // Link tml_zlib_runtime (C wrappers for zlib/brotli/zstd streams)
+            auto zlib_base =
+                fs::path("build") / (config.optimization_level > 0 ? "release" : "debug");
+            for (const auto& zlib_lib_name : {"libtml_zlib_runtime.a", "lib/libtml_zlib_runtime.a",
+                                              "tml_zlib_runtime.lib", "lib/tml_zlib_runtime.lib"}) {
+                auto zlib_lib_path = zlib_base / zlib_lib_name;
+                if (fs::exists(zlib_lib_path)) {
+                    link_opts.link_flags.push_back(
+                        to_fwd_slashes(fs::absolute(zlib_lib_path).string()));
+                    break;
+                }
             }
         }
     }
