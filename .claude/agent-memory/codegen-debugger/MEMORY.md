@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [fn-ptr-local-var-fix.md](fn-ptr-local-var-fix.md) - Function pointer in local variable indirect call fix (2026-03-17, FIXED)
 - [fn-type-mangling-fix.md](fn-type-mangling-fix.md) - parse_tokens_with_pattern greedy token fix + Fn mangling (2026-03-16, FIXED)
 - [where-clause-functype-fix.md](where-clause-functype-fix.md) - match_where_pattern_call FuncType handling (2026-03-16, FIXED)
 - [runtime-lib-naming-fix.md](runtime-lib-naming-fix.md) - Dual .lib/.a naming for Zig CC (2026-03-16, FIXED)

@@ -1,0 +1,5 @@
+- [x] Read existing ch15-00-oop.md for context and style
+- [x] Read ch03-00-structs.md and ch03-02-methods-and-extend.md for paradigm contrast
+- [x] Rewrite ch15-00-oop.md — overview: dual paradigm, when to use behaviors vs classes
+- [x] Create ch15-01-classes.md — class definitions, access modifiers, static members, inheritance, virtual/override, abstract, sealed, constructors with base:, properties
+- [x] Create ch15-02-interfaces.md — interface definitions, default methods, generic interfaces, This keyword, interface inheritance, multiple implements, interfaces vs behaviors
