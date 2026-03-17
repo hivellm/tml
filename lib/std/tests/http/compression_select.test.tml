@@ -1,0 +1,13 @@
+// Tests for compression — encoding selection and should_compress
+use test::{assert, assert_eq}
+use std::http::compression::{CompressionOptions, select_encoding, should_compress}
+
+@test
+func test_select_encoding() -> I32 {
+    let opts: CompressionOptions = CompressionOptions::new()
+    assert_eq(select_encoding("gzip, deflate, br", ref opts), "br", "prefers brotli")
+    assert_eq(select_encoding("gzip, deflate", ref opts), "gzip", "falls back to gzip")
+    assert_eq(select_encoding("identity", ref opts), "", "no match")
+    assert_eq(select_encoding("", ref opts), "", "empty")
+    return 0
+}

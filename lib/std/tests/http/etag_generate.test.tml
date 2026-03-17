@@ -1,0 +1,23 @@
+// Tests for etag — generate, generate_weak, is_not_modified
+use test::{assert, assert_eq}
+use core::str
+use std::http::etag::{generate, generate_weak, is_not_modified, is_not_modified_since}
+
+@test
+func test_etag_generate() -> I32 {
+    let tag: Str = generate("Hello World")
+    // Must be quoted string: "hash-len"
+    assert(str::starts_with(tag, "\""), "starts with quote")
+    assert(str::ends_with(tag, "\""), "ends with quote")
+    assert(str::contains(tag, "-11"), "contains content length")
+    // Same content = same ETag
+    let tag2: Str = generate("Hello World")
+    assert_eq(tag, tag2, "deterministic")
+    // Different content = different ETag
+    let tag3: Str = generate("Goodbye World")
+    assert(tag != tag3, "different content different tag")
+    // Empty content
+    let empty: Str = generate("")
+    assert_eq(empty, "\"0-0\"", "empty etag")
+    return 0
+}

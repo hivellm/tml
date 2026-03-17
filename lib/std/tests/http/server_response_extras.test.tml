@@ -1,0 +1,22 @@
+// Tests for ServerResponse — set_send_date, write_head_simple, end_empty, flush_headers
+use test::{assert, assert_eq}
+use std::http::server_response::ServerResponse
+
+@test
+func test_server_response_extras() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    // write_head_simple
+    resp.write_head_simple(404)
+    assert_eq(resp.status_code(), 404, "status 404")
+    assert(resp.is_headers_sent(), "headers sent")
+    // end_empty
+    resp.end_empty()
+    assert(resp.is_finished(), "finished")
+    // flush_headers on new response
+    var resp2: ServerResponse = ServerResponse::new()
+    resp2.flush_headers()
+    assert(resp2.is_headers_sent(), "flushed")
+    // set_send_date
+    resp2.set_send_date(false)
+    return 0
+}

@@ -1,0 +1,12 @@
+// Tests for static_server — dot file detection
+use test::{assert}
+use std::http::static_server::is_dot_file
+
+@test
+func test_is_dot_file() -> I32 {
+    assert(is_dot_file(".htaccess"), "dotfile at root")
+    assert(is_dot_file("/.hidden"), "dotfile with slash")
+    assert(not is_dot_file("index.html"), "normal file")
+    assert(not is_dot_file("path/to/file.css"), "nested normal file")
+    return 0
+}

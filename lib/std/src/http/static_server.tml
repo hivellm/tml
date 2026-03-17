@@ -195,13 +195,17 @@ pub func static_file_headers(file_path: Str, content: Str, opts: ref StaticOptio
     return result
 }
 
-/// Returns true if the path contains a dot-file segment.
+/// Returns true if the path starts with a dot or contains a /. segment.
 pub func is_dot_file(path: Str) -> Bool {
     let path_len: I64 = str::len(path)
+    if path_len == 0 { return false }
+    // Check if starts with dot
+    if str::char_at(path, 0) == 46 { return true }  // '.'
+    // Check for /. or \. sequences
     var i: I64 = 0
     loop (i < path_len - 1) {
         let c: I32 = str::char_at(path, i)
-        if (c == 47 or c == 92 or i == 0) and str::char_at(path, i + (if i == 0 { 0 } else { 1 })) == 46 {
+        if (c == 47 or c == 92) and str::char_at(path, i + 1) == 46 {
             return true
         }
         i = i + 1

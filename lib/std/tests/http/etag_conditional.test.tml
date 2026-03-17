@@ -1,0 +1,21 @@
+// Tests for etag — conditional requests
+use test::{assert, assert_eq}
+use std::http::etag::{generate, generate_weak, is_not_modified, is_not_modified_since}
+
+@test
+func test_etag_not_modified() -> I32 {
+    let tag: Str = generate("content")
+    // Exact match
+    assert(is_not_modified(tag, tag), "exact match")
+    // Wildcard
+    assert(is_not_modified("*", tag), "wildcard matches")
+    // No match
+    assert(not is_not_modified("\"other\"", tag), "no match")
+    // Empty
+    assert(not is_not_modified("", tag), "empty INM")
+    assert(not is_not_modified(tag, ""), "empty etag")
+    // Weak ETag
+    let weak: Str = generate_weak("content")
+    assert(is_not_modified(weak, tag), "weak matches strong")
+    return 0
+}

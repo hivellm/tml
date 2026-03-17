@@ -1,29 +1,68 @@
 //! ETag generation and conditional request handling.
 //!
 //! Implements ETag (entity tag) generation for HTTP caching per RFC 7232.
+//! Uses FNV-1a hash for fast, deterministic ETag generation.
 //! Inspired by Express.js `etag` package.
 
 use core::str
-use std::crypto::hash::{sha256}
-use std::crypto::encoding::{hex_encode}
+use core::fmt::helpers::i64_to_str
+
+/// FNV-1a hash of a string, returned as a hex string.
+/// Fast, deterministic, and good distribution for ETag use.
+func fnv1a_hex(content: Str) -> Str {
+    let content_len: I64 = str::len(content)
+    // FNV-1a 64-bit: offset basis and prime
+    var hash: I64 = -3750763034362895579 as I64  // 0xCBF29CE484222325
+    let prime: I64 = 1099511628211 as I64         // 0x100000001B3
+    var i: I64 = 0
+    loop (i < content_len) {
+        let byte: I64 = str::char_at(content, i) as I64
+        // XOR with byte, then multiply by prime
+        hash = hash ^ byte
+        hash = hash * prime
+        i = i + 1
+    }
+    // Convert to hex string (positive)
+    let hex_chars: Str = "0123456789abcdef"
+    var result: Str = ""
+    // Output 16 hex chars (full 64-bit hash)
+    var shift: I64 = 60
+    loop (shift >= 0) {
+        let nibble: I64 = (hash / pow2(shift)) % 16
+        // Handle negative values
+        var idx: I64 = nibble
+        if idx < 0 { idx = idx + 16 }
+        result = "{result}{str::substring(hex_chars, idx, idx + 1)}"
+        shift = shift - 4
+    }
+    return result
+}
+
+/// Simple power of 2 helper.
+func pow2(n: I64) -> I64 {
+    var result: I64 = 1
+    var i: I64 = 0
+    loop (i < n) {
+        result = result * 2
+        i = i + 1
+    }
+    return result
+}
 
 /// Generates a strong ETag for the given content.
-/// Uses SHA-256 hash truncated to 16 hex chars.
-/// Returns: "\"abcdef0123456789\""
+/// Uses FNV-1a hash + content length.
+/// Returns: "\"hash-length\""
 pub func generate(content: Str) -> Str {
     let content_len: I64 = str::len(content)
     if content_len == 0 {
         return "\"0-0\""
     }
-    let hash: Str = sha256(content)
-    // Use first 16 chars of hex hash + content length for uniqueness
-    let short_hash: Str = str::substring(hash, 0, 16)
-    return "\"{short_hash}-{content_len}\""
+    let hash: Str = fnv1a_hex(content)
+    return "\"{hash}-{i64_to_str(content_len)}\""
 }
 
 /// Generates a weak ETag for the given content.
-/// Weak ETags indicate semantic equivalence, not byte-for-byte identity.
-/// Returns: "W/\"abcdef0123456789\""
+/// Returns: "W/\"hash-length\""
 pub func generate_weak(content: Str) -> Str {
     let strong: Str = generate(content)
     return "W/{strong}"
@@ -66,7 +105,6 @@ pub func is_not_modified(if_none_match: Str, etag: Str) -> Bool {
         }
         let part: Str = str::trim(str::substring(if_none_match, pos, end))
         if part == etag { return true }
-        // Weak comparison
         let part_len: I64 = str::len(part)
         var clean_part: Str = part
         if str::starts_with(part, "W/") {
@@ -79,11 +117,8 @@ pub func is_not_modified(if_none_match: Str, etag: Str) -> Bool {
 }
 
 /// Checks If-Modified-Since header against a last-modified timestamp.
-/// Both values should be HTTP-date format strings.
 /// Returns true if the resource has NOT been modified (304 should be sent).
 pub func is_not_modified_since(if_modified_since: Str, last_modified: Str) -> Bool {
-    // Simple string comparison — both should be in RFC 7231 format
-    // "Mon, 17 Mar 2026 12:00:00 GMT"
     if str::len(if_modified_since) == 0 or str::len(last_modified) == 0 {
         return false
     }

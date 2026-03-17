@@ -1,0 +1,16 @@
+// Tests for compression — should_compress check
+use test::{assert}
+use std::http::compression::{CompressionOptions, should_compress}
+
+@test
+func test_should_compress() -> I32 {
+    let opts: CompressionOptions = CompressionOptions::new()
+    // Text over 1KB should compress
+    assert(should_compress("text/html", 2000, ref opts), "text/html 2KB")
+    assert(should_compress("application/json", 5000, ref opts), "json 5KB")
+    // Under minimum size
+    assert(not should_compress("text/html", 100, ref opts), "too small")
+    // Binary types not in filter
+    assert(not should_compress("image/png", 5000, ref opts), "png not compressed")
+    return 0
+}

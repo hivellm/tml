@@ -1,0 +1,13 @@
+// Tests for body_parser — URL decode and parse_form_data
+use test::{assert_eq}
+use std::http::body_parser::{url_decode, parse_form_data, form_get}
+
+@test
+func test_url_decode() -> I32 {
+    assert_eq(url_decode("hello%20world"), "hello world", "space")
+    assert_eq(url_decode("a+b"), "a b", "plus as space")
+    assert_eq(url_decode("100%25"), "100%", "percent")
+    assert_eq(url_decode(""), "", "empty")
+    assert_eq(url_decode("no-encoding"), "no-encoding", "plain")
+    return 0
+}

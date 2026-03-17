@@ -1,0 +1,12 @@
+// Tests for body_parser — parse_form_data
+use test::{assert_eq}
+use std::http::body_parser::{parse_form_data, form_get}
+
+@test
+func test_parse_form_data() -> I32 {
+    let data: Str = parse_form_data("name=John&city=NYC")
+    assert_eq(form_get(data, "name"), "John", "name field")
+    assert_eq(form_get(data, "city"), "NYC", "city field")
+    assert_eq(form_get(data, "missing"), "", "missing field")
+    return 0
+}

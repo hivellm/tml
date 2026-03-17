@@ -1,0 +1,16 @@
+// Tests for static_server — file headers and dot file detection
+use test::{assert, assert_eq}
+use core::str
+use std::http::static_server::{StaticOptions, static_file_headers, is_dot_file}
+
+@test
+func test_static_file_headers() -> I32 {
+    let opts: StaticOptions = StaticOptions::new("/var/www").with_max_age(3600)
+    let hdrs: Str = static_file_headers("index.html", "<html></html>", ref opts)
+    assert(str::contains(hdrs, "Content-Type: text/html"), "html content type")
+    assert(str::contains(hdrs, "Content-Length: 13"), "content length")
+    assert(str::contains(hdrs, "ETag:"), "has etag")
+    assert(str::contains(hdrs, "Cache-Control:"), "has cache-control")
+    assert(str::contains(hdrs, "Accept-Ranges: bytes"), "accept ranges")
+    return 0
+}

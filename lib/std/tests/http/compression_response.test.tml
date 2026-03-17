@@ -1,0 +1,12 @@
+// Tests for compression — compress_response
+use test::{assert, assert_eq}
+use std::http::compression::compress_response
+
+@test
+func test_compress_response_skip_small() -> I32 {
+    // Small body should not be compressed
+    let result = compress_response("small", "gzip", "text/html")
+    assert_eq(result.0, "small", "body unchanged")
+    assert_eq(result.1, "", "no encoding applied")
+    return 0
+}
