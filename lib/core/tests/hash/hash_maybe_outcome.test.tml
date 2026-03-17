@@ -1,0 +1,40 @@
+use test
+use core::hash
+
+@test
+func test_hash_maybe_just() {
+    let x: Maybe[I64] = Just(42)
+    let h = x.hash()
+    assert(h != 0)
+}
+
+@test
+func test_hash_maybe_nothing() {
+    let x: Maybe[I64] = Nothing
+    assert_eq(x.hash(), 0)
+}
+
+@test
+func test_hash_maybe_deterministic() {
+    let a: Maybe[I64] = Just(42)
+    let h1 = a.hash()
+    let h2 = a.hash()
+    assert_eq(h1, h2)
+}
+
+@test
+func test_hash_outcome_ok() {
+    let x: Outcome[I64, Str] = Ok(42)
+    let h = x.hash()
+    // Just verify it doesn't crash and returns a value
+    let _ = h
+    assert(true)
+}
+
+@test
+func test_hash_outcome_err() {
+    let x: Outcome[I64, Str] = Err("fail")
+    let h = x.hash()
+    let _ = h
+    assert(true)
+}
