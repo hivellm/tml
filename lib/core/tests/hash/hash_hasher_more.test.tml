@@ -1,0 +1,71 @@
+// Additional tests for core::hash — with_seed determinism and write methods
+use test
+use core::hash::{DefaultHasher, RandomState, BuildHasher}
+
+@test
+func test_default_hasher_with_seed_same_seed_deterministic() {
+    var h1 = DefaultHasher::with_seed(123 as U64)
+    h1.write_i64(42)
+    var h2 = DefaultHasher::with_seed(123 as U64)
+    h2.write_i64(42)
+    assert_eq(h1.finish(), h2.finish())
+}
+
+@test
+func test_default_hasher_different_seeds_produce_different_hashes() {
+    var h1 = DefaultHasher::with_seed(1 as U64)
+    h1.write_i64(42)
+    var h2 = DefaultHasher::with_seed(2 as U64)
+    h2.write_i64(42)
+    assert(h1.finish() != h2.finish())
+}
+
+@test
+func test_default_hasher_write_i32_changes_state() {
+    var h = DefaultHasher::new()
+    let initial: I64 = h.finish()
+    h.write_i32(42)
+    let after: I64 = h.finish()
+    assert(initial != after)
+}
+
+@test
+func test_default_hasher_write_u8_changes_state() {
+    var h = DefaultHasher::new()
+    let initial: I64 = h.finish()
+    h.write_u8(65 as U8)
+    let after: I64 = h.finish()
+    assert(initial != after)
+}
+
+@test
+func test_default_hasher_zero_seed_differs_from_new() {
+    let h_new = DefaultHasher::new()
+    let h_seed = DefaultHasher::with_seed(0 as U64)
+    // with_seed(0) XORs FNV_OFFSET_BASIS with 0, producing same value as new()
+    assert_eq(h_new.finish(), h_seed.finish())
+}
+
+@test
+func test_default_hasher_with_seed_nonzero_differs_from_new() {
+    let h_new = DefaultHasher::new()
+    let h_seed = DefaultHasher::with_seed(999 as U64)
+    assert(h_new.finish() != h_seed.finish())
+}
+
+@test
+func test_build_hasher_from_random_state_with_keys() {
+    let rs = RandomState::with_keys(77 as U64, 88 as U64)
+    var h1 = rs.build_hasher()
+    h1.write_i32(10)
+    var h2 = rs.build_hasher()
+    h2.write_i32(10)
+    assert_eq(h1.finish(), h2.finish())
+}
+
+@test
+func test_default_hasher_write_i64_then_finish_nonzero() {
+    var h = DefaultHasher::new()
+    h.write_i64(1 as I64)
+    assert(h.finish() != 0)
+}

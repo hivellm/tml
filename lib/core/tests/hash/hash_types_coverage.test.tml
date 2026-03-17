@@ -1,0 +1,79 @@
+use test
+use core::hash
+
+@test
+func test_hash_i8_deterministic() {
+    let x: I8 = 42 as I8
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_i16_deterministic() {
+    let x: I16 = 1000 as I16
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_u8_deterministic() {
+    let x: U8 = 255 as U8
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_u16_deterministic() {
+    let x: U16 = 50000 as U16
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_u32_deterministic() {
+    let x: U32 = 100000 as U32
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_u64_deterministic() {
+    let x: U64 = 999999 as U64
+    assert_eq(x.hash(), x.hash())
+}
+
+@test
+func test_hash_bool_true() {
+    let h = true.hash()
+    assert_eq(h, 1)
+}
+
+@test
+func test_hash_bool_false() {
+    let h = false.hash()
+    assert_eq(h, 0)
+}
+
+@test
+func test_combine_hashes() {
+    let h1 = 10
+    let h2 = 20
+    let combined = combine_hashes(h1, h2)
+    assert_eq(combined, 10 * 31 + 20)
+}
+
+@test
+func test_combine_hashes_order_matters() {
+    let a = combine_hashes(1, 2)
+    let b = combine_hashes(2, 1)
+    assert(a != b)
+}
+
+@test
+func test_hash_str_equal() {
+    let a = "hello"
+    let b = "hello"
+    assert_eq(a.hash(), b.hash())
+}
+
+@test
+func test_hash_str_different() {
+    let a = "hello"
+    let b = "world"
+    assert(a.hash() != b.hash())
+}
