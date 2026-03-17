@@ -1,0 +1,692 @@
+//! HTTP server workers — thread pool and event loop implementations.
+//!
+//! Two server modes:
+//!   - Thread pool (`app_listen`): N worker threads pull connections from a shared queue.
+//!     Each worker handles one connection at a time (blocking I/O). Best throughput.
+//!   - Event loop (`app_listen_evloop`): N workers each own a non-blocking poller.
+//!     Accept thread distributes connections round-robin. More concurrent connections.
+//!
+//! Both modes share the same shared-state memory layout and dispatch pipeline.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::http::dispatch::{app_dispatch, app_shutdown, RESPONSE_413}
+use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
+                       app_has_header_end, app_has_connection_close, app_is_http11,
+                       app_is_bodyless_method, app_find_header_end_in_str}
+use std::net::eventloop::{EventLoop, Interest, Event}
+
+// ── FFI ─────────────────────────────────────────────────────────
+@extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
+@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
+@extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
+@extern("tml_sys_close") func sys_close(handle: I64) -> I64
+@extern("tml_sys_accept_v4") func sys_accept(handle: I64) -> I64
+@extern("c") func tml_sys_socket(domain: I32, typ: I32, proto: I32) -> I64
+@extern("c") func tml_sys_bind_v4(handle: I64, addr: I32, port: I32) -> I64
+@extern("c") func tml_sys_listen(handle: I64, backlog: I32) -> I64
+@extern("tml_thread_spawn") func raw_thread_spawn(f: *Unit, arg: *Unit, stack: U64) -> U64
+@extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
+@extern("tml_thread_available_parallelism") func cpu_count() -> U32
+@extern("tml_thread_sleep_ms") func thread_sleep_ms(ms: U64)
+
+// Mutex FFI
+@extern("c") func tml_mutex_init(mutex: *Unit) -> I32
+@extern("c") func tml_mutex_lock(mutex: *Unit) -> I32
+@extern("c") func tml_mutex_unlock(mutex: *Unit) -> I32
+
+// Condvar FFI
+@extern("c") func tml_condvar_init(cvar: *Unit) -> I32
+@extern("c") func tml_condvar_notify_one(cvar: *Unit) -> I32
+@extern("c") func tml_condvar_wait(cvar: *Unit, mutex: *Unit) -> I32
+
+// EventLoop re-exports from std::net::eventloop handle all poll FFI
+
+const AF_INET: I32 = 2
+const SOCK_STREAM: I32 = 1
+const SOL_SOCKET: I32 = 65535
+const SO_REUSEADDR: I32 = 4
+const SO_RCVTIMEO: I32 = 4102
+const SO_SNDTIMEO: I32 = 4101
+const IPPROTO_TCP: I32 = 6
+const TCP_NODELAY: I32 = 1
+const BUF_SIZE: I64 = 8192
+const QUEUE_CAP: I64 = 4096
+
+// ════════════════════════════════════════════════════════════════════
+// Shared state memory layout offsets (same layout as dispatch.tml)
+// ════════════════════════════════════════════════════════════════════
+
+const OFF_TABLE: I64 = 0
+const OFF_COUNT: I64 = 8
+const OFF_ROUTER: I64 = 16
+const OFF_MW_TABLE: I64 = 24
+const OFF_MW_COUNT: I64 = 32
+const OFF_SHUTDOWN: I64 = 40
+const OFF_READ_TIMEOUT: I64 = 48
+const OFF_WRITE_TIMEOUT: I64 = 56
+const OFF_IDLE_TIMEOUT: I64 = 64
+const OFF_BODY_LIMIT: I64 = 72
+const OFF_ON_REQUEST_TABLE: I64 = 80
+const OFF_ON_REQUEST_COUNT: I64 = 88
+const OFF_PRE_HANDLER_TABLE: I64 = 96
+const OFF_PRE_HANDLER_COUNT: I64 = 104
+const OFF_ON_SEND_TABLE: I64 = 112
+const OFF_ON_SEND_COUNT: I64 = 120
+const OFF_ON_RESPONSE_TABLE: I64 = 128
+const OFF_ON_RESPONSE_COUNT: I64 = 136
+const OFF_ON_ERROR_TABLE: I64 = 144
+const OFF_ON_ERROR_COUNT: I64 = 152
+const OFF_ERROR_HANDLER: I64 = 160
+const OFF_QUEUE_BUF: I64 = 168
+const OFF_QUEUE_HEAD: I64 = 176
+const OFF_QUEUE_TAIL: I64 = 184
+const OFF_QUEUE_CAP: I64 = 192
+const OFF_QUEUE_LEN: I64 = 200
+const OFF_MUTEX: I64 = 208
+const OFF_CONDVAR: I64 = 272
+
+const SHARED_SIZE: I64 = 336
+const ENTRY_SIZE: I64 = 24
+
+// ════════════════════════════════════════════════════════════════════
+// Global server state pointer (for shutdown from any thread)
+// ════════════════════════════════════════════════════════════════════
+
+// Stores the shared state pointer so app_shutdown() can be called from any thread.
+// Set by app_listen/app_listen_evloop. 8 bytes, holds a single I64.
+pub var g_shared_ptr: I64 = 0
+
+/// Signal the running server to shut down gracefully.
+/// Can be called from any thread (e.g., a signal handler or hook).
+/// Workers will finish their current request and exit.
+pub func app_shutdown() {
+    if g_shared_ptr != 0 {
+        lowlevel { ptr_write[I64]((g_shared_ptr + OFF_SHUTDOWN) as *I64, 1 as I64) }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Thread Pool — lock-free ring buffer with mutex+condvar
+// ════════════════════════════════════════════════════════════════════
+
+/// Enqueue a file descriptor into the work queue. Returns true if enqueued.
+func queue_push(shared: I64, fd: I64) -> Bool {
+    let mutex_ptr: I64 = shared + OFF_MUTEX
+    tml_mutex_lock(mutex_ptr as *Unit)
+
+    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
+    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
+    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+
+    if len >= cap {
+        tml_mutex_unlock(mutex_ptr as *Unit)
+        return false
+    }
+
+    let tail: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_TAIL) as *I64) }
+    lowlevel { ptr_write[I64]((buf + tail * 8) as *I64, fd) }
+    let new_tail: I64 = (tail + 1) % cap
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_TAIL) as *I64, new_tail) }
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len + 1) }
+
+    let condvar_ptr: I64 = shared + OFF_CONDVAR
+    tml_condvar_notify_one(condvar_ptr as *Unit)
+    tml_mutex_unlock(mutex_ptr as *Unit)
+    return true
+}
+
+/// Dequeue a file descriptor. Blocks until one is available or shutdown.
+/// Returns -1 on shutdown.
+func queue_pop(shared: I64) -> I64 {
+    let mutex_ptr: I64 = shared + OFF_MUTEX
+    let condvar_ptr: I64 = shared + OFF_CONDVAR
+    tml_mutex_lock(mutex_ptr as *Unit)
+
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 {
+            tml_mutex_unlock(mutex_ptr as *Unit)
+            return -1
+        }
+        let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+        if len > 0 { break }
+        tml_condvar_wait(condvar_ptr as *Unit, mutex_ptr as *Unit)
+    }
+
+    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
+    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
+    let head: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_HEAD) as *I64) }
+    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+
+    let fd: I64 = lowlevel { ptr_read[I64]((buf + head * 8) as *I64) }
+    let new_head: I64 = (head + 1) % cap
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_HEAD) as *I64, new_head) }
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len - 1) }
+
+    tml_mutex_unlock(mutex_ptr as *Unit)
+    return fd
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Worker thread — pulls fds from queue, handles connections
+// ════════════════════════════════════════════════════════════════════
+
+pub func app_worker(arg: *Unit) {
+    let shared: I64 = arg as I64
+    let read_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_READ_TIMEOUT) as *I64) }
+    let write_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_WRITE_TIMEOUT) as *I64) }
+    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
+
+    let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+    // Pre-allocate params buffer per worker (8 params x 16 bytes = 128 bytes)
+    let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+
+    loop (true) {
+        let fd: I64 = queue_pop(shared)
+        if fd < 0 { break }
+
+        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+        if read_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, read_timeout as I32)
+        }
+        if write_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, write_timeout as I32)
+        }
+
+        // Keep-alive loop — process multiple requests per connection
+        loop (true) {
+            var total: I64 = 0
+            var complete: Bool = false
+            loop (total < BUF_SIZE - 1) {
+                let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
+                if n <= 0 { break }
+                total = total + n
+                if app_has_header_end(buf, total) { complete = true; break }
+            }
+            if not complete or total <= 0 { break }
+            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+
+            // Detect HTTP version before zero-copy parsing mutates buffer
+            let is_http11: Bool = app_is_http11(buf, total)
+            // Check Connection: close before zero-copy parsing mutates buffer
+            let wants_close: Bool = app_has_connection_close(buf, total)
+            // HTTP/1.0 default: close connection (no keep-alive unless explicit)
+            let should_close: Bool = wants_close or not is_http11
+
+            // Zero-copy parsing: null-terminate in-place in the recv buffer.
+            let method: Str = app_zerocopy_method(buf, total)
+            let path: Str = app_zerocopy_path(buf, total)
+
+            // Skip body extraction for bodyless methods (GET, HEAD, TRACE, OPTIONS)
+            var body: Str = ""
+            if not app_is_bodyless_method(method) {
+                body = app_extract_body(buf, total)
+                // Check body size limit
+                let body_len: I64 = str::len(body)
+                if body_limit > 0 and body_len > body_limit {
+                    tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
+                    break
+                }
+            }
+
+            // HEAD support: dispatch normally but only send headers
+            let is_head: Bool = str::len(method) == 4 and str::char_at(method, 0) == 72  // 'H'
+            let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
+            var send_len: I64 = str::len(response)
+            if is_head {
+                // Find \r\n\r\n and only send up to there
+                let header_end: I64 = app_find_header_end_in_str(response)
+                if header_end > 0 { send_len = header_end }
+            }
+            let sent: I64 = tml_sys_send(fd, response as *Unit, send_len)
+            if sent < 0 { break }
+            if should_close { break }
+        }
+
+        sys_close(fd)
+    }
+
+    lowlevel { mem_free(buf as *Unit) }
+    lowlevel { mem_free(params_buf as *Unit) }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Listen — binds, spawns thread pool, accepts connections
+// ════════════════════════════════════════════════════════════════════
+
+pub func app_listen(
+    table: I64, count: I64, trees: I64,
+    mw_table: I64, mw_count: I64,
+    on_request_table: I64, on_request_count: I64,
+    pre_handler_table: I64, pre_handler_count: I64,
+    on_send_table: I64, on_send_count: I64,
+    on_response_table: I64, on_response_count: I64,
+    on_error_table: I64, on_error_count: I64,
+    error_handler: I64,
+    read_timeout: I64, write_timeout: I64, idle_timeout: I64,
+    body_limit: I64, port: I64
+) {
+    let num_workers: I64 = cpu_count() as I64
+    if num_workers < 1 { return }
+
+    println("TML HTTP Server")
+    println("  Port:       " + port.to_string())
+    println("  Workers:    " + num_workers.to_string() + " (thread pool)")
+    println("  Keep-Alive: yes")
+    println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
+    println("  Middleware: " + mw_count.to_string())
+    println("  Routes:     " + count.to_string())
+    println("  Hooks:      onRequest=" + on_request_count.to_string() +
+            " preHandler=" + pre_handler_count.to_string() +
+            " onSend=" + on_send_count.to_string() +
+            " onResponse=" + on_response_count.to_string() +
+            " onError=" + on_error_count.to_string())
+    println("")
+
+    var i: I64 = 0
+    loop (i < count) {
+        let offset: I64 = i * ENTRY_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+        println("  " + m + "\t" + p)
+        i = i + 1
+    }
+    println("")
+
+    let listener: I64 = app_bind_listener(port)
+    if listener < 0 {
+        println("ERROR: could not bind to port " + port.to_string())
+        return
+    }
+    println("Listening on http://localhost:" + port.to_string())
+
+    // Allocate and zero shared state
+    let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
+    g_shared_ptr = shared
+    var z: I64 = 0
+    loop (z < SHARED_SIZE) {
+        lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
+        z = z + 1
+    }
+
+    // Write shared state fields
+    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
+    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_BODY_LIMIT) as *I64, body_limit) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64, on_request_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64, on_request_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64, pre_handler_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64, pre_handler_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_TABLE) as *I64, on_send_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_COUNT) as *I64, on_send_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64, on_response_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64, on_response_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_TABLE) as *I64, on_error_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
+
+    // Init thread pool queue
+    let queue_buf: I64 = lowlevel { mem_alloc(QUEUE_CAP * 8) } as I64
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_BUF) as *I64, queue_buf) }
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_CAP) as *I64, QUEUE_CAP) }
+
+    // Init mutex and condvar
+    let mutex_ptr: I64 = shared + OFF_MUTEX
+    let condvar_ptr: I64 = shared + OFF_CONDVAR
+    tml_mutex_init(mutex_ptr as *Unit)
+    tml_condvar_init(condvar_ptr as *Unit)
+
+    // Spawn worker threads
+    var w: I64 = 0
+    loop (w < num_workers) {
+        let h: U64 = raw_thread_spawn(app_worker as *Unit, shared as *Unit, 0 as U64)
+        if h != 0 as U64 {
+            raw_thread_detach(h)
+        }
+        w = w + 1
+    }
+
+    // Accept loop — push fds into the queue for workers
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+
+        let fd: I64 = sys_accept(listener)
+        if fd < 0 { continue }
+
+        let ok: Bool = queue_push(shared, fd)
+        if not ok {
+            // Queue full — reject connection
+            let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            tml_sys_send(fd, reject as *Unit, str::len(reject))
+            sys_close(fd)
+        }
+    }
+
+    sys_close(listener)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Event Loop — non-blocking I/O via std::net::eventloop
+// ════════════════════════════════════════════════════════════════════
+
+// Per-connection state: [0] fd, [8] buf, [16] used, [24] state (0=read,1=write)
+// [32] resp_ptr, [40] resp_len, [48] resp_sent
+const CONN_STRIDE_EV: I64 = 56
+const CONN_FD: I64 = 0
+const CONN_BUF: I64 = 8
+const CONN_USED: I64 = 16
+const CONN_STATE: I64 = 24
+const CONN_RESP: I64 = 32
+const CONN_RESP_LEN: I64 = 40
+const CONN_RESP_SENT: I64 = 48
+const MAX_CONNS_PER_WORKER: I64 = 1024
+
+// Worker state: [0] shared, [8] mutex_ptr, [16] new_fds_buf, [24] new_fds_count, [32] new_fds_cap
+const WSTATE_SIZE: I64 = 40
+const WS_SHARED: I64 = 0
+const WS_MUTEX: I64 = 8
+const WS_NEW_FDS: I64 = 16
+const WS_NEW_FDS_COUNT: I64 = 24
+const WS_NEW_FDS_CAP: I64 = 32
+
+func conn_get(conns: I64, idx: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64) }
+}
+
+func conn_set(conns: I64, idx: I64, field: I64, val: I64) {
+    lowlevel { ptr_write[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64, val) }
+}
+
+/// Event loop worker thread. Each worker owns an EventLoop + connection table.
+pub func app_evloop_worker(arg: *Unit) {
+    let ws: I64 = arg as I64
+    let shared: I64 = lowlevel { ptr_read[I64]((ws + WS_SHARED) as *I64) }
+    let mutex_ptr: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
+    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
+    let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+
+    // Each worker creates its own EventLoop — thread-local, no sharing needed
+    var ev: EventLoop = EventLoop::new(256)
+    let conns_mem: I64 = MAX_CONNS_PER_WORKER * CONN_STRIDE_EV
+    let conns: I64 = lowlevel { mem_alloc(conns_mem) } as I64
+    var conn_count: I64 = 0
+
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+
+        // Drain new connections from accept thread
+        tml_mutex_lock(mutex_ptr as *Unit)
+        let new_count: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_COUNT) as *I64) }
+        let new_buf: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS) as *I64) }
+        var ni: I64 = 0
+        loop (ni < new_count and conn_count < MAX_CONNS_PER_WORKER) {
+            let fd: I64 = lowlevel { ptr_read[I64]((new_buf + ni * 8) as *I64) }
+            ev.make_nonblocking(fd)
+            tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+            let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+            conn_set(conns, conn_count, CONN_FD, fd)
+            conn_set(conns, conn_count, CONN_BUF, buf)
+            conn_set(conns, conn_count, CONN_USED, 0)
+            conn_set(conns, conn_count, CONN_STATE, 0)
+            conn_set(conns, conn_count, CONN_RESP, 0)
+            conn_set(conns, conn_count, CONN_RESP_LEN, 0)
+            conn_set(conns, conn_count, CONN_RESP_SENT, 0)
+            ev.register(fd, conn_count, Interest::readable())
+            conn_count = conn_count + 1
+            ni = ni + 1
+        }
+        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
+        tml_mutex_unlock(mutex_ptr as *Unit)
+
+        // Poll for I/O events (10ms timeout)
+        let n: I64 = ev.poll(10)
+        if n <= 0 { continue }
+
+        var ei: I64 = 0
+        loop (ei < n) {
+            let event: Event = ev.event_at(ei)
+            let idx: I64 = event.token()
+
+            if idx < 0 or idx >= conn_count { ei = ei + 1; continue }
+            let fd: I64 = conn_get(conns, idx, CONN_FD)
+            if fd <= 0 { ei = ei + 1; continue }
+
+            let state: I64 = conn_get(conns, idx, CONN_STATE)
+
+            if state == 0 and event.is_readable() {
+                // ── Reading request ──
+                let buf: I64 = conn_get(conns, idx, CONN_BUF)
+                let used: I64 = conn_get(conns, idx, CONN_USED)
+                let n_read: I64 = tml_sys_recv(fd, (buf + used) as *Unit, BUF_SIZE - used - 1)
+                if n_read <= 0 {
+                    ev.deregister(fd)
+                    sys_close(fd)
+                    lowlevel { mem_free(buf as *Unit) }
+                    conn_set(conns, idx, CONN_FD, 0)
+                } else {
+                    let new_used: I64 = used + n_read
+                    conn_set(conns, idx, CONN_USED, new_used)
+                    if app_has_header_end(buf, new_used) {
+                        lowlevel { ptr_write[U8]((buf + new_used) as *U8, 0 as U8) }
+                        let method: Str = app_zerocopy_method(buf, new_used)
+                        let path: Str = app_zerocopy_path(buf, new_used)
+
+                        // Skip body for bodyless methods
+                        var body: Str = ""
+                        if not app_is_bodyless_method(method) {
+                            body = app_extract_body(buf, new_used)
+                        }
+
+                        // Check body size limit
+                        let body_len: I64 = str::len(body)
+                        if body_limit > 0 and body_len > body_limit {
+                            tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
+                            ev.deregister(fd)
+                            sys_close(fd)
+                            lowlevel { mem_free(buf as *Unit) }
+                            conn_set(conns, idx, CONN_FD, 0)
+                        } else {
+                            let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
+                            let resp_len: I64 = str::len(response)
+                            conn_set(conns, idx, CONN_STATE, 1)
+                            conn_set(conns, idx, CONN_RESP, response as I64)
+                            conn_set(conns, idx, CONN_RESP_LEN, resp_len)
+                            conn_set(conns, idx, CONN_RESP_SENT, 0)
+                            conn_set(conns, idx, CONN_USED, 0)
+                            ev.reregister(fd, idx, Interest::writable())
+                        }
+                    }
+                }
+            } else if state == 1 and event.is_writable() {
+                // ── Writing response ──
+                let resp: I64 = conn_get(conns, idx, CONN_RESP)
+                let resp_len: I64 = conn_get(conns, idx, CONN_RESP_LEN)
+                let sent: I64 = conn_get(conns, idx, CONN_RESP_SENT)
+                let remaining: I64 = resp_len - sent
+                if remaining > 0 {
+                    let n_sent: I64 = tml_sys_send(fd, (resp + sent) as *Unit, remaining)
+                    if n_sent <= 0 {
+                        ev.deregister(fd)
+                        sys_close(fd)
+                        let buf: I64 = conn_get(conns, idx, CONN_BUF)
+                        lowlevel { mem_free(buf as *Unit) }
+                        conn_set(conns, idx, CONN_FD, 0)
+                    } else {
+                        conn_set(conns, idx, CONN_RESP_SENT, sent + n_sent)
+                        if sent + n_sent >= resp_len {
+                            // Response done → back to reading (keep-alive)
+                            conn_set(conns, idx, CONN_STATE, 0)
+                            conn_set(conns, idx, CONN_RESP, 0)
+                            ev.reregister(fd, idx, Interest::readable())
+                        }
+                    }
+                }
+            }
+            ei = ei + 1
+        }
+    }
+
+    // Cleanup
+    var ci: I64 = 0
+    loop (ci < conn_count) {
+        let fd: I64 = conn_get(conns, ci, CONN_FD)
+        if fd > 0 {
+            sys_close(fd)
+            let buf: I64 = conn_get(conns, ci, CONN_BUF)
+            lowlevel { mem_free(buf as *Unit) }
+        }
+        ci = ci + 1
+    }
+    lowlevel { mem_free(conns as *Unit) }
+    lowlevel { mem_free(params_buf as *Unit) }
+    ev.destroy()
+}
+
+/// Event-loop based listen. Each worker runs its own poller.
+/// Accept thread distributes connections round-robin to workers.
+pub func app_listen_evloop(
+    table: I64, count: I64, trees: I64,
+    mw_table: I64, mw_count: I64,
+    on_request_table: I64, on_request_count: I64,
+    pre_handler_table: I64, pre_handler_count: I64,
+    on_send_table: I64, on_send_count: I64,
+    on_response_table: I64, on_response_count: I64,
+    on_error_table: I64, on_error_count: I64,
+    error_handler: I64,
+    read_timeout: I64, write_timeout: I64, idle_timeout: I64,
+    body_limit: I64, port: I64
+) {
+    let num_workers: I64 = cpu_count() as I64
+    if num_workers < 1 { return }
+
+    println("TML HTTP Server (event loop)")
+    println("  Port:       " + port.to_string())
+    println("  Workers:    " + num_workers.to_string() + " (event loop, non-blocking)")
+    println("  Keep-Alive: yes")
+    println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
+    println("  Middleware: " + mw_count.to_string())
+    println("  Routes:     " + count.to_string())
+    println("  Hooks:      onRequest=" + on_request_count.to_string() +
+            " preHandler=" + pre_handler_count.to_string() +
+            " onSend=" + on_send_count.to_string() +
+            " onResponse=" + on_response_count.to_string() +
+            " onError=" + on_error_count.to_string())
+    println("")
+
+    var i: I64 = 0
+    loop (i < count) {
+        let offset: I64 = i * ENTRY_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+        println("  " + m + "\t" + p)
+        i = i + 1
+    }
+    println("")
+
+    let listener: I64 = app_bind_listener(port)
+    if listener < 0 {
+        println("ERROR: could not bind to port " + port.to_string())
+        return
+    }
+    println("Listening on http://localhost:" + port.to_string())
+
+    // Allocate and zero shared state (same layout as thread pool version)
+    let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
+    g_shared_ptr = shared
+    var z: I64 = 0
+    loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
+
+    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
+    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_BODY_LIMIT) as *I64, body_limit) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64, on_request_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64, on_request_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64, pre_handler_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64, pre_handler_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_TABLE) as *I64, on_send_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_COUNT) as *I64, on_send_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64, on_response_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64, on_response_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_TABLE) as *I64, on_error_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
+
+    // Create per-worker state (lightweight — worker creates its own EventLoop)
+    let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
+    var w: I64 = 0
+    loop (w < num_workers) {
+        let ws: I64 = lowlevel { mem_alloc(WSTATE_SIZE) } as I64
+        var wz: I64 = 0
+        loop (wz < WSTATE_SIZE) { lowlevel { ptr_write[U8]((ws + wz) as *U8, 0 as U8) }; wz = wz + 1 }
+        let mutex: I64 = lowlevel { mem_alloc(64) } as I64
+        tml_mutex_init(mutex as *Unit)
+        let new_fds_cap: I64 = 256
+        let new_fds: I64 = lowlevel { mem_alloc(2048) } as I64
+        lowlevel { ptr_write[I64]((ws + WS_SHARED) as *I64, shared) }
+        lowlevel { ptr_write[I64]((ws + WS_MUTEX) as *I64, mutex) }
+        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS) as *I64, new_fds) }
+        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
+        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_CAP) as *I64, new_fds_cap) }
+        lowlevel { ptr_write[I64]((workers + w * 8) as *I64, ws) }
+        let h: U64 = raw_thread_spawn(app_evloop_worker as *Unit, ws as *Unit, 0 as U64)
+        if h != 0 as U64 { raw_thread_detach(h) }
+        w = w + 1
+    }
+
+    // Accept loop — round-robin distribute to workers
+    var rr: I64 = 0
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+        let fd: I64 = sys_accept(listener)
+        if fd < 0 { continue }
+        // Push fd to worker's new_fds queue
+        let ws: I64 = lowlevel { ptr_read[I64]((workers + rr * 8) as *I64) }
+        let mutex: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
+        tml_mutex_lock(mutex as *Unit)
+        let new_count: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_COUNT) as *I64) }
+        let new_cap: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_CAP) as *I64) }
+        let new_buf: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS) as *I64) }
+        if new_count < new_cap {
+            lowlevel { ptr_write[I64]((new_buf + new_count * 8) as *I64, fd) }
+            lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, new_count + 1) }
+            tml_mutex_unlock(mutex as *Unit)
+        } else {
+            tml_mutex_unlock(mutex as *Unit)
+            // Worker queue full — close
+            let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            tml_sys_send(fd, reject as *Unit, str::len(reject))
+            sys_close(fd)
+        }
+        rr = (rr + 1) % num_workers
+    }
+
+    sys_close(listener)
+}
+
+/// Create and bind a TCP listener socket on the given port.
+pub func app_bind_listener(port: I64) -> I64 {
+    let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
+    if sock < 0 { return -1 }
+    tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
+    if tml_sys_bind_v4(sock, 0, port as I32) < 0 { sys_close(sock); return -1 }
+    if tml_sys_listen(sock, 2048) < 0 { sys_close(sock); return -1 }
+    return sock
+}

@@ -41,6 +41,9 @@ pub mod router
 pub mod multipart
 
 // ── Application Framework ───────────────────────────────────
+pub mod parse
+pub mod dispatch
+pub mod worker
 pub mod app
 
 // ── Middleware & Framework ───────────────────────────────────

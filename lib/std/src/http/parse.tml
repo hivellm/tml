@@ -1,0 +1,321 @@
+//! HTTP request parsing — zero-copy and allocating parsers.
+//!
+//! Zero-copy parsers null-terminate in-place in the recv buffer, returning
+//! a Str that points directly into the buffer. No allocations.
+//! Allocating parsers copy into fresh heap buffers (for external callers).
+//!
+//! Pattern matching helpers support the legacy linear-scan compatibility path.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
+
+/// Maximum number of path parameters extracted per request.
+pub const MAX_PARAMS: I64 = 8
+
+// ════════════════════════════════════════════════════════════════════
+// Zero-copy HTTP parsing
+// ════════════════════════════════════════════════════════════════════
+// These functions null-terminate in-place in the recv buffer, returning
+// a Str that points directly into the buffer. No allocations.
+// The caller's buffer is modified but that's fine — we only read method/path
+// once per request before overwriting with the next recv.
+
+/// Zero-copy method extraction. Overwrites the space after method with \0.
+/// Returns Str pointing into buf. "GET /path HTTP/1.1\r\n" → "GET"
+pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len and i < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c == 32 as U8 {
+            lowlevel { ptr_write[U8]((buf + i) as *U8, 0 as U8) }
+            return buf as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Zero-copy path extraction. Overwrites the space/? after path with \0.
+/// Returns Str pointing into buf. Assumes method was already null-terminated.
+/// Scans from start of buf to find the first null byte (end of method), then
+/// the path starts at the next byte.
+pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
+    // Find start: skip past the null-terminated method + the null byte
+    var start: I64 = 0
+    loop (start < len and start < 10) {
+        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 0 as U8 {
+            start = start + 1
+            break
+        }
+        start = start + 1
+    }
+    let path_start: I64 = start
+    var end: I64 = start
+    loop (end < len) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
+        if c == 32 as U8 or c == 63 as U8 { break }
+        end = end + 1
+    }
+    if end <= path_start { return "/" }
+    lowlevel { ptr_write[U8]((buf + end) as *U8, 0 as U8) }
+    return (buf + path_start) as Str
+}
+
+/// Detect HTTP version from request line. Returns true if HTTP/1.1, false if HTTP/1.0.
+/// Scans backwards from the first \r to find "HTTP/1.0" or "HTTP/1.1".
+/// Default: true (assume 1.1 if not detected).
+pub func app_is_http11(buf: I64, len: I64) -> Bool {
+    // Find first \r (end of request line)
+    var cr: I64 = 0
+    loop (cr < len and cr < 2048) {
+        if lowlevel { ptr_read[U8]((buf + cr) as *U8) } == 13 as U8 { break }
+        cr = cr + 1
+    }
+    // "HTTP/1.0" is 8 chars before \r
+    if cr >= 8 {
+        let h: I64 = cr - 8
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + h) as *U8) }      // 'H'
+        let c4: U8 = lowlevel { ptr_read[U8]((buf + h + 4) as *U8) }  // '/'
+        let c7: U8 = lowlevel { ptr_read[U8]((buf + h + 7) as *U8) }  // '0' or '1'
+        if c0 == 72 as U8 and c4 == 47 as U8 {
+            if c7 == 48 as U8 { return false }  // '0' → HTTP/1.0
+        }
+    }
+    return true  // default HTTP/1.1
+}
+
+/// Check if HTTP method is "bodyless" (GET, HEAD, TRACE, OPTIONS).
+/// Bodyless methods should not have the body parsed from the request.
+pub func app_is_bodyless_method(method: Str) -> Bool {
+    let len: I64 = str::len(method)
+    if len == 3 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 71 { return true }  // 'G' → GET
+    }
+    if len == 4 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 72 { return true }  // 'H' → HEAD
+    }
+    if len == 5 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 84 { return true }  // 'T' → TRACE
+    }
+    if len == 7 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 79 { return true }  // 'O' → OPTIONS
+    }
+    return false
+}
+
+// ── Allocating HTTP parsing (kept for external use) ────────────
+
+pub func app_extract_method(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len and i < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c == 32 as U8 {
+            let p: I64 = lowlevel { mem_alloc(i + 1) } as I64
+            lowlevel { copy_nonoverlapping(buf as *Unit, p as *Unit, i) }
+            lowlevel { ptr_write[U8]((p + i) as *U8, 0 as U8) }
+            return p as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+pub func app_extract_path(buf: I64, len: I64) -> Str {
+    var start: I64 = 0
+    loop (start < len and start < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
+        if c == 32 as U8 { start = start + 1; break }
+        start = start + 1
+    }
+    var end: I64 = start
+    loop (end < len) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
+        if c == 32 as U8 or c == 63 as U8 { break }
+        end = end + 1
+    }
+    let path_len: I64 = end - start
+    if path_len <= 0 { return "/" }
+    let p: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
+    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, path_len) }
+    lowlevel { ptr_write[U8]((p + path_len) as *U8, 0 as U8) }
+    return p as Str
+}
+
+pub func app_extract_body(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len - 3) {
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        let c1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+        let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
+        let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
+        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+            let body_start: I64 = i + 4
+            let body_len: I64 = len - body_start
+            if body_len <= 0 { return "" }
+            let p: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
+            lowlevel { copy_nonoverlapping((buf + body_start) as *Unit, p as *Unit, body_len) }
+            lowlevel { ptr_write[U8]((p + body_len) as *U8, 0 as U8) }
+            return p as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+pub func app_has_header_end(buf: I64, len: I64) -> Bool {
+    if len < 4 { return false }
+    var i: I64 = 3
+    loop (i < len) {
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
+        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
+        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
+        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Check if request has "Connection: close" header.
+/// Scans raw recv buffer for case-insensitive "connection: close".
+pub func app_has_connection_close(buf: I64, len: I64) -> Bool {
+    // Simple scan for "onnection: close" (skip first char for case insensitivity)
+    var i: I64 = 0
+    loop (i < len - 16) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        // Check for 'o' or 'O' followed by "nnection: close"
+        if (c == 111 as U8 or c == 79 as U8) {
+            let n1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+            let n2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
+            if (n1 == 110 as U8 or n1 == 78 as U8) and (n2 == 110 as U8 or n2 == 78 as U8) {
+                // Check "ection: close" at i+3
+                let e: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
+                if e == 101 as U8 or e == 69 as U8 {
+                    // Check ": close" or ":close" after "onnection"
+                    var j: I64 = i + 10  // skip past "onnection"
+                    // Find ':'
+                    loop (j < i + 14 and j < len) {
+                        if lowlevel { ptr_read[U8]((buf + j) as *U8) } == 58 as U8 { break }
+                        j = j + 1
+                    }
+                    if j < len {
+                        j = j + 1
+                        // Skip spaces
+                        loop (j < len and lowlevel { ptr_read[U8]((buf + j) as *U8) } == 32 as U8) {
+                            j = j + 1
+                        }
+                        // Check "close"
+                        if j + 5 <= len {
+                            let c1: U8 = lowlevel { ptr_read[U8]((buf + j) as *U8) }
+                            let c2: U8 = lowlevel { ptr_read[U8]((buf + j + 1) as *U8) }
+                            if (c1 == 99 as U8 or c1 == 67 as U8) and (c2 == 108 as U8 or c2 == 76 as U8) {
+                                return true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Find the end of headers (\r\n\r\n) in a response string. Returns position after \r\n\r\n, or 0.
+pub func app_find_header_end_in_str(s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    let buf: I64 = s as I64
+    var i: I64 = 3
+    loop (i < len) {
+        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
+            return i + 1
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Pattern-matching helpers (kept for legacy linear-scan compat)
+// ════════════════════════════════════════════════════════════════════
+
+/// Check if a route pattern contains ':' (parametric segment).
+func app_pattern_has_param(pattern: Str) -> Bool {
+    let len: I64 = str::len(pattern)
+    var i: I64 = 0
+    loop (i < len) {
+        if str::char_at(pattern, i) == 58 { return true }  // ':'
+        i = i + 1
+    }
+    return false
+}
+
+/// Store a param name+value at index in the params buffer.
+/// Each param = 16 bytes (name I64 + value I64).
+pub func app_store_param(params_buf: I64, index: I64, name: Str, value: Str) {
+    // Offset = index * 16. Use loop addition to avoid i32 multiplication codegen bug.
+    var off: I64 = 0
+    var j: I64 = 0
+    loop (j < index) { off = off + 16; j = j + 1 }
+    lowlevel { ptr_write[I64]((params_buf + off) as *I64, name as I64) }
+    lowlevel { ptr_write[I64]((params_buf + off + 8) as *I64, value as I64) }
+}
+
+/// Match a pattern like "/users/:id/posts" against a path like "/users/42/posts".
+/// Returns true if match, stores extracted params in params_buf.
+func app_pattern_match(pattern: Str, path: Str, params_buf: I64, pc: mut ref I64) -> Bool {
+    let pat_len: I64 = str::len(pattern)
+    let path_len: I64 = str::len(path)
+    var pp: I64 = 0  // pattern position
+    var xp: I64 = 0  // path position
+
+    loop (pp < pat_len and xp < path_len) {
+        if str::char_at(pattern, pp) == 58 {
+            // Parametric segment: extract param name and value
+            let name_start: I64 = pp + 1
+            var name_end: I64 = name_start
+            loop (name_end < pat_len and str::char_at(pattern, name_end) != 47) {
+                name_end = name_end + 1
+            }
+            // Extract path value until next '/'
+            var val_end: I64 = xp
+            loop (val_end < path_len and str::char_at(path, val_end) != 47) {
+                val_end = val_end + 1
+            }
+            if pc < MAX_PARAMS {
+                // Name from pattern
+                let name_len: I64 = name_end - name_start
+                let nbuf: I64 = lowlevel { mem_alloc(name_len + 1) } as I64
+                lowlevel { copy_nonoverlapping((pattern as I64 + name_start) as *Unit, nbuf as *Unit, name_len) }
+                lowlevel { ptr_write[U8]((nbuf + name_len) as *U8, 0 as U8) }
+                // Value from path
+                let val_len: I64 = val_end - xp
+                let vbuf: I64 = lowlevel { mem_alloc(val_len + 1) } as I64
+                lowlevel { copy_nonoverlapping((path as I64 + xp) as *Unit, vbuf as *Unit, val_len) }
+                lowlevel { ptr_write[U8]((vbuf + val_len) as *U8, 0 as U8) }
+                app_store_param(params_buf, pc, nbuf as Str, vbuf as Str)
+                pc = pc + 1
+            }
+            pp = name_end
+            xp = val_end
+        } else {
+            // Static character must match exactly
+            if str::char_at(pattern, pp) != str::char_at(path, xp) {
+                return false
+            }
+            pp = pp + 1
+            xp = xp + 1
+        }
+    }
+    // Both must be consumed (or pattern ends with param that consumed rest of path)
+    return pp >= pat_len and xp >= path_len
+}

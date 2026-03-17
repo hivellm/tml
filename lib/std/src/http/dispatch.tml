@@ -1,0 +1,527 @@
+//! HTTP request dispatch — hook lifecycle + route matching + handler invocation.
+//!
+//! Implements the full cmmv-server lifecycle:
+//!   onRequest hooks → middleware → route match → preHandler hooks
+//!   → handler(req, res) → onSend hooks → serialize → onResponse hooks
+//!
+//! Includes inline radix-tree lookup (avoids cross-module List dependency).
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::http::incoming::IncomingMessage
+use std::http::server_response::ServerResponse
+use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
+
+// ════════════════════════════════════════════════════════════════════
+// Response constants
+// ════════════════════════════════════════════════════════════════════
+
+pub const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
+pub const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
+pub const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
+pub const RESPONSE_413: Str = "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"payload too large\"}"
+
+// ════════════════════════════════════════════════════════════════════
+// Shared state memory layout offsets
+// ════════════════════════════════════════════════════════════════════
+
+const OFF_TABLE: I64 = 0
+const OFF_COUNT: I64 = 8
+const OFF_ROUTER: I64 = 16
+const OFF_MW_TABLE: I64 = 24
+const OFF_MW_COUNT: I64 = 32
+const OFF_SHUTDOWN: I64 = 40
+const OFF_ON_REQUEST_TABLE: I64 = 80
+const OFF_ON_REQUEST_COUNT: I64 = 88
+const OFF_PRE_HANDLER_TABLE: I64 = 96
+const OFF_PRE_HANDLER_COUNT: I64 = 104
+const OFF_ON_SEND_TABLE: I64 = 112
+const OFF_ON_SEND_COUNT: I64 = 120
+const OFF_ON_RESPONSE_TABLE: I64 = 128
+const OFF_ON_RESPONSE_COUNT: I64 = 136
+const OFF_ON_ERROR_TABLE: I64 = 144
+const OFF_ON_ERROR_COUNT: I64 = 152
+const OFF_ERROR_HANDLER: I64 = 160
+
+const ENTRY_SIZE: I64 = 24
+
+// ════════════════════════════════════════════════════════════════════
+// Method index — O(1) method → radix tree lookup
+// ════════════════════════════════════════════════════════════════════
+
+const METHOD_GET: I64 = 0
+const METHOD_POST: I64 = 1
+const METHOD_PUT: I64 = 2
+const METHOD_DELETE: I64 = 3
+const METHOD_PATCH: I64 = 4
+const METHOD_HEAD: I64 = 5
+const METHOD_OPTIONS: I64 = 6
+
+func method_index(method: Str) -> I64 {
+    // Fast path: check first char then length
+    let len: I64 = str::len(method)
+    if len == 3 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 71 { return METHOD_GET }    // 'G'
+        if c == 80 { return METHOD_PUT }    // 'P' + len=3
+    }
+    if len == 4 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 80 { return METHOD_POST }   // 'P' + len=4
+        if c == 72 { return METHOD_HEAD }   // 'H'
+    }
+    if len == 5 { return METHOD_PATCH }
+    if len == 6 { return METHOD_DELETE }
+    if len == 7 { return METHOD_OPTIONS }
+    return -1
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Inline radix-tree lookup (avoids cross-module List dependency)
+// ════════════════════════════════════════════════════════════════════
+// Node layout from router.tml: 80 bytes per node
+
+const RT_PREFIX: I64 = 0
+const RT_CHILDREN_PTR: I64 = 8
+const RT_CHILDREN_COUNT: I64 = 16
+const RT_PARAM_CHILD: I64 = 32
+const RT_WILDCARD_CHILD: I64 = 40
+const RT_HANDLER: I64 = 48
+const RT_PARAM_NAME: I64 = 56
+const RT_KIND: I64 = 64
+
+func rt_get(node: I64, off: I64) -> I64 {
+    lowlevel { ptr_read[I64]((node + off) as *I64) }
+}
+
+func rt_find_child(node: I64, byte_key: I32) -> I64 {
+    let arr: I64 = rt_get(node, 8)
+    let count: I64 = rt_get(node, 16)
+    if arr == 0 or count == 0 { return 0 }
+    let key: I64 = byte_key as I64
+    var entry: I64 = arr
+    var idx: I64 = 0
+    loop (idx < count) {
+        let k: I64 = lowlevel { ptr_read[I64](entry as *I64) }
+        if k == key {
+            return lowlevel { ptr_read[I64]((entry + 8) as *I64) }
+        }
+        entry = entry + 16
+        idx = idx + 1
+    }
+    return 0
+}
+
+func rt_match_prefix(path: Str, pos: I64, prefix: Str) -> I64 {
+    let plen: I64 = str::len(path)
+    let prelen: I64 = str::len(prefix)
+    var i: I64 = 0
+    loop (i < prelen) {
+        if pos + i >= plen { return i }
+        if str::char_at(path, pos + i) != str::char_at(prefix, i) { return i }
+        i = i + 1
+    }
+    return prelen
+}
+
+func rt_find_slash(path: Str, from: I64, plen: I64) -> I64 {
+    var i: I64 = from
+    loop (i < plen) {
+        if str::char_at(path, i) == 47 { return i }
+        i = i + 1
+    }
+    return plen
+}
+
+/// Inline radix-tree search. Returns handler_id (0 = not found).
+/// Stores up to MAX_PARAMS name/value pairs in params_buf.
+/// params_buf layout: [name0, value0, name1, value1, ...] as I64 (Str pointers).
+/// param_count is set to the number of extracted params.
+pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut ref I64) -> I64 {
+    let plen: I64 = str::len(path)
+    param_count = 0
+
+    // Root route
+    if path == "/" or plen == 0 {
+        return rt_get(root, RT_HANDLER)
+    }
+
+    var current: I64 = root
+    var pos: I64 = 0
+
+    loop (pos < plen) {
+        let c: I32 = str::char_at(path, pos)
+
+        // Try static child
+        let child: I64 = rt_find_child(current, c)
+        if child != 0 {
+            let prefix: Str = rt_get(child, RT_PREFIX) as Str
+            let prelen: I64 = str::len(prefix)
+            let matched: I64 = rt_match_prefix(path, pos, prefix)
+            if matched == prelen {
+                current = child
+                pos = pos + prelen
+                continue
+            }
+        }
+
+        // Try parametric child
+        let param: I64 = rt_get(current, RT_PARAM_CHILD)
+        if param != 0 {
+            // Skip leading /
+            var cap_start: I64 = pos
+            if cap_start < plen and str::char_at(path, cap_start) == 47 {
+                cap_start = cap_start + 1
+            }
+            let seg_end: I64 = rt_find_slash(path, cap_start, plen)
+            if param_count < MAX_PARAMS {
+                let name: Str = rt_get(param, RT_PARAM_NAME) as Str
+                // Manual substring to avoid cross-module str::substring call
+                let vlen: I64 = seg_end - cap_start
+                let vbuf: I64 = lowlevel { mem_alloc(vlen + 1) } as I64
+                lowlevel { copy_nonoverlapping((path as I64 + cap_start) as *Unit, vbuf as *Unit, vlen) }
+                lowlevel { ptr_write[U8]((vbuf + vlen) as *U8, 0 as U8) }
+                let value: Str = vbuf as Str
+                app_store_param(params_buf, param_count, name, value)
+                param_count = param_count + 1
+            }
+            current = param
+            pos = seg_end
+            continue
+        }
+
+        // Try wildcard child
+        let wc: I64 = rt_get(current, RT_WILDCARD_CHILD)
+        if wc != 0 {
+            var wc_start: I64 = pos
+            if wc_start < plen and str::char_at(path, wc_start) == 47 {
+                wc_start = wc_start + 1
+            }
+            if param_count < MAX_PARAMS {
+                let name: Str = rt_get(wc, RT_PARAM_NAME) as Str
+                let value: Str = str::substring(path, wc_start, plen)
+                app_store_param(params_buf, param_count, name, value)
+                param_count = param_count + 1
+            }
+            return rt_get(wc, RT_HANDLER)
+        }
+
+        // No match
+        return 0
+    }
+
+    return rt_get(current, RT_HANDLER)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Dispatch — hook lifecycle + route matching + handler invocation
+// ════════════════════════════════════════════════════════════════════
+
+/// Build an IncomingMessage from zero-copy parsed fields (fast path).
+/// Does not allocate headers — suitable for high-throughput scenarios.
+/// Handlers that need headers can inspect the raw buffer directly.
+func app_make_request(method: Str, path: Str, body: Str, fd: I64,
+                      params_buf: I64, param_count: I64) -> IncomingMessage {
+    // Direct struct construction — avoids IncomingMessage::new() which allocates Headers.
+    // route_params_ptr stores our params_buf layout: [name0, value0, ...].
+    // IncomingMessage layout matches struct field order exactly.
+    IncomingMessage {
+        req_method: method,
+        req_url: path,
+        req_headers_ptr: params_buf,
+        raw_header_count: param_count,
+        req_body: body,
+        req_version: "HTTP/1.1",
+        is_complete: true,
+        socket_fd: fd,
+    }
+}
+
+/// Get a path parameter by name from an IncomingMessage (fast-path requests).
+/// For fast-path requests, params are stored in req_headers_ptr (params_buf)
+/// and raw_header_count (param_count). Layout: [name0, value0, name1, value1, ...] as I64.
+pub func app_get_param(req: IncomingMessage, name: Str) -> Str {
+    let params_buf: I64 = req.req_headers_ptr
+    let pc: I64 = req.raw_header_count
+    if params_buf == 0 or pc == 0 { return "" }
+    var i: I64 = 0
+    loop (i < pc) {
+        // Each param is 16 bytes: [name I64, value I64]
+        var off: I64 = 0
+        var j: I64 = 0
+        loop (j < i) { off = off + 16; j = j + 1 }
+        let n: Str = lowlevel { ptr_read[I64]((params_buf + off) as *I64) } as Str
+        if n == name {
+            return lowlevel { ptr_read[I64]((params_buf + off + 8) as *I64) } as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Run all 2-param hooks in a hook table (onRequest, preHandler, onSend, onResponse).
+/// Returns true if the pipeline should continue (res not yet finished).
+/// Returns false if a hook called res.end() and short-circuited the pipeline.
+func app_run_hooks(hook_table: I64, hook_count: I64, req: IncomingMessage, res: ServerResponse) -> Bool {
+    var i: I64 = 0
+    loop (i < hook_count) {
+        let fn_ptr: I64 = lowlevel { ptr_read[I64]((hook_table + i * 8) as *I64) }
+        if fn_ptr != 0 {
+            let hook: func(IncomingMessage, ServerResponse) = fn_ptr as func(IncomingMessage, ServerResponse)
+            hook(req, res)
+            // If hook marked response finished, short-circuit
+            if res.is_finished() { return false }
+        }
+        i = i + 1
+    }
+    return true
+}
+
+/// Run all onError hooks (3-param: req, res, error_msg).
+func app_run_error_hooks(hook_table: I64, hook_count: I64, error_handler: I64,
+                         req: IncomingMessage, res: ServerResponse, msg: Str) {
+    // Run custom error handler first if set
+    if error_handler != 0 {
+        let h: func(IncomingMessage, ServerResponse, Str) = error_handler as func(IncomingMessage, ServerResponse, Str)
+        h(req, res, msg)
+        return
+    }
+    // Run onError hooks
+    var i: I64 = 0
+    loop (i < hook_count) {
+        let fn_ptr: I64 = lowlevel { ptr_read[I64]((hook_table + i * 8) as *I64) }
+        if fn_ptr != 0 {
+            let hook: func(IncomingMessage, ServerResponse, Str) = fn_ptr as func(IncomingMessage, ServerResponse, Str)
+            hook(req, res, msg)
+        }
+        i = i + 1
+    }
+}
+
+/// Radix-tree dispatch: look up handler_id by method and path.
+/// Returns handler fn_ptr (I64) and stores params into params_buf.
+/// Returns 0 if not found.
+func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
+                              params_buf: I64, param_count: mut ref I64) -> I64 {
+    let idx: I64 = method_index(method)
+    if idx < 0 { return 0 }
+    let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
+    if root == 0 { return 0 }
+    let handler_id: I64 = app_find_route(root, path, params_buf, ref param_count)
+    if handler_id <= 0 { return 0 }
+    let offset: I64 = (handler_id - 1) * ENTRY_SIZE
+    return lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+}
+
+/// Main dispatch function. Runs the full cmmv-server lifecycle:
+///   onRequest hooks → middleware → route match → preHandler hooks
+///   → handler(req, res) → onSend hooks → serialize → onResponse hooks
+///
+/// params_buf: pre-allocated 128-byte buffer for route params (reused per worker).
+/// Returns the serialized HTTP response string.
+pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, params_buf: I64) -> Str {
+    let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
+    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
+    let mw_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_TABLE) as *I64) }
+    let mw_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_COUNT) as *I64) }
+    let on_request_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64) }
+    let on_request_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64) }
+    let pre_handler_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64) }
+    let pre_handler_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64) }
+    let on_send_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_TABLE) as *I64) }
+    let on_send_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_COUNT) as *I64) }
+    let on_response_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64) }
+    let on_response_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64) }
+    let on_error_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_TABLE) as *I64) }
+    let on_error_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_COUNT) as *I64) }
+    let error_handler: I64 = lowlevel { ptr_read[I64]((shared + OFF_ERROR_HANDLER) as *I64) }
+
+    var param_count: I64 = 0
+
+    // ── Route lookup (before building req/res) ──────────────────
+    let fn_ptr: I64 = app_dispatch_tree_lookup(table, trees, method, path, params_buf, ref param_count)
+
+    // ── Construct IncomingMessage (fast path — no header parsing) ─
+    let req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, param_count)
+    var res: ServerResponse = ServerResponse::for_request(fd, method)
+
+    // ── onRequest hooks ─────────────────────────────────────────
+    let continue_on_request: Bool = app_run_hooks(on_request_table, on_request_count, req, res)
+    if not continue_on_request {
+        let response: Str = res.serialize()
+        return response
+    }
+
+    // ── Middleware pipeline ──────────────────────────────────────
+    var mw_idx: I64 = 0
+    loop (mw_idx < mw_count) {
+        let mw_ptr: I64 = lowlevel { ptr_read[I64]((mw_table + mw_idx * 8) as *I64) }
+        if mw_ptr != 0 {
+            let mw: func(IncomingMessage, ServerResponse) = mw_ptr as func(IncomingMessage, ServerResponse)
+            mw(req, res)
+            if res.is_finished() {
+                let response: Str = res.serialize()
+                return response
+            }
+        }
+        mw_idx = mw_idx + 1
+    }
+
+    // ── Route not found ──────────────────────────────────────────
+    if fn_ptr == 0 {
+        // Try HEAD → GET fallback
+        var head_fallback_ptr: I64 = 0
+        if method_index(method) == METHOD_HEAD {
+            let get_idx: I64 = METHOD_GET
+            let get_root: I64 = lowlevel { ptr_read[I64]((trees + get_idx * 8) as *I64) }
+            if get_root != 0 {
+                var fallback_pc: I64 = 0
+                let hid: I64 = app_find_route(get_root, path, params_buf, ref fallback_pc)
+                if hid > 0 {
+                    let off: I64 = (hid - 1) * ENTRY_SIZE
+                    head_fallback_ptr = lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
+                }
+            }
+        }
+        if head_fallback_ptr == 0 {
+            // Run onError hooks for 404
+            app_run_error_hooks(on_error_table, on_error_count, error_handler, req, res, "not found")
+            if res.is_finished() {
+                let response: Str = res.serialize()
+                return response
+            }
+            // Default 404 response (JSON error format)
+            return app_error_response(404, "not found")
+        }
+        // Use HEAD fallback handler (strip body in send, headers only)
+        let continue_pre: Bool = app_run_hooks(pre_handler_table, pre_handler_count, req, res)
+        if not continue_pre {
+            let response: Str = res.serialize()
+            return response
+        }
+        let handler: func(IncomingMessage, ServerResponse) = head_fallback_ptr as func(IncomingMessage, ServerResponse)
+        handler(req, res)
+        app_run_hooks(on_send_table, on_send_count, req, res)
+        let response: Str = res.serialize()
+        app_run_hooks(on_response_table, on_response_count, req, res)
+        return response
+    }
+
+    // ── preHandler hooks ─────────────────────────────────────────
+    let continue_pre: Bool = app_run_hooks(pre_handler_table, pre_handler_count, req, res)
+    if not continue_pre {
+        let response: Str = res.serialize()
+        return response
+    }
+
+    // ── Route handler ────────────────────────────────────────────
+    let handler: func(IncomingMessage, ServerResponse) = fn_ptr as func(IncomingMessage, ServerResponse)
+    handler(req, res)
+
+    // ── onSend hooks ─────────────────────────────────────────────
+    app_run_hooks(on_send_table, on_send_count, req, res)
+
+    // ── Serialize response ───────────────────────────────────────
+    let response: Str = res.serialize()
+
+    // ── onResponse hooks (post-send, logging/metrics) ────────────
+    app_run_hooks(on_response_table, on_response_count, req, res)
+
+    return response
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Status helpers
+// ════════════════════════════════════════════════════════════════════
+
+pub func app_status_text(code: I64) -> Str {
+    if code == 200 { return "OK" }
+    if code == 201 { return "Created" }
+    if code == 204 { return "No Content" }
+    if code == 301 { return "Moved Permanently" }
+    if code == 302 { return "Found" }
+    if code == 304 { return "Not Modified" }
+    if code == 400 { return "Bad Request" }
+    if code == 401 { return "Unauthorized" }
+    if code == 403 { return "Forbidden" }
+    if code == 404 { return "Not Found" }
+    if code == 405 { return "Method Not Allowed" }
+    if code == 408 { return "Request Timeout" }
+    if code == 413 { return "Payload Too Large" }
+    if code == 429 { return "Too Many Requests" }
+    if code == 500 { return "Internal Server Error" }
+    if code == 502 { return "Bad Gateway" }
+    if code == 503 { return "Service Unavailable" }
+    return "OK"
+}
+
+/// Build HTTP response with pre-computed status line and headers.
+/// Uses single buffer allocation instead of multiple string concatenations.
+pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
+    let body_len: I64 = str::len(body)
+    let cl_str: Str = body_len.to_string()
+    let status_str: Str = status.to_string()
+    let status_text: Str = app_status_text(status)
+    let header_prefix: Str = "HTTP/1.1 "
+    let ct_header: Str = "\r\nContent-Type: "
+    let cl_header: Str = "\r\nContent-Length: "
+    let suffix: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+    let total: I64 = str::len(header_prefix) + str::len(status_str) + 1 + str::len(status_text) +
+                     str::len(ct_header) + str::len(content_type) +
+                     str::len(cl_header) + str::len(cl_str) +
+                     str::len(suffix) + body_len
+    let buf: I64 = lowlevel { mem_alloc(total + 1) } as I64
+    var pos: I64 = 0
+    pos = app_buf_copy(buf, pos, header_prefix)
+    pos = app_buf_copy(buf, pos, status_str)
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 32 as U8) }
+    pos = pos + 1
+    pos = app_buf_copy(buf, pos, status_text)
+    pos = app_buf_copy(buf, pos, ct_header)
+    pos = app_buf_copy(buf, pos, content_type)
+    pos = app_buf_copy(buf, pos, cl_header)
+    pos = app_buf_copy(buf, pos, cl_str)
+    pos = app_buf_copy(buf, pos, suffix)
+    pos = app_buf_copy(buf, pos, body)
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Copy a string into buffer at position, return new position.
+func app_buf_copy(buf: I64, pos: I64, s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    if len > 0 {
+        lowlevel { copy_nonoverlapping(s as *Unit, (buf + pos) as *Unit, len) }
+    }
+    return pos + len
+}
+
+/// Build a JSON error response following cmmv-server format:
+/// {"statusCode":NNN,"error":"Reason","message":"..."}
+/// Returns a complete HTTP response string.
+pub func app_error_response(status: I64, message: Str) -> Str {
+    let status_text: Str = app_status_text(status)
+    let status_str: Str = status.to_string()
+    // Build JSON body: {"statusCode":NNN,"error":"Reason","message":"msg"}
+    let body_prefix: Str = "{\"statusCode\":"
+    let body_err: Str = ",\"error\":\""
+    let body_msg: Str = "\",\"message\":\""
+    let body_suffix: Str = "\"}"
+    let body_len: I64 = str::len(body_prefix) + str::len(status_str) +
+                        str::len(body_err) + str::len(status_text) +
+                        str::len(body_msg) + str::len(message) +
+                        str::len(body_suffix)
+    // Build body first
+    let body_buf: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
+    var bp: I64 = 0
+    bp = app_buf_copy(body_buf, bp, body_prefix)
+    bp = app_buf_copy(body_buf, bp, status_str)
+    bp = app_buf_copy(body_buf, bp, body_err)
+    bp = app_buf_copy(body_buf, bp, status_text)
+    bp = app_buf_copy(body_buf, bp, body_msg)
+    bp = app_buf_copy(body_buf, bp, message)
+    bp = app_buf_copy(body_buf, bp, body_suffix)
+    lowlevel { ptr_write[U8]((body_buf + bp) as *U8, 0 as U8) }
+    let body: Str = body_buf as Str
+    return app_build_response(status, "application/json; charset=utf-8", body)
+}

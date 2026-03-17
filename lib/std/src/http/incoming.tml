@@ -12,6 +12,7 @@ use std::http::method::Method
 use std::http::headers::Headers
 use std::http::version::HttpVersion
 use std::http::error::{HttpError, HttpErrorKind}
+use std::http::cookie::parse_cookie
 
 /// An HTTP request received by the server (incoming message).
 ///
@@ -138,6 +139,17 @@ impl IncomingMessage {
         return str::contains(te, "chunked")
     }
 
+    // ── Cookie access ─────────────────────────────────────────────
+
+    /// Get a cookie value by name from the Cookie header.
+    /// Only works for full-parse requests (headers parsed).
+    /// Returns "" if the cookie is not found or headers are not available.
+    pub func cookie(this, name: Str) -> Str {
+        let cookie_header: Str = this.get_header("cookie")
+        if str::len(cookie_header) == 0 { return "" }
+        return parse_cookie(cookie_header, name)
+    }
+
     // ── URL decomposition ────────────────────────────────────────
 
     /// Returns just the path component (before '?').
@@ -164,6 +176,101 @@ impl IncomingMessage {
             qpos = qpos + 1
         }
         return ""
+    }
+
+    // ── Convenience getters (cmmv-server / Express style) ────────
+
+    /// Returns the hostname from the Host header (without port).
+    pub func hostname(this) -> Str {
+        let host_val: Str = this.get_header("host")
+        let host_len: I64 = str::len(host_val)
+        if host_len == 0 { return "" }
+        // Strip port if present (e.g., "example.com:3000" → "example.com")
+        var i: I64 = 0
+        loop (i < host_len) {
+            if str::char_at(host_val, i) == 58 {  // ':'
+                return str::substring(host_val, 0, i)
+            }
+            i = i + 1
+        }
+        return host_val
+    }
+
+    /// Returns the remote IP address from X-Forwarded-For header, or "".
+    /// In a real implementation this would read from the socket; for now uses the header.
+    pub func ip(this) -> Str {
+        let xff: Str = this.get_header("x-forwarded-for")
+        if str::len(xff) > 0 {
+            // Take first IP: "1.2.3.4, 5.6.7.8" → "1.2.3.4"
+            let xff_len: I64 = str::len(xff)
+            var i: I64 = 0
+            loop (i < xff_len) {
+                if str::char_at(xff, i) == 44 {  // ','
+                    return str::substring(xff, 0, i)
+                }
+                i = i + 1
+            }
+            return xff
+        }
+        return ""
+    }
+
+    /// Returns "http" or "https" based on X-Forwarded-Proto header.
+    pub func protocol(this) -> Str {
+        let proto: Str = this.get_header("x-forwarded-proto")
+        if str::len(proto) > 0 { return proto }
+        return "http"
+    }
+
+    /// Returns true if the protocol is "https".
+    pub func secure(this) -> Bool {
+        return this.protocol() == "https"
+    }
+
+    /// Returns true if the request was made via XMLHttpRequest.
+    pub func xhr(this) -> Bool {
+        let xrw: Str = this.get_header("x-requested-with")
+        return str::to_lowercase(xrw) == "xmlhttprequest"
+    }
+
+    /// Check if the request Content-Type matches a given MIME type.
+    /// e.g., req.is_type("json") checks if Content-Type contains "json".
+    pub func is_type(this, type_str: Str) -> Bool {
+        let ct: Str = this.content_type()
+        if str::len(ct) == 0 { return false }
+        return str::contains(str::to_lowercase(ct), str::to_lowercase(type_str))
+    }
+
+    /// Check if the Accept header contains the given MIME type.
+    /// e.g., req.accepts("text/html") or req.accepts("json").
+    pub func accepts(this, type_str: Str) -> Bool {
+        let accept: Str = this.get_header("accept")
+        if str::len(accept) == 0 { return false }
+        let lower_accept: Str = str::to_lowercase(accept)
+        let lower_type: Str = str::to_lowercase(type_str)
+        // Check wildcard
+        if str::contains(lower_accept, "*/*") { return true }
+        // Check direct match
+        if str::contains(lower_accept, lower_type) { return true }
+        // Check shorthand: "json" matches "application/json"
+        if str::contains(lower_accept, "application/" + lower_type) { return true }
+        if str::contains(lower_accept, "text/" + lower_type) { return true }
+        return false
+    }
+
+    /// Returns true if the response would be "fresh" (cacheable based on ETag/Last-Modified).
+    /// Checks If-None-Match and If-Modified-Since headers.
+    pub func fresh(this) -> Bool {
+        let inm: Str = this.get_header("if-none-match")
+        if str::len(inm) > 0 { return true }
+        let ims: Str = this.get_header("if-modified-since")
+        if str::len(ims) > 0 { return true }
+        return false
+    }
+
+    /// Returns true if the request is "stale" (not fresh).
+    pub func stale(this) -> Bool {
+        return not this.fresh()
     }
 
     /// Frees internal storage.

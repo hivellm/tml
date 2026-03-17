@@ -1,34 +1,73 @@
-// TML HTTP Server — Express-like with path params, middleware, thread pool
+// TML HTTP Server — cmmv-server style framework demo
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
-// Test:   curl http://localhost:3000/users/42
+// Test:   curl http://localhost:3000/
+//         curl http://localhost:3000/users/42
+//         curl -X POST http://localhost:3000/api/echo -d '{"hello":"world"}'
+//         curl http://localhost:3000/old-page
 // Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
 
 mod server
 
 use core::str
-use std::http::app::{App, AppContext}
+use std::http::app::{App, app_get_param}
+use std::http::incoming::IncomingMessage
+use std::http::server_response::ServerResponse
 
 // ── Handlers ───────────────────────────────────────────────────
 
-func handle_root(ctx: AppContext) -> Str {
-    ctx.json(200, "{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
+func handle_root(req: IncomingMessage, res: ServerResponse) {
+    res.json("{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
 }
 
-func handle_health(ctx: AppContext) -> Str {
-    ctx.json(200, "{\"status\":\"ok\"}")
+func handle_health(req: IncomingMessage, res: ServerResponse) {
+    res.json("{\"status\":\"ok\"}")
 }
 
-func handle_user(ctx: AppContext) -> Str {
-    let id: Str = ctx.param("id")
-    ctx.json(200, "{\"user_id\":\"" + id + "\"}")
+func handle_user(req: IncomingMessage, res: ServerResponse) {
+    let id: Str = app_get_param(req, "id")
+    res.json("{\"user_id\":\"" + id + "\"}")
 }
 
-func handle_echo(ctx: AppContext) -> Str {
-    let body: Str = ctx.body()
-    if str::len(body) == 0 { return ctx.json(200, "{}") }
-    ctx.json(200, body)
+func handle_echo(req: IncomingMessage, res: ServerResponse) {
+    let body: Str = req.body()
+    if str::len(body) == 0 {
+        res.json("{}")
+        return
+    }
+    res.json(body)
+}
+
+func handle_redirect(req: IncomingMessage, res: ServerResponse) {
+    res.redirect("/")
+}
+
+func handle_html(req: IncomingMessage, res: ServerResponse) {
+    res.html("<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>")
+}
+
+func handle_text(req: IncomingMessage, res: ServerResponse) {
+    res.text("Hello, plain text world!")
+}
+
+func handle_not_found(req: IncomingMessage, res: ServerResponse) {
+    res.status(404)
+    res.json("{\"error\":\"custom 404\",\"path\":\"" + req.url() + "\"}")
+}
+
+// ── Middleware (logging) ──────────────────────────────────────
+
+func logger_middleware(req: IncomingMessage, res: ServerResponse) {
+    println(req.method() + " " + req.url())
+    // Don't call res.end() — continue to next middleware/handler
+}
+
+// ── Hooks ────────────────────────────────────────────────────
+
+func on_response_hook(req: IncomingMessage, res: ServerResponse) {
+    // Post-response hook — runs after response is sent.
+    // Good for logging response status, timing, metrics.
 }
 
 // ── Main ───────────────────────────────────────────────────────
@@ -36,10 +75,25 @@ func handle_echo(ctx: AppContext) -> Str {
 pub func main() -> I32 {
     var app: App = App::new()
 
-    app.get("/", handle_root)
-    app.get("/health", handle_health)
-    app.get("/users/:id", handle_user)
-    app.post("/api/echo", handle_echo)
+    // Middleware — runs for every request before routing
+    app.use_middleware(logger_middleware as I64)
+
+    // Hooks — lifecycle events
+    app.add_hook_on_response(on_response_hook as I64)
+
+    // Settings
+    app.set_body_limit(2097152)     // 2MB body limit
+    app.set_read_timeout(60000)     // 60s read timeout
+    app.set_idle_timeout(120000)    // 120s idle timeout
+
+    // Routes
+    app.get("/", handle_root as I64)
+    app.get("/health", handle_health as I64)
+    app.get("/users/:id", handle_user as I64)
+    app.post("/api/echo", handle_echo as I64)
+    app.get("/old-page", handle_redirect as I64)
+    app.get("/page", handle_html as I64)
+    app.get("/text", handle_text as I64)
 
     app.listen(3000)
     return 0

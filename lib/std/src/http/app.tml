@@ -1,9 +1,11 @@
-//! HTTP Application Framework — Express/Koa-like API for TML.
+//! HTTP Application Framework — cmmv-server style API for TML.
 //!
 //! Features:
 //!   - Radix-tree router with path params (`:id`) and wildcards (`*`)
 //!   - Thread pool (N workers = CPU cores) — no thread-per-connection
-//!   - Middleware pipeline (app.use)
+//!   - Hook lifecycle: onRequest, preHandler, onSend, onResponse, onError
+//!   - Middleware pipeline (app.use_middleware)
+//!   - IncomingMessage + ServerResponse handler signature
 //!   - Read/write/idle timeouts
 //!   - Graceful shutdown via app.shutdown()
 //!   - Keep-alive connections
@@ -11,360 +13,357 @@
 //! # Example
 //!
 //! ```tml
-//! use std::http::app::{App, AppContext}
+//! use std::http::app::{App, app_get_param}
+//! use std::http::incoming::IncomingMessage
+//! use std::http::server_response::ServerResponse
 //!
-//! func handle_root(ctx: AppContext) -> Str {
-//!     ctx.json(200, "{\"status\":\"ok\"}")
+//! func handle_root(req: IncomingMessage, res: ServerResponse) {
+//!     res.json("{\"status\":\"ok\"}")
+//! }
+//!
+//! func handle_user(req: IncomingMessage, res: ServerResponse) {
+//!     let id: Str = app_get_param(req, "id")
+//!     res.json("{\"user_id\":\"" + id + "\"}")
 //! }
 //!
 //! pub func main() -> I32 {
 //!     var app: App = App::new()
-//!     app.get("/", handle_root)
-//!     app.get("/users/:id", do(ctx: AppContext) -> Str {
-//!         ctx.json(200, "{\"id\":\"" + ctx.param("id") + "\"}")
-//!     })
+//!     app.get("/", handle_root as I64)
+//!     app.get("/users/:id", handle_user as I64)
 //!     app.listen(3000)
 //!     return 0
 //! }
 //! ```
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc}
 use std::http::router::{NODE_STATIC, insert, node_new}
-use std::net::eventloop::{EventLoop, Interest, Event}
+use std::http::incoming::IncomingMessage
+use std::http::server_response::ServerResponse
+use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
+                          app_status_text, app_find_route}
+use std::http::worker::{app_listen, app_listen_evloop, app_bind_listener, app_shutdown}
+use std::http::parse::MAX_PARAMS
 
-// ── FFI ─────────────────────────────────────────────────────────
-@extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
-@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
-@extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
-@extern("tml_sys_close") func sys_close(handle: I64) -> I64
-@extern("tml_sys_accept_v4") func sys_accept(handle: I64) -> I64
-@extern("c") func tml_sys_socket(domain: I32, typ: I32, proto: I32) -> I64
-@extern("c") func tml_sys_bind_v4(handle: I64, addr: I32, port: I32) -> I64
-@extern("c") func tml_sys_listen(handle: I64, backlog: I32) -> I64
-@extern("tml_thread_spawn") func raw_thread_spawn(f: *Unit, arg: *Unit, stack: U64) -> U64
-@extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
-@extern("tml_thread_available_parallelism") func cpu_count() -> U32
-@extern("tml_thread_sleep_ms") func thread_sleep_ms(ms: U64)
+// Re-exports for convenience — callers can import these from std::http::app
+pub use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
+                              app_status_text, app_find_route}
+pub use std::http::worker::{app_shutdown, app_bind_listener, app_worker, app_evloop_worker,
+                             app_listen, app_listen_evloop}
+pub use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_is_http11,
+                            app_is_bodyless_method, app_extract_method, app_extract_path,
+                            app_extract_body, app_has_header_end, app_has_connection_close,
+                            app_find_header_end_in_str, app_store_param}
+pub use std::http::dispatch::{RESPONSE_404, RESPONSE_500, RESPONSE_405, RESPONSE_413}
 
-// Mutex FFI
-@extern("c") func tml_mutex_init(mutex: *Unit) -> I32
-@extern("c") func tml_mutex_lock(mutex: *Unit) -> I32
-@extern("c") func tml_mutex_unlock(mutex: *Unit) -> I32
-
-// Condvar FFI
-@extern("c") func tml_condvar_init(cvar: *Unit) -> I32
-@extern("c") func tml_condvar_notify_one(cvar: *Unit) -> I32
-@extern("c") func tml_condvar_wait(cvar: *Unit, mutex: *Unit) -> I32
-
-// EventLoop re-exports from std::net::eventloop handle all poll FFI
-
-const AF_INET: I32 = 2
-const SOCK_STREAM: I32 = 1
-const SOL_SOCKET: I32 = 65535
-const SO_REUSEADDR: I32 = 4
-const SO_RCVTIMEO: I32 = 4102
-const SO_SNDTIMEO: I32 = 4101
-const IPPROTO_TCP: I32 = 6
-const TCP_NODELAY: I32 = 1
-const BUF_SIZE: I64 = 8192
 const MAX_HANDLERS: I64 = 256
 const MAX_MIDDLEWARE: I64 = 32
-const MAX_HEADER_SIZE: I64 = 8192
+const MAX_HOOKS: I64 = 16
 const MAX_BODY_SIZE: I64 = 1048576
 
-// Shared state memory layout:
-// [0]  handler_table    (I64 ptr to array of [method_ptr, path_ptr, fn_ptr] x N)
-// [8]  handler_count    (I64)
-// [16] router_ptr       (I64 ptr to heap-allocated Router)
-// [24] middleware_table  (I64 ptr to array of fn_ptrs)
-// [32] middleware_count  (I64)
-// [40] shutdown_flag     (I64: 0=running, 1=shutdown)
-// [48] read_timeout_ms   (I64: 0=no timeout)
-// [56] write_timeout_ms  (I64: 0=no timeout)
-// [64] idle_timeout_ms   (I64: 0=no timeout)
-// -- Thread pool --
-// [72]  queue_buf        (I64 ptr to ring buffer of fd values)
-// [80]  queue_head       (I64)
-// [88]  queue_tail       (I64)
-// [96]  queue_cap        (I64)
-// [104] queue_len        (I64)
-// [112] mutex_data       (64 bytes — platform mutex)
-// [176] condvar_data     (64 bytes — platform condvar)
-const SHARED_SIZE: I64 = 240
-const OFF_TABLE: I64 = 0
-const OFF_COUNT: I64 = 8
-const OFF_ROUTER: I64 = 16
-const OFF_MW_TABLE: I64 = 24
-const OFF_MW_COUNT: I64 = 32
-const OFF_SHUTDOWN: I64 = 40
-const OFF_READ_TIMEOUT: I64 = 48
-const OFF_WRITE_TIMEOUT: I64 = 56
-const OFF_IDLE_TIMEOUT: I64 = 64
-const OFF_QUEUE_BUF: I64 = 72
-const OFF_QUEUE_HEAD: I64 = 80
-const OFF_QUEUE_TAIL: I64 = 88
-const OFF_QUEUE_CAP: I64 = 96
-const OFF_QUEUE_LEN: I64 = 104
-const OFF_MUTEX: I64 = 112
-const OFF_CONDVAR: I64 = 176
-
-const ENTRY_SIZE: I64 = 24
-const QUEUE_CAP: I64 = 4096
-
-// ════════════════════════════════════════════════════════════════════
-// AppContext — request info passed to each handler
-// ════════════════════════════════════════════════════════════════════
-
-pub type AppContext {
-    req_method: Str,
-    req_path: Str,
-    req_body: Str,
-    route_match_ptr: I64,
-}
-
-impl AppContext {
-    pub func method(this) -> Str { this.req_method }
-    pub func path(this) -> Str { this.req_path }
-    pub func body(this) -> Str { this.req_body }
-
-    /// Get a path parameter by name. e.g., ctx.param("id") for route "/users/:id"
-    pub func param(this, name: Str) -> Str {
-        if this.route_match_ptr == 0 { return "" }
-        // ctx_data layout: [0] params_buf (I64), [8] param_count (I64)
-        // params_buf layout: [name0, value0, name1, value1, ...] as I64
-        let ctx_data: I64 = this.route_match_ptr
-        let params_buf: I64 = lowlevel { ptr_read[I64](ctx_data as *I64) }
-        let pc: I64 = lowlevel { ptr_read[I64]((ctx_data + 8) as *I64) }
-        if params_buf == 0 or pc == 0 { return "" }
-        var i: I64 = 0
-        loop (i < pc) {
-            let n: Str = lowlevel { ptr_read[I64]((params_buf + i * 16) as *I64) } as Str
-            if n == name {
-                return lowlevel { ptr_read[I64]((params_buf + i * 16 + 8) as *I64) } as Str
-            }
-            i = i + 1
-        }
-        return ""
-    }
-
-    pub func json(this, status: I64, body: Str) -> Str {
-        app_build_response(status, "application/json; charset=utf-8", body)
-    }
-
-    pub func text(this, status: I64, body: Str) -> Str {
-        app_build_response(status, "text/plain; charset=utf-8", body)
-    }
-
-    pub func html(this, status: I64, body: Str) -> Str {
-        app_build_response(status, "text/html; charset=utf-8", body)
-    }
-
-    pub func redirect(this, status: I64, location: Str) -> Str {
-        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) +
-               "\r\nLocation: " + location +
-               "\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
-    }
-
-    /// Send raw response string (for custom headers/bodies).
-    pub func raw(this, response: Str) -> Str { response }
-
-    /// Get request header value by name (not yet implemented — returns "").
-    pub func header(this, name: Str) -> Str { return "" }
-}
-
-// ════════════════════════════════════════════════════════════════════
-// App — route registration + server config
-// ════════════════════════════════════════════════════════════════════
-
-// Method index: fixed slots for O(1) method→tree lookup
+// Method index constants (needed by app_register)
 const METHOD_GET: I64 = 0
 const METHOD_POST: I64 = 1
 const METHOD_PUT: I64 = 2
 const METHOD_DELETE: I64 = 3
 const METHOD_PATCH: I64 = 4
 const METHOD_HEAD: I64 = 5
-const METHOD_COUNT: I64 = 6
+const METHOD_OPTIONS: I64 = 6
+const METHOD_COUNT: I64 = 7
+const ENTRY_SIZE: I64 = 24
 
 func method_index(method: Str) -> I64 {
-    // Fast path: check first char then length
     let len: I64 = str::len(method)
     if len == 3 {
         let c: I32 = str::char_at(method, 0)
-        if c == 71 { return METHOD_GET }     // 'G'
-        if c == 80 { return METHOD_PUT }     // 'P' + len=3
+        if c == 71 { return METHOD_GET }    // 'G'
+        if c == 80 { return METHOD_PUT }    // 'P' + len=3
     }
     if len == 4 {
         let c: I32 = str::char_at(method, 0)
-        if c == 80 { return METHOD_POST }    // 'P' + len=4
-        if c == 72 { return METHOD_HEAD }    // 'H'
+        if c == 80 { return METHOD_POST }   // 'P' + len=4
+        if c == 72 { return METHOD_HEAD }   // 'H'
     }
     if len == 5 { return METHOD_PATCH }
     if len == 6 { return METHOD_DELETE }
+    if len == 7 { return METHOD_OPTIONS }
     return -1
 }
 
+// ════════════════════════════════════════════════════════════════════
+// App — route registration, hooks, server config
+// ════════════════════════════════════════════════════════════════════
+//
+// All fields are I64 to avoid mut-this field access codegen bug.
+// Handler functions are stored as I64 fn pointers and cast when calling.
+// Hook signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
+// Error hook signature: func(req: IncomingMessage, res: ServerResponse, msg: Str)
+// stored as I64.
+
 pub type App {
-    table: I64,
-    count: I64,
-    trees: I64,
-    mw_table: I64,
-    mw_count: I64,
+    table: I64,             // ptr to handler table (method, path, fn_ptr entries)
+    count: I64,             // number of registered routes
+    trees: I64,             // ptr to array of radix tree roots (one per method)
+    mw_table: I64,          // ptr to middleware fn_ptr array
+    mw_count: I64,          // number of middleware
+    on_request_table: I64,  // ptr to onRequest hook fn_ptr array
+    on_request_count: I64,
+    pre_handler_table: I64, // ptr to preHandler hook fn_ptr array
+    pre_handler_count: I64,
+    on_send_table: I64,     // ptr to onSend hook fn_ptr array
+    on_send_count: I64,
+    on_response_table: I64, // ptr to onResponse hook fn_ptr array
+    on_response_count: I64,
+    on_error_table: I64,    // ptr to onError hook fn_ptr array (3-param: req, res, msg)
+    on_error_count: I64,
+    error_handler: I64,     // custom error handler fn_ptr (3-param), 0 = default
     read_timeout: I64,
     write_timeout: I64,
     idle_timeout: I64,
+    body_limit: I64,        // max body size in bytes (default 1MB)
+    // Settings (I64 booleans: 0=false, 1=true)
+    trust_proxy: I64,       // trust X-Forwarded-For/Proto headers (default 0)
+    etag_enabled: I64,      // auto-generate ETag headers (default 0)
+    x_powered_by: I64,      // add X-Powered-By: TML header (default 1)
 }
 
 impl App {
+    /// Create a new App with default settings.
     pub func new() -> App {
         let table: I64 = lowlevel { mem_alloc(MAX_HANDLERS * ENTRY_SIZE) } as I64
         let mw_table: I64 = lowlevel { mem_alloc(MAX_MIDDLEWARE * 8) } as I64
-        // Fixed array of 6 radix tree roots (one per HTTP method), all initialized to 0
+        // Fixed array of METHOD_COUNT radix tree roots, all initialized to 0
         let trees: I64 = lowlevel { mem_alloc(METHOD_COUNT * 8) } as I64
         var t: I64 = 0
         loop (t < METHOD_COUNT) {
             lowlevel { ptr_write[I64]((trees + t * 8) as *I64, 0 as I64) }
             t = t + 1
         }
+        let on_request_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
+        let pre_handler_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
+        let on_send_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
+        let on_response_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
+        let on_error_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
         return App {
             table: table,
             count: 0,
             trees: trees,
             mw_table: mw_table,
             mw_count: 0,
+            on_request_table: on_request_table,
+            on_request_count: 0,
+            pre_handler_table: pre_handler_table,
+            pre_handler_count: 0,
+            on_send_table: on_send_table,
+            on_send_count: 0,
+            on_response_table: on_response_table,
+            on_response_count: 0,
+            on_error_table: on_error_table,
+            on_error_count: 0,
+            error_handler: 0,
             read_timeout: 30000,
             write_timeout: 30000,
             idle_timeout: 60000,
+            body_limit: MAX_BODY_SIZE,
+            trust_proxy: 0,
+            etag_enabled: 0,
+            x_powered_by: 1,
         }
     }
 
-    pub func get(mut this, path: Str, handler: func(AppContext) -> Str) {
+    // ── Route Registration ────────────────────────────────────────
+    // Handlers stored as I64 fn pointers. Call via:
+    //   let h: func(IncomingMessage, ServerResponse) = fn_ptr as func(IncomingMessage, ServerResponse)
+    //   h(req, res)
+
+    /// Register a GET handler. Pass function as I64: `handle_root as I64`
+    pub func get(mut this, path: Str, handler: I64) {
         app_register(this.table, ref this.count, this.trees, "GET", path, handler)
     }
 
-    pub func post(mut this, path: Str, handler: func(AppContext) -> Str) {
+    /// Register a POST handler.
+    pub func post(mut this, path: Str, handler: I64) {
         app_register(this.table, ref this.count, this.trees, "POST", path, handler)
     }
 
-    pub func put(mut this, path: Str, handler: func(AppContext) -> Str) {
+    /// Register a PUT handler.
+    pub func put(mut this, path: Str, handler: I64) {
         app_register(this.table, ref this.count, this.trees, "PUT", path, handler)
     }
 
-    pub func delete(mut this, path: Str, handler: func(AppContext) -> Str) {
+    /// Register a DELETE handler.
+    pub func delete(mut this, path: Str, handler: I64) {
         app_register(this.table, ref this.count, this.trees, "DELETE", path, handler)
     }
 
-    pub func patch(mut this, path: Str, handler: func(AppContext) -> Str) {
+    /// Register a PATCH handler.
+    pub func patch(mut this, path: Str, handler: I64) {
         app_register(this.table, ref this.count, this.trees, "PATCH", path, handler)
     }
 
-    /// Register a middleware function. Middlewares run in order before the handler.
-    /// Return "" to continue to next middleware/handler, or a response string to short-circuit.
-    pub func use_middleware(mut this, mw: func(AppContext) -> Str) {
+    /// Register a HEAD handler.
+    pub func head(mut this, path: Str, handler: I64) {
+        app_register(this.table, ref this.count, this.trees, "HEAD", path, handler)
+    }
+
+    /// Register an OPTIONS handler.
+    pub func options(mut this, path: Str, handler: I64) {
+        app_register(this.table, ref this.count, this.trees, "OPTIONS", path, handler)
+    }
+
+    /// Register a handler for all HTTP methods (GET, POST, PUT, DELETE, PATCH).
+    pub func all(mut this, path: Str, handler: I64) {
+        app_register(this.table, ref this.count, this.trees, "GET", path, handler)
+        app_register(this.table, ref this.count, this.trees, "POST", path, handler)
+        app_register(this.table, ref this.count, this.trees, "PUT", path, handler)
+        app_register(this.table, ref this.count, this.trees, "DELETE", path, handler)
+        app_register(this.table, ref this.count, this.trees, "PATCH", path, handler)
+    }
+
+    // ── Middleware ────────────────────────────────────────────────
+
+    /// Register a middleware function (same signature as handler: I64 fn ptr).
+    /// Return without calling res.end() to continue to next middleware/handler.
+    /// Call res.end() to short-circuit the pipeline.
+    pub func use_middleware(mut this, mw: I64) {
         if this.mw_count >= MAX_MIDDLEWARE { return }
-        lowlevel { ptr_write[I64]((this.mw_table + this.mw_count * 8) as *I64, mw as I64) }
+        lowlevel { ptr_write[I64]((this.mw_table + this.mw_count * 8) as *I64, mw) }
         this.mw_count = this.mw_count + 1
     }
 
-    /// Set read timeout in milliseconds (default: 30000)
+    // ── Hook System ───────────────────────────────────────────────
+    // Hooks follow cmmv-server lifecycle:
+    //   onRequest    → first hook, runs before routing (can short-circuit)
+    //   preHandler   → runs after routing but before handler
+    //   onSend       → runs after handler, before sending (can modify response)
+    //   onResponse   → runs after response is sent (logging, metrics)
+    //   onError      → runs when an error occurs (3-param signature)
+
+    /// Add an onRequest hook. Called for every request before routing.
+    /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
+    pub func add_hook_on_request(mut this, hook: I64) {
+        if this.on_request_count >= MAX_HOOKS { return }
+        lowlevel { ptr_write[I64]((this.on_request_table + this.on_request_count * 8) as *I64, hook) }
+        this.on_request_count = this.on_request_count + 1
+    }
+
+    /// Add a preHandler hook. Called after routing but before the route handler.
+    /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
+    pub func add_hook_pre_handler(mut this, hook: I64) {
+        if this.pre_handler_count >= MAX_HOOKS { return }
+        lowlevel { ptr_write[I64]((this.pre_handler_table + this.pre_handler_count * 8) as *I64, hook) }
+        this.pre_handler_count = this.pre_handler_count + 1
+    }
+
+    /// Add an onSend hook. Called after the handler writes the response, before sending.
+    /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
+    pub func add_hook_on_send(mut this, hook: I64) {
+        if this.on_send_count >= MAX_HOOKS { return }
+        lowlevel { ptr_write[I64]((this.on_send_table + this.on_send_count * 8) as *I64, hook) }
+        this.on_send_count = this.on_send_count + 1
+    }
+
+    /// Add an onResponse hook. Called after the response is sent (logging, metrics).
+    /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
+    pub func add_hook_on_response(mut this, hook: I64) {
+        if this.on_response_count >= MAX_HOOKS { return }
+        lowlevel { ptr_write[I64]((this.on_response_table + this.on_response_count * 8) as *I64, hook) }
+        this.on_response_count = this.on_response_count + 1
+    }
+
+    /// Add an onError hook. Called when an unhandled error occurs.
+    /// Signature: func(req: IncomingMessage, res: ServerResponse, msg: Str) stored as I64.
+    pub func add_hook_on_error(mut this, hook: I64) {
+        if this.on_error_count >= MAX_HOOKS { return }
+        lowlevel { ptr_write[I64]((this.on_error_table + this.on_error_count * 8) as *I64, hook) }
+        this.on_error_count = this.on_error_count + 1
+    }
+
+    /// Set a custom error handler replacing the default 500 response.
+    /// Signature: func(req: IncomingMessage, res: ServerResponse, msg: Str) stored as I64.
+    pub func set_error_handler(mut this, handler: I64) {
+        this.error_handler = handler
+    }
+
+    // ── Settings ──────────────────────────────────────────────────
+
+    /// Set read timeout in milliseconds (default: 30000).
     pub func set_read_timeout(mut this, ms: I64) { this.read_timeout = ms }
 
-    /// Set write timeout in milliseconds (default: 30000)
+    /// Set write timeout in milliseconds (default: 30000).
     pub func set_write_timeout(mut this, ms: I64) { this.write_timeout = ms }
 
-    /// Set idle timeout in milliseconds (default: 60000)
+    /// Set idle timeout in milliseconds (default: 60000).
     pub func set_idle_timeout(mut this, ms: I64) { this.idle_timeout = ms }
 
-    /// Start server with thread pool (default — highest throughput).
-    pub func listen(this, port: I64) {
-        app_listen(this.table, this.count, this.trees, this.mw_table, this.mw_count,
-                   this.read_timeout, this.write_timeout, this.idle_timeout, port)
+    /// Set maximum body size in bytes (default: 1048576 = 1MB).
+    pub func set_body_limit(mut this, bytes: I64) { this.body_limit = bytes }
+
+    /// Enable/disable trust proxy (uses X-Forwarded-For/Proto headers). Default: false.
+    pub func set_trust_proxy(mut this, enabled: Bool) {
+        if enabled { this.trust_proxy = 1 } else { this.trust_proxy = 0 }
     }
 
-    /// Start server with non-blocking event loop (scales to more concurrent connections).
+    /// Enable/disable automatic ETag header generation. Default: false.
+    pub func set_etag(mut this, enabled: Bool) {
+        if enabled { this.etag_enabled = 1 } else { this.etag_enabled = 0 }
+    }
+
+    /// Enable/disable X-Powered-By: TML header. Default: true.
+    pub func set_x_powered_by(mut this, enabled: Bool) {
+        if enabled { this.x_powered_by = 1 } else { this.x_powered_by = 0 }
+    }
+
+    // ── Listen ────────────────────────────────────────────────────
+
+    /// Start server with thread pool (highest throughput, default).
+    pub func listen(this, port: I64) {
+        app_listen(
+            this.table, this.count, this.trees,
+            this.mw_table, this.mw_count,
+            this.on_request_table, this.on_request_count,
+            this.pre_handler_table, this.pre_handler_count,
+            this.on_send_table, this.on_send_count,
+            this.on_response_table, this.on_response_count,
+            this.on_error_table, this.on_error_count,
+            this.error_handler,
+            this.read_timeout, this.write_timeout, this.idle_timeout,
+            this.body_limit, port
+        )
+    }
+
+    /// Start server with non-blocking event loop (more concurrent connections).
     /// Uses std::net::eventloop internally — WSAPoll on Windows, epoll on Linux.
     pub func listen_async(this, port: I64) {
-        app_listen_evloop(this.table, this.count, this.trees, this.mw_table, this.mw_count,
-                          this.read_timeout, this.write_timeout, this.idle_timeout, port)
+        app_listen_evloop(
+            this.table, this.count, this.trees,
+            this.mw_table, this.mw_count,
+            this.on_request_table, this.on_request_count,
+            this.pre_handler_table, this.pre_handler_count,
+            this.on_send_table, this.on_send_count,
+            this.on_response_table, this.on_response_count,
+            this.on_error_table, this.on_error_count,
+            this.error_handler,
+            this.read_timeout, this.write_timeout, this.idle_timeout,
+            this.body_limit, port
+        )
     }
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Free functions — server internals
+// Route registration
 // ════════════════════════════════════════════════════════════════════
 
-pub func app_status_text(code: I64) -> Str {
-    if code == 200 { return "OK" }
-    if code == 201 { return "Created" }
-    if code == 204 { return "No Content" }
-    if code == 301 { return "Moved Permanently" }
-    if code == 302 { return "Found" }
-    if code == 304 { return "Not Modified" }
-    if code == 400 { return "Bad Request" }
-    if code == 401 { return "Unauthorized" }
-    if code == 403 { return "Forbidden" }
-    if code == 404 { return "Not Found" }
-    if code == 405 { return "Method Not Allowed" }
-    if code == 408 { return "Request Timeout" }
-    if code == 429 { return "Too Many Requests" }
-    if code == 500 { return "Internal Server Error" }
-    if code == 502 { return "Bad Gateway" }
-    if code == 503 { return "Service Unavailable" }
-    return "OK"
-}
-
-/// Build HTTP response with pre-computed status line and headers.
-/// Uses single buffer allocation instead of multiple string concatenations.
-pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
-    let body_len: I64 = str::len(body)
-    let cl_str: Str = body_len.to_string()
-    let status_str: Str = status.to_string()
-    let status_text: Str = app_status_text(status)
-    // Pre-compute total size to allocate once
-    // "HTTP/1.1 " + status + " " + text + "\r\nContent-Type: " + ct + "\r\nContent-Length: " + cl
-    // + "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n" + body
-    let header_prefix: Str = "HTTP/1.1 "
-    let ct_header: Str = "\r\nContent-Type: "
-    let cl_header: Str = "\r\nContent-Length: "
-    let suffix: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
-    let total: I64 = str::len(header_prefix) + str::len(status_str) + 1 + str::len(status_text) +
-                     str::len(ct_header) + str::len(content_type) +
-                     str::len(cl_header) + str::len(cl_str) +
-                     str::len(suffix) + body_len
-    let buf: I64 = lowlevel { mem_alloc(total + 1) } as I64
-    var pos: I64 = 0
-    pos = app_buf_copy(buf, pos, header_prefix)
-    pos = app_buf_copy(buf, pos, status_str)
-    lowlevel { ptr_write[U8]((buf + pos) as *U8, 32 as U8) }
-    pos = pos + 1
-    pos = app_buf_copy(buf, pos, status_text)
-    pos = app_buf_copy(buf, pos, ct_header)
-    pos = app_buf_copy(buf, pos, content_type)
-    pos = app_buf_copy(buf, pos, cl_header)
-    pos = app_buf_copy(buf, pos, cl_str)
-    pos = app_buf_copy(buf, pos, suffix)
-    pos = app_buf_copy(buf, pos, body)
-    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
-    return buf as Str
-}
-
-/// Copy a string into buffer at position, return new position.
-func app_buf_copy(buf: I64, pos: I64, s: Str) -> I64 {
-    let len: I64 = str::len(s)
-    if len > 0 {
-        lowlevel { copy_nonoverlapping(s as *Unit, (buf + pos) as *Unit, len) }
-    }
-    return pos + len
-}
-
-pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, path: Str, handler: func(AppContext) -> Str) {
+/// Register a handler in the flat table and radix tree.
+/// handler is an I64 fn pointer (cast from func(IncomingMessage, ServerResponse)).
+pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, path: Str, handler: I64) {
     if count >= MAX_HANDLERS { return }
     let handler_id: I64 = count + 1
     let offset: I64 = count * ENTRY_SIZE
     // Handler table: flat array for O(1) lookup by handler_id (1-indexed)
     lowlevel { ptr_write[I64]((table + offset) as *I64, method as I64) }
     lowlevel { ptr_write[I64]((table + offset + 8) as *I64, path as I64) }
-    lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler as I64) }
+    lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler) }
     // Insert into radix-tree for O(log n) path matching with params/wildcards
     let idx: I64 = method_index(method)
     if idx >= 0 {
@@ -376,1027 +375,4 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
         insert(root, path, handler_id)
     }
     count = count + 1
-}
-
-/// Check if a route pattern contains ':' (parametric segment).
-func app_pattern_has_param(pattern: Str) -> Bool {
-    let len: I64 = str::len(pattern)
-    var i: I64 = 0
-    loop (i < len) {
-        if str::char_at(pattern, i) == 58 { return true }  // ':'
-        i = i + 1
-    }
-    return false
-}
-
-/// Match a pattern like "/users/:id/posts" against a path like "/users/42/posts".
-/// Returns true if match, stores extracted params in params_buf.
-func app_pattern_match(pattern: Str, path: Str, params_buf: I64, pc: mut ref I64) -> Bool {
-    let pat_len: I64 = str::len(pattern)
-    let path_len: I64 = str::len(path)
-    var pp: I64 = 0  // pattern position
-    var xp: I64 = 0  // path position
-
-    loop (pp < pat_len and xp < path_len) {
-        if str::char_at(pattern, pp) == 58 {
-            // Parametric segment: extract param name and value
-            let name_start: I64 = pp + 1
-            var name_end: I64 = name_start
-            loop (name_end < pat_len and str::char_at(pattern, name_end) != 47) {
-                name_end = name_end + 1
-            }
-            // Extract path value until next '/'
-            var val_end: I64 = xp
-            loop (val_end < path_len and str::char_at(path, val_end) != 47) {
-                val_end = val_end + 1
-            }
-            if pc < MAX_PARAMS {
-                // Name from pattern
-                let name_len: I64 = name_end - name_start
-                let nbuf: I64 = lowlevel { mem_alloc(name_len + 1) } as I64
-                lowlevel { copy_nonoverlapping((pattern as I64 + name_start) as *Unit, nbuf as *Unit, name_len) }
-                lowlevel { ptr_write[U8]((nbuf + name_len) as *U8, 0 as U8) }
-                // Value from path
-                let val_len: I64 = val_end - xp
-                let vbuf: I64 = lowlevel { mem_alloc(val_len + 1) } as I64
-                lowlevel { copy_nonoverlapping((path as I64 + xp) as *Unit, vbuf as *Unit, val_len) }
-                lowlevel { ptr_write[U8]((vbuf + val_len) as *U8, 0 as U8) }
-                app_store_param(params_buf, pc, nbuf as Str, vbuf as Str)
-                pc = pc + 1
-            }
-            pp = name_end
-            xp = val_end
-        } else {
-            // Static character must match exactly
-            if str::char_at(pattern, pp) != str::char_at(path, xp) {
-                return false
-            }
-            pp = pp + 1
-            xp = xp + 1
-        }
-    }
-    // Both must be consumed (or pattern ends with param that consumed rest of path)
-    return pp >= pat_len and xp >= path_len
-}
-
-const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
-const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
-const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
-
-// ── Inline radix-tree lookup (avoids cross-module List dependency) ──
-// Node layout from router.tml: 80 bytes per node
-const RT_PREFIX: I64 = 0
-const RT_CHILDREN_PTR: I64 = 8
-const RT_CHILDREN_COUNT: I64 = 16
-const RT_PARAM_CHILD: I64 = 32
-const RT_WILDCARD_CHILD: I64 = 40
-const RT_HANDLER: I64 = 48
-const RT_PARAM_NAME: I64 = 56
-const RT_KIND: I64 = 64
-const MAX_PARAMS: I64 = 8
-
-func rt_get(node: I64, off: I64) -> I64 {
-    lowlevel { ptr_read[I64]((node + off) as *I64) }
-}
-
-func rt_find_child(node: I64, byte_key: I32) -> I64 {
-    let arr: I64 = rt_get(node, 8)
-    let count: I64 = rt_get(node, 16)
-    if arr == 0 or count == 0 { return 0 }
-    let key: I64 = byte_key as I64
-    var entry: I64 = arr
-    var idx: I64 = 0
-    loop (idx < count) {
-        let k: I64 = lowlevel { ptr_read[I64](entry as *I64) }
-        if k == key {
-            return lowlevel { ptr_read[I64]((entry + 8) as *I64) }
-        }
-        entry = entry + 16
-        idx = idx + 1
-    }
-    return 0
-}
-
-func rt_match_prefix(path: Str, pos: I64, prefix: Str) -> I64 {
-    let plen: I64 = str::len(path)
-    let prelen: I64 = str::len(prefix)
-    var i: I64 = 0
-    loop (i < prelen) {
-        if pos + i >= plen { return i }
-        if str::char_at(path, pos + i) != str::char_at(prefix, i) { return i }
-        i = i + 1
-    }
-    return prelen
-}
-
-func rt_find_slash(path: Str, from: I64, plen: I64) -> I64 {
-    var i: I64 = from
-    loop (i < plen) {
-        if str::char_at(path, i) == 47 { return i }
-        i = i + 1
-    }
-    return plen
-}
-
-/// Inline radix-tree search. Returns handler_id (0 = not found).
-/// Stores up to MAX_PARAMS name/value pairs in params_buf.
-/// params_buf layout: [name0, value0, name1, value1, ...] as I64 (Str pointers)
-/// param_count is set to the number of extracted params.
-/// Store a param name+value at index in the params buffer.
-/// Each param = 16 bytes (name I64 + value I64).
-func app_store_param(params_buf: I64, index: I64, name: Str, value: Str) {
-    // Offset = index * 16. Use addition to avoid i32 multiplication codegen bug.
-    var off: I64 = 0
-    var j: I64 = 0
-    loop (j < index) { off = off + 16; j = j + 1 }
-    lowlevel { ptr_write[I64]((params_buf + off) as *I64, name as I64) }
-    lowlevel { ptr_write[I64]((params_buf + off + 8) as *I64, value as I64) }
-}
-
-pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut ref I64) -> I64 {
-    let plen: I64 = str::len(path)
-    param_count = 0
-
-    // Root route
-    if path == "/" or plen == 0 {
-        return rt_get(root, RT_HANDLER)
-    }
-
-    var current: I64 = root
-    var pos: I64 = 0
-
-    loop (pos < plen) {
-        let c: I32 = str::char_at(path, pos)
-
-        // Try static child
-        let child: I64 = rt_find_child(current, c)
-        if child != 0 {
-            let prefix: Str = rt_get(child, RT_PREFIX) as Str
-            let prelen: I64 = str::len(prefix)
-            let matched: I64 = rt_match_prefix(path, pos, prefix)
-            if matched == prelen {
-                current = child
-                pos = pos + prelen
-                continue
-            }
-        }
-
-        // Try parametric child
-        let param: I64 = rt_get(current, RT_PARAM_CHILD)
-        if param != 0 {
-            // Skip leading /
-            var cap_start: I64 = pos
-            if cap_start < plen and str::char_at(path, cap_start) == 47 {
-                cap_start = cap_start + 1
-            }
-            let seg_end: I64 = rt_find_slash(path, cap_start, plen)
-            if param_count < MAX_PARAMS {
-                let name: Str = rt_get(param, RT_PARAM_NAME) as Str
-                // Manual substring to avoid cross-module str::substring call
-                let vlen: I64 = seg_end - cap_start
-                let vbuf: I64 = lowlevel { mem_alloc(vlen + 1) } as I64
-                lowlevel { copy_nonoverlapping((path as I64 + cap_start) as *Unit, vbuf as *Unit, vlen) }
-                lowlevel { ptr_write[U8]((vbuf + vlen) as *U8, 0 as U8) }
-                let value: Str = vbuf as Str
-                app_store_param(params_buf, param_count, name, value)
-                param_count = param_count + 1
-            }
-            current = param
-            pos = seg_end
-            continue
-        }
-
-        // Try wildcard child
-        let wc: I64 = rt_get(current, RT_WILDCARD_CHILD)
-        if wc != 0 {
-            var wc_start: I64 = pos
-            if wc_start < plen and str::char_at(path, wc_start) == 47 {
-                wc_start = wc_start + 1
-            }
-            if param_count < MAX_PARAMS {
-                let name: Str = rt_get(wc, RT_PARAM_NAME) as Str
-                let value: Str = str::substring(path, wc_start, plen)
-                app_store_param(params_buf, param_count, name, value)
-                param_count = param_count + 1
-            }
-            return rt_get(wc, RT_HANDLER)
-        }
-
-        // No match
-        return 0
-    }
-
-    return rt_get(current, RT_HANDLER)
-}
-
-/// Radix-tree fallback dispatch using inline lookup (no cross-module dependency).
-func app_dispatch_tree(table: I64, trees: I64, method: Str, path: Str, body: Str) -> Str {
-    let idx: I64 = method_index(method)
-    if idx >= 0 {
-        let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
-        if root != 0 {
-            // Fixed param buffer: 8 params x 2 (name+value) x 8 bytes = 128 bytes
-            let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
-            var pc: I64 = 0
-            let handler_id: I64 = app_find_route(root, path, params_buf, ref pc)
-            if handler_id > 0 {
-                let offset: I64 = (handler_id - 1) * ENTRY_SIZE
-                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                if fn_ptr == 0 {
-                    lowlevel { mem_free(params_buf as *Unit) }
-                    return RESPONSE_500
-                }
-                // Store params_buf pointer for AppContext.param() access
-                // Encode as: [0] params_buf, [8] param_count — 16 bytes
-                let ctx_data: I64 = lowlevel { mem_alloc(16) } as I64
-                lowlevel { ptr_write[I64](ctx_data as *I64, params_buf) }
-                lowlevel { ptr_write[I64]((ctx_data + 8) as *I64, pc) }
-                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: ctx_data }
-                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                let result: Str = handler(ctx)
-                lowlevel { mem_free(params_buf as *Unit) }
-                lowlevel { mem_free(ctx_data as *Unit) }
-                return result
-            }
-            lowlevel { mem_free(params_buf as *Unit) }
-        }
-    }
-    return ""
-}
-
-pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
-    let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
-    let mw_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_TABLE) as *I64) }
-    let mw_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_COUNT) as *I64) }
-
-    // Run middleware pipeline first
-    let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: 0 }
-    var mw_idx: I64 = 0
-    loop (mw_idx < mw_count) {
-        let mw_ptr: I64 = lowlevel { ptr_read[I64]((mw_table + mw_idx * 8) as *I64) }
-        let mw: func(AppContext) -> Str = mw_ptr as func(AppContext) -> Str
-        let result: Str = mw(ctx)
-        if str::len(result) > 0 {
-            return result
-        }
-        mw_idx = mw_idx + 1
-    }
-
-    // Route matching: linear scan with pattern matching for :param segments
-    let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
-    var i: I64 = 0
-    loop (i < count) {
-        let offset: I64 = i * ENTRY_SIZE
-        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
-        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
-        if m == method {
-            if p == path {
-                // Exact match — fast path, no params
-                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                if fn_ptr == 0 { return RESPONSE_500 }
-                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                return handler(ctx)
-            }
-            // Check if pattern has ':' (parametric route)
-            if app_pattern_has_param(p) {
-                let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
-                var pc: I64 = 0
-                if app_pattern_match(p, path, params_buf, ref pc) {
-                    let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                    if fn_ptr == 0 { lowlevel { mem_free(params_buf as *Unit) }; return RESPONSE_500 }
-                    let ctx_data: I64 = lowlevel { mem_alloc(16) } as I64
-                    lowlevel { ptr_write[I64](ctx_data as *I64, params_buf) }
-                    lowlevel { ptr_write[I64]((ctx_data + 8) as *I64, pc) }
-                    let param_ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: ctx_data }
-                    let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                    let result: Str = handler(param_ctx)
-                    lowlevel { mem_free(params_buf as *Unit) }
-                    lowlevel { mem_free(ctx_data as *Unit) }
-                    return result
-                }
-                lowlevel { mem_free(params_buf as *Unit) }
-            }
-        }
-        i = i + 1
-    }
-
-    // HEAD fallback: try GET handlers if HEAD has no specific route
-    if method_index(method) == METHOD_HEAD {
-        // Retry linear scan with GET
-        var j: I64 = 0
-        loop (j < count) {
-            let offset: I64 = j * ENTRY_SIZE
-            let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
-            let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
-            if m == "GET" and p == path {
-                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                if fn_ptr == 0 { return RESPONSE_500 }
-                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                return handler(ctx)
-            }
-            j = j + 1
-        }
-        // Pattern matching for GET routes with params (HEAD fallback)
-        var k: I64 = 0
-        loop (k < count) {
-            let koff: I64 = k * ENTRY_SIZE
-            let km: Str = lowlevel { ptr_read[I64]((table + koff) as *I64) } as Str
-            let kp: Str = lowlevel { ptr_read[I64]((table + koff + 8) as *I64) } as Str
-            if km == "GET" and app_pattern_has_param(kp) {
-                let pb: I64 = lowlevel { mem_alloc(128) } as I64
-                var kpc: I64 = 0
-                if app_pattern_match(kp, path, pb, ref kpc) {
-                    let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + koff + 16) as *I64) }
-                    if fn_ptr != 0 {
-                        let cd: I64 = lowlevel { mem_alloc(16) } as I64
-                        lowlevel { ptr_write[I64](cd as *I64, pb) }
-                        lowlevel { ptr_write[I64]((cd + 8) as *I64, kpc) }
-                        let hctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: cd }
-                        let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                        let res: Str = handler(hctx)
-                        lowlevel { mem_free(pb as *Unit) }
-                        lowlevel { mem_free(cd as *Unit) }
-                        return res
-                    }
-                }
-                lowlevel { mem_free(pb as *Unit) }
-            }
-            k = k + 1
-        }
-    }
-
-    return RESPONSE_404
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Thread Pool — lock-free ring buffer with mutex+condvar
-// ════════════════════════════════════════════════════════════════════
-
-/// Enqueue a file descriptor into the work queue. Returns true if enqueued.
-func queue_push(shared: I64, fd: I64) -> Bool {
-    let mutex_ptr: I64 = shared + OFF_MUTEX
-    tml_mutex_lock(mutex_ptr as *Unit)
-
-    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
-    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
-    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
-
-    if len >= cap {
-        tml_mutex_unlock(mutex_ptr as *Unit)
-        return false
-    }
-
-    let tail: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_TAIL) as *I64) }
-    lowlevel { ptr_write[I64]((buf + tail * 8) as *I64, fd) }
-    let new_tail: I64 = (tail + 1) % cap
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_TAIL) as *I64, new_tail) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len + 1) }
-
-    let condvar_ptr: I64 = shared + OFF_CONDVAR
-    tml_condvar_notify_one(condvar_ptr as *Unit)
-    tml_mutex_unlock(mutex_ptr as *Unit)
-    return true
-}
-
-/// Dequeue a file descriptor. Blocks until one is available or shutdown.
-/// Returns -1 on shutdown.
-func queue_pop(shared: I64) -> I64 {
-    let mutex_ptr: I64 = shared + OFF_MUTEX
-    let condvar_ptr: I64 = shared + OFF_CONDVAR
-    tml_mutex_lock(mutex_ptr as *Unit)
-
-    loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
-        if shutdown != 0 {
-            tml_mutex_unlock(mutex_ptr as *Unit)
-            return -1
-        }
-        let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
-        if len > 0 { break }
-        tml_condvar_wait(condvar_ptr as *Unit, mutex_ptr as *Unit)
-    }
-
-    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
-    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
-    let head: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_HEAD) as *I64) }
-    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
-
-    let fd: I64 = lowlevel { ptr_read[I64]((buf + head * 8) as *I64) }
-    let new_head: I64 = (head + 1) % cap
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_HEAD) as *I64, new_head) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len - 1) }
-
-    tml_mutex_unlock(mutex_ptr as *Unit)
-    return fd
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Worker thread — pulls fds from queue, handles connections
-// ════════════════════════════════════════════════════════════════════
-
-pub func app_worker(arg: *Unit) {
-    let shared: I64 = arg as I64
-    let read_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_READ_TIMEOUT) as *I64) }
-    let write_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_WRITE_TIMEOUT) as *I64) }
-    let idle_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_IDLE_TIMEOUT) as *I64) }
-
-    let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
-
-    loop (true) {
-        let fd: I64 = queue_pop(shared)
-        if fd < 0 { break }
-
-        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-        // Set socket timeouts
-        if read_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, read_timeout as I32)
-        }
-        if write_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, write_timeout as I32)
-        }
-
-        // Keep-alive loop — process multiple requests per connection
-        var idle_count: I64 = 0
-        loop (true) {
-            var total: I64 = 0
-            var complete: Bool = false
-            loop (total < BUF_SIZE - 1) {
-                let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
-                if n <= 0 { break }
-                total = total + n
-                if app_has_header_end(buf, total) { complete = true; break }
-            }
-            if not complete or total <= 0 { break }
-            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
-
-            // Check Connection: close before zero-copy parsing mutates buffer
-            let wants_close: Bool = app_has_connection_close(buf, total)
-
-            // Zero-copy parsing: null-terminate in-place in the recv buffer.
-            let method: Str = app_zerocopy_method(buf, total)
-            let path: Str = app_zerocopy_path(buf, total)
-            let body: Str = app_extract_body(buf, total)
-
-            // HEAD support: dispatch normally but only send headers
-            let is_head: Bool = str::len(method) == 4 and str::char_at(method, 0) == 72  // 'H'
-            let response: Str = app_dispatch(shared, method, path, body)
-            var send_len: I64 = str::len(response)
-            if is_head {
-                // Find \r\n\r\n and only send up to there
-                let header_end: I64 = app_find_header_end_in_str(response)
-                if header_end > 0 { send_len = header_end }
-            }
-            let sent: I64 = tml_sys_send(fd, response as *Unit, send_len)
-            if sent < 0 { break }
-            if wants_close { break }
-        }
-
-        sys_close(fd)
-    }
-
-    lowlevel { mem_free(buf as *Unit) }
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Listen — binds, spawns thread pool, accepts connections
-// ════════════════════════════════════════════════════════════════════
-
-pub func app_listen(table: I64, count: I64, trees: I64, mw_table: I64, mw_count: I64,
-                    read_timeout: I64, write_timeout: I64, idle_timeout: I64, port: I64) {
-    let num_workers: I64 = cpu_count() as I64
-    if num_workers < 1 { return }
-
-    println("TML HTTP Server")
-    println("  Port:       " + port.to_string())
-    println("  Workers:    " + num_workers.to_string() + " (thread pool)")
-    println("  Keep-Alive: yes")
-    println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
-    println("  Middleware:  " + mw_count.to_string())
-    println("  Routes:     " + count.to_string())
-    println("")
-
-    var i: I64 = 0
-    loop (i < count) {
-        let offset: I64 = i * ENTRY_SIZE
-        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
-        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
-        println("  " + m + "\t" + p)
-        i = i + 1
-    }
-    println("")
-
-    let listener: I64 = app_bind_listener(port)
-    if listener < 0 {
-        println("ERROR: could not bind to port " + port.to_string())
-        return
-    }
-    println("Listening on http://localhost:" + port.to_string())
-
-    // Allocate shared state
-    let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    // Zero everything
-    var z: I64 = 0
-    loop (z < SHARED_SIZE) {
-        lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
-        z = z + 1
-    }
-    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
-    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
-
-    // Init thread pool queue
-    let queue_buf: I64 = lowlevel { mem_alloc(QUEUE_CAP * 8) } as I64
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_BUF) as *I64, queue_buf) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_CAP) as *I64, QUEUE_CAP) }
-
-    // Init mutex and condvar
-    let mutex_ptr: I64 = shared + OFF_MUTEX
-    let condvar_ptr: I64 = shared + OFF_CONDVAR
-    tml_mutex_init(mutex_ptr as *Unit)
-    tml_condvar_init(condvar_ptr as *Unit)
-
-    // Spawn worker threads
-    var w: I64 = 0
-    loop (w < num_workers) {
-        let h: U64 = raw_thread_spawn(app_worker as *Unit, shared as *Unit, 0 as U64)
-        if h != 0 as U64 {
-            raw_thread_detach(h)
-        }
-        w = w + 1
-    }
-
-    // Accept loop — push fds into the queue for workers
-    loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
-        if shutdown != 0 { break }
-
-        let fd: I64 = sys_accept(listener)
-        if fd < 0 { continue }
-
-        let ok: Bool = queue_push(shared, fd)
-        if not ok {
-            // Queue full — reject connection
-            let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            tml_sys_send(fd, reject as *Unit, str::len(reject))
-            sys_close(fd)
-        }
-    }
-
-    sys_close(listener)
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Event Loop — non-blocking I/O via std::net::eventloop
-// ════════════════════════════════════════════════════════════════════
-
-// Per-connection state: [0] fd, [8] buf, [16] used, [24] state (0=read,1=write)
-// [32] resp_ptr, [40] resp_len, [48] resp_sent
-const CONN_STRIDE_EV: I64 = 56
-const CONN_FD: I64 = 0
-const CONN_BUF: I64 = 8
-const CONN_USED: I64 = 16
-const CONN_STATE: I64 = 24
-const CONN_RESP: I64 = 32
-const CONN_RESP_LEN: I64 = 40
-const CONN_RESP_SENT: I64 = 48
-const MAX_CONNS_PER_WORKER: I64 = 1024
-
-// Worker state: [0] shared, [8] mutex_ptr, [16] new_fds_buf, [24] new_fds_count, [32] new_fds_cap
-const WSTATE_SIZE: I64 = 40
-const WS_SHARED: I64 = 0
-const WS_MUTEX: I64 = 8
-const WS_NEW_FDS: I64 = 16
-const WS_NEW_FDS_COUNT: I64 = 24
-const WS_NEW_FDS_CAP: I64 = 32
-
-func conn_get(conns: I64, idx: I64, field: I64) -> I64 {
-    lowlevel { ptr_read[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64) }
-}
-
-func conn_set(conns: I64, idx: I64, field: I64, val: I64) {
-    lowlevel { ptr_write[I64]((conns + idx * CONN_STRIDE_EV + field) as *I64, val) }
-}
-
-/// Event loop worker thread. Each worker owns an EventLoop + connection table.
-pub func app_evloop_worker(arg: *Unit) {
-    let ws: I64 = arg as I64
-    let shared: I64 = lowlevel { ptr_read[I64]((ws + WS_SHARED) as *I64) }
-    let mutex_ptr: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
-
-    // Each worker creates its own EventLoop — thread-local, no sharing needed
-    var ev: EventLoop = EventLoop::new(256)
-    let conns_mem: I64 = MAX_CONNS_PER_WORKER * CONN_STRIDE_EV
-    let conns: I64 = lowlevel { mem_alloc(conns_mem) } as I64
-    var conn_count: I64 = 0
-
-    loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
-        if shutdown != 0 { break }
-
-        // Drain new connections from accept thread
-        tml_mutex_lock(mutex_ptr as *Unit)
-        let new_count: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_COUNT) as *I64) }
-        let new_buf: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS) as *I64) }
-        var ni: I64 = 0
-        loop (ni < new_count and conn_count < MAX_CONNS_PER_WORKER) {
-            let fd: I64 = lowlevel { ptr_read[I64]((new_buf + ni * 8) as *I64) }
-            ev.make_nonblocking(fd)
-            tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-            let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
-            conn_set(conns, conn_count, CONN_FD, fd)
-            conn_set(conns, conn_count, CONN_BUF, buf)
-            conn_set(conns, conn_count, CONN_USED, 0)
-            conn_set(conns, conn_count, CONN_STATE, 0)
-            conn_set(conns, conn_count, CONN_RESP, 0)
-            conn_set(conns, conn_count, CONN_RESP_LEN, 0)
-            conn_set(conns, conn_count, CONN_RESP_SENT, 0)
-            ev.register(fd, conn_count, Interest::readable())
-            conn_count = conn_count + 1
-            ni = ni + 1
-        }
-        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
-        tml_mutex_unlock(mutex_ptr as *Unit)
-
-        // Poll for I/O events (10ms timeout)
-        let n: I64 = ev.poll(10)
-        if n <= 0 { continue }
-
-        var ei: I64 = 0
-        loop (ei < n) {
-            let event: Event = ev.event_at(ei)
-            let idx: I64 = event.token()
-
-            if idx < 0 or idx >= conn_count { ei = ei + 1; continue }
-            let fd: I64 = conn_get(conns, idx, CONN_FD)
-            if fd <= 0 { ei = ei + 1; continue }
-
-            let state: I64 = conn_get(conns, idx, CONN_STATE)
-
-            if state == 0 and event.is_readable() {
-                // ── Reading request ──
-                let buf: I64 = conn_get(conns, idx, CONN_BUF)
-                let used: I64 = conn_get(conns, idx, CONN_USED)
-                let n_read: I64 = tml_sys_recv(fd, (buf + used) as *Unit, BUF_SIZE - used - 1)
-                if n_read <= 0 {
-                    ev.deregister(fd)
-                    sys_close(fd)
-                    lowlevel { mem_free(buf as *Unit) }
-                    conn_set(conns, idx, CONN_FD, 0)
-                } else {
-                    let new_used: I64 = used + n_read
-                    conn_set(conns, idx, CONN_USED, new_used)
-                    if app_has_header_end(buf, new_used) {
-                        lowlevel { ptr_write[U8]((buf + new_used) as *U8, 0 as U8) }
-                        let method: Str = app_zerocopy_method(buf, new_used)
-                        let path: Str = app_zerocopy_path(buf, new_used)
-                        let body: Str = app_extract_body(buf, new_used)
-                        let response: Str = app_dispatch(shared, method, path, body)
-                        let resp_len: I64 = str::len(response)
-                        conn_set(conns, idx, CONN_STATE, 1)
-                        conn_set(conns, idx, CONN_RESP, response as I64)
-                        conn_set(conns, idx, CONN_RESP_LEN, resp_len)
-                        conn_set(conns, idx, CONN_RESP_SENT, 0)
-                        conn_set(conns, idx, CONN_USED, 0)
-                        ev.reregister(fd, idx, Interest::writable())
-                    }
-                }
-            } else if state == 1 and event.is_writable() {
-                // ── Writing response ──
-                let resp: I64 = conn_get(conns, idx, CONN_RESP)
-                let resp_len: I64 = conn_get(conns, idx, CONN_RESP_LEN)
-                let sent: I64 = conn_get(conns, idx, CONN_RESP_SENT)
-                let remaining: I64 = resp_len - sent
-                if remaining > 0 {
-                    let n_sent: I64 = tml_sys_send(fd, (resp + sent) as *Unit, remaining)
-                    if n_sent <= 0 {
-                        ev.deregister(fd)
-                        sys_close(fd)
-                        let buf: I64 = conn_get(conns, idx, CONN_BUF)
-                        lowlevel { mem_free(buf as *Unit) }
-                        conn_set(conns, idx, CONN_FD, 0)
-                    } else {
-                        conn_set(conns, idx, CONN_RESP_SENT, sent + n_sent)
-                        if sent + n_sent >= resp_len {
-                            // Response done → back to reading (keep-alive)
-                            conn_set(conns, idx, CONN_STATE, 0)
-                            conn_set(conns, idx, CONN_RESP, 0)
-                            ev.reregister(fd, idx, Interest::readable())
-                        }
-                    }
-                }
-            }
-            ei = ei + 1
-        }
-    }
-
-    // Cleanup
-    var ci: I64 = 0
-    loop (ci < conn_count) {
-        let fd: I64 = conn_get(conns, ci, CONN_FD)
-        if fd > 0 {
-            sys_close(fd)
-            let buf: I64 = conn_get(conns, ci, CONN_BUF)
-            lowlevel { mem_free(buf as *Unit) }
-        }
-        ci = ci + 1
-    }
-    lowlevel { mem_free(conns as *Unit) }
-    ev.destroy()
-}
-
-/// Event-loop based listen. Each worker runs its own poller.
-/// Accept thread distributes connections round-robin to workers.
-pub func app_listen_evloop(table: I64, count: I64, trees: I64, mw_table: I64, mw_count: I64,
-                           read_timeout: I64, write_timeout: I64, idle_timeout: I64, port: I64) {
-    let num_workers: I64 = cpu_count() as I64
-    if num_workers < 1 { return }
-
-    println("TML HTTP Server (event loop)")
-    println("  Port:       " + port.to_string())
-    println("  Workers:    " + num_workers.to_string() + " (event loop, non-blocking)")
-    println("  Keep-Alive: yes")
-    println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
-    println("  Middleware:  " + mw_count.to_string())
-    println("  Routes:     " + count.to_string())
-    println("")
-
-    var i: I64 = 0
-    loop (i < count) {
-        let offset: I64 = i * ENTRY_SIZE
-        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
-        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
-        println("  " + m + "\t" + p)
-        i = i + 1
-    }
-    println("")
-
-    let listener: I64 = app_bind_listener(port)
-    if listener < 0 {
-        println("ERROR: could not bind to port " + port.to_string())
-        return
-    }
-    println("Listening on http://localhost:" + port.to_string())
-
-    // Allocate shared state (same as thread pool version)
-    let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    var z: I64 = 0
-    loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
-    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
-    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
-
-    // Create per-worker state (lightweight — worker creates its own EventLoop)
-    let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
-    var w: I64 = 0
-    loop (w < num_workers) {
-        let ws: I64 = lowlevel { mem_alloc(WSTATE_SIZE) } as I64
-        var wz: I64 = 0
-        loop (wz < WSTATE_SIZE) { lowlevel { ptr_write[U8]((ws + wz) as *U8, 0 as U8) }; wz = wz + 1 }
-        let mutex: I64 = lowlevel { mem_alloc(64) } as I64
-        tml_mutex_init(mutex as *Unit)
-        let new_fds_cap: I64 = 256
-        let new_fds: I64 = lowlevel { mem_alloc(2048) } as I64
-        lowlevel { ptr_write[I64]((ws + WS_SHARED) as *I64, shared) }
-        lowlevel { ptr_write[I64]((ws + WS_MUTEX) as *I64, mutex) }
-        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS) as *I64, new_fds) }
-        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
-        lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_CAP) as *I64, new_fds_cap) }
-        lowlevel { ptr_write[I64]((workers + w * 8) as *I64, ws) }
-        let h: U64 = raw_thread_spawn(app_evloop_worker as *Unit, ws as *Unit, 0 as U64)
-        if h != 0 as U64 { raw_thread_detach(h) }
-        w = w + 1
-    }
-
-    // Accept loop — round-robin distribute to workers
-    var rr: I64 = 0
-    loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
-        if shutdown != 0 { break }
-        let fd: I64 = sys_accept(listener)
-        if fd < 0 { continue }
-        // Push fd to worker's new_fds queue
-        let ws: I64 = lowlevel { ptr_read[I64]((workers + rr * 8) as *I64) }
-        let mutex: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
-        tml_mutex_lock(mutex as *Unit)
-        let new_count: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_COUNT) as *I64) }
-        let new_cap: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS_CAP) as *I64) }
-        let new_buf: I64 = lowlevel { ptr_read[I64]((ws + WS_NEW_FDS) as *I64) }
-        if new_count < new_cap {
-            lowlevel { ptr_write[I64]((new_buf + new_count * 8) as *I64, fd) }
-            lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, new_count + 1) }
-            tml_mutex_unlock(mutex as *Unit)
-        } else {
-            tml_mutex_unlock(mutex as *Unit)
-            // Worker queue full — close
-            let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            tml_sys_send(fd, reject as *Unit, str::len(reject))
-            sys_close(fd)
-        }
-        rr = (rr + 1) % num_workers
-    }
-
-    sys_close(listener)
-}
-
-// ── Zero-copy HTTP parsing ──────────────────────────────────────
-// These functions null-terminate in-place in the recv buffer, returning
-// a Str that points directly into the buffer. No allocations.
-// The caller's buffer is modified but that's fine — we only read method/path
-// once per request before overwriting with the next recv.
-
-/// Zero-copy method extraction. Overwrites the space after method with \0.
-/// Returns Str pointing into buf. "GET /path HTTP/1.1\r\n" → "GET"
-pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len and i < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c == 32 as U8 {
-            lowlevel { ptr_write[U8]((buf + i) as *U8, 0 as U8) }
-            return buf as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-/// Zero-copy path extraction. Overwrites the space/? after path with \0.
-/// Returns Str pointing into buf. Assumes method was already null-terminated.
-/// Scans from start of buf to find the first space (end of method), then
-/// the path starts at the next byte.
-pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
-    // Find start: skip past the null-terminated method + the null byte
-    var start: I64 = 0
-    loop (start < len and start < 10) {
-        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 0 as U8 {
-            start = start + 1
-            break
-        }
-        start = start + 1
-    }
-    let path_start: I64 = start
-    var end: I64 = start
-    loop (end < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
-        if c == 32 as U8 or c == 63 as U8 { break }
-        end = end + 1
-    }
-    if end <= path_start { return "/" }
-    lowlevel { ptr_write[U8]((buf + end) as *U8, 0 as U8) }
-    return (buf + path_start) as Str
-}
-
-// ── Allocating HTTP parsing (kept for external use) ────────────
-
-pub func app_extract_method(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len and i < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c == 32 as U8 {
-            let p: I64 = lowlevel { mem_alloc(i + 1) } as I64
-            lowlevel { copy_nonoverlapping(buf as *Unit, p as *Unit, i) }
-            lowlevel { ptr_write[U8]((p + i) as *U8, 0 as U8) }
-            return p as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-pub func app_extract_path(buf: I64, len: I64) -> Str {
-    var start: I64 = 0
-    loop (start < len and start < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
-        if c == 32 as U8 { start = start + 1; break }
-        start = start + 1
-    }
-    var end: I64 = start
-    loop (end < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
-        if c == 32 as U8 or c == 63 as U8 { break }
-        end = end + 1
-    }
-    let path_len: I64 = end - start
-    if path_len <= 0 { return "/" }
-    let p: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
-    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, path_len) }
-    lowlevel { ptr_write[U8]((p + path_len) as *U8, 0 as U8) }
-    return p as Str
-}
-
-pub func app_extract_body(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len - 3) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            let body_start: I64 = i + 4
-            let body_len: I64 = len - body_start
-            if body_len <= 0 { return "" }
-            let p: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
-            lowlevel { copy_nonoverlapping((buf + body_start) as *Unit, p as *Unit, body_len) }
-            lowlevel { ptr_write[U8]((p + body_len) as *U8, 0 as U8) }
-            return p as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-pub func app_has_header_end(buf: I64, len: I64) -> Bool {
-    if len < 4 { return false }
-    var i: I64 = 3
-    loop (i < len) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            return true
-        }
-        i = i + 1
-    }
-    return false
-}
-
-/// Check if request has "Connection: close" header.
-/// Scans raw recv buffer for case-insensitive "connection: close".
-pub func app_has_connection_close(buf: I64, len: I64) -> Bool {
-    // Simple scan for "onnection: close" (skip first char for case insensitivity)
-    var i: I64 = 0
-    loop (i < len - 16) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        // Check for 'o' or 'O' followed by "nnection: close"
-        if (c == 111 as U8 or c == 79 as U8) {
-            let n1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
-            let n2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
-            if (n1 == 110 as U8 or n1 == 78 as U8) and (n2 == 110 as U8 or n2 == 78 as U8) {
-                // Check "ection: close" at i+3
-                let e: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
-                if e == 101 as U8 or e == 69 as U8 {
-                    // Check ": close" or ":close" after "onnection"
-                    var j: I64 = i + 10  // skip past "onnection"
-                    // Find ':'
-                    loop (j < i + 14 and j < len) {
-                        if lowlevel { ptr_read[U8]((buf + j) as *U8) } == 58 as U8 { break }
-                        j = j + 1
-                    }
-                    if j < len {
-                        j = j + 1
-                        // Skip spaces
-                        loop (j < len and lowlevel { ptr_read[U8]((buf + j) as *U8) } == 32 as U8) {
-                            j = j + 1
-                        }
-                        // Check "close"
-                        if j + 5 <= len {
-                            let c1: U8 = lowlevel { ptr_read[U8]((buf + j) as *U8) }
-                            let c2: U8 = lowlevel { ptr_read[U8]((buf + j + 1) as *U8) }
-                            if (c1 == 99 as U8 or c1 == 67 as U8) and (c2 == 108 as U8 or c2 == 76 as U8) {
-                                return true
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        i = i + 1
-    }
-    return false
-}
-
-/// Find the end of headers (\r\n\r\n) in a response string. Returns position after \r\n\r\n, or 0.
-pub func app_find_header_end_in_str(s: Str) -> I64 {
-    let len: I64 = str::len(s)
-    let buf: I64 = s as I64
-    var i: I64 = 3
-    loop (i < len) {
-        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
-            return i + 1
-        }
-        i = i + 1
-    }
-    return 0
-}
-
-pub func app_bind_listener(port: I64) -> I64 {
-    let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
-    if sock < 0 { return -1 }
-    tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
-    if tml_sys_bind_v4(sock, 0, port as I32) < 0 { sys_close(sock); return -1 }
-    if tml_sys_listen(sock, 2048) < 0 { sys_close(sock); return -1 }
-    return sock
 }
