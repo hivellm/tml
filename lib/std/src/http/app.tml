@@ -30,7 +30,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use std::http::router::{Router, RouteMatch}
+use std::http::router::{RouteMatch, NODE_STATIC, insert, find_in_tree, node_new}
 
 // ── FFI ─────────────────────────────────────────────────────────
 @extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
@@ -185,10 +185,37 @@ impl AppContext {
 // App — route registration + server config
 // ════════════════════════════════════════════════════════════════════
 
+// Method index: fixed slots for O(1) method→tree lookup
+const METHOD_GET: I64 = 0
+const METHOD_POST: I64 = 1
+const METHOD_PUT: I64 = 2
+const METHOD_DELETE: I64 = 3
+const METHOD_PATCH: I64 = 4
+const METHOD_HEAD: I64 = 5
+const METHOD_COUNT: I64 = 6
+
+func method_index(method: Str) -> I64 {
+    // Fast path: check first char then length
+    let len: I64 = str::len(method)
+    if len == 3 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 71 { return METHOD_GET }     // 'G'
+        if c == 80 { return METHOD_PUT }     // 'P' + len=3
+    }
+    if len == 4 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 80 { return METHOD_POST }    // 'P' + len=4
+        if c == 72 { return METHOD_HEAD }    // 'H'
+    }
+    if len == 5 { return METHOD_PATCH }
+    if len == 6 { return METHOD_DELETE }
+    return -1
+}
+
 pub type App {
     table: I64,
     count: I64,
-    router_ptr: I64,
+    trees: I64,
     mw_table: I64,
     mw_count: I64,
     read_timeout: I64,
@@ -200,16 +227,17 @@ impl App {
     pub func new() -> App {
         let table: I64 = lowlevel { mem_alloc(MAX_HANDLERS * ENTRY_SIZE) } as I64
         let mw_table: I64 = lowlevel { mem_alloc(MAX_MIDDLEWARE * 8) } as I64
-        // Heap-allocate Router so it survives thread sharing
-        let router: Router = Router::new()
-        let router_heap: I64 = lowlevel { mem_alloc(8) } as I64
-        let stack_addr: I64 = (ref router) as I64
-        let handle_val: I64 = lowlevel { ptr_read[I64](stack_addr as *I64) }
-        lowlevel { ptr_write[I64](router_heap as *I64, handle_val) }
+        // Fixed array of 6 radix tree roots (one per HTTP method), all initialized to 0
+        let trees: I64 = lowlevel { mem_alloc(METHOD_COUNT * 8) } as I64
+        var t: I64 = 0
+        loop (t < METHOD_COUNT) {
+            lowlevel { ptr_write[I64]((trees + t * 8) as *I64, 0 as I64) }
+            t = t + 1
+        }
         return App {
             table: table,
             count: 0,
-            router_ptr: router_heap,
+            trees: trees,
             mw_table: mw_table,
             mw_count: 0,
             read_timeout: 30000,
@@ -219,23 +247,23 @@ impl App {
     }
 
     pub func get(mut this, path: Str, handler: func(AppContext) -> Str) {
-        app_register(this.table, ref this.count, this.router_ptr, "GET", path, handler)
+        app_register(this.table, ref this.count, this.trees, "GET", path, handler)
     }
 
     pub func post(mut this, path: Str, handler: func(AppContext) -> Str) {
-        app_register(this.table, ref this.count, this.router_ptr, "POST", path, handler)
+        app_register(this.table, ref this.count, this.trees, "POST", path, handler)
     }
 
     pub func put(mut this, path: Str, handler: func(AppContext) -> Str) {
-        app_register(this.table, ref this.count, this.router_ptr, "PUT", path, handler)
+        app_register(this.table, ref this.count, this.trees, "PUT", path, handler)
     }
 
     pub func delete(mut this, path: Str, handler: func(AppContext) -> Str) {
-        app_register(this.table, ref this.count, this.router_ptr, "DELETE", path, handler)
+        app_register(this.table, ref this.count, this.trees, "DELETE", path, handler)
     }
 
     pub func patch(mut this, path: Str, handler: func(AppContext) -> Str) {
-        app_register(this.table, ref this.count, this.router_ptr, "PATCH", path, handler)
+        app_register(this.table, ref this.count, this.trees, "PATCH", path, handler)
     }
 
     /// Register a middleware function. Middlewares run in order before the handler.
@@ -256,7 +284,7 @@ impl App {
     pub func set_idle_timeout(mut this, ms: I64) { this.idle_timeout = ms }
 
     pub func listen(this, port: I64) {
-        app_listen(this.table, this.count, this.router_ptr, this.mw_table, this.mw_count,
+        app_listen(this.table, this.count, this.trees, this.mw_table, this.mw_count,
                    this.read_timeout, this.write_timeout, this.idle_timeout, port)
     }
 }
@@ -285,37 +313,30 @@ pub func app_status_text(code: I64) -> Str {
     return "OK"
 }
 
-pub func app_register(table: I64, count: mut ref I64, router_ptr: I64, method: Str, path: Str, handler: func(AppContext) -> Str) {
+pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, path: Str, handler: func(AppContext) -> Str) {
     if count >= MAX_HANDLERS { return }
     let handler_id: I64 = count + 1
     let offset: I64 = count * ENTRY_SIZE
+    // Handler table: flat array for O(1) lookup by handler_id (1-indexed)
     lowlevel { ptr_write[I64]((table + offset) as *I64, method as I64) }
     lowlevel { ptr_write[I64]((table + offset + 8) as *I64, path as I64) }
     lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler as I64) }
-    // Register in radix-tree router
-    let router_ref: I64 = lowlevel { ptr_read[I64](router_ptr as *I64) }
-    // Router.on(method, path, handler_id) — call via the HashMap handle
-    // We need to reconstruct the Router from its heap pointer and call .on()
-    // Since Router = { methods: HashMap } = { handle: *Unit } = 8 bytes,
-    // router_ptr points to 8 bytes containing the HashMap handle.
-    // We call the free functions from router.tml directly via the radix tree insert.
-    app_router_register(router_ref, method, path, handler_id)
+    // Insert into radix-tree for O(log n) path matching with params/wildcards
+    let idx: I64 = method_index(method)
+    if idx >= 0 {
+        var root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
+        if root == 0 {
+            root = node_new("/", NODE_STATIC)
+            lowlevel { ptr_write[I64]((trees + idx * 8) as *I64, root) }
+        }
+        insert(root, path, handler_id)
+    }
     count = count + 1
-}
-
-/// Register a route in the Router's radix tree.
-/// router_handle is the HashMap[Str,I64] handle value (the *Unit inside Router).
-func app_router_register(router_handle: I64, method: Str, path: Str, handler_id: I64) {
-    // We can't call Router.on() because we only have the raw handle.
-    // Instead, replicate the logic: get or create the method's tree root, then insert.
-    // HashMap operations work on the handle directly.
-    // For now, fall back to the linear table for dispatch (Router integration comes next iteration).
-    // The router_handle is stored for future use.
 }
 
 pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
     let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
-    let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
+    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
     let mw_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_TABLE) as *I64) }
     let mw_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_COUNT) as *I64) }
 
@@ -332,7 +353,8 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
         mw_idx = mw_idx + 1
     }
 
-    // Linear scan dispatch (fast for <64 routes, O(n))
+    // Fast path: exact match via linear scan (O(n) but no allocations, fast for <64 routes)
+    let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
     var i: I64 = 0
     loop (i < count) {
         let offset: I64 = i * ENTRY_SIZE
@@ -344,6 +366,22 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
             return handler(ctx)
         }
         i = i + 1
+    }
+
+    // Slow path: radix-tree lookup for parametric/wildcard routes
+    let idx: I64 = method_index(method)
+    if idx >= 0 {
+        let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
+        if root != 0 {
+            let rm: RouteMatch = find_in_tree(root, path)
+            if rm.found {
+                let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
+                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                // TODO: pass rm to AppContext for param extraction
+                return handler(ctx)
+            }
+        }
     }
     return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n" + "{" + "\"error\":\"not found\"" + "}"
 }
@@ -467,7 +505,7 @@ pub func app_worker(arg: *Unit) {
 // Listen — binds, spawns thread pool, accepts connections
 // ════════════════════════════════════════════════════════════════════
 
-pub func app_listen(table: I64, count: I64, router_ptr: I64, mw_table: I64, mw_count: I64,
+pub func app_listen(table: I64, count: I64, trees: I64, mw_table: I64, mw_count: I64,
                     read_timeout: I64, write_timeout: I64, idle_timeout: I64, port: I64) {
     let num_workers: I64 = cpu_count() as I64
     if num_workers < 1 { return }
@@ -508,7 +546,7 @@ pub func app_listen(table: I64, count: I64, router_ptr: I64, mw_table: I64, mw_c
     }
     lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
     lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, router_ptr) }
+    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
     lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
     lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
     lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }

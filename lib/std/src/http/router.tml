@@ -181,7 +181,7 @@ func zero_memory(addr: I64, size: I64) {
 }
 
 /// Allocate a new node with the given prefix and kind.
-func node_new(prefix: Str, kind: I64) -> I64 {
+pub func node_new(prefix: Str, kind: I64) -> I64 {
     let mem: *Unit = lowlevel { mem_alloc(NODE_SIZE) }
     let addr: I64 = mem as I64
     zero_memory(addr, NODE_SIZE)
@@ -400,7 +400,7 @@ func insert_static_child(parent: I64, text: Str) -> I64 {
 }
 
 /// Insert a route pattern into the tree rooted at `root`.
-func insert(root: I64, path: Str, handler_id: I64) {
+pub func insert(root: I64, path: Str, handler_id: I64) {
     let path_len: I64 = str::len(path)
     var current: I64 = root
     var pos: I64 = 0
@@ -489,7 +489,7 @@ func insert(root: I64, path: Str, handler_id: I64) {
 /// The algorithm walks the tree character-by-character using prefix matching.
 /// When a static match fails, it backtracks to try parametric/wildcard alternatives.
 /// Priority: static > parametric > wildcard.
-func find_in_tree(root: I64, path: Str) -> RouteMatch {
+pub func find_in_tree(root: I64, path: Str) -> RouteMatch {
     let param_names: List[Str] = List[Str].new(4)
     let param_values: List[Str] = List[Str].new(4)
     let stack: List[I64] = List[I64].new(16)
