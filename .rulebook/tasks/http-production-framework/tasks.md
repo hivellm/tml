@@ -1,61 +1,66 @@
-# Tasks: HTTP Framework — Production-Ready
+# Tasks: HTTP Framework — 500K req/s Target
 
-**Status**: IN_PROGRESS (March 2026)
+**Status**: IN_PROGRESS (March 2026) — Currently ~50K req/s
 
-## Phase 1: Wire Router + Buffer Responses (target: 80K req/s)
+## Critical Bugs (must fix first)
+
+- [ ] B.1 Fix GlobalModuleCache serving stale source code (use hash, not timestamp)
+- [ ] B.2 Radix-tree dispatch returns 404 in multi-thread (caused by B.1)
+
+## Phase 1: Zero-Allocation Hot Path (target: 150-200K req/s)
 
 - [x] 1.1 Thread pool with mutex+condvar ring buffer
-- [x] 1.2 Middleware pipeline (app.use_middleware)
-- [x] 1.3 Read/write/idle timeouts via SO_RCVTIMEO/SO_SNDTIMEO
-- [x] 1.4 Graceful shutdown flag in shared state
-- [x] 1.5 AppContext.html(), .redirect() response helpers
-- [x] 1.6 Queue overflow protection (503 when full)
-- [x] 1.7 Wire Router radix-tree to app_dispatch (hybrid: exact match fast path + radix tree fallback)
-- [x] 1.8 AppContext.param("name") working with RouteMatch (stack-allocated, zero heap)
-- [x] 1.9 Buffer-based response builder (single alloc + copy_nonoverlapping)
-- [x] 1.10 Pre-built common headers (Server: TML, Connection: keep-alive)
-- [x] 1.11 Request size limits (BUF_SIZE=8KB header cap, MAX_BODY_SIZE=1MB constant)
-- [ ] 1.12 Error recovery (catch handler panics, return 500)
+- [x] 1.2 Middleware pipeline
+- [x] 1.3 Timeouts, graceful shutdown, queue overflow
+- [x] 1.4 Router radix-tree + inline lookup
+- [x] 1.5 Buffer response builder (single alloc)
+- [x] 1.6 Zero-copy HTTP parsing (method/path)
+- [x] 1.7 Connection: close, HEAD support, error recovery guards
+- [ ] 1.8 Per-worker pre-allocated response buffer (eliminate mem_alloc per request)
+- [ ] 1.9 Pre-computed status lines as constants ("HTTP/1.1 200 OK\r\n")
+- [ ] 1.10 Inline I64-to-ASCII for Content-Length (no to_string() allocation)
+- [ ] 1.11 Stack-allocated params_buf and ctx_data (no mem_alloc for radix tree dispatch)
 
-## Phase 2: Zero-Copy Parsing + Arena (target: 150K req/s)
+## Phase 2: IOCP on Windows (target: 300-400K req/s)
 
-- [ ] 2.1 Zero-copy HTTP parser (parse method/path/headers as slices into recv buffer)
-- [ ] 2.2 Arena allocator for per-request allocations (bulk free on request end)
-- [ ] 2.3 writev() for scatter-gather response writes (headers + body without copy)
-- [ ] 2.4 Pipelined request support (parse multiple requests from single recv)
-- [ ] 2.5 Connection: close handling (honor client request)
-- [ ] 2.6 Transfer-Encoding: chunked request body parsing
-- [ ] 2.7 Expect: 100-continue support
-- [ ] 2.8 HEAD method support (send headers only, no body)
+- [ ] 2.1 C runtime: tml_iocp_create, tml_iocp_associate, tml_iocp_get_completion
+- [ ] 2.2 C runtime: tml_iocp_post_accept (AcceptEx with pre-posted buffers)
+- [ ] 2.3 C runtime: tml_iocp_post_recv (WSARecv with overlapped I/O)
+- [ ] 2.4 C runtime: tml_iocp_post_send (WSASend with overlapped I/O)
+- [ ] 2.5 TML: std::net::iocp module (IOCompletionPort, Completion, OverlappedBuffer)
+- [ ] 2.6 TML: app.listen() uses IOCP backend (workers block on GetQueuedCompletionStatus)
+- [ ] 2.7 Pre-post 4 AcceptEx calls at all times (async accept pipeline)
+- [ ] 2.8 Per-connection pre-allocated recv buffer (zero kernel-copy on WSARecv)
 
-## Phase 3: Async I/O (target: 400K req/s)
+## Phase 3: Connection Pipeline (target: 400-500K req/s)
 
-- [x] 3.1 WSAPoll/epoll wrapper (std::net::eventloop — EventLoop, Interest, Event)
-- [x] 3.2 Event loop runtime (per-worker EventLoop with connection table)
-- [x] 3.3 Async accept (non-blocking listener + round-robin distribution)
-- [x] 3.4 Async recv (non-blocking read with header detection)
-- [x] 3.5 Async send (non-blocking write with state machine buffering)
-- [ ] 3.6 Timer wheel for timeout management (no per-socket setsockopt)
-- [ ] 3.7 Work-stealing thread pool (multiple event loops)
-- [ ] 3.8 Backpressure: pause accept when all workers busy
+- [ ] 3.1 Non-blocking send with per-connection write buffer
+- [ ] 3.2 Scatter/gather I/O (WSASend with header+body buffers, no copy)
+- [ ] 3.3 Pre-computed response cache for static routes
+- [ ] 3.4 Lock-free MPSC queue per worker (replace mutex ring buffer)
+- [ ] 3.5 Request pipelining support
+- [ ] 3.6 Connection memory pool (slab allocator for fixed-size conn state)
 
 ## Phase 4: Production Hardening
 
-- [ ] 4.1 Graceful shutdown with connection draining (finish in-flight, reject new)
-- [ ] 4.2 Signal handler (Ctrl+C triggers shutdown)
-- [ ] 4.3 Access logging middleware (timestamp, method, path, status, duration)
-- [ ] 4.4 Rate limiter middleware (token bucket per IP)
-- [ ] 4.5 CORS middleware (preflight, allowed origins/methods/headers)
-- [ ] 4.6 Static file serving (MIME types, ETag, Range)
-- [ ] 4.7 JSON body parser middleware (auto-parse Content-Type: application/json)
-- [ ] 4.8 Request ID middleware (X-Request-Id header)
-- [ ] 4.9 Health check endpoint (/health with configurable checks)
-- [ ] 4.10 Metrics endpoint (/metrics — connections, requests, latency histogram)
+- [ ] 4.1 Graceful shutdown with connection draining
+- [ ] 4.2 Signal handler (Ctrl+C)
+- [ ] 4.3 Access logging middleware
+- [ ] 4.4 CORS middleware
+- [ ] 4.5 JSON body parser middleware
+- [ ] 4.6 Static file serving
+- [ ] 4.7 Rate limiter middleware
 
-## Phase 5: TLS + HTTP/2
+## Done (reference)
 
-- [ ] 5.1 TLS via OpenSSL FFI (already have bindings in std::net::tls)
-- [ ] 5.2 ALPN negotiation for HTTP/2
-- [ ] 5.3 HTTP/2 framing (HPACK, streams, flow control)
-- [ ] 5.4 Server push
-- [ ] 5.5 Auto-redirect HTTP→HTTPS
+- [x] Thread pool (32 workers), 50K req/s
+- [x] EventLoop abstraction (std::net::eventloop)
+- [x] WSAPoll/epoll event loop (22K req/s — limited by WSAPoll O(n))
+- [x] Buffer response builder with Server: TML header
+- [x] Radix-tree inline lookup (app_find_route)
+- [x] AppContext.param() with fixed-size param buffer
+- [x] Zero-copy method/path parsing
+- [x] Connection: close detection
+- [x] HEAD method support with GET fallback
+- [x] Null fn_ptr guard (500 response)
+- [x] Compiler: GlobalModuleCache timestamp validation (partial fix)

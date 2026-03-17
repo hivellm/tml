@@ -158,9 +158,11 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     if (GlobalModuleCache::should_cache(module_path)) {
         auto& cache = GlobalModuleCache::instance();
         if (auto cached_module = cache.get(module_path)) {
-            // Validate that the cached module is still fresh by checking if meta
-            // file hash matches current source. This prevents stale modules from
-            // persisting when library source files are edited.
+            // Validate cached module freshness using source content hash.
+            // The GlobalModuleCache persists for the lifetime of the compiler process.
+            // If library source files change between builds (or within the same build
+            // when meta files are regenerated), the in-memory cache may hold stale modules.
+            // We compare the current source hash against the meta file's stored hash.
             bool cache_valid = true;
             {
                 std::string lib_subdir, rest;
@@ -183,18 +185,24 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                     }
                     std::string src = resolve_lib_module_path(lib_subdir, "src", fs_rest);
                     if (!src.empty()) {
-                        // Check if the meta cache file is older than the source
-                        namespace fs = std::filesystem;
-                        auto build_root = find_build_root();
-                        auto cache_path = get_module_cache_path(module_path, build_root);
-                        if (!cache_path.empty() && fs::exists(cache_path) && fs::exists(src)) {
-                            auto meta_time = fs::last_write_time(cache_path);
-                            auto src_time = fs::last_write_time(src);
-                            if (src_time > meta_time) {
-                                TML_LOG_DEBUG("types", "[MODULE] GlobalCache stale for: "
-                                                           << module_path
-                                                           << " (source newer than meta)");
-                                cache_valid = false;
+                        // Compute hash of current source and compare against meta file
+                        uint64_t current_hash = compute_module_source_hash(src);
+                        if (current_hash != 0) {
+                            auto build_root = find_build_root();
+                            auto cache_path = get_module_cache_path(module_path, build_root);
+                            if (!cache_path.empty() && std::filesystem::exists(cache_path)) {
+                                std::ifstream meta_in(cache_path, std::ios::binary);
+                                if (meta_in) {
+                                    ModuleBinaryReader header_reader(meta_in);
+                                    uint64_t cached_hash = header_reader.read_header_hash();
+                                    if (!header_reader.has_error() && cached_hash != current_hash) {
+                                        TML_LOG_DEBUG("types", "[MODULE] GlobalCache stale for: "
+                                                                   << module_path << " (hash "
+                                                                   << current_hash << " vs "
+                                                                   << cached_hash << ")");
+                                        cache_valid = false;
+                                    }
+                                }
                             }
                         }
                     }

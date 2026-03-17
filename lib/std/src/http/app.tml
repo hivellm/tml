@@ -378,6 +378,67 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
     count = count + 1
 }
 
+/// Check if a route pattern contains ':' (parametric segment).
+func app_pattern_has_param(pattern: Str) -> Bool {
+    let len: I64 = str::len(pattern)
+    var i: I64 = 0
+    loop (i < len) {
+        if str::char_at(pattern, i) == 58 { return true }  // ':'
+        i = i + 1
+    }
+    return false
+}
+
+/// Match a pattern like "/users/:id/posts" against a path like "/users/42/posts".
+/// Returns true if match, stores extracted params in params_buf.
+func app_pattern_match(pattern: Str, path: Str, params_buf: I64, pc: mut ref I64) -> Bool {
+    let pat_len: I64 = str::len(pattern)
+    let path_len: I64 = str::len(path)
+    var pp: I64 = 0  // pattern position
+    var xp: I64 = 0  // path position
+
+    loop (pp < pat_len and xp < path_len) {
+        if str::char_at(pattern, pp) == 58 {
+            // Parametric segment: extract param name and value
+            let name_start: I64 = pp + 1
+            var name_end: I64 = name_start
+            loop (name_end < pat_len and str::char_at(pattern, name_end) != 47) {
+                name_end = name_end + 1
+            }
+            // Extract path value until next '/'
+            var val_end: I64 = xp
+            loop (val_end < path_len and str::char_at(path, val_end) != 47) {
+                val_end = val_end + 1
+            }
+            if pc < MAX_PARAMS {
+                // Name from pattern
+                let name_len: I64 = name_end - name_start
+                let nbuf: I64 = lowlevel { mem_alloc(name_len + 1) } as I64
+                lowlevel { copy_nonoverlapping((pattern as I64 + name_start) as *Unit, nbuf as *Unit, name_len) }
+                lowlevel { ptr_write[U8]((nbuf + name_len) as *U8, 0 as U8) }
+                // Value from path
+                let val_len: I64 = val_end - xp
+                let vbuf: I64 = lowlevel { mem_alloc(val_len + 1) } as I64
+                lowlevel { copy_nonoverlapping((path as I64 + xp) as *Unit, vbuf as *Unit, val_len) }
+                lowlevel { ptr_write[U8]((vbuf + val_len) as *U8, 0 as U8) }
+                app_store_param(params_buf, pc, nbuf as Str, vbuf as Str)
+                pc = pc + 1
+            }
+            pp = name_end
+            xp = val_end
+        } else {
+            // Static character must match exactly
+            if str::char_at(pattern, pp) != str::char_at(path, xp) {
+                return false
+            }
+            pp = pp + 1
+            xp = xp + 1
+        }
+    }
+    // Both must be consumed (or pattern ends with param that consumed rest of path)
+    return pp >= pat_len and xp >= path_len
+}
+
 const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
 const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
 const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
@@ -581,27 +642,42 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
         mw_idx = mw_idx + 1
     }
 
-    // Fast path: exact match via linear scan (zero allocations, hot for static routes)
+    // Route matching: linear scan with pattern matching for :param segments
     let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
     var i: I64 = 0
     loop (i < count) {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
-        if m == method and p == path {
-            let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-            if fn_ptr == 0 { return RESPONSE_500 }
-            let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-            return handler(ctx)
+        if m == method {
+            if p == path {
+                // Exact match — fast path, no params
+                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                if fn_ptr == 0 { return RESPONSE_500 }
+                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                return handler(ctx)
+            }
+            // Check if pattern has ':' (parametric route)
+            if app_pattern_has_param(p) {
+                let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+                var pc: I64 = 0
+                if app_pattern_match(p, path, params_buf, ref pc) {
+                    let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                    if fn_ptr == 0 { lowlevel { mem_free(params_buf as *Unit) }; return RESPONSE_500 }
+                    let ctx_data: I64 = lowlevel { mem_alloc(16) } as I64
+                    lowlevel { ptr_write[I64](ctx_data as *I64, params_buf) }
+                    lowlevel { ptr_write[I64]((ctx_data + 8) as *I64, pc) }
+                    let param_ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: ctx_data }
+                    let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                    let result: Str = handler(param_ctx)
+                    lowlevel { mem_free(params_buf as *Unit) }
+                    lowlevel { mem_free(ctx_data as *Unit) }
+                    return result
+                }
+                lowlevel { mem_free(params_buf as *Unit) }
+            }
         }
         i = i + 1
-    }
-
-    // Slow path: radix-tree for parametric/wildcard routes
-    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
-    let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
-    if str::len(tree_result) > 0 {
-        return tree_result
     }
 
     // HEAD fallback: try GET handlers if HEAD has no specific route
@@ -620,9 +696,33 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
             }
             j = j + 1
         }
-        // Try radix tree with GET
-        let get_result: Str = app_dispatch_tree(table, trees, "GET", path, body)
-        if str::len(get_result) > 0 { return get_result }
+        // Pattern matching for GET routes with params (HEAD fallback)
+        var k: I64 = 0
+        loop (k < count) {
+            let koff: I64 = k * ENTRY_SIZE
+            let km: Str = lowlevel { ptr_read[I64]((table + koff) as *I64) } as Str
+            let kp: Str = lowlevel { ptr_read[I64]((table + koff + 8) as *I64) } as Str
+            if km == "GET" and app_pattern_has_param(kp) {
+                let pb: I64 = lowlevel { mem_alloc(128) } as I64
+                var kpc: I64 = 0
+                if app_pattern_match(kp, path, pb, ref kpc) {
+                    let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + koff + 16) as *I64) }
+                    if fn_ptr != 0 {
+                        let cd: I64 = lowlevel { mem_alloc(16) } as I64
+                        lowlevel { ptr_write[I64](cd as *I64, pb) }
+                        lowlevel { ptr_write[I64]((cd + 8) as *I64, kpc) }
+                        let hctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: cd }
+                        let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                        let res: Str = handler(hctx)
+                        lowlevel { mem_free(pb as *Unit) }
+                        lowlevel { mem_free(cd as *Unit) }
+                        return res
+                    }
+                }
+                lowlevel { mem_free(pb as *Unit) }
+            }
+            k = k + 1
+        }
     }
 
     return RESPONSE_404
