@@ -218,6 +218,31 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
 
     // Check if it's a function reference (first-class function)
     auto func_it = functions_.find(ident.name);
+
+    // If not found by bare name, try qualifying with current_module_name_ (:: separated).
+    // This handles intra-module function references like `app_conn_handler as *Unit`
+    // inside library modules where functions are registered with qualified names
+    // (e.g., "std::http::app::app_conn_handler") but not bare names.
+    if (func_it == functions_.end() && !current_module_name_.empty() &&
+        ident.name.find("::") == std::string::npos) {
+        std::string qualified = current_module_name_ + "::" + ident.name;
+        func_it = functions_.find(qualified);
+    }
+
+    // Also try current_module_prefix_ (underscore-separated) converted to :: format.
+    // This handles cases where the module name format differs.
+    if (func_it == functions_.end() && !current_module_prefix_.empty() &&
+        ident.name.find("::") == std::string::npos) {
+        std::string module_path = current_module_prefix_;
+        size_t pos = 0;
+        while ((pos = module_path.find("_", pos)) != std::string::npos) {
+            module_path.replace(pos, 1, "::");
+            pos += 2;
+        }
+        std::string qualified = module_path + "::" + ident.name;
+        func_it = functions_.find(qualified);
+    }
+
     if (func_it != functions_.end()) {
         const FuncInfo& func = func_it->second;
         last_expr_type_ = "ptr"; // Function pointers are ptr type in LLVM

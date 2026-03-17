@@ -10,7 +10,10 @@ pub mod status
 pub mod version
 pub mod headers
 pub mod error
-pub mod encoding
+// encoding and compression are NOT declared as pub mod to avoid pulling in
+// std::zlib (zstd/brotli/zlib DLLs) for all std::http users.
+// Import directly: use std::http::encoding::{compress, decompress}
+// or: use std::http::compression::{CompressionOptions, compress_response}
 pub mod cookie
 pub mod chunked
 pub mod functions
@@ -42,7 +45,7 @@ pub mod app
 
 // ── Middleware & Framework ───────────────────────────────────
 pub mod cors
-pub mod compression
+// compression removed from pub mod — see encoding note above
 pub mod security
 pub mod etag
 pub mod stream
@@ -59,7 +62,8 @@ pub use std::http::headers::Headers
 pub use std::http::error::{HttpError, HttpErrorKind}
 pub use std::http::cookie::Cookie
 pub use std::http::router::{Router, RouteMatch}
-pub use std::http::encoding::{compress, decompress, accepted_encodings}
+// NOTE: encoding re-exports removed to avoid pulling in std::zlib (zstd/brotli/zlib DLLs)
+// when only core HTTP types are needed. Import directly: use std::http::encoding::{compress, decompress}
 pub use std::http::connection::{Connection, ConnectionInfo}
 pub use std::http::request::Request
 pub use std::http::response::Response
@@ -74,7 +78,8 @@ pub use std::http::agent::{Agent, AgentOptions}
 pub use std::http::content_type::{parse_content_type, matches_type, negotiate}
 pub use std::http::body_parser::{ParsedBody, parse_body, form_get, url_decode}
 pub use std::http::cors::{CorsOptions, cors_headers, preflight_headers, is_preflight}
-pub use std::http::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
+// NOTE: compression re-exports removed to avoid pulling in std::zlib (zstd/brotli/zlib DLLs).
+// Import directly: use std::http::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
 pub use std::http::security::{SecurityOptions, security_headers}
 pub use std::http::etag::{generate, generate_weak, is_not_modified}
 pub use std::http::stream::{SseEvent, sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_headers, ndjson_line}
