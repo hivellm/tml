@@ -1,238 +1,102 @@
 # Control Flow
 
-Control flow lets you run code conditionally and repeat code. TML provides
-`if` expressions and several loop constructs.
+Control flow lets your program make decisions and repeat work. TML provides:
+
+- `if` expressions for conditional branching
+- The `loop` keyword as the unified construct for all loop styles
+- The `when` expression for pattern matching
 
 ## `if` Expressions
 
-The `if` expression lets you branch your code:
+The `if` expression evaluates a condition and runs one of two branches:
 
 ```tml
 func main() {
-    let number = 7
+    let temperature: I32 = 75
 
-    if number < 5 {
-        println("less than 5")
+    if temperature > 100 {
+        println("Boiling")
+    } else if temperature > 0 {
+        println("Liquid")
     } else {
-        println("5 or greater")
+        println("Frozen")
     }
 }
 ```
 
-### Condition Must Be Boolean
+### Conditions Must Be Boolean
 
-Unlike some languages, TML requires the condition to be a `Bool`:
+TML requires the condition to be a `Bool`. Passing an integer or other type is a compile error:
+
+```tml
+let count: I32 = 5
+
+// Error: expected Bool, found I32
+// if count { ... }
+
+// Correct: explicit comparison
+if count > 0 {
+    println("has items")
+}
+```
+
+### `if` Is an Expression
+
+In TML, `if` is an expression — it produces a value. Both branches must produce the same type:
 
 ```tml
 func main() {
-    let number = 3
-
-    // Error: number is I32, not Bool
-    // if number { ... }
-
-    // Correct: explicit comparison
-    if number != 0 {
-        println("number is not zero")
-    }
+    let x: I32 = 10
+    let label: Str = if x >= 0 { "non-negative" } else { "negative" }
+    println(label)  // non-negative
 }
 ```
 
-### `else if` Chains
-
-Handle multiple conditions with `else if`:
+For short, single-expression conditionals, use the `then` form:
 
 ```tml
-func main() {
-    let number = 6
+let abs_x: I32 = if x >= 0 then x else -x
 
-    if number % 4 == 0 {
-        println("divisible by 4")
-    } else if number % 3 == 0 {
-        println("divisible by 3")
-    } else if number % 2 == 0 {
-        println("divisible by 2")
-    } else {
-        println("not divisible by 4, 3, or 2")
-    }
-}
+let sign: Str = if x < 0 then "negative"
+                else if x > 0 then "positive"
+                else "zero"
 ```
 
-### `if` as an Expression
+The `then` form and the block form are equivalent. Use whichever reads more clearly: `then` for
+concise one-liners, blocks when the branches contain multiple statements.
 
-In TML, `if` is an expression that returns a value:
+### Ternary Conditional
+
+TML also supports the `? :` ternary operator for simple inline conditions:
 
 ```tml
-func main() {
-    let condition = true
-    let number = if condition { 5 } else { 6 }
-    println(number)  // 5
-}
+let max: I32 = a > b ? a : b
+let label: Str = is_valid ? "PASS" : "FAIL"
 ```
 
-Both branches must return the same type.
-
-### Two `if` Syntaxes: Block Form and Expression Form
-
-TML supports two syntaxes for `if` expressions:
-
-**Block form** (with braces):
-```tml
-func max(a: I32, b: I32) -> I32 {
-    let result = if a > b {
-        a
-    } else {
-        b
-    }
-    return result
-}
-```
-
-**Expression form** (with `then` keyword):
-```tml
-func max(a: I32, b: I32) -> I32 {
-    return if a > b then a else b
-}
-
-func abs(x: I32) -> I32 {
-    return if x < 0 then -x else x
-}
-
-func sign(x: I32) -> String {
-    return if x < 0 then
-        "negative"
-    else if x > 0 then
-        "positive"
-    else
-        "zero"
-}
-```
-
-Both syntaxes work identically—choose based on readability.
-
-### Ternary Conditional Operator
-
-For simple conditional expressions, TML provides a ternary operator `? :`:
-
-```tml
-func main() {
-    let x = 10
-    let y = 20
-
-    // Find maximum using ternary
-    let max = x > y ? x : y
-    println(max)  // 20
-
-    // Find minimum
-    let min = x < y ? x : y
-    println(min)  // 10
-}
-```
-
-The ternary operator is an expression that evaluates to a value. Both branches must return the same type.
-
-**Nested ternary:**
-```tml
-func max_of_three(a: I32, b: I32, c: I32) -> I32 {
-    return a > b ? (a > c ? a : c) : (b > c ? b : c)
-}
-```
-
-**When to use ternary vs if:**
-- Use ternary for simple, inline conditions
-- Use if for complex logic or multiple statements
-
-```tml
-// Ternary (concise, one-liner)
-let status = is_valid ? "PASS" : "FAIL"
-
-// If-then-else (more explicit)
-let status = if is_valid then "PASS" else "FAIL"
-
-// If block (for complex logic)
-let status = if is_valid {
-    log("Validation passed")
-    "PASS"
-} else {
-    log("Validation failed")
-    "FAIL"
-}
-```
-
-### `if let` Pattern Matching
-
-Use `if let` to conditionally unwrap `Maybe` and `Outcome` values:
-
-```tml
-func get_first_item(items: List[I32]) -> String {
-    if let Just(first) = items.get(0) {
-        return "First item: " + first.to_string()
-    } else {
-        return "List is empty"
-    }
-}
-
-func load_config() -> Config {
-    let result = Config.load()
-
-    if let Ok(config) = result {
-        return config
-    } else {
-        return Config.default()
-    }
-}
-```
-
-You can also handle errors with binding:
-
-```tml
-func try_parse(input: String) -> I32 {
-    let result = input.parse_i32()
-
-    if let Err(error) = result {
-        println("Parse failed: " + error.message)
-        return 0
-    }
-
-    if let Ok(value) = result {
-        return value
-    }
-
-    return 0
-}
-```
-
-`if let` works with any pattern, including nested patterns:
-
-```tml
-func process_nested(data: Maybe[Outcome[String, Error]]) -> String {
-    if let Just(result) = data {
-        if let Ok(value) = result {
-            return value
-        }
-    }
-    return "failed"
-}
-```
+The ternary operator and `if ... then ... else ...` are interchangeable for single-expression
+conditions. Prefer `if ... then ... else ...` when the expression approaches the line length
+limit, since it is easier to break across lines.
 
 ## Loops
 
-TML provides a unified `loop` construct with different patterns.
+TML uses a single `loop` keyword for every loop style. The variant is selected by what follows
+`loop`.
 
-### Conditional Loop
+### Counted Range Loop
 
-The `loop (condition)` runs while the condition is true:
+Iterate over a range of integers with `loop i in start to end`:
 
 ```tml
 func main() {
-    var count = 0
-    loop (count < 5) {
-        println(count)
-        count = count + 1
+    loop i in 0 to 5 {
+        println(i.to_string())
     }
 }
 ```
 
 Output:
+
 ```
 0
 1
@@ -241,421 +105,301 @@ Output:
 4
 ```
 
-The condition is checked before each iteration. You can use `break` and `continue`:
+`to` produces an exclusive range: `0 to 5` iterates over 0, 1, 2, 3, 4. The upper bound is not
+included.
+
+For an inclusive upper bound, use `through`:
 
 ```tml
 func main() {
-    var i = 0
-    loop (i < 10) {
-        i = i + 1
-        if i % 2 == 0 {
-            continue  // Skip even numbers
-        }
-        println(i)  // Only odd numbers
+    loop i in 1 through 5 {
+        println(i.to_string())
     }
-}
-```
-
-### Loop with Variable Declaration
-
-TML supports declaring loop variables inline with automatic initialization:
-
-```tml
-func main() {
-    var sum = 0
-    loop (var i: I32 < 5) {
-        sum = sum + i
-        i = i + 1
-    }
-    println(sum)  // 10 (0 + 1 + 2 + 3 + 4)
-}
-```
-
-The `loop (var name: Type < limit)` syntax:
-- Declares a new variable `name` of type `Type`
-- Initializes it to `0`
-- Continues while `name < limit`
-- The variable must be manually incremented inside the loop
-
-This is useful for index-based iteration:
-
-```tml
-func main() {
-    loop (var i: I64 < 10) {
-        println(i)
-        i = i + 1
-    }
-}
-```
-
-### Infinite Loop
-
-For infinite loops, use `loop (true)`:
-
-```tml
-func main() {
-    var count = 0
-    loop (true) {
-        println(count)
-        count = count + 1
-        if count >= 5 {
-            break
-        }
-    }
-}
-```
-
-### `while` Loop (Alias)
-
-The `while` keyword is supported as an alias for `loop (condition)`:
-
-```tml
-func main() {
-    var count = 0
-    while count < 5 {
-        println(count)
-        count = count + 1
-    }
-}
-```
-
-This is equivalent to `loop (count < 5) { ... }`.
-
-### `for` Loop with Ranges
-
-Use `for` to iterate over ranges:
-
-```tml
-func main() {
-    // 0 to 4 (exclusive end)
-    for i in 0 to 5 {
-        println(i)
-    }
-}
-```
-
-Use `through` for inclusive end:
-
-```tml
-func main() {
-    // 1 through 5 (inclusive)
-    for i in 1 through 5 {
-        println(i)
-    }
-}
-```
-
-### `for` Loop with Collections
-
-You can iterate directly over collections like `List`, `Vec`, `HashMap`, and `Buffer`:
-
-```tml
-func main() {
-    let list = list_create(5)
-    list_push(list, 10)
-    list_push(list, 20)
-    list_push(list, 30)
-
-    // Iterate over list elements
-    for item in list {
-        println(item)
-    }
-
-    list_destroy(list)
 }
 ```
 
 Output:
+
 ```
-10
-20
-30
+1
+2
+3
+4
+5
 ```
 
-This works with any collection type:
+`through` produces an inclusive range: `1 through 5` iterates over 1, 2, 3, 4, 5.
+
+### Iterating Over a Collection
+
+Iterate over any collection — arrays, lists, slices — with `loop item in collection`:
 
 ```tml
-func sum_list(numbers: List) -> I32 {
-    var total = 0
-    for num in numbers {
-        total = total + num
+func main() {
+    let scores: [I32; 4] = [10, 20, 30, 40]
+    loop score in scores {
+        println(score.to_string())
     }
-    return total
-}
-
-func main() {
-    let list = list_create(3)
-    list_push(list, 5)
-    list_push(list, 10)
-    list_push(list, 15)
-
-    let result = sum_list(list)
-    println("Sum: ", result)  // Sum: 30
-
-    list_destroy(list)
 }
 ```
 
-**Note:** Collection iteration is currently experimental. For HashMap, it iterates over values. Future versions will support key-value pair iteration.
+This works with any type that implements the `Iter` behavior. Standard library collections such
+as `List[T]` and `HashMap[K, V]` all support this form.
 
-### `continue`
+### Conditional Loop
 
-Skip to the next iteration with `continue`:
+Run a block while a condition holds with `loop while condition`:
 
 ```tml
 func main() {
-    for i in 0 to 10 {
-        if i % 2 == 0 {
-            continue  // Skip even numbers
+    var count: I32 = 0
+    loop while count < 5 {
+        println(count.to_string())
+        count = count + 1
+    }
+}
+```
+
+Output:
+
+```
+0
+1
+2
+3
+4
+```
+
+The condition is evaluated before each iteration. When it becomes false, the loop stops.
+
+### Infinite Loop
+
+A bare `loop` with no qualifier runs forever until `break` is reached:
+
+```tml
+func main() {
+    var attempts: I32 = 0
+    loop {
+        attempts = attempts + 1
+        if attempts >= 3 {
+            break
         }
-        println(i)  // Only odd numbers
+        println("Trying...")
+    }
+    println("Done after ${attempts.to_string()} attempts.")
+}
+```
+
+Infinite loops are common when polling for an event or implementing a server that processes
+requests until shutdown.
+
+### `break` and `continue`
+
+`break` exits the nearest enclosing loop. `continue` skips to the next iteration:
+
+```tml
+func main() {
+    loop i in 0 to 20 {
+        if i % 2 == 0 {
+            continue   // skip even numbers
+        }
+        if i > 10 {
+            break      // stop after 10
+        }
+        println(i.to_string())
     }
 }
+```
+
+Output:
+
+```
+1
+3
+5
+7
+9
 ```
 
 ### Nested Loops
 
-You can nest loops and break out of them:
+`break` and `continue` apply to the nearest enclosing loop:
 
 ```tml
 func main() {
-    loop (var i: I32 < 3) {
-        loop (var j: I32 < 3) {
-            println(i, ", ", j)
-            j = j + 1
-        }
-        i = i + 1
-    }
-}
-```
-
-Or using conditional loops:
-
-```tml
-func main() {
-    var i = 0
-    loop (i < 3) {
-        var j = 0
-        loop (j < 3) {
-            println(i, ", ", j)
-            j = j + 1
-        }
-        i = i + 1
-    }
-}
-```
-
-## Example: FizzBuzz
-
-A classic example combining control flow concepts:
-
-```tml
-func main() {
-    for i in 1 through 20 {
-        if i % 15 == 0 {
-            println("FizzBuzz")
-        } else if i % 3 == 0 {
-            println("Fizz")
-        } else if i % 5 == 0 {
-            println("Buzz")
-        } else {
-            println(i)
+    loop i in 0 to 3 {
+        loop j in 0 to 3 {
+            if j == 1 {
+                continue   // continues the inner loop
+            }
+            println("${i.to_string()}, ${j.to_string()}")
         }
     }
 }
 ```
 
-## Example: Sum of Numbers
+## `when` — Pattern Matching
+
+The `when` expression matches a value against a set of patterns and evaluates the corresponding
+arm. It is TML's equivalent of `match` (Rust) or `switch` (C, Java).
+
+### Basic Usage
 
 ```tml
-func main() {
-    var sum = 0
-    for i in 1 through 10 {
-        sum = sum + i
-    }
-    println("Sum: ", sum)  // Sum: 55
-}
-```
-
-## Pattern Matching with `when`
-
-The `when` expression is TML's powerful pattern matching construct (similar to `match` in Rust or `switch` in other languages). It lets you compare a value against patterns and execute code based on which pattern matches.
-
-### Basic Syntax
-
-```tml
-func describe_number(n: I32) -> String {
+func describe(n: I32) -> Str {
     return when n {
         0 => "zero",
         1 => "one",
         2 => "two",
-        _ => "other"
+        _ => "something else",
     }
+}
+
+func main() {
+    println(describe(1))   // one
+    println(describe(99))  // something else
 }
 ```
 
-The `_` is a wildcard pattern that matches anything. Each arm is separated by commas.
+The `_` wildcard matches any value that no earlier arm matched. Every `when` expression must be
+exhaustive — the compiler rejects a `when` that can fall through without a match.
 
-### Block Bodies
+Arms are separated by commas. The last arm may include a trailing comma or omit it.
 
-Each arm can have a block with multiple statements:
+### `when` Is an Expression
+
+Like `if`, `when` produces a value. All arms must have the same type:
 
 ```tml
-func process_number(n: I32) -> I32 {
+let day_name: Str = when day_number {
+    1 => "Monday",
+    2 => "Tuesday",
+    3 => "Wednesday",
+    4 => "Thursday",
+    5 => "Friday",
+    6 => "Saturday",
+    7 => "Sunday",
+    _ => "invalid",
+}
+```
+
+### Block Arms
+
+When an arm needs multiple statements, use a block. The last expression in the block is the
+value of the arm:
+
+```tml
+func process(n: I32) -> I32 {
     return when n {
         0 => {
-            let x: I32 = 10
-            let y: I32 = 20
-            x + y  // Last expression is the return value
+            println("Got zero")
+            0
         },
-        1 => {
-            let a: I32 = 100
-            a * 2
+        _ => {
+            let doubled = n * 2
+            doubled + 1
         },
-        _ => n * n
     }
 }
 ```
 
 ### Range Patterns
 
-Match ranges of values with `to` (exclusive) and `through` (inclusive):
+Match a range of values using `to` (exclusive) or `through` (inclusive):
 
 ```tml
-func classify(n: I32) -> String {
-    return when n {
-        0 through 9 => "single digit",
-        10 to 100 => "two digits",
-        100 through 999 => "three digits",
-        _ => "large number"
-    }
-}
-
-// Character ranges also work
-func is_vowel(c: Char) -> Bool {
-    return when c {
-        'a' through 'e' => true,
-        'i' => true,
-        'o' => true,
-        'u' => true,
-        _ => false
-    }
-}
-```
-
-### Struct Patterns
-
-Destructure structs in patterns:
-
-```tml
-type Point {
-    x: I32,
-    y: I32,
-}
-
-func classify_point(p: Point) -> String {
-    return when p {
-        Point { x, y } => {
-            if x == 0 and y == 0 {
-                "origin"
-            } else if x == 0 {
-                "on y-axis"
-            } else if y == 0 {
-                "on x-axis"
-            } else {
-                "elsewhere"
-            }
-        }
-    }
-}
-
-func sum_point(p: Point) -> I32 {
-    return when p {
-        Point { x, y } => x + y
-    }
-}
-```
-
-### Tuple Patterns
-
-Destructure tuples in patterns:
-
-```tml
-func swap(pair: (I32, I32)) -> (I32, I32) {
-    return when pair {
-        (a, b) => (b, a)
-    }
-}
-
-func sum_triple(t: (I32, I32, I32)) -> I32 {
-    return when t {
-        (a, b, c) => a + b + c
-    }
-}
-```
-
-### Array Patterns
-
-Destructure arrays in patterns:
-
-```tml
-func first_element(arr: [I32; 3]) -> I32 {
-    return when arr {
-        [a, _, _] => a
-    }
-}
-
-func sum_array(arr: [I32; 3]) -> I32 {
-    return when arr {
-        [a, b, c] => a + b + c
+func grade(score: I32) -> Str {
+    return when score {
+        90 through 100 => "A",
+        80 through 89  => "B",
+        70 through 79  => "C",
+        60 through 69  => "D",
+        _              => "F",
     }
 }
 ```
 
 ### Enum Patterns
 
-Match enum variants:
+`when` is the primary way to work with enum values. The standard library types `Maybe[T]` and
+`Outcome[T, E]` are enums, and `when` destructures them naturally:
 
 ```tml
-type Maybe[T] {
-    Just(T),
-    Nothing
-}
-
-func unwrap_or(m: Maybe[I32], default: I32) -> I32 {
+func describe_maybe(m: Maybe[I32]) -> Str {
     return when m {
-        Just(value) => value,
-        Nothing => default
+        Just(value) => "has value: ${value.to_string()}",
+        Nothing     => "empty",
     }
 }
 
-type Outcome[T, E] {
-    Ok(T),
-    Err(E)
-}
-
-func handle_result(r: Outcome[I32, String]) -> I32 {
+func handle_result(r: Outcome[I32, Str]) -> I32 {
     return when r {
         Ok(value) => value,
-        Err(msg) => {
-            println("Error: " + msg)
+        Err(msg)  => {
+            println("Error: ${msg}")
             -1
-        }
+        },
     }
 }
 ```
 
+`Maybe` and `Outcome` are introduced in Chapter 7. The key point for now: `when` is how you
+examine which variant an enum holds and extract the data inside it.
+
 ### Compared to Traditional `switch`
 
-| Traditional Switch (C/Java) | TML `when` |
-|-----------------------------|-----------|
-| `case 1: { code; break; }` | `1 => { code }` |
-| Fall-through by default | Each arm isolated (no fall-through) |
+| `switch` (C/Java) | `when` (TML) |
+|-------------------|--------------|
+| `case 1: { ... break; }` | `1 => { ... },` |
+| Falls through by default | No fall-through |
 | `default:` | `_ =>` |
-| Statement (no return value) | Expression (returns value) |
-| Only matches literals | Supports pattern matching |
+| Statement only | Expression — returns a value |
+| Matches literals only | Matches literals, ranges, enums, structs |
 
-TML's `when` is:
-- **Safer**: No accidental fall-through
-- **More expressive**: Returns values, supports destructuring
-- **Cleaner syntax**: No `break` statements needed
+`when` is safer than `switch` (no accidental fall-through), more expressive (pattern matching),
+and cleaner (no `break` statements).
+
+## Combining Control Flow
+
+Here is a complete example that uses all of the constructs introduced in this section:
+
+```tml
+func fizzbuzz(limit: I32) {
+    loop i in 1 through limit {
+        let label: Str = if i % 15 == 0 then "FizzBuzz"
+                         else if i % 3 == 0 then "Fizz"
+                         else if i % 5 == 0 then "Buzz"
+                         else i.to_string()
+        println(label)
+    }
+}
+
+func main() {
+    fizzbuzz(20)
+}
+```
+
+Output:
+
+```
+1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+FizzBuzz
+16
+17
+Fizz
+19
+Buzz
+```

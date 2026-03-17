@@ -1,24 +1,19 @@
 # Getting Started
 
-Let's start your TML journey! There's a lot to learn, but every journey
-starts somewhere. In this chapter, we'll:
+This chapter gets you from a fresh machine to running TML code. It covers three things:
 
-- Install the TML compiler
-- Write our first TML program
-- Learn about the `tml` command line tool
+1. Installing the TML compiler and toolchain
+2. Writing and running your first TML program
+3. Learning the basic `tml` CLI commands you will use every day
 
-## Installing TML
+TML ships as a single self-contained binary. There is no separate LLVM installation, no system linker to configure, and no package manager to set up before you can compile your first program. Download the binary, add it to your PATH, and you are ready.
 
-The first step is to install TML. The TML compiler is **self-contained** — it
-includes an embedded LLVM backend and LLD linker, so you don't need to install
-any external tools to compile and link TML programs.
+## What to Expect
 
-## Writing Your First Program
+By the end of this chapter you will have:
 
-After installation, we'll write the traditional "Hello, World!" program.
-This simple program will verify your installation is working correctly.
+- A working TML installation verified with `tml --version`
+- A `hello.tml` file that compiles and runs
+- Familiarity with `tml run`, `tml build`, and `tml check`
 
-## Using the TML CLI
-
-TML comes with a command-line tool that handles compiling and running
-your programs. We'll learn the basic commands you'll use daily.
+The next chapter introduces the core language concepts: variables, types, functions, comments, and control flow. Everything in that chapter assumes you have a working installation, so complete this chapter first.

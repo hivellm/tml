@@ -1,105 +1,148 @@
 # Functions
 
-Functions are the building blocks of readable, reusable code. You've
-already seen one function: `main`. Let's learn how to define your own.
+Functions are the primary unit of reuse in TML. You have already seen `main`. This section
+covers how to define your own functions, how parameters and return types work, and how
+expression bodies and early returns interact.
 
-## Defining Functions
+## Defining a Function
 
-Use the `func` keyword to define a function:
+Use the `func` keyword, followed by the function name, a parameter list in parentheses, an
+optional return type, and a body in curly braces:
 
 ```tml
-func main() {
-    println("Hello from main!")
-    greet()
-}
-
 func greet() {
     println("Hello!")
 }
+
+func main() {
+    greet()
+}
 ```
 
-Functions can be defined in any order. TML will find them.
+Functions can be defined in any order within a file. TML resolves names across the file, so
+calling a function before its definition is valid.
 
 ## Parameters
 
-Functions can take parameters:
+Each parameter has a name and a type, separated by a colon. Multiple parameters are separated
+by commas:
 
 ```tml
-func main() {
-    greet("Alice")
-    greet("Bob")
-}
-
-func greet(name: Str) {
-    println("Hello, ", name, "!")
-}
-```
-
-Multiple parameters are separated by commas:
-
-```tml
-func main() {
-    let result = add(5, 3)
-    println(result)  // 8
-}
-
 func add(a: I32, b: I32) -> I32 {
     return a + b
 }
+
+func main() {
+    let result = add(5, 3)
+    println(result.to_string())  // 8
+}
 ```
+
+The parameter types are mandatory. TML does not infer parameter types.
 
 ## Return Values
 
-Use `->` to specify the return type:
+Specify the return type with `->` after the parameter list:
 
 ```tml
-func add(a: I32, b: I32) -> I32 {
-    return a + b
+func square(x: I32) -> I32 {
+    return x * x
 }
 ```
 
-### Implicit Returns
+### Expression Body
 
-The last expression in a function is implicitly returned:
+The last expression in a function body is implicitly returned when no semicolon follows it and
+no explicit `return` is written:
 
 ```tml
-func add(a: I32, b: I32) -> I32 {
-    a + b  // No semicolon = return value
+func square(x: I32) -> I32 {
+    x * x   // returned implicitly
 }
 ```
 
-### Early Returns
+Both forms are valid. Use whichever reads more clearly. For short, single-expression functions,
+the implicit form is common. For functions with multiple steps, `return` is often clearer.
 
-Use `return` to exit early:
+### Early Return
+
+`return` exits the function immediately with the given value:
 
 ```tml
-func check(x: I32) -> Str {
-    if x < 0 {
+func classify(n: I32) -> Str {
+    if n < 0 {
         return "negative"
     }
-    if x == 0 {
+    if n == 0 {
         return "zero"
     }
     return "positive"
 }
 ```
 
-## Functions Returning Nothing
+### Functions That Return Nothing
 
-Functions that don't return a value have return type `Unit` (implied):
+A function that performs an action but produces no value has return type `Unit`. You can omit
+the return type annotation entirely, and TML infers `Unit`:
 
 ```tml
-func say_hello() {
-    println("Hello!")
-    // Implicitly returns Unit
+func log_message(msg: Str) {
+    println("[LOG] " + msg)
 }
 
-func say_hello_explicit() -> Unit {
-    println("Hello!")
+// Equivalent explicit annotation:
+func log_message_explicit(msg: Str) -> Unit {
+    println("[LOG] " + msg)
 }
 ```
 
-## Function Examples
+## Reference Parameters
+
+By default, function arguments are passed by value — the function receives a copy. For types
+that are expensive to copy, or when the function needs to observe the caller's value without
+copying it, use a reference parameter:
+
+```tml
+func length(s: ref Str) -> U64 {
+    return s.len()
+}
+```
+
+`ref T` is a shared (immutable) reference. The function can read through the reference but
+cannot modify the value it points to.
+
+For a function that needs to modify the caller's value, use a mutable reference:
+
+```tml
+func append_exclamation(s: mut ref Str) {
+    s.push_str("!")
+}
+```
+
+`mut ref T` is a mutable reference. Only one mutable reference to a value may exist at a time;
+the borrow checker enforces this. References and ownership are covered in depth in Chapter 8.
+
+## Multiple Return Values
+
+Return a tuple to hand back more than one value:
+
+```tml
+func min_max(a: I32, b: I32) -> (I32, I32) {
+    if a < b {
+        return (a, b)
+    }
+    return (b, a)
+}
+
+func main() {
+    let result = min_max(7, 3)
+    let lo = result.0   // 3
+    let hi = result.1   // 7
+    println("min: ${lo.to_string()}, max: ${hi.to_string()}")
+}
+```
+
+## Examples
 
 ### Factorial
 
@@ -112,7 +155,8 @@ func factorial(n: I32) -> I32 {
 }
 
 func main() {
-    println(factorial(5))  // 120
+    println(factorial(5).to_string())   // 120
+    println(factorial(10).to_string())  // 3628800
 }
 ```
 
@@ -127,239 +171,88 @@ func fibonacci(n: I32) -> I32 {
 }
 
 func main() {
-    let i = 0
-    loop {
-        if i >= 10 {
-            break
-        }
-        println(fibonacci(i))
-        i = i + 1
+    loop i in 0 to 10 {
+        println(fibonacci(i).to_string())
     }
 }
 ```
 
-## Function Types
+## Closures
 
-Functions can be used as values in TML. Use `func(Args) -> Return` syntax for function types:
-
-```tml
-// Function type alias
-type BinaryOp = func(I32, I32) -> I32
-
-func apply_op(a: I32, b: I32, op: BinaryOp) -> I32 {
-    return op(a, b)
-}
-
-func add(x: I32, y: I32) -> I32 {
-    return x + y
-}
-
-func main() {
-    let result = apply_op(5, 3, add)
-    println(result)  // 8
-}
-```
-
-### Common Function Type Patterns
-
-```tml
-// Predicate (returns Bool)
-type Predicate[T] = func(T) -> Bool
-
-// Mapper (transforms one type to another)
-type Mapper[T, U] = func(T) -> U
-
-// Comparator (compares two values)
-type Comparator[T] = func(T, T) -> I32
-
-// Callback (no return value)
-type Callback = func() -> ()
-```
-
-## Closures (Anonymous Functions)
-
-Use the `do` keyword to create anonymous functions (closures):
+Anonymous functions are written with the `do` keyword:
 
 ```tml
 func main() {
-    // Simple closure
     let double = do(x: I32) -> I32 x * 2
 
-    println(double(5))  // 10
-    println(double(7))  // 14
+    println(double(5).to_string())   // 10
+    println(double(21).to_string())  // 42
 }
 ```
 
-### Closure Syntax
-
-Closures can have single-expression or block bodies:
+The body can be a single expression (shown above) or a block:
 
 ```tml
-// Single expression
-let increment = do(x: I32) -> I32 x + 1
-
-// Block body
-let complex = do(x: I32) -> I32 {
-    let doubled = x * 2
-    let incremented = doubled + 1
-    return incremented
-}
-```
-
-### Using Closures with Higher-Order Functions
-
-```tml
-func filter[T](items: List[T], pred: func(T) -> Bool) -> List[T] {
-    var result = List.new()
-    loop item in items {
-        if pred(item) {
-            result.push(item)
-        }
+let clamp = do(x: I32, lo: I32, hi: I32) -> I32 {
+    if x < lo {
+        return lo
     }
-    return result
-}
-
-func map[T, U](items: List[T], mapper: func(T) -> U) -> List[U] {
-    var result = List.new()
-    loop item in items {
-        result.push(mapper(item))
+    if x > hi {
+        return hi
     }
-    return result
-}
-
-func main() {
-    let numbers = [1, 2, 3, 4, 5, 6]
-
-    // Filter even numbers
-    let evens = filter(numbers, do(n: I32) -> Bool n % 2 == 0)
-    println(evens)  // [2, 4, 6]
-
-    // Map to doubles
-    let doubled = map(numbers, do(n: I32) -> I32 n * 2)
-    println(doubled)  // [2, 4, 6, 8, 10, 12]
-
-    // Chain operations
-    let result = map(
-        filter(numbers, do(n: I32) -> Bool n > 2),
-        do(n: I32) -> I32 n * n
-    )
-    println(result)  // [9, 16, 25, 36]
+    x
 }
 ```
 
-### Practical Closure Examples
+Closures can capture variables from the surrounding scope:
 
 ```tml
-// Sorting with custom comparator
-func sort_by[T](items: mut ref List[T], cmp: func(T, T) -> I32) {
-    // Sort using provided comparator
-    items.sort_with(cmp)
-}
-
 func main() {
-    var numbers = [5, 2, 8, 1, 9]
+    let offset: I32 = 10
+    let shift   = do(x: I32) -> I32 x + offset
 
-    // Sort ascending
-    sort_by(mut ref numbers, do(a: I32, b: I32) -> I32 a - b)
-
-    // Sort descending
-    sort_by(mut ref numbers, do(a: I32, b: I32) -> I32 b - a)
+    println(shift(5).to_string())   // 15
+    println(shift(32).to_string())  // 42
 }
 ```
 
-```tml
-// Event handlers
-type EventHandler = func(I32, I32) -> ()
-
-type Button {
-    label: String,
-    on_click: EventHandler,
-}
-
-func create_button(label: String, handler: EventHandler) -> Button {
-    return Button {
-        label: label,
-        on_click: handler,
-    }
-}
-
-func main() {
-    let button = create_button(
-        "Click me",
-        do(x: I32, y: I32) -> () {
-            println("Clicked at: ", x, ", ", y)
-        }
-    )
-
-    // Simulate click
-    button.on_click(100, 200)
-}
-```
+Closures are covered in full in Chapter 9.
 
 ## Generic Functions
 
-Functions can be generic, accepting any type that satisfies certain constraints:
+A function can operate on any type that satisfies certain constraints. Type parameters are
+written in square brackets after the function name:
 
 ```tml
-// Simple generic function
 func identity[T](value: T) -> T {
     return value
 }
 
 func main() {
-    let x = identity(42)       // T = I32
-    let y = identity("hello")  // T = Str
-    println(x)
-    println(y)
+    let n = identity(42)        // T = I32
+    let s = identity("hello")   // T = Str
+    println(n.to_string())
+    println(s)
 }
 ```
 
-### Where Clauses
-
-Use `where` to constrain generic types:
+Constraints on type parameters are written in a `where` clause:
 
 ```tml
-// T must implement Add behavior
-func double[T](value: T) -> T
-where T: Add
+func largest[T](a: T, b: T) -> T
+where T: Ord
 {
-    return value + value
-}
-
-// Multiple constraints
-func compare_and_print[T](a: T, b: T) -> Bool
-where T: Ord + Debug
-{
-    println("Comparing: {} and {}", a, b)
-    return a > b
-}
-
-func main() {
-    println(double(21))     // 42
-    println(double(3.14))   // 6.28
+    if a > b { return a }
+    return b
 }
 ```
 
-### Generic Type Bounds
+`Ord` is a behavior (TML's equivalent of a trait) that requires the type to support comparison
+operators. Behaviors are covered in Chapter 5.
 
-Common behavior bounds:
+## Naming Conventions
 
-| Bound | Description |
-|-------|-------------|
-| `Add` | Supports `+` operator |
-| `Sub` | Supports `-` operator |
-| `Ord` | Supports comparison (`<`, `>`, etc.) |
-| `Eq` | Supports equality (`==`, `!=`) |
-| `Debug` | Can be printed for debugging |
-| `Duplicate` | Can be cloned |
-| `Default` | Has a default value |
-
-## Best Practices
-
-1. **Use descriptive names**: `calculate_area` is better than `ca`
-2. **Keep functions small**: Each function should do one thing
-3. **Use snake_case**: `my_function` not `myFunction`
-4. **Document complex functions**: Explain what the function does
-5. **Use closures for short operations**: For longer logic, define named functions
-6. **Prefer function types for callbacks**: Makes APIs clearer
-7. **Use `where` clauses for complex constraints**: Keeps function signatures readable
+- Function names use `snake_case`: `parse_header`, `count_words`
+- Keep functions focused — each should do one thing
+- Parameter names describe the role, not the type: `name` not `str_param`
+- Document non-obvious functions with doc comments (covered in the next section)

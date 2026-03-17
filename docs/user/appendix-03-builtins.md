@@ -1,269 +1,360 @@
 # Appendix C - Builtin Functions
 
-TML provides several builtin functions that are always available.
+Builtin functions are available in every TML program without any `use`
+declaration. They are injected by the compiler rather than defined in a
+library module.
+
+This appendix lists all builtins, grouped by purpose. Functions that require
+a `lowlevel` block are noted explicitly.
+
+---
 
 ## I/O Functions
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `print(...)` | `(...) -> Unit` | Print values (no newline) |
-| `println(...)` | `(...) -> Unit` | Print values with newline |
+These functions write to standard output and standard error, and read from
+standard input.
 
-### Basic Usage
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `print(value)` | `Unit` | Writes `value` to stdout without a trailing newline. |
+| `println(value)` | `Unit` | Writes `value` to stdout followed by a newline. |
+| `eprint(value)` | `Unit` | Writes `value` to stderr without a trailing newline. |
+| `eprintln(value)` | `Unit` | Writes `value` to stderr followed by a newline. |
+| `read_line()` | `Str` | Reads one line from stdin and returns it without the trailing newline. |
 
-```tml
-print("Hello ")
-println("World!")  // Hello World!
-println(42)        // 42
-println(true)      // true
-```
-
-### Format Strings
-
-Both `print` and `println` support format strings with placeholders:
+`print` and `println` accept any type that implements the `Display` behavior.
+All primitive types (`I32`, `F64`, `Bool`, `Str`, etc.) implement `Display`.
 
 ```tml
-// Basic placeholder {}
-let name = "Alice"
-println("Hello, {}!", name)  // Hello, Alice!
+print("Loading")
+print(".")
+println(" done")      // Loading. done
 
-// Multiple values
-let x = 10
-let y = 20
-println("Values: {} and {}", x, y)  // Values: 10 and 20
+let name = read_line()
+println("Hello, ${name}!")
 ```
 
-### String Interpolation
+### String Interpolation in I/O
 
-TML also supports direct string interpolation with `{expr}` syntax:
+The `${}` syntax inside string literals evaluates an expression and formats it
+inline. This works everywhere a string literal is valid, not only inside print
+calls.
 
 ```tml
-let name = "Alice"
-let age = 30
-println("Hello, {name}! You are {age} years old.")
+let count = 42
+let unit = count == 1 ? "item" : "items"
+println("Found ${count} ${unit}.")
+
+// Method calls and expressions are valid inside ${}
+let values = [1, 2, 3]
+println("Length: ${values.len()}, sum: ${values.iter().sum()}")
 ```
 
-### Precision Format Specifiers
-
-Use `{:.N}` to specify decimal precision for floating-point numbers:
-
-```tml
-let pi: F64 = 3.14159265359
-
-println("{}", pi)      // 3.14159265359
-println("{:.0}", pi)   // 3
-println("{:.2}", pi)   // 3.14
-println("{:.5}", pi)   // 3.14159
-
-// Works with integers too (converts to double)
-let x: I32 = 42
-println("{:.2}", x)    // 42.00
-```
-
-**Supported Types:**
-- `Str` - Direct output
-- `I8`, `I16`, `I32`, `I64`, `I128` - Integer formatting
-- `U8`, `U16`, `U32`, `U64`, `U128` - Unsigned integer formatting
-- `F32`, `F64` - Float formatting (supports precision)
-- `Bool` - Prints "true" or "false"
-
-## Memory Functions
-
-Memory operations use `*Unit` as an opaque pointer type (similar to `void*` in C).
-
-> **Tip:** The `core::ptr` module provides `Ptr` as a convenient alias for `*Unit`:
-> ```tml
-> use core::ptr::Ptr
-> let mem: Ptr = mem_alloc(64)
-> ```
-
-### Modern Memory Intrinsics (Preferred)
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `mem_alloc(size)` | `(I64) -> *Unit` | Allocate `size` bytes |
-| `mem_free(ptr)` | `(*Unit) -> Unit` | Free allocated memory |
-| `ptr_read[T](ptr)` | `(*Unit) -> T` | Read typed value from pointer |
-| `ptr_write[T](ptr, val)` | `(*Unit, T) -> Unit` | Write typed value to pointer |
-| `ptr_offset(ptr, n)` | `(*Unit, I64) -> *Unit` | Offset pointer by `n` bytes |
-| `copy_nonoverlapping(src, dst, n)` | `(*Unit, *Unit, I64) -> Unit` | Copy `n` bytes (memcpy) |
-
-```tml
-let mem = mem_alloc(16)
-ptr_write[I64](mem, 42)
-let val = ptr_read[I64](mem)
-println("{val}")  // 42
-mem_free(mem)
-```
-
-### Legacy Memory Functions (Still Supported)
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `alloc(size)` | `(I32) -> *Unit` | Allocate bytes (size * 4 bytes) |
-| `dealloc(ptr)` | `(*Unit) -> Unit` | Free memory |
-| `read_i32(ptr)` | `(*Unit) -> I32` | Read 32-bit int |
-| `write_i32(ptr, val)` | `(*Unit, I32) -> Unit` | Write 32-bit int |
+---
 
 ## Compile-Time Constants
 
+These identifiers are resolved by the compiler at each point of use and produce
+a `Str` or `I64` value. They cannot be assigned or shadowed.
+
 | Constant | Type | Description |
 |----------|------|-------------|
-| `__FILE__` | `Str` | Path of the current source file |
-| `__DIRNAME__` | `Str` | Directory containing the current source file |
-| `__LINE__` | `I64` | Current line number |
+| `__FILE__` | `Str` | Absolute path of the current source file at compile time. |
+| `__LINE__` | `I64` | Line number of the current source location. |
+| `__DIRNAME__` | `Str` | Directory containing the current source file. |
+| `__FUNC__` | `Str` | Name of the immediately enclosing function. |
 
 ```tml
-println("File: {__FILE__}")
-println("Dir: {__DIRNAME__}")
-println("Line: {__LINE__}")
+func greet(name: Str) {
+    println("[${__FUNC__}] called from ${__FILE__}:${__LINE__}")
+    println("Hello, ${name}!")
+}
 ```
 
-## Atomic Functions
+---
 
-Atomic operations for thread-safe memory access. All functions use type-specific variants.
+## Assertion Functions
+
+Assertions verify program invariants. A failed assertion calls `panic` with a
+descriptive message that includes the source location.
+
+### General Assertions
+
+| Function | Description |
+|----------|-------------|
+| `assert(condition: Bool, message: Str)` | Panics with `message` if `condition` is `false`. |
+| `assert_true(value: Bool)` | Panics if `value` is not `true`. |
+| `assert_false(value: Bool)` | Panics if `value` is not `false`. |
+| `debug_assert(condition: Bool)` | Like `assert`, but compiled out in release builds. |
+
+### Equality Assertions
+
+| Function | Description |
+|----------|-------------|
+| `assert_eq(actual, expected)` | Panics if `actual != expected`. Prints both values on failure. |
+| `assert_ne(actual, expected)` | Panics if `actual == expected`. Prints both values on failure. |
+
+### Ordering Assertions
+
+| Function | Description |
+|----------|-------------|
+| `assert_lt(a, b)` | Panics if `a` is not less than `b`. |
+| `assert_le(a, b)` | Panics if `a` is not less than or equal to `b`. |
+| `assert_gt(a, b)` | Panics if `a` is not greater than `b`. |
+| `assert_ge(a, b)` | Panics if `a` is not greater than or equal to `b`. |
+| `assert_in_range(value, min, max)` | Panics if `value` is not in `[min, max]`. |
+
+### String Assertions
+
+| Function | Description |
+|----------|-------------|
+| `assert_str_len(s: Str, len: I64)` | Panics if `s.len() != len`. |
+| `assert_str_empty(s: Str)` | Panics if `s` is not empty. |
+| `assert_str_not_empty(s: Str)` | Panics if `s` is empty. |
+
+```tml
+let xs = [1, 2, 3]
+assert_eq(xs.len(), 3)
+assert_gt(xs[0], 0)
+assert_in_range(xs[1], 1, 5)
+
+let msg = "hello"
+assert_str_not_empty(msg)
+assert_str_len(msg, 5)
+```
+
+---
+
+## Control Functions
+
+These functions terminate the current execution path. Their return type is
+`!` (the never type), meaning they never return normally.
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `panic(message: Str)` | `!` | Terminates the program immediately with an error message and stack information. |
+| `unreachable(message: Str)` | `!` | Signals that the program reached a code path that should be impossible. Use when the compiler cannot prove the path is dead. |
+| `todo(message: Str)` | `!` | Marks an unimplemented code path. The program panics if the path is reached at runtime. |
+
+```tml
+func describe(n: I32) -> Str {
+    when n {
+        0 -> "zero"
+        1 -> "one"
+        else -> todo("extend for larger numbers")
+    }
+}
+
+func direction(deg: I32) -> Str {
+    when deg {
+        0   -> "North"
+        90  -> "East"
+        180 -> "South"
+        270 -> "West"
+        else -> unreachable("caller must normalize degrees to 0/90/180/270")
+    }
+}
+```
+
+---
+
+## Memory Intrinsics
+
+> These functions require a `lowlevel` block. Using them outside a `lowlevel`
+> block is a compile error. They correspond directly to LLVM intrinsics and
+> carry no safety guarantees.
+
+Raw memory operations use `*Unit` as an opaque pointer (equivalent to `void*`
+in C). The `core::ptr` module provides a `Ptr` type alias for convenience.
+
+### Allocation
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `mem_alloc(size: I64)` | `-> *Unit` | Allocates at least `size` bytes and returns a pointer to the first byte. The returned memory is uninitialized. |
+| `mem_free(ptr: *Unit)` | `-> Unit` | Frees memory previously returned by `mem_alloc`. Calling with any other pointer is undefined behavior. |
+
+### Typed Read / Write
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `ptr_read[T](ptr: *Unit, offset: I64)` | `-> T` | Reads a `T`-sized value from `ptr + offset` bytes. The memory must be initialized and properly aligned for `T`. |
+| `ptr_write[T](ptr: *Unit, offset: I64, value: T)` | `-> Unit` | Writes `value` to `ptr + offset` bytes. The offset must be aligned for `T`. |
+
+### Pointer Arithmetic
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `ptr_offset(ptr: *Unit, bytes: I64)` | `-> *Unit` | Returns a new pointer displaced by `bytes` from `ptr`. Equivalent to `(char*)ptr + bytes` in C. |
+| `copy_nonoverlapping(src: *Unit, dst: *Unit, bytes: I64)` | `-> Unit` | Copies `bytes` bytes from `src` to `dst`. The regions must not overlap (use `ptr_offset` to verify). |
+
+### Layout Queries
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `size_of[T]()` | `-> I64` | Returns the size in bytes of type `T` as the compiler would lay it out in memory. |
+| `align_of[T]()` | `-> I64` | Returns the required alignment in bytes of type `T`. |
+
+```tml
+lowlevel {
+    let stride = size_of[I64]()           // 8
+    let buf = mem_alloc(stride * 4)       // room for 4 I64 values
+
+    ptr_write[I64](buf, 0, 10)
+    ptr_write[I64](buf, stride, 20)
+    ptr_write[I64](buf, stride * 2, 30)
+    ptr_write[I64](buf, stride * 3, 40)
+
+    let third = ptr_read[I64](buf, stride * 2)  // 30
+    println("Third element: ${third}")
+
+    mem_free(buf)
+}
+```
+
+---
+
+## Atomic Operations
+
+> Atomic functions require a `lowlevel` block.
+
+Atomic operations guarantee visibility and ordering across threads without
+a mutex. All atomics operate on raw memory pointers; the caller is responsible
+for ensuring the pointed-to memory has the correct size and alignment.
 
 ### I32 Atomics
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `atomic_load_i32(ptr)` | `(*Unit) -> I32` | Atomic read |
-| `atomic_store_i32(ptr, val)` | `(*Unit, I32) -> Unit` | Atomic write |
-| `atomic_fetch_add_i32(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and add |
-| `atomic_fetch_sub_i32(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and subtract |
-| `atomic_swap_i32(ptr, val)` | `(*Unit, I32) -> I32` | Swap |
-| `atomic_compare_exchange_i32(ptr, exp, des)` | `(*Unit, I32, I32) -> I32` | Compare-and-exchange |
-| `atomic_and_i32(ptr, val)` | `(*Unit, I32) -> I32` | Atomic AND |
-| `atomic_or_i32(ptr, val)` | `(*Unit, I32) -> I32` | Atomic OR |
+| `atomic_load_i32(ptr: *Unit)` | `-> I32` | Reads an I32 atomically. |
+| `atomic_store_i32(ptr: *Unit, val: I32)` | `-> Unit` | Writes an I32 atomically. |
+| `atomic_add_i32(ptr: *Unit, val: I32)` | `-> I32` | Adds `val`, returns the previous value. |
+| `atomic_sub_i32(ptr: *Unit, val: I32)` | `-> I32` | Subtracts `val`, returns the previous value. |
+| `atomic_and_i32(ptr: *Unit, val: I32)` | `-> I32` | Bitwise AND, returns the previous value. |
+| `atomic_or_i32(ptr: *Unit, val: I32)` | `-> I32` | Bitwise OR, returns the previous value. |
+| `atomic_xor_i32(ptr: *Unit, val: I32)` | `-> I32` | Bitwise XOR, returns the previous value. |
+| `atomic_cas_i32(ptr: *Unit, expected: I32, desired: I32)` | `-> I32` | Compare-and-swap. If `*ptr == expected`, writes `desired`. Returns the value that was in `*ptr` before the operation. |
 
 ### I64 Atomics
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `atomic_load_i64(ptr)` | `(*Unit) -> I64` | Atomic read |
-| `atomic_store_i64(ptr, val)` | `(*Unit, I64) -> Unit` | Atomic write |
-| `atomic_fetch_add_i64(ptr, val)` | `(*Unit, I64) -> I64` | Fetch and add |
-| `atomic_fetch_sub_i64(ptr, val)` | `(*Unit, I64) -> I64` | Fetch and subtract |
-| `atomic_swap_i64(ptr, val)` | `(*Unit, I64) -> I64` | Swap |
-| `atomic_compare_exchange_i64(ptr, exp, des)` | `(*Unit, I64, I64) -> I64` | Compare-and-exchange |
+| `atomic_load_i64(ptr: *Unit)` | `-> I64` | Reads an I64 atomically. |
+| `atomic_store_i64(ptr: *Unit, val: I64)` | `-> Unit` | Writes an I64 atomically. |
+| `atomic_add_i64(ptr: *Unit, val: I64)` | `-> I64` | Adds `val`, returns the previous value. |
+| `atomic_sub_i64(ptr: *Unit, val: I64)` | `-> I64` | Subtracts `val`, returns the previous value. |
+| `atomic_cas_i64(ptr: *Unit, expected: I64, desired: I64)` | `-> I64` | Compare-and-swap, returns the previous value. |
+
+### Memory Fences
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `atomic_fence()` | `-> Unit` | Full sequential-consistency memory barrier. Prevents all reordering across the fence. |
+| `atomic_fence_acquire()` | `-> Unit` | Acquire fence. Prevents loads and stores after this point from being reordered before it. |
+| `atomic_fence_release()` | `-> Unit` | Release fence. Prevents loads and stores before this point from being reordered after it. |
 
 ```tml
-let counter = mem_alloc(4)
-atomic_store_i32(counter, 0)
+lowlevel {
+    let counter = mem_alloc(size_of[I32]())
+    atomic_store_i32(counter, 0)
 
-let old = atomic_fetch_add_i32(counter, 1)
-println("{old}")  // 0
+    // Increment and read
+    let prev = atomic_add_i32(counter, 1)   // returns 0
+    let now  = atomic_load_i32(counter)      // 1
 
-let value = atomic_load_i32(counter)
-println("{value}")  // 1
+    // Compare-and-swap loop (set to 10 only if currently 1)
+    let old = atomic_cas_i32(counter, 1, 10)
+    // old == 1 means the swap succeeded; counter is now 10
 
-mem_free(counter)
+    mem_free(counter)
+}
 ```
 
-## Memory Fences
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `atomic_fence()` | `() -> Unit` | Full memory barrier (SeqCst) |
-| `atomic_fence_acquire()` | `() -> Unit` | Acquire fence |
-| `atomic_fence_release()` | `() -> Unit` | Release fence |
-
-## Synchronization Functions
-
-### Spinlock
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `spin_lock(ptr)` | `(*Unit) -> Unit` | Acquire spinlock |
-| `spin_unlock(ptr)` | `(*Unit) -> Unit` | Release spinlock |
-| `spin_trylock(ptr)` | `(*Unit) -> Bool` | Try acquire |
-
-### Mutex
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `mutex_create()` | `() -> ptr` | Create mutex |
-| `mutex_lock(m)` | `(ptr) -> Unit` | Acquire lock |
-| `mutex_unlock(m)` | `(ptr) -> Unit` | Release lock |
-| `mutex_try_lock(m)` | `(ptr) -> Bool` | Try acquire |
-| `mutex_destroy(m)` | `(ptr) -> Unit` | Free mutex |
-
-## Channel Functions
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `channel_create()` | `() -> ptr` | Create channel |
-| `channel_send(ch, val)` | `(ptr, I32) -> Bool` | Blocking send |
-| `channel_recv(ch)` | `(ptr) -> I32` | Blocking receive |
-| `channel_try_send(ch, val)` | `(ptr, I32) -> Bool` | Non-blocking send |
-| `channel_try_recv(ch, out)` | `(ptr, ptr) -> Bool` | Non-blocking recv |
-| `channel_len(ch)` | `(ptr) -> I32` | Get length |
-| `channel_close(ch)` | `(ptr) -> Unit` | Close channel |
-| `channel_destroy(ch)` | `(ptr) -> Unit` | Free channel |
-
-## WaitGroup Functions
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `waitgroup_create()` | `() -> ptr` | Create WaitGroup |
-| `waitgroup_add(wg, n)` | `(ptr, I32) -> Unit` | Add to counter |
-| `waitgroup_done(wg)` | `(ptr) -> Unit` | Decrement counter |
-| `waitgroup_wait(wg)` | `(ptr) -> Unit` | Wait for zero |
-| `waitgroup_destroy(wg)` | `(ptr) -> Unit` | Free WaitGroup |
+---
 
 ## Thread Functions
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `thread_spawn(fn, arg)` | `(ptr, ptr) -> ptr` | Start thread |
-| `thread_join(handle)` | `(ptr) -> Unit` | Wait for thread |
-| `thread_yield()` | `() -> Unit` | Yield CPU |
-| `thread_sleep(ms)` | `(I32) -> Unit` | Sleep milliseconds |
-| `thread_id()` | `() -> I32` | Get current thread ID |
-
-## Time and Benchmarking
-
-### Deprecated Time Functions
-
-These functions are deprecated. Use the `Instant` API instead.
-
-| Function | Signature | Status |
-|----------|-----------|--------|
-| `time_ms()` | `() -> I32` | Deprecated (use `Instant::now()`) |
-| `time_us()` | `() -> I64` | Deprecated (use `Instant::now()`) |
-| `time_ns()` | `() -> I64` | Deprecated (use `Instant::now()`) |
-
-### Instant API (Recommended)
+> Thread functions require a `lowlevel` block. For higher-level concurrency,
+> prefer the `thread` module in the standard library.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `Instant::now()` | `() -> I64` | High-resolution timestamp (microseconds) |
-| `Instant::elapsed(start)` | `(I64) -> I64` | Duration since start (microseconds) |
-| `Duration::as_secs_f64(us)` | `(I64) -> F64` | Duration in seconds as float |
-| `Duration::as_millis_f64(us)` | `(I64) -> F64` | Duration in milliseconds as float |
+| `thread_spawn(fn: *Unit, arg: *Unit)` | `-> *Unit` | Starts a new OS thread. `fn` is a function pointer; `arg` is passed as its single argument. Returns an opaque thread handle. |
+| `thread_join(handle: *Unit)` | `-> Unit` | Waits for the thread identified by `handle` to finish. |
+| `thread_sleep(ms: I32)` | `-> Unit` | Suspends the current thread for at least `ms` milliseconds. |
+| `thread_yield()` | `-> Unit` | Voluntarily yields the CPU to other threads. |
+| `thread_id()` | `-> I32` | Returns a numeric identifier for the current thread. |
+
+---
+
+## Time
+
+The recommended approach is to use `Instant` and `Duration` from the standard
+library. The legacy functions listed below still work but are deprecated.
+
+### Recommended API
 
 ```tml
+use std::time::{Instant, Duration}
+
 let start = Instant::now()
 expensive_computation()
-let elapsed = Instant::elapsed(start)
-let ms = Duration::as_millis_f64(elapsed)
-println("Time: {:.3} ms", ms)
+let elapsed: Duration = start.elapsed()
+println("Finished in ${elapsed.as_millis()} ms")
 ```
 
-## Debug / Test Assertions
+### Deprecated Builtin Functions
+
+These functions are available without an import but will be removed in a future
+version.
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `time_now()` | `I64` | Current time in microseconds since an arbitrary epoch. Prefer `Instant::now()`. |
+| `time_diff(start: I64, end: I64)` | `I64` | Difference in microseconds between two `time_now()` values. |
+| `time_elapsed(start: I64)` | `I64` | Microseconds elapsed since `start`. Equivalent to `time_diff(start, time_now())`. |
+
+---
+
+## Synchronization Primitives
+
+> These functions require a `lowlevel` block. For safe concurrency, prefer
+> `Mutex`, `Channel`, and `WaitGroup` from the `std::sync` module.
+
+### Spinlock
+
+A spinlock is a busy-wait lock implemented with a single `I32` in memory.
+Suitable for very short critical sections.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `assert(cond)` | `(Bool) -> Unit` | Assert condition is true |
-| `assert_eq(a, b)` | `(T, T) -> Unit` | Assert values are equal |
-| `assert_ne(a, b)` | `(T, T) -> Unit` | Assert values are not equal |
-| `assert_true(a)` | `(Bool) -> Unit` | Assert value is true |
-| `assert_false(a)` | `(Bool) -> Unit` | Assert value is false |
-| `assert_lt(a, b)` | `(T, T) -> Unit` | Assert a < b |
-| `assert_gt(a, b)` | `(T, T) -> Unit` | Assert a > b |
-| `assert_lte(a, b)` | `(T, T) -> Unit` | Assert a <= b |
-| `assert_gte(a, b)` | `(T, T) -> Unit` | Assert a >= b |
-| `assert_in_range(val, min, max)` | `(T, T, T) -> Unit` | Assert min <= val <= max |
-| `assert_str_len(s, len)` | `(Str, I64) -> Unit` | Assert string length |
-| `assert_str_empty(s)` | `(Str) -> Unit` | Assert string is empty |
-| `assert_str_not_empty(s)` | `(Str) -> Unit` | Assert string is not empty |
+| `spin_lock(ptr: *Unit)` | `-> Unit` | Busy-waits until the lock at `ptr` is acquired. |
+| `spin_unlock(ptr: *Unit)` | `-> Unit` | Releases the spinlock at `ptr`. |
+| `spin_trylock(ptr: *Unit)` | `-> Bool` | Attempts to acquire the lock once. Returns `true` if acquired. |
+
+### WaitGroup
+
+A WaitGroup coordinates a fixed number of concurrent operations.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `waitgroup_create()` | `-> *Unit` | Allocates and returns a new WaitGroup. |
+| `waitgroup_add(wg: *Unit, n: I32)` | `-> Unit` | Adds `n` to the counter. Call before spawning work. |
+| `waitgroup_done(wg: *Unit)` | `-> Unit` | Decrements the counter by one. Call when a unit of work completes. |
+| `waitgroup_wait(wg: *Unit)` | `-> Unit` | Blocks until the counter reaches zero. |
+| `waitgroup_destroy(wg: *Unit)` | `-> Unit` | Frees the WaitGroup. Call only after `waitgroup_wait` returns. |
+
+### Channel
+
+Channels provide first-in, first-out message passing between threads.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `channel_create()` | `-> *Unit` | Creates a new unbounded channel. |
+| `channel_send(ch: *Unit, val: I32)` | `-> Bool` | Sends `val`. Returns `false` if the channel is closed. |
+| `channel_recv(ch: *Unit)` | `-> I32` | Blocks until a value is available and returns it. |
+| `channel_try_send(ch: *Unit, val: I32)` | `-> Bool` | Non-blocking send. Returns `false` if full or closed. |
+| `channel_try_recv(ch: *Unit, out: *Unit)` | `-> Bool` | Non-blocking receive. Writes to `out` and returns `true` if a value was available. |
+| `channel_len(ch: *Unit)` | `-> I32` | Returns the number of values currently queued. |
+| `channel_close(ch: *Unit)` | `-> Unit` | Closes the channel. Subsequent sends return `false`. |
+| `channel_destroy(ch: *Unit)` | `-> Unit` | Frees the channel. Call only after `channel_close`. |

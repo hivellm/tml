@@ -1,12 +1,12 @@
 # The TML Programming Language
 
-*by HiveLLM*
+*by the HiveLLM Team*
 
-This documentation assumes you are using TML 1.0 or later.
+---
 
-TML (To Machine Language) is a programming language designed specifically for
-code generation and analysis by LLMs. It combines the safety of languages like
-Rust with a more readable and LLM-friendly syntax.
+This book covers TML 1.0 and later. TML (To Machine Language) is a systems programming language
+designed for the AI era — built to be generated reliably by large language models while remaining
+clear and pleasant for human developers to read, write, and maintain.
 
-The source code for this documentation and the TML compiler can be found at
+The TML compiler, standard library, and the source for this documentation are available at
 [github.com/hivellm/tml](https://github.com/hivellm/tml).

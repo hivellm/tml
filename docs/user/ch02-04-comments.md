@@ -1,50 +1,59 @@
 # Comments
 
-Comments let you document your code. The compiler ignores them, but they
-help other developers (and your future self) understand your code.
+Comments let you annotate your code with explanations that the compiler ignores. TML supports
+three styles: line comments, block comments, and documentation comments.
 
 ## Line Comments
 
-Use `//` for single-line comments:
+A line comment begins with `//` and extends to the end of the line:
 
 ```tml
 func main() {
-    // This is a comment
-    let x = 5  // This is also a comment
-    println(x)
+    // This entire line is a comment.
+    let x: I32 = 5   // This comment follows code on the same line.
+    println(x.to_string())
 }
 ```
 
+Line comments are the most common form and are appropriate for most in-code annotations.
+
 ## Block Comments
 
-Use `/* */` for multi-line comments:
+A block comment begins with `/*` and ends with `*/`. It can span multiple lines:
 
 ```tml
 func main() {
-    /* This is a
-       multi-line
-       comment */
-    let x = 5
-    println(x)
+    /*
+       This is a block comment.
+       It can span as many lines as needed.
+    */
+    let x: I32 = 5
+    println(x.to_string())
 }
 ```
 
 Block comments can be nested:
 
 ```tml
-/* Outer comment
-   /* Inner comment */
-   Still in outer comment
+/*
+   Outer comment.
+   /* Inner comment — still valid. */
+   Back in the outer comment.
 */
 ```
 
+Block comments are useful for temporarily disabling a section of code during development or for
+writing a long explanation that spans multiple lines in the middle of a function.
+
 ## Documentation Comments
 
-Use `///` for documentation comments that describe functions:
+A documentation comment begins with `///` and documents the item immediately below it. The TML
+documentation generator uses these comments to produce HTML API references:
 
 ```tml
-/// Calculates the factorial of a number.
-/// Returns 1 for n <= 1.
+/// Returns the factorial of `n`.
+///
+/// Panics if `n` is negative.
 func factorial(n: I32) -> I32 {
     if n <= 1 {
         return 1
@@ -53,34 +62,64 @@ func factorial(n: I32) -> I32 {
 }
 ```
 
-## Best Practices
-
-1. **Explain why, not what**: The code shows *what*, comments should explain *why*
+Documentation comments support a small set of Markdown conventions: paragraphs, code blocks
+(fenced with triple backticks), bold, and bullet lists.
 
 ```tml
-// Bad: increment x by 1
-x = x + 1
-
-// Good: adjust for zero-based indexing
-x = x + 1
+/// Classifies an integer as negative, zero, or positive.
+///
+/// # Examples
+///
+/// ```tml
+/// let result = classify(-5)
+/// assert_eq(result, "negative")
+/// ```
+func classify(n: I32) -> Str {
+    if n < 0 {
+        return "negative"
+    }
+    if n == 0 {
+        return "zero"
+    }
+    return "positive"
+}
 ```
 
-2. **Keep comments up to date**: Outdated comments are worse than no comments
+Write documentation comments on all public functions, types, and constants. For private
+implementation details, line comments are sufficient.
 
-3. **Don't over-comment**: Self-explanatory code doesn't need comments
+## What to Put in Comments
+
+Comments should explain *why*, not *what*. The code already shows what it does. A comment that
+simply restates the code adds noise without value:
 
 ```tml
-// Bad: set name to "Alice"
-let name = "Alice"
+// Poor comment — restates the obvious
+x = x + 1  // increment x by 1
 
-// Good: no comment needed
-let name = "Alice"
+// Good comment — explains the reasoning
+x = x + 1  // adjust for zero-based indexing before passing to the C API
 ```
 
-4. **Use comments for complex logic**:
+Comments that become outdated are worse than no comments. When you change code, update the
+comments at the same time.
+
+Good uses for comments:
+
+- Explaining a non-obvious algorithm or formula
+- Documenting a constraint or assumption that cannot be expressed in the type system
+- Noting a workaround for a known external limitation
+- Providing a reference to the specification or algorithm the code implements
 
 ```tml
-// Using bitwise AND to check if number is even
-// (faster than modulo for hot paths)
-let is_even = (n & 1) == 0
+// FNV-1a hash — fast, good distribution for short strings.
+// See: http://www.isthe.com/chongo/tech/comp/fnv/
+func fnv1a(data: ref Str) -> U64 {
+    var hash: U64 = 14695981039346656037
+    loop i in 0 to data.len() {
+        hash = hash ^ (data.byte_at(i) as U64)
+        hash = hash * 1099511628211
+    }
+    return hash
+}
 ```

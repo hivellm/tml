@@ -1,10 +1,9 @@
 # Hello, World!
 
-Now that you have TML installed, let's write your first TML program.
-It's traditional to write a program that prints "Hello, World!" to the
-screen, so we'll do exactly that.
+With TML installed, you are ready to write your first program. By tradition, that program prints
+"Hello, World!" to the screen.
 
-## Creating a Project File
+## Creating the File
 
 Create a new file called `hello.tml` with the following content:
 
@@ -14,23 +13,21 @@ func main() {
 }
 ```
 
-Save the file and run it:
+Save the file, then run it:
 
 ```bash
 tml run hello.tml
 ```
 
-You should see:
+Output:
 
 ```
 Hello, World!
 ```
 
-Congratulations! You've officially written a TML program.
+That is a complete, working TML program.
 
-## Anatomy of a TML Program
-
-Let's look at each part of the program:
+## Anatomy of the Program
 
 ```tml
 func main() {
@@ -38,55 +35,94 @@ func main() {
 }
 ```
 
-### The `func` Keyword
+### `func`
 
-In TML, functions are defined using the `func` keyword (not `fn` like Rust).
-This is more explicit and readable.
+The `func` keyword declares a function. TML uses `func` rather than `fn` (Rust) or `function`
+(JavaScript) — explicit and unambiguous.
 
-### The `main` Function
+### `main`
 
-The `main` function is special: it's the entry point of every TML program.
-When you run a TML program, execution starts at `main`.
+`main` is the entry point of every TML program. When you run a TML program, execution begins at
+`main`. The name is required: TML will refuse to link a program that has no `main` function.
 
-### The Function Body
+### The function body
 
-The function body is enclosed in curly braces `{ }`. Inside, we have a
-single statement that calls `println`.
+The body of the function is enclosed in curly braces `{ }`. Most constructs in TML that contain
+a block of code use curly braces.
 
-### The `println` Function
+### `println`
 
-`println` is a builtin function that prints text to the console, followed
-by a newline. TML also provides `print` which doesn't add a newline.
+`println` is a builtin function that prints its argument to standard output, followed by a
+newline. TML also provides `print`, which prints without a trailing newline.
 
-## Compiling and Running
+```tml
+func main() {
+    print("Hello, ")    // no newline
+    println("World!")   // adds newline
+}
+```
 
-TML provides several ways to run your code:
+Output:
 
-### Run Directly
+```
+Hello, World!
+```
+
+## CLI Commands
+
+The `tml` tool provides several commands for working with TML programs.
+
+### `tml run`
+
+Compiles and immediately runs a source file:
 
 ```bash
 tml run hello.tml
 ```
 
-This compiles and runs the program in one step.
+This is the fastest way to try out a program. The compiled binary is temporary — it is not
+saved to disk by default.
 
-### Check Syntax
+### `tml build`
+
+Compiles a source file and writes the executable to disk:
+
+```bash
+tml build hello.tml
+```
+
+By default this produces `hello` (or `hello.exe` on Windows) in the current directory. To
+specify the output path:
+
+```bash
+tml build hello.tml --output dist/hello
+```
+
+### `tml check`
+
+Type-checks a source file without producing any output:
 
 ```bash
 tml check hello.tml
 ```
 
-This checks for syntax and type errors without running the program.
+Use this when you want to verify that your code is correct without running it. It is faster than
+a full build because it skips code generation and linking.
 
-### Parse Only
+## Common Mistakes
 
-```bash
-tml parse hello.tml
-```
+**Forgetting the return type arrow** — For `main`, no return type is needed. For other functions
+that return a value, you must write `-> ReturnType`. This is covered in detail in the Functions
+section.
 
-This parses the file and shows the AST (useful for debugging).
+**Using semicolons** — TML does not require semicolons at the end of statements. The compiler
+will accept them in most positions, but idiomatic TML omits them.
+
+**Mismatched braces** — Every `{` must have a matching `}`. If `tml check` reports an unexpected
+token error near the end of a file, look for an unclosed brace.
 
 ## What's Next?
 
-Now that you have a working TML installation and know how to run programs,
-let's learn about variables and data types in the next chapter.
+You have a working TML installation and know how to run programs. The next chapter covers the
+fundamental building blocks of the language: variables, data types, functions, comments, and
+control flow.

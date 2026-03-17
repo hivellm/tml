@@ -1,127 +1,172 @@
 # Appendix A - Keywords
 
-The following list contains keywords reserved for current or future use
-by TML. These cannot be used as identifiers.
+TML reserves 57 words that may not be used as identifiers. They are listed
+below, grouped by purpose. Each entry states what the keyword does; the
+relevant chapter provides full syntax and examples.
 
-## Currently Used Keywords (57 reserved words)
+---
 
-### Declarations
+## Declarations
 
-| Keyword | Description |
-|---------|-------------|
-| `func` | Function declaration |
-| `type` | Type/struct declaration |
-| `behavior` | Define a behavior (trait) |
-| `impl` | Implementation block |
-| `mod` | Module declaration |
-| `use` | Import declaration |
-| `pub` | Public visibility |
-| `let` | Variable declaration |
-| `const` | Constant declaration |
-| `decorator` | Function decorator |
-| `where` | Generic constraints |
-
-### Control Flow
+These keywords introduce named items — functions, types, modules, and so on.
 
 | Keyword | Description |
 |---------|-------------|
-| `if` | Conditional branch |
-| `then` | Used after conditions |
-| `else` | Alternative branch |
-| `when` | Pattern matching |
-| `loop` | Unified loop keyword |
-| `while` | While loop condition |
-| `for` | For loop |
-| `in` | Used in for loops |
-| `to` | Exclusive range end |
-| `through` | Inclusive range end |
-| `break` | Exit a loop |
-| `continue` | Skip to next loop iteration |
-| `return` | Return from function |
-| `do` | Closure/lambda syntax |
+| `func` | Declares a function. |
+| `type` | Declares a struct or type alias. |
+| `enum` | Declares an enumeration. |
+| `let` | Declares an immutable variable binding. |
+| `var` | Declares a mutable variable binding. |
+| `const` | Declares a compile-time constant. |
+| `mod` | Declares a module. |
+| `use` | Imports a name into the current scope. |
+| `pub` | Makes an item visible outside its module. |
+| `behavior` | Declares a behavior (similar to a trait or interface). |
+| `extend` | Adds methods to an existing type without modifying it. |
+| `impl` | Implements a behavior for a type. |
+| `static` | Declares a static member that belongs to the type, not an instance. |
+| `where` | Introduces generic constraints on a function or type. |
 
-### Logical Operators
+### OOP Declaration Keywords
 
-| Keyword | Description |
-|---------|-------------|
-| `and` | Logical AND (short-circuit) |
-| `or` | Logical OR (short-circuit) |
-| `not` | Logical negation |
-
-### Types and References
+The following keywords support the optional object-oriented programming model
+(see Chapter 15). They are reserved whether or not OOP features are in use.
 
 | Keyword | Description |
 |---------|-------------|
-| `this` | Current instance |
-| `This` | Current type (in impl blocks) |
-| `as` | Type casting |
-| `dyn` | Dynamic dispatch |
-| `mut` | Mutable modifier |
-| `ref` | Reference type |
-| `lowlevel` | Unsafe/low-level code block |
-| `life` | Lifetime annotation (reserved) |
+| `class` | Declares a class with inheritance support. |
+| `interface` | Declares an interface. |
+| `abstract` | Marks a class or method that must be overridden. |
+| `sealed` | Prevents a class from being subclassed. |
+| `virtual` | Marks a method that may be overridden by a subclass. |
+| `override` | Marks a method that overrides a parent method. |
+| `namespace` | Declares a namespace for organizing names. |
+| `new` | Constructs an instance using a constructor. |
 
-### Modules
+---
 
-| Keyword | Description |
-|---------|-------------|
-| `crate` | Reference to current crate |
-| `super` | Parent module |
-| `with` | Context expression |
+## Control Flow
 
-### Async (reserved for future)
+These keywords direct the execution path of a program.
 
 | Keyword | Description |
 |---------|-------------|
-| `async` | Asynchronous function marker |
-| `await` | Wait for async result |
-| `quote` | Macro quoting |
+| `if` | Begins a conditional expression. |
+| `then` | Separates the condition from its body in a single-line `if`. |
+| `else` | Provides the alternative branch of an `if` expression. |
+| `when` | Pattern-matching expression (similar to `match` in other languages). |
+| `loop` | Begins an unconditional loop. |
+| `while` | Adds a condition to a `loop`. |
+| `for` | Iterates over a range or iterable with `in`. |
+| `in` | Separates the binding from the iterable in a `for` loop. |
+| `to` | Produces an exclusive range: `0 to 10` yields 0 through 9. |
+| `through` | Produces an inclusive range: `1 through 10` yields 1 through 10. |
+| `break` | Exits the nearest enclosing loop. |
+| `continue` | Skips to the next iteration of the nearest enclosing loop. |
+| `return` | Returns a value from a function. |
+| `do` | Introduces a closure (lambda) expression. |
+| `catch` | Catches a propagated error in a `when` arm or expression. |
 
-### OOP Keywords (reserved for future C#-style OOP)
+---
+
+## Types and Values
+
+Keywords that describe or interact with types and their values.
 
 | Keyword | Description |
 |---------|-------------|
-| `class` | Class declaration |
-| `interface` | Interface declaration |
-| `extends` | Inheritance |
-| `implements` | Interface implementation |
-| `override` | Method override |
-| `virtual` | Virtual method |
-| `abstract` | Abstract class/method |
-| `sealed` | Non-inheritable class |
-| `namespace` | Namespace declaration |
-| `base` | Base class reference |
-| `protected` | Protected visibility |
-| `private` | Private visibility |
-| `static` | Static member |
-| `new` | Constructor |
-| `prop` | Property declaration |
+| `true` | Boolean true literal. |
+| `false` | Boolean false literal. |
+| `null` | Null pointer literal; has type `*Unit` (opaque pointer). |
+| `this` | Refers to the current instance inside a method or extend block. |
+| `This` | Refers to the type of the current instance (usable in impl blocks). |
+| `Self` | Alias for the type being implemented; interchangeable with `This`. |
+| `ref` | Creates a shared (immutable) reference, or annotates a reference type. |
+| `mut` | Marks a value or binding as mutable. |
+| `dyn` | Enables dynamic dispatch through a behavior object. |
+| `as` | Casts a value to a different type. |
 
-## Literals
+---
 
-> **Note:** These are lexed as literals, not as keywords.
+## Logic
 
-| Token | Description |
-|-------|-------------|
-| `true` | Boolean true literal |
-| `false` | Boolean false literal |
-| `null` | Null pointer literal (`Ptr[Unit]`) |
+TML uses keywords rather than symbols for logical operators, which improves
+readability and removes ambiguity with bitwise operators.
+
+| Keyword | Description |
+|---------|-------------|
+| `and` | Logical AND with short-circuit evaluation. |
+| `or` | Logical OR with short-circuit evaluation. |
+| `not` | Logical negation. |
+
+---
+
+## Visibility
+
+| Keyword | Description |
+|---------|-------------|
+| `pub` | Public — visible to all modules (also listed under Declarations). |
+| `private` | Explicitly private — visible only within the declaring module. |
+| `protected` | Visible to the declaring type and its subclasses. |
+
+---
+
+## Memory and Safety
+
+| Keyword | Description |
+|---------|-------------|
+| `lowlevel` | Introduces a block that may use memory intrinsics, raw pointers, and FFI. Signals that the programmer takes responsibility for safety. |
+| `move` | Explicitly transfers ownership of a value to a new binding. |
+
+---
+
+## Error Handling Contracts
+
+| Keyword | Description |
+|---------|-------------|
+| `requires` | Specifies a precondition that must hold when a function is called. |
+| `ensures` | Specifies a postcondition that must hold when a function returns. |
+
+---
+
+## Other
+
+| Keyword | Description |
+|---------|-------------|
+| `with` | Opens a context expression (for resource management). |
+| `extends` | Declares that a class inherits from another class. |
+| `implements` | Declares that a class or type implements an interface or behavior. |
+
+---
 
 ## Compile-Time Constants
 
+These identifiers are substituted by the compiler at the point of use. They are
+not user-definable and behave like keywords.
+
 | Constant | Type | Description |
 |----------|------|-------------|
-| `__FILE__` | `Str` | Current source file path |
-| `__DIRNAME__` | `Str` | Directory of current source file |
-| `__LINE__` | `I64` | Current line number |
+| `__FILE__` | `Str` | Absolute path of the current source file. |
+| `__LINE__` | `I64` | Line number of the current source location. |
+| `__DIRNAME__` | `Str` | Directory containing the current source file. |
+| `__FUNC__` | `Str` | Name of the immediately enclosing function. |
+
+```tml
+func locate() {
+    println("Called from ${__FUNC__} at ${__FILE__}:${__LINE__}")
+}
+```
+
+---
 
 ## Naming Conventions
 
-While not keywords, TML has naming conventions:
+These are not enforced by the compiler but are followed universally in the
+standard library and expected in idiomatic TML code.
 
-| Pattern | Use |
-|---------|-----|
-| `snake_case` | Variables, functions |
-| `PascalCase` | Types, behaviors |
-| `SCREAMING_CASE` | Constants |
-| `_prefix` | Unused variables |
+| Style | Used For | Examples |
+|-------|----------|---------|
+| `PascalCase` | Types, behaviors, enums, enum variants | `HttpClient`, `Maybe`, `IoError` |
+| `snake_case` | Functions, variables, module names | `parse_json`, `user_name`, `http_client` |
+| `SCREAMING_SNAKE_CASE` | Constants | `MAX_SIZE`, `PI`, `DEFAULT_TIMEOUT` |
+| `_snake_case` | Intentionally unused bindings | `_result`, `_unused` |
