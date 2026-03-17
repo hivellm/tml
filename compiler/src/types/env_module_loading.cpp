@@ -158,63 +158,110 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     if (GlobalModuleCache::should_cache(module_path)) {
         auto& cache = GlobalModuleCache::instance();
         if (auto cached_module = cache.get(module_path)) {
-            // Found in cache - register directly without re-parsing
-            TML_DEBUG_LN("[MODULE] Cache hit for: " << module_path);
-
-            // Copy re-export source paths before any operations that might invalidate iterators
-            std::vector<std::string> re_export_sources;
-            re_export_sources.reserve(cached_module->re_exports.size());
-            for (const auto& re_export : cached_module->re_exports) {
-                re_export_sources.push_back(re_export.source_path);
-            }
-
-            // Copy private import paths (for glob imports like `use std::zlib::constants::*`)
-            std::vector<std::string> private_import_sources = cached_module->private_imports;
-
-            // Register behavior impls from cached module (e.g., Drop for MutexGuard)
-            // Each TypeEnv has its own behavior_impls_, so we must re-register
-            for (const auto& [type_name, behaviors] : cached_module->behavior_impls) {
-                for (const auto& behavior_name : behaviors) {
-                    register_impl(type_name, behavior_name);
+            // Validate that the cached module is still fresh by checking if meta
+            // file hash matches current source. This prevents stale modules from
+            // persisting when library source files are edited.
+            bool cache_valid = true;
+            {
+                std::string lib_subdir, rest;
+                if (module_path.substr(0, 6) == "core::") {
+                    lib_subdir = "core";
+                    rest = module_path.substr(6);
+                } else if (module_path.substr(0, 5) == "std::") {
+                    lib_subdir = "std";
+                    rest = module_path.substr(5);
+                } else if (module_path.substr(0, 6) == "test::") {
+                    lib_subdir = "test";
+                    rest = module_path.substr(6);
                 }
-            }
-
-            // Fallback: if behavior_impls is empty (old cache format), infer Drop impls
-            // from function names like "MutexGuard::drop" in the module's functions map
-            if (cached_module->behavior_impls.empty()) {
-                for (const auto& [func_name, _sig] : cached_module->functions) {
-                    if (func_name.size() > 6 &&
-                        func_name.substr(func_name.size() - 6) == "::drop") {
-                        std::string type_name = func_name.substr(0, func_name.size() - 6);
-                        register_impl(type_name, "Drop");
+                if (!lib_subdir.empty() && !rest.empty()) {
+                    std::string fs_rest = rest;
+                    size_t p = 0;
+                    while ((p = fs_rest.find("::", p)) != std::string::npos) {
+                        fs_rest.replace(p, 2, "/");
+                        p += 1;
+                    }
+                    std::string src = resolve_lib_module_path(lib_subdir, "src", fs_rest);
+                    if (!src.empty()) {
+                        // Check if the meta cache file is older than the source
+                        namespace fs = std::filesystem;
+                        auto build_root = find_build_root();
+                        auto cache_path = get_module_cache_path(module_path, build_root);
+                        if (!cache_path.empty() && fs::exists(cache_path) && fs::exists(src)) {
+                            auto meta_time = fs::last_write_time(cache_path);
+                            auto src_time = fs::last_write_time(src);
+                            if (src_time > meta_time) {
+                                TML_LOG_DEBUG("types", "[MODULE] GlobalCache stale for: "
+                                                           << module_path
+                                                           << " (source newer than meta)");
+                                cache_valid = false;
+                            }
+                        }
                     }
                 }
             }
+            if (!cache_valid) {
+                // Fall through to binary meta cache / file loading below
+                // (which will re-validate hash and reload from source)
+            } else {
+                // Found in cache and valid
+                TML_DEBUG_LN("[MODULE] Cache hit for: " << module_path);
 
-            module_registry_->register_module(module_path, *cached_module);
+                // Copy re-export source paths before any operations that might invalidate iterators
+                std::vector<std::string> re_export_sources;
+                re_export_sources.reserve(cached_module->re_exports.size());
+                for (const auto& re_export : cached_module->re_exports) {
+                    re_export_sources.push_back(re_export.source_path);
+                }
 
-            // Load re-export source modules to ensure they're in the current registry
-            // This is needed because each TypeEnv has its own registry but the cache is global
-            for (const auto& source_path : re_export_sources) {
-                load_native_module(source_path, /*silent=*/true);
-            }
+                // Copy private import paths (for glob imports like `use std::zlib::constants::*`)
+                std::vector<std::string> private_import_sources = cached_module->private_imports;
 
-            // Load private import modules to ensure transitive dependencies are available
-            // This handles cases like `use std::zlib::constants::*` in options.tml
-            // Private imports may be stored as full paths including symbol names
-            // (e.g., "core::option::Maybe"), so we also try the base module path
-            for (const auto& import_path : private_import_sources) {
-                bool loaded = load_native_module(import_path, /*silent=*/true);
-                if (!loaded) {
-                    // Strip last segment (symbol name) and try as module path
-                    auto last_sep = import_path.rfind("::");
-                    if (last_sep != std::string::npos) {
-                        load_native_module(import_path.substr(0, last_sep), /*silent=*/true);
+                // Register behavior impls from cached module (e.g., Drop for MutexGuard)
+                // Each TypeEnv has its own behavior_impls_, so we must re-register
+                for (const auto& [type_name, behaviors] : cached_module->behavior_impls) {
+                    for (const auto& behavior_name : behaviors) {
+                        register_impl(type_name, behavior_name);
                     }
                 }
-            }
 
-            return true;
+                // Fallback: if behavior_impls is empty (old cache format), infer Drop impls
+                // from function names like "MutexGuard::drop" in the module's functions map
+                if (cached_module->behavior_impls.empty()) {
+                    for (const auto& [func_name, _sig] : cached_module->functions) {
+                        if (func_name.size() > 6 &&
+                            func_name.substr(func_name.size() - 6) == "::drop") {
+                            std::string type_name = func_name.substr(0, func_name.size() - 6);
+                            register_impl(type_name, "Drop");
+                        }
+                    }
+                }
+
+                module_registry_->register_module(module_path, *cached_module);
+
+                // Load re-export source modules to ensure they're in the current registry
+                // This is needed because each TypeEnv has its own registry but the cache is global
+                for (const auto& source_path : re_export_sources) {
+                    load_native_module(source_path, /*silent=*/true);
+                }
+
+                // Load private import modules to ensure transitive dependencies are available
+                // This handles cases like `use std::zlib::constants::*` in options.tml
+                // Private imports may be stored as full paths including symbol names
+                // (e.g., "core::option::Maybe"), so we also try the base module path
+                for (const auto& import_path : private_import_sources) {
+                    bool loaded = load_native_module(import_path, /*silent=*/true);
+                    if (!loaded) {
+                        // Strip last segment (symbol name) and try as module path
+                        auto last_sep = import_path.rfind("::");
+                        if (last_sep != std::string::npos) {
+                            load_native_module(import_path.substr(0, last_sep), /*silent=*/true);
+                        }
+                    }
+                }
+
+                return true;
+            } // else (cache_valid)
         }
     }
 
@@ -222,6 +269,10 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     // Loads pre-serialized Module structs without file resolution or parsing.
     // We first resolve the source path to validate the hash against the current source.
     // This catches stale meta caches when library source files change.
+    //
+    // IMPORTANT: We must validate BEFORE checking GlobalModuleCache, because the
+    // in-memory cache may hold a stale module from a previous meta load in this process.
+    // For directory modules (mod.tml), the hash covers ALL .tml files in the directory.
     if (GlobalModuleCache::should_cache(module_path)) {
         // Resolve source path for hash validation
         std::string meta_source_path;

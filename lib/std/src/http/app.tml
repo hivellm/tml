@@ -491,7 +491,12 @@ pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut 
             let seg_end: I64 = rt_find_slash(path, cap_start, plen)
             if param_count < MAX_PARAMS {
                 let name: Str = rt_get(param, RT_PARAM_NAME) as Str
-                let value: Str = str::substring(path, cap_start, seg_end)
+                // Manual substring to avoid cross-module str::substring call
+                let vlen: I64 = seg_end - cap_start
+                let vbuf: I64 = lowlevel { mem_alloc(vlen + 1) } as I64
+                lowlevel { copy_nonoverlapping((path as I64 + cap_start) as *Unit, vbuf as *Unit, vlen) }
+                lowlevel { ptr_write[U8]((vbuf + vlen) as *U8, 0 as U8) }
+                let value: Str = vbuf as Str
                 app_store_param(params_buf, param_count, name, value)
                 param_count = param_count + 1
             }
@@ -593,13 +598,11 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
     }
 
     // Slow path: radix-tree for parametric/wildcard routes
-    // NOTE: Disabled in multi-threaded mode due to thread-safety issue with
-    // str::char_at/str::len on radix tree node prefixes. Works correctly in
-    // single-threaded standalone builds. See: app_find_route() + test_find_route.tml
-    // TODO: Fix thread-safety of string operations on shared radix tree nodes
-    // let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
-    // let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
-    // if str::len(tree_result) > 0 { return tree_result }
+    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
+    let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
+    if str::len(tree_result) > 0 {
+        return tree_result
+    }
 
     // HEAD fallback: try GET handlers if HEAD has no specific route
     if method_index(method) == METHOD_HEAD {
