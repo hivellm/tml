@@ -1,0 +1,301 @@
+//! HTTP Application Framework — Express.js-like API for TML.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+
+// ── FFI ─────────────────────────────────────────────────────────
+@extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
+@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
+@extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
+@extern("tml_sys_close") func sys_close(handle: I64) -> I64
+@extern("tml_sys_accept_v4") func sys_accept(handle: I64) -> I64
+@extern("c") func tml_sys_socket(domain: I32, typ: I32, proto: I32) -> I64
+@extern("c") func tml_sys_bind_v4(handle: I64, addr: I32, port: I32) -> I64
+@extern("c") func tml_sys_listen(handle: I64, backlog: I32) -> I64
+@extern("tml_thread_spawn") func raw_thread_spawn(f: *Unit, arg: *Unit, stack: U64) -> U64
+@extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
+@extern("tml_thread_available_parallelism") func cpu_count() -> U32
+
+const AF_INET: I32 = 2
+const SOCK_STREAM: I32 = 1
+const SOL_SOCKET: I32 = 65535
+const SO_REUSEADDR: I32 = 4
+const IPPROTO_TCP: I32 = 6
+const TCP_NODELAY: I32 = 1
+const BUF_SIZE: I64 = 8192
+const MAX_HANDLERS: I64 = 64
+const ENTRY_SIZE: I64 = 24
+
+// ════════════════════════════════════════════════════════════════════
+// AppContext — request info passed to each handler
+// ════════════════════════════════════════════════════════════════════
+
+pub type AppContext {
+    req_method: Str,
+    req_path: Str,
+    req_body: Str,
+}
+
+impl AppContext {
+    pub func method(this) -> Str { this.req_method }
+    pub func path(this) -> Str { this.req_path }
+    pub func body(this) -> Str { this.req_body }
+
+    pub func json(this, status: I64, body: Str) -> Str {
+        let cl: Str = str::len(body).to_string()
+        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
+               "Content-Type: application/json; charset=utf-8\r\n" +
+               "Content-Length: " + cl + "\r\n" +
+               "Connection: keep-alive\r\n\r\n" + body
+    }
+
+    pub func text(this, status: I64, body: Str) -> Str {
+        let cl: Str = str::len(body).to_string()
+        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
+               "Content-Type: text/plain; charset=utf-8\r\n" +
+               "Content-Length: " + cl + "\r\n" +
+               "Connection: keep-alive\r\n\r\n" + body
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// App — route registration
+// ════════════════════════════════════════════════════════════════════
+
+pub type App {
+    table: I64,
+    count: I64,
+}
+
+impl App {
+    pub func new() -> App {
+        let table: I64 = lowlevel { mem_alloc(MAX_HANDLERS * ENTRY_SIZE) } as I64
+        return App { table: table, count: 0 }
+    }
+
+    pub func get(mut this, path: Str, handler: func(AppContext) -> Str) {
+        app_register(this.table, ref this.count, "GET", path, handler)
+    }
+
+    pub func post(mut this, path: Str, handler: func(AppContext) -> Str) {
+        app_register(this.table, ref this.count, "POST", path, handler)
+    }
+
+    pub func put(mut this, path: Str, handler: func(AppContext) -> Str) {
+        app_register(this.table, ref this.count, "PUT", path, handler)
+    }
+
+    pub func delete(mut this, path: Str, handler: func(AppContext) -> Str) {
+        app_register(this.table, ref this.count, "DELETE", path, handler)
+    }
+
+    pub func listen(this, port: I64) {
+        app_listen(this.table, this.count, port)
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Free functions — all server logic lives here (avoids impl scope issues)
+// ════════════════════════════════════════════════════════════════════
+
+pub func app_status_text(code: I64) -> Str {
+    if code == 200 { return "OK" }
+    if code == 201 { return "Created" }
+    if code == 400 { return "Bad Request" }
+    if code == 404 { return "Not Found" }
+    if code == 500 { return "Internal Server Error" }
+    return "OK"
+}
+
+pub func app_register(table: I64, count: mut ref I64, method: Str, path: Str, handler: func(AppContext) -> Str) {
+    if count >= MAX_HANDLERS { return }
+    let offset: I64 = count * ENTRY_SIZE
+    lowlevel { ptr_write[I64]((table + offset) as *I64, method as I64) }
+    lowlevel { ptr_write[I64]((table + offset + 8) as *I64, path as I64) }
+    lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler as I64) }
+    count = count + 1
+}
+
+pub func app_dispatch(table: I64, count: I64, method: Str, path: Str, body: Str) -> Str {
+    var i: I64 = 0
+    loop (i < count) {
+        let offset: I64 = i * ENTRY_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+        if m == method and p == path {
+            let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+            let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+            let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body }
+            return handler(ctx)
+        }
+        i = i + 1
+    }
+    return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n" + "{" + "\"error\":\"not found\"" + "}"
+}
+
+pub func app_conn_handler(arg: *Unit) {
+    let arg_addr: I64 = arg as I64
+    let fd: I64 = lowlevel { ptr_read[I64](arg_addr as *I64) }
+    let shared: I64 = lowlevel { ptr_read[I64]((arg_addr + 8) as *I64) }
+    lowlevel { mem_free(arg as *Unit) }
+
+    let table: I64 = lowlevel { ptr_read[I64](shared as *I64) }
+    let count: I64 = lowlevel { ptr_read[I64]((shared + 8) as *I64) }
+
+    tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+    let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+
+    loop (true) {
+        var total: I64 = 0
+        var complete: Bool = false
+        loop (total < BUF_SIZE - 1) {
+            let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
+            if n <= 0 { break }
+            total = total + n
+            if app_has_header_end(buf, total) { complete = true; break }
+        }
+        if not complete or total <= 0 { break }
+        lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+
+        let method: Str = app_extract_method(buf, total)
+        let path: Str = app_extract_path(buf, total)
+        let body: Str = app_extract_body(buf, total)
+        let response: Str = app_dispatch(table, count, method, path, body)
+        let sent: I64 = tml_sys_send(fd, response as *Unit, str::len(response))
+        if sent < 0 { break }
+    }
+
+    lowlevel { mem_free(buf as *Unit) }
+    sys_close(fd)
+}
+
+pub func app_listen(table: I64, count: I64, port: I64) {
+    println("TML HTTP Server")
+    println("  Port:       " + port.to_string())
+    println("  Workers:    " + cpu_count().to_string() + " cores")
+    println("  Keep-Alive: yes")
+    println("  Routes:     " + count.to_string())
+    println("")
+
+    var i: I64 = 0
+    loop (i < count) {
+        let offset: I64 = i * ENTRY_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+        println("  " + m + "\t" + p)
+        i = i + 1
+    }
+    println("")
+
+    let listener: I64 = app_bind_listener(port)
+    if listener < 0 {
+        println("ERROR: could not bind to port " + port.to_string())
+        return
+    }
+    println("Listening on http://localhost:" + port.to_string())
+
+    let shared: I64 = lowlevel { mem_alloc(16) } as I64
+    lowlevel { ptr_write[I64](shared as *I64, table) }
+    lowlevel { ptr_write[I64]((shared + 8) as *I64, count) }
+
+    loop (true) {
+        let fd: I64 = sys_accept(listener)
+        if fd < 0 { continue }
+
+        let arg: I64 = lowlevel { mem_alloc(16) } as I64
+        lowlevel { ptr_write[I64](arg as *I64, fd) }
+        lowlevel { ptr_write[I64]((arg + 8) as *I64, shared) }
+
+        let h: U64 = raw_thread_spawn(app_conn_handler as *Unit, arg as *Unit, 0 as U64)
+        if h != 0 as U64 {
+            raw_thread_detach(h)
+        } else {
+            lowlevel { mem_free(arg as *Unit) }
+            sys_close(fd)
+        }
+    }
+}
+
+// ── HTTP parsing helpers ────────────────────────────────────────
+
+pub func app_extract_method(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len and i < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c == 32 as U8 {
+            let p: I64 = lowlevel { mem_alloc(i + 1) } as I64
+            lowlevel { copy_nonoverlapping(buf as *Unit, p as *Unit, i) }
+            lowlevel { ptr_write[U8]((p + i) as *U8, 0 as U8) }
+            return p as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+pub func app_extract_path(buf: I64, len: I64) -> Str {
+    var start: I64 = 0
+    loop (start < len and start < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
+        if c == 32 as U8 { start = start + 1; break }
+        start = start + 1
+    }
+    var end: I64 = start
+    loop (end < len) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
+        if c == 32 as U8 or c == 63 as U8 { break }
+        end = end + 1
+    }
+    let path_len: I64 = end - start
+    if path_len <= 0 { return "/" }
+    let p: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
+    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, path_len) }
+    lowlevel { ptr_write[U8]((p + path_len) as *U8, 0 as U8) }
+    return p as Str
+}
+
+pub func app_extract_body(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len - 3) {
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        let c1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+        let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
+        let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
+        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+            let body_start: I64 = i + 4
+            let body_len: I64 = len - body_start
+            if body_len <= 0 { return "" }
+            let p: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
+            lowlevel { copy_nonoverlapping((buf + body_start) as *Unit, p as *Unit, body_len) }
+            lowlevel { ptr_write[U8]((p + body_len) as *U8, 0 as U8) }
+            return p as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+pub func app_has_header_end(buf: I64, len: I64) -> Bool {
+    if len < 4 { return false }
+    var i: I64 = 3
+    loop (i < len) {
+        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
+        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
+        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
+        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+pub func app_bind_listener(port: I64) -> I64 {
+    let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
+    if sock < 0 { return -1 }
+    tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
+    if tml_sys_bind_v4(sock, 0, port as I32) < 0 { sys_close(sock); return -1 }
+    if tml_sys_listen(sock, 1024) < 0 { sys_close(sock); return -1 }
+    return sock
+}

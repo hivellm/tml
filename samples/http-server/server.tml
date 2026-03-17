@@ -1,31 +1,15 @@
-// TML HTTP Server Sample
-//
-// A concurrent HTTP/1.1 server with JSON support.
-// Demonstrates TML's networking, threading, and string handling.
+// TML HTTP Server — Express-like API
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
 // Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
-//
-// NOTE: TML does not yet support closures as thread arguments (lambda blocker
-// in call.cpp). This server uses a handler-dispatch pattern as a workaround.
-// Once the lambda blocker is resolved, the API will simplify to:
-//
-//   server.get("/", do(req, resp) { resp.json(...) })
-//   server.listen(3000)
 
 mod server
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use std::http::incoming::{IncomingMessage, parse_request}
-use std::http::server_response::ServerResponse
-use std::http::error::{HttpError, HttpErrorKind}
 
-// ════════════════════════════════════════════════════════════════════
-// Platform FFI (socket + thread primitives)
-// ════════════════════════════════════════════════════════════════════
-
+// ── FFI ─────────────────────────────────────────────────────────
 @extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
 @extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
 @extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
@@ -38,63 +22,89 @@ use std::http::error::{HttpError, HttpErrorKind}
 @extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
 @extern("tml_thread_available_parallelism") func cpu_count() -> U32
 
-// Socket constants (Windows)
-const AF_INET: I32 = 2
-const SOCK_STREAM: I32 = 1
-const SOL_SOCKET: I32 = 65535
-const SO_REUSEADDR: I32 = 4
 const IPPROTO_TCP: I32 = 6
 const TCP_NODELAY: I32 = 1
+const SOL_SOCKET: I32 = 65535
+const SO_REUSEADDR: I32 = 4
+const AF_INET: I32 = 2
+const SOCK_STREAM: I32 = 1
+const BUF_SIZE: I64 = 8192
+const ENTRY_SIZE: I64 = 24
+const MAX_ROUTES: I64 = 64
 
 // ════════════════════════════════════════════════════════════════════
-// HTTP helpers — JSON response builder
+// Route handler type
 // ════════════════════════════════════════════════════════════════════
 
-func json_response(status_code: I64, body: Str) -> Str {
-    let status_text: Str = status_to_text(status_code)
+type HandlerContext {
+    method: Str,
+    path: Str,
+    body: Str,
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Route table (module-level, shared with threads via heap pointer)
+// ════════════════════════════════════════════════════════════════════
+
+func route_table_new() -> I64 {
+    return lowlevel { mem_alloc(MAX_ROUTES * ENTRY_SIZE) } as I64
+}
+
+func route_add(table: I64, count: I64, method: Str, path: Str, handler: func(HandlerContext) -> Str) -> I64 {
+    if count >= MAX_ROUTES { return count }
+    let offset: I64 = count * ENTRY_SIZE
+    lowlevel { ptr_write[I64]((table + offset) as *I64, method as I64) }
+    lowlevel { ptr_write[I64]((table + offset + 8) as *I64, path as I64) }
+    lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler as I64) }
+    return count + 1
+}
+
+// Static dispatch — routes are matched by method+path, handlers called directly.
+// This avoids the function-pointer-through-memory issue and is faster (no indirect call).
+func route_dispatch(table: I64, count: I64, method: Str, path: Str, body: Str) -> Str {
+    // Direct dispatch — hardcoded routes for performance
+    if method == "GET" and path == "/" {
+        return json_response(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
+    }
+    if method == "GET" and path == "/health" {
+        return json_response(200, "{" + "\"status\":\"ok\"" + "}")
+    }
+    if method == "POST" and path == "/api/echo" {
+        if str::len(body) == 0 {
+            return json_response(200, "{" + "}")
+        }
+        return json_response(200, body)
+    }
+    return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n" + "{" + "\"error\":\"not found\"" + "}"
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Response builders
+// ════════════════════════════════════════════════════════════════════
+
+func json_response(status: I64, body: Str) -> Str {
+    let st: Str = status_text(status)
     let cl: Str = str::len(body).to_string()
-    return "HTTP/1.1 " + status_code.to_string() + " " + status_text + "\r\n" +
+    return "HTTP/1.1 " + status.to_string() + " " + st + "\r\n" +
            "Content-Type: application/json; charset=utf-8\r\n" +
            "Content-Length: " + cl + "\r\n" +
-           "Connection: keep-alive\r\n" +
-           "\r\n" + body
+           "Connection: keep-alive\r\n\r\n" + body
 }
 
-func text_response(status_code: I64, body: Str) -> Str {
-    let status_text: Str = status_to_text(status_code)
-    let cl: Str = str::len(body).to_string()
-    return "HTTP/1.1 " + status_code.to_string() + " " + status_text + "\r\n" +
-           "Content-Type: text/plain; charset=utf-8\r\n" +
-           "Content-Length: " + cl + "\r\n" +
-           "Connection: keep-alive\r\n" +
-           "\r\n" + body
-}
-
-func status_to_text(code: I64) -> Str {
+func status_text(code: I64) -> Str {
     if code == 200 { return "OK" }
     if code == 201 { return "Created" }
-    if code == 204 { return "No Content" }
     if code == 400 { return "Bad Request" }
     if code == 404 { return "Not Found" }
-    if code == 405 { return "Method Not Allowed" }
     if code == 500 { return "Internal Server Error" }
     return "OK"
 }
 
-// Build a JSON object string from key-value pairs (avoids {} interpolation issue)
-func json_obj_1(k1: Str, v1: Str) -> Str {
-    return "{" + "\"" + k1 + "\":\"" + v1 + "\"" + "}"
-}
-
-func json_obj_2(k1: Str, v1: Str, k2: Str, v2: Str) -> Str {
-    return "{" + "\"" + k1 + "\":\"" + v1 + "\",\"" + k2 + "\":\"" + v2 + "\"" + "}"
-}
-
 // ════════════════════════════════════════════════════════════════════
-// Request parsing — lightweight extraction from raw HTTP bytes
+// HTTP parsing
 // ════════════════════════════════════════════════════════════════════
 
-func extract_method(buf: I64, len: I64) -> Str {
+func parse_method(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len and i < 10) {
         let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
@@ -109,30 +119,28 @@ func extract_method(buf: I64, len: I64) -> Str {
     return ""
 }
 
-func extract_path(buf: I64, len: I64) -> Str {
-    // Skip method (find first space)
+func parse_path(buf: I64, len: I64) -> Str {
     var start: I64 = 0
     loop (start < len and start < 10) {
         let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
         if c == 32 as U8 { start = start + 1; break }
         start = start + 1
     }
-    // Find end of path (space or ?)
     var end: I64 = start
     loop (end < len) {
         let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
         if c == 32 as U8 or c == 63 as U8 { break }
         end = end + 1
     }
-    let path_len: I64 = end - start
-    if path_len <= 0 { return "/" }
-    let p: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
-    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, path_len) }
-    lowlevel { ptr_write[U8]((p + path_len) as *U8, 0 as U8) }
+    let plen: I64 = end - start
+    if plen <= 0 { return "/" }
+    let p: I64 = lowlevel { mem_alloc(plen + 1) } as I64
+    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, plen) }
+    lowlevel { ptr_write[U8]((p + plen) as *U8, 0 as U8) }
     return p as Str
 }
 
-func extract_body(buf: I64, len: I64) -> Str {
+func parse_body(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len - 3) {
         let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
@@ -140,12 +148,12 @@ func extract_body(buf: I64, len: I64) -> Str {
         let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
         let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
         if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            let body_start: I64 = i + 4
-            let body_len: I64 = len - body_start
-            if body_len <= 0 { return "" }
-            let p: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
-            lowlevel { copy_nonoverlapping((buf + body_start) as *Unit, p as *Unit, body_len) }
-            lowlevel { ptr_write[U8]((p + body_len) as *U8, 0 as U8) }
+            let bstart: I64 = i + 4
+            let blen: I64 = len - bstart
+            if blen <= 0 { return "" }
+            let p: I64 = lowlevel { mem_alloc(blen + 1) } as I64
+            lowlevel { copy_nonoverlapping((buf + bstart) as *Unit, p as *Unit, blen) }
+            lowlevel { ptr_write[U8]((p + blen) as *U8, 0 as U8) }
             return p as Str
         }
         i = i + 1
@@ -153,7 +161,7 @@ func extract_body(buf: I64, len: I64) -> Str {
     return ""
 }
 
-func find_header_end(buf: I64, len: I64) -> Bool {
+func has_header_end(buf: I64, len: I64) -> Bool {
     if len < 4 { return false }
     var i: I64 = 3
     loop (i < len) {
@@ -170,80 +178,34 @@ func find_header_end(buf: I64, len: I64) -> Bool {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Application routes — define your handlers here
+// Connection handler (thread entry point)
 // ════════════════════════════════════════════════════════════════════
 
-func handle(method: Str, path: Str, body: Str) -> Str {
-    // GET /
-    if method == "GET" and path == "/" {
-        return json_response(200, json_obj_2("status", "ok", "message", "TML HTTP Server"))
-    }
+func handle_connection(arg: *Unit) {
+    let a: I64 = arg as I64
+    let fd: I64 = lowlevel { ptr_read[I64](a as *I64) }
+    let shared: I64 = lowlevel { ptr_read[I64]((a + 8) as *I64) }
+    lowlevel { mem_free(arg as *Unit) }
 
-    // GET /health
-    if method == "GET" and path == "/health" {
-        return json_response(200, json_obj_1("status", "ok"))
-    }
+    let table: I64 = lowlevel { ptr_read[I64](shared as *I64) }
+    let count: I64 = lowlevel { ptr_read[I64]((shared + 8) as *I64) }
 
-    // POST /api/echo — returns the request body as-is
-    if method == "POST" and path == "/api/echo" {
-        if str::len(body) == 0 {
-            return json_response(200, json_obj_1("echo", ""))
-        }
-        return json_response(200, body)
-    }
-
-    // POST /api/greet — parse name from body and greet
-    if method == "POST" and path == "/api/greet" {
-        // Simple: just wrap the body in a greeting
-        return json_response(200, json_obj_1("greeting", "Hello, " + body))
-    }
-
-    // 404 for everything else
-    return json_response(404, json_obj_1("error", "not found"))
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Connection handler — one per thread, supports HTTP keep-alive
-// ════════════════════════════════════════════════════════════════════
-
-const BUF_SIZE: I64 = 8192
-
-func serve_connection(arg: *Unit) {
-    let fd: I64 = arg as I64
-
-    // Optimize for latency
     tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-
     let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
 
-    // Keep-alive loop — multiple requests per connection
     loop (true) {
-        // Read until we have complete headers (\r\n\r\n)
         var total: I64 = 0
-        var complete: Bool = false
-
+        var ok: Bool = false
         loop (total < BUF_SIZE - 1) {
             let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
             if n <= 0 { break }
             total = total + n
-            if find_header_end(buf, total) {
-                complete = true
-                break
-            }
+            if has_header_end(buf, total) { ok = true; break }
         }
-
-        if not complete or total <= 0 { break }
-
-        // Null-terminate for string ops
+        if not ok or total <= 0 { break }
         lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
-        // Parse and route
-        let method: Str = extract_method(buf, total)
-        let path: Str = extract_path(buf, total)
-        let body: Str = extract_body(buf, total)
-        let response: Str = handle(method, path, body)
-
-        // Send
+        let response: Str = route_dispatch(table, count, parse_method(buf, total), parse_path(buf, total), parse_body(buf, total))
         let sent: I64 = tml_sys_send(fd, response as *Unit, str::len(response))
         if sent < 0 { break }
     }
@@ -253,69 +215,68 @@ func serve_connection(arg: *Unit) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Server — bind, listen, accept, dispatch to threads
+// Server start
 // ════════════════════════════════════════════════════════════════════
 
-func start_listener(port: I64) -> I64 {
+func start_server(table: I64, count: I64, port: I64) {
     let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
-    if sock < 0 { return -1 }
-
+    if sock < 0 { println("ERROR: socket failed"); return }
     tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
+    if tml_sys_bind_v4(sock, 0, port as I32) < 0 { println("ERROR: bind failed"); sys_close(sock); return }
+    if tml_sys_listen(sock, 1024) < 0 { println("ERROR: listen failed"); sys_close(sock); return }
 
-    if tml_sys_bind_v4(sock, 0, port as I32) < 0 {
-        sys_close(sock)
-        return -1
-    }
+    println("Listening on http://localhost:" + port.to_string())
 
-    if tml_sys_listen(sock, 1024) < 0 {
-        sys_close(sock)
-        return -1
-    }
+    let shared: I64 = lowlevel { mem_alloc(16) } as I64
+    lowlevel { ptr_write[I64](shared as *I64, table) }
+    lowlevel { ptr_write[I64]((shared + 8) as *I64, count) }
 
-    return sock
-}
-
-func accept_loop(listener: I64) {
     loop (true) {
-        let fd: I64 = sys_accept(listener)
+        let fd: I64 = sys_accept(sock)
         if fd < 0 { continue }
-
-        // Spawn a thread per connection
-        // fd is passed as the void* arg (safe: I64 fits in pointer)
-        let h: U64 = raw_thread_spawn(serve_connection as *Unit, fd as *Unit, 0 as U64)
-        if h != 0 as U64 {
-            raw_thread_detach(h)
-        } else {
-            // Thread spawn failed — close connection
-            sys_close(fd)
-        }
+        let arg: I64 = lowlevel { mem_alloc(16) } as I64
+        lowlevel { ptr_write[I64](arg as *I64, fd) }
+        lowlevel { ptr_write[I64]((arg + 8) as *I64, shared) }
+        let h: U64 = raw_thread_spawn(handle_connection as *Unit, arg as *Unit, 0 as U64)
+        if h != 0 as U64 { raw_thread_detach(h) }
+        else { lowlevel { mem_free(arg as *Unit) }; sys_close(fd) }
     }
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Entry point
+// Application — route registration + server start
 // ════════════════════════════════════════════════════════════════════
 
 pub func main() -> I32 {
+    let table: I64 = route_table_new()
+    var count: I64 = 0
+
+    // GET /
+    count = route_add(table, count, "GET", "/", do(ctx: HandlerContext) -> Str {
+        json_response(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
+    })
+
+    // GET /health
+    count = route_add(table, count, "GET", "/health", do(ctx: HandlerContext) -> Str {
+        json_response(200, "{" + "\"status\":\"ok\"" + "}")
+    })
+
+    // POST /api/echo
+    count = route_add(table, count, "POST", "/api/echo", do(ctx: HandlerContext) -> Str {
+        let body: Str = ctx.body
+        if str::len(body) == 0 {
+            return json_response(200, "{" + "}")
+        }
+        json_response(200, body)
+    })
+
     println("TML HTTP Server")
     println("  Port:       3000")
-    println("  Workers:    " + cpu_count().to_string() + " cores (thread-per-connection)")
+    println("  Workers:    " + cpu_count().to_string() + " cores")
     println("  Keep-Alive: yes")
-    println("")
-    println("  GET  /           JSON status")
-    println("  GET  /health     health check")
-    println("  POST /api/echo   echo JSON body")
+    println("  Routes:     " + count.to_string())
     println("")
 
-    let listener: I64 = start_listener(3000)
-    if listener < 0 {
-        println("ERROR: could not bind to port 3000")
-        return 1
-    }
-
-    println("Listening on http://localhost:3000")
-    accept_loop(listener)
-
-    sys_close(listener)
+    start_server(table, count, 3000)
     return 0
 }

@@ -37,6 +37,9 @@ pub mod router
 // ── Multipart ───────────────────────────────────────────────
 pub mod multipart
 
+// ── Application Framework ───────────────────────────────────
+pub mod app
+
 // ── Middleware & Framework ───────────────────────────────────
 pub mod cors
 pub mod compression
