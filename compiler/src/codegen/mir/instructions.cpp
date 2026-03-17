@@ -1019,7 +1019,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
     }
 
-    // Check if this is an indirect call (function pointer parameter)
+    // Check if this is an indirect call (function pointer parameter or local variable)
     auto param_it = param_info_.find(i.func_name);
     if (param_it != param_info_.end()) {
         auto& [value_id, param_type] = param_it->second;
@@ -1027,6 +1027,27 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         if (param_type && std::holds_alternative<mir::MirFunctionType>(param_type->kind)) {
             emit_indirect_call(i, param_it->first, value_id, param_type, result_reg, inst);
             return;
+        }
+    }
+
+    // Check if this is a local variable holding a function pointer.
+    // When `let f = add100; f(42)` is compiled, the MIR emits CallInst with func_name="f".
+    // We detect this: if "f" is not a known function but IS a value in value_regs_ with
+    // a function-pointer type ({ ptr, ptr } or ptr), emit an indirect call.
+    if (param_it == param_info_.end()) {
+        // Search value_regs_ for a register named %f (matching i.func_name)
+        for (const auto& [vid, reg] : value_regs_) {
+            if (reg == "%" + i.func_name) {
+                auto vt_it = value_types_.find(vid);
+                if (vt_it != value_types_.end()) {
+                    const std::string& vtype = vt_it->second;
+                    if (vtype == "{ ptr, ptr }" || vtype == "ptr") {
+                        // This is a function pointer in a local variable — indirect call
+                        emit_indirect_call(i, i.func_name, vid, nullptr, result_reg, inst);
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -1160,6 +1181,17 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                        !actual_type.empty() && actual_type != declared_type) {
                 arg_type = actual_type;
             }
+        }
+
+        // Named function → fat pointer conversion: when a named function (global @name)
+        // is passed to a parameter expecting { ptr, ptr } (function type), wrap it.
+        if (declared_type == "{ ptr, ptr }" && arg.size() > 0 && arg[0] == '@') {
+            std::string fat1 = new_temp();
+            std::string fat2 = new_temp();
+            emitln("    " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + arg + ", 0");
+            emitln("    " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
+            arg = fat2;
+            arg_type = "{ ptr, ptr }";
         }
 
         // Unit type maps to "void" but LLVM doesn't allow void as a call argument.

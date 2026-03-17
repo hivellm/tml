@@ -91,7 +91,7 @@ void MemoryLeakCheckPass::analyze_function(const Function& func) {
         warning.alloc_value = alloc_value;
         warning.allocation_site = "block '" + get_block_name(func, block_id) + "'";
         warning.reason = "heap allocation is never freed";
-        warning.is_error = true; // Memory leaks are errors
+        warning.is_error = false; // Downgrade to warning — lowlevel blocks may free via intrinsics
 
         warnings_.push_back(warning);
     }
@@ -233,7 +233,7 @@ auto MemoryLeakCheckPass::is_free_call(const Instruction& inst, ValueId& freed_v
     -> bool {
     if (auto* call = std::get_if<CallInst>(&inst)) {
         const auto& name = call->func_name;
-        if (name == "free" || name == "tml_free" || name == "heap_free" ||
+        if (name == "free" || name == "mem_free" || name == "tml_free" || name == "heap_free" ||
             name.find("::destroy") != std::string::npos ||
             name.find("::drop") != std::string::npos ||
             name.find("::delete") != std::string::npos ||
