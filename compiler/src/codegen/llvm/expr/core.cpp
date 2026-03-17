@@ -211,6 +211,28 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             var.is_ptr_to_value) {
             std::string reg = fresh_reg();
             emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
+
+            // For mut ref <primitive> parameters, the first load gets us the pointer.
+            // We need a second load to dereference and get the actual primitive value.
+            // e.g., `count: mut ref I64` → alloca holds ptr, ptr points to i64.
+            //   load ptr, ptr %alloca  → pointer to the i64
+            //   load i64, ptr %ptr     → the actual i64 value
+            if (var.type == "ptr" && var.semantic_type && var.semantic_type->is<types::RefType>()) {
+                const auto& ref = var.semantic_type->as<types::RefType>();
+                if (ref.is_mut && ref.inner) {
+                    std::string inner_type = llvm_type_from_semantic(ref.inner);
+                    // Only dereference for primitive types (i8, i16, i32, i64, float, etc.)
+                    // Struct/enum refs should stay as ptr (used for GEP field access)
+                    if (!inner_type.empty() && inner_type[0] != '%' && inner_type != "ptr" &&
+                        inner_type != "void") {
+                        std::string deref_reg = fresh_reg();
+                        emit_line("  " + deref_reg + " = load " + inner_type + ", ptr " + reg);
+                        last_expr_type_ = inner_type;
+                        return deref_reg;
+                    }
+                }
+            }
+
             return reg;
         }
         return var.reg;
