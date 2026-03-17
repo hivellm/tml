@@ -155,35 +155,28 @@ impl AppContext {
     }
 
     pub func json(this, status: I64, body: Str) -> Str {
-        let cl: Str = str::len(body).to_string()
-        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
-               "Content-Type: application/json; charset=utf-8\r\n" +
-               "Content-Length: " + cl + "\r\n" +
-               "Connection: keep-alive\r\n\r\n" + body
+        app_build_response(status, "application/json; charset=utf-8", body)
     }
 
     pub func text(this, status: I64, body: Str) -> Str {
-        let cl: Str = str::len(body).to_string()
-        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
-               "Content-Type: text/plain; charset=utf-8\r\n" +
-               "Content-Length: " + cl + "\r\n" +
-               "Connection: keep-alive\r\n\r\n" + body
+        app_build_response(status, "text/plain; charset=utf-8", body)
     }
 
     pub func html(this, status: I64, body: Str) -> Str {
-        let cl: Str = str::len(body).to_string()
-        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
-               "Content-Type: text/html; charset=utf-8\r\n" +
-               "Content-Length: " + cl + "\r\n" +
-               "Connection: keep-alive\r\n\r\n" + body
+        app_build_response(status, "text/html; charset=utf-8", body)
     }
 
     pub func redirect(this, status: I64, location: Str) -> Str {
-        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) + "\r\n" +
-               "Location: " + location + "\r\n" +
-               "Content-Length: 0\r\n" +
-               "Connection: keep-alive\r\n\r\n"
+        return "HTTP/1.1 " + status.to_string() + " " + app_status_text(status) +
+               "\r\nLocation: " + location +
+               "\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n"
     }
+
+    /// Send raw response string (for custom headers/bodies).
+    pub func raw(this, response: Str) -> Str { response }
+
+    /// Get request header value by name (not yet implemented — returns "").
+    pub func header(this, name: Str) -> Str { return "" }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -326,6 +319,50 @@ pub func app_status_text(code: I64) -> Str {
     return "OK"
 }
 
+/// Build HTTP response with pre-computed status line and headers.
+/// Uses single buffer allocation instead of multiple string concatenations.
+pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
+    let body_len: I64 = str::len(body)
+    let cl_str: Str = body_len.to_string()
+    let status_str: Str = status.to_string()
+    let status_text: Str = app_status_text(status)
+    // Pre-compute total size to allocate once
+    // "HTTP/1.1 " + status + " " + text + "\r\nContent-Type: " + ct + "\r\nContent-Length: " + cl
+    // + "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n" + body
+    let header_prefix: Str = "HTTP/1.1 "
+    let ct_header: Str = "\r\nContent-Type: "
+    let cl_header: Str = "\r\nContent-Length: "
+    let suffix: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+    let total: I64 = str::len(header_prefix) + str::len(status_str) + 1 + str::len(status_text) +
+                     str::len(ct_header) + str::len(content_type) +
+                     str::len(cl_header) + str::len(cl_str) +
+                     str::len(suffix) + body_len
+    let buf: I64 = lowlevel { mem_alloc(total + 1) } as I64
+    var pos: I64 = 0
+    pos = app_buf_copy(buf, pos, header_prefix)
+    pos = app_buf_copy(buf, pos, status_str)
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 32 as U8) }
+    pos = pos + 1
+    pos = app_buf_copy(buf, pos, status_text)
+    pos = app_buf_copy(buf, pos, ct_header)
+    pos = app_buf_copy(buf, pos, content_type)
+    pos = app_buf_copy(buf, pos, cl_header)
+    pos = app_buf_copy(buf, pos, cl_str)
+    pos = app_buf_copy(buf, pos, suffix)
+    pos = app_buf_copy(buf, pos, body)
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Copy a string into buffer at position, return new position.
+func app_buf_copy(buf: I64, pos: I64, s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    if len > 0 {
+        lowlevel { copy_nonoverlapping(s as *Unit, (buf + pos) as *Unit, len) }
+    }
+    return pos + len
+}
+
 pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, path: Str, handler: func(AppContext) -> Str) {
     if count >= MAX_HANDLERS { return }
     let handler_id: I64 = count + 1
@@ -358,7 +395,11 @@ func app_dispatch_tree(table: I64, trees: I64, method: Str, path: Str, body: Str
         if root != 0 {
             let rm: RouteMatch = find_in_tree(root, path)
             if rm.found {
-                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: 0 }
+                // Heap-allocate RouteMatch so AppContext.param() can access it
+                // RouteMatch = { found: Bool, handler_id: I64, param_names: List, param_values: List }
+                // We store it on the stack and pass its address
+                let rm_ptr: I64 = (ref rm) as I64
+                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: rm_ptr }
                 let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
                 let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
                 let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
