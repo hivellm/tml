@@ -1,4 +1,4 @@
-// TML HTTP Server — Express-like API with dynamic handler dispatch
+// TML HTTP Server — Express-like API
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
@@ -7,243 +7,29 @@
 mod server
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::http::app::{App, AppContext}
 
-// ── FFI ─────────────────────────────────────────────────────────
-@extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
-@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
-@extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
-@extern("tml_sys_close") func sys_close(handle: I64) -> I64
-@extern("tml_sys_accept_v4") func sys_accept(handle: I64) -> I64
-@extern("c") func tml_sys_socket(domain: I32, typ: I32, proto: I32) -> I64
-@extern("c") func tml_sys_bind_v4(handle: I64, addr: I32, port: I32) -> I64
-@extern("c") func tml_sys_listen(handle: I64, backlog: I32) -> I64
-@extern("tml_thread_spawn") func raw_thread_spawn(f: *Unit, arg: *Unit, stack: U64) -> U64
-@extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
-@extern("tml_thread_available_parallelism") func cpu_count() -> U32
-
-const IPPROTO_TCP: I32 = 6
-const TCP_NODELAY: I32 = 1
-const SOL_SOCKET: I32 = 65535
-const SO_REUSEADDR: I32 = 4
-const AF_INET: I32 = 2
-const SOCK_STREAM: I32 = 1
-const BUF_SIZE: I64 = 8192
-const MAX_ROUTES: I64 = 64
-const ROUTE_SIZE: I64 = 24
-
-// ════════════════════════════════════════════════════════════════════
-// Route table: heap array of [method_ptr, path_ptr, handler_ptr] x N
-// ════════════════════════════════════════════════════════════════════
-
-func route_new() -> I64 {
-    return lowlevel { mem_alloc(MAX_ROUTES * ROUTE_SIZE) } as I64
+func handle_root(ctx: AppContext) -> Str {
+    ctx.json(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
 }
 
-func route_add(table: I64, count: I64, method: Str, path: Str, handler: func(Str, Str, Str) -> Str) -> I64 {
-    if count >= MAX_ROUTES { return count }
-    let off: I64 = count * ROUTE_SIZE
-    lowlevel { ptr_write[I64]((table + off) as *I64, method as I64) }
-    lowlevel { ptr_write[I64]((table + off + 8) as *I64, path as I64) }
-    lowlevel { ptr_write[I64]((table + off + 16) as *I64, handler as I64) }
-    return count + 1
+func handle_health(ctx: AppContext) -> Str {
+    ctx.json(200, "{" + "\"status\":\"ok\"" + "}")
 }
 
-func route_dispatch(table: I64, count: I64, method: Str, path: Str, body: Str) -> Str {
-    var i: I64 = 0
-    loop (i < count) {
-        let off: I64 = i * ROUTE_SIZE
-        let m: Str = lowlevel { ptr_read[I64]((table + off) as *I64) } as Str
-        let p: Str = lowlevel { ptr_read[I64]((table + off + 8) as *I64) } as Str
-        if m == method and p == path {
-            let fp: I64 = lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
-            let handler: func(Str, Str, Str) -> Str = fp as func(Str, Str, Str) -> Str
-            return handler(method, path, body)
-        }
-        i = i + 1
+func handle_echo(ctx: AppContext) -> Str {
+    let body: Str = ctx.body()
+    if str::len(body) == 0 {
+        return ctx.json(200, "{}")
     }
-    return json_response(404, "{" + "\"error\":\"not found\"" + "}")
+    ctx.json(200, body)
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Response builder
-// ════════════════════════════════════════════════════════════════════
-
-func json_response(status: I64, body: Str) -> Str {
-    let cl: Str = str::len(body).to_string()
-    return "HTTP/1.1 " + status.to_string() + " OK\r\n" +
-           "Content-Type: application/json\r\n" +
-           "Content-Length: " + cl + "\r\n" +
-           "Connection: keep-alive\r\n\r\n" + body
-}
-
-// ════════════════════════════════════════════════════════════════════
-// HTTP parsing
-// ════════════════════════════════════════════════════════════════════
-
-func parse_method(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len and i < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c == 32 as U8 {
-            let p: I64 = lowlevel { mem_alloc(i + 1) } as I64
-            lowlevel { copy_nonoverlapping(buf as *Unit, p as *Unit, i) }
-            lowlevel { ptr_write[U8]((p + i) as *U8, 0 as U8) }
-            return p as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-func parse_path(buf: I64, len: I64) -> Str {
-    var start: I64 = 0
-    loop (start < len and start < 10) {
-        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 32 as U8 { start = start + 1; break }
-        start = start + 1
-    }
-    var end: I64 = start
-    loop (end < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
-        if c == 32 as U8 or c == 63 as U8 { break }
-        end = end + 1
-    }
-    let plen: I64 = end - start
-    if plen <= 0 { return "/" }
-    let p: I64 = lowlevel { mem_alloc(plen + 1) } as I64
-    lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, plen) }
-    lowlevel { ptr_write[U8]((p + plen) as *U8, 0 as U8) }
-    return p as Str
-}
-
-func parse_body(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len - 3) {
-        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i + 1) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i + 2) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i + 3) as *U8) } == 10 as U8 {
-            let bs: I64 = i + 4
-            let bl: I64 = len - bs
-            if bl <= 0 { return "" }
-            let p: I64 = lowlevel { mem_alloc(bl + 1) } as I64
-            lowlevel { copy_nonoverlapping((buf + bs) as *Unit, p as *Unit, bl) }
-            lowlevel { ptr_write[U8]((p + bl) as *U8, 0 as U8) }
-            return p as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-func has_header_end(buf: I64, len: I64) -> Bool {
-    if len < 4 { return false }
-    var i: I64 = 3
-    loop (i < len) {
-        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
-            return true
-        }
-        i = i + 1
-    }
-    return false
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Connection handler (thread entry point)
-// ════════════════════════════════════════════════════════════════════
-
-func handle_connection(arg: *Unit) {
-    let a: I64 = arg as I64
-    let fd: I64 = lowlevel { ptr_read[I64](a as *I64) }
-    let shared: I64 = lowlevel { ptr_read[I64]((a + 8) as *I64) }
-    lowlevel { mem_free(arg as *Unit) }
-
-    let table: I64 = lowlevel { ptr_read[I64](shared as *I64) }
-    let count: I64 = lowlevel { ptr_read[I64]((shared + 8) as *I64) }
-
-    tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-    let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
-
-    loop (true) {
-        var total: I64 = 0
-        var ok: Bool = false
-        loop (total < BUF_SIZE - 1) {
-            let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
-            if n <= 0 { break }
-            total = total + n
-            if has_header_end(buf, total) { ok = true; break }
-        }
-        if not ok or total <= 0 { break }
-        lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
-
-        let resp: Str = route_dispatch(table, count, parse_method(buf, total), parse_path(buf, total), parse_body(buf, total))
-        let sent: I64 = tml_sys_send(fd, resp as *Unit, str::len(resp))
-        if sent < 0 { break }
-    }
-
-    lowlevel { mem_free(buf as *Unit) }
-    sys_close(fd)
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Server start
-// ════════════════════════════════════════════════════════════════════
-
-func start_server(table: I64, count: I64, port: I64) {
-    let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
-    if sock < 0 { println("ERROR: socket failed"); return }
-    tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
-    if tml_sys_bind_v4(sock, 0, port as I32) < 0 { println("ERROR: bind failed"); sys_close(sock); return }
-    if tml_sys_listen(sock, 1024) < 0 { println("ERROR: listen failed"); sys_close(sock); return }
-    println("Listening on http://localhost:" + port.to_string())
-
-    let shared: I64 = lowlevel { mem_alloc(16) } as I64
-    lowlevel { ptr_write[I64](shared as *I64, table) }
-    lowlevel { ptr_write[I64]((shared + 8) as *I64, count) }
-
-    loop (true) {
-        let fd: I64 = sys_accept(sock)
-        if fd < 0 { continue }
-        let arg: I64 = lowlevel { mem_alloc(16) } as I64
-        lowlevel { ptr_write[I64](arg as *I64, fd) }
-        lowlevel { ptr_write[I64]((arg + 8) as *I64, shared) }
-        let h: U64 = raw_thread_spawn(handle_connection as *Unit, arg as *Unit, 0 as U64)
-        if h != 0 as U64 { raw_thread_detach(h) }
-        else { lowlevel { mem_free(arg as *Unit) }; sys_close(fd) }
-    }
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Main — register routes with lambdas, start server
-// ════════════════════════════════════════════════════════════════════
 
 pub func main() -> I32 {
-    let table: I64 = route_new()
-    var count: I64 = 0
-
-    count = route_add(table, count, "GET", "/", do(method: Str, path: Str, body: Str) -> Str {
-        json_response(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
-    })
-
-    count = route_add(table, count, "GET", "/health", do(method: Str, path: Str, body: Str) -> Str {
-        json_response(200, "{" + "\"status\":\"ok\"" + "}")
-    })
-
-    count = route_add(table, count, "POST", "/api/echo", do(method: Str, path: Str, body: Str) -> Str {
-        if str::len(body) == 0 { return json_response(200, "{" + "}") }
-        json_response(200, body)
-    })
-
-    println("TML HTTP Server")
-    println("  Port:       3000")
-    println("  Workers:    " + cpu_count().to_string() + " cores")
-    println("  Keep-Alive: yes")
-    println("  Routes:     " + count.to_string() + " (dynamic dispatch)")
-    println("")
-
-    start_server(table, count, 3000)
+    var app: App = App::new()
+    app.get("/", handle_root)
+    app.get("/health", handle_health)
+    app.post("/api/echo", handle_echo)
+    app.listen(3000)
     return 0
 }
