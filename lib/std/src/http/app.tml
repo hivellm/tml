@@ -30,7 +30,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use std::http::router::{RouteMatch, NODE_STATIC, insert, find_in_tree, node_new}
+use std::http::router::{NODE_STATIC, insert, node_new}
 use std::net::eventloop::{EventLoop, Interest, Event}
 
 // ── FFI ─────────────────────────────────────────────────────────
@@ -131,23 +131,17 @@ impl AppContext {
     /// Get a path parameter by name. e.g., ctx.param("id") for route "/users/:id"
     pub func param(this, name: Str) -> Str {
         if this.route_match_ptr == 0 { return "" }
-        // Read param_names list handle and param_values list handle from RouteMatch
-        // RouteMatch layout: { found: Bool(8), handler_id: I64(8), param_names: List(16), param_values: List(16) }
-        let rm: I64 = this.route_match_ptr
-        // param_names starts at offset 16 (after Bool found + I64 handler_id)
-        // List[Str] = { handle: *Unit } = 8 bytes
-        let names_handle: I64 = lowlevel { ptr_read[I64]((rm + 16) as *I64) }
-        let values_handle: I64 = lowlevel { ptr_read[I64]((rm + 24) as *I64) }
-        if names_handle == 0 or values_handle == 0 { return "" }
-        // List header: [0] data_ptr, [8] len, [16] cap, [24] stride
-        let names_data: I64 = lowlevel { ptr_read[I64](names_handle as *I64) }
-        let names_len: I64 = lowlevel { ptr_read[I64]((names_handle + 8) as *I64) }
-        let values_data: I64 = lowlevel { ptr_read[I64](values_handle as *I64) }
+        // ctx_data layout: [0] params_buf (I64), [8] param_count (I64)
+        // params_buf layout: [name0, value0, name1, value1, ...] as I64
+        let ctx_data: I64 = this.route_match_ptr
+        let params_buf: I64 = lowlevel { ptr_read[I64](ctx_data as *I64) }
+        let pc: I64 = lowlevel { ptr_read[I64]((ctx_data + 8) as *I64) }
+        if params_buf == 0 or pc == 0 { return "" }
         var i: I64 = 0
-        loop (i < names_len) {
-            let n: Str = lowlevel { ptr_read[I64]((names_data + i * 8) as *I64) } as Str
+        loop (i < pc) {
+            let n: Str = lowlevel { ptr_read[I64]((params_buf + i * 16) as *I64) } as Str
             if n == name {
-                return lowlevel { ptr_read[I64]((values_data + i * 8) as *I64) } as Str
+                return lowlevel { ptr_read[I64]((params_buf + i * 16 + 8) as *I64) } as Str
             }
             i = i + 1
         }
@@ -388,26 +382,177 @@ const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/j
 const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
 const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
 
-/// Radix-tree fallback dispatch. Separated from app_dispatch so the RouteMatch
-/// type (which contains List[Str] fields) doesn't pollute the hot path's stack frame.
+// ── Inline radix-tree lookup (avoids cross-module List dependency) ──
+// Node layout from router.tml: 80 bytes per node
+const RT_PREFIX: I64 = 0
+const RT_CHILDREN_PTR: I64 = 8
+const RT_CHILDREN_COUNT: I64 = 16
+const RT_PARAM_CHILD: I64 = 32
+const RT_WILDCARD_CHILD: I64 = 40
+const RT_HANDLER: I64 = 48
+const RT_PARAM_NAME: I64 = 56
+const RT_KIND: I64 = 64
+const MAX_PARAMS: I64 = 8
+
+func rt_get(node: I64, off: I64) -> I64 {
+    lowlevel { ptr_read[I64]((node + off) as *I64) }
+}
+
+func rt_find_child(node: I64, byte_key: I32) -> I64 {
+    let arr: I64 = rt_get(node, 8)
+    let count: I64 = rt_get(node, 16)
+    if arr == 0 or count == 0 { return 0 }
+    let key: I64 = byte_key as I64
+    var entry: I64 = arr
+    var idx: I64 = 0
+    loop (idx < count) {
+        let k: I64 = lowlevel { ptr_read[I64](entry as *I64) }
+        if k == key {
+            return lowlevel { ptr_read[I64]((entry + 8) as *I64) }
+        }
+        entry = entry + 16
+        idx = idx + 1
+    }
+    return 0
+}
+
+func rt_match_prefix(path: Str, pos: I64, prefix: Str) -> I64 {
+    let plen: I64 = str::len(path)
+    let prelen: I64 = str::len(prefix)
+    var i: I64 = 0
+    loop (i < prelen) {
+        if pos + i >= plen { return i }
+        if str::char_at(path, pos + i) != str::char_at(prefix, i) { return i }
+        i = i + 1
+    }
+    return prelen
+}
+
+func rt_find_slash(path: Str, from: I64, plen: I64) -> I64 {
+    var i: I64 = from
+    loop (i < plen) {
+        if str::char_at(path, i) == 47 { return i }
+        i = i + 1
+    }
+    return plen
+}
+
+/// Inline radix-tree search. Returns handler_id (0 = not found).
+/// Stores up to MAX_PARAMS name/value pairs in params_buf.
+/// params_buf layout: [name0, value0, name1, value1, ...] as I64 (Str pointers)
+/// param_count is set to the number of extracted params.
+/// Store a param name+value at index in the params buffer.
+/// Each param = 16 bytes (name I64 + value I64).
+func app_store_param(params_buf: I64, index: I64, name: Str, value: Str) {
+    // Offset = index * 16. Use addition to avoid i32 multiplication codegen bug.
+    var off: I64 = 0
+    var j: I64 = 0
+    loop (j < index) { off = off + 16; j = j + 1 }
+    lowlevel { ptr_write[I64]((params_buf + off) as *I64, name as I64) }
+    lowlevel { ptr_write[I64]((params_buf + off + 8) as *I64, value as I64) }
+}
+
+pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut ref I64) -> I64 {
+    let plen: I64 = str::len(path)
+    param_count = 0
+
+    // Root route
+    if path == "/" or plen == 0 {
+        return rt_get(root, RT_HANDLER)
+    }
+
+    var current: I64 = root
+    var pos: I64 = 0
+
+    loop (pos < plen) {
+        let c: I32 = str::char_at(path, pos)
+
+        // Try static child
+        let child: I64 = rt_find_child(current, c)
+        if child != 0 {
+            let prefix: Str = rt_get(child, RT_PREFIX) as Str
+            let prelen: I64 = str::len(prefix)
+            let matched: I64 = rt_match_prefix(path, pos, prefix)
+            if matched == prelen {
+                current = child
+                pos = pos + prelen
+                continue
+            }
+        }
+
+        // Try parametric child
+        let param: I64 = rt_get(current, RT_PARAM_CHILD)
+        if param != 0 {
+            // Skip leading /
+            var cap_start: I64 = pos
+            if cap_start < plen and str::char_at(path, cap_start) == 47 {
+                cap_start = cap_start + 1
+            }
+            let seg_end: I64 = rt_find_slash(path, cap_start, plen)
+            if param_count < MAX_PARAMS {
+                let name: Str = rt_get(param, RT_PARAM_NAME) as Str
+                let value: Str = str::substring(path, cap_start, seg_end)
+                app_store_param(params_buf, param_count, name, value)
+                param_count = param_count + 1
+            }
+            current = param
+            pos = seg_end
+            continue
+        }
+
+        // Try wildcard child
+        let wc: I64 = rt_get(current, RT_WILDCARD_CHILD)
+        if wc != 0 {
+            var wc_start: I64 = pos
+            if wc_start < plen and str::char_at(path, wc_start) == 47 {
+                wc_start = wc_start + 1
+            }
+            if param_count < MAX_PARAMS {
+                let name: Str = rt_get(wc, RT_PARAM_NAME) as Str
+                let value: Str = str::substring(path, wc_start, plen)
+                app_store_param(params_buf, param_count, name, value)
+                param_count = param_count + 1
+            }
+            return rt_get(wc, RT_HANDLER)
+        }
+
+        // No match
+        return 0
+    }
+
+    return rt_get(current, RT_HANDLER)
+}
+
+/// Radix-tree fallback dispatch using inline lookup (no cross-module dependency).
 func app_dispatch_tree(table: I64, trees: I64, method: Str, path: Str, body: Str) -> Str {
     let idx: I64 = method_index(method)
     if idx >= 0 {
         let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
         if root != 0 {
-            let rm: RouteMatch = find_in_tree(root, path)
-            if rm.found {
-                // Heap-allocate RouteMatch so AppContext.param() can access it
-                // RouteMatch = { found: Bool, handler_id: I64, param_names: List, param_values: List }
-                // We store it on the stack and pass its address
-                let rm_ptr: I64 = (ref rm) as I64
-                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: rm_ptr }
-                let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
+            // Fixed param buffer: 8 params x 2 (name+value) x 8 bytes = 128 bytes
+            let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+            var pc: I64 = 0
+            let handler_id: I64 = app_find_route(root, path, params_buf, ref pc)
+            if handler_id > 0 {
+                let offset: I64 = (handler_id - 1) * ENTRY_SIZE
                 let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                if fn_ptr == 0 { return RESPONSE_500 }
+                if fn_ptr == 0 {
+                    lowlevel { mem_free(params_buf as *Unit) }
+                    return RESPONSE_500
+                }
+                // Store params_buf pointer for AppContext.param() access
+                // Encode as: [0] params_buf, [8] param_count — 16 bytes
+                let ctx_data: I64 = lowlevel { mem_alloc(16) } as I64
+                lowlevel { ptr_write[I64](ctx_data as *I64, params_buf) }
+                lowlevel { ptr_write[I64]((ctx_data + 8) as *I64, pc) }
+                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: ctx_data }
                 let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                return handler(ctx)
+                let result: Str = handler(ctx)
+                lowlevel { mem_free(params_buf as *Unit) }
+                lowlevel { mem_free(ctx_data as *Unit) }
+                return result
             }
+            lowlevel { mem_free(params_buf as *Unit) }
         }
     }
     return ""
