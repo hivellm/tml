@@ -67,6 +67,8 @@ const TCP_NODELAY: I32 = 1
 const BUF_SIZE: I64 = 8192
 const MAX_HANDLERS: I64 = 256
 const MAX_MIDDLEWARE: I64 = 32
+const MAX_HEADER_SIZE: I64 = 8192
+const MAX_BODY_SIZE: I64 = 1048576
 
 // Shared state memory layout:
 // [0]  handler_table    (I64 ptr to array of [method_ptr, path_ptr, fn_ptr] x N)

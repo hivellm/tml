@@ -10,11 +10,11 @@
 - [x] 1.4 Graceful shutdown flag in shared state
 - [x] 1.5 AppContext.html(), .redirect() response helpers
 - [x] 1.6 Queue overflow protection (503 when full)
-- [ ] 1.7 Wire Router radix-tree to app_dispatch (replace linear scan)
+- [x] 1.7 Wire Router radix-tree to app_dispatch (hybrid: exact match fast path + radix tree fallback)
 - [ ] 1.8 AppContext.param("name") working with RouteMatch
 - [ ] 1.9 Buffer-based response builder (eliminate string concat)
 - [ ] 1.10 Pre-built common headers (Date, Server, Connection)
-- [ ] 1.11 Request size limits (max header size, max body size)
+- [x] 1.11 Request size limits (BUF_SIZE=8KB header cap, MAX_BODY_SIZE=1MB constant)
 - [ ] 1.12 Error recovery (catch handler panics, return 500)
 
 ## Phase 2: Zero-Copy Parsing + Arena (target: 150K req/s)
