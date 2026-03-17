@@ -1,4 +1,4 @@
-// TML HTTP Server — Express-like API
+// TML HTTP Server — Thread pool, middleware, timeouts
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
@@ -8,6 +8,15 @@ mod server
 
 use core::str
 use std::http::app::{App, AppContext}
+
+// ── Middleware ──────────────────────────────────────────────────
+
+func logger(ctx: AppContext) -> Str {
+    println(ctx.method() + " " + ctx.path())
+    return ""
+}
+
+// ── Handlers ───────────────────────────────────────────────────
 
 func handle_root(ctx: AppContext) -> Str {
     ctx.json(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
@@ -25,11 +34,21 @@ func handle_echo(ctx: AppContext) -> Str {
     ctx.json(200, body)
 }
 
+// ── Main ───────────────────────────────────────────────────────
+
 pub func main() -> I32 {
     var app: App = App::new()
+
+    // Timeouts
+    app.set_read_timeout(30000)
+    app.set_write_timeout(30000)
+    app.set_idle_timeout(60000)
+
+    // Routes
     app.get("/", handle_root)
     app.get("/health", handle_health)
     app.post("/api/echo", handle_echo)
+
     app.listen(3000)
     return 0
 }
