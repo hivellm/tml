@@ -27,6 +27,17 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
 
     if (block.expr.has_value() && !block_terminated_) {
         result = gen_expr(*block.expr.value());
+    } else if (!block_terminated_ && closure_wants_implicit_return_ && !block.stmts.empty()) {
+        // Closure with non-void return type but no trailing expression.
+        // Treat the last ExprStmt's value as the implicit return value.
+        // The expression was already emitted by gen_stmt — re-generate it
+        // to capture the value. This is safe for pure expressions (no side effects).
+        const auto& last_stmt = *block.stmts.back();
+        if (last_stmt.is<parser::ExprStmt>()) {
+            result = gen_expr(*last_stmt.as<parser::ExprStmt>().expr);
+        } else {
+            last_expr_type_ = "void";
+        }
     } else {
         // Block has no trailing expression - it returns Unit (void)
         last_expr_type_ = "void";

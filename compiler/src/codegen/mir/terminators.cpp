@@ -36,7 +36,13 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                             type_str = it->second;
                         }
                     }
-                    if (type_str == "void") {
+                    if (type_str == "void" && !current_func_ret_type_.empty() &&
+                        current_func_ret_type_ != "void" && current_func_ret_type_ != "{}") {
+                        // Value was typed as void (e.g., block's last ExprStmt in a closure)
+                        // but the function return type is non-void. Use the function's
+                        // return type instead — the value register holds the correct data.
+                        emitln("    ret " + current_func_ret_type_ + " " + val);
+                    } else if (type_str == "void") {
                         // Unit type return — emit `ret void` without a value operand
                         emitln("    ret void");
                     } else if (type_str.empty()) {

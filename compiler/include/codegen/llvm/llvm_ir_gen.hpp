@@ -400,6 +400,10 @@ private:
     std::string closure_return_type_;   // LLVM type of the closure return value
     std::string closure_return_label_;  // label to branch to after storing
 
+    // When true, gen_block treats the last ExprStmt as a trailing expression
+    // (preserving its value). Used by closure codegen for implicit return.
+    bool closure_wants_implicit_return_ = false;
+
     // Current namespace context for qualified names
     std::vector<std::string> current_namespace_;
     auto qualified_name(const std::string& name) const -> std::string;

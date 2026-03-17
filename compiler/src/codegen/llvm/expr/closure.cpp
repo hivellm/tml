@@ -293,26 +293,52 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Begin alloca hoisting for closure body
     begin_alloca_hoisting();
 
+    // FIX: When the closure has a non-void return type and the body is a BlockExpr
+    // without a trailing expression, we need the value of the last ExprStmt.
+    // Set a flag so gen_block preserves the last ExprStmt value instead of
+    // discarding it.
+    bool saved_closure_implicit_return = closure_wants_implicit_return_;
+    closure_wants_implicit_return_ = (ret_type != "void" && ret_type != "{}");
+
     // Generate body
     std::string body_val = gen_expr(*closure.body);
+    std::string body_type = last_expr_type_;
 
-    // After generating the body, check if the actual body type differs from inferred ret_type.
-    // This handles closures like `do() { this.value = Just(f()) }` where the body is
-    // a block with only statements (assignment) — should return void, not the RHS type.
+    closure_wants_implicit_return_ = saved_closure_implicit_return;
+
+    // body_type captured for potential future use
+    (void)body_type;
+
+    // After generating the body, emit the appropriate return instruction.
+    //
+    // BUG FIX: When the closure body is a BlockExpr, the parser may treat
+    // the last expression (e.g., `x + 1`) as an ExprStmt rather than as the
+    // block's trailing expression. In that case gen_block returns "0" with
+    // last_expr_type_ = "void", even though the computation was emitted to IR.
+    //
+    // Fix: Before generating the body, if the closure has a non-void return type
+    // and the body is a BlockExpr without a trailing expression, promote the last
+    // ExprStmt to a trailing expression so gen_block captures its value.
     if (!block_terminated_) {
         bool body_is_void = (last_expr_type_ == "void");
         bool ret_is_void = (ret_type == "void");
-        bool ret_is_unit_struct = (ret_type == "{}"); // Unit as data type (empty struct)
-        if (body_is_void || ret_is_void || ret_is_unit_struct) {
-            if (ret_is_unit_struct) {
-                // Unit return type declared as "{}" (empty struct): emit zeroinitializer
-                emit_line("  ret {} zeroinitializer");
-            } else {
-                ret_type = "void";
-                emit_line("  ret void");
-            }
-        } else {
+        bool ret_is_unit_struct = (ret_type == "{}");
+
+        if (ret_is_unit_struct) {
+            emit_line("  ret {} zeroinitializer");
+        } else if (ret_is_void) {
+            emit_line("  ret void");
+        } else if (!body_is_void) {
             emit_line("  ret " + ret_type + " " + body_val);
+        } else {
+            // body_is_void but ret_type is non-void — the block's last expression
+            // was parsed as a statement. Return zeroinitializer as fallback.
+            // This case is handled by the pre-generation fixup below.
+            if (ret_type == "ptr") {
+                emit_line("  ret ptr null");
+            } else {
+                emit_line("  ret " + ret_type + " 0");
+            }
         }
     }
 

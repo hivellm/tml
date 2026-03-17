@@ -89,6 +89,7 @@ private:
 
     // Current function context
     std::string current_func_;
+    std::string current_func_ret_type_; // LLVM return type of the current function
 
     // Value ID to LLVM register mapping
     std::unordered_map<mir::ValueId, std::string> value_regs_;

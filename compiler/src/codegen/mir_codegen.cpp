@@ -754,6 +754,7 @@ void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
 
 void MirCodegen::emit_function(const mir::Function& func) {
     current_func_ = func.name;
+    current_func_ret_type_ = func.return_type ? mir_type_to_llvm(func.return_type) : "void";
     value_regs_.clear();
     block_labels_.clear();
     block_exit_labels_.clear();
