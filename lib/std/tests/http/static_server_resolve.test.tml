@@ -1,0 +1,12 @@
+// Tests for static_server — path resolution
+use test::{assert, assert_eq}
+use std::http::static_server::{resolve_path, get_extension, mime_for_extension}
+
+@test
+func test_resolve_path() -> I32 {
+    assert_eq(resolve_path("/var/www", "/index.html"), "/var/www/index.html", "basic resolve")
+    assert_eq(resolve_path("/var/www/", "/style.css"), "/var/www/style.css", "trailing slash root")
+    assert_eq(resolve_path("/var/www", "/../etc/passwd"), "", "directory traversal blocked")
+    assert_eq(resolve_path("/var/www", "//etc/passwd"), "", "double slash blocked")
+    return 0
+}

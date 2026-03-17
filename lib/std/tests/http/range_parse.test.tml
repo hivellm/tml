@@ -1,0 +1,18 @@
+// Tests for range — Range header parsing
+use test::{assert, assert_eq}
+use std::http::range::{ByteRange, parse_range, content_range, content_range_unsatisfied, is_range_satisfiable}
+
+@test
+func test_parse_range_explicit() -> I32 {
+    let r = parse_range("bytes=0-499")
+    when r {
+        Just(range) => {
+            let resolved = range.resolve(1000)
+            assert_eq(resolved.0, 0, "start=0")
+            assert_eq(resolved.1, 499, "end=499")
+            assert_eq(range.length(1000), 500, "length=500")
+        },
+        Nothing => assert(false, "should parse"),
+    }
+    return 0
+}

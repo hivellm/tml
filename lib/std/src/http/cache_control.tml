@@ -1,0 +1,137 @@
+//! HTTP Cache-Control header generation.
+//!
+//! Generates Cache-Control, Expires, and related caching headers
+//! per RFC 7234. Inspired by Express.js caching middleware.
+
+use core::str
+use core::fmt::helpers::i64_to_str
+
+/// Cache-Control configuration.
+pub type CacheOptions {
+    is_public: Bool,
+    is_private: Bool,
+    no_cache: Bool,
+    no_store: Bool,
+    no_transform: Bool,
+    must_revalidate: Bool,
+    proxy_revalidate: Bool,
+    max_age: I64,           // seconds (-1 = omit)
+    s_maxage: I64,          // shared cache max-age (-1 = omit)
+    immutable: Bool,
+    stale_while_revalidate: I64,  // seconds (-1 = omit)
+    stale_if_error: I64,          // seconds (-1 = omit)
+}
+
+impl CacheOptions {
+    /// No caching at all (for dynamic/sensitive content).
+    pub func no_store() -> CacheOptions {
+        CacheOptions {
+            is_public: false, is_private: true,
+            no_cache: true, no_store: true, no_transform: false,
+            must_revalidate: false, proxy_revalidate: false,
+            max_age: 0, s_maxage: -1 as I64,
+            immutable: false,
+            stale_while_revalidate: -1 as I64,
+            stale_if_error: -1 as I64,
+        }
+    }
+
+    /// Short-lived cache (5 minutes, must revalidate).
+    pub func short() -> CacheOptions {
+        CacheOptions {
+            is_public: true, is_private: false,
+            no_cache: false, no_store: false, no_transform: false,
+            must_revalidate: true, proxy_revalidate: false,
+            max_age: 300, s_maxage: -1 as I64,
+            immutable: false,
+            stale_while_revalidate: -1 as I64,
+            stale_if_error: -1 as I64,
+        }
+    }
+
+    /// Long-lived cache for static assets (1 year, immutable).
+    pub func immutable_asset() -> CacheOptions {
+        CacheOptions {
+            is_public: true, is_private: false,
+            no_cache: false, no_store: false, no_transform: false,
+            must_revalidate: false, proxy_revalidate: false,
+            max_age: 31536000, s_maxage: -1 as I64,
+            immutable: true,
+            stale_while_revalidate: -1 as I64,
+            stale_if_error: -1 as I64,
+        }
+    }
+
+    /// Custom max-age with public caching.
+    pub func public_max_age(seconds: I64) -> CacheOptions {
+        CacheOptions {
+            is_public: true, is_private: false,
+            no_cache: false, no_store: false, no_transform: false,
+            must_revalidate: false, proxy_revalidate: false,
+            max_age: seconds, s_maxage: -1 as I64,
+            immutable: false,
+            stale_while_revalidate: -1 as I64,
+            stale_if_error: -1 as I64,
+        }
+    }
+
+    /// Custom max-age with private caching.
+    pub func private_max_age(seconds: I64) -> CacheOptions {
+        CacheOptions {
+            is_public: false, is_private: true,
+            no_cache: false, no_store: false, no_transform: false,
+            must_revalidate: false, proxy_revalidate: false,
+            max_age: seconds, s_maxage: -1 as I64,
+            immutable: false,
+            stale_while_revalidate: -1 as I64,
+            stale_if_error: -1 as I64,
+        }
+    }
+
+    /// Adds stale-while-revalidate directive.
+    pub func with_stale_while_revalidate(this, seconds: I64) -> CacheOptions {
+        CacheOptions {
+            is_public: this.is_public, is_private: this.is_private,
+            no_cache: this.no_cache, no_store: this.no_store, no_transform: this.no_transform,
+            must_revalidate: this.must_revalidate, proxy_revalidate: this.proxy_revalidate,
+            max_age: this.max_age, s_maxage: this.s_maxage,
+            immutable: this.immutable,
+            stale_while_revalidate: seconds,
+            stale_if_error: this.stale_if_error,
+        }
+    }
+}
+
+/// Generates the Cache-Control header value from options.
+pub func cache_control_header(opts: ref CacheOptions) -> Str {
+    var parts: Str = ""
+
+    if opts.is_public { parts = add_part(parts, "public") }
+    if opts.is_private { parts = add_part(parts, "private") }
+    if opts.no_cache { parts = add_part(parts, "no-cache") }
+    if opts.no_store { parts = add_part(parts, "no-store") }
+    if opts.no_transform { parts = add_part(parts, "no-transform") }
+    if opts.must_revalidate { parts = add_part(parts, "must-revalidate") }
+    if opts.proxy_revalidate { parts = add_part(parts, "proxy-revalidate") }
+    if opts.max_age >= 0 {
+        parts = add_part(parts, "max-age={i64_to_str(opts.max_age)}")
+    }
+    if opts.s_maxage >= 0 {
+        parts = add_part(parts, "s-maxage={i64_to_str(opts.s_maxage)}")
+    }
+    if opts.immutable { parts = add_part(parts, "immutable") }
+    if opts.stale_while_revalidate >= 0 {
+        parts = add_part(parts, "stale-while-revalidate={i64_to_str(opts.stale_while_revalidate)}")
+    }
+    if opts.stale_if_error >= 0 {
+        parts = add_part(parts, "stale-if-error={i64_to_str(opts.stale_if_error)}")
+    }
+
+    return parts
+}
+
+/// Helper: append a part with comma separator.
+func add_part(existing: Str, part: Str) -> Str {
+    if str::len(existing) == 0 { return part }
+    return "{existing}, {part}"
+}

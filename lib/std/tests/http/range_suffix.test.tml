@@ -1,0 +1,17 @@
+// Tests for range — suffix range and content-range header
+use test::{assert, assert_eq}
+use std::http::range::{ByteRange, parse_range, content_range, content_range_unsatisfied}
+
+@test
+func test_suffix_range() -> I32 {
+    let r = parse_range("bytes=-200")
+    when r {
+        Just(range) => {
+            let resolved = range.resolve(1000)
+            assert_eq(resolved.0, 800, "start=800")
+            assert_eq(resolved.1, 999, "end=999")
+        },
+        Nothing => assert(false, "should parse suffix"),
+    }
+    return 0
+}

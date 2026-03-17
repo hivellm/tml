@@ -1,0 +1,13 @@
+// Tests for stream — named SSE events and helpers
+use test::{assert, assert_eq}
+use core::str
+use std::http::stream::{SseEvent, sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_line}
+
+@test
+func test_sse_named_event() -> I32 {
+    let evt: SseEvent = SseEvent::named("update", "{\"count\": 42}")
+    let wire: Str = evt.serialize()
+    assert(str::contains(wire, "event: update\n"), "event type")
+    assert(str::contains(wire, "data: {\"count\": 42}\n"), "data")
+    return 0
+}

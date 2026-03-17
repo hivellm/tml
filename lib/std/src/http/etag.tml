@@ -1,0 +1,91 @@
+//! ETag generation and conditional request handling.
+//!
+//! Implements ETag (entity tag) generation for HTTP caching per RFC 7232.
+//! Inspired by Express.js `etag` package.
+
+use core::str
+use std::crypto::hash::{sha256}
+use std::crypto::encoding::{hex_encode}
+
+/// Generates a strong ETag for the given content.
+/// Uses SHA-256 hash truncated to 16 hex chars.
+/// Returns: "\"abcdef0123456789\""
+pub func generate(content: Str) -> Str {
+    let content_len: I64 = str::len(content)
+    if content_len == 0 {
+        return "\"0-0\""
+    }
+    let hash: Str = sha256(content)
+    // Use first 16 chars of hex hash + content length for uniqueness
+    let short_hash: Str = str::substring(hash, 0, 16)
+    return "\"{short_hash}-{content_len}\""
+}
+
+/// Generates a weak ETag for the given content.
+/// Weak ETags indicate semantic equivalence, not byte-for-byte identity.
+/// Returns: "W/\"abcdef0123456789\""
+pub func generate_weak(content: Str) -> Str {
+    let strong: Str = generate(content)
+    return "W/{strong}"
+}
+
+/// Checks if the request's If-None-Match header matches the ETag.
+/// Returns true if the content has NOT been modified (304 should be sent).
+pub func is_not_modified(if_none_match: Str, etag: Str) -> Bool {
+    let inm_len: I64 = str::len(if_none_match)
+    let etag_len: I64 = str::len(etag)
+    if inm_len == 0 or etag_len == 0 { return false }
+
+    // Wildcard match
+    if if_none_match == "*" { return true }
+
+    // Direct match
+    if if_none_match == etag { return true }
+
+    // Strip W/ prefix for weak comparison
+    var clean_inm: Str = if_none_match
+    if str::starts_with(if_none_match, "W/") {
+        clean_inm = str::substring(if_none_match, 2, inm_len)
+    }
+    var clean_etag: Str = etag
+    if str::starts_with(etag, "W/") {
+        clean_etag = str::substring(etag, 2, etag_len)
+    }
+    if clean_inm == clean_etag { return true }
+
+    // Multiple ETags in If-None-Match (comma-separated)
+    var pos: I64 = 0
+    loop (pos < inm_len) {
+        // Skip whitespace and commas
+        loop (pos < inm_len and (str::char_at(if_none_match, pos) == 32 or str::char_at(if_none_match, pos) == 44)) {
+            pos = pos + 1
+        }
+        var end: I64 = pos
+        loop (end < inm_len and str::char_at(if_none_match, end) != 44) {
+            end = end + 1
+        }
+        let part: Str = str::trim(str::substring(if_none_match, pos, end))
+        if part == etag { return true }
+        // Weak comparison
+        let part_len: I64 = str::len(part)
+        var clean_part: Str = part
+        if str::starts_with(part, "W/") {
+            clean_part = str::substring(part, 2, part_len)
+        }
+        if clean_part == clean_etag { return true }
+        pos = end + 1
+    }
+    return false
+}
+
+/// Checks If-Modified-Since header against a last-modified timestamp.
+/// Both values should be HTTP-date format strings.
+/// Returns true if the resource has NOT been modified (304 should be sent).
+pub func is_not_modified_since(if_modified_since: Str, last_modified: Str) -> Bool {
+    // Simple string comparison — both should be in RFC 7231 format
+    // "Mon, 17 Mar 2026 12:00:00 GMT"
+    if str::len(if_modified_since) == 0 or str::len(last_modified) == 0 {
+        return false
+    }
+    return if_modified_since == last_modified
+}

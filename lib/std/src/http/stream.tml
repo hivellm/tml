@@ -1,0 +1,118 @@
+//! HTTP streaming — Server-Sent Events (SSE) and StreamableHTTP.
+//!
+//! Implements Server-Sent Events (SSE) message formatting per the
+//! W3C EventSource specification, and streaming HTTP response helpers.
+
+use core::str
+use core::fmt::helpers::i64_to_str
+
+/// A Server-Sent Event message.
+pub type SseEvent {
+    event_type: Str,   // event name (empty = "message")
+    data: Str,         // event data (can be multi-line)
+    id: Str,           // event ID for reconnection
+    retry: I64,        // reconnection time in ms (0 = omit)
+}
+
+impl SseEvent {
+    /// Creates a data-only SSE event.
+    pub func data(data: Str) -> SseEvent {
+        SseEvent { event_type: "", data: data, id: "", retry: 0 }
+    }
+
+    /// Creates a named SSE event with data.
+    pub func named(event_type: Str, data: Str) -> SseEvent {
+        SseEvent { event_type: event_type, data: data, id: "", retry: 0 }
+    }
+
+    /// Creates an SSE event with ID for reconnection.
+    pub func with_id(this, id: Str) -> SseEvent {
+        SseEvent { event_type: this.event_type, data: this.data, id: id, retry: this.retry }
+    }
+
+    /// Sets the retry interval.
+    pub func with_retry(this, ms: I64) -> SseEvent {
+        SseEvent { event_type: this.event_type, data: this.data, id: this.id, retry: ms }
+    }
+
+    /// Serializes the SSE event to wire format.
+    /// Output: "event: name\ndata: content\nid: 123\n\n"
+    pub func serialize(this) -> Str {
+        var result: Str = ""
+
+        if str::len(this.event_type) > 0 {
+            result = "{result}event: {this.event_type}\n"
+        }
+
+        // Data can be multi-line — each line needs "data: " prefix
+        let data_len: I64 = str::len(this.data)
+        if data_len > 0 {
+            var pos: I64 = 0
+            loop (pos < data_len) {
+                var line_end: I64 = pos
+                loop (line_end < data_len and str::char_at(this.data, line_end) != 10) {
+                    line_end = line_end + 1
+                }
+                let line: Str = str::substring(this.data, pos, line_end)
+                result = "{result}data: {line}\n"
+                pos = line_end + 1
+            }
+        } else {
+            result = "{result}data: \n"
+        }
+
+        if str::len(this.id) > 0 {
+            result = "{result}id: {this.id}\n"
+        }
+
+        if this.retry > 0 {
+            result = "{result}retry: {i64_to_str(this.retry)}\n"
+        }
+
+        // Double newline terminates the event
+        result = "{result}\n"
+        return result
+    }
+}
+
+/// SSE comment line (keep-alive ping).
+pub func sse_comment(text: Str) -> Str {
+    return ": {text}\n\n"
+}
+
+/// SSE keep-alive ping (empty comment).
+pub func sse_ping() -> Str {
+    return ":\n\n"
+}
+
+/// Returns the headers needed for an SSE response.
+pub func sse_headers() -> Str {
+    var result: Str = ""
+    result = "{result}Content-Type: text/event-stream\r\n"
+    result = "{result}Cache-Control: no-cache\r\n"
+    result = "{result}Connection: keep-alive\r\n"
+    result = "{result}X-Accel-Buffering: no\r\n"
+    return result
+}
+
+// ── StreamableHTTP helpers ──────────────────────────────────
+
+/// Returns headers for a streaming HTTP response (no Content-Length).
+pub func streaming_headers(content_type: Str) -> Str {
+    var result: Str = ""
+    result = "{result}Content-Type: {content_type}\r\n"
+    result = "{result}Transfer-Encoding: chunked\r\n"
+    result = "{result}Connection: keep-alive\r\n"
+    result = "{result}Cache-Control: no-cache\r\n"
+    return result
+}
+
+/// Returns headers for a JSON streaming response (NDJSON).
+pub func ndjson_headers() -> Str {
+    return streaming_headers("application/x-ndjson")
+}
+
+/// Formats a line for NDJSON streaming.
+pub func ndjson_line(json: Str) -> Str {
+    return "{json}\n"
+}

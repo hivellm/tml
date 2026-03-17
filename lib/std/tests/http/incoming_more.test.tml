@@ -1,0 +1,18 @@
+// Tests for IncomingMessage — user_agent, authorization, is_chunked, socket
+use test::{assert, assert_eq}
+use std::http::incoming::{IncomingMessage, parse_request}
+
+@test
+func test_incoming_extra_headers() -> I32 {
+    let raw: Str = "POST /data HTTP/1.1\r\nHost: api.test\r\nUser-Agent: Mozilla/5.0\r\nAuthorization: Bearer token123\r\nTransfer-Encoding: chunked\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            assert_eq(msg.user_agent(), "Mozilla/5.0", "user agent")
+            assert_eq(msg.authorization(), "Bearer token123", "authorization")
+            assert(msg.is_chunked(), "is chunked")
+        },
+        Err(e) => assert(false, "should parse"),
+    }
+    return 0
+}

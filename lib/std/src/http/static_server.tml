@@ -1,0 +1,210 @@
+//! Static file serving utilities.
+//!
+//! Provides helpers for serving static files over HTTP, including
+//! MIME type detection, ETag generation, and Range request support.
+//! Inspired by Express.js `serve-static` and `send`.
+
+use core::str
+use std::mime::Mime
+use std::http::etag
+use std::http::cache_control::{CacheOptions, cache_control_header}
+use core::fmt::helpers::i64_to_str
+
+/// Configuration for static file serving.
+pub type StaticOptions {
+    root: Str,                // root directory for files
+    index_file: Str,          // index file name (e.g. "index.html")
+    dot_files: Str,           // "ignore", "allow", "deny"
+    etag_enabled: Bool,       // generate ETags
+    last_modified: Bool,      // send Last-Modified header
+    max_age: I64,             // Cache-Control max-age in seconds
+    immutable: Bool,          // Cache-Control immutable flag
+    extensions: Str,          // fallback extensions: "html,htm"
+}
+
+impl StaticOptions {
+    /// Creates default static serving options.
+    pub func new(root: Str) -> StaticOptions {
+        StaticOptions {
+            root: root,
+            index_file: "index.html",
+            dot_files: "ignore",
+            etag_enabled: true,
+            last_modified: true,
+            max_age: 0,
+            immutable: false,
+            extensions: "",
+        }
+    }
+
+    /// Sets the index file name.
+    pub func with_index(this, index: Str) -> StaticOptions {
+        StaticOptions {
+            root: this.root, index_file: index, dot_files: this.dot_files,
+            etag_enabled: this.etag_enabled, last_modified: this.last_modified,
+            max_age: this.max_age, immutable: this.immutable, extensions: this.extensions,
+        }
+    }
+
+    /// Sets the max-age for caching.
+    pub func with_max_age(this, seconds: I64) -> StaticOptions {
+        StaticOptions {
+            root: this.root, index_file: this.index_file, dot_files: this.dot_files,
+            etag_enabled: this.etag_enabled, last_modified: this.last_modified,
+            max_age: seconds, immutable: this.immutable, extensions: this.extensions,
+        }
+    }
+
+    /// Enables immutable caching (for fingerprinted assets).
+    pub func with_immutable(this) -> StaticOptions {
+        StaticOptions {
+            root: this.root, index_file: this.index_file, dot_files: this.dot_files,
+            etag_enabled: this.etag_enabled, last_modified: this.last_modified,
+            max_age: 31536000, immutable: true, extensions: this.extensions,
+        }
+    }
+
+    /// Sets fallback file extensions.
+    pub func with_extensions(this, exts: Str) -> StaticOptions {
+        StaticOptions {
+            root: this.root, index_file: this.index_file, dot_files: this.dot_files,
+            etag_enabled: this.etag_enabled, last_modified: this.last_modified,
+            max_age: this.max_age, immutable: this.immutable, extensions: exts,
+        }
+    }
+}
+
+/// Resolves a URL path to a file path under the root directory.
+/// Returns the resolved path or "" if the path is invalid (directory traversal).
+pub func resolve_path(root: Str, url_path: Str) -> Str {
+    // Prevent directory traversal
+    if str::contains(url_path, "..") { return "" }
+    if str::contains(url_path, "//") { return "" }
+
+    // Strip leading slash
+    let path_len: I64 = str::len(url_path)
+    var clean_path: Str = url_path
+    if path_len > 0 and str::char_at(url_path, 0) == 47 {
+        clean_path = str::substring(url_path, 1, path_len)
+    }
+
+    // Build full path
+    let root_len: I64 = str::len(root)
+    if root_len > 0 and str::char_at(root, root_len - 1) == 47 {
+        return "{root}{clean_path}"
+    }
+    return "{root}/{clean_path}"
+}
+
+/// Returns the file extension from a path (without the dot).
+/// "index.html" → "html", "style.min.css" → "css"
+pub func get_extension(path: Str) -> Str {
+    let path_len: I64 = str::len(path)
+    var i: I64 = path_len - 1
+    loop (i >= 0) {
+        let c: I32 = str::char_at(path, i)
+        if c == 46 {  // '.'
+            return str::substring(path, i + 1, path_len)
+        }
+        if c == 47 or c == 92 {  // '/' or '\'
+            break
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+/// Returns the MIME type for a file extension.
+/// Uses common mappings for web-relevant file types.
+pub func mime_for_extension(ext: Str) -> Str {
+    let lower: Str = str::to_lowercase(ext)
+    // Text
+    if lower == "html" or lower == "htm" { return "text/html; charset=utf-8" }
+    if lower == "css" { return "text/css; charset=utf-8" }
+    if lower == "js" or lower == "mjs" { return "text/javascript; charset=utf-8" }
+    if lower == "json" { return "application/json; charset=utf-8" }
+    if lower == "xml" { return "application/xml; charset=utf-8" }
+    if lower == "txt" { return "text/plain; charset=utf-8" }
+    if lower == "csv" { return "text/csv; charset=utf-8" }
+    if lower == "md" { return "text/markdown; charset=utf-8" }
+    if lower == "yaml" or lower == "yml" { return "text/yaml; charset=utf-8" }
+    // Images
+    if lower == "png" { return "image/png" }
+    if lower == "jpg" or lower == "jpeg" { return "image/jpeg" }
+    if lower == "gif" { return "image/gif" }
+    if lower == "svg" { return "image/svg+xml" }
+    if lower == "webp" { return "image/webp" }
+    if lower == "ico" { return "image/x-icon" }
+    if lower == "avif" { return "image/avif" }
+    // Fonts
+    if lower == "woff" { return "font/woff" }
+    if lower == "woff2" { return "font/woff2" }
+    if lower == "ttf" { return "font/ttf" }
+    if lower == "otf" { return "font/otf" }
+    if lower == "eot" { return "application/vnd.ms-fontobject" }
+    // Media
+    if lower == "mp4" { return "video/mp4" }
+    if lower == "webm" { return "video/webm" }
+    if lower == "ogg" { return "video/ogg" }
+    if lower == "mp3" { return "audio/mpeg" }
+    if lower == "wav" { return "audio/wav" }
+    if lower == "flac" { return "audio/flac" }
+    // Archives
+    if lower == "zip" { return "application/zip" }
+    if lower == "gz" or lower == "gzip" { return "application/gzip" }
+    if lower == "tar" { return "application/x-tar" }
+    if lower == "br" { return "application/x-brotli" }
+    if lower == "zst" { return "application/zstd" }
+    // Documents
+    if lower == "pdf" { return "application/pdf" }
+    // WebAssembly
+    if lower == "wasm" { return "application/wasm" }
+    // Manifest
+    if lower == "webmanifest" { return "application/manifest+json" }
+    if lower == "map" { return "application/json" }
+    // Default
+    return "application/octet-stream"
+}
+
+/// Generates response headers for a static file.
+pub func static_file_headers(file_path: Str, content: Str, opts: ref StaticOptions) -> Str {
+    var result: Str = ""
+    let ext: Str = get_extension(file_path)
+    let content_type: Str = mime_for_extension(ext)
+    let content_len: I64 = str::len(content)
+
+    result = "{result}Content-Type: {content_type}\r\n"
+    result = "{result}Content-Length: {i64_to_str(content_len)}\r\n"
+
+    // ETag
+    if opts.etag_enabled {
+        let tag: Str = etag::generate(content)
+        result = "{result}ETag: {tag}\r\n"
+    }
+
+    // Cache-Control
+    if opts.immutable {
+        result = "{result}Cache-Control: public, max-age=31536000, immutable\r\n"
+    } else if opts.max_age > 0 {
+        result = "{result}Cache-Control: public, max-age={i64_to_str(opts.max_age)}\r\n"
+    }
+
+    // Accept-Ranges for partial content support
+    result = "{result}Accept-Ranges: bytes\r\n"
+
+    return result
+}
+
+/// Returns true if the path contains a dot-file segment.
+pub func is_dot_file(path: Str) -> Bool {
+    let path_len: I64 = str::len(path)
+    var i: I64 = 0
+    loop (i < path_len - 1) {
+        let c: I32 = str::char_at(path, i)
+        if (c == 47 or c == 92 or i == 0) and str::char_at(path, i + (if i == 0 { 0 } else { 1 })) == 46 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}

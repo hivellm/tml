@@ -1,0 +1,19 @@
+// Tests for ServerResponse — write_head and end
+use test::{assert, assert_eq}
+use core::str
+use std::http::server_response::ServerResponse
+
+@test
+func test_write_head_and_end() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.write_head(201, "Created")
+    assert_eq(resp.status_code(), 201, "status 201")
+    assert_eq(resp.status_message(), "Created", "custom message")
+    assert(resp.is_headers_sent(), "headers sent after write_head")
+    resp.end("OK")
+    assert(resp.is_finished(), "finished after end")
+    let wire: Str = resp.serialize()
+    assert(str::starts_with(wire, "HTTP/1.1 201 Created"), "wire status line")
+    assert(str::contains(wire, "OK"), "body in wire")
+    return 0
+}

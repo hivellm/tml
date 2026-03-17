@@ -1,6 +1,8 @@
-//! HTTP client, server, routing, and shared protocol types.
+//! HTTP client, server, middleware, and framework — complete HTTP stack.
 //!
-//! Full HTTP/1.1 implementation inspired by Node.js `http` module.
+//! Full HTTP/1.1 implementation with Express.js-like middleware ecosystem.
+//! Includes body parsing, compression, CORS, security headers, rate limiting,
+//! static file serving, ETag, SSE/streaming, range requests, and more.
 
 // ── Shared protocol types ───────────────────────────────────
 pub mod method
@@ -12,6 +14,8 @@ pub mod encoding
 pub mod cookie
 pub mod chunked
 pub mod functions
+pub mod content_type
+pub mod body_parser
 
 // ── Connection, Request, Response, Client ─────────────────────
 pub mod connection
@@ -33,6 +37,17 @@ pub mod router
 // ── Multipart ───────────────────────────────────────────────
 pub mod multipart
 
+// ── Middleware & Framework ───────────────────────────────────
+pub mod cors
+pub mod compression
+pub mod security
+pub mod etag
+pub mod stream
+pub mod range
+pub mod cache_control
+pub mod rate_limit
+pub mod static_server
+
 // ── Re-exports ──────────────────────────────────────────────
 pub use std::http::method::Method
 pub use std::http::status::Status
@@ -53,3 +68,14 @@ pub use std::http::multipart::{MultipartBuilder, MultipartPart}
 pub use std::http::functions::{methods, status_codes, validate_header_name, validate_header_value, MAX_HEADER_SIZE}
 pub use std::http::server::HttpServer
 pub use std::http::agent::{Agent, AgentOptions}
+pub use std::http::content_type::{parse_content_type, matches_type, negotiate}
+pub use std::http::body_parser::{ParsedBody, parse_body, form_get, url_decode}
+pub use std::http::cors::{CorsOptions, cors_headers, preflight_headers, is_preflight}
+pub use std::http::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
+pub use std::http::security::{SecurityOptions, security_headers}
+pub use std::http::etag::{generate, generate_weak, is_not_modified}
+pub use std::http::stream::{SseEvent, sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_headers, ndjson_line}
+pub use std::http::range::{ByteRange, parse_range, content_range, content_range_unsatisfied, is_range_satisfiable}
+pub use std::http::cache_control::{CacheOptions, cache_control_header}
+pub use std::http::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
+pub use std::http::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}

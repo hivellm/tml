@@ -1,0 +1,12 @@
+// Tests for cors — preflight requests
+use test::{assert, assert_eq}
+use core::str
+use std::http::cors::{CorsOptions, preflight_headers, is_preflight}
+
+@test
+func test_preflight_detection() -> I32 {
+    assert(is_preflight("OPTIONS", true, true), "OPTIONS with origin and method is preflight")
+    assert(not is_preflight("GET", true, true), "GET is not preflight")
+    assert(not is_preflight("OPTIONS", false, true), "no origin = not preflight")
+    return 0
+}

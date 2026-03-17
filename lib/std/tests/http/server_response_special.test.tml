@@ -1,0 +1,14 @@
+// Tests for ServerResponse — special methods (100 Continue, 102 Processing, 103 Early Hints)
+use test::{assert, assert_eq}
+use core::str
+use std::http::server_response::ServerResponse
+
+@test
+func test_special_responses() -> I32 {
+    assert_eq(ServerResponse::write_continue(), "HTTP/1.1 100 Continue\r\n\r\n", "100 Continue")
+    assert_eq(ServerResponse::write_processing(), "HTTP/1.1 102 Processing\r\n\r\n", "102 Processing")
+    let hints: Str = ServerResponse::write_early_hints("</style.css>; rel=preload; as=style")
+    assert(str::contains(hints, "103 Early Hints"), "103 status")
+    assert(str::contains(hints, "Link:"), "Link header")
+    return 0
+}

@@ -1,0 +1,15 @@
+// Tests for security — minimal security options
+use test::{assert, assert_eq}
+use core::str
+use std::http::security::{SecurityOptions, security_headers}
+
+@test
+func test_minimal_security() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::minimal()
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "X-Content-Type-Options: nosniff"), "nosniff present")
+    assert(str::contains(hdrs, "X-Frame-Options: SAMEORIGIN"), "frame options present")
+    assert(not str::contains(hdrs, "Strict-Transport-Security"), "no HSTS")
+    assert(not str::contains(hdrs, "Content-Security-Policy"), "no CSP")
+    return 0
+}

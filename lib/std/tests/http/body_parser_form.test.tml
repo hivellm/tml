@@ -1,0 +1,19 @@
+// Tests for body_parser — form data and URL decoding
+use test::{assert, assert_eq}
+use std::http::body_parser::{ParsedBody, parse_body, form_get, url_decode}
+
+@test
+func test_parse_form_body() -> I32 {
+    let result = parse_body("application/x-www-form-urlencoded", "name=John&age=30")
+    when result {
+        Ok(body) => {
+            assert(body.is_form(), "is form")
+            let data: Str = body.as_str()
+            assert_eq(form_get(data, "name"), "John", "name=John")
+            assert_eq(form_get(data, "age"), "30", "age=30")
+            assert_eq(form_get(data, "missing"), "", "missing key")
+        },
+        Err(e) => assert(false, "should succeed"),
+    }
+    return 0
+}

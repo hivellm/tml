@@ -1,0 +1,10 @@
+// Tests for chunked — full body encoding
+use test::{assert, assert_eq}
+use core::str
+use std::http::chunked::{encode_final_chunk, encode_body_chunked, encode_body_multi_chunk}
+
+@test
+func test_encode_final_chunk() -> I32 {
+    assert_eq(encode_final_chunk(), "0\r\n\r\n", "final chunk")
+    return 0
+}

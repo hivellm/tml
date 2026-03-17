@@ -1,0 +1,16 @@
+// Tests for body_parser — JSON and form data parsing
+use test::{assert, assert_eq}
+use std::http::body_parser::{ParsedBody, parse_body, form_get, url_decode}
+
+@test
+func test_parse_json_body() -> I32 {
+    let result = parse_body("application/json", "{\"name\":\"test\"}")
+    when result {
+        Ok(body) => {
+            assert(body.is_json(), "is json")
+            assert_eq(body.as_str(), "{\"name\":\"test\"}", "json content")
+        },
+        Err(e) => assert(false, "should succeed"),
+    }
+    return 0
+}

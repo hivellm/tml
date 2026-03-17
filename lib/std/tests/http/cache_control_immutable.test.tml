@@ -1,0 +1,14 @@
+// Tests for cache_control — immutable asset caching
+use test::{assert, assert_eq}
+use core::str
+use std::http::cache_control::{CacheOptions, cache_control_header}
+
+@test
+func test_immutable_asset_cache() -> I32 {
+    let opts: CacheOptions = CacheOptions::immutable_asset()
+    let header: Str = cache_control_header(ref opts)
+    assert(str::contains(header, "public"), "public")
+    assert(str::contains(header, "max-age=31536000"), "1 year max-age")
+    assert(str::contains(header, "immutable"), "immutable")
+    return 0
+}

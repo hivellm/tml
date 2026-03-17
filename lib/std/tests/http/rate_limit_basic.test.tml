@@ -1,0 +1,14 @@
+// Tests for rate_limit — basic rate limiting
+use test::{assert, assert_eq}
+use std::http::rate_limit::{RateLimitOptions, RateLimiter}
+
+@test
+func test_rate_limit_creation() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new()
+    assert_eq(opts.window_ms, 900000, "default window 15min")
+    assert_eq(opts.max_requests, 100, "default max 100")
+    let opts2: RateLimitOptions = opts.with_max(5).with_window(1000)
+    assert_eq(opts2.max_requests, 5, "custom max")
+    assert_eq(opts2.window_ms, 1000, "custom window")
+    return 0
+}

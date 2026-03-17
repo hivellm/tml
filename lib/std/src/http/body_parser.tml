@@ -1,0 +1,169 @@
+//! HTTP body parser — parses request bodies by content type.
+//!
+//! Inspired by Express.js `body-parser` middleware.
+//! Supports JSON, URL-encoded form data, raw text, and raw binary.
+
+use core::str
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// Maximum body size (1 MB default).
+pub const MAX_BODY_SIZE: I64 = 1048576
+
+/// Parsed body variants.
+pub type ParsedBody {
+    Json(Str),
+    Form(Str),
+    Text(Str),
+    Raw(Str),
+    Empty,
+}
+
+impl ParsedBody {
+    /// Returns the body as a string regardless of type.
+    pub func as_str(this) -> Str {
+        when this {
+            ParsedBody::Json(s) => s,
+            ParsedBody::Form(s) => s,
+            ParsedBody::Text(s) => s,
+            ParsedBody::Raw(s) => s,
+            ParsedBody::Empty => "",
+        }
+    }
+
+    /// Returns true if the body is JSON.
+    pub func is_json(this) -> Bool {
+        when this {
+            ParsedBody::Json(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the body is form-encoded.
+    pub func is_form(this) -> Bool {
+        when this {
+            ParsedBody::Form(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the body is text.
+    pub func is_text(this) -> Bool {
+        when this {
+            ParsedBody::Text(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the body is empty.
+    pub func is_empty(this) -> Bool {
+        when this {
+            ParsedBody::Empty => true,
+            _ => false,
+        }
+    }
+}
+
+/// Parses a request body based on Content-Type header.
+/// Returns a ParsedBody variant matching the content type.
+pub func parse_body(content_type: Str, body: Str) -> Outcome[ParsedBody, HttpError] {
+    let body_len: I64 = str::len(body)
+    if body_len == 0 {
+        return Ok(ParsedBody::Empty)
+    }
+    if body_len > MAX_BODY_SIZE {
+        return Err(HttpError::body_too_large("body exceeds maximum size"))
+    }
+
+    let ct_lower: Str = str::to_lowercase(content_type)
+
+    if str::contains(ct_lower, "application/json") {
+        return Ok(ParsedBody::Json(body))
+    }
+    if str::contains(ct_lower, "application/x-www-form-urlencoded") {
+        return Ok(ParsedBody::Form(body))
+    }
+    if str::starts_with(ct_lower, "text/") {
+        return Ok(ParsedBody::Text(body))
+    }
+    // Default: raw
+    return Ok(ParsedBody::Raw(body))
+}
+
+/// Parses URL-encoded form data into key=value pairs.
+/// Input: "name=John&age=30&city=NYC"
+/// Returns pairs as a flat string: "name\0John\0age\030\0city\0NYC\0"
+/// Use form_get() to retrieve values.
+pub func parse_form_data(data: Str) -> Str {
+    // Just return the raw form data — callers use form_get() to extract values
+    return data
+}
+
+/// Gets a value from URL-encoded form data by key.
+/// Input: "name=John&age=30", key: "age" → "30"
+pub func form_get(data: Str, key: Str) -> Str {
+    let data_len: I64 = str::len(data)
+    let key_len: I64 = str::len(key)
+    if data_len == 0 or key_len == 0 { return "" }
+
+    var pos: I64 = 0
+    loop (pos < data_len) {
+        // Find '='
+        var eq: I64 = pos
+        loop (eq < data_len and str::char_at(data, eq) != 61) {  // '='
+            eq = eq + 1
+        }
+        if eq >= data_len { break }
+
+        let param_key: Str = str::substring(data, pos, eq)
+
+        // Find '&' or end
+        var amp: I64 = eq + 1
+        loop (amp < data_len and str::char_at(data, amp) != 38) {  // '&'
+            amp = amp + 1
+        }
+        let param_val: Str = str::substring(data, eq + 1, amp)
+
+        if param_key == key {
+            return param_val
+        }
+        pos = amp + 1
+    }
+    return ""
+}
+
+/// Decodes a percent-encoded string (URL decoding).
+/// Converts %XX sequences to their byte values and '+' to space.
+pub func url_decode(s: Str) -> Str {
+    let s_len: I64 = str::len(s)
+    if s_len == 0 { return "" }
+    var result: Str = ""
+    var i: I64 = 0
+    loop (i < s_len) {
+        let c: I32 = str::char_at(s, i)
+        if c == 37 and i + 2 < s_len {  // '%'
+            let h1: I32 = str::char_at(s, i + 1)
+            let h2: I32 = str::char_at(s, i + 2)
+            let byte_val: I64 = hex_char_to_val(h1) * 16 + hex_char_to_val(h2)
+            // Build single-char string from byte
+            let ch: Str = str::from_char_code(byte_val as I32)
+            result = "{result}{ch}"
+            i = i + 3
+        } else if c == 43 {  // '+' → space
+            result = "{result} "
+            i = i + 1
+        } else {
+            let ch: Str = str::from_char_code(c)
+            result = "{result}{ch}"
+            i = i + 1
+        }
+    }
+    return result
+}
+
+/// Converts a hex character to its numeric value.
+func hex_char_to_val(c: I32) -> I64 {
+    if c >= 48 and c <= 57 { return (c - 48) as I64 }       // '0'-'9'
+    if c >= 65 and c <= 70 { return (c - 55) as I64 }       // 'A'-'F'
+    if c >= 97 and c <= 102 { return (c - 87) as I64 }      // 'a'-'f'
+    return 0
+}

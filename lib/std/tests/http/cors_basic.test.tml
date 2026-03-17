@@ -1,0 +1,13 @@
+// Tests for cors — CORS header generation
+use test::{assert, assert_eq}
+use core::str
+use std::http::cors::{CorsOptions, cors_headers, preflight_headers, is_preflight}
+
+@test
+func test_cors_default_headers() -> I32 {
+    let opts: CorsOptions = CorsOptions::new()
+    let hdrs: Str = cors_headers(ref opts, "https://example.com")
+    assert(str::contains(hdrs, "Access-Control-Allow-Origin: *"), "allow all origins")
+    assert(not str::contains(hdrs, "Credentials"), "no credentials by default")
+    return 0
+}

@@ -1,0 +1,13 @@
+// Tests for content_type — type matching and negotiation
+use test::{assert, assert_eq}
+use std::http::content_type::{matches_type, negotiate}
+
+@test
+func test_matches_type() -> I32 {
+    assert(matches_type("text/html", "text/html"), "exact match")
+    assert(matches_type("text/html", "text/*"), "wildcard subtype")
+    assert(matches_type("text/html", "*/*"), "wildcard all")
+    assert(not matches_type("text/html", "application/json"), "no match")
+    assert(not matches_type("text/html", "image/*"), "wrong type")
+    return 0
+}

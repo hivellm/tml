@@ -1,0 +1,16 @@
+// Tests for stream — SSE helpers and streaming headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::stream::{sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_headers, ndjson_line}
+
+@test
+func test_sse_helpers() -> I32 {
+    let hdrs: Str = sse_headers()
+    assert(str::contains(hdrs, "text/event-stream"), "SSE content type")
+    assert(str::contains(hdrs, "no-cache"), "no cache")
+    assert_eq(sse_ping(), ":\n\n", "ping format")
+    assert_eq(sse_comment("keepalive"), ": keepalive\n\n", "comment format")
+    let ndjson: Str = ndjson_line("{\"x\":1}")
+    assert_eq(ndjson, "{\"x\":1}\n", "ndjson line")
+    return 0
+}

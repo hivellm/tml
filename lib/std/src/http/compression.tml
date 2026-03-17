@@ -1,0 +1,119 @@
+//! HTTP response compression middleware.
+//!
+//! Selects and applies the best compression algorithm based on the
+//! client's Accept-Encoding header. Inspired by Express.js `compression`.
+
+use core::str
+use std::http::encoding::{compress, decompress, accepted_encodings}
+use std::http::error::{HttpError, HttpErrorKind}
+
+/// Minimum body size for compression (1 KB).
+pub const MIN_COMPRESS_SIZE: I64 = 1024
+
+/// Compression configuration.
+pub type CompressionOptions {
+    min_size: I64,          // minimum body size to compress
+    level: I64,             // compression level (1-9, 0 = default)
+    prefer_order: Str,      // preferred encoding order: "br,gzip,deflate,zstd"
+    filter_types: Str,      // MIME types to compress: "text/*,application/json,application/xml"
+}
+
+impl CompressionOptions {
+    /// Creates default compression options.
+    pub func new() -> CompressionOptions {
+        CompressionOptions {
+            min_size: MIN_COMPRESS_SIZE,
+            level: 0,
+            prefer_order: "br,gzip,deflate,zstd",
+            filter_types: "text/,application/json,application/javascript,application/xml,image/svg+xml",
+        }
+    }
+
+    /// Sets minimum body size for compression.
+    pub func with_min_size(this, size: I64) -> CompressionOptions {
+        CompressionOptions {
+            min_size: size,
+            level: this.level,
+            prefer_order: this.prefer_order,
+            filter_types: this.filter_types,
+        }
+    }
+
+    /// Sets compression level.
+    pub func with_level(this, lvl: I64) -> CompressionOptions {
+        CompressionOptions {
+            min_size: this.min_size,
+            level: lvl,
+            prefer_order: this.prefer_order,
+            filter_types: this.filter_types,
+        }
+    }
+}
+
+/// Selects the best compression encoding based on Accept-Encoding header.
+/// Returns the encoding name ("gzip", "br", "deflate", "zstd") or "" if none.
+pub func select_encoding(accept_encoding: Str, opts: ref CompressionOptions) -> Str {
+    let ae_lower: Str = str::to_lowercase(accept_encoding)
+
+    // Check in preference order
+    let pref: Str = opts.prefer_order
+    let pref_len: I64 = str::len(pref)
+    var pos: I64 = 0
+    loop (pos < pref_len) {
+        var end: I64 = pos
+        loop (end < pref_len and str::char_at(pref, end) != 44) {
+            end = end + 1
+        }
+        let enc: Str = str::trim(str::substring(pref, pos, end))
+        if str::contains(ae_lower, enc) {
+            return enc
+        }
+        pos = end + 1
+    }
+    return ""
+}
+
+/// Returns true if the given content type should be compressed.
+pub func should_compress(content_type: Str, body_len: I64, opts: ref CompressionOptions) -> Bool {
+    if body_len < opts.min_size { return false }
+
+    let ct_lower: Str = str::to_lowercase(content_type)
+    let filter: Str = opts.filter_types
+    let filter_len: I64 = str::len(filter)
+
+    var pos: I64 = 0
+    loop (pos < filter_len) {
+        var end: I64 = pos
+        loop (end < filter_len and str::char_at(filter, end) != 44) {
+            end = end + 1
+        }
+        let pattern: Str = str::trim(str::substring(filter, pos, end))
+        if str::contains(ct_lower, pattern) {
+            return true
+        }
+        pos = end + 1
+    }
+    return false
+}
+
+/// Compresses the response body with the selected encoding.
+/// Returns (compressed_body, encoding_name) or the original body if compression fails.
+pub func compress_response(body: Str, accept_encoding: Str, content_type: Str) -> (Str, Str) {
+    let opts: CompressionOptions = CompressionOptions::new()
+    let body_len: I64 = str::len(body)
+
+    if not should_compress(content_type, body_len, ref opts) {
+        return (body, "")
+    }
+
+    let encoding: Str = select_encoding(accept_encoding, ref opts)
+    if str::len(encoding) == 0 {
+        return (body, "")
+    }
+
+    let result = compress(encoding, body)
+    when result {
+        Ok(compressed) => return (compressed, encoding),
+        Err(e) => return (body, ""),
+    }
+}

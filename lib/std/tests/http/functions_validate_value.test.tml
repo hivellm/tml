@@ -1,0 +1,20 @@
+// Tests for functions — validate_header_value
+use test::{assert, assert_eq}
+use std::http::functions::validate_header_value
+
+@test
+func test_validate_header_value() -> I32 {
+    // Valid values
+    let r1 = validate_header_value("Content-Type", "text/html")
+    when r1 {
+        Ok(_) => assert(true, "normal value valid"),
+        Err(e) => assert(false, "should be valid"),
+    }
+    // Empty value is ok
+    let r2 = validate_header_value("X-Empty", "")
+    when r2 {
+        Ok(_) => assert(true, "empty value valid"),
+        Err(e) => assert(false, "empty should be valid"),
+    }
+    return 0
+}

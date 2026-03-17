@@ -1,0 +1,168 @@
+//! Content-Type parsing, negotiation, and common types.
+//!
+//! Provides Content-Type header parsing, Accept header negotiation,
+//! and constants for common MIME types used in HTTP.
+//!
+//! Inspired by Express.js `content-type` and `accepts` packages.
+
+use core::str
+
+/// Parses a Content-Type header value into type, subtype, and charset.
+/// Input: "text/html; charset=utf-8"
+/// Returns: (media_type, charset) e.g. ("text/html", "utf-8")
+pub func parse_content_type(header: Str) -> (Str, Str) {
+    let header_len: I64 = str::len(header)
+    if header_len == 0 {
+        return ("", "")
+    }
+
+    // Find semicolon separating media type from parameters
+    var semi: I64 = 0
+    loop (semi < header_len) {
+        if str::char_at(header, semi) == 59 {  // ';'
+            break
+        }
+        semi = semi + 1
+    }
+
+    let media_type: Str = str::trim(str::substring(header, 0, semi))
+
+    // Parse charset from parameters
+    var charset: Str = ""
+    if semi < header_len {
+        var pos: I64 = semi + 1
+        loop (pos < header_len) {
+            // Skip whitespace
+            loop (pos < header_len and str::char_at(header, pos) == 32) {
+                pos = pos + 1
+            }
+            // Find =
+            var eq: I64 = pos
+            loop (eq < header_len and str::char_at(header, eq) != 61) {
+                eq = eq + 1
+            }
+            if eq < header_len {
+                let param_name: Str = str::trim(str::to_lowercase(str::substring(header, pos, eq)))
+                // Find end of value (next ; or end)
+                var val_end: I64 = eq + 1
+                loop (val_end < header_len and str::char_at(header, val_end) != 59) {
+                    val_end = val_end + 1
+                }
+                let param_value: Str = str::trim(str::substring(header, eq + 1, val_end))
+                // Strip quotes if present
+                let val_len: I64 = str::len(param_value)
+                var clean_val: Str = param_value
+                if val_len >= 2 and str::char_at(param_value, 0) == 34 and str::char_at(param_value, val_len - 1) == 34 {
+                    clean_val = str::substring(param_value, 1, val_len - 1)
+                }
+                if param_name == "charset" {
+                    charset = clean_val
+                }
+                pos = val_end + 1
+            } else {
+                break
+            }
+        }
+    }
+
+    return (media_type, charset)
+}
+
+/// Returns true if the media type matches a pattern.
+/// Supports wildcards: "text/*" matches "text/html", "*/*" matches anything.
+pub func matches_type(media_type: Str, pattern: Str) -> Bool {
+    if pattern == "*/*" { return true }
+    let mt_len: I64 = str::len(media_type)
+    let pt_len: I64 = str::len(pattern)
+    if mt_len == 0 or pt_len == 0 { return false }
+
+    // Split both into type/subtype
+    var mt_slash: I64 = 0
+    loop (mt_slash < mt_len and str::char_at(media_type, mt_slash) != 47) {
+        mt_slash = mt_slash + 1
+    }
+    var pt_slash: I64 = 0
+    loop (pt_slash < pt_len and str::char_at(pattern, pt_slash) != 47) {
+        pt_slash = pt_slash + 1
+    }
+
+    let mt_type: Str = str::substring(media_type, 0, mt_slash)
+    let pt_type: Str = str::substring(pattern, 0, pt_slash)
+
+    // Type must match (or pattern type is *)
+    if pt_type != "*" and mt_type != pt_type { return false }
+
+    // If pattern has no subtype, match on type only
+    if pt_slash >= pt_len { return true }
+
+    let mt_sub: Str = str::substring(media_type, mt_slash + 1, mt_len)
+    let pt_sub: Str = str::substring(pattern, pt_slash + 1, pt_len)
+
+    if pt_sub == "*" { return true }
+    return mt_sub == pt_sub
+}
+
+/// Negotiates the best content type from Accept header.
+/// Returns the first matching type, or "" if none match.
+pub func negotiate(accept_header: Str, available_types: Str) -> Str {
+    // Parse available types (comma-separated)
+    // Parse accept header (comma-separated, with quality factors)
+    // Simple implementation: return first available type that matches any accept type
+    let accept_len: I64 = str::len(accept_header)
+    let avail_len: I64 = str::len(available_types)
+    if accept_len == 0 or avail_len == 0 { return "" }
+
+    // Split available types by comma
+    var apos: I64 = 0
+    loop (apos < avail_len) {
+        var aend: I64 = apos
+        loop (aend < avail_len and str::char_at(available_types, aend) != 44) {
+            aend = aend + 1
+        }
+        let avail: Str = str::trim(str::substring(available_types, apos, aend))
+
+        // Check if this available type matches any accept type
+        var hpos: I64 = 0
+        loop (hpos < accept_len) {
+            var hend: I64 = hpos
+            loop (hend < accept_len and str::char_at(accept_header, hend) != 44) {
+                hend = hend + 1
+            }
+            let accept_part: Str = str::trim(str::substring(accept_header, hpos, hend))
+            // Strip quality factor (everything after ;)
+            let apart_len: I64 = str::len(accept_part)
+            var semi: I64 = 0
+            loop (semi < apart_len and str::char_at(accept_part, semi) != 59) {
+                semi = semi + 1
+            }
+            let accept_type: Str = str::trim(str::substring(accept_part, 0, semi))
+
+            if matches_type(avail, accept_type) {
+                return avail
+            }
+            hpos = hend + 1
+        }
+        apos = aend + 1
+    }
+    return ""
+}
+
+// ── Common Content-Type constants ────────────────────────────
+
+pub const CT_TEXT_PLAIN: Str = "text/plain; charset=utf-8"
+pub const CT_TEXT_HTML: Str = "text/html; charset=utf-8"
+pub const CT_TEXT_CSS: Str = "text/css; charset=utf-8"
+pub const CT_TEXT_JS: Str = "text/javascript; charset=utf-8"
+pub const CT_JSON: Str = "application/json; charset=utf-8"
+pub const CT_XML: Str = "application/xml; charset=utf-8"
+pub const CT_FORM: Str = "application/x-www-form-urlencoded"
+pub const CT_MULTIPART: Str = "multipart/form-data"
+pub const CT_OCTET_STREAM: Str = "application/octet-stream"
+pub const CT_PDF: Str = "application/pdf"
+pub const CT_PNG: Str = "image/png"
+pub const CT_JPEG: Str = "image/jpeg"
+pub const CT_GIF: Str = "image/gif"
+pub const CT_SVG: Str = "image/svg+xml"
+pub const CT_WEBP: Str = "image/webp"
+pub const CT_WOFF2: Str = "font/woff2"
+pub const CT_SSE: Str = "text/event-stream"

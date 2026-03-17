@@ -1,0 +1,13 @@
+// Tests for body_parser — empty and text bodies
+use test::{assert, assert_eq}
+use std::http::body_parser::{ParsedBody, parse_body, url_decode}
+
+@test
+func test_parse_empty_body() -> I32 {
+    let result = parse_body("text/plain", "")
+    when result {
+        Ok(body) => assert(body.is_empty(), "empty body"),
+        Err(e) => assert(false, "should succeed"),
+    }
+    return 0
+}

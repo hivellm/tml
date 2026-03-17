@@ -1,0 +1,14 @@
+// Tests for Agent — default constructor and TLS name
+use test::{assert, assert_eq}
+use std::http::agent::{Agent, AgentOptions}
+
+@test
+func test_agent_default_and_tls_name() -> I32 {
+    let agent: Agent = Agent::default()
+    assert(not agent.is_keep_alive(), "default no keep-alive")
+    assert_eq(agent.scheduling(), "lifo", "default lifo")
+    let name: Str = agent.get_name("example.com", 443, true)
+    assert_eq(name, "example.com:443:tls", "TLS pool name")
+    agent.destroy()
+    return 0
+}

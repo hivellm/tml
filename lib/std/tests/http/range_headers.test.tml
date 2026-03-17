@@ -1,0 +1,10 @@
+// Tests for range — Content-Range header generation
+use test::{assert_eq}
+use std::http::range::{content_range, content_range_unsatisfied}
+
+@test
+func test_content_range_header() -> I32 {
+    assert_eq(content_range(0, 499, 1000), "bytes 0-499/1000", "explicit range")
+    assert_eq(content_range_unsatisfied(1000), "bytes */1000", "unsatisfied range")
+    return 0
+}

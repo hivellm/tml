@@ -1,0 +1,15 @@
+// Tests for cache_control — Cache-Control header generation
+use test::{assert, assert_eq}
+use core::str
+use std::http::cache_control::{CacheOptions, cache_control_header}
+
+@test
+func test_no_store_cache() -> I32 {
+    let opts: CacheOptions = CacheOptions::no_store()
+    let header: Str = cache_control_header(ref opts)
+    assert(str::contains(header, "private"), "private")
+    assert(str::contains(header, "no-cache"), "no-cache")
+    assert(str::contains(header, "no-store"), "no-store")
+    assert(str::contains(header, "max-age=0"), "max-age=0")
+    return 0
+}

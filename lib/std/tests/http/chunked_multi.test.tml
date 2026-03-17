@@ -1,0 +1,13 @@
+// Tests for chunked — multi-chunk and full body encoding
+use test::{assert, assert_eq}
+use core::str
+use std::http::chunked::{encode_body_chunked, encode_body_multi_chunk}
+
+@test
+func test_encode_body_chunked() -> I32 {
+    let result: Str = encode_body_chunked("Hello World")
+    assert(str::starts_with(result, "b\r\n"), "chunk size b (11)")
+    assert(str::contains(result, "Hello World\r\n"), "body data")
+    assert(str::ends_with(result, "0\r\n\r\n"), "final chunk")
+    return 0
+}

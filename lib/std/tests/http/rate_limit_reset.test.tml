@@ -1,0 +1,17 @@
+// Tests for rate_limit — allowed result headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::rate_limit::RateLimitResult
+
+@test
+func test_rate_limit_allowed_result() -> I32 {
+    let result: RateLimitResult = RateLimitResult {
+        allowed: true, remaining: 99, limit: 100, reset_at: 2000000,
+    }
+    assert(result.allowed, "is allowed")
+    assert_eq(result.remaining, 99, "99 remaining")
+    let hdrs: Str = result.headers()
+    assert(str::contains(hdrs, "X-RateLimit-Remaining: 99"), "remaining 99")
+    assert(not str::contains(hdrs, "Retry-After"), "no retry-after for allowed")
+    return 0
+}

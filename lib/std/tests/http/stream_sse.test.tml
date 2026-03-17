@@ -1,0 +1,14 @@
+// Tests for stream — SSE event serialization
+use test::{assert, assert_eq}
+use core::str
+use std::http::stream::{SseEvent, sse_headers, sse_ping, sse_comment}
+
+@test
+func test_sse_data_event() -> I32 {
+    let evt: SseEvent = SseEvent::data("hello world")
+    let wire: Str = evt.serialize()
+    assert(str::contains(wire, "data: hello world\n"), "data line")
+    assert(str::ends_with(wire, "\n\n"), "double newline terminator")
+    assert(not str::contains(wire, "event:"), "no event type for data-only")
+    return 0
+}

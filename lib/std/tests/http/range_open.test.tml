@@ -1,0 +1,17 @@
+// Tests for range — open and suffix ranges
+use test::{assert, assert_eq}
+use std::http::range::{ByteRange, parse_range, content_range, content_range_unsatisfied}
+
+@test
+func test_parse_open_range() -> I32 {
+    let r = parse_range("bytes=500-")
+    when r {
+        Just(range) => {
+            let resolved = range.resolve(1000)
+            assert_eq(resolved.0, 500, "start=500")
+            assert_eq(resolved.1, 999, "end=999")
+        },
+        Nothing => assert(false, "should parse open range"),
+    }
+    return 0
+}

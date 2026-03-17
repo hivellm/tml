@@ -1,0 +1,16 @@
+// Tests for rate_limit — RateLimitResult headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::rate_limit::RateLimitResult
+
+@test
+func test_rate_limit_result_headers() -> I32 {
+    let result: RateLimitResult = RateLimitResult {
+        allowed: false, remaining: 0, limit: 100, reset_at: 1000000,
+    }
+    let hdrs: Str = result.headers()
+    assert(str::contains(hdrs, "X-RateLimit-Limit: 100"), "limit header")
+    assert(str::contains(hdrs, "X-RateLimit-Remaining: 0"), "remaining header")
+    assert(str::contains(hdrs, "Retry-After:"), "retry-after for blocked")
+    return 0
+}

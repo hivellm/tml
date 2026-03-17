@@ -1,0 +1,183 @@
+//! HTTP security headers — helmet-like protection.
+//!
+//! Generates security-related HTTP response headers to protect against
+//! common web vulnerabilities. Inspired by Express.js `helmet` middleware.
+
+use core::str
+
+/// Security header configuration.
+pub type SecurityOptions {
+    content_security_policy: Str,
+    x_content_type_options: Bool,       // nosniff
+    x_frame_options: Str,               // DENY, SAMEORIGIN
+    x_xss_protection: Bool,             // 1; mode=block
+    strict_transport_security: Bool,    // max-age=31536000; includeSubDomains
+    hsts_max_age: I64,
+    hsts_include_subdomains: Bool,
+    hsts_preload: Bool,
+    referrer_policy: Str,               // no-referrer, strict-origin-when-cross-origin
+    x_dns_prefetch_control: Bool,       // off
+    x_download_options: Bool,           // noopen
+    x_permitted_cross_domain: Bool,     // none
+    cross_origin_embedder_policy: Str,
+    cross_origin_opener_policy: Str,
+    cross_origin_resource_policy: Str,
+}
+
+impl SecurityOptions {
+    /// Creates default security options (equivalent to helmet defaults).
+    pub func new() -> SecurityOptions {
+        SecurityOptions {
+            content_security_policy: "default-src 'self'",
+            x_content_type_options: true,
+            x_frame_options: "SAMEORIGIN",
+            x_xss_protection: false,
+            strict_transport_security: true,
+            hsts_max_age: 15552000,
+            hsts_include_subdomains: true,
+            hsts_preload: false,
+            referrer_policy: "no-referrer",
+            x_dns_prefetch_control: true,
+            x_download_options: true,
+            x_permitted_cross_domain: true,
+            cross_origin_embedder_policy: "require-corp",
+            cross_origin_opener_policy: "same-origin",
+            cross_origin_resource_policy: "same-origin",
+        }
+    }
+
+    /// Creates minimal security options (only essential headers).
+    pub func minimal() -> SecurityOptions {
+        SecurityOptions {
+            content_security_policy: "",
+            x_content_type_options: true,
+            x_frame_options: "SAMEORIGIN",
+            x_xss_protection: false,
+            strict_transport_security: false,
+            hsts_max_age: 0,
+            hsts_include_subdomains: false,
+            hsts_preload: false,
+            referrer_policy: "",
+            x_dns_prefetch_control: false,
+            x_download_options: false,
+            x_permitted_cross_domain: false,
+            cross_origin_embedder_policy: "",
+            cross_origin_opener_policy: "",
+            cross_origin_resource_policy: "",
+        }
+    }
+
+    /// Sets Content-Security-Policy.
+    pub func with_csp(this, policy: Str) -> SecurityOptions {
+        SecurityOptions {
+            content_security_policy: policy,
+            x_content_type_options: this.x_content_type_options,
+            x_frame_options: this.x_frame_options,
+            x_xss_protection: this.x_xss_protection,
+            strict_transport_security: this.strict_transport_security,
+            hsts_max_age: this.hsts_max_age,
+            hsts_include_subdomains: this.hsts_include_subdomains,
+            hsts_preload: this.hsts_preload,
+            referrer_policy: this.referrer_policy,
+            x_dns_prefetch_control: this.x_dns_prefetch_control,
+            x_download_options: this.x_download_options,
+            x_permitted_cross_domain: this.x_permitted_cross_domain,
+            cross_origin_embedder_policy: this.cross_origin_embedder_policy,
+            cross_origin_opener_policy: this.cross_origin_opener_policy,
+            cross_origin_resource_policy: this.cross_origin_resource_policy,
+        }
+    }
+
+    /// Sets X-Frame-Options.
+    pub func with_frame_options(this, value: Str) -> SecurityOptions {
+        SecurityOptions {
+            content_security_policy: this.content_security_policy,
+            x_content_type_options: this.x_content_type_options,
+            x_frame_options: value,
+            x_xss_protection: this.x_xss_protection,
+            strict_transport_security: this.strict_transport_security,
+            hsts_max_age: this.hsts_max_age,
+            hsts_include_subdomains: this.hsts_include_subdomains,
+            hsts_preload: this.hsts_preload,
+            referrer_policy: this.referrer_policy,
+            x_dns_prefetch_control: this.x_dns_prefetch_control,
+            x_download_options: this.x_download_options,
+            x_permitted_cross_domain: this.x_permitted_cross_domain,
+            cross_origin_embedder_policy: this.cross_origin_embedder_policy,
+            cross_origin_opener_policy: this.cross_origin_opener_policy,
+            cross_origin_resource_policy: this.cross_origin_resource_policy,
+        }
+    }
+
+    /// Sets Referrer-Policy.
+    pub func with_referrer_policy(this, policy: Str) -> SecurityOptions {
+        SecurityOptions {
+            content_security_policy: this.content_security_policy,
+            x_content_type_options: this.x_content_type_options,
+            x_frame_options: this.x_frame_options,
+            x_xss_protection: this.x_xss_protection,
+            strict_transport_security: this.strict_transport_security,
+            hsts_max_age: this.hsts_max_age,
+            hsts_include_subdomains: this.hsts_include_subdomains,
+            hsts_preload: this.hsts_preload,
+            referrer_policy: policy,
+            x_dns_prefetch_control: this.x_dns_prefetch_control,
+            x_download_options: this.x_download_options,
+            x_permitted_cross_domain: this.x_permitted_cross_domain,
+            cross_origin_embedder_policy: this.cross_origin_embedder_policy,
+            cross_origin_opener_policy: this.cross_origin_opener_policy,
+            cross_origin_resource_policy: this.cross_origin_resource_policy,
+        }
+    }
+}
+
+/// Generates all security headers as a serialized header block.
+pub func security_headers(opts: ref SecurityOptions) -> Str {
+    var result: Str = ""
+
+    if str::len(opts.content_security_policy) > 0 {
+        result = "{result}Content-Security-Policy: {opts.content_security_policy}\r\n"
+    }
+    if opts.x_content_type_options {
+        result = "{result}X-Content-Type-Options: nosniff\r\n"
+    }
+    if str::len(opts.x_frame_options) > 0 {
+        result = "{result}X-Frame-Options: {opts.x_frame_options}\r\n"
+    }
+    if opts.x_xss_protection {
+        result = "{result}X-XSS-Protection: 1; mode=block\r\n"
+    }
+    if opts.strict_transport_security {
+        var hsts: Str = "max-age={opts.hsts_max_age}"
+        if opts.hsts_include_subdomains {
+            hsts = "{hsts}; includeSubDomains"
+        }
+        if opts.hsts_preload {
+            hsts = "{hsts}; preload"
+        }
+        result = "{result}Strict-Transport-Security: {hsts}\r\n"
+    }
+    if str::len(opts.referrer_policy) > 0 {
+        result = "{result}Referrer-Policy: {opts.referrer_policy}\r\n"
+    }
+    if opts.x_dns_prefetch_control {
+        result = "{result}X-DNS-Prefetch-Control: off\r\n"
+    }
+    if opts.x_download_options {
+        result = "{result}X-Download-Options: noopen\r\n"
+    }
+    if opts.x_permitted_cross_domain {
+        result = "{result}X-Permitted-Cross-Domain-Policies: none\r\n"
+    }
+    if str::len(opts.cross_origin_embedder_policy) > 0 {
+        result = "{result}Cross-Origin-Embedder-Policy: {opts.cross_origin_embedder_policy}\r\n"
+    }
+    if str::len(opts.cross_origin_opener_policy) > 0 {
+        result = "{result}Cross-Origin-Opener-Policy: {opts.cross_origin_opener_policy}\r\n"
+    }
+    if str::len(opts.cross_origin_resource_policy) > 0 {
+        result = "{result}Cross-Origin-Resource-Policy: {opts.cross_origin_resource_policy}\r\n"
+    }
+
+    return result
+}

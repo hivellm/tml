@@ -1,0 +1,164 @@
+//! HTTP rate limiting — token bucket algorithm.
+//!
+//! Implements in-memory rate limiting per client/key.
+//! Inspired by Express.js `express-rate-limit`.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::fmt::helpers::i64_to_str
+
+/// Rate limiter configuration.
+pub type RateLimitOptions {
+    window_ms: I64,
+    max_requests: I64,
+}
+
+impl RateLimitOptions {
+    /// Creates default rate limit options (100 requests per 15 minutes).
+    pub func new() -> RateLimitOptions {
+        RateLimitOptions { window_ms: 900000, max_requests: 100 }
+    }
+
+    pub func with_window(this, ms: I64) -> RateLimitOptions {
+        RateLimitOptions { window_ms: ms, max_requests: this.max_requests }
+    }
+
+    pub func with_max(this, max: I64) -> RateLimitOptions {
+        RateLimitOptions { window_ms: this.window_ms, max_requests: max }
+    }
+}
+
+/// Rate limit check result.
+pub type RateLimitResult {
+    allowed: Bool,
+    remaining: I64,
+    limit: I64,
+    reset_at: I64,
+}
+
+impl RateLimitResult {
+    pub func headers(this) -> Str {
+        var result: Str = ""
+        result = "{result}X-RateLimit-Limit: {i64_to_str(this.limit)}\r\n"
+        result = "{result}X-RateLimit-Remaining: {i64_to_str(this.remaining)}\r\n"
+        result = "{result}X-RateLimit-Reset: {i64_to_str(this.reset_at)}\r\n"
+        if not this.allowed {
+            result = "{result}Retry-After: {i64_to_str(this.reset_at)}\r\n"
+        }
+        return result
+    }
+}
+
+/// In-memory rate limiter.
+/// All state is stored on the heap via a handle pointer.
+/// Handle layout: [entry_count: I64, entry_cap: I64, window_ms: I64, max_req: I64, entries...]
+/// Each entry: [key_ptr: I64, count: I64, window_start: I64] = 24 bytes
+pub type RateLimiter {
+    handle: I64,  // pointer to heap state
+}
+
+const RL_OFF_COUNT: I64 = 0
+const RL_OFF_CAP: I64 = 8
+const RL_OFF_WINDOW: I64 = 16
+const RL_OFF_MAX: I64 = 24
+const RL_OFF_ENTRIES: I64 = 32
+
+impl RateLimiter {
+    pub func new(opts: RateLimitOptions) -> RateLimiter {
+        let cap: I64 = 64
+        let total_size: I64 = RL_OFF_ENTRIES + cap * 24
+        let h: I64 = lowlevel { mem_alloc(total_size) } as I64
+        lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, 0) }
+        lowlevel { ptr_write[I64]((h + RL_OFF_CAP) as *I64, cap) }
+        lowlevel { ptr_write[I64]((h + RL_OFF_WINDOW) as *I64, opts.window_ms) }
+        lowlevel { ptr_write[I64]((h + RL_OFF_MAX) as *I64, opts.max_requests) }
+        RateLimiter { handle: h }
+    }
+
+    pub func check(this, key: Str, now_ms: I64) -> RateLimitResult {
+        let h: I64 = this.handle
+        let count: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_COUNT) as *I64) }
+        let cap: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_CAP) as *I64) }
+        let window_ms: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_WINDOW) as *I64) }
+        let max_req: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_MAX) as *I64) }
+
+        // Search for existing entry
+        var i: I64 = 0
+        loop (i < count) {
+            let off: I64 = RL_OFF_ENTRIES + i * 24
+            let entry_key: Str = lowlevel { ptr_read[I64]((h + off) as *I64) } as Str
+            if entry_key == key {
+                let entry_count: I64 = lowlevel { ptr_read[I64]((h + off + 8) as *I64) }
+                let entry_start: I64 = lowlevel { ptr_read[I64]((h + off + 16) as *I64) }
+
+                if now_ms - entry_start >= window_ms {
+                    // Reset window
+                    lowlevel { ptr_write[I64]((h + off + 8) as *I64, 1) }
+                    lowlevel { ptr_write[I64]((h + off + 16) as *I64, now_ms) }
+                    return RateLimitResult {
+                        allowed: true, remaining: max_req - 1,
+                        limit: max_req, reset_at: now_ms + window_ms,
+                    }
+                }
+
+                let new_count: I64 = entry_count + 1
+                lowlevel { ptr_write[I64]((h + off + 8) as *I64, new_count) }
+
+                if new_count > max_req {
+                    return RateLimitResult {
+                        allowed: false, remaining: 0,
+                        limit: max_req, reset_at: entry_start + window_ms,
+                    }
+                }
+                return RateLimitResult {
+                    allowed: true, remaining: max_req - new_count,
+                    limit: max_req, reset_at: entry_start + window_ms,
+                }
+            }
+            i = i + 1
+        }
+
+        // New entry
+        let off: I64 = RL_OFF_ENTRIES + count * 24
+        lowlevel { ptr_write[I64]((h + off) as *I64, key as I64) }
+        lowlevel { ptr_write[I64]((h + off + 8) as *I64, 1) }
+        lowlevel { ptr_write[I64]((h + off + 16) as *I64, now_ms) }
+        lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, count + 1) }
+
+        return RateLimitResult {
+            allowed: true, remaining: max_req - 1,
+            limit: max_req, reset_at: now_ms + window_ms,
+        }
+    }
+
+    pub func reset(this, key: Str) {
+        let h: I64 = this.handle
+        let count: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_COUNT) as *I64) }
+        var i: I64 = 0
+        loop (i < count) {
+            let off: I64 = RL_OFF_ENTRIES + i * 24
+            let entry_key: Str = lowlevel { ptr_read[I64]((h + off) as *I64) } as Str
+            if entry_key == key {
+                let last: I64 = count - 1
+                if i != last {
+                    let loff: I64 = RL_OFF_ENTRIES + last * 24
+                    let lk: I64 = lowlevel { ptr_read[I64]((h + loff) as *I64) }
+                    let lc: I64 = lowlevel { ptr_read[I64]((h + loff + 8) as *I64) }
+                    let lw: I64 = lowlevel { ptr_read[I64]((h + loff + 16) as *I64) }
+                    lowlevel { ptr_write[I64]((h + off) as *I64, lk) }
+                    lowlevel { ptr_write[I64]((h + off + 8) as *I64, lc) }
+                    lowlevel { ptr_write[I64]((h + off + 16) as *I64, lw) }
+                }
+                lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, last) }
+                return
+            }
+            i = i + 1
+        }
+    }
+
+    pub func destroy(this) {
+        if this.handle != 0 {
+            lowlevel { mem_free(this.handle as *Unit) }
+        }
+    }
+}

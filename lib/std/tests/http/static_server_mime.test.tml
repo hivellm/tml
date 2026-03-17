@@ -1,0 +1,12 @@
+// Tests for static_server — extension and MIME type detection
+use test::{assert, assert_eq}
+use std::http::static_server::{get_extension, mime_for_extension}
+
+@test
+func test_get_extension() -> I32 {
+    assert_eq(get_extension("index.html"), "html", "html extension")
+    assert_eq(get_extension("style.min.css"), "css", "nested extension")
+    assert_eq(get_extension("Makefile"), "", "no extension")
+    assert_eq(get_extension("/path/to/app.js"), "js", "path with extension")
+    return 0
+}

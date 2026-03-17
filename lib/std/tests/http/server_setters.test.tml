@@ -1,0 +1,21 @@
+// Tests for HttpServer — configuration setters
+use test::{assert, assert_eq}
+use std::http::server::HttpServer
+
+@test
+func test_server_setters() -> I32 {
+    var server: HttpServer = HttpServer::new()
+    server.set_timeout(30000)
+    assert_eq(server.get_timeout(), 30000, "timeout set")
+    server.set_headers_timeout(10000)
+    assert_eq(server.get_headers_timeout(), 10000, "headers timeout set")
+    server.set_keep_alive_timeout(2000)
+    assert_eq(server.get_keep_alive_timeout(), 2000, "keep-alive timeout set")
+    server.set_request_timeout(120000)
+    assert_eq(server.get_request_timeout(), 120000, "request timeout set")
+    server.set_max_headers_count(100)
+    assert_eq(server.get_max_headers_count(), 100, "max headers set")
+    server.set_max_requests_per_socket(50)
+    assert_eq(server.get_max_requests_per_socket(), 50, "max requests set")
+    return 0
+}

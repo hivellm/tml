@@ -1,0 +1,14 @@
+// Tests for ServerResponse — status and write_head
+use test::{assert, assert_eq}
+use std::http::server_response::ServerResponse
+
+@test
+func test_set_status_and_message() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.set_status(404)
+    assert_eq(resp.status_code(), 404, "status 404")
+    assert_eq(resp.status_message(), "Not Found", "reason Not Found")
+    resp.set_status_message("Custom Not Found")
+    assert_eq(resp.status_message(), "Custom Not Found", "custom message")
+    return 0
+}

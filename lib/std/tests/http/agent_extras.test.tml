@@ -1,0 +1,23 @@
+// Tests for Agent — options builders and extra accessors
+use test::{assert, assert_eq}
+use std::http::agent::{Agent, AgentOptions}
+
+@test
+func test_agent_options_builders() -> I32 {
+    let opts: AgentOptions = AgentOptions::new()
+        .with_keep_alive(true)
+        .with_max_sockets(10)
+        .with_max_free_sockets(5)
+        .with_timeout(30000)
+        .with_scheduling("fifo")
+    let agent: Agent = Agent::new(opts)
+    assert(agent.is_keep_alive(), "keep-alive on")
+    assert_eq(agent.max_sockets(), 10, "max sockets 10")
+    assert_eq(agent.max_free_sockets(), 5, "max free 5")
+    assert_eq(agent.get_timeout(), 30000, "timeout 30s")
+    assert_eq(agent.scheduling(), "fifo", "fifo scheduling")
+    assert_eq(agent.active_count(), 0, "no active sockets")
+    assert_eq(agent.max_total_sockets(), -1 as I64, "unlimited total")
+    agent.destroy()
+    return 0
+}

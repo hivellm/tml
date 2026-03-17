@@ -1,0 +1,15 @@
+// Tests for functions — status_codes and validate_header_value
+use test::{assert, assert_eq}
+use std::http::functions::{status_codes, validate_header_value}
+use std::collections::hashmap::HashMap
+
+@test
+func test_status_codes_map() -> I32 {
+    let codes: HashMap[Str, Str] = status_codes()
+    assert_eq(codes.get("200"), "OK", "200 OK")
+    assert_eq(codes.get("404"), "Not Found", "404 Not Found")
+    assert_eq(codes.get("500"), "Internal Server Error", "500 ISE")
+    assert(codes.has("301"), "has 301")
+    assert(codes.has("418"), "has 418")
+    return 0
+}

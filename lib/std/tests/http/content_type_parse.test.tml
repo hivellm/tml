@@ -1,0 +1,16 @@
+// Tests for content_type — parsing and negotiation
+use test::{assert, assert_eq}
+use std::http::content_type::{parse_content_type, matches_type, negotiate}
+
+@test
+func test_parse_content_type() -> I32 {
+    let r1 = parse_content_type("text/html; charset=utf-8")
+    assert_eq(r1.0, "text/html", "media type")
+    assert_eq(r1.1, "utf-8", "charset")
+    let r2 = parse_content_type("application/json")
+    assert_eq(r2.0, "application/json", "json type")
+    assert_eq(r2.1, "", "no charset")
+    let r3 = parse_content_type("")
+    assert_eq(r3.0, "", "empty")
+    return 0
+}

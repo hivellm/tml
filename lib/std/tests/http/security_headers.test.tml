@@ -1,0 +1,17 @@
+// Tests for security — helmet-like security headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::security::{SecurityOptions, security_headers}
+
+@test
+func test_default_security_headers() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::new()
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "X-Content-Type-Options: nosniff"), "nosniff")
+    assert(str::contains(hdrs, "X-Frame-Options: SAMEORIGIN"), "frame options")
+    assert(str::contains(hdrs, "Strict-Transport-Security:"), "HSTS")
+    assert(str::contains(hdrs, "Referrer-Policy: no-referrer"), "referrer")
+    assert(str::contains(hdrs, "Content-Security-Policy: default-src 'self'"), "CSP")
+    assert(str::contains(hdrs, "Cross-Origin-Opener-Policy: same-origin"), "COOP")
+    return 0
+}

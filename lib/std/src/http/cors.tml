@@ -1,0 +1,161 @@
+//! CORS (Cross-Origin Resource Sharing) support.
+//!
+//! Generates CORS response headers per the Fetch specification.
+//! Inspired by Express.js `cors` middleware.
+
+use core::str
+
+/// CORS configuration options.
+pub type CorsOptions {
+    allow_origin: Str,       // "*" or specific origin, or ""
+    allow_methods: Str,      // "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+    allow_headers: Str,      // "Content-Type,Authorization,X-Requested-With"
+    expose_headers: Str,     // headers the browser can access
+    allow_credentials: Bool, // whether to send Access-Control-Allow-Credentials
+    max_age: I64,            // preflight cache duration in seconds (0 = no header)
+}
+
+impl CorsOptions {
+    /// Creates default CORS options (allow all origins, common methods).
+    pub func new() -> CorsOptions {
+        CorsOptions {
+            allow_origin: "*",
+            allow_methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+            allow_headers: "",
+            expose_headers: "",
+            allow_credentials: false,
+            max_age: 0,
+        }
+    }
+
+    /// Allow a specific origin.
+    pub func with_origin(this, origin: Str) -> CorsOptions {
+        CorsOptions {
+            allow_origin: origin,
+            allow_methods: this.allow_methods,
+            allow_headers: this.allow_headers,
+            expose_headers: this.expose_headers,
+            allow_credentials: this.allow_credentials,
+            max_age: this.max_age,
+        }
+    }
+
+    /// Set allowed methods.
+    pub func with_methods(this, methods: Str) -> CorsOptions {
+        CorsOptions {
+            allow_origin: this.allow_origin,
+            allow_methods: methods,
+            allow_headers: this.allow_headers,
+            expose_headers: this.expose_headers,
+            allow_credentials: this.allow_credentials,
+            max_age: this.max_age,
+        }
+    }
+
+    /// Set allowed headers.
+    pub func with_headers(this, headers: Str) -> CorsOptions {
+        CorsOptions {
+            allow_origin: this.allow_origin,
+            allow_methods: this.allow_methods,
+            allow_headers: headers,
+            expose_headers: this.expose_headers,
+            allow_credentials: this.allow_credentials,
+            max_age: this.max_age,
+        }
+    }
+
+    /// Set exposed headers.
+    pub func with_expose_headers(this, headers: Str) -> CorsOptions {
+        CorsOptions {
+            allow_origin: this.allow_origin,
+            allow_methods: this.allow_methods,
+            allow_headers: this.allow_headers,
+            expose_headers: headers,
+            allow_credentials: this.allow_credentials,
+            max_age: this.max_age,
+        }
+    }
+
+    /// Enable credentials.
+    pub func with_credentials(this) -> CorsOptions {
+        CorsOptions {
+            allow_origin: this.allow_origin,
+            allow_methods: this.allow_methods,
+            allow_headers: this.allow_headers,
+            expose_headers: this.expose_headers,
+            allow_credentials: true,
+            max_age: this.max_age,
+        }
+    }
+
+    /// Set preflight cache max age.
+    pub func with_max_age(this, seconds: I64) -> CorsOptions {
+        CorsOptions {
+            allow_origin: this.allow_origin,
+            allow_methods: this.allow_methods,
+            allow_headers: this.allow_headers,
+            expose_headers: this.expose_headers,
+            allow_credentials: this.allow_credentials,
+            max_age: seconds,
+        }
+    }
+}
+
+/// Generates CORS headers as a serialized header block.
+/// Returns headers like "Access-Control-Allow-Origin: *\r\n..."
+pub func cors_headers(opts: ref CorsOptions, request_origin: Str) -> Str {
+    var result: Str = ""
+
+    // Access-Control-Allow-Origin
+    if str::len(opts.allow_origin) > 0 {
+        if opts.allow_origin == "*" and not opts.allow_credentials {
+            result = "{result}Access-Control-Allow-Origin: *\r\n"
+        } else if str::len(request_origin) > 0 {
+            // Reflect the request origin if it matches
+            result = "{result}Access-Control-Allow-Origin: {request_origin}\r\n"
+            result = "{result}Vary: Origin\r\n"
+        }
+    }
+
+    // Access-Control-Allow-Credentials
+    if opts.allow_credentials {
+        result = "{result}Access-Control-Allow-Credentials: true\r\n"
+    }
+
+    // Access-Control-Expose-Headers
+    if str::len(opts.expose_headers) > 0 {
+        result = "{result}Access-Control-Expose-Headers: {opts.expose_headers}\r\n"
+    }
+
+    return result
+}
+
+/// Generates preflight (OPTIONS) response headers.
+pub func preflight_headers(opts: ref CorsOptions, request_origin: Str, request_method: Str, request_headers: Str) -> Str {
+    var result: Str = cors_headers(ref opts, request_origin)
+
+    // Access-Control-Allow-Methods
+    if str::len(opts.allow_methods) > 0 {
+        result = "{result}Access-Control-Allow-Methods: {opts.allow_methods}\r\n"
+    }
+
+    // Access-Control-Allow-Headers
+    if str::len(opts.allow_headers) > 0 {
+        result = "{result}Access-Control-Allow-Headers: {opts.allow_headers}\r\n"
+    } else if str::len(request_headers) > 0 {
+        // Reflect requested headers
+        result = "{result}Access-Control-Allow-Headers: {request_headers}\r\n"
+    }
+
+    // Access-Control-Max-Age
+    if opts.max_age > 0 {
+        result = "{result}Access-Control-Max-Age: {opts.max_age}\r\n"
+    }
+
+    return result
+}
+
+/// Returns true if the request is a CORS preflight (OPTIONS with specific headers).
+pub func is_preflight(method: Str, has_origin: Bool, has_request_method: Bool) -> Bool {
+    return method == "OPTIONS" and has_origin and has_request_method
+}

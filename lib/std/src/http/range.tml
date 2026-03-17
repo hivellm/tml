@@ -1,0 +1,136 @@
+//! HTTP Range request support (RFC 7233).
+//!
+//! Parses Range headers and generates Content-Range responses
+//! for partial content delivery (e.g., video streaming, resumable downloads).
+
+use core::str
+use core::fmt::helpers::i64_to_str
+
+/// A single byte range from a Range header.
+pub type ByteRange {
+    start: I64,
+    end: I64,      // -1 means "to end of content"
+}
+
+impl ByteRange {
+    /// Creates a range with explicit start and end.
+    pub func new(start: I64, end: I64) -> ByteRange {
+        ByteRange { start: start, end: end }
+    }
+
+    /// Creates a range from start to end of content.
+    pub func from_start(start: I64) -> ByteRange {
+        ByteRange { start: start, end: -1 as I64 }
+    }
+
+    /// Creates a suffix range (last N bytes).
+    pub func suffix(n: I64) -> ByteRange {
+        ByteRange { start: -1 as I64, end: n }
+    }
+
+    /// Resolves the range against a content length.
+    /// Returns (actual_start, actual_end) or (-1, -1) if invalid.
+    pub func resolve(this, content_length: I64) -> (I64, I64) {
+        if this.start < 0 {
+            // Suffix range: last N bytes
+            let start: I64 = content_length - this.end
+            if start < 0 { return (0, content_length - 1) }
+            return (start, content_length - 1)
+        }
+        var end: I64 = this.end
+        if end < 0 or end >= content_length {
+            end = content_length - 1
+        }
+        if this.start > end {
+            return (-1 as I64, -1 as I64)  // invalid range
+        }
+        return (this.start, end)
+    }
+
+    /// Returns the length of this range after resolution.
+    pub func length(this, content_length: I64) -> I64 {
+        let resolved = this.resolve(content_length)
+        if resolved.0 < 0 { return 0 }
+        return resolved.1 - resolved.0 + 1
+    }
+}
+
+/// Parses a Range header value.
+/// Input: "bytes=0-499" or "bytes=500-" or "bytes=-500"
+/// Returns a ByteRange or None for invalid input.
+pub func parse_range(header: Str) -> Maybe[ByteRange] {
+    let header_len: I64 = str::len(header)
+    if header_len < 6 { return Nothing }
+
+    // Must start with "bytes="
+    if not str::starts_with(header, "bytes=") { return Nothing }
+
+    let range_str: Str = str::substring(header, 6, header_len)
+    let range_len: I64 = str::len(range_str)
+    if range_len == 0 { return Nothing }
+
+    // Find the first range (we only support single ranges)
+    var comma: I64 = 0
+    loop (comma < range_len and str::char_at(range_str, comma) != 44) {
+        comma = comma + 1
+    }
+    let first_range: Str = str::trim(str::substring(range_str, 0, comma))
+    let fr_len: I64 = str::len(first_range)
+
+    // Find dash
+    var dash: I64 = 0
+    loop (dash < fr_len and str::char_at(first_range, dash) != 45) {
+        dash = dash + 1
+    }
+    if dash >= fr_len { return Nothing }
+
+    let start_str: Str = str::substring(first_range, 0, dash)
+    let end_str: Str = str::substring(first_range, dash + 1, fr_len)
+
+    // Suffix range: "-500"
+    if str::len(start_str) == 0 {
+        let end_parsed = str::parse_i64(end_str)
+        when end_parsed {
+            Just(n) => return Just(ByteRange::suffix(n)),
+            Nothing => return Nothing,
+        }
+    }
+
+    // Parse start
+    let start_parsed = str::parse_i64(start_str)
+    var start_val: I64 = 0
+    when start_parsed {
+        Just(n) => start_val = n,
+        Nothing => return Nothing,
+    }
+
+    // Open range: "500-"
+    if str::len(end_str) == 0 {
+        return Just(ByteRange::from_start(start_val))
+    }
+
+    // Explicit range: "0-499"
+    let end_parsed = str::parse_i64(end_str)
+    when end_parsed {
+        Just(n) => return Just(ByteRange::new(start_val, n)),
+        Nothing => return Nothing,
+    }
+}
+
+/// Generates a Content-Range header value.
+/// Output: "bytes 0-499/1000"
+pub func content_range(start: I64, end: I64, total: I64) -> Str {
+    return "bytes {i64_to_str(start)}-{i64_to_str(end)}/{i64_to_str(total)}"
+}
+
+/// Generates a Content-Range header for an unsatisfied range.
+/// Output: "bytes */1000"
+pub func content_range_unsatisfied(total: I64) -> Str {
+    return "bytes */{i64_to_str(total)}"
+}
+
+/// Returns true if the range is satisfiable for the given content length.
+pub func is_range_satisfiable(range: ref ByteRange, content_length: I64) -> Bool {
+    let resolved = range.resolve(content_length)
+    return resolved.0 >= 0
+}
