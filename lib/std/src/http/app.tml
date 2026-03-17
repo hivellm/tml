@@ -593,11 +593,13 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
     }
 
     // Slow path: radix-tree for parametric/wildcard routes
-    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
-    let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
-    if str::len(tree_result) > 0 {
-        return tree_result
-    }
+    // NOTE: Disabled in multi-threaded mode due to thread-safety issue with
+    // str::char_at/str::len on radix tree node prefixes. Works correctly in
+    // single-threaded standalone builds. See: app_find_route() + test_find_route.tml
+    // TODO: Fix thread-safety of string operations on shared radix tree nodes
+    // let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
+    // let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
+    // if str::len(tree_result) > 0 { return tree_result }
 
     // HEAD fallback: try GET handlers if HEAD has no specific route
     if method_index(method) == METHOD_HEAD {
