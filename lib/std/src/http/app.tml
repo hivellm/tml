@@ -384,7 +384,9 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
     count = count + 1
 }
 
-const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
+const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
+const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
+const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
 
 /// Radix-tree fallback dispatch. Separated from app_dispatch so the RouteMatch
 /// type (which contains List[Str] fields) doesn't pollute the hot path's stack frame.
@@ -402,6 +404,7 @@ func app_dispatch_tree(table: I64, trees: I64, method: Str, path: Str, body: Str
                 let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: rm_ptr }
                 let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
                 let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                if fn_ptr == 0 { return RESPONSE_500 }
                 let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
                 return handler(ctx)
             }
@@ -437,18 +440,41 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
         if m == method and p == path {
             let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+            if fn_ptr == 0 { return RESPONSE_500 }
             let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
             return handler(ctx)
         }
         i = i + 1
     }
 
-    // Slow path: radix-tree for parametric/wildcard routes (separate function to keep hot path lean)
+    // Slow path: radix-tree for parametric/wildcard routes
     let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
     let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
     if str::len(tree_result) > 0 {
         return tree_result
     }
+
+    // HEAD fallback: try GET handlers if HEAD has no specific route
+    if method_index(method) == METHOD_HEAD {
+        // Retry linear scan with GET
+        var j: I64 = 0
+        loop (j < count) {
+            let offset: I64 = j * ENTRY_SIZE
+            let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+            let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+            if m == "GET" and p == path {
+                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                if fn_ptr == 0 { return RESPONSE_500 }
+                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                return handler(ctx)
+            }
+            j = j + 1
+        }
+        // Try radix tree with GET
+        let get_result: Str = app_dispatch_tree(table, trees, "GET", path, body)
+        if str::len(get_result) > 0 { return get_result }
+    }
+
     return RESPONSE_404
 }
 
@@ -553,14 +579,26 @@ pub func app_worker(arg: *Unit) {
             if not complete or total <= 0 { break }
             lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
+            // Check Connection: close before zero-copy parsing mutates buffer
+            let wants_close: Bool = app_has_connection_close(buf, total)
+
             // Zero-copy parsing: null-terminate in-place in the recv buffer.
-            // No mem_alloc per request. We restore the overwritten bytes after dispatch.
             let method: Str = app_zerocopy_method(buf, total)
             let path: Str = app_zerocopy_path(buf, total)
             let body: Str = app_extract_body(buf, total)
+
+            // HEAD support: dispatch normally but only send headers
+            let is_head: Bool = str::len(method) == 4 and str::char_at(method, 0) == 72  // 'H'
             let response: Str = app_dispatch(shared, method, path, body)
-            let sent: I64 = tml_sys_send(fd, response as *Unit, str::len(response))
+            var send_len: I64 = str::len(response)
+            if is_head {
+                // Find \r\n\r\n and only send up to there
+                let header_end: I64 = app_find_header_end_in_str(response)
+                if header_end > 0 { send_len = header_end }
+            }
+            let sent: I64 = tml_sys_send(fd, response as *Unit, send_len)
             if sent < 0 { break }
+            if wants_close { break }
         }
 
         sys_close(fd)
@@ -1040,6 +1078,68 @@ pub func app_has_header_end(buf: I64, len: I64) -> Bool {
         i = i + 1
     }
     return false
+}
+
+/// Check if request has "Connection: close" header.
+/// Scans raw recv buffer for case-insensitive "connection: close".
+pub func app_has_connection_close(buf: I64, len: I64) -> Bool {
+    // Simple scan for "onnection: close" (skip first char for case insensitivity)
+    var i: I64 = 0
+    loop (i < len - 16) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        // Check for 'o' or 'O' followed by "nnection: close"
+        if (c == 111 as U8 or c == 79 as U8) {
+            let n1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+            let n2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
+            if (n1 == 110 as U8 or n1 == 78 as U8) and (n2 == 110 as U8 or n2 == 78 as U8) {
+                // Check "ection: close" at i+3
+                let e: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
+                if e == 101 as U8 or e == 69 as U8 {
+                    // Check ": close" or ":close" after "onnection"
+                    var j: I64 = i + 10  // skip past "onnection"
+                    // Find ':'
+                    loop (j < i + 14 and j < len) {
+                        if lowlevel { ptr_read[U8]((buf + j) as *U8) } == 58 as U8 { break }
+                        j = j + 1
+                    }
+                    if j < len {
+                        j = j + 1
+                        // Skip spaces
+                        loop (j < len and lowlevel { ptr_read[U8]((buf + j) as *U8) } == 32 as U8) {
+                            j = j + 1
+                        }
+                        // Check "close"
+                        if j + 5 <= len {
+                            let c1: U8 = lowlevel { ptr_read[U8]((buf + j) as *U8) }
+                            let c2: U8 = lowlevel { ptr_read[U8]((buf + j + 1) as *U8) }
+                            if (c1 == 99 as U8 or c1 == 67 as U8) and (c2 == 108 as U8 or c2 == 76 as U8) {
+                                return true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Find the end of headers (\r\n\r\n) in a response string. Returns position after \r\n\r\n, or 0.
+pub func app_find_header_end_in_str(s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    let buf: I64 = s as I64
+    var i: I64 = 3
+    loop (i < len) {
+        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
+            return i + 1
+        }
+        i = i + 1
+    }
+    return 0
 }
 
 pub func app_bind_listener(port: I64) -> I64 {
