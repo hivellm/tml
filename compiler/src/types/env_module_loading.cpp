@@ -219,9 +219,40 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     }
 
     // Check binary metadata cache (.tml.meta) for library modules
-    // Loads pre-serialized Module structs without file resolution or parsing
+    // Loads pre-serialized Module structs without file resolution or parsing.
+    // We first resolve the source path to validate the hash against the current source.
+    // This catches stale meta caches when library source files change.
     if (GlobalModuleCache::should_cache(module_path)) {
-        if (auto cached = load_module_from_cache(module_path)) {
+        // Resolve source path for hash validation
+        std::string meta_source_path;
+        {
+            // Determine lib subdir from module path prefix
+            std::string lib_subdir;
+            std::string rest;
+            if (module_path.substr(0, 6) == "core::") {
+                lib_subdir = "core";
+                rest = module_path.substr(6);
+            } else if (module_path.substr(0, 5) == "std::") {
+                lib_subdir = "std";
+                rest = module_path.substr(5);
+            } else if (module_path.substr(0, 6) == "test::") {
+                lib_subdir = "test";
+                rest = module_path.substr(6);
+            }
+            if (!lib_subdir.empty() && !rest.empty()) {
+                std::string fs_rest = rest;
+                size_t p = 0;
+                while ((p = fs_rest.find("::", p)) != std::string::npos) {
+                    fs_rest.replace(p, 2, "/");
+                    p += 1;
+                }
+                meta_source_path = resolve_lib_module_path(lib_subdir, "src", fs_rest);
+            }
+        }
+        auto cached = meta_source_path.empty()
+                          ? load_module_from_cache(module_path)
+                          : load_module_from_cache(module_path, meta_source_path);
+        if (cached) {
             TML_DEBUG_LN("[MODULE] Binary meta cache hit for: " << module_path);
 
             // Copy re-export and private import paths before moving the cached module

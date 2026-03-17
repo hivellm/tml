@@ -50,6 +50,47 @@ This includes but is not limited to:
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ ABSOLUTE PROHIBITION: No Git Branch Manipulation Without Authorization ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING ANY GIT COMMAND THAT ALTERS BRANCH STATE, HISTORY, OR STASHED WORK WITHOUT EXPLICIT USER AUTHORIZATION.**
+
+This includes but is not limited to:
+
+- ❌ `git stash` / `git stash pop` / `git stash drop`
+- ❌ `git rebase` (any form — interactive, onto, autosquash)
+- ❌ `git reset` (soft, mixed, or hard)
+- ❌ `git checkout -- .` / `git restore .` (discarding changes)
+- ❌ `git revert` (creating revert commits)
+- ❌ `git cherry-pick`
+- ❌ `git merge` (merging branches)
+- ❌ `git branch -D` / `git branch -d` (deleting branches)
+- ❌ `git push --force` / `git push --force-with-lease`
+- ❌ `git clean -f` / `git clean -fd`
+- ❌ `git checkout <branch>` (switching branches)
+- ❌ ANY command that rewrites history, moves HEAD, discards uncommitted work, or changes the current branch
+
+**The ONLY git commands allowed without explicit authorization are:**
+
+- ✅ `git status` — viewing state
+- ✅ `git diff` — viewing changes
+- ✅ `git log` — viewing history
+- ✅ `git add` — staging files (when committing with user approval)
+- ✅ `git commit` — creating commits (when user asks to commit)
+- ✅ `git blame` — viewing authorship
+
+**If you believe a branch-altering operation is needed, you MUST:**
+
+1. Explain what you want to do and WHY
+2. Show the exact command you would run
+3. Wait for the user to explicitly say "yes", "do it", "go ahead", or similar approval
+4. Only then execute the command
+
+**WHY:** Unauthorized branch manipulation has destroyed in-progress work, lost uncommitted changes, and created merge nightmares. The cost of asking is zero. The cost of unauthorized manipulation can be hours of lost work.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ ABSOLUTE PROHIBITION: Never Run Tests Multiple Times to Filter Output ⛔
 
 **YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING THE TEST SUITE MULTIPLE TIMES TO GREP/FILTER DIFFERENT PARTS OF THE OUTPUT.**

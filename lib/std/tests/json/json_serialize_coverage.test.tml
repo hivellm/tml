@@ -87,6 +87,136 @@ func test_builder_len() -> I32 {
 }
 
 // =============================================================================
+// Builder — nested objects and arrays
+// =============================================================================
+
+@test
+func test_builder_nested_object_in_array() -> I32 {
+    let b: Builder = array()
+    b.obj()
+    b.ks("name", "alice")
+    b.kn("count", 3 as I64)
+    b.end_obj()
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.contains("alice"), "nested object name should appear")
+    assert(s.contains("3"), "nested object count should appear")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_nested_array_in_object() -> I32 {
+    let b: Builder = object()
+    b.k("items")
+    b.arr()
+    b.n(10 as I64)
+    b.n(20 as I64)
+    b.end_arr()
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("items"), "key 'items' should appear")
+    assert(s.contains("10"), "first element should appear")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kb_true() -> I32 {
+    let b: Builder = object()
+    b.kb("active", true)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("true"), "kb true should write true")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kb_false() -> I32 {
+    let b: Builder = object()
+    b.kb("deleted", false)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("false"), "kb false should write false")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_nil_in_array() -> I32 {
+    let b: Builder = array()
+    b.nil()
+    b.n(1 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.contains("null"), "nil should produce null")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_knil() -> I32 {
+    let b: Builder = object()
+    b.knil("deleted_at")
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("null"), "knil should produce null value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_multiple_keys() -> I32 {
+    let b: Builder = object()
+    b.ks("name", "bob")
+    b.kn("age", 30 as I64)
+    b.kb("active", true)
+    b.knil("email")
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("bob"), "name should appear")
+    assert(s.contains("30"), "age should appear")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_empty_object() -> I32 {
+    let b: Builder = object()
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("{"), "empty object should have opening brace")
+    assert(s.contains("}"), "empty object should have closing brace")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_empty_array() -> I32 {
+    let b: Builder = array()
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.contains("["), "empty array should have opening bracket")
+    assert(s.contains("]"), "empty array should have closing bracket")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_bool_true_in_array() -> I32 {
+    let b: Builder = array()
+    b.b(true)
+    b.b(false)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.contains("true"), "true in array")
+    assert(s.contains("false"), "false in array")
+    b.drop()
+    return 0
+}
+
+// =============================================================================
 // PrettyBuilder methods
 // =============================================================================
 
@@ -188,6 +318,68 @@ func test_pretty_builder_knil() -> I32 {
     b.end_obj()
     let s: Str = b.build()
     assert(s.len() > 0, "pretty knil should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_ks() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.ks("label", "active")
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("active"), "pretty ks should contain the string value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_kn() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kn("total", 999 as I64)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("999"), "pretty kn should contain the number")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_kb() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kb("enabled", true)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("true"), "pretty kb should contain bool")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_nested_object() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.k("inner")
+    b.obj()
+    b.ks("x", "val")
+    b.end_obj()
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("val"), "pretty nested object should contain value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_nested_array() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.k("nums")
+    b.arr()
+    b.n(1 as I64)
+    b.n(2 as I64)
+    b.end_arr()
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.contains("nums"), "pretty nested array key should appear")
     b.drop()
     return 0
 }

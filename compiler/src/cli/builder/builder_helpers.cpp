@@ -1037,14 +1037,62 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         }
     }
 
-    // Link std::zlib runtime if imported (pre-built C library with zlib, brotli, zstd)
-    // Check for std::zlib or any submodule
-    auto uses_zlib_module = [&registry]() -> bool {
-        if (registry->has_module("std::zlib"))
-            return true;
-        for (const auto& [path, _] : registry->get_all_modules()) {
-            if (path.find("std::zlib::") == 0 || path == "std::zlib") {
+    // Link std::zlib runtime if the user's source actually imports std::zlib (directly
+    // or transitively). We check the source module's use declarations AND the registry's
+    // tracked user imports, rather than the full registry which includes preloaded modules.
+    auto uses_zlib_module = [&module, &registry]() -> bool {
+        // Check 1: Direct user imports from source file
+        for (const auto& decl : module.decls) {
+            if (!decl->is<parser::UseDecl>())
+                continue;
+            const auto& use_decl = decl->as<parser::UseDecl>();
+            std::string use_path;
+            for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
+                if (i > 0)
+                    use_path += "::";
+                use_path += use_decl.path.segments[i];
+            }
+            // Direct import of std::zlib or submodule
+            if (use_path == "std::zlib" || use_path.find("std::zlib::") == 0)
                 return true;
+            // Modules that transitively require zlib
+            if (use_path == "std::http::encoding" || use_path.find("std::http::encoding::") == 0)
+                return true;
+            if (use_path == "std::http::compression" ||
+                use_path.find("std::http::compression::") == 0)
+                return true;
+        }
+        // Check 2: Walk private_imports of user-imported modules to find transitive zlib deps.
+        // This handles cases like: user imports module X, which imports std::zlib internally.
+        if (registry) {
+            // Collect user's direct module imports
+            std::unordered_set<std::string> user_modules;
+            for (const auto& decl : module.decls) {
+                if (!decl->is<parser::UseDecl>())
+                    continue;
+                const auto& use_decl = decl->as<parser::UseDecl>();
+                std::string use_path;
+                for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
+                    if (i > 0)
+                        use_path += "::";
+                    use_path += use_decl.path.segments[i];
+                }
+                user_modules.insert(use_path);
+                // Also try parent path (for symbol imports like std::zlib::gzip)
+                auto sep = use_path.rfind("::");
+                if (sep != std::string::npos) {
+                    user_modules.insert(use_path.substr(0, sep));
+                }
+            }
+            // Check private_imports of directly imported modules
+            for (const auto& mod_path : user_modules) {
+                auto mod_opt = registry->get_module(mod_path);
+                if (!mod_opt)
+                    continue;
+                for (const auto& dep : mod_opt->private_imports) {
+                    if (dep == "std::zlib" || dep.find("std::zlib::") == 0)
+                        return true;
+                }
             }
         }
         return false;

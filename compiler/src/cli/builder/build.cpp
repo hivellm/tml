@@ -689,6 +689,25 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     // Add runtime object files only for executables (not for libraries)
     if (output_type == BuildOutputType::Executable) {
         auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+
+        // Filter out zlib/brotli/zstd libraries if the generated IR doesn't reference them.
+        // The module registry may contain std::zlib from the meta cache preload even when
+        // the user's code doesn't actually use compression. Check the IR for FFI references.
+        bool ir_uses_zlib = !llvm_ir.empty() && (llvm_ir.find("@zlib_") != std::string::npos ||
+                                                 llvm_ir.find("@brotli_") != std::string::npos ||
+                                                 llvm_ir.find("@zstd_") != std::string::npos);
+        if (!ir_uses_zlib) {
+            runtime_objects.erase(
+                std::remove_if(runtime_objects.begin(), runtime_objects.end(),
+                               [](const fs::path& p) {
+                                   std::string name = p.filename().string();
+                                   return name.find("zlib") != std::string::npos ||
+                                          name.find("zstd") != std::string::npos ||
+                                          name.find("brotli") != std::string::npos;
+                               }),
+                runtime_objects.end());
+        }
+
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
     }
 
