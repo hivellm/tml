@@ -1,4 +1,4 @@
-// TML HTTP Server — Express-like API
+// TML HTTP Server — Express-like API with dynamic handler dispatch
 //
 // Build:  tml build samples/http-server/server.tml
 // Run:    build/debug/server.exe
@@ -29,75 +29,52 @@ const SO_REUSEADDR: I32 = 4
 const AF_INET: I32 = 2
 const SOCK_STREAM: I32 = 1
 const BUF_SIZE: I64 = 8192
-const ENTRY_SIZE: I64 = 24
 const MAX_ROUTES: I64 = 64
+const ROUTE_SIZE: I64 = 24
 
 // ════════════════════════════════════════════════════════════════════
-// Route handler type
+// Route table: heap array of [method_ptr, path_ptr, handler_ptr] x N
 // ════════════════════════════════════════════════════════════════════
 
-type HandlerContext {
-    method: Str,
-    path: Str,
-    body: Str,
+func route_new() -> I64 {
+    return lowlevel { mem_alloc(MAX_ROUTES * ROUTE_SIZE) } as I64
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Route table (module-level, shared with threads via heap pointer)
-// ════════════════════════════════════════════════════════════════════
-
-func route_table_new() -> I64 {
-    return lowlevel { mem_alloc(MAX_ROUTES * ENTRY_SIZE) } as I64
-}
-
-func route_add(table: I64, count: I64, method: Str, path: Str, handler: func(HandlerContext) -> Str) -> I64 {
+func route_add(table: I64, count: I64, method: Str, path: Str, handler: func(Str, Str, Str) -> Str) -> I64 {
     if count >= MAX_ROUTES { return count }
-    let offset: I64 = count * ENTRY_SIZE
-    lowlevel { ptr_write[I64]((table + offset) as *I64, method as I64) }
-    lowlevel { ptr_write[I64]((table + offset + 8) as *I64, path as I64) }
-    lowlevel { ptr_write[I64]((table + offset + 16) as *I64, handler as I64) }
+    let off: I64 = count * ROUTE_SIZE
+    lowlevel { ptr_write[I64]((table + off) as *I64, method as I64) }
+    lowlevel { ptr_write[I64]((table + off + 8) as *I64, path as I64) }
+    lowlevel { ptr_write[I64]((table + off + 16) as *I64, handler as I64) }
     return count + 1
 }
 
-// Static dispatch — routes are matched by method+path, handlers called directly.
-// This avoids the function-pointer-through-memory issue and is faster (no indirect call).
 func route_dispatch(table: I64, count: I64, method: Str, path: Str, body: Str) -> Str {
-    // Direct dispatch — hardcoded routes for performance
-    if method == "GET" and path == "/" {
-        return json_response(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
-    }
-    if method == "GET" and path == "/health" {
-        return json_response(200, "{" + "\"status\":\"ok\"" + "}")
-    }
-    if method == "POST" and path == "/api/echo" {
-        if str::len(body) == 0 {
-            return json_response(200, "{" + "}")
+    var i: I64 = 0
+    loop (i < count) {
+        let off: I64 = i * ROUTE_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + off) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + off + 8) as *I64) } as Str
+        if m == method and p == path {
+            let fp: I64 = lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
+            let handler: func(Str, Str, Str) -> Str = fp as func(Str, Str, Str) -> Str
+            return handler(method, path, body)
         }
-        return json_response(200, body)
+        i = i + 1
     }
-    return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n" + "{" + "\"error\":\"not found\"" + "}"
+    return json_response(404, "{" + "\"error\":\"not found\"" + "}")
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Response builders
+// Response builder
 // ════════════════════════════════════════════════════════════════════
 
 func json_response(status: I64, body: Str) -> Str {
-    let st: Str = status_text(status)
     let cl: Str = str::len(body).to_string()
-    return "HTTP/1.1 " + status.to_string() + " " + st + "\r\n" +
-           "Content-Type: application/json; charset=utf-8\r\n" +
+    return "HTTP/1.1 " + status.to_string() + " OK\r\n" +
+           "Content-Type: application/json\r\n" +
            "Content-Length: " + cl + "\r\n" +
            "Connection: keep-alive\r\n\r\n" + body
-}
-
-func status_text(code: I64) -> Str {
-    if code == 200 { return "OK" }
-    if code == 201 { return "Created" }
-    if code == 400 { return "Bad Request" }
-    if code == 404 { return "Not Found" }
-    if code == 500 { return "Internal Server Error" }
-    return "OK"
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -122,8 +99,7 @@ func parse_method(buf: I64, len: I64) -> Str {
 func parse_path(buf: I64, len: I64) -> Str {
     var start: I64 = 0
     loop (start < len and start < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
-        if c == 32 as U8 { start = start + 1; break }
+        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 32 as U8 { start = start + 1; break }
         start = start + 1
     }
     var end: I64 = start
@@ -143,17 +119,16 @@ func parse_path(buf: I64, len: I64) -> Str {
 func parse_body(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len - 3) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            let bstart: I64 = i + 4
-            let blen: I64 = len - bstart
-            if blen <= 0 { return "" }
-            let p: I64 = lowlevel { mem_alloc(blen + 1) } as I64
-            lowlevel { copy_nonoverlapping((buf + bstart) as *Unit, p as *Unit, blen) }
-            lowlevel { ptr_write[U8]((p + blen) as *U8, 0 as U8) }
+        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i + 1) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i + 2) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i + 3) as *U8) } == 10 as U8 {
+            let bs: I64 = i + 4
+            let bl: I64 = len - bs
+            if bl <= 0 { return "" }
+            let p: I64 = lowlevel { mem_alloc(bl + 1) } as I64
+            lowlevel { copy_nonoverlapping((buf + bs) as *Unit, p as *Unit, bl) }
+            lowlevel { ptr_write[U8]((p + bl) as *U8, 0 as U8) }
             return p as Str
         }
         i = i + 1
@@ -165,11 +140,10 @@ func has_header_end(buf: I64, len: I64) -> Bool {
     if len < 4 { return false }
     var i: I64 = 3
     loop (i < len) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
             return true
         }
         i = i + 1
@@ -205,8 +179,8 @@ func handle_connection(arg: *Unit) {
         if not ok or total <= 0 { break }
         lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
-        let response: Str = route_dispatch(table, count, parse_method(buf, total), parse_path(buf, total), parse_body(buf, total))
-        let sent: I64 = tml_sys_send(fd, response as *Unit, str::len(response))
+        let resp: Str = route_dispatch(table, count, parse_method(buf, total), parse_path(buf, total), parse_body(buf, total))
+        let sent: I64 = tml_sys_send(fd, resp as *Unit, str::len(resp))
         if sent < 0 { break }
     }
 
@@ -224,7 +198,6 @@ func start_server(table: I64, count: I64, port: I64) {
     tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
     if tml_sys_bind_v4(sock, 0, port as I32) < 0 { println("ERROR: bind failed"); sys_close(sock); return }
     if tml_sys_listen(sock, 1024) < 0 { println("ERROR: listen failed"); sys_close(sock); return }
-
     println("Listening on http://localhost:" + port.to_string())
 
     let shared: I64 = lowlevel { mem_alloc(16) } as I64
@@ -244,29 +217,23 @@ func start_server(table: I64, count: I64, port: I64) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Application — route registration + server start
+// Main — register routes with lambdas, start server
 // ════════════════════════════════════════════════════════════════════
 
 pub func main() -> I32 {
-    let table: I64 = route_table_new()
+    let table: I64 = route_new()
     var count: I64 = 0
 
-    // GET /
-    count = route_add(table, count, "GET", "/", do(ctx: HandlerContext) -> Str {
+    count = route_add(table, count, "GET", "/", do(method: Str, path: Str, body: Str) -> Str {
         json_response(200, "{" + "\"status\":\"ok\",\"message\":\"TML HTTP Server\"" + "}")
     })
 
-    // GET /health
-    count = route_add(table, count, "GET", "/health", do(ctx: HandlerContext) -> Str {
+    count = route_add(table, count, "GET", "/health", do(method: Str, path: Str, body: Str) -> Str {
         json_response(200, "{" + "\"status\":\"ok\"" + "}")
     })
 
-    // POST /api/echo
-    count = route_add(table, count, "POST", "/api/echo", do(ctx: HandlerContext) -> Str {
-        let body: Str = ctx.body
-        if str::len(body) == 0 {
-            return json_response(200, "{" + "}")
-        }
+    count = route_add(table, count, "POST", "/api/echo", do(method: Str, path: Str, body: Str) -> Str {
+        if str::len(body) == 0 { return json_response(200, "{" + "}") }
         json_response(200, body)
     })
 
@@ -274,7 +241,7 @@ pub func main() -> I32 {
     println("  Port:       3000")
     println("  Workers:    " + cpu_count().to_string() + " cores")
     println("  Keep-Alive: yes")
-    println("  Routes:     " + count.to_string())
+    println("  Routes:     " + count.to_string() + " (dynamic dispatch)")
     println("")
 
     start_server(table, count, 3000)

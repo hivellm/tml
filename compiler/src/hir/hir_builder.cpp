@@ -781,6 +781,9 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
     } else if (type.is<parser::RefType>()) {
         const auto& ref = type.as<parser::RefType>();
         return types::make_ref(resolve_type(*ref.inner), ref.is_mut);
+    } else if (type.is<parser::PtrType>()) {
+        const auto& ptr = type.as<parser::PtrType>();
+        return types::make_ptr(resolve_type(*ptr.inner), ptr.is_mut);
     } else if (type.is<parser::ArrayType>()) {
         const auto& arr = type.as<parser::ArrayType>();
         // Try to evaluate size as a constant expression

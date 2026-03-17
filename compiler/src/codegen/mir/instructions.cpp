@@ -936,6 +936,346 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
     }
 
     // ========================================================================
+    // Memory intrinsics: ptr_write, ptr_read, ptr_offset, mem_free,
+    // copy_nonoverlapping — lowered to LLVM store/load/GEP/call.
+    // These are TML's core::intrinsics functions that the legacy codegen
+    // handles in builtins/intrinsics.cpp but MIR codegen was missing.
+    // ========================================================================
+
+    // ptr_write[T](ptr, val) -> Unit  — store val to ptr
+    if (base_name == "ptr_write" && i.args.size() >= 2) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+        std::string val_arg = get_value_reg(i.args[1]);
+
+        // Determine the element type from the value argument
+        std::string elem_type = "i32"; // default
+        auto val_vt = value_types_.find(i.args[1].id);
+        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+            elem_type = val_vt->second;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+        if (i.arg_types.size() >= 2 && i.arg_types[1]) {
+            std::string declared = mir_type_to_llvm(i.arg_types[1]);
+            if (declared != "void" && declared != "i32") {
+                elem_type = declared;
+            }
+        }
+
+        // If ptr_arg is an integer (e.g., I64 address), convert to ptr
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.pw." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
+        return;
+    }
+
+    // ptr_read[T](ptr) -> T  — load T from ptr
+    if (base_name == "ptr_read" && i.args.size() >= 1) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+
+        // Determine the element type. Priority:
+        // 1) Pointee type from pointer argument's MIR type (most reliable for generic [T])
+        // 2) Return type from MIR CallInst (may be I32 default from type checker)
+        // 3) Fallback i32
+        std::string elem_type = "i32";
+
+        // Check pointer argument's pointee type
+        mir::MirTypePtr arg_type =
+            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+        if (arg_type) {
+            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                if (pt->pointee) {
+                    std::string pointee = mir_type_to_llvm(pt->pointee);
+                    if (pointee != "void" && pointee != "{}")
+                        elem_type = pointee;
+                }
+            }
+        }
+
+        // Fall back to return type if pointee didn't resolve
+        if (elem_type == "i32" && i.return_type) {
+            std::string rt = mir_type_to_llvm(i.return_type);
+            if (rt != "void" && rt != "i32")
+                elem_type = rt;
+        }
+
+        // If ptr_arg is an integer, convert to ptr
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.pr." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
+        if (inst.result != mir::INVALID_VALUE)
+            value_types_[inst.result] = elem_type;
+        return;
+    }
+
+    // ptr_read_volatile[T](ptr) -> T / volatile_read
+    if ((base_name == "ptr_read_volatile" || base_name == "volatile_read") && i.args.size() >= 1) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+
+        std::string elem_type = "i32";
+        mir::MirTypePtr arg_type =
+            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+        if (arg_type) {
+            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                if (pt->pointee) {
+                    std::string pointee = mir_type_to_llvm(pt->pointee);
+                    if (pointee != "void" && pointee != "{}")
+                        elem_type = pointee;
+                }
+            }
+        }
+        if (elem_type == "i32" && i.return_type) {
+            std::string rt = mir_type_to_llvm(i.return_type);
+            if (rt != "void" && rt != "i32")
+                elem_type = rt;
+        }
+
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.prv." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    " + result_reg + " = load volatile " + elem_type + ", ptr " + ptr_reg);
+        if (inst.result != mir::INVALID_VALUE)
+            value_types_[inst.result] = elem_type;
+        return;
+    }
+
+    // ptr_write_volatile[T](ptr, val) / volatile_write
+    if ((base_name == "ptr_write_volatile" || base_name == "volatile_write") &&
+        i.args.size() >= 2) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+        std::string val_arg = get_value_reg(i.args[1]);
+
+        std::string elem_type = "i32";
+        auto val_vt = value_types_.find(i.args[1].id);
+        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+            elem_type = val_vt->second;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.pwv." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    store volatile " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
+        return;
+    }
+
+    // ptr_read_unaligned[T](ptr) -> T
+    if (base_name == "ptr_read_unaligned" && i.args.size() >= 1) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+
+        std::string elem_type = "i32";
+        mir::MirTypePtr arg_type =
+            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+        if (arg_type) {
+            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                if (pt->pointee) {
+                    std::string pointee = mir_type_to_llvm(pt->pointee);
+                    if (pointee != "void" && pointee != "{}")
+                        elem_type = pointee;
+                }
+            }
+        }
+        if (elem_type == "i32" && i.return_type) {
+            std::string rt = mir_type_to_llvm(i.return_type);
+            if (rt != "void" && rt != "i32")
+                elem_type = rt;
+        }
+
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.pru." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg + ", align 1");
+        if (inst.result != mir::INVALID_VALUE)
+            value_types_[inst.result] = elem_type;
+        return;
+    }
+
+    // ptr_write_unaligned[T](ptr, val)
+    if (base_name == "ptr_write_unaligned" && i.args.size() >= 2) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr_arg = get_value_reg(i.args[0]);
+        std::string val_arg = get_value_reg(i.args[1]);
+
+        std::string elem_type = "i32";
+        auto val_vt = value_types_.find(i.args[1].id);
+        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+            elem_type = val_vt->second;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string conv = "%itp.pwu." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg + ", align 1");
+        return;
+    }
+
+    // ptr_offset[T](ptr, offset) -> *T  — GEP-based pointer arithmetic
+    if (base_name == "ptr_offset" && i.args.size() >= 2) {
+        std::string ptr_arg = get_value_reg(i.args[0]);
+        std::string offset_arg = get_value_reg(i.args[1]);
+
+        // Determine element type for GEP stride
+        std::string elem_type = "i8"; // default byte-stride
+        if (i.return_type) {
+            if (auto* pt = std::get_if<mir::MirPointerType>(&i.return_type->kind)) {
+                if (pt->pointee)
+                    elem_type = mir_type_to_llvm(pt->pointee);
+            }
+        }
+
+        std::string ptr_reg = ptr_arg;
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+            std::string id = std::to_string(temp_counter_++);
+            std::string conv = "%itp.po." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            ptr_reg = conv;
+        }
+
+        emitln("    " + result_reg + " = getelementptr " + elem_type + ", ptr " + ptr_reg +
+               ", i64 " + offset_arg);
+        if (inst.result != mir::INVALID_VALUE)
+            value_types_[inst.result] = "ptr";
+        return;
+    }
+
+    // mem_free(ptr) -> Unit
+    if (base_name == "mem_free" && i.args.size() >= 1) {
+        std::string ptr_arg = get_value_reg(i.args[0]);
+
+        // If the argument is an integer, convert to ptr
+        auto ptr_vt = value_types_.find(i.args[0].id);
+        std::string ptr_type_str;
+        if (ptr_vt != value_types_.end())
+            ptr_type_str = ptr_vt->second;
+        else if (i.args[0].type)
+            ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+        if (ptr_type_str == "ptr") {
+            emitln("    call void @mem_free(ptr " + ptr_arg + ")");
+        } else if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i') {
+            std::string id = std::to_string(temp_counter_++);
+            std::string conv = "%itp.mf." + id;
+            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+            emitln("    call void @mem_free(ptr " + conv + ")");
+        } else {
+            emitln("    call void @mem_free(ptr " + ptr_arg + ")");
+        }
+        return;
+    }
+
+    // copy_nonoverlapping(src, dst, count) -> Unit
+    if (base_name == "copy_nonoverlapping" && i.args.size() >= 3) {
+        std::string src = get_value_reg(i.args[0]);
+        std::string dst = get_value_reg(i.args[1]);
+        std::string count = get_value_reg(i.args[2]);
+
+        // Ensure both pointers are ptr type
+        auto ensure_ptr = [&](const mir::Value& v, std::string& reg) {
+            auto vt = value_types_.find(v.id);
+            std::string vtype;
+            if (vt != value_types_.end())
+                vtype = vt->second;
+            else if (v.type)
+                vtype = mir_type_to_llvm(v.type);
+            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
+                std::string id = std::to_string(temp_counter_++);
+                std::string conv = "%itp.cn." + id;
+                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
+                reg = conv;
+            }
+        };
+        ensure_ptr(i.args[0], src);
+        ensure_ptr(i.args[1], dst);
+
+        emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+               count + ", i1 false)");
+        return;
+    }
+
+    // ========================================================================
     // Inline primitive to_string / debug_string (Char, Str, Bool)
     // These may arrive as CallInst with func_name "Type::method" when the
     // MIR builder resolves behavior methods to qualified function names.
@@ -1019,7 +1359,16 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
     }
 
-    // Check if this is an indirect call (function pointer parameter or local variable)
+    // Check if the THIR builder marked this as an indirect call through a local variable
+    // or parameter holding a function pointer. The callee field carries the MIR Value
+    // whose LLVM register contains the { ptr, ptr } fat pointer.
+    if (i.callee.has_value()) {
+        auto callee_type = i.callee_func_type ? i.callee_func_type : i.callee->type;
+        emit_indirect_call(i, i.func_name, i.callee->id, callee_type, result_reg, inst);
+        return;
+    }
+
+    // Check if this is an indirect call via a function pointer parameter
     auto param_it = param_info_.find(i.func_name);
     if (param_it != param_info_.end()) {
         auto& [value_id, param_type] = param_it->second;
@@ -1027,27 +1376,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         if (param_type && std::holds_alternative<mir::MirFunctionType>(param_type->kind)) {
             emit_indirect_call(i, param_it->first, value_id, param_type, result_reg, inst);
             return;
-        }
-    }
-
-    // Check if this is a local variable holding a function pointer.
-    // When `let f = add100; f(42)` is compiled, the MIR emits CallInst with func_name="f".
-    // We detect this: if "f" is not a known function but IS a value in value_regs_ with
-    // a function-pointer type ({ ptr, ptr } or ptr), emit an indirect call.
-    if (param_it == param_info_.end()) {
-        // Search value_regs_ for a register named %f (matching i.func_name)
-        for (const auto& [vid, reg] : value_regs_) {
-            if (reg == "%" + i.func_name) {
-                auto vt_it = value_types_.find(vid);
-                if (vt_it != value_types_.end()) {
-                    const std::string& vtype = vt_it->second;
-                    if (vtype == "{ ptr, ptr }" || vtype == "ptr") {
-                        // This is a function pointer in a local variable — indirect call
-                        emit_indirect_call(i, i.func_name, vid, nullptr, result_reg, inst);
-                        return;
-                    }
-                }
-            }
         }
     }
 
@@ -1239,12 +1567,20 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
                                     mir::ValueId value_id, const mir::MirTypePtr& func_type,
                                     const std::string& result_reg,
                                     const mir::InstructionData& inst) {
-    (void)value_id; // May be used for future enhancements
-
     // Function types are represented as fat pointers: { func_ptr, env_ptr }
     // where env_ptr is null for non-capturing closures / plain function pointers.
     // We must extract both components and branch on env_ptr nullness.
-    std::string fat_ptr = "%" + param_name;
+
+    // Resolve the LLVM register holding the fat pointer.
+    // For local variables (callee field set), use value_regs_ lookup.
+    // For parameters (param_info_ path), use "%" + param_name.
+    std::string fat_ptr;
+    auto reg_it = value_regs_.find(value_id);
+    if (reg_it != value_regs_.end() && !reg_it->second.empty()) {
+        fat_ptr = reg_it->second;
+    } else {
+        fat_ptr = "%" + param_name;
+    }
 
     // Extract function type info
     const auto& mir_func_type = std::get<mir::MirFunctionType>(func_type->kind);

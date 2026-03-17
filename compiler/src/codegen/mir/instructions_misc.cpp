@@ -61,6 +61,40 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = tgt_type;
         }
+    } else if ((src_type == "{ ptr, ptr }" || operand_actual_type == "{ ptr, ptr }") &&
+               (tgt_type[0] == 'i' && tgt_type != "i1")) {
+        // Function/closure fat pointer { fn_ptr, env_ptr } cast to integer:
+        // Extract fn_ptr (element 0) then ptrtoint to target integer type.
+        std::string extract_reg = "%extract" + std::to_string(temp_counter_++);
+        emitln("    " + extract_reg + " = extractvalue { ptr, ptr } " + operand + ", 0");
+        emitln("    " + result_reg + " = ptrtoint ptr " + extract_reg + " to " + tgt_type);
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = tgt_type;
+        }
+    } else if ((tgt_type == "{ ptr, ptr }" || tgt_type == "ptr") &&
+               (src_type[0] == 'i' && src_type != "i1") && i.kind == mir::CastKind::IntToPtr) {
+        // Integer to function pointer: inttoptr then wrap in fat pointer if needed.
+        std::string ptr_reg = "%itp" + std::to_string(temp_counter_++);
+        emitln("    " + ptr_reg + " = inttoptr " + src_type + " " + operand + " to ptr");
+        if (tgt_type == "{ ptr, ptr }") {
+            std::string fat1 = "%fat1." + std::to_string(temp_counter_++);
+            emitln("    " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + ptr_reg + ", 0");
+            emitln("    " + result_reg + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
+        } else {
+            // ptr to ptr — just alias, no bitcast needed
+            value_regs_[inst.result] = ptr_reg;
+            value_types_[inst.result] = tgt_type;
+            return;
+        }
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = tgt_type;
+        }
+    } else if (src_type == tgt_type) {
+        // Same type — no cast needed, just alias the register.
+        // This happens when value_types_ overrides src_type to match tgt_type
+        // (e.g., constant 8 already coerced from i32 to i64 by a prior operation).
+        value_regs_[inst.result] = operand;
+        value_types_[inst.result] = tgt_type;
     } else {
         static const char* cast_names[] = {"bitcast", "trunc",  "zext",     "sext",
                                            "fptrunc", "fpext",  "fptosi",   "fptoui",
@@ -92,6 +126,13 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
                 // Default to zext; sext would need signed info from MIR
                 cast_name = (i.kind == mir::CastKind::SExt) ? "sext" : "zext";
             }
+        } else if (src_type == "ptr" && tgt_is_int) {
+            // Safety net: ptr-to-integer must use ptrtoint, not bitcast
+            // (function pointers, raw pointers cast to I64/U64/etc.)
+            cast_name = "ptrtoint";
+        } else if (src_is_int && tgt_type == "ptr") {
+            // Safety net: integer-to-ptr must use inttoptr, not bitcast
+            cast_name = "inttoptr";
         }
 
         emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " + operand + " to " +
@@ -220,11 +261,18 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                     value_types_[inst.result] = "{}";
                 }
             } else if constexpr (std::is_same_v<C, mir::ConstFuncRef>) {
-                // Function reference - store as opaque pointer (modern LLVM uses ptr for all
-                // pointers including function pointers)
+                // Function reference — build a fat pointer { func_ptr, env_ptr } matching
+                // the closure calling convention. env_ptr is null for plain function refs.
+                // This allows indirect calls through local variables to use the same
+                // emit_indirect_call path as closures.
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_regs_[inst.result] = "@" + quote_func_name(c.func_name);
-                    value_types_[inst.result] = "ptr";
+                    std::string func_ptr = "@" + quote_func_name(c.func_name);
+                    std::string tmp = new_temp();
+                    emitln("    " + tmp + " = insertvalue { ptr, ptr } undef, ptr " + func_ptr +
+                           ", 0");
+                    emitln("    " + result_reg + " = insertvalue { ptr, ptr } " + tmp +
+                           ", ptr null, 1");
+                    value_types_[inst.result] = "{ ptr, ptr }";
                 }
             }
         },

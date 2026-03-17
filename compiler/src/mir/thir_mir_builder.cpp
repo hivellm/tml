@@ -800,6 +800,19 @@ auto ThirMirBuilder::build_call(const thir::ThirCallExpr& call) -> Value {
     inst.args = std::move(args);
     inst.arg_types = std::move(arg_types);
     inst.return_type = result_type;
+
+    // Check if the callee is a local variable holding a function pointer.
+    // When `let f: func(I32) -> I32 = add100; f(42)` is compiled, the parser
+    // creates a CallExpr with func_name="f". We detect that "f" is a local
+    // variable (not a global function) and mark this as an indirect call.
+    Value callee_var = get_variable(call.func_name);
+    if (callee_var.id != INVALID_VALUE && callee_var.type) {
+        if (std::holds_alternative<MirFunctionType>(callee_var.type->kind)) {
+            inst.callee = callee_var;
+            inst.callee_func_type = callee_var.type;
+        }
+    }
+
     return emit(std::move(inst), result_type, call.span);
 }
 

@@ -389,6 +389,14 @@ struct CallInst {
     std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
     bool is_stack_eligible = false;        ///< True if result can be stack-allocated (for allocs).
 
+    /// Callee value for indirect calls (function pointer in local variable or parameter).
+    /// When set, the call should be emitted as an indirect call through this value
+    /// instead of a direct call to func_name as a global symbol.
+    std::optional<Value> callee;
+
+    /// Function type for indirect calls (needed to determine parameter/return types).
+    MirTypePtr callee_func_type;
+
     /// Returns true if this call was devirtualized from a virtual method call.
     [[nodiscard]] auto is_devirtualized() const -> bool {
         return devirt_info.has_value();

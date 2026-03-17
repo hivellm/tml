@@ -483,6 +483,7 @@ void MirCodegen::emit_preamble() {
     emitln("declare void @abort() noreturn");
     // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
     emitln("declare ptr @mem_alloc(i64)"); // Memory allocation for char-to-string
+    emitln("declare void @mem_free(ptr)"); // Memory deallocation for intrinsics
     emitln("declare i64 @strlen(ptr)");
     emitln("declare ptr @malloc(i64)");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");

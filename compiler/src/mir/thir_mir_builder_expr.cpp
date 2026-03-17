@@ -193,6 +193,13 @@ auto ThirMirBuilder::build_cast(const thir::ThirCastExpr& cast) -> Value {
             inst.kind = CastKind::PtrToInt;
         } else if (val.type->is_integer() && result_type->is_pointer()) {
             inst.kind = CastKind::IntToPtr;
+        } else if (std::holds_alternative<MirFunctionType>(val.type->kind) &&
+                   result_type->is_integer()) {
+            // Function references are pointers at the LLVM level (ptr @func_name)
+            inst.kind = CastKind::PtrToInt;
+        } else if (val.type->is_integer() &&
+                   std::holds_alternative<MirFunctionType>(result_type->kind)) {
+            inst.kind = CastKind::IntToPtr;
         }
     }
 

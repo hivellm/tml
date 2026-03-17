@@ -752,6 +752,9 @@ auto is_value_used(const Function& func, ValueId value) -> bool {
                     } else if constexpr (std::is_same_v<T, InsertValueInst>) {
                         return i.aggregate.id == value || i.value.id == value;
                     } else if constexpr (std::is_same_v<T, CallInst>) {
+                        // Check indirect call callee (function pointer local variable)
+                        if (i.callee.has_value() && i.callee->id == value)
+                            return true;
                         for (const auto& arg : i.args) {
                             if (arg.id == value)
                                 return true;
