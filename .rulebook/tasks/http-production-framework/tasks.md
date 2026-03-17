@@ -1,66 +1,80 @@
-# Tasks: HTTP Framework — 500K req/s Target
+# Tasks: HTTP Framework — cmmv-server Parity + 500K req/s
 
-**Status**: IN_PROGRESS (March 2026) — Currently ~50K req/s
+**Status**: IN_PROGRESS (March 2026)
+**Reference**: https://github.com/cmmvio/cmmv-server
 
-## Critical Bugs (must fix first)
+## Phase 0: Foundation Types
 
-- [ ] B.1 Fix GlobalModuleCache serving stale source code (use hash, not timestamp)
-- [ ] B.2 Radix-tree dispatch returns 404 in multi-thread (caused by B.1)
+- [ ] 0.1 Create `server/request.tml` — Request type with: method, url, http_version, headers, params, body, raw fd
+- [ ] 0.2 Request lazy getters: query(), path(), hostname(), ip(), protocol(), secure(), fresh(), stale(), xhr()
+- [ ] 0.3 Request.get(name) — header by name (case-insensitive)
+- [ ] 0.4 Request.is(type) — content-type check
+- [ ] 0.5 Request.accepts(types) — Accept negotiation
+- [ ] 0.6 Create `server/response.tml` — Response type with: status_code, headers, sent, header_sent, raw fd
+- [ ] 0.7 Response.status(code) — chainable status setter
+- [ ] 0.8 Response.send(body) — detect content-type, set Content-Length, write to socket
+- [ ] 0.9 Response.json(data) — set application/json, serialize, send
+- [ ] 0.10 Response.html(body) — set text/html, send
+- [ ] 0.11 Response.redirect(url) and redirect_with(status, url)
+- [ ] 0.12 Response.set(name, value) / get(name) — header manipulation
+- [ ] 0.13 Response.type_set(mime) — Content-Type setter
+- [ ] 0.14 Response.write(chunk) + end() — streaming support
+- [ ] 0.15 Response.write_head(status, headers) — raw header write
+- [ ] 0.16 Response.vary(field) — Vary header
+- [ ] 0.17 Create `server/constants.tml` — HTTP methods list, status codes map, MIME types
 
-## Phase 1: Zero-Allocation Hot Path (target: 150-200K req/s)
+## Phase 1: Hook System + Router
 
-- [x] 1.1 Thread pool with mutex+condvar ring buffer
-- [x] 1.2 Middleware pipeline
-- [x] 1.3 Timeouts, graceful shutdown, queue overflow
-- [x] 1.4 Router radix-tree + inline lookup
-- [x] 1.5 Buffer response builder (single alloc)
-- [x] 1.6 Zero-copy HTTP parsing (method/path)
-- [x] 1.7 Connection: close, HEAD support, error recovery guards
-- [ ] 1.8 Per-worker pre-allocated response buffer (eliminate mem_alloc per request)
-- [ ] 1.9 Pre-computed status lines as constants ("HTTP/1.1 200 OK\r\n")
-- [ ] 1.10 Inline I64-to-ASCII for Content-Length (no to_string() allocation)
-- [ ] 1.11 Stack-allocated params_buf and ctx_data (no mem_alloc for radix tree dispatch)
+- [ ] 1.1 Create `server/hooks.tml` — Hooks type with: onRequest, preParsing, preHandler, onSend, onResponse, onError
+- [ ] 1.2 Hook.add(name, fn), Hook.validate(name, fn)
+- [ ] 1.3 Hook runners: onRequestHookRunner, preHandlerHookRunner, onSendHookRunner, onResponseHookRunner
+- [ ] 1.4 Create `server/handle_request.tml` — body detection (bodyless: GET/HEAD/TRACE, bodywith: POST/PUT/PATCH/DELETE/OPTIONS)
+- [ ] 1.5 Content-type parser registry (addContentTypeParser, contentTypeParser)
+- [ ] 1.6 Wire router.tml to Application (find-my-way integration)
+- [ ] 1.7 Handler signature: func(Request, Response) instead of func(AppContext) -> Str
 
-## Phase 2: IOCP on Windows (target: 300-400K req/s)
+## Phase 2: Application + Server
 
-- [ ] 2.1 C runtime: tml_iocp_create, tml_iocp_associate, tml_iocp_get_completion
-- [ ] 2.2 C runtime: tml_iocp_post_accept (AcceptEx with pre-posted buffers)
-- [ ] 2.3 C runtime: tml_iocp_post_recv (WSARecv with overlapped I/O)
-- [ ] 2.4 C runtime: tml_iocp_post_send (WSASend with overlapped I/O)
-- [ ] 2.5 TML: std::net::iocp module (IOCompletionPort, Completion, OverlappedBuffer)
-- [ ] 2.6 TML: app.listen() uses IOCP backend (workers block on GetQueuedCompletionStatus)
-- [ ] 2.7 Pre-post 4 AcceptEx calls at all times (async accept pipeline)
-- [ ] 2.8 Per-connection pre-allocated recv buffer (zero kernel-copy on WSARecv)
+- [ ] 2.1 Rewrite `server/app.tml` — Application type: router, hooks, settings, cache, middlewares
+- [ ] 2.2 app.get/post/put/delete/patch/head/options (all HTTP methods via router)
+- [ ] 2.3 app.use(middleware) — middleware stack with path prefix support
+- [ ] 2.4 app.set(key, value) / app.get(key) — settings (etag, trust proxy, view engine, etc.)
+- [ ] 2.5 app.addHook(name, fn) — lifecycle hook registration
+- [ ] 2.6 app.setErrorHandler(fn) — custom error handler chain
+- [ ] 2.7 app.addContentTypeParser(type, fn) — content-type parser registration
+- [ ] 2.8 app.listen(port) — create server, bind, accept loop
+- [ ] 2.9 app.close() — graceful shutdown with connection draining
+- [ ] 2.10 Server options: connectionTimeout, keepAliveTimeout, requestTimeout, bodyLimit, maxHeaderSize
 
-## Phase 3: Connection Pipeline (target: 400-500K req/s)
+## Phase 3: Error Handling + Serialization
 
-- [ ] 3.1 Non-blocking send with per-connection write buffer
-- [ ] 3.2 Scatter/gather I/O (WSASend with header+body buffers, no copy)
-- [ ] 3.3 Pre-computed response cache for static routes
-- [ ] 3.4 Lock-free MPSC queue per worker (replace mutex ring buffer)
-- [ ] 3.5 Request pipelining support
-- [ ] 3.6 Connection memory pool (slab allocator for fixed-size conn state)
+- [ ] 3.1 Create `server/error_handler.tml` — buildErrorHandler, rootErrorHandler, fallbackErrorHandler
+- [ ] 3.2 Error serialization (JSON format: {error, code, message, statusCode})
+- [ ] 3.3 Hook-based error pipeline: handler error → onError hook → error handler chain → fallback
+- [ ] 3.4 Set error headers from error.status/error.statusCode
 
-## Phase 4: Production Hardening
+## Phase 4: Performance (Thread Pool + Event Loop)
 
-- [ ] 4.1 Graceful shutdown with connection draining
-- [ ] 4.2 Signal handler (Ctrl+C)
-- [ ] 4.3 Access logging middleware
-- [ ] 4.4 CORS middleware
-- [ ] 4.5 JSON body parser middleware
-- [ ] 4.6 Static file serving
-- [ ] 4.7 Rate limiter middleware
+- [ ] 4.1 Thread pool with per-worker pre-allocated buffers (response, params, headers)
+- [ ] 4.2 Non-blocking I/O via std::net::eventloop
+- [ ] 4.3 Response writes directly to socket (no intermediate Str allocation)
+- [ ] 4.4 HTTP version detection from request line (1.0, 1.1, 2)
+- [ ] 4.5 Pre-computed status lines for common codes
+- [ ] 4.6 Inline I64-to-ASCII for Content-Length
 
-## Done (reference)
+## Phase 5: IOCP + 500K Target
 
-- [x] Thread pool (32 workers), 50K req/s
+- [ ] 5.1 C runtime: tml_iocp_* functions (CreateIoCompletionPort, AcceptEx, WSARecv, WSASend)
+- [ ] 5.2 TML: std::net::iocp module
+- [ ] 5.3 IOCP-based server backend for app.listen()
+- [ ] 5.4 Pre-posted AcceptEx + WSARecv buffers
+- [ ] 5.5 Connection memory pool (slab allocator)
+
+## Done (prior work, preserved)
+
+- [x] Thread pool with mutex+condvar ring buffer (50K req/s)
 - [x] EventLoop abstraction (std::net::eventloop)
-- [x] WSAPoll/epoll event loop (22K req/s — limited by WSAPoll O(n))
-- [x] Buffer response builder with Server: TML header
-- [x] Radix-tree inline lookup (app_find_route)
-- [x] AppContext.param() with fixed-size param buffer
-- [x] Zero-copy method/path parsing
-- [x] Connection: close detection
-- [x] HEAD method support with GET fallback
-- [x] Null fn_ptr guard (500 response)
-- [x] Compiler: GlobalModuleCache timestamp validation (partial fix)
+- [x] Radix-tree router (router.tml)
+- [x] Pattern matching dispatch with path params
+- [x] Zero-copy HTTP parsing
+- [x] Compiler: GlobalModuleCache hash validation
