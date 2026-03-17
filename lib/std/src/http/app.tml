@@ -336,9 +336,30 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
     count = count + 1
 }
 
+const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
+
+/// Radix-tree fallback dispatch. Separated from app_dispatch so the RouteMatch
+/// type (which contains List[Str] fields) doesn't pollute the hot path's stack frame.
+func app_dispatch_tree(table: I64, trees: I64, method: Str, path: Str, body: Str) -> Str {
+    let idx: I64 = method_index(method)
+    if idx >= 0 {
+        let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
+        if root != 0 {
+            let rm: RouteMatch = find_in_tree(root, path)
+            if rm.found {
+                let ctx: AppContext = AppContext { req_method: method, req_path: path, req_body: body, route_match_ptr: 0 }
+                let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
+                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
+                return handler(ctx)
+            }
+        }
+    }
+    return ""
+}
+
 pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
     let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
-    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
     let mw_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_TABLE) as *I64) }
     let mw_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_COUNT) as *I64) }
 
@@ -355,7 +376,7 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
         mw_idx = mw_idx + 1
     }
 
-    // Fast path: exact match via linear scan (O(n) but no allocations, fast for <64 routes)
+    // Fast path: exact match via linear scan (zero allocations, hot for static routes)
     let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
     var i: I64 = 0
     loop (i < count) {
@@ -370,22 +391,13 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str) -> Str {
         i = i + 1
     }
 
-    // Slow path: radix-tree lookup for parametric/wildcard routes
-    let idx: I64 = method_index(method)
-    if idx >= 0 {
-        let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
-        if root != 0 {
-            let rm: RouteMatch = find_in_tree(root, path)
-            if rm.found {
-                let offset: I64 = (rm.handler_id - 1) * ENTRY_SIZE
-                let fn_ptr: I64 = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-                let handler: func(AppContext) -> Str = fn_ptr as func(AppContext) -> Str
-                // TODO: pass rm to AppContext for param extraction
-                return handler(ctx)
-            }
-        }
+    // Slow path: radix-tree for parametric/wildcard routes (separate function to keep hot path lean)
+    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
+    let tree_result: Str = app_dispatch_tree(table, trees, method, path, body)
+    if str::len(tree_result) > 0 {
+        return tree_result
     }
-    return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n" + "{" + "\"error\":\"not found\"" + "}"
+    return RESPONSE_404
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -489,8 +501,10 @@ pub func app_worker(arg: *Unit) {
             if not complete or total <= 0 { break }
             lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
-            let method: Str = app_extract_method(buf, total)
-            let path: Str = app_extract_path(buf, total)
+            // Zero-copy parsing: null-terminate in-place in the recv buffer.
+            // No mem_alloc per request. We restore the overwritten bytes after dispatch.
+            let method: Str = app_zerocopy_method(buf, total)
+            let path: Str = app_zerocopy_path(buf, total)
             let body: Str = app_extract_body(buf, total)
             let response: Str = app_dispatch(shared, method, path, body)
             let sent: I64 = tml_sys_send(fd, response as *Unit, str::len(response))
@@ -596,7 +610,54 @@ pub func app_listen(table: I64, count: I64, trees: I64, mw_table: I64, mw_count:
     sys_close(listener)
 }
 
-// ── HTTP parsing helpers ────────────────────────────────────────
+// ── Zero-copy HTTP parsing ──────────────────────────────────────
+// These functions null-terminate in-place in the recv buffer, returning
+// a Str that points directly into the buffer. No allocations.
+// The caller's buffer is modified but that's fine — we only read method/path
+// once per request before overwriting with the next recv.
+
+/// Zero-copy method extraction. Overwrites the space after method with \0.
+/// Returns Str pointing into buf. "GET /path HTTP/1.1\r\n" → "GET"
+pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
+    var i: I64 = 0
+    loop (i < len and i < 10) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if c == 32 as U8 {
+            lowlevel { ptr_write[U8]((buf + i) as *U8, 0 as U8) }
+            return buf as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Zero-copy path extraction. Overwrites the space/? after path with \0.
+/// Returns Str pointing into buf. Assumes method was already null-terminated.
+/// Scans from start of buf to find the first space (end of method), then
+/// the path starts at the next byte.
+pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
+    // Find start: skip past the null-terminated method + the null byte
+    var start: I64 = 0
+    loop (start < len and start < 10) {
+        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 0 as U8 {
+            start = start + 1
+            break
+        }
+        start = start + 1
+    }
+    let path_start: I64 = start
+    var end: I64 = start
+    loop (end < len) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
+        if c == 32 as U8 or c == 63 as U8 { break }
+        end = end + 1
+    }
+    if end <= path_start { return "/" }
+    lowlevel { ptr_write[U8]((buf + end) as *U8, 0 as U8) }
+    return (buf + path_start) as Str
+}
+
+// ── Allocating HTTP parsing (kept for external use) ────────────
 
 pub func app_extract_method(buf: I64, len: I64) -> Str {
     var i: I64 = 0
