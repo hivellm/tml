@@ -296,6 +296,179 @@ pub func app_request_offset(buf: I64, len: I64, n: I64) -> I64 {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// Zero-copy header parsing — nginx-style
+// ════════════════════════════════════════════════════════════════════
+// Headers are stored as pointers into the recv buffer. No allocations.
+// Layout: headers_buf holds [name_ptr, name_len, value_ptr, value_len] x N
+// Each entry is 32 bytes (4 x I64).
+
+pub const MAX_HEADERS: I64 = 32
+pub const HEADER_ENTRY_SIZE: I64 = 32
+
+/// Parse HTTP headers from a recv buffer into a flat array.
+/// Starts scanning after the request line (first \r\n).
+/// Null-terminates header names and values in-place in the buffer.
+/// Returns the number of headers parsed.
+/// headers_buf layout: [name_ptr, name_len, value_ptr, value_len] per header.
+pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
+    // Find end of request line (first \r\n)
+    var pos: I64 = 0
+    loop (pos < len - 1) {
+        if lowlevel { ptr_read[U8]((buf + pos) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + pos + 1) as *U8) } == 10 as U8 {
+            pos = pos + 2
+            break
+        }
+        pos = pos + 1
+    }
+
+    var count: I64 = 0
+    // Parse each header line: "Name: Value\r\n"
+    loop (pos < len - 1 and count < MAX_HEADERS) {
+        // Check for empty line (\r\n) = end of headers
+        if lowlevel { ptr_read[U8]((buf + pos) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + pos + 1) as *U8) } == 10 as U8 {
+            break
+        }
+
+        // Find colon
+        let name_start: I64 = pos
+        var colon: I64 = pos
+        loop (colon < len) {
+            if lowlevel { ptr_read[U8]((buf + colon) as *U8) } == 58 as U8 { break }
+            colon = colon + 1
+        }
+        if colon >= len { break }
+
+        let name_len: I64 = colon - name_start
+
+        // Skip ": " (colon + optional spaces)
+        var val_start: I64 = colon + 1
+        loop (val_start < len and lowlevel { ptr_read[U8]((buf + val_start) as *U8) } == 32 as U8) {
+            val_start = val_start + 1
+        }
+
+        // Find end of value (\r\n)
+        var val_end: I64 = val_start
+        loop (val_end < len - 1) {
+            if lowlevel { ptr_read[U8]((buf + val_end) as *U8) } == 13 as U8
+               and lowlevel { ptr_read[U8]((buf + val_end + 1) as *U8) } == 10 as U8 {
+                break
+            }
+            val_end = val_end + 1
+        }
+        let val_len: I64 = val_end - val_start
+
+        // Store header entry: [name_ptr, name_len, value_ptr, value_len]
+        var entry_off: I64 = 0
+        var k: I64 = 0
+        loop (k < count) { entry_off = entry_off + HEADER_ENTRY_SIZE; k = k + 1 }
+        lowlevel { ptr_write[I64]((headers_buf + entry_off) as *I64, buf + name_start) }
+        lowlevel { ptr_write[I64]((headers_buf + entry_off + 8) as *I64, name_len) }
+        lowlevel { ptr_write[I64]((headers_buf + entry_off + 16) as *I64, buf + val_start) }
+        lowlevel { ptr_write[I64]((headers_buf + entry_off + 24) as *I64, val_len) }
+        count = count + 1
+
+        // Move past \r\n
+        pos = val_end + 2
+    }
+    return count
+}
+
+/// Get a header value by name (case-insensitive).
+/// Scans the headers_buf parsed by app_parse_headers.
+/// Returns the value as Str (pointer into recv buffer), or "" if not found.
+pub func app_get_header(headers_buf: I64, header_count: I64, name: Str) -> Str {
+    let name_len: I64 = str::len(name)
+    var i: I64 = 0
+    var off: I64 = 0
+    loop (i < header_count) {
+        let h_name_ptr: I64 = lowlevel { ptr_read[I64]((headers_buf + off) as *I64) }
+        let h_name_len: I64 = lowlevel { ptr_read[I64]((headers_buf + off + 8) as *I64) }
+        let h_val_ptr: I64 = lowlevel { ptr_read[I64]((headers_buf + off + 16) as *I64) }
+        let h_val_len: I64 = lowlevel { ptr_read[I64]((headers_buf + off + 24) as *I64) }
+
+        if h_name_len == name_len {
+            // Case-insensitive comparison
+            var match: Bool = true
+            var j: I64 = 0
+            loop (j < name_len) {
+                var a: U8 = lowlevel { ptr_read[U8]((h_name_ptr + j) as *U8) }
+                var b: U8 = lowlevel { ptr_read[U8]((name as I64 + j) as *U8) }
+                // Lowercase: if A-Z (65-90), add 32
+                if a >= 65 as U8 and a <= 90 as U8 { a = (a as I64 + 32) as U8 }
+                if b >= 65 as U8 and b <= 90 as U8 { b = (b as I64 + 32) as U8 }
+                if a != b { match = false; break }
+                j = j + 1
+            }
+            if match {
+                // Return a null-terminated copy of the value
+                let vbuf: I64 = lowlevel { mem_alloc(h_val_len + 1) } as I64
+                lowlevel { copy_nonoverlapping(h_val_ptr as *Unit, vbuf as *Unit, h_val_len) }
+                lowlevel { ptr_write[U8]((vbuf + h_val_len) as *U8, 0 as U8) }
+                return vbuf as Str
+            }
+        }
+        off = off + HEADER_ENTRY_SIZE
+        i = i + 1
+    }
+    return ""
+}
+
+/// Extract Content-Length value from headers. Returns -1 if not present.
+pub func app_get_content_length(headers_buf: I64, header_count: I64) -> I64 {
+    let cl_str: Str = app_get_header(headers_buf, header_count, "content-length")
+    if str::len(cl_str) == 0 { return -1 }
+    // Parse integer from string
+    var result: I64 = 0
+    var i: I64 = 0
+    let slen: I64 = str::len(cl_str)
+    loop (i < slen) {
+        let c: I32 = str::char_at(cl_str, i)
+        if c < 48 or c > 57 { return -1 }  // not a digit
+        result = result * 10 + (c - 48) as I64
+        i = i + 1
+    }
+    return result
+}
+
+/// Extract query string from a URL. Returns everything after '?' or "" if no query.
+/// Does NOT modify the input — returns a new allocated string.
+pub func app_extract_query(url: Str) -> Str {
+    let len: I64 = str::len(url)
+    var i: I64 = 0
+    loop (i < len) {
+        if str::char_at(url, i) == 63 {  // '?'
+            let qlen: I64 = len - i - 1
+            if qlen <= 0 { return "" }
+            let qbuf: I64 = lowlevel { mem_alloc(qlen + 1) } as I64
+            lowlevel { copy_nonoverlapping((url as I64 + i + 1) as *Unit, qbuf as *Unit, qlen) }
+            lowlevel { ptr_write[U8]((qbuf + qlen) as *U8, 0 as U8) }
+            return qbuf as Str
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+/// Extract path from a URL (everything before '?'). Allocating copy.
+pub func app_extract_path_from_url(url: Str) -> Str {
+    let len: I64 = str::len(url)
+    var i: I64 = 0
+    loop (i < len) {
+        if str::char_at(url, i) == 63 {  // '?'
+            if i == 0 { return "/" }
+            let pbuf: I64 = lowlevel { mem_alloc(i + 1) } as I64
+            lowlevel { copy_nonoverlapping(url as *Unit, pbuf as *Unit, i) }
+            lowlevel { ptr_write[U8]((pbuf + i) as *U8, 0 as U8) }
+            return pbuf as Str
+        }
+        i = i + 1
+    }
+    return url  // no query string
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Pattern-matching helpers (kept for legacy linear-scan compat)
 // ════════════════════════════════════════════════════════════════════
 

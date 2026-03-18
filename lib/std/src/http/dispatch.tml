@@ -22,6 +22,7 @@ use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
 pub const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
 pub const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
 pub const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
+pub const RESPONSE_400: Str = "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 25\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"bad request\"}"
 pub const RESPONSE_413: Str = "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"payload too large\"}"
 
 // ════════════════════════════════════════════════════════════════════
