@@ -992,7 +992,11 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
 
     // Call - handle void vs non-void return types
     std::string dbg_suffix = get_debug_loc_suffix();
-    if (ret_type == "void") {
+    // Unit type "{}" and void are equivalent for call instructions.
+    // Function definitions use "void" return, so calls must also use "void".
+    // Using "call {} @func()" when the function is "define void @func()" is invalid IR
+    // and causes stack corruption at runtime.
+    if (ret_type == "void" || ret_type == "{}") {
         emit("  call void " + mangled + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
             if (i > 0)

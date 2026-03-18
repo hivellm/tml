@@ -1739,12 +1739,17 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
     }
     std::string ret_type = mir_type_to_llvm(ret_ptr);
 
-    if (ret_type != "void" && !result_reg.empty()) {
+    // Unit type is represented as "{}" in MIR but "void" in LLVM function signatures.
+    // Calling a void function with "call {} @func()" is invalid LLVM IR and causes
+    // stack corruption at runtime. Normalize "{}" to "void" for call instructions.
+    std::string call_ret_type = (ret_type == "{}") ? "void" : ret_type;
+
+    if (call_ret_type != "void" && !result_reg.empty()) {
         emit("    " + result_reg + " = ");
     } else {
         emit("    ");
     }
-    emit("call " + ret_type + " @" + quote_func_name(func_name) + "(");
+    emit("call " + call_ret_type + " @" + quote_func_name(func_name) + "(");
     for (size_t j = 0; j < processed_args.size(); ++j) {
         if (j > 0) {
             emit(", ");
@@ -1753,8 +1758,8 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
     }
     emitln(")");
 
-    if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
-        value_types_[inst.result] = ret_type;
+    if (inst.result != mir::INVALID_VALUE && call_ret_type != "void") {
+        value_types_[inst.result] = call_ret_type;
     }
 }
 

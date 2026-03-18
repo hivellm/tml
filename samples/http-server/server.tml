@@ -19,21 +19,15 @@ use std::http::app::App
 use std::http::dispatch::{app_get_param, app_build_response}
 use std::http::incoming::IncomingMessage
 
-// ── Pre-computed static responses (zero-alloc per request) ──────
-
-// For endpoints that always return the same body, pre-compute the full HTTP
-// response at module level. This avoids app_build_response per request entirely.
-const RESP_ROOT: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 44\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}"
-const RESP_HEALTH: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 15\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"status\":\"ok\"}"
-const RESP_EMPTY_JSON: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 2\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{}"
-const RESP_REDIRECT: Str = "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
-const RESP_HTML: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 76\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>"
-const RESP_TEXT: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\nHello, plain text world!"
-
 // ── Handlers ───────────────────────────────────────────────────
 
-func handle_root(req: IncomingMessage) -> Str { RESP_ROOT }
-func handle_health(req: IncomingMessage) -> Str { RESP_HEALTH }
+func handle_root(req: IncomingMessage) -> Str {
+    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
+}
+
+func handle_health(req: IncomingMessage) -> Str {
+    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\"}")
+}
 
 func handle_user(req: IncomingMessage) -> Str {
     let id: Str = app_get_param(req, "id")
@@ -42,13 +36,23 @@ func handle_user(req: IncomingMessage) -> Str {
 
 func handle_echo(req: IncomingMessage) -> Str {
     let body: Str = req.body()
-    if str::len(body) == 0 { return RESP_EMPTY_JSON }
+    if str::len(body) == 0 {
+        return app_build_response(200, "application/json; charset=utf-8", "{}")
+    }
     app_build_response(200, "application/json; charset=utf-8", body)
 }
 
-func handle_redirect(req: IncomingMessage) -> Str { RESP_REDIRECT }
-func handle_html(req: IncomingMessage) -> Str { RESP_HTML }
-func handle_text(req: IncomingMessage) -> Str { RESP_TEXT }
+func handle_redirect(req: IncomingMessage) -> Str {
+    "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+}
+
+func handle_html(req: IncomingMessage) -> Str {
+    app_build_response(200, "text/html; charset=utf-8", "<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>")
+}
+
+func handle_text(req: IncomingMessage) -> Str {
+    app_build_response(200, "text/plain; charset=utf-8", "Hello, plain text world!")
+}
 
 // ── Main ───────────────────────────────────────────────────────
 
