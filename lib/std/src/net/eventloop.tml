@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────┐
-//! │              EventLoop               │
+//! │              NetEventLoop               │
 //! │  ┌─────────┐  ┌──────────────────┐   │
 //! │  │  Poller  │  │  Token → Source  │   │
 //! │  │ (epoll/  │  │    mapping      │   │
@@ -27,9 +27,9 @@
 //! # Example — Echo Server
 //!
 //! ```tml
-//! use std::net::eventloop::{EventLoop, Interest, Token, Event}
+//! use std::net::eventloop::{NetEventLoop, Interest, Token, Event}
 //!
-//! let ev: EventLoop = EventLoop::new(1024)
+//! let ev: NetEventLoop = NetEventLoop::new(1024)
 //! let listener_fd: I64 = bind_and_listen(3000)
 //! ev.register(listener_fd, Token(0), Interest::Readable)
 //!
@@ -165,7 +165,7 @@ impl Debug for Event {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// EventLoop — the main abstraction
+// NetEventLoop — the main abstraction
 // ════════════════════════════════════════════════════════════════════
 
 const DEFAULT_MAX_EVENTS: I64 = 256
@@ -177,7 +177,7 @@ const DEFAULT_MAX_EVENTS: I64 = 256
 ///
 /// # Thread Safety
 ///
-/// An EventLoop is NOT thread-safe. Each thread should have its own EventLoop.
+/// An NetEventLoop is NOT thread-safe. Each thread should have its own NetEventLoop.
 /// Use a shared accept thread to distribute connections to per-thread loops.
 /// Read event at index from raw event buffer.
 func evloop_read_event(events_buf: I64, index: I64) -> Event {
@@ -191,24 +191,24 @@ func evloop_read_event(events_buf: I64, index: I64) -> Event {
     return Event { token_val: tok, flags_val: flg }
 }
 
-pub type EventLoop {
+pub type NetEventLoop {
     poller: I64,
     events_buf: I64,
     max_events: I64,
     last_count: I64,
 }
 
-impl EventLoop {
+impl NetEventLoop {
     /// Create a new event loop.
     ///
     /// `capacity` is the maximum number of events returned per poll call.
     /// Typical values: 256 for servers, 64 for clients.
-    pub func new(capacity: I64) -> EventLoop {
+    pub func new(capacity: I64) -> NetEventLoop {
         let poller: I64 = tml_poll_create()
         let max_ev: I64 = capacity
-        if max_ev <= 0 { return EventLoop { poller: 0, events_buf: 0, max_events: 0, last_count: 0 } }
+        if max_ev <= 0 { return NetEventLoop { poller: 0, events_buf: 0, max_events: 0, last_count: 0 } }
         let buf: I64 = lowlevel { mem_alloc(max_ev * EVENT_SIZE) } as I64
-        return EventLoop {
+        return NetEventLoop {
             poller: poller,
             events_buf: buf,
             max_events: max_ev,
@@ -217,8 +217,8 @@ impl EventLoop {
     }
 
     /// Create an event loop with the default capacity (256 events).
-    pub func with_defaults() -> EventLoop {
-        EventLoop::new(DEFAULT_MAX_EVENTS)
+    pub func with_defaults() -> NetEventLoop {
+        NetEventLoop::new(DEFAULT_MAX_EVENTS)
     }
 
     /// Register a file descriptor for I/O events.
@@ -288,12 +288,12 @@ impl EventLoop {
     }
 }
 
-impl Display for EventLoop {
+impl Display for NetEventLoop {
     pub func to_string(this) -> Str {
-        return "EventLoop(max_events=" + this.max_events.to_string() + ")"
+        return "NetEventLoop(max_events=" + this.max_events.to_string() + ")"
     }
 }
 
-impl Debug for EventLoop {
+impl Debug for NetEventLoop {
     pub func debug_string(this) -> Str { this.to_string() }
 }

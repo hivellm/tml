@@ -10,11 +10,11 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use std::http::dispatch::{app_dispatch, app_shutdown, RESPONSE_413}
+use std::http::dispatch::{app_dispatch, RESPONSE_413}
 use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
                        app_is_bodyless_method, app_find_header_end_in_str}
-use std::net::eventloop::{EventLoop, Interest, Event}
+use std::net::eventloop::{NetEventLoop, Interest, Event}
 
 // ── FFI ─────────────────────────────────────────────────────────
 @extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
@@ -39,8 +39,6 @@ use std::net::eventloop::{EventLoop, Interest, Event}
 @extern("c") func tml_condvar_init(cvar: *Unit) -> I32
 @extern("c") func tml_condvar_notify_one(cvar: *Unit) -> I32
 @extern("c") func tml_condvar_wait(cvar: *Unit, mutex: *Unit) -> I32
-
-// EventLoop re-exports from std::net::eventloop handle all poll FFI
 
 const AF_INET: I32 = 2
 const SOCK_STREAM: I32 = 1
@@ -90,24 +88,19 @@ const SHARED_SIZE: I64 = 336
 const ENTRY_SIZE: I64 = 24
 
 // ════════════════════════════════════════════════════════════════════
-// Global server state pointer (for shutdown from any thread)
+// Shutdown
 // ════════════════════════════════════════════════════════════════════
 
-// Stores the shared state pointer so app_shutdown() can be called from any thread.
-// Set by app_listen/app_listen_evloop. 8 bytes, holds a single I64.
-pub var g_shared_ptr: I64 = 0
-
-/// Signal the running server to shut down gracefully.
-/// Can be called from any thread (e.g., a signal handler or hook).
-/// Workers will finish their current request and exit.
-pub func app_shutdown() {
-    if g_shared_ptr != 0 {
-        lowlevel { ptr_write[I64]((g_shared_ptr + OFF_SHUTDOWN) as *I64, 1 as I64) }
+/// Signal a running server to shut down gracefully.
+/// Takes the shared state pointer (from listen setup).
+pub func app_shutdown(shared: I64) {
+    if shared != 0 {
+        lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 1 as I64) }
     }
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Thread Pool — lock-free ring buffer with mutex+condvar
+// Thread Pool — ring buffer with mutex+condvar
 // ════════════════════════════════════════════════════════════════════
 
 /// Enqueue a file descriptor into the work queue. Returns true if enqueued.
@@ -174,55 +167,53 @@ func queue_pop(shared: I64) -> I64 {
 
 pub func app_worker(arg: *Unit) {
     let shared: I64 = arg as I64
-    let read_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_READ_TIMEOUT) as *I64) }
-    let write_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_WRITE_TIMEOUT) as *I64) }
     let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
 
     let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
-    // Pre-allocate params buffer per worker (8 params x 16 bytes = 128 bytes)
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
 
     loop (true) {
         let fd: I64 = queue_pop(shared)
         if fd < 0 { break }
 
-        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-        if read_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, read_timeout as I32)
-        }
-        if write_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, write_timeout as I32)
-        }
+        // TCP_NODELAY + timeouts set in accept loop — not here (saves syscalls per worker)
 
         // Keep-alive loop — process multiple requests per connection
         loop (true) {
-            var total: I64 = 0
-            var complete: Bool = false
-            loop (total < BUF_SIZE - 1) {
-                let n: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
-                if n <= 0 { break }
-                total = total + n
-                if app_has_header_end(buf, total) { complete = true; break }
+            // Single recv for typical small HTTP requests (< 8KB)
+            let n: I64 = tml_sys_recv(fd, buf as *Unit, BUF_SIZE - 1)
+            if n <= 0 { break }
+            var total: I64 = n
+            var complete: Bool = app_has_header_end(buf, total)
+
+            // Rare path: header spans multiple packets
+            if not complete {
+                loop (total < BUF_SIZE - 1) {
+                    let n2: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
+                    if n2 <= 0 { break }
+                    total = total + n2
+                    if app_has_header_end(buf, total) { complete = true; break }
+                }
+                if not complete { break }
             }
-            if not complete or total <= 0 { break }
             lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
-            // Detect HTTP version before zero-copy parsing mutates buffer
+            // Fast path: assume HTTP/1.1 keep-alive (>99% of modern traffic)
             let is_http11: Bool = app_is_http11(buf, total)
-            // Check Connection: close before zero-copy parsing mutates buffer
-            let wants_close: Bool = app_has_connection_close(buf, total)
-            // HTTP/1.0 default: close connection (no keep-alive unless explicit)
-            let should_close: Bool = wants_close or not is_http11
+            var should_close: Bool = not is_http11
+            if not should_close {
+                should_close = app_has_connection_close(buf, total)
+            }
 
-            // Zero-copy parsing: null-terminate in-place in the recv buffer.
+            // Zero-copy parsing
             let method: Str = app_zerocopy_method(buf, total)
             let path: Str = app_zerocopy_path(buf, total)
 
-            // Skip body extraction for bodyless methods (GET, HEAD, TRACE, OPTIONS)
+            // Fast path for GET — skip body extraction (most common method)
+            let method_len: I64 = str::len(method)
             var body: Str = ""
-            if not app_is_bodyless_method(method) {
+            if method_len != 3 and not app_is_bodyless_method(method) {
                 body = app_extract_body(buf, total)
-                // Check body size limit
                 let body_len: I64 = str::len(body)
                 if body_limit > 0 and body_len > body_limit {
                     tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
@@ -231,16 +222,22 @@ pub func app_worker(arg: *Unit) {
             }
 
             // HEAD support: dispatch normally but only send headers
-            let is_head: Bool = str::len(method) == 4 and str::char_at(method, 0) == 72  // 'H'
+            let is_head: Bool = method_len == 4 and str::char_at(method, 0) == 72
             let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
             var send_len: I64 = str::len(response)
             if is_head {
-                // Find \r\n\r\n and only send up to there
                 let header_end: I64 = app_find_header_end_in_str(response)
                 if header_end > 0 { send_len = header_end }
             }
-            let sent: I64 = tml_sys_send(fd, response as *Unit, send_len)
-            if sent < 0 { break }
+
+            // Send response — loop to handle partial sends
+            var sent_total: I64 = 0
+            loop (sent_total < send_len) {
+                let sent: I64 = tml_sys_send(fd, (response as I64 + sent_total) as *Unit, send_len - sent_total)
+                if sent <= 0 { break }
+                sent_total = sent_total + sent
+            }
+            if sent_total < send_len { break }
             if should_close { break }
         }
 
@@ -303,7 +300,6 @@ pub func app_listen(
 
     // Allocate and zero shared state
     let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    g_shared_ptr = shared
     var z: I64 = 0
     loop (z < SHARED_SIZE) {
         lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
@@ -354,7 +350,7 @@ pub func app_listen(
         w = w + 1
     }
 
-    // Accept loop — push fds into the queue for workers
+    // Accept loop — set socket options here then push to workers
     loop (true) {
         let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
         if shutdown != 0 { break }
@@ -362,9 +358,17 @@ pub func app_listen(
         let fd: I64 = sys_accept(listener)
         if fd < 0 { continue }
 
+        // Set socket options in accept thread — saves syscalls in worker hot path
+        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+        if read_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, read_timeout as I32)
+        }
+        if write_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, write_timeout as I32)
+        }
+
         let ok: Bool = queue_push(shared, fd)
         if not ok {
-            // Queue full — reject connection
             let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             tml_sys_send(fd, reject as *Unit, str::len(reject))
             sys_close(fd)
@@ -378,8 +382,6 @@ pub func app_listen(
 // Event Loop — non-blocking I/O via std::net::eventloop
 // ════════════════════════════════════════════════════════════════════
 
-// Per-connection state: [0] fd, [8] buf, [16] used, [24] state (0=read,1=write)
-// [32] resp_ptr, [40] resp_len, [48] resp_sent
 const CONN_STRIDE_EV: I64 = 56
 const CONN_FD: I64 = 0
 const CONN_BUF: I64 = 8
@@ -390,7 +392,6 @@ const CONN_RESP_LEN: I64 = 40
 const CONN_RESP_SENT: I64 = 48
 const MAX_CONNS_PER_WORKER: I64 = 1024
 
-// Worker state: [0] shared, [8] mutex_ptr, [16] new_fds_buf, [24] new_fds_count, [32] new_fds_cap
 const WSTATE_SIZE: I64 = 40
 const WS_SHARED: I64 = 0
 const WS_MUTEX: I64 = 8
@@ -414,8 +415,7 @@ pub func app_evloop_worker(arg: *Unit) {
     let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
 
-    // Each worker creates its own EventLoop — thread-local, no sharing needed
-    var ev: EventLoop = EventLoop::new(256)
+    var ev: NetEventLoop = NetEventLoop::new(256)
     let conns_mem: I64 = MAX_CONNS_PER_WORKER * CONN_STRIDE_EV
     let conns: I64 = lowlevel { mem_alloc(conns_mem) } as I64
     var conn_count: I64 = 0
@@ -448,8 +448,10 @@ pub func app_evloop_worker(arg: *Unit) {
         lowlevel { ptr_write[I64]((ws + WS_NEW_FDS_COUNT) as *I64, 0 as I64) }
         tml_mutex_unlock(mutex_ptr as *Unit)
 
-        // Poll for I/O events (10ms timeout)
-        let n: I64 = ev.poll(10)
+        // Adaptive poll: 0ms under load, 5ms idle
+        var poll_ms: I32 = 0
+        if conn_count == 0 { poll_ms = 5 }
+        let n: I64 = ev.poll(poll_ms)
         if n <= 0 { continue }
 
         var ei: I64 = 0
@@ -464,7 +466,6 @@ pub func app_evloop_worker(arg: *Unit) {
             let state: I64 = conn_get(conns, idx, CONN_STATE)
 
             if state == 0 and event.is_readable() {
-                // ── Reading request ──
                 let buf: I64 = conn_get(conns, idx, CONN_BUF)
                 let used: I64 = conn_get(conns, idx, CONN_USED)
                 let n_read: I64 = tml_sys_recv(fd, (buf + used) as *Unit, BUF_SIZE - used - 1)
@@ -481,13 +482,11 @@ pub func app_evloop_worker(arg: *Unit) {
                         let method: Str = app_zerocopy_method(buf, new_used)
                         let path: Str = app_zerocopy_path(buf, new_used)
 
-                        // Skip body for bodyless methods
                         var body: Str = ""
                         if not app_is_bodyless_method(method) {
                             body = app_extract_body(buf, new_used)
                         }
 
-                        // Check body size limit
                         let body_len: I64 = str::len(body)
                         if body_limit > 0 and body_len > body_limit {
                             tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
@@ -508,7 +507,6 @@ pub func app_evloop_worker(arg: *Unit) {
                     }
                 }
             } else if state == 1 and event.is_writable() {
-                // ── Writing response ──
                 let resp: I64 = conn_get(conns, idx, CONN_RESP)
                 let resp_len: I64 = conn_get(conns, idx, CONN_RESP_LEN)
                 let sent: I64 = conn_get(conns, idx, CONN_RESP_SENT)
@@ -524,7 +522,6 @@ pub func app_evloop_worker(arg: *Unit) {
                     } else {
                         conn_set(conns, idx, CONN_RESP_SENT, sent + n_sent)
                         if sent + n_sent >= resp_len {
-                            // Response done → back to reading (keep-alive)
                             conn_set(conns, idx, CONN_STATE, 0)
                             conn_set(conns, idx, CONN_RESP, 0)
                             ev.reregister(fd, idx, Interest::readable())
@@ -553,7 +550,6 @@ pub func app_evloop_worker(arg: *Unit) {
 }
 
 /// Event-loop based listen. Each worker runs its own poller.
-/// Accept thread distributes connections round-robin to workers.
 pub func app_listen_evloop(
     table: I64, count: I64, trees: I64,
     mw_table: I64, mw_count: I64,
@@ -600,9 +596,8 @@ pub func app_listen_evloop(
     }
     println("Listening on http://localhost:" + port.to_string())
 
-    // Allocate and zero shared state (same layout as thread pool version)
+    // Allocate and zero shared state
     let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    g_shared_ptr = shared
     var z: I64 = 0
     loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
 
@@ -628,7 +623,7 @@ pub func app_listen_evloop(
     lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
     lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
 
-    // Create per-worker state (lightweight — worker creates its own EventLoop)
+    // Create per-worker state
     let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
     var w: I64 = 0
     loop (w < num_workers) {
@@ -657,7 +652,6 @@ pub func app_listen_evloop(
         if shutdown != 0 { break }
         let fd: I64 = sys_accept(listener)
         if fd < 0 { continue }
-        // Push fd to worker's new_fds queue
         let ws: I64 = lowlevel { ptr_read[I64]((workers + rr * 8) as *I64) }
         let mutex: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
         tml_mutex_lock(mutex as *Unit)
@@ -670,7 +664,6 @@ pub func app_listen_evloop(
             tml_mutex_unlock(mutex as *Unit)
         } else {
             tml_mutex_unlock(mutex as *Unit)
-            // Worker queue full — close
             let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             tml_sys_send(fd, reject as *Unit, str::len(reject))
             sys_close(fd)
@@ -682,11 +675,12 @@ pub func app_listen_evloop(
 }
 
 /// Create and bind a TCP listener socket on the given port.
+/// Backlog 8192 for high-throughput scenarios (500K+ req/s target).
 pub func app_bind_listener(port: I64) -> I64 {
     let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
     if sock < 0 { return -1 }
     tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
     if tml_sys_bind_v4(sock, 0, port as I32) < 0 { sys_close(sock); return -1 }
-    if tml_sys_listen(sock, 2048) < 0 { sys_close(sock); return -1 }
+    if tml_sys_listen(sock, 8192) < 0 { sys_close(sock); return -1 }
     return sock
 }

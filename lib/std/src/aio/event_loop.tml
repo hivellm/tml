@@ -129,19 +129,15 @@ pub type EventLoop {
     next_tick_queue: I64,
 }
 
-impl Display for EventLoop {
+impl EventLoop {
     pub func to_string(this) -> Str {
         return "EventLoop(sources=" + this.sources_count.to_string() + ")"
     }
-}
 
-impl Debug for EventLoop {
     pub func debug_string(this) -> Str {
         return this.to_string()
     }
-}
 
-impl EventLoop {
     /// Creates a new event loop.
     pub func new() -> EventLoop {
         let poller: Poller = Poller::new()
