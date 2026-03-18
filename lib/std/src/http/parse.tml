@@ -253,6 +253,49 @@ pub func app_find_header_end_in_str(s: Str) -> I64 {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// HTTP pipelining — count and locate request boundaries
+// ════════════════════════════════════════════════════════════════════
+
+/// Count the number of complete HTTP requests in a recv buffer.
+/// Each \r\n\r\n marks the end of one request's headers.
+/// Returns the count of complete requests (0 if none complete).
+pub func app_count_requests(buf: I64, len: I64) -> I64 {
+    if len < 4 { return 0 }
+    var count: I64 = 0
+    var i: I64 = 3
+    loop (i < len) {
+        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8 {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+/// Find the byte offset where the Nth request starts in the buffer (0-indexed).
+/// Request 0 starts at offset 0. Request 1 starts after the first \r\n\r\n.
+/// Returns -1 if the Nth request doesn't exist.
+pub func app_request_offset(buf: I64, len: I64, n: I64) -> I64 {
+    if n == 0 { return 0 }
+    var count: I64 = 0
+    var i: I64 = 3
+    loop (i < len) {
+        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
+           and lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8 {
+            count = count + 1
+            if count == n { return i + 1 }
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Pattern-matching helpers (kept for legacy linear-scan compat)
 // ════════════════════════════════════════════════════════════════════
 

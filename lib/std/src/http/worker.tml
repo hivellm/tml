@@ -13,7 +13,8 @@ use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlap
 use std::http::dispatch::{app_dispatch, RESPONSE_413}
 use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
-                       app_is_bodyless_method, app_find_header_end_in_str}
+                       app_is_bodyless_method, app_find_header_end_in_str,
+                       app_count_requests, app_request_offset}
 use std::net::eventloop::{NetEventLoop, Interest, Event}
 
 // ── FFI ─────────────────────────────────────────────────────────
@@ -48,7 +49,8 @@ const SO_RCVTIMEO: I32 = 4102
 const SO_SNDTIMEO: I32 = 4101
 const IPPROTO_TCP: I32 = 6
 const TCP_NODELAY: I32 = 1
-const BUF_SIZE: I64 = 8192
+const BUF_SIZE: I64 = 65536     // 64KB for HTTP pipelining (captures ~100 pipelined requests)
+const RESP_BUF_SIZE: I64 = 65536 // 64KB response batch buffer
 const QUEUE_CAP: I64 = 4096
 
 // ════════════════════════════════════════════════════════════════════
@@ -165,79 +167,154 @@ func queue_pop(shared: I64) -> I64 {
 // Worker thread — pulls fds from queue, handles connections
 // ════════════════════════════════════════════════════════════════════
 
+/// Dispatch a single HTTP request from the recv buffer at the given offset.
+/// Uses zero-copy parsing: null-terminates in-place at buf+offset.
+/// Returns the response string (from app_dispatch or error handler).
+func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
+                     fd: I64, params_buf: I64, body_limit: I64) -> Str {
+    let req_buf: I64 = buf + offset
+    lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
+    let method: Str = app_zerocopy_method(req_buf, req_len)
+    let path: Str = app_zerocopy_path(req_buf, req_len)
+
+    let method_len: I64 = str::len(method)
+    var body: Str = ""
+    if method_len != 3 and not app_is_bodyless_method(method) {
+        body = app_extract_body(req_buf, req_len)
+        let body_len: I64 = str::len(body)
+        if body_limit > 0 and body_len > body_limit {
+            return RESPONSE_413
+        }
+    }
+
+    return app_dispatch(shared, method, path, body, fd, params_buf)
+}
+
 pub func app_worker(arg: *Unit) {
     let shared: I64 = arg as I64
     let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
 
     let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+    // Response batch buffer for HTTP pipelining
+    let resp_buf: I64 = lowlevel { mem_alloc(RESP_BUF_SIZE) } as I64
 
     loop (true) {
         let fd: I64 = queue_pop(shared)
         if fd < 0 { break }
 
-        // TCP_NODELAY + timeouts set in accept loop — not here (saves syscalls per worker)
-
-        // Keep-alive loop — process multiple requests per connection
+        // Keep-alive + pipelining loop
         loop (true) {
-            // Single recv for typical small HTTP requests (< 8KB)
             let n: I64 = tml_sys_recv(fd, buf as *Unit, BUF_SIZE - 1)
             if n <= 0 { break }
             var total: I64 = n
-            var complete: Bool = app_has_header_end(buf, total)
 
-            // Rare path: header spans multiple packets
-            if not complete {
+            // Check if we have at least one complete request
+            if not app_has_header_end(buf, total) {
+                // Rare: header spans packets — keep reading
                 loop (total < BUF_SIZE - 1) {
                     let n2: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
                     if n2 <= 0 { break }
                     total = total + n2
-                    if app_has_header_end(buf, total) { complete = true; break }
+                    if app_has_header_end(buf, total) { break }
                 }
-                if not complete { break }
+                if not app_has_header_end(buf, total) { break }
             }
-            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
 
-            // Fast path: assume HTTP/1.1 keep-alive (>99% of modern traffic)
+            // Count pipelined requests in this recv buffer
+            let num_requests: I64 = app_count_requests(buf, total)
+            if num_requests <= 0 { break }
+
+            // Check Connection: close on the FIRST request (before zero-copy mutates buffer)
             let is_http11: Bool = app_is_http11(buf, total)
             var should_close: Bool = not is_http11
             if not should_close {
                 should_close = app_has_connection_close(buf, total)
             }
 
-            // Zero-copy parsing
-            let method: Str = app_zerocopy_method(buf, total)
-            let path: Str = app_zerocopy_path(buf, total)
+            if num_requests == 1 {
+                // ── Single request (common fast path) ──────────────────
+                lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+                let method: Str = app_zerocopy_method(buf, total)
+                let path: Str = app_zerocopy_path(buf, total)
 
-            // Fast path for GET — skip body extraction (most common method)
-            let method_len: I64 = str::len(method)
-            var body: Str = ""
-            if method_len != 3 and not app_is_bodyless_method(method) {
-                body = app_extract_body(buf, total)
-                let body_len: I64 = str::len(body)
-                if body_limit > 0 and body_len > body_limit {
-                    tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
-                    break
+                let method_len: I64 = str::len(method)
+                var body: Str = ""
+                if method_len != 3 and not app_is_bodyless_method(method) {
+                    body = app_extract_body(buf, total)
+                    let body_len: I64 = str::len(body)
+                    if body_limit > 0 and body_len > body_limit {
+                        tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
+                        break
+                    }
+                }
+
+                let is_head: Bool = method_len == 4 and str::char_at(method, 0) == 72
+                let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
+                var send_len: I64 = str::len(response)
+                if is_head {
+                    let header_end: I64 = app_find_header_end_in_str(response)
+                    if header_end > 0 { send_len = header_end }
+                }
+
+                var sent_total: I64 = 0
+                loop (sent_total < send_len) {
+                    let sent: I64 = tml_sys_send(fd, (response as I64 + sent_total) as *Unit, send_len - sent_total)
+                    if sent <= 0 { break }
+                    sent_total = sent_total + sent
+                }
+                if sent_total < send_len { break }
+            } else {
+                // ── HTTP pipelining: N requests in one recv ────────────
+                // Dispatch each request, concatenate responses into batch buffer
+                var batch_pos: I64 = 0
+                var req_idx: I64 = 0
+                loop (req_idx < num_requests) {
+                    let req_start: I64 = app_request_offset(buf, total, req_idx)
+                    if req_start < 0 { break }
+
+                    // Calculate request length: from start to next boundary (or end of buffer)
+                    var req_end: I64 = total
+                    if req_idx + 1 < num_requests {
+                        let next_start: I64 = app_request_offset(buf, total, req_idx + 1)
+                        if next_start > 0 { req_end = next_start }
+                    }
+                    let req_len: I64 = req_end - req_start
+
+                    let response: Str = dispatch_single(shared, buf, req_start, req_len, fd, params_buf, body_limit)
+                    let resp_len: I64 = str::len(response)
+
+                    // Append response to batch buffer
+                    if batch_pos + resp_len <= RESP_BUF_SIZE {
+                        lowlevel { copy_nonoverlapping(response as *Unit, (resp_buf + batch_pos) as *Unit, resp_len) }
+                        batch_pos = batch_pos + resp_len
+                    } else {
+                        // Batch buffer full — flush what we have, then send this one directly
+                        if batch_pos > 0 {
+                            var sent: I64 = 0
+                            loop (sent < batch_pos) {
+                                let w: I64 = tml_sys_send(fd, (resp_buf + sent) as *Unit, batch_pos - sent)
+                                if w <= 0 { break }
+                                sent = sent + w
+                            }
+                            batch_pos = 0
+                        }
+                        tml_sys_send(fd, response as *Unit, resp_len)
+                    }
+                    req_idx = req_idx + 1
+                }
+
+                // Send batched responses in single syscall
+                if batch_pos > 0 {
+                    var sent: I64 = 0
+                    loop (sent < batch_pos) {
+                        let w: I64 = tml_sys_send(fd, (resp_buf + sent) as *Unit, batch_pos - sent)
+                        if w <= 0 { break }
+                        sent = sent + w
+                    }
                 }
             }
 
-            // HEAD support: dispatch normally but only send headers
-            let is_head: Bool = method_len == 4 and str::char_at(method, 0) == 72
-            let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
-            var send_len: I64 = str::len(response)
-            if is_head {
-                let header_end: I64 = app_find_header_end_in_str(response)
-                if header_end > 0 { send_len = header_end }
-            }
-
-            // Send response — loop to handle partial sends
-            var sent_total: I64 = 0
-            loop (sent_total < send_len) {
-                let sent: I64 = tml_sys_send(fd, (response as I64 + sent_total) as *Unit, send_len - sent_total)
-                if sent <= 0 { break }
-                sent_total = sent_total + sent
-            }
-            if sent_total < send_len { break }
             if should_close { break }
         }
 
@@ -246,6 +323,7 @@ pub func app_worker(arg: *Unit) {
 
     lowlevel { mem_free(buf as *Unit) }
     lowlevel { mem_free(params_buf as *Unit) }
+    lowlevel { mem_free(resp_buf as *Unit) }
 }
 
 // ════════════════════════════════════════════════════════════════════
