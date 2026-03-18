@@ -74,7 +74,13 @@ func method_index(method: Str) -> I64 {
         if c == 80 { return METHOD_POST }   // 'P' + len=4
         if c == 72 { return METHOD_HEAD }   // 'H'
     }
-    if len == 5 { return METHOD_PATCH }
+    if len == 5 {
+        // PATCH starts with 'P' (80), TRACE starts with 'T' (84)
+        let c: I32 = str::char_at(method, 0)
+        if c == 80 { return METHOD_PATCH }
+        // TRACE is not routable — return -1
+        return -1
+    }
     if len == 6 { return METHOD_DELETE }
     if len == 7 { return METHOD_OPTIONS }
     return -1
