@@ -92,7 +92,14 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
         if (!func_ret_type_.empty()) {
             current_ret_type_ = func_ret_type_;
         }
+        // Suppress auto-deref when function returns ptr — returning a mut ref
+        // variable should yield the pointer, not the dereferenced value.
+        bool saved_suppress = suppress_mut_ref_auto_deref_;
+        if (func_ret_type_ == "ptr" || current_ret_type_ == "ptr") {
+            suppress_mut_ref_auto_deref_ = true;
+        }
         val = gen_expr(*ret.value.value());
+        suppress_mut_ref_auto_deref_ = saved_suppress;
         val_type = last_expr_type_;
 
         // Mark the returned variable as consumed (moved) so it won't be dropped.

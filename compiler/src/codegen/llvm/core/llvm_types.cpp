@@ -625,6 +625,13 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         for (size_t i = 0; i < struct_def.fields.size(); ++i) {
                             std::string ft =
                                 llvm_type_from_semantic(struct_def.fields[i].type, true);
+                            // DEBUG: detect fallback to i32 for struct fields
+                            if (ft == "i32" && struct_def.fields[i].type) {
+                                std::string sem = types::type_to_string(struct_def.fields[i].type);
+                                type_defs_buffer_ << "; WARN: field " << struct_def.fields[i].name
+                                                  << " of " << named.name
+                                                  << " resolved to i32 (semantic: " << sem << ")\n";
+                            }
                             // Function pointer fields use fat pointer to support closures
                             if (struct_def.fields[i].type &&
                                 struct_def.fields[i].type->is<types::FuncType>()) {
