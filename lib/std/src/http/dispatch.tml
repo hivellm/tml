@@ -509,29 +509,25 @@ func app_status_line(code: I64) -> Str {
 }
 
 /// Fast integer to decimal string for Content-Length.
+/// Zero-alloc: counts digits first, then writes directly in reverse.
 func app_itoa_content_length(buf: I64, pos: I64, n: I64) -> I64 {
     if n == 0 {
         lowlevel { ptr_write[U8]((buf + pos) as *U8, 48 as U8) }
         return pos + 1
     }
-    var tmp: I64 = lowlevel { mem_alloc(20) } as I64
-    var len: I64 = 0
+    // Count digits
+    var digits: I64 = 0
+    var tmp: I64 = n
+    loop (tmp > 0) { digits = digits + 1; tmp = tmp / 10 }
+    // Write digits in reverse directly into output buffer
+    var write_pos: I64 = pos + digits - 1
     var val: I64 = n
     loop (val > 0) {
-        let digit: I64 = val % 10
-        lowlevel { ptr_write[U8]((tmp + len) as *U8, (digit + 48) as U8) }
-        len = len + 1
+        lowlevel { ptr_write[U8]((buf + write_pos) as *U8, ((val % 10) + 48) as U8) }
+        write_pos = write_pos - 1
         val = val / 10
     }
-    var i: I64 = len - 1
-    loop (i >= 0) {
-        let ch: U8 = lowlevel { ptr_read[U8]((tmp + i) as *U8) }
-        lowlevel { ptr_write[U8]((buf + pos) as *U8, ch) }
-        pos = pos + 1
-        i = i - 1
-    }
-    lowlevel { mem_free(tmp as *Unit) }
-    return pos
+    return pos + digits
 }
 
 /// Copy a string into buffer at position, return new position.
@@ -578,6 +574,38 @@ pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
     }
     lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
     return buf as Str
+}
+
+/// Build HTTP response into a pre-allocated buffer (zero-alloc hot path).
+/// Returns the total bytes written. Caller must ensure buf has enough space.
+/// Use this in the worker with a per-worker scratch buffer to avoid mem_alloc per request.
+pub func app_build_response_into(buf: I64, status: I64, content_type: Str, body: Str) -> I64 {
+    let body_len: I64 = str::len(body)
+    let status_line: Str = app_status_line(status)
+    let sl_len: I64 = str::len(status_line)
+    let ct_len: I64 = str::len(content_type)
+    let hdr_suffix_len: I64 = str::len(HDR_SUFFIX)
+    var pos: I64 = 0
+    lowlevel { copy_nonoverlapping(status_line as *Unit, buf as *Unit, sl_len) }
+    pos = sl_len
+    lowlevel { copy_nonoverlapping(HDR_CT as *Unit, (buf + pos) as *Unit, 14) }
+    pos = pos + 14
+    lowlevel { copy_nonoverlapping(content_type as *Unit, (buf + pos) as *Unit, ct_len) }
+    pos = pos + ct_len
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 13 as U8) }
+    lowlevel { ptr_write[U8]((buf + pos + 1) as *U8, 10 as U8) }
+    pos = pos + 2
+    lowlevel { copy_nonoverlapping(HDR_CL as *Unit, (buf + pos) as *Unit, 16) }
+    pos = pos + 16
+    pos = app_itoa_content_length(buf, pos, body_len)
+    lowlevel { copy_nonoverlapping(HDR_SUFFIX as *Unit, (buf + pos) as *Unit, hdr_suffix_len) }
+    pos = pos + hdr_suffix_len
+    if body_len > 0 {
+        lowlevel { copy_nonoverlapping(body as *Unit, (buf + pos) as *Unit, body_len) }
+        pos = pos + body_len
+    }
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
+    return pos
 }
 
 /// Build a JSON error response following cmmv-server format.
