@@ -289,7 +289,15 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 expected_literal_is_unsigned_ = false;
             }
 
+            // Suppress auto-deref for mut ref fields: when a field expects ptr
+            // (e.g., MutSlice.data: mut ref T), gen_ident should return the pointer,
+            // not the dereferenced value.
+            bool saved_suppress = suppress_mut_ref_auto_deref_;
+            if (field_type == "ptr") {
+                suppress_mut_ref_auto_deref_ = true;
+            }
             std::string field_val = gen_expr(*s.fields[i].second);
+            suppress_mut_ref_auto_deref_ = saved_suppress;
 
             // Mark variable as consumed if field value is an identifier (move semantics)
             if (s.fields[i].second->is<parser::IdentExpr>()) {
@@ -372,7 +380,15 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 expected_literal_is_unsigned_ = false;
             }
 
+            // Suppress auto-deref for mut ref fields: when a field expects ptr
+            // (e.g., MutSlice.data: mut ref T), gen_ident should return the pointer,
+            // not the dereferenced value.
+            bool saved_suppress = suppress_mut_ref_auto_deref_;
+            if (field_type == "ptr") {
+                suppress_mut_ref_auto_deref_ = true;
+            }
             std::string field_val = gen_expr(*s.fields[i].second);
+            suppress_mut_ref_auto_deref_ = saved_suppress;
 
             // Mark variable as consumed if field value is an identifier (move semantics)
             if (s.fields[i].second->is<parser::IdentExpr>()) {

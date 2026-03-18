@@ -223,9 +223,10 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 if (ref.is_mut && ref.inner) {
                     std::string inner_type = llvm_type_from_semantic(ref.inner);
                     // Only dereference for primitive types (i8, i16, i32, i64, float, etc.)
-                    // Struct/enum refs should stay as ptr (used for GEP field access)
-                    if (!inner_type.empty() && inner_type[0] != '%' && inner_type != "ptr" &&
-                        inner_type != "void") {
+                    // Struct/enum refs should stay as ptr (used for GEP field access).
+                    // Also exclude naked struct types like "{ ptr, i64 }" (fat pointers/slices).
+                    if (!inner_type.empty() && inner_type[0] != '%' && inner_type[0] != '{' &&
+                        inner_type != "ptr" && inner_type != "void") {
                         std::string deref_reg = fresh_reg();
                         emit_line("  " + deref_reg + " = load " + inner_type + ", ptr " + reg);
                         last_expr_type_ = inner_type;

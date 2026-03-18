@@ -754,7 +754,11 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             } else {
                 val = gen_expr(*call.args[i]);
                 actual_type = last_expr_type_;
-                if (actual_type.starts_with("%struct.")) {
+                bool is_struct_val = actual_type.starts_with("%struct.") ||
+                                     actual_type.starts_with("%enum.") ||
+                                     (actual_type.size() > 2 && actual_type.front() == '{' &&
+                                      actual_type.back() == '}');
+                if (is_struct_val) {
                     std::string temp_alloca = fresh_reg();
                     emit_line("  " + temp_alloca + " = alloca " + actual_type);
                     emit_line("  store " + actual_type + " " + val + ", ptr " + temp_alloca);
@@ -767,8 +771,12 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
             actual_type = last_expr_type_;
 
             // If param is ref but arg is not an IdentExpr (e.g., temporary expression),
-            // we need to store it in a temp alloca and pass the address
-            if (param_is_ref && actual_type.starts_with("%struct.")) {
+            // we need to store it in a temp alloca and pass the address.
+            // Check both named structs (%struct.X) and naked/anonymous structs ({ ptr, i64 }).
+            bool is_struct_value =
+                actual_type.starts_with("%struct.") || actual_type.starts_with("%enum.") ||
+                (actual_type.size() > 2 && actual_type.front() == '{' && actual_type.back() == '}');
+            if (param_is_ref && is_struct_value) {
                 std::string temp_alloca = fresh_reg();
                 emit_line("  " + temp_alloca + " = alloca " + actual_type);
                 emit_line("  store " + actual_type + " " + val + ", ptr " + temp_alloca);
@@ -803,7 +811,10 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         // The semantic signature says the first struct/enum param is a value type,
         // but impl.cpp converts it to ptr in the LLVM definition.
         // Look up the underscore-keyed FuncInfo; if registered param is ptr, alloca+store.
-        if (actual_type.starts_with("%struct.") || actual_type.starts_with("%enum.")) {
+        bool is_aggregate =
+            actual_type.starts_with("%struct.") || actual_type.starts_with("%enum.") ||
+            (actual_type.size() > 2 && actual_type.front() == '{' && actual_type.back() == '}');
+        if (is_aggregate) {
             // Build Type_method key from fn_name like "IoError::new" → "IoError_new"
             std::string abi_key;
             size_t sep = fn_name.rfind("::");
