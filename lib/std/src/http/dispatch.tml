@@ -334,9 +334,9 @@ func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
 ///
 /// params_buf: pre-allocated buffer for route params (reused per worker).
 /// Returns the serialized HTTP response string.
-/// Linear scan dispatch — fallback when radix tree has corruption bugs.
-/// Matches method + path against the flat handler table.
+/// Linear scan dispatch — matches method + path against the flat handler table.
 /// Supports exact match and pattern matching for `:param` segments.
+/// Stores extracted path params into params_buf, sets param_count.
 func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
                        params_buf: I64, param_count: mut ref I64) -> I64 {
     param_count = 0
@@ -349,11 +349,13 @@ func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
         let p: Str = lowlevel { ptr_read[I64]((table + off + 8) as *I64) } as Str
         if m == method {
             if p == path {
-                // Exact match
+                // Exact match — no params
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
             // Pattern match for :param segments
-            if app_pattern_match_inline(p, path, params_buf, ref param_count) {
+            let matched_params: I64 = app_pattern_match_extract(p, path, params_buf)
+            if matched_params >= 0 {
+                param_count = matched_params
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
         }
@@ -362,16 +364,18 @@ func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
     return 0
 }
 
-/// Inline pattern matcher for `:param` routes.
-/// Matches "/users/:id" against "/users/42", extracting id=42.
-func app_pattern_match_inline(pattern: Str, path: Str, params_buf: I64, pc: mut ref I64) -> Bool {
+/// Pattern matcher for `:param` routes. Returns number of extracted params, or -1 if no match.
+/// Avoids mut ref for param counting — uses a local var and returns the count.
+func app_pattern_match_extract(pattern: Str, path: Str, params_buf: I64) -> I64 {
     let pat_len: I64 = str::len(pattern)
     let path_len: I64 = str::len(path)
     var pp: I64 = 0
     var xp: I64 = 0
+    var pc: I64 = 0
+
     loop (pp < pat_len and xp < path_len) {
         if str::char_at(pattern, pp) == 58 {
-            // ':' parametric segment
+            // ':' parametric segment — extract param name and value
             let name_start: I64 = pp + 1
             var name_end: I64 = name_start
             loop (name_end < pat_len and str::char_at(pattern, name_end) != 47) {
@@ -396,12 +400,15 @@ func app_pattern_match_inline(pattern: Str, path: Str, params_buf: I64, pc: mut 
             pp = name_end
             xp = val_end
         } else {
-            if str::char_at(pattern, pp) != str::char_at(path, xp) { return false }
+            if str::char_at(pattern, pp) != str::char_at(path, xp) { return -1 }
             pp = pp + 1
             xp = xp + 1
         }
     }
-    return pp >= pat_len and xp >= path_len
+    if pp >= pat_len and xp >= path_len {
+        return pc
+    }
+    return -1
 }
 
 pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, params_buf: I64) -> Str {
