@@ -1,8 +1,11 @@
-//! HTTP request dispatch — hook lifecycle + route matching + handler invocation.
+//! HTTP request dispatch — route matching + handler invocation.
 //!
-//! Implements the full cmmv-server lifecycle:
-//!   onRequest hooks → middleware → route match → preHandler hooks
-//!   → handler(req, res) → onSend hooks → serialize → onResponse hooks
+//! Implements the route dispatch pipeline:
+//!   route match → handler(req) -> Str → return HTTP response string
+//!
+//! Hooks and middleware are defined but not called from app_dispatch due to a
+//! codegen bug: ServerResponse (12 fields with Bool/i1) causes LLVM IR errors
+//! when passed through fn ptrs. They will be re-enabled when the bug is fixed.
 //!
 //! Includes inline radix-tree lookup (avoids cross-module List dependency).
 
@@ -244,16 +247,15 @@ pub func app_get_param(req: IncomingMessage, name: Str) -> Str {
     let params_buf: I64 = req.req_headers_ptr
     let pc: I64 = req.raw_header_count
     if params_buf == 0 or pc == 0 { return "" }
+    // O(n) scan — each param is 16 bytes: [name I64, value I64]
+    var off: I64 = 0
     var i: I64 = 0
     loop (i < pc) {
-        // Each param is 16 bytes: [name I64, value I64]
-        var off: I64 = 0
-        var j: I64 = 0
-        loop (j < i) { off = off + 16; j = j + 1 }
         let n: Str = lowlevel { ptr_read[I64]((params_buf + off) as *I64) } as Str
         if n == name {
             return lowlevel { ptr_read[I64]((params_buf + off + 8) as *I64) } as Str
         }
+        off = off + 16
         i = i + 1
     }
     return ""
@@ -262,6 +264,10 @@ pub func app_get_param(req: IncomingMessage, name: Str) -> Str {
 /// Run all 2-param hooks in a hook table (onRequest, preHandler, onSend, onResponse).
 /// Returns true if the pipeline should continue (res not yet finished).
 /// Returns false if a hook called res.end() and short-circuited the pipeline.
+///
+/// NOTE: Not called from app_dispatch currently due to a codegen bug where
+/// ServerResponse (Bool fields / i1 type) causes LLVM IR errors through fn ptrs.
+/// Will be re-enabled when that bug is fixed.
 func app_run_hooks(hook_table: I64, hook_count: I64, req: IncomingMessage, res: ServerResponse) -> Bool {
     var i: I64 = 0
     loop (i < hook_count) {
@@ -278,6 +284,10 @@ func app_run_hooks(hook_table: I64, hook_count: I64, req: IncomingMessage, res: 
 }
 
 /// Run all onError hooks (3-param: req, res, error_msg).
+///
+/// NOTE: Not called from app_dispatch currently due to a codegen bug where
+/// ServerResponse (Bool fields / i1 type) causes LLVM IR errors through fn ptrs.
+/// Will be re-enabled when that bug is fixed.
 func app_run_error_hooks(hook_table: I64, hook_count: I64, error_handler: I64,
                          req: IncomingMessage, res: ServerResponse, msg: Str) {
     // Run custom error handler first if set
@@ -313,121 +323,55 @@ func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
     return lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
 }
 
-/// Main dispatch function. Runs the full cmmv-server lifecycle:
-///   onRequest hooks → middleware → route match → preHandler hooks
-///   → handler(req, res) → onSend hooks → serialize → onResponse hooks
+/// Main dispatch function. Looks up a route and calls handler(req) -> Str.
 ///
-/// params_buf: pre-allocated 128-byte buffer for route params (reused per worker).
+/// Hooks and middleware are intentionally skipped: passing ServerResponse through
+/// fn ptrs triggers a codegen bug (Bool/i1 fields cause LLVM IR type errors).
+/// They will be re-enabled once that bug is fixed.
+///
+/// Handler signature: func(req: IncomingMessage) -> Str
+///   The returned Str must be a complete HTTP response (built with app_build_response).
+///
+/// params_buf: pre-allocated buffer for route params (reused per worker).
 /// Returns the serialized HTTP response string.
 pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, params_buf: I64) -> Str {
     let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
     let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
-    let mw_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_TABLE) as *I64) }
-    let mw_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_MW_COUNT) as *I64) }
-    let on_request_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64) }
-    let on_request_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64) }
-    let pre_handler_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64) }
-    let pre_handler_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64) }
-    let on_send_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_TABLE) as *I64) }
-    let on_send_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_COUNT) as *I64) }
-    let on_response_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64) }
-    let on_response_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64) }
-    let on_error_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_TABLE) as *I64) }
-    let on_error_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_COUNT) as *I64) }
-    let error_handler: I64 = lowlevel { ptr_read[I64]((shared + OFF_ERROR_HANDLER) as *I64) }
 
     var param_count: I64 = 0
 
-    // ── Route lookup (before building req/res) ──────────────────
+    // ── Route lookup ─────────────────────────────────────────────
     let fn_ptr: I64 = app_dispatch_tree_lookup(table, trees, method, path, params_buf, ref param_count)
 
     // ── Construct IncomingMessage (fast path — no header parsing) ─
     let req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, param_count)
-    var res: ServerResponse = ServerResponse::for_request(fd, method)
-
-    // ── onRequest hooks ─────────────────────────────────────────
-    let continue_on_request: Bool = app_run_hooks(on_request_table, on_request_count, req, res)
-    if not continue_on_request {
-        let response: Str = res.serialize()
-        return response
-    }
-
-    // ── Middleware pipeline ──────────────────────────────────────
-    var mw_idx: I64 = 0
-    loop (mw_idx < mw_count) {
-        let mw_ptr: I64 = lowlevel { ptr_read[I64]((mw_table + mw_idx * 8) as *I64) }
-        if mw_ptr != 0 {
-            let mw: func(IncomingMessage, ServerResponse) = mw_ptr as func(IncomingMessage, ServerResponse)
-            mw(req, res)
-            if res.is_finished() {
-                let response: Str = res.serialize()
-                return response
-            }
-        }
-        mw_idx = mw_idx + 1
-    }
 
     // ── Route not found ──────────────────────────────────────────
     if fn_ptr == 0 {
         // Try HEAD → GET fallback
-        var head_fallback_ptr: I64 = 0
         if method_index(method) == METHOD_HEAD {
-            let get_idx: I64 = METHOD_GET
-            let get_root: I64 = lowlevel { ptr_read[I64]((trees + get_idx * 8) as *I64) }
+            let get_root: I64 = lowlevel { ptr_read[I64]((trees + METHOD_GET * 8) as *I64) }
             if get_root != 0 {
                 var fallback_pc: I64 = 0
                 let hid: I64 = app_find_route(get_root, path, params_buf, ref fallback_pc)
                 if hid > 0 {
                     let off: I64 = (hid - 1) * ENTRY_SIZE
-                    head_fallback_ptr = lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
+                    let head_ptr: I64 = lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
+                    if head_ptr != 0 {
+                        // Rebuild req with updated param_count from HEAD fallback lookup
+                        let head_req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, fallback_pc)
+                        let handler: func(IncomingMessage) -> Str = head_ptr as func(IncomingMessage) -> Str
+                        return handler(head_req)
+                    }
                 }
             }
         }
-        if head_fallback_ptr == 0 {
-            // Run onError hooks for 404
-            app_run_error_hooks(on_error_table, on_error_count, error_handler, req, res, "not found")
-            if res.is_finished() {
-                let response: Str = res.serialize()
-                return response
-            }
-            // Default 404 response (JSON error format)
-            return app_error_response(404, "not found")
-        }
-        // Use HEAD fallback handler (strip body in send, headers only)
-        let continue_pre: Bool = app_run_hooks(pre_handler_table, pre_handler_count, req, res)
-        if not continue_pre {
-            let response: Str = res.serialize()
-            return response
-        }
-        let handler: func(IncomingMessage, ServerResponse) = head_fallback_ptr as func(IncomingMessage, ServerResponse)
-        handler(req, res)
-        app_run_hooks(on_send_table, on_send_count, req, res)
-        let response: Str = res.serialize()
-        app_run_hooks(on_response_table, on_response_count, req, res)
-        return response
-    }
-
-    // ── preHandler hooks ─────────────────────────────────────────
-    let continue_pre: Bool = app_run_hooks(pre_handler_table, pre_handler_count, req, res)
-    if not continue_pre {
-        let response: Str = res.serialize()
-        return response
+        return app_error_response(404, "not found")
     }
 
     // ── Route handler ────────────────────────────────────────────
-    let handler: func(IncomingMessage, ServerResponse) = fn_ptr as func(IncomingMessage, ServerResponse)
-    handler(req, res)
-
-    // ── onSend hooks ─────────────────────────────────────────────
-    app_run_hooks(on_send_table, on_send_count, req, res)
-
-    // ── Serialize response ───────────────────────────────────────
-    let response: Str = res.serialize()
-
-    // ── onResponse hooks (post-send, logging/metrics) ────────────
-    app_run_hooks(on_response_table, on_response_count, req, res)
-
-    return response
+    let handler: func(IncomingMessage) -> Str = fn_ptr as func(IncomingMessage) -> Str
+    return handler(req)
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -455,36 +399,68 @@ pub func app_status_text(code: I64) -> Str {
     return "OK"
 }
 
-/// Build HTTP response with pre-computed status line and headers.
-/// Uses single buffer allocation instead of multiple string concatenations.
-pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
-    let body_len: I64 = str::len(body)
-    let cl_str: Str = body_len.to_string()
-    let status_str: Str = status.to_string()
-    let status_text: Str = app_status_text(status)
-    let header_prefix: Str = "HTTP/1.1 "
-    let ct_header: Str = "\r\nContent-Type: "
-    let cl_header: Str = "\r\nContent-Length: "
-    let suffix: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
-    let total: I64 = str::len(header_prefix) + str::len(status_str) + 1 + str::len(status_text) +
-                     str::len(ct_header) + str::len(content_type) +
-                     str::len(cl_header) + str::len(cl_str) +
-                     str::len(suffix) + body_len
-    let buf: I64 = lowlevel { mem_alloc(total + 1) } as I64
+/// Pre-computed "HTTP/1.1 NNN Reason\r\n" status lines — avoids I64.to_string() in hot path.
+func app_status_line(code: I64) -> Str {
+    if code == 200 { return "HTTP/1.1 200 OK\r\n" }
+    if code == 201 { return "HTTP/1.1 201 Created\r\n" }
+    if code == 204 { return "HTTP/1.1 204 No Content\r\n" }
+    if code == 301 { return "HTTP/1.1 301 Moved Permanently\r\n" }
+    if code == 302 { return "HTTP/1.1 302 Found\r\n" }
+    if code == 304 { return "HTTP/1.1 304 Not Modified\r\n" }
+    if code == 400 { return "HTTP/1.1 400 Bad Request\r\n" }
+    if code == 401 { return "HTTP/1.1 401 Unauthorized\r\n" }
+    if code == 403 { return "HTTP/1.1 403 Forbidden\r\n" }
+    if code == 404 { return "HTTP/1.1 404 Not Found\r\n" }
+    if code == 405 { return "HTTP/1.1 405 Method Not Allowed\r\n" }
+    if code == 408 { return "HTTP/1.1 408 Request Timeout\r\n" }
+    if code == 413 { return "HTTP/1.1 413 Payload Too Large\r\n" }
+    if code == 429 { return "HTTP/1.1 429 Too Many Requests\r\n" }
+    if code == 500 { return "HTTP/1.1 500 Internal Server Error\r\n" }
+    if code == 502 { return "HTTP/1.1 502 Bad Gateway\r\n" }
+    if code == 503 { return "HTTP/1.1 503 Service Unavailable\r\n" }
+    // Fallback: build dynamically (rare path)
+    let status_str: Str = code.to_string()
+    let status_text: Str = app_status_text(code)
+    let prefix: Str = "HTTP/1.1 "
+    let plen: I64 = 9 + str::len(status_str) + 1 + str::len(status_text) + 2
+    let p: I64 = lowlevel { mem_alloc(plen + 1) } as I64
     var pos: I64 = 0
-    pos = app_buf_copy(buf, pos, header_prefix)
-    pos = app_buf_copy(buf, pos, status_str)
-    lowlevel { ptr_write[U8]((buf + pos) as *U8, 32 as U8) }
+    pos = app_buf_copy(p, pos, prefix)
+    pos = app_buf_copy(p, pos, status_str)
+    lowlevel { ptr_write[U8]((p + pos) as *U8, 32 as U8) }
     pos = pos + 1
-    pos = app_buf_copy(buf, pos, status_text)
-    pos = app_buf_copy(buf, pos, ct_header)
-    pos = app_buf_copy(buf, pos, content_type)
-    pos = app_buf_copy(buf, pos, cl_header)
-    pos = app_buf_copy(buf, pos, cl_str)
-    pos = app_buf_copy(buf, pos, suffix)
-    pos = app_buf_copy(buf, pos, body)
-    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
-    return buf as Str
+    pos = app_buf_copy(p, pos, status_text)
+    lowlevel { ptr_write[U8]((p + pos) as *U8, 13 as U8) }
+    lowlevel { ptr_write[U8]((p + pos + 1) as *U8, 10 as U8) }
+    pos = pos + 2
+    lowlevel { ptr_write[U8]((p + pos) as *U8, 0 as U8) }
+    return p as Str
+}
+
+/// Fast integer to decimal string for Content-Length.
+func app_itoa_content_length(buf: I64, pos: I64, n: I64) -> I64 {
+    if n == 0 {
+        lowlevel { ptr_write[U8]((buf + pos) as *U8, 48 as U8) }
+        return pos + 1
+    }
+    var tmp: I64 = lowlevel { mem_alloc(20) } as I64
+    var len: I64 = 0
+    var val: I64 = n
+    loop (val > 0) {
+        let digit: I64 = val % 10
+        lowlevel { ptr_write[U8]((tmp + len) as *U8, (digit + 48) as U8) }
+        len = len + 1
+        val = val / 10
+    }
+    var i: I64 = len - 1
+    loop (i >= 0) {
+        let ch: U8 = lowlevel { ptr_read[U8]((tmp + i) as *U8) }
+        lowlevel { ptr_write[U8]((buf + pos) as *U8, ch) }
+        pos = pos + 1
+        i = i - 1
+    }
+    lowlevel { mem_free(tmp as *Unit) }
+    return pos
 }
 
 /// Copy a string into buffer at position, return new position.
@@ -496,22 +472,55 @@ func app_buf_copy(buf: I64, pos: I64, s: Str) -> I64 {
     return pos + len
 }
 
-/// Build a JSON error response following cmmv-server format:
-/// {"statusCode":NNN,"error":"Reason","message":"..."}
-/// Returns a complete HTTP response string.
+// Pre-computed header fragments
+const HDR_CT: Str = "Content-Type: "
+const HDR_CL: Str = "Content-Length: "
+const HDR_SUFFIX: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+
+/// Build HTTP response — optimized hot path.
+pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
+    let body_len: I64 = str::len(body)
+    let status_line: Str = app_status_line(status)
+    let sl_len: I64 = str::len(status_line)
+    let ct_len: I64 = str::len(content_type)
+    let hdr_suffix_len: I64 = str::len(HDR_SUFFIX)
+    let max_total: I64 = sl_len + 14 + ct_len + 2 + 16 + 10 + hdr_suffix_len + body_len
+    let buf: I64 = lowlevel { mem_alloc(max_total + 1) } as I64
+    var pos: I64 = 0
+    lowlevel { copy_nonoverlapping(status_line as *Unit, buf as *Unit, sl_len) }
+    pos = sl_len
+    lowlevel { copy_nonoverlapping(HDR_CT as *Unit, (buf + pos) as *Unit, 14) }
+    pos = pos + 14
+    lowlevel { copy_nonoverlapping(content_type as *Unit, (buf + pos) as *Unit, ct_len) }
+    pos = pos + ct_len
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 13 as U8) }
+    lowlevel { ptr_write[U8]((buf + pos + 1) as *U8, 10 as U8) }
+    pos = pos + 2
+    lowlevel { copy_nonoverlapping(HDR_CL as *Unit, (buf + pos) as *Unit, 16) }
+    pos = pos + 16
+    pos = app_itoa_content_length(buf, pos, body_len)
+    lowlevel { copy_nonoverlapping(HDR_SUFFIX as *Unit, (buf + pos) as *Unit, hdr_suffix_len) }
+    pos = pos + hdr_suffix_len
+    if body_len > 0 {
+        lowlevel { copy_nonoverlapping(body as *Unit, (buf + pos) as *Unit, body_len) }
+        pos = pos + body_len
+    }
+    lowlevel { ptr_write[U8]((buf + pos) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Build a JSON error response following cmmv-server format.
 pub func app_error_response(status: I64, message: Str) -> Str {
     let status_text: Str = app_status_text(status)
     let status_str: Str = status.to_string()
-    // Build JSON body: {"statusCode":NNN,"error":"Reason","message":"msg"}
     let body_prefix: Str = "{\"statusCode\":"
     let body_err: Str = ",\"error\":\""
     let body_msg: Str = "\",\"message\":\""
     let body_suffix: Str = "\"}"
-    let body_len: I64 = str::len(body_prefix) + str::len(status_str) +
-                        str::len(body_err) + str::len(status_text) +
-                        str::len(body_msg) + str::len(message) +
-                        str::len(body_suffix)
-    // Build body first
+    let status_str_len: I64 = str::len(status_str)
+    let status_text_len: I64 = str::len(status_text)
+    let message_len: I64 = str::len(message)
+    let body_len: I64 = 14 + status_str_len + 10 + status_text_len + 14 + message_len + 2
     let body_buf: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
     var bp: I64 = 0
     bp = app_buf_copy(body_buf, bp, body_prefix)

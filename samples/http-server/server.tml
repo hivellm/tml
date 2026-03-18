@@ -7,79 +7,53 @@
 //         curl -X POST http://localhost:3000/api/echo -d '{"hello":"world"}'
 //         curl http://localhost:3000/old-page
 // Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
+//
+// Handler signature: func(req: IncomingMessage) -> Str
+//   Use app_build_response(status, content_type, body) to build responses.
+//   Middleware and hooks are disabled pending a codegen fix for ServerResponse fn ptrs.
 
-mod server
+mod http_server
 
 use core::str
-use std::http::app::{App, app_get_param}
+use std::http::app::App
+use std::http::dispatch::{app_get_param, app_build_response}
 use std::http::incoming::IncomingMessage
-use std::http::server_response::ServerResponse
+
+// ── Pre-computed static responses (zero-alloc per request) ──────
+
+// For endpoints that always return the same body, pre-compute the full HTTP
+// response at module level. This avoids app_build_response per request entirely.
+const RESP_ROOT: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 44\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}"
+const RESP_HEALTH: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 15\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"status\":\"ok\"}"
+const RESP_EMPTY_JSON: Str = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 2\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{}"
+const RESP_REDIRECT: Str = "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+const RESP_HTML: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 76\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>"
+const RESP_TEXT: Str = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\nHello, plain text world!"
 
 // ── Handlers ───────────────────────────────────────────────────
 
-func handle_root(req: IncomingMessage, res: ServerResponse) {
-    res.json("{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
-}
+func handle_root(req: IncomingMessage) -> Str { RESP_ROOT }
+func handle_health(req: IncomingMessage) -> Str { RESP_HEALTH }
 
-func handle_health(req: IncomingMessage, res: ServerResponse) {
-    res.json("{\"status\":\"ok\"}")
-}
-
-func handle_user(req: IncomingMessage, res: ServerResponse) {
+func handle_user(req: IncomingMessage) -> Str {
     let id: Str = app_get_param(req, "id")
-    res.json("{\"user_id\":\"" + id + "\"}")
+    app_build_response(200, "application/json; charset=utf-8", "{\"user_id\":\"" + id + "\"}")
 }
 
-func handle_echo(req: IncomingMessage, res: ServerResponse) {
+func handle_echo(req: IncomingMessage) -> Str {
     let body: Str = req.body()
-    if str::len(body) == 0 {
-        res.json("{}")
-        return
-    }
-    res.json(body)
+    if str::len(body) == 0 { return RESP_EMPTY_JSON }
+    app_build_response(200, "application/json; charset=utf-8", body)
 }
 
-func handle_redirect(req: IncomingMessage, res: ServerResponse) {
-    res.redirect("/")
-}
-
-func handle_html(req: IncomingMessage, res: ServerResponse) {
-    res.html("<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>")
-}
-
-func handle_text(req: IncomingMessage, res: ServerResponse) {
-    res.text("Hello, plain text world!")
-}
-
-func handle_not_found(req: IncomingMessage, res: ServerResponse) {
-    res.status(404)
-    res.json("{\"error\":\"custom 404\",\"path\":\"" + req.url() + "\"}")
-}
-
-// ── Middleware (logging) ──────────────────────────────────────
-
-func logger_middleware(req: IncomingMessage, res: ServerResponse) {
-    println(req.method() + " " + req.url())
-    // Don't call res.end() — continue to next middleware/handler
-}
-
-// ── Hooks ────────────────────────────────────────────────────
-
-func on_response_hook(req: IncomingMessage, res: ServerResponse) {
-    // Post-response hook — runs after response is sent.
-    // Good for logging response status, timing, metrics.
-}
+func handle_redirect(req: IncomingMessage) -> Str { RESP_REDIRECT }
+func handle_html(req: IncomingMessage) -> Str { RESP_HTML }
+func handle_text(req: IncomingMessage) -> Str { RESP_TEXT }
 
 // ── Main ───────────────────────────────────────────────────────
 
 pub func main() -> I32 {
     var app: App = App::new()
-
-    // Middleware — runs for every request before routing
-    app.use_middleware(logger_middleware as I64)
-
-    // Hooks — lifecycle events
-    app.add_hook_on_response(on_response_hook as I64)
 
     // Settings
     app.set_body_limit(2097152)     // 2MB body limit

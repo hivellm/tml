@@ -4,8 +4,9 @@
 //!   - Radix-tree router with path params (`:id`) and wildcards (`*`)
 //!   - Thread pool (N workers = CPU cores) — no thread-per-connection
 //!   - Hook lifecycle: onRequest, preHandler, onSend, onResponse, onError
-//!   - Middleware pipeline (app.use_middleware)
-//!   - IncomingMessage + ServerResponse handler signature
+//!     (hooks are defined but not wired in dispatch until a codegen bug is fixed)
+//!   - Handler signature: func(req: IncomingMessage) -> Str
+//!     Use app_build_response(status, content_type, body) to build responses.
 //!   - Read/write/idle timeouts
 //!   - Graceful shutdown via app.shutdown()
 //!   - Keep-alive connections
@@ -13,17 +14,16 @@
 //! # Example
 //!
 //! ```tml
-//! use std::http::app::{App, app_get_param}
+//! use std::http::app::{App, app_get_param, app_build_response}
 //! use std::http::incoming::IncomingMessage
-//! use std::http::server_response::ServerResponse
 //!
-//! func handle_root(req: IncomingMessage, res: ServerResponse) {
-//!     res.json("{\"status\":\"ok\"}")
+//! func handle_root(req: IncomingMessage) -> Str {
+//!     app_build_response(200, "application/json", "{\"status\":\"ok\"}")
 //! }
 //!
-//! func handle_user(req: IncomingMessage, res: ServerResponse) {
+//! func handle_user(req: IncomingMessage) -> Str {
 //!     let id: Str = app_get_param(req, "id")
-//!     res.json("{\"user_id\":\"" + id + "\"}")
+//!     app_build_response(200, "application/json", "{\"user_id\":\"" + id + "\"}")
 //! }
 //!
 //! pub func main() -> I32 {
@@ -45,16 +45,7 @@ use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
 use std::http::worker::{app_listen, app_listen_evloop, app_bind_listener, app_shutdown}
 use std::http::parse::MAX_PARAMS
 
-// Re-exports for convenience — callers can import these from std::http::app
-pub use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
-                              app_status_text, app_find_route}
-pub use std::http::worker::{app_shutdown, app_bind_listener, app_worker, app_evloop_worker,
-                             app_listen, app_listen_evloop}
-pub use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_is_http11,
-                            app_is_bodyless_method, app_extract_method, app_extract_path,
-                            app_extract_body, app_has_header_end, app_has_connection_close,
-                            app_find_header_end_in_str, app_store_param}
-pub use std::http::dispatch::{RESPONSE_404, RESPONSE_500, RESPONSE_405, RESPONSE_413}
+// Re-exports removed — import directly from std::http::worker or std::http::parse
 
 const MAX_HANDLERS: I64 = 256
 const MAX_MIDDLEWARE: I64 = 32
@@ -96,9 +87,10 @@ func method_index(method: Str) -> I64 {
 //
 // All fields are I64 to avoid mut-this field access codegen bug.
 // Handler functions are stored as I64 fn pointers and cast when calling.
-// Hook signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
-// Error hook signature: func(req: IncomingMessage, res: ServerResponse, msg: Str)
-// stored as I64.
+// Handler signature: func(req: IncomingMessage) -> Str stored as I64.
+//   Use app_build_response(status, content_type, body) in handler bodies.
+// Hook signature (future, pending codegen fix): func(req: IncomingMessage, res: ServerResponse)
+// Error hook signature (future): func(req: IncomingMessage, res: ServerResponse, msg: Str)
 
 pub type App {
     table: I64,             // ptr to handler table (method, path, fn_ptr entries)
@@ -173,8 +165,8 @@ impl App {
 
     // ── Route Registration ────────────────────────────────────────
     // Handlers stored as I64 fn pointers. Call via:
-    //   let h: func(IncomingMessage, ServerResponse) = fn_ptr as func(IncomingMessage, ServerResponse)
-    //   h(req, res)
+    //   let h: func(IncomingMessage) -> Str = fn_ptr as func(IncomingMessage) -> Str
+    //   let response: Str = h(req)
 
     /// Register a GET handler. Pass function as I64: `handle_root as I64`
     pub func get(mut this, path: Str, handler: I64) {
@@ -355,7 +347,7 @@ impl App {
 // ════════════════════════════════════════════════════════════════════
 
 /// Register a handler in the flat table and radix tree.
-/// handler is an I64 fn pointer (cast from func(IncomingMessage, ServerResponse)).
+/// handler is an I64 fn pointer (cast from func(IncomingMessage) -> Str).
 pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, path: Str, handler: I64) {
     if count >= MAX_HANDLERS { return }
     let handler_id: I64 = count + 1

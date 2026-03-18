@@ -168,16 +168,24 @@ pub func app_extract_body(buf: I64, len: I64) -> Str {
 
 pub func app_has_header_end(buf: I64, len: I64) -> Bool {
     if len < 4 { return false }
-    var i: I64 = 3
-    loop (i < len) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
+    // Scan backwards from end — header end (\r\n\r\n) is almost always near the
+    // end of received data. For typical HTTP requests this finds it in 1-2 iterations
+    // instead of scanning the entire buffer from the start.
+    var i: I64 = len - 1
+    loop (i >= 3) {
         let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            return true
+        // Quick filter: most bytes aren't \n (0x0A), skip immediately
+        if c3 == 10 as U8 {
+            let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
+            if c2 == 13 as U8 {
+                let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
+                if c1 == 10 as U8 {
+                    let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
+                    if c0 == 13 as U8 { return true }
+                }
+            }
         }
-        i = i + 1
+        i = i - 1
     }
     return false
 }

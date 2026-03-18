@@ -640,3 +640,16 @@ int32_t tml_sys_close(int64_t handle) {
 int32_t tml_sys_get_last_error(void) {
     return sys_get_last_error();
 }
+
+/**
+ * @brief Check if the last socket operation failed with EWOULDBLOCK/EAGAIN.
+ * Returns 1 if would-block (try again later), 0 otherwise.
+ * Essential for non-blocking I/O event loops.
+ */
+int32_t tml_sys_would_block(void) {
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEWOULDBLOCK ? 1 : 0;
+#else
+    return (errno == EWOULDBLOCK || errno == EAGAIN) ? 1 : 0;
+#endif
+}

@@ -208,7 +208,120 @@ int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int3
 }
 
 /* ========================================================================== */
-/* Linux: epoll-based implementation                                          */
+/* macOS/BSD: kqueue-based implementation                                     */
+/*                                                                            */
+/* kqueue is the native event notification system on macOS, FreeBSD, etc.     */
+/* EV_CLEAR provides edge-triggered semantics (like epoll EPOLLET).           */
+/* ========================================================================== */
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+
+#include <errno.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+int64_t tml_poll_create(void) {
+    int kq = kqueue();
+    return kq < 0 ? -1 : (int64_t)kq;
+}
+
+void tml_poll_destroy(int64_t poller) {
+    if (poller >= 0)
+        close((int)poller);
+}
+
+int32_t tml_poll_add(int64_t poller, int64_t socket_handle, uint32_t token, uint32_t interests) {
+    int kq = (int)poller;
+    int fd = (int)socket_handle;
+    struct kevent changes[2];
+    int n = 0;
+    if (interests & POLL_READABLE) {
+        EV_SET(&changes[n], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, (void*)(uintptr_t)token);
+        n++;
+    }
+    if (interests & POLL_WRITABLE) {
+        EV_SET(&changes[n], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, (void*)(uintptr_t)token);
+        n++;
+    }
+    return n > 0 && kevent(kq, changes, n, NULL, 0, NULL) >= 0 ? 0 : -1;
+}
+
+int32_t tml_poll_modify(int64_t poller, int64_t socket_handle, uint32_t token, uint32_t interests) {
+    int kq = (int)poller;
+    int fd = (int)socket_handle;
+    struct kevent changes[4];
+    int n = 0;
+    /* Delete old filters, add new ones */
+    EV_SET(&changes[n++], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+    EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+    if (interests & POLL_READABLE) {
+        EV_SET(&changes[n++], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, (void*)(uintptr_t)token);
+    }
+    if (interests & POLL_WRITABLE) {
+        EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, (void*)(uintptr_t)token);
+    }
+    kevent(kq, changes, n, NULL, 0, NULL);
+    return 0;
+}
+
+int32_t tml_poll_remove(int64_t poller, int64_t socket_handle) {
+    int kq = (int)poller;
+    int fd = (int)socket_handle;
+    struct kevent changes[2];
+    EV_SET(&changes[0], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+    EV_SET(&changes[1], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+    kevent(kq, changes, 2, NULL, 0, NULL); /* ignore ENOENT */
+    return 0;
+}
+
+int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int32_t timeout_ms) {
+    int kq = (int)poller;
+    struct kevent kev[256];
+    int32_t limit = max_events < 256 ? max_events : 256;
+    struct timespec ts;
+    struct timespec* tsp = NULL;
+    if (timeout_ms >= 0) {
+        ts.tv_sec = timeout_ms / 1000;
+        ts.tv_nsec = (timeout_ms % 1000) * 1000000L;
+        tsp = &ts;
+    }
+    int ret = kevent(kq, NULL, 0, kev, limit, tsp);
+    if (ret <= 0)
+        return ret;
+
+    PollEvent* out = (PollEvent*)events_out;
+    int32_t n = 0;
+    for (int i = 0; i < ret && n < max_events; i++) {
+        uint32_t token = (uint32_t)(uintptr_t)kev[i].udata;
+        uint32_t flags = 0;
+        if (kev[i].filter == EVFILT_READ)
+            flags |= POLL_READABLE;
+        if (kev[i].filter == EVFILT_WRITE)
+            flags |= POLL_WRITABLE;
+        if (kev[i].flags & EV_ERROR)
+            flags |= POLL_ERROR;
+        if (kev[i].flags & EV_EOF)
+            flags |= POLL_HUP;
+        /* Merge events for same token */
+        int merged = 0;
+        for (int j = 0; j < n; j++) {
+            if (out[j].token == token) {
+                out[j].flags |= flags;
+                merged = 1;
+                break;
+            }
+        }
+        if (!merged) {
+            out[n].token = token;
+            out[n].flags = flags;
+            n++;
+        }
+    }
+    return n;
+}
+
+/* ========================================================================== */
+/* Linux: epoll-based implementation (edge-triggered via EPOLLET)             */
 /* ========================================================================== */
 #else
 
@@ -217,7 +330,7 @@ int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int3
 #include <unistd.h>
 
 static uint32_t interests_to_epoll(uint32_t interests) {
-    uint32_t events = 0;
+    uint32_t events = EPOLLET; /* edge-triggered for max efficiency */
     if (interests & POLL_READABLE)
         events |= EPOLLIN;
     if (interests & POLL_WRITABLE)
@@ -238,13 +351,9 @@ static uint32_t epoll_to_interests(uint32_t events) {
     return flags;
 }
 
-/* ── Public API (Linux) ───────────────────────────────────────────────────── */
-
 int64_t tml_poll_create(void) {
     int fd = epoll_create1(0);
-    if (fd < 0)
-        return -1;
-    return (int64_t)fd;
+    return fd < 0 ? -1 : (int64_t)fd;
 }
 
 void tml_poll_destroy(int64_t poller) {
@@ -273,10 +382,8 @@ int32_t tml_poll_remove(int64_t poller, int64_t socket_handle) {
 }
 
 int32_t tml_poll_wait(int64_t poller, void* events_out, int32_t max_events, int32_t timeout_ms) {
-    /* Stack-allocate epoll_events, copy to our output format */
     struct epoll_event ep_events[256];
     int32_t limit = max_events < 256 ? max_events : 256;
-
     int ret = epoll_wait((int)poller, ep_events, limit, timeout_ms);
     if (ret <= 0)
         return ret;

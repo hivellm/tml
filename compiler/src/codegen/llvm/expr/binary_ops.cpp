@@ -549,8 +549,6 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         }
     }
 
-    // Check if either operand is i64 (after promotion)
-    bool is_i64 = (left_type == "i64" || right_type == "i64");
     // Check for smaller integer types (i8, i16)
     bool is_i8 = (left_type == "i8" && right_type == "i8");
     bool is_i16 = (left_type == "i16" && right_type == "i16");
@@ -618,7 +616,7 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     std::string int_type = "i32";
     if (is_bool) {
         int_type = "i1";
-    } else if (is_i64) {
+    } else if (left_type == "i64" || right_type == "i64") {
         int_type = "i64";
     } else if (is_i16) {
         int_type = "i16";
@@ -784,12 +782,28 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             last_expr_type_ = float_type;
         } else if (CompilerOptions::checked_math) {
             // Checked multiplication: panic on overflow instead of UB
-            std::string ov_type = "{ " + int_type + ", i1 }";
+            // Always use i64 for the overflow check to avoid type mismatches
+            // when the result is passed to functions expecting i64 (mem_alloc, ptr ops).
+            // TML's default integer is I64, so promoting i32 multiplication to i64 is safe.
+            std::string check_type = (int_type == "i32") ? "i64" : int_type;
+            // Promote operands to check_type if needed
+            std::string check_left = left;
+            std::string check_right = right;
+            if (int_type == "i32" && check_type == "i64") {
+                std::string ext_l = fresh_reg();
+                std::string ext_r = fresh_reg();
+                std::string ext_op = is_unsigned ? "zext" : "sext";
+                emit_line("  " + ext_l + " = " + ext_op + " i32 " + left + " to i64");
+                emit_line("  " + ext_r + " = " + ext_op + " i32 " + right + " to i64");
+                check_left = ext_l;
+                check_right = ext_r;
+            }
+            std::string ov_type = "{ " + check_type + ", i1 }";
             std::string intrinsic =
                 is_unsigned ? "@llvm.umul.with.overflow." : "@llvm.smul.with.overflow.";
             std::string ov_result = fresh_reg();
-            emit_line("  " + ov_result + " = call " + ov_type + " " + intrinsic + int_type + "(" +
-                      int_type + " " + left + ", " + int_type + " " + right + ")");
+            emit_line("  " + ov_result + " = call " + ov_type + " " + intrinsic + check_type + "(" +
+                      check_type + " " + check_left + ", " + check_type + " " + check_right + ")");
             emit_line("  " + result + " = extractvalue " + ov_type + " " + ov_result + ", 0");
             std::string overflow_flag = fresh_reg();
             emit_line("  " + overflow_flag + " = extractvalue " + ov_type + " " + ov_result +
@@ -807,7 +821,7 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
             emit_line(label_ok + ":");
             current_block_ = label_ok;
             block_terminated_ = false;
-            last_expr_type_ = int_type;
+            last_expr_type_ = check_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = mul nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;

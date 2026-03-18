@@ -168,9 +168,14 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         func_param_types_[func.name] = std::move(param_types);
     }
 
-    // Emit functions
+    // Emit functions: define for functions with bodies, declare for extern/imported
     for (const auto& func : module.functions) {
-        emit_function(func);
+        if (func.blocks.empty()) {
+            // Extern or imported function — no body, emit as declare
+            emit_function_declaration(func);
+        } else {
+            emit_function(func);
+        }
     }
 
     // Emit entry point wrappers.
@@ -298,12 +303,13 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         func_param_types_[func.name] = std::move(param_types);
     }
 
-    // Emit functions: define for included, declare for others
+    // Emit functions: define for included (with body), declare for others/extern
     for (size_t i = 0; i < module.functions.size(); ++i) {
-        if (included.count(i)) {
-            emit_function(module.functions[i]);
+        const auto& func = module.functions[i];
+        if (included.count(i) && !func.blocks.empty()) {
+            emit_function(func);
         } else {
-            emit_function_declaration(module.functions[i]);
+            emit_function_declaration(func);
         }
     }
 
