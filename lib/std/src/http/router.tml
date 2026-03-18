@@ -384,6 +384,7 @@ func insert_static_child(parent: I64, text: Str) -> I64 {
     children_set(split, child_new_first, existing)
 
     // Replace existing in parent with split
+    // Replace existing in parent with split
     children_set(parent, first_byte, split)
 
     // Case 2c-i: text is exactly the common prefix
