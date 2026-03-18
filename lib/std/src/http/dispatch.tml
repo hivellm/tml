@@ -411,12 +411,11 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
 
     var param_count: I64 = 0
 
-    // ── Route lookup: try radix tree first, fall back to linear scan ──
-    var fn_ptr: I64 = app_dispatch_tree_lookup(table, trees, method, path, params_buf, ref param_count)
-    if fn_ptr == 0 {
-        // Radix tree miss — try linear scan (handles split corruption + pattern matching)
-        fn_ptr = app_linear_lookup(table, count, method, path, params_buf, ref param_count)
-    }
+    // ── Route lookup: linear scan (reliable) ──
+    // The radix tree has a split corruption bug that causes incorrect lookups.
+    // Linear scan is O(n) but correct for all route patterns including :param.
+    // TODO: fix radix tree split and re-enable as primary lookup
+    var fn_ptr: I64 = app_linear_lookup(table, count, method, path, params_buf, ref param_count)
 
     // ── Construct IncomingMessage ─────────────────────────────────
     let req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, param_count)
