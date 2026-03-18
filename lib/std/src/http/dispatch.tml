@@ -347,16 +347,13 @@ func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
 func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
                        params_buf: I64, param_count: mut ref I64) -> I64 {
     param_count = 0
+    var off: I64 = 0
     var i: I64 = 0
     loop (i < count) {
-        var off: I64 = 0
-        var j: I64 = 0
-        loop (j < i) { off = off + ENTRY_SIZE; j = j + 1 }
         let m: Str = lowlevel { ptr_read[I64]((table + off) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + off + 8) as *I64) } as Str
         if m == method {
             if p == path {
-                // Exact match — no params
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
             // Pattern match for :param segments
@@ -366,6 +363,7 @@ func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
         }
+        off = off + ENTRY_SIZE
         i = i + 1
     }
     return 0
