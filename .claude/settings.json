@@ -10,18 +10,14 @@
       "Edit(*)",
       "Glob(*)",
       "Grep(*)",
-      "Agent(*)"
+      "Agent(*)",
+      "TodoWrite(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Skill(*)",
+      "mcp__tml__*",
+      "mcp__rulebook__*"
     ]
   },
-  "enabledMcpjsonServers": ["tml"],
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "type": "command",
-        "command": "bash .claude/hooks/on-compact-reinject.sh",
-        "timeout": 5000
-      }
-    ]
-  }
+  "enabledMcpjsonServers": ["tml"]
 }

@@ -65,15 +65,40 @@ auto LLVMIRGen::wrap_in_poll_ready(const std::string& value, const std::string& 
         current_poll_inner_type_.empty() ? value_type : current_poll_inner_type_;
     std::string final_value = value;
 
-    // If the value type doesn't match the inner type, we may need to extend/convert
+    // If the value type doesn't match the inner type, we may need to extend/truncate
     if (value_type != inner_type) {
-        // Integer widening (e.g., i32 to i64)
-        if ((value_type == "i32" || value_type == "i16" || value_type == "i8") &&
-            (inner_type == "i64" || inner_type == "i32" || inner_type == "i16")) {
-            std::string extended = fresh_reg();
-            emit_line("  " + extended + " = sext " + value_type + " " + value + " to " +
-                      inner_type);
-            final_value = extended;
+        // Helper lambda to get integer bit width, returns 0 for non-integer types
+        auto int_width = [](const std::string& t) -> int {
+            if (t == "i8")
+                return 8;
+            if (t == "i16")
+                return 16;
+            if (t == "i32")
+                return 32;
+            if (t == "i64")
+                return 64;
+            return 0;
+        };
+
+        int val_width = int_width(value_type);
+        int inner_width = int_width(inner_type);
+
+        if (val_width > 0 && inner_width > 0) {
+            if (val_width < inner_width) {
+                // Integer widening (e.g., i32 to i64)
+                std::string extended = fresh_reg();
+                emit_line("  " + extended + " = sext " + value_type + " " + value + " to " +
+                          inner_type);
+                final_value = extended;
+            } else if (val_width > inner_width) {
+                // Integer truncation (e.g., i64 to i32)
+                // This happens when checked arithmetic promotes i32 to i64 for overflow detection,
+                // but the Poll[I32] payload field expects i32.
+                std::string truncated = fresh_reg();
+                emit_line("  " + truncated + " = trunc " + value_type + " " + value + " to " +
+                          inner_type);
+                final_value = truncated;
+            }
         }
     }
 

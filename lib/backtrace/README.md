@@ -2,7 +2,7 @@
 
 Runtime stack trace capture and symbol resolution for debugging TML applications.
 
-**Status**: Complete (Production ready)
+**Status**: Complete (Production ready) | [Changelog](CHANGELOG.md)
 
 ## Features
 

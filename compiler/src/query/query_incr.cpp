@@ -12,6 +12,13 @@ TML_MODULE("compiler")
 #include <fstream>
 #include <sstream>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace tml::query {
@@ -21,9 +28,43 @@ namespace tml::query {
 // ============================================================================
 
 uint32_t compiler_build_hash() {
-    // Changes every time the compiler is recompiled (__DATE__ + __TIME__ are compile-time
-    // constants)
-    static const uint32_t hash = tml::crc32c(std::string(__DATE__) + " " + __TIME__);
+    // Use the compiler binary's last-write-time as the hash source.
+    // __DATE__/__TIME__ only change when THIS file is recompiled, which
+    // doesn't happen in incremental C++ builds when other codegen files
+    // change. The binary's mtime changes whenever ANY object file in the
+    // link changes, making it a reliable invalidation signal.
+    static const uint32_t hash = [] {
+        std::error_code ec;
+#ifdef _WIN32
+        // On Windows, get the path to our own DLL/EXE module
+        char module_path[MAX_PATH] = {};
+        HMODULE hModule = nullptr;
+        // Get handle to the DLL containing this function
+        GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(&compiler_build_hash), &hModule);
+        if (hModule) {
+            GetModuleFileNameA(hModule, module_path, MAX_PATH);
+        }
+        fs::path binary_path(module_path);
+#else
+        // On Linux/macOS, /proc/self/exe or argv[0] — fall back to __DATE__/__TIME__
+        fs::path binary_path("/proc/self/exe");
+        if (!fs::exists(binary_path, ec)) {
+            return tml::crc32c(std::string(__DATE__) + " " + __TIME__);
+        }
+#endif
+        if (!binary_path.empty() && fs::exists(binary_path, ec)) {
+            auto ftime = fs::last_write_time(binary_path, ec);
+            if (!ec) {
+                auto ns = ftime.time_since_epoch().count();
+                auto str = std::to_string(ns);
+                return tml::crc32c(str);
+            }
+        }
+        // Fallback to compile-time constants if binary path unavailable
+        return tml::crc32c(std::string(__DATE__) + " " + __TIME__);
+    }();
     return hash;
 }
 

@@ -1,6 +1,8 @@
 # Codegen Debugger Memory
 
 ## Index
+- [dyn-behavior-codegen-fix.md](dyn-behavior-codegen-fix.md) - Full dyn Behavior codegen: fat pointers, vtables, vtable dispatch (2026-03-19, FIXED)
+- [fnptr-sret-mismatch-fix.md](fnptr-sret-mismatch-fix.md) - Fn ptr indirect calls missing sret for struct returns (2026-03-19, FIXED)
 - [fn-ptr-local-var-fix.md](fn-ptr-local-var-fix.md) - Function pointer in local variable indirect call fix (2026-03-17, FIXED)
 - [fn-type-mangling-fix.md](fn-type-mangling-fix.md) - parse_tokens_with_pattern greedy token fix + Fn mangling (2026-03-16, FIXED)
 - [where-clause-functype-fix.md](where-clause-functype-fix.md) - match_where_pattern_call FuncType handling (2026-03-16, FIXED)
@@ -12,6 +14,15 @@
 - [array-mut-this-dispatch.md](array-mut-this-dispatch.md) - Array `mut this` method dispatch failure
 - [gen-path-unsigned-flag.md](gen-path-unsigned-flag.md) - gen_path() missing last_expr_is_unsigned_ (I32::MIN sext bug)
 - [compiler-test-suite-issues.md](compiler-test-suite-issues.md) - Compiler test suite collision patterns
+
+## Recent Fixes (2026-03-19)
+
+### Async/Await Stale Cache + MIR AwaitInst -- FIXED
+- Root cause: `compiler_build_hash()` in `query_incr.cpp` used `__DATE__`/`__TIME__` which only changes when THAT file is recompiled. Incremental C++ builds don't recompile it when codegen files change.
+- Fix: Changed to use binary mtime (`GetModuleHandleExA` on Windows, `/proc/self/exe` on Linux)
+- Also: MIR codegen `instructions.cpp` silently ignored `AwaitInst` (no handler). Added handler that extracts Poll[T] payload field 1.
+- Key insight: `tml run` uses query pipeline (MIR by default), but `tml build --emit-ir` forces AST codegen. A stale cache can make `run` fail while `build --emit-ir` works fine.
+- Files: `query_incr.cpp:23`, `instructions.cpp:374`
 
 ## Recent Fixes (2026-03-16)
 
@@ -56,9 +67,11 @@
 - **Full suite crash**: Resource exhaustion running all 1477 tests concurrently
 
 ### MIR Codegen Method Call Pipeline
-- THIR builder creates CallInst directly (not MethodCallInst) for method calls
+- THIR builder creates CallInst directly (not MethodCallInst) for NON-dyn method calls
+- For dyn dispatch, THIR builder now creates MethodCallInst with is_dyn_dispatch=true
 - Devirtualization pass can also convert MethodCallInst -> CallInst
 - All MIR method dispatch fixes must go in `emit_call_inst` in instructions.cpp
+- Default pipeline: CompilerOptions::use_thir = true → ThirMirBuilder, NOT HirMirBuilder
 
 ### Generic Inference Patterns
 - FuncType vs ClosureType: closures return ClosureType, not FuncType (fixed in extract_type_params)

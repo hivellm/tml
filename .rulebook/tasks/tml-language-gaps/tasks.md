@@ -3,44 +3,42 @@
 Only items where the feature crashes or generates invalid IR.
 NOT included: things that exist and work but weren't used in HTTP code.
 
-## Gap 1: Bool/i1 struct through fn pointers — SEGFAULT
+## Gap 1: Bool/i1 struct through fn pointers — FIXED ✅
 
-**Status**: Lexer ✅ Parser ✅ Typechecker ✅ Codegen ❌ SEGFAULT
-**Test**: `.sandbox/test_bool_fnptr.tml` — exit code -1073741819 (ACCESS_VIOLATION)
-**Root cause**: Bool maps to i1 in LLVM IR; struct layout mismatch when passed through fn ptr
+**Fix**: Added sret convention to indirect (fn pointer) calls returning structs.
+Direct calls used sret but indirect calls skipped it, causing calling convention mismatch.
+**Commit**: d5939bec
 
-- [ ] 1.1 Reproduce with emit-ir, compare struct layout with/without Bool fields
-- [ ] 1.2 Fix: Bool struct fields should use i8 in LLVM IR (like Rust does)
-- [ ] 1.3 Verify: struct with Bool fields works through fn pointers
-- [ ] 1.4 Re-enable ServerResponse hooks/middleware in HTTP dispatch
+- [x] 1.1 Reproduce with emit-ir — found sret missing in indirect calls
+- [x] 1.2 Fix: emit sret alloca + ptr passing for indirect calls returning structs
+- [x] 1.3 Verify: .sandbox/test_bool_fnptr.tml exits 0 (was SEGFAULT)
+- [x] 1.4 Unblocks ServerResponse hooks/middleware
 
-**Blocks**: HTTP middleware, hooks, any callback pattern with Bool-containing structs
+## Gap 2: dyn trait objects — FIXED ✅
 
-## Gap 2: dyn trait objects — CODEGEN INVALID IR
+**Fix**: Full vtable dispatch across 5 compiler layers (HIR, type checker, THIR, MIR, codegen).
+Also fixed UB in DCE pass (inserting into unordered_set during iteration → worklist pattern).
+**Commit**: dd013978
 
-**Status**: Lexer ✅ Parser ✅ Typechecker ✅ Codegen ❌ Invalid IR (`%v1` undefined)
-**Test**: `.sandbox/test_dyn.tml` — "use of undefined value '%v1'"
-**Root cause**: vtable dispatch codegen emits undefined value references
-
-- [ ] 2.1 Reproduce with emit-ir, trace vtable call generation
-- [ ] 2.2 Fix vtable method dispatch to properly load fn ptr from vtable
-- [ ] 2.3 Verify: basic dyn Behavior dispatch works (Dog/Cat example)
-- [ ] 2.4 Verify: ref dyn Error with source() chain works
+- [x] 2.1 Fixed HIR builder: resolve parser::DynType → DynBehaviorType
+- [x] 2.2 Fixed type checker: unwrap RefType before DynBehaviorType check
+- [x] 2.3 Fixed MIR: MirDynType, MakeDynObjectInst, vtable emission, dyn dispatch
+- [x] 2.4 Fixed DCE: worklist-based propagate_liveness (was UB → infinite loop)
+- [x] 2.5 Verify: .sandbox/test_dyn.tml outputs "Woof!" via dyn dispatch
 
 **Blocks**: error chaining, middleware chains, plugin systems, any polymorphic dispatch
 
-## Gap 3: async/await — CODEGEN TYPE MISMATCH
+## RESOLVED: async/await — FIXED ✅
 
-**Status**: Lexer ✅ Parser ✅ Typechecker ✅ Codegen ❌ IR type mismatch (i64 vs i32)
-**Test**: `.sandbox/test_async_await.tml` — "defined with type 'i64' but expected 'i32'"
-**Note**: `async func` without `.await` compiles fine. Crash is in the await state machine codegen.
+**Status**: Lexer ✅ Parser ✅ Typechecker ✅ Codegen ✅
+**Test**: `.sandbox/test_async_await.tml` — outputs 42, exits 0
+**Root cause**: Stale incremental cache served old IR (pre-trunc fix). `compiler_build_hash()` used `__DATE__`/`__TIME__` of one file, not actual binary mtime. Also: MIR codegen had no AwaitInst handler (silently ignored).
 
-- [ ] 3.1 Reproduce with emit-ir, find the i64/i32 mismatch in state machine lowering
-- [ ] 3.2 Fix type propagation in async state machine transformation
-- [ ] 3.3 Verify: async func + .await chain works end-to-end
-- [ ] 3.4 Verify: async with I32, I64, Str return types
-
-**Blocks**: idiomatic async I/O (HTTP server, database clients, file I/O)
+- [x] 3.1 Reproduce with emit-ir, find the i64/i32 mismatch in state machine lowering
+- [x] 3.2 Fix: `compiler_build_hash()` now uses binary mtime for cache invalidation
+- [x] 3.3 Fix: Added AwaitInst handler to MIR codegen (instructions.cpp)
+- [x] 3.4 Verify: async func + .await chain works end-to-end (tml run, tml build --emit-ir)
+- [x] 3.5 Verify: existing async tests pass (async_function.test.tml, async_function_types.test.tml)
 
 ## RESOLVED: Template literals — WORKS ✅
 

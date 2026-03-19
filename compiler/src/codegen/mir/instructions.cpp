@@ -373,6 +373,37 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::MakeDynObjectInst>) {
                 emit_make_dyn_object_inst(i, result_reg, inst);
+
+            } else if constexpr (std::is_same_v<T, mir::AwaitInst>) {
+                // Await in MIR: in the synchronous model, the awaited expression
+                // has already been called and returned Poll[T]. Extract the Ready
+                // payload (field 1) from the Poll struct.
+                std::string poll_val = get_value_reg(i.poll_value);
+                // Determine the inner type from the AwaitInst's result_type
+                std::string inner_type = "i32"; // default
+                if (i.result_type) {
+                    inner_type = mir_type_to_llvm(i.result_type);
+                }
+                // Determine the Poll struct type from the poll_value's type
+                std::string poll_type;
+                auto poll_type_it = value_types_.find(i.poll_value.id);
+                if (poll_type_it != value_types_.end()) {
+                    poll_type = poll_type_it->second;
+                } else if (i.poll_value.type) {
+                    poll_type = mir_type_to_llvm(i.poll_value.type);
+                }
+                if (poll_type.empty()) {
+                    poll_type = "%struct.Poll__I32"; // fallback
+                }
+                // Spill the Poll value to memory, GEP to field 1, load inner value
+                std::string spill = "%await_spill" + std::to_string(temp_counter_++);
+                emitln("    " + spill + " = alloca " + poll_type);
+                emitln("    store " + poll_type + " " + poll_val + ", ptr " + spill);
+                std::string field_ptr = "%await_fld" + std::to_string(temp_counter_++);
+                emitln("    " + field_ptr + " = getelementptr inbounds " + poll_type + ", ptr " +
+                       spill + ", i32 0, i32 1");
+                emitln("    " + result_reg + " = load " + inner_type + ", ptr " + field_ptr);
+                value_types_[inst.result] = inner_type;
             }
         },
         inst.inst);
