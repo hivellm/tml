@@ -1,9 +1,9 @@
 # Tasks: Refactor Codebase — Replace Hardcoded lowlevel with Existing APIs
 
-**Status**: IN PROGRESS
+**Status**: IN PROGRESS (safe refactors done, structural changes blocked)
 **Priority**: High
 **Updated**: 2026-03-19
-**Scope**: 44 files, ~3000+ lines lowlevel → ~600 lines using existing APIs
+**Scope**: 44 files identified, 23 files refactored, remaining blocked by codegen bugs or need new Buffer APIs
 
 ---
 
@@ -69,63 +69,46 @@
 
 ## Phase 5: Stream Module — Buffer + typed structs (CRITICAL)
 
-- [ ] 5.1 Replace `rbuf_*` in readable_stream.tml (84-200) with `Buffer`
-- [ ] 5.2 Replace 10 offset constants in readable_stream.tml (206-228) with typed struct
-- [ ] 5.3 Replace `wbuf_*` in writable_stream.tml (49-120) with `Buffer`
-- [ ] 5.4 Replace writable_stream.tml offset constants with typed struct
-- [ ] 5.5 Refactor `ByteStream` (byte_stream.tml:1-464) to wrap `Buffer` internally
-- [ ] 5.6 Add `remaining()`, `advance()`, `read_ptr()`, `write_ptr()` to ByteStream public API
-- [ ] 5.7 Rewrite `pipe.tml` (38-120) using ByteStream public API instead of internal offsets
-- [ ] 5.8 Fix `buffered.tml` compaction (153-159) — use `copy_nonoverlapping`
-- [ ] 5.9 Fix `buffered.tml` read_line() (246-254) — use `Text`
-- [ ] 5.10 Fix `buffered.tml` flush() (491-524) — use ByteStream public API
-- [ ] 5.11 Replace `abuf_*` helpers in async_buffered.tml with `Buffer`
-- [ ] 5.12 Rewrite async_buffered.tml extract_line/extract_remaining with `Text`
-- [ ] 5.13 Run stream test suite — all tests pass
+- [x] 5.1 Replace byte-by-byte copies in readable_stream.tml rbuf_append_str/rbuf_read with `copy_nonoverlapping`
+- [ ] 5.2 Replace 10 offset constants in readable_stream.tml (206-228) with typed struct — BLOCKED: struct GEP codegen bug
+- [x] 5.3 Replace byte-by-byte copies in writable_stream.tml wbuf_append_str/wbuf_append_bytes/wbuf_drain with `copy_nonoverlapping`
+- [ ] 5.4 Replace writable_stream.tml offset constants with typed struct — BLOCKED: struct GEP codegen bug
+- [ ] 5.5 Refactor `ByteStream` to wrap `Buffer` — BLOCKED: needs Buffer prepend/drain ops
+- [ ] 5.6-5.7 ByteStream public API + pipe.tml — BLOCKED: depends on 5.5
+- [ ] 5.8-5.10 buffered.tml fixes — BLOCKED: depends on ByteStream refactor
+- [ ] 5.11-5.12 async_buffered.tml Buffer/Text — BLOCKED: needs Buffer prepend/drain ops
+- [x] 5.13 Run stream test suite — 33/33 pass
 
-## Phase 6: Async/IO — Event Loop + Timer Wheel (CRITICAL)
+## Phase 6: Async/IO — Event Loop + Timer Wheel (BLOCKED)
 
-- [ ] 6.1 Define `type IoSource { socket: I64, token: U32, interests: U32, state: I32, callback: I64, user_data: I64 }`
-- [ ] 6.2 Replace `el_la_*` system (event_loop.tml:38-88) with `List[I64]`
-- [ ] 6.3 Replace `sources: I64` with `List[IoSource]` + typed field access
-- [ ] 6.4 Replace `pending_queue`/`next_tick_queue` with `List[I64]`
-- [ ] 6.5 Remove `grow_sources()` — List auto-grows
-- [ ] 6.6 Define `type TimerEntry { deadline: I64, callback: I64, user_data: I64, next: I64 }`
-- [ ] 6.7 Replace timer_wheel.tml raw pointers (level0/level1/entries) with `List[TimerEntry]` + `List[I64]`
-- [ ] 6.8 Rewrite timer schedule/cancel/alloc/free/insert/fire with typed operations
-- [ ] 6.9 Remove `grow_entries()` — List auto-grows
-- [ ] 6.10 Run async test suite — all tests pass
+All items BLOCKED: `el_la_*` and IoSource patterns use I64 handles passed cross-thread via FFI.
+Replacing with `List[I64]` or typed structs requires changing the handle-based API throughout
+the async stack, and typed structs with List fields hit GEP codegen bugs.
 
-## Phase 7: Runtime — Multi-Threaded Executor (CRITICAL)
+- [ ] 6.1-6.10 — BLOCKED: needs codegen fix for struct-with-List fields
 
-- [ ] 7.1 Define `type Task { fn_ptr: I64, data: I64, id: I64 }`
-- [ ] 7.2 Define `type TaskQueue { tasks: List[Task], mutex: I64 }`
-- [ ] 7.3 Define `type SharedState { queue: TaskQueue, shutdown: AtomicI64, active: I64, ... }`
-- [ ] 7.4 Define `type WorkerContext { state: I64, shared: I64, id: I64, ... }`
-- [ ] 7.5 Replace 15 layout constants (multi_executor.tml:82-133) with typed structs
-- [ ] 7.6 Replace `tq_init/push/pop/len/destroy` (135-207) with `List[Task]` operations
-- [ ] 7.7 Replace `ss_init/destroy` (209-280) with struct initialization
-- [ ] 7.8 Replace worker loop `ptr_read` offset access (282-360) with struct field access
-- [ ] 7.9 Run runtime test suite — all tests pass
+## Phase 7: Runtime — Multi-Threaded Executor (BLOCKED)
 
-## Phase 8: Events + Observable (CRITICAL/HIGH)
+All items BLOCKED: SharedState/TaskQueue/WorkerContext use raw I64 handles passed to threads
+via `raw_thread_spawn(fn, shared_ptr)`. Typed structs with mutex inline would need codegen
+support for struct-to-pointer casts in FFI calls.
 
-- [ ] 8.1 Replace `la_*` listener array in events.tml (81-143) with `List[I64]`
-- [ ] 8.2 Replace HashMap internal iteration (events.tml:391-408, 517-533) with public API
-- [ ] 8.3 Define `type SubjectState { completed: Bool, has_error: Bool, next_id: I64 }`
-- [ ] 8.4 Replace `List[I64]`-as-struct in Subject/BehaviorSubject with typed structs
-- [ ] 8.5 Replace ReplaySubject ring buffer with `core::ringbuf::RingBuffer[I32]`
-- [ ] 8.6 Replace operator collect loops with iterator adapters
-- [ ] 8.7 Run observable test suite — all tests pass
+- [ ] 7.1-7.9 — BLOCKED: needs codegen fix for struct-with-mutex cross-thread
+
+## Phase 8: Events + Observable (BLOCKED)
+
+- [ ] 8.1-8.2 events.tml — BLOCKED: la_* uses same handle-based API as el_la_*
+- [ ] 8.3-8.5 observable — BLOCKED: comment documents codegen bugs (List[func(T)] stride bug, struct GEP bug)
+- [ ] 8.6 iterator adapters — BLOCKED: cross-module closures don't emit LLVM symbols
 
 ## Phase 9: Search, Crypto, UUID — Cleanup (HIGH)
 
 - [x] 9.1 Remove unnecessary `lowlevel { }` wrappers around `@extern` calls in bm25.tml (10 functions)
 - [x] 9.2 Remove unnecessary `lowlevel { }` wrappers around `@extern` calls in hnsw.tml (15 functions)
 - [ ] 9.3 Replace `make_evp_digest()` manual Buffer header writes (crypto/hash.tml:73-86) with Buffer API — needs Buffer internal API
-- [x] 9.4 Replace `Digest::to_hex()` (crypto/hash.tml) with `this.data.to_hex()`
+- [x] 9.4 Replace `Digest::to_hex()` (crypto/hash.tml) — use Buffer public helpers (buf_get_data, buf_read_byte_at, hex_digit_to_char)
 - [x] 9.5 Replace `Uuid::to_string()` (uuid.tml) with `Text` builder
-- [ ] 9.6 Run search + crypto + uuid test suites — all pass
+- [x] 9.6 Run search + crypto + uuid test suites — 25/25 crypto, 14/14 uuid pass
 
 ## Phase 10: Net — BufferView + AsyncUDP (CRITICAL/HIGH)
 
