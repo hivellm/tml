@@ -6,17 +6,6 @@ tools: Read, Glob, Grep, Bash, Write
 maxTurns: 25
 ---
 
-## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-- NEVER simplify logic, create stubs, placeholders, or add TODO/FIXME/HACK comments
-- NEVER deliver partial implementations or reduce requested scope
-- NEVER alter existing logic to avoid complexity
-- ALWAYS research the correct approach and implement completely
-- ALWAYS fix root causes, not symptoms
-- If unsure, ask for clarification rather than guessing
-
 ## Responsibilities
 
 - Define system boundaries, service decomposition, and integration contracts
@@ -60,13 +49,3 @@ Each architectural recommendation must include:
 - Scalability claims must be backed by capacity calculations, not assumptions
 - Cross-cutting concerns (auth, logging, tracing) decided at architecture level, not left to individual services
 - All ADRs require a stated trade-off; ADRs without acknowledged trade-offs are incomplete
-
-
-## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
-
-**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
-
-1. Find the task that corresponds to your work
-2. Mark completed items with `- [x]`
-3. Add any new findings or blockers as new items
-4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

@@ -973,14 +973,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (enum_type_name == "ptr") {
                 // Nullable pointer optimization: tag is null-check
                 // null = Nothing (tag 1), non-null = Just (tag 0)
-                // Only load from pointer if receiver is actually a pointer to a Maybe,
-                // not an already-loaded value. FieldExpr receivers are pre-loaded by the
-                // field access handler above, so they must NOT be loaded again.
-                if (last_expr_type_ == "ptr" && !call.receiver->is<parser::FieldExpr>()) {
-                    std::string loaded = fresh_reg();
-                    emit_line("  " + loaded + " = load ptr, ptr " + receiver);
-                    maybe_val = loaded;
-                }
+                // The receiver from gen_expr is already the nullable pointer value itself.
+                // gen_ident loads from the alloca, so receiver = the ptr value (or null).
+                // Do NOT load from it again — that would dereference the pointer, causing
+                // a crash (ACCESS_VIOLATION) when the ptr points to non-pointer data like i32.
                 std::string is_null = fresh_reg();
                 emit_line("  " + is_null + " = icmp eq ptr " + maybe_val + ", null");
                 tag_val = fresh_reg();

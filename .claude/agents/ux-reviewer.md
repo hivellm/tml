@@ -7,17 +7,6 @@ disallowedTools: Write, Edit, Bash
 maxTurns: 15
 ---
 
-## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-- NEVER simplify logic, create stubs, placeholders, or add TODO/FIXME/HACK comments
-- NEVER deliver partial implementations or reduce requested scope
-- NEVER alter existing logic to avoid complexity
-- ALWAYS research the correct approach and implement completely
-- ALWAYS fix root causes, not symptoms
-- If unsure, ask for clarification rather than guessing
-
 ## Responsibilities
 
 - Evaluate interfaces against Nielsen's 10 usability heuristics
@@ -52,13 +41,3 @@ maxTurns: 15
 - Every critical finding must include a concrete, implementable remediation
 - Validate findings against actual user task flows, not isolated components
 - Prioritize findings by user impact, not implementation effort
-
-
-## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
-
-**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
-
-1. Find the task that corresponds to your work
-2. Mark completed items with `- [x]`
-3. Add any new findings or blockers as new items
-4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

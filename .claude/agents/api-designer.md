@@ -6,17 +6,6 @@ tools: Read, Glob, Grep, Edit, Write
 maxTurns: 20
 ---
 
-## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-- NEVER simplify logic, create stubs, placeholders, or add TODO/FIXME/HACK comments
-- NEVER deliver partial implementations or reduce requested scope
-- NEVER alter existing logic to avoid complexity
-- ALWAYS research the correct approach and implement completely
-- ALWAYS fix root causes, not symptoms
-- If unsure, ask for clarification rather than guessing
-
 ## Responsibilities
 
 - Design REST or GraphQL APIs following industry conventions
@@ -51,13 +40,3 @@ maxTurns: 20
 - Sensitive data must never appear in URL path or query parameters
 - Pagination must be present on all list endpoints returning more than 20 items
 - Rate limit headers (`X-RateLimit-*`) must be returned on every response
-
-
-## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
-
-**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
-
-1. Find the task that corresponds to your work
-2. Mark completed items with `- [x]`
-3. Add any new findings or blockers as new items
-4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

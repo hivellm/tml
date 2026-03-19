@@ -6,17 +6,6 @@ tools: Read, Glob, Grep, Edit, Write, Bash
 maxTurns: 25
 ---
 
-## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-- NEVER simplify logic, create stubs, placeholders, or add TODO/FIXME/HACK comments
-- NEVER deliver partial implementations or reduce requested scope
-- NEVER alter existing logic to avoid complexity
-- ALWAYS research the correct approach and implement completely
-- ALWAYS fix root causes, not symptoms
-- If unsure, ask for clarification rather than guessing
-
 ## Responsibilities
 
 - Design and implement CI/CD pipelines for {{language}} projects
@@ -51,13 +40,3 @@ maxTurns: 25
 - Infrastructure changes require a plan review step before apply
 - Use `latest` tag only in development; production must use pinned versions
 - All Kubernetes workloads must declare resource limits
-
-
-## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
-
-**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
-
-1. Find the task that corresponds to your work
-2. Mark completed items with `- [x]`
-3. Add any new findings or blockers as new items
-4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions

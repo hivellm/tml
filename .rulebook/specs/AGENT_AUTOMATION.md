@@ -3,24 +3,6 @@
 
 **CRITICAL**: Mandatory workflow that AI agents MUST execute after EVERY implementation.
 
-## ⛔ ABSOLUTE PROHIBITION: No Shortcuts, Stubs, or Placeholders ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-ALL agents MUST:
-- **Research the correct approach** before implementing — read existing code, understand patterns
-- **Implement completely** — full functionality with all edge cases, never partial
-- **Fix root causes** — never patch symptoms to make things "appear to work"
-
-ALL agents are FORBIDDEN from:
-- Simplifying logic to deliver faster
-- Adding TODO/FIXME/HACK placeholders
-- Creating stubs or placeholder implementations
-- Altering existing logic to avoid complexity
-- Reducing requested scope
-- Skipping edge cases or error handling
-- Delivering partial implementations
-
 ## ⚠️ TOKEN OPTIMIZATION (MANDATORY FOR HAIKU)
 
 **Claude Haiku has limited context. Every token counts.**
@@ -142,6 +124,14 @@ rulebook task update <task-id> --status completed
 # Update any blocked/pending tasks
 rulebook task update <task-id> --status blocked --reason "explanation"
 ```
+
+**⚠️ CRITICAL: Follow the task sequence**
+
+When working through a `tasks.md` checklist:
+- Execute items in the EXACT order listed — top to bottom
+- NEVER skip ahead, reorder, or cherry-pick "easier" tasks
+- NEVER start Phase N+1 before Phase N is 100% complete
+- The task list is an ORDER, not a MENU
 
 ### Step 5: Update OpenSpec Tasks
 

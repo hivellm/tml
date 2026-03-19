@@ -1,6 +1,9 @@
 # Codegen Debugger Memory
 
 ## Index
+- [dyn-boxing-casting-fix.md](dyn-boxing-casting-fix.md) - ref dyn Behavior fat pointer type resolution: 7 bugs in type/cast/enum/store/alloca (2026-03-19, FIXED)
+- [when-pattern-binding-fix.md](when-pattern-binding-fix.md) - When-pattern enum payload bindings alias payload_ptr (fixes Maybe[mut ref T] dangling pointer, 2026-03-19, FIXED)
+- [nullable-maybe-double-load.md](nullable-maybe-double-load.md) - Nullable Maybe[ref T] double-load crash in method dispatch (2026-03-19, FIXED)
 - [dyn-behavior-codegen-fix.md](dyn-behavior-codegen-fix.md) - Full dyn Behavior codegen: fat pointers, vtables, vtable dispatch (2026-03-19, FIXED)
 - [fnptr-sret-mismatch-fix.md](fnptr-sret-mismatch-fix.md) - Fn ptr indirect calls missing sret for struct returns (2026-03-19, FIXED)
 - [fn-ptr-local-var-fix.md](fn-ptr-local-var-fix.md) - Function pointer in local variable indirect call fix (2026-03-17, FIXED)
@@ -16,6 +19,19 @@
 - [compiler-test-suite-issues.md](compiler-test-suite-issues.md) - Compiler test suite collision patterns
 
 ## Recent Fixes (2026-03-19)
+
+### When-Pattern Enum Payload Dangling Pointer -- FIXED
+- Bug: `Maybe[mut ref T]` methods (as_mut, get_mut etc.) returned ptr to local alloca → ACCESS_VIOLATION
+- Root cause: `when.cpp` enum payload bindings for primitives did load+copy to local alloca. `mut ref val` returned ptr to copy, which is stack-local and freed on return.
+- Fix: All 3 binding sites in when.cpp now alias payload_ptr directly (both struct AND primitive types). gen_ident loads through ptr for by-value access.
+- File: `compiler/src/codegen/llvm/control/when.cpp` (lines ~759, ~844, ~948)
+- Tests fixed: option_as_mut, shared_getmut, sync_getmut, array_get_mut
+
+### Nullable Maybe[ref T] Double-Load Crash -- FIXED
+- Bug: `arr.get(1).is_just()` crashed (ACCESS_VIOLATION) because codegen loaded through nullable ptr
+- Root cause: `method.cpp:973-983` did `load ptr, ptr %receiver` for nullable-ptr Maybe, but receiver was already the loaded nullable ptr value. The extra load dereferenced the pointer as if it pointed to another pointer.
+- Fix: Removed the extra load for `enum_type_name == "ptr"` case. The receiver from `gen_expr` is always the value, not an alloca pointer.
+- Tests fixed: core/array 20/20, core/slice 21/21, core/cell 27/27, core/iter 52/52, core/types 7/7
 
 ### Nested Generic Enum Monomorphization -- FIXED
 - Bug: `Poll[Outcome[I64, MyError]]` generated `%struct.Outcome__I32__I32` instead of `%struct.Outcome__I64__MyError`

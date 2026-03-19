@@ -386,7 +386,11 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     std::string result_type = "void"; // Default void, updated when an arm produces a value
     bool result_type_set = false;
     bool all_arms_terminate = true;
-    emit_line("  " + result_ptr + " = alloca i64"); // Use i64 to hold most types
+    // Use [4 x i64] (32 bytes) to accommodate fat pointers and other multi-word types.
+    // The result_ptr is treated as an opaque ptr — the actual type is tracked in result_type
+    // and used for loads/stores. 32 bytes handles: primitives, ptrs, fat ptrs ({ptr,ptr}),
+    // and small structs. When-expressions returning larger types are rare.
+    emit_line("  " + result_ptr + " = alloca [4 x i64]");
 
     // scrutinee_semantic already computed above for string detection
 
@@ -756,24 +760,12 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                       tuple_llvm_type + ", ptr " + payload_ptr + ", i32 0, i32 " +
                                       std::to_string(i));
 
-                            // For struct types, alias the payload pointer (value
-                            // is moved out of the enum).
-                            if (elem_type.starts_with("%struct.") || elem_type.starts_with("{")) {
-                                locals_[ident.name] =
-                                    VarInfo{elem_ptr, elem_type, elem_semantic_type, std::nullopt};
-                            } else {
-                                // Primitive type - load and store
-                                std::string elem_val = fresh_reg();
-                                emit_line("  " + elem_val + " = load " + elem_type + ", ptr " +
-                                          elem_ptr);
-
-                                std::string var_alloca = fresh_reg();
-                                emit_line("  " + var_alloca + " = alloca " + elem_type);
-                                emit_line("  store " + elem_type + " " + elem_val + ", ptr " +
-                                          var_alloca);
-                                locals_[ident.name] = VarInfo{var_alloca, elem_type,
-                                                              elem_semantic_type, std::nullopt};
-                            }
+                            // Alias the payload pointer so `ref val` / `mut ref val`
+                            // returns a pointer into the original struct (not a
+                            // dangling pointer to a local copy).  gen_ident loads
+                            // through the pointer for by-value access.
+                            locals_[ident.name] =
+                                VarInfo{elem_ptr, elem_type, elem_semantic_type, std::nullopt};
                         } else if (elem_pat->is<parser::WildcardPattern>()) {
                             // Wildcard _ - skip binding
                             continue;
@@ -853,20 +845,10 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         emit_line("  " + elem_ptr + " = getelementptr inbounds " + tuple_type +
                                   ", ptr " + payload_ptr + ", i32 0, i32 " + std::to_string(i));
 
-                        if (elem_type.starts_with("%struct.") || elem_type.starts_with("{")) {
-                            locals_[ident.name] =
-                                VarInfo{elem_ptr, elem_type, elem_semantic, std::nullopt};
-                        } else {
-                            std::string elem_val = fresh_reg();
-                            emit_line("  " + elem_val + " = load " + elem_type + ", ptr " +
-                                      elem_ptr);
-                            std::string var_alloca = fresh_reg();
-                            emit_line("  " + var_alloca + " = alloca " + elem_type);
-                            emit_line("  store " + elem_type + " " + elem_val + ", ptr " +
-                                      var_alloca);
-                            locals_[ident.name] =
-                                VarInfo{var_alloca, elem_type, elem_semantic, std::nullopt};
-                        }
+                        // Alias the payload pointer so `ref val` / `mut ref val`
+                        // returns a pointer into the original struct.
+                        locals_[ident.name] =
+                            VarInfo{elem_ptr, elem_type, elem_semantic, std::nullopt};
                     }
                 } else if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
                     // Simple ident pattern - original behavior (single field)
@@ -940,26 +922,16 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         }
                     }
 
-                    // For struct/tuple types, the variable is a pointer to the payload.
-                    // The binding aliases the scrutinee's payload — the value is
-                    // "moved" out of the Outcome/enum.  The arm-scope drop logic
-                    // will handle cleanup: if the binding is used as the arm result
-                    // it gets marked consumed (no drop); otherwise it gets dropped.
-                    if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
-                        locals_[ident.name] =
-                            VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
-                    } else {
-                        // For primitives, load from payload
-                        std::string payload = fresh_reg();
-                        emit_line("  " + payload + " = load " + bound_type + ", ptr " +
-                                  payload_ptr);
-
-                        std::string var_alloca = fresh_reg();
-                        emit_line("  " + var_alloca + " = alloca " + bound_type);
-                        emit_line("  store " + bound_type + " " + payload + ", ptr " + var_alloca);
-                        locals_[ident.name] =
-                            VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
-                    }
+                    // Bind the variable as a pointer to the payload location.
+                    // For struct/tuple types, this aliases the scrutinee's payload —
+                    // the value is "moved" out of the Outcome/enum.
+                    // For primitive types, this also aliases the payload pointer
+                    // so that `ref val` / `mut ref val` returns a pointer into
+                    // the original struct (not a dangling pointer to a local copy).
+                    // gen_ident will load through the pointer when the value is
+                    // used by value (e.g., val + 1).
+                    locals_[ident.name] =
+                        VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
                 }
             }
         }

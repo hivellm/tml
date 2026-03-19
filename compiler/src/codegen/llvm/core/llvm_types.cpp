@@ -273,6 +273,11 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
             return llvm_type_from_semantic(sem_type, true);
         }
     } else if (type.is<parser::RefType>()) {
+        // Check if inner type is dyn Behavior (fat pointer, not simple ptr)
+        const auto& ref_inner = type.as<parser::RefType>().inner;
+        if (ref_inner && ref_inner->is<parser::DynType>()) {
+            return llvm_type(*ref_inner);
+        }
         return "ptr";
     } else if (type.is<parser::PtrType>()) {
         return "ptr";
@@ -808,6 +813,16 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Return a placeholder (will cause error if actually used)
         return "i32";
     } else if (type->is<types::RefType>() || type->is<types::PtrType>()) {
+        // Check if the inner type is a dyn behavior type (fat pointer)
+        // ref dyn Behavior = { data_ptr, vtable_ptr } — NOT a simple ptr
+        if (type->is<types::RefType>()) {
+            auto inner = type->as<types::RefType>().inner;
+            if (inner && inner->is<types::DynBehaviorType>()) {
+                const auto& dyn = inner->as<types::DynBehaviorType>();
+                emit_dyn_type(dyn.behavior_name);
+                return "%dyn." + dyn.behavior_name;
+            }
+        }
         return "ptr";
     } else if (type->is<types::TupleType>()) {
         // Tuple types are anonymous structs in LLVM: { element1, element2, ... }

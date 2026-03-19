@@ -1388,8 +1388,12 @@ private:
     /// Emit a store, normalizing the value if it's a raw "0" to match the type.
     void emit_store(const std::string& type, const std::string& value, const std::string& ptr_reg) {
         std::string val = value;
-        if (val == "0" && type == "ptr")
+        if (val == "0" && type == "ptr") {
             val = "null";
+        } else if (val == "0" && (type.starts_with("%") || type.starts_with("{"))) {
+            // Struct/aggregate types cannot use integer literal 0 — use zeroinitializer
+            val = "zeroinitializer";
+        }
         emit_line("  store " + type + " " + val + ", ptr " + ptr_reg);
     }
 

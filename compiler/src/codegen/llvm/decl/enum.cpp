@@ -413,6 +413,10 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 }
                 return tuple_size > 0 ? tuple_size : 8;
             }
+            // Check if it's a dyn type (fat pointer: { data_ptr, vtable_ptr })
+            if (ty.starts_with("%dyn.")) {
+                return 16; // { ptr, ptr } = 2 * 8 bytes
+            }
             // Check if it's a struct type
             if (ty.starts_with("%struct.")) {
                 std::string struct_name = ty.substr(8); // Remove "%struct."

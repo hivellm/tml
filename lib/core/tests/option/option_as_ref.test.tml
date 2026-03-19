@@ -6,7 +6,6 @@ func test_maybe_as_ref_just() -> I32 {
     let x: Maybe[I32] = Just(42)
     let r: Maybe[ref I32] = x.as_ref()
     assert_true(r.is_just(), "as_ref on Just should be Just")
-    // NOTE: *r.unwrap() dereference blocked by Maybe[ref T] codegen bug
     return 0
 }
 

@@ -324,6 +324,50 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         }
     }
 
+    // Cast to dyn Behavior type: ptr -> %dyn.BehaviorName
+    // Creates a fat pointer { data_ptr, vtable_ptr } from a concrete reference
+    if (src_type == "ptr" && target_type.starts_with("%dyn.")) {
+        std::string behavior_name = target_type.substr(5); // Remove "%dyn."
+
+        // Determine the concrete type from the source expression's semantic type
+        std::string concrete_type_name;
+        auto src_semantic = infer_expr_type(*cast.expr);
+        if (src_semantic) {
+            // Unwrap ref types to get the concrete type
+            auto inner = src_semantic;
+            while (inner->is<types::RefType>()) {
+                inner = inner->as<types::RefType>().inner;
+            }
+            if (inner->is<types::NamedType>()) {
+                concrete_type_name = inner->as<types::NamedType>().name;
+            }
+        }
+
+        // If we couldn't infer the concrete type, try the current impl type
+        if (concrete_type_name.empty() && !current_impl_type_.empty()) {
+            concrete_type_name = current_impl_type_;
+        }
+
+        if (!concrete_type_name.empty()) {
+            std::string vtable_name = get_vtable(concrete_type_name, behavior_name);
+            if (vtable_name.empty()) {
+                // Try to emit the vtable if not yet emitted
+                vtable_name = "@vtable." + concrete_type_name + "." + behavior_name;
+            }
+
+            // Ensure dyn type is defined
+            emit_dyn_type(behavior_name);
+
+            // Build fat pointer: { data_ptr, vtable_ptr }
+            std::string ins1 = fresh_reg();
+            emit_line("  " + ins1 + " = insertvalue " + target_type + " undef, ptr " + src + ", 0");
+            emit_line("  " + result + " = insertvalue " + target_type + " " + ins1 + ", ptr " +
+                      vtable_name + ", 1");
+            last_expr_type_ = target_type;
+            return result;
+        }
+    }
+
     // Fallback: bitcast for same-size types
     emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
     last_expr_type_ = target_type;

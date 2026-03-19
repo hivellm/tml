@@ -77,8 +77,16 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + var_type);
         if (var_type != "{}") {
-            // Use "null" for pointer types, "0" for integer/struct types
-            std::string zero_val = (var_type == "ptr") ? "null" : "0";
+            // Use appropriate zero value for each type
+            std::string zero_val;
+            if (var_type == "ptr") {
+                zero_val = "null";
+            } else if (var_type.starts_with("%") || var_type.starts_with("{")) {
+                // Struct/aggregate types use zeroinitializer
+                zero_val = "zeroinitializer";
+            } else {
+                zero_val = "0";
+            }
             emit_line("  store " + var_type + " " + zero_val + ", ptr " + alloca_reg);
         }
 

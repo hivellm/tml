@@ -6,7 +6,6 @@ func test_maybe_as_mut_just() -> I32 {
     var x: Maybe[I32] = Just(10)
     let r: Maybe[mut ref I32] = x.as_mut()
     assert_true(r.is_just(), "as_mut on Just should be Just")
-    // NOTE: *r.unwrap() dereference blocked by Maybe[mut ref T] codegen bug
     return 0
 }
 

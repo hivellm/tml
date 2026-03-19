@@ -6,17 +6,6 @@ tools: Read, Glob, Grep, Edit, Write
 maxTurns: 15
 ---
 
-## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
-
-**Response time is NOT important. Only the QUALITY of the final result matters.**
-
-- NEVER simplify logic, create stubs, placeholders, or add TODO/FIXME/HACK comments
-- NEVER deliver partial implementations or reduce requested scope
-- NEVER alter existing logic to avoid complexity
-- ALWAYS research the correct approach and implement completely
-- ALWAYS fix root causes, not symptoms
-- If unsure, ask for clarification rather than guessing
-
 ## Responsibilities
 
 - Audit {{language}} codebase for hardcoded strings and replace with translation keys
@@ -51,13 +40,3 @@ maxTurns: 15
 - Do not hardcode locale-specific assumptions (date order, currency symbol position)
 - Images containing text must have locale-specific variants or use text overlays
 - Translation files must be valid JSON/YAML; CI must reject malformed files
-
-
-## ⛔ MANDATORY: Update tasks.md After Completing Work ⛔
-
-**After completing ANY task, you MUST update the relevant `tasks.md` file in `.rulebook/tasks/`.**
-
-1. Find the task that corresponds to your work
-2. Mark completed items with `- [x]`
-3. Add any new findings or blockers as new items
-4. This is NON-NEGOTIABLE — incomplete task tracking wastes time in future sessions
