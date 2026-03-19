@@ -23,6 +23,10 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                 return mir_primitive_to_llvm(t.kind);
 
             } else if constexpr (std::is_same_v<T, mir::MirPointerType>) {
+                // ref dyn Behavior -> fat pointer { ptr, ptr } (data + vtable)
+                if (t.pointee && std::holds_alternative<mir::MirDynType>(t.pointee->kind)) {
+                    return "{ ptr, ptr }";
+                }
                 return "ptr";
 
             } else if constexpr (std::is_same_v<T, mir::MirArrayType>) {
@@ -64,6 +68,10 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
             } else if constexpr (std::is_same_v<T, mir::MirFunctionType>) {
                 // Function types are fat pointers: { func_ptr, env_ptr }
                 // to support both plain function pointers and capturing closures
+                return "{ ptr, ptr }";
+
+            } else if constexpr (std::is_same_v<T, mir::MirDynType>) {
+                // Dyn trait objects are fat pointers: { data_ptr, vtable_ptr }
                 return "{ ptr, ptr }";
             } else {
                 // Should not be reached if all variant types are handled

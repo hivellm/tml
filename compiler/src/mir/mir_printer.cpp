@@ -299,6 +299,9 @@ auto MirPrinter::print_instruction(const InstructionData& inst) -> std::string {
                     out << i.captures[j].first << " = " << print_value(i.captures[j].second);
                 }
                 out << "]";
+            } else if constexpr (std::is_same_v<T, MakeDynObjectInst>) {
+                out << "make_dyn " << i.behavior_name << " for " << i.concrete_type
+                    << " data=" << print_value(i.data_ptr);
             }
         },
         inst.inst);

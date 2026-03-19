@@ -118,8 +118,10 @@ auto MirBuilder::convert_type(const parser::Type& type) -> MirTypePtr {
                 // Inferred type - should be resolved by type checker
                 return make_i32_type(); // Fallback
             } else if constexpr (std::is_same_v<T, parser::DynType>) {
-                // Trait object - pointer to vtable
-                return make_ptr_type();
+                // Trait object - fat pointer { data_ptr, vtable_ptr }
+                std::string name =
+                    t.behavior.segments.empty() ? std::string{} : t.behavior.segments.back();
+                return std::make_shared<MirType>(MirType{MirDynType{name, {}}});
             } else {
                 return make_unit_type();
             }
@@ -212,6 +214,14 @@ auto MirBuilder::convert_semantic_type(const types::TypePtr& type) -> MirTypePtr
                     type_args.push_back(convert_semantic_type(arg));
                 }
                 return make_struct_type(t.name, std::move(type_args));
+            } else if constexpr (std::is_same_v<T, types::DynBehaviorType>) {
+                // Dynamic trait object type: dyn Behavior -> fat pointer { ptr, ptr }
+                std::vector<MirTypePtr> type_args;
+                for (const auto& arg : t.type_args) {
+                    type_args.push_back(convert_semantic_type(arg));
+                }
+                return std::make_shared<MirType>(
+                    MirType{MirDynType{t.behavior_name, std::move(type_args)}});
             } else {
                 return make_unit_type();
             }

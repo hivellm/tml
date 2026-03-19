@@ -113,6 +113,13 @@ struct MirEnumType {
     std::vector<MirTypePtr> type_args; ///< Generic type arguments.
 };
 
+/// Dynamic trait object type variant: `dyn Behavior`.
+/// Represented as a fat pointer `{ ptr, ptr }` = `{ data_ptr, vtable_ptr }`.
+struct MirDynType {
+    std::string behavior_name;         ///< Behavior (trait) name.
+    std::vector<MirTypePtr> type_args; ///< Generic type arguments.
+};
+
 /// Function type variant.
 struct MirFunctionType {
     std::vector<MirTypePtr> params; ///< Parameter types.
@@ -129,7 +136,7 @@ struct MirVectorType {
 struct MirType {
     /// The type variant data.
     std::variant<MirPrimitiveType, MirPointerType, MirArrayType, MirSliceType, MirTupleType,
-                 MirStructType, MirEnumType, MirFunctionType, MirVectorType>
+                 MirStructType, MirEnumType, MirFunctionType, MirVectorType, MirDynType>
         kind;
 
     /// Returns true if this is a primitive type.
@@ -420,6 +427,12 @@ struct MethodCallInst {
     MirTypePtr return_type;
     std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
 
+    /// True when receiver is a dyn trait object (fat pointer).
+    /// The method call should be dispatched through the vtable.
+    bool is_dyn_dispatch = false;
+    /// Behavior name for dyn dispatch (e.g., "Greetable").
+    std::string dyn_behavior_name;
+
     /// Returns true if this call was devirtualized.
     [[nodiscard]] bool is_devirtualized() const {
         return devirt_info.has_value();
@@ -669,6 +682,17 @@ struct VectorInsertInst {
     MirTypePtr result_type; ///< Vector type
 };
 
+/// Construct a dyn trait object (fat pointer): result = { data_ptr, vtable_ptr }
+///
+/// Creates a fat pointer from a concrete type reference and a behavior (trait) name.
+/// The vtable is resolved at codegen time based on the concrete type and behavior.
+struct MakeDynObjectInst {
+    Value data_ptr;            ///< Pointer to the concrete data
+    std::string concrete_type; ///< Name of the concrete type (e.g., "Dog")
+    std::string behavior_name; ///< Name of the behavior (e.g., "Greetable")
+    MirTypePtr result_type;    ///< Fat pointer type: { ptr, ptr }
+};
+
 // All instruction types
 using Instruction =
     std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst, GetElementPtrInst,
@@ -679,7 +703,9 @@ using Instruction =
                  AtomicLoadInst, AtomicStoreInst, AtomicRMWInst, AtomicCmpXchgInst, FenceInst,
                  // SIMD vector instructions
                  VectorLoadInst, VectorStoreInst, VectorBinaryInst, VectorReductionInst,
-                 VectorSplatInst, VectorExtractInst, VectorInsertInst>;
+                 VectorSplatInst, VectorExtractInst, VectorInsertInst,
+                 // Dynamic dispatch
+                 MakeDynObjectInst>;
 
 // Instruction with result
 struct InstructionData {
@@ -900,6 +926,20 @@ struct ClassMetadata {
 // Module
 // ============================================================================
 
+/// Behavior (trait) definition metadata for vtable generation.
+struct BehaviorDef {
+    std::string name;                 ///< Behavior name (e.g., "Greetable").
+    std::vector<std::string> methods; ///< Ordered list of method names.
+};
+
+/// Impl block metadata for vtable generation.
+struct ImplDef {
+    std::string type_name;     ///< Concrete type (e.g., "Dog").
+    std::string behavior_name; ///< Behavior being implemented (e.g., "Greetable").
+    /// Maps method name -> MIR function name in the module.
+    std::unordered_map<std::string, std::string> method_functions;
+};
+
 struct Module {
     std::string name;
     std::vector<StructDef> structs;
@@ -908,6 +948,11 @@ struct Module {
 
     // Global constants
     std::unordered_map<std::string, Constant> constants;
+
+    // Behavior definitions (for vtable generation)
+    std::vector<BehaviorDef> behaviors;
+    // Impl blocks (for vtable generation)
+    std::vector<ImplDef> impls;
 
     // Class metadata for OOP optimization (keyed by class name)
     std::unordered_map<std::string, ClassMetadata> class_metadata;

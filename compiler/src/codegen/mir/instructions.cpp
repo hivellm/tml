@@ -370,6 +370,9 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::ClosureInitInst>) {
                 emit_closure_init_inst(i, result_reg, inst);
+
+            } else if constexpr (std::is_same_v<T, mir::MakeDynObjectInst>) {
+                emit_make_dyn_object_inst(i, result_reg, inst);
             }
         },
         inst.inst);

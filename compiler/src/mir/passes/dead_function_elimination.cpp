@@ -149,6 +149,14 @@ void DeadFunctionEliminationPass::mark_entry_points(const Module& module) {
         }
     }
 
+    // Mark functions referenced by vtables (impl blocks) as live
+    // These are called indirectly through dyn dispatch and must not be removed
+    for (const auto& impl : module.impls) {
+        for (const auto& [method_name, func_name] : impl.method_functions) {
+            live_functions_.insert(func_name);
+        }
+    }
+
     // If no entry points found, keep all functions (library mode)
     if (live_functions_.empty()) {
         for (const auto& func : module.functions) {
@@ -158,24 +166,24 @@ void DeadFunctionEliminationPass::mark_entry_points(const Module& module) {
 }
 
 void DeadFunctionEliminationPass::propagate_liveness() {
-    bool changed = true;
+    // Worklist algorithm: never iterate live_functions_ while inserting into it.
+    // Inserting into unordered_set during iteration is UB (rehash invalidates iterators).
+    std::vector<std::string> worklist(live_functions_.begin(), live_functions_.end());
 
-    while (changed) {
-        changed = false;
+    while (!worklist.empty()) {
+        std::string func_name = std::move(worklist.back());
+        worklist.pop_back();
 
-        for (const auto& live_func : live_functions_) {
-            auto it = call_graph_.find(live_func);
-            if (it == call_graph_.end()) {
-                continue;
-            }
+        auto it = call_graph_.find(func_name);
+        if (it == call_graph_.end()) {
+            continue;
+        }
 
-            for (const auto& callee : it->second) {
-                if (live_functions_.find(callee) == live_functions_.end()) {
-                    // Check if callee exists in the module
-                    if (call_graph_.find(callee) != call_graph_.end()) {
-                        live_functions_.insert(callee);
-                        changed = true;
-                    }
+        for (const auto& callee : it->second) {
+            if (live_functions_.find(callee) == live_functions_.end()) {
+                if (call_graph_.find(callee) != call_graph_.end()) {
+                    live_functions_.insert(callee);
+                    worklist.push_back(callee);
                 }
             }
         }

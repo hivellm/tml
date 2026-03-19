@@ -811,6 +811,8 @@ auto is_value_used(const Function& func, ValueId value) -> bool {
                                 return true;
                         }
                         return false;
+                    } else if constexpr (std::is_same_v<T, MakeDynObjectInst>) {
+                        return i.data_ptr.id == value;
                     } else {
                         return false;
                     }

@@ -285,6 +285,51 @@ auto HirMirBuilder::build_cast(const hir::HirCastExpr& cast) -> Value {
     MirTypePtr source_type = operand.type;
     MirTypePtr target_type = convert_type(cast.target_type);
 
+    // Check for dyn trait object cast: `ref T as ref dyn Behavior`
+    // The target_type in HIR semantic types would be RefType{inner: DynBehaviorType}
+    if (cast.target_type) {
+        // Check if target is `ref dyn Behavior`
+        if (auto* ref_type = std::get_if<types::RefType>(&cast.target_type->kind)) {
+            if (ref_type->inner) {
+                if (auto* dyn_type = std::get_if<types::DynBehaviorType>(&ref_type->inner->kind)) {
+                    // Extract concrete type name from the source expression type
+                    std::string concrete_type;
+                    auto src_sem_type = cast.expr->type();
+                    if (src_sem_type) {
+                        if (auto* src_ref = std::get_if<types::RefType>(&src_sem_type->kind)) {
+                            if (src_ref->inner) {
+                                if (auto* named =
+                                        std::get_if<types::NamedType>(&src_ref->inner->kind)) {
+                                    concrete_type = named->name;
+                                }
+                            }
+                        }
+                        // Also check if the source is directly a NamedType (non-ref)
+                        if (concrete_type.empty()) {
+                            if (auto* named = std::get_if<types::NamedType>(&src_sem_type->kind)) {
+                                concrete_type = named->name;
+                            }
+                        }
+                    }
+
+                    if (!concrete_type.empty()) {
+                        // Create MakeDynObjectInst
+                        MakeDynObjectInst inst;
+                        inst.data_ptr = operand;
+                        inst.concrete_type = concrete_type;
+                        inst.behavior_name = dyn_type->behavior_name;
+                        // Result type is the dyn fat pointer type
+                        auto dyn_mir_type = std::make_shared<MirType>(
+                            MirType{MirDynType{dyn_type->behavior_name, {}}});
+                        auto fat_ptr_type = make_pointer_type(dyn_mir_type, ref_type->is_mut);
+                        inst.result_type = fat_ptr_type;
+                        return emit(inst, fat_ptr_type, cast.span);
+                    }
+                }
+            }
+        }
+    }
+
     // Determine cast kind
     CastKind kind = CastKind::Bitcast; // Default
 

@@ -614,30 +614,38 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
-    if (receiver_type->is<DynBehaviorType>()) {
-        auto& dyn = receiver_type->as<DynBehaviorType>();
-        auto behavior_def = env_.lookup_behavior(dyn.behavior_name);
-        if (behavior_def) {
-            for (const auto& method : behavior_def->methods) {
-                if (method.name == call.method) {
-                    // Build substitution map from behavior's type params to dyn's type args
-                    // e.g., for dyn Processor[I32], map T -> I32
-                    if (!dyn.type_args.empty() && !behavior_def->type_params.empty()) {
-                        std::unordered_map<std::string, TypePtr> subs;
-                        for (size_t i = 0;
-                             i < behavior_def->type_params.size() && i < dyn.type_args.size();
-                             ++i) {
-                            subs[behavior_def->type_params[i]] = dyn.type_args[i];
+    // Handle dyn dispatch: check both direct DynBehaviorType and ref dyn Behavior
+    {
+        TypePtr dyn_check_type = receiver_type;
+        if (dyn_check_type->is<RefType>()) {
+            dyn_check_type = dyn_check_type->as<RefType>().inner;
+        }
+        if (dyn_check_type && dyn_check_type->is<DynBehaviorType>()) {
+            auto& dyn = dyn_check_type->as<DynBehaviorType>();
+            auto behavior_def = env_.lookup_behavior(dyn.behavior_name);
+            if (behavior_def) {
+                for (const auto& method : behavior_def->methods) {
+                    if (method.name == call.method) {
+                        // Build substitution map from behavior's type params to dyn's type args
+                        // e.g., for dyn Processor[I32], map T -> I32
+                        if (!dyn.type_args.empty() && !behavior_def->type_params.empty()) {
+                            std::unordered_map<std::string, TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < behavior_def->type_params.size() && i < dyn.type_args.size();
+                                 ++i) {
+                                subs[behavior_def->type_params[i]] = dyn.type_args[i];
+                            }
+                            // Substitute both return type and check parameter types
+                            auto return_type = substitute_type(method.return_type, subs);
+                            return return_type;
                         }
-                        // Substitute both return type and check parameter types
-                        auto return_type = substitute_type(method.return_type, subs);
-                        return return_type;
+                        return apply_type_args(method);
                     }
-                    return apply_type_args(method);
                 }
+                error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name +
+                          "'",
+                      call.receiver->span, "T079");
             }
-            error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
-                  call.receiver->span, "T079");
         }
     }
 

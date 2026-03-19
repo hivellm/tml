@@ -161,6 +161,46 @@ auto ThirMirBuilder::build_cast(const thir::ThirCastExpr& cast) -> Value {
     auto val = build_expr(cast.expr);
     auto result_type = convert_type(cast.type);
 
+    // Check for dyn trait object cast: `ref T as ref dyn Behavior`
+    if (cast.type) {
+        if (auto* ref_type = std::get_if<types::RefType>(&cast.type->kind)) {
+            if (ref_type->inner && ref_type->inner->is<types::DynBehaviorType>()) {
+                const auto& dyn = ref_type->inner->as<types::DynBehaviorType>();
+                // Extract concrete type name from the source expression's type
+                std::string concrete_type;
+                // The source expr's semantic type should be available via cast.expr->type()
+                // But we need to look at the MIR type or the semantic type
+                // For `ref d as ref dyn Greetable`, the source is ptr to Dog
+                // We get the concrete type from the semantic type if available
+                if (cast.target_type) {
+                    // cast.target_type is the FULL target type (ref dyn Behavior)
+                    // cast.expr carries the source expression
+                    // We need the concrete type from the source
+                }
+                // Try to get concrete type from the ThirExpr's type
+                auto source_type = cast.expr ? cast.expr->type() : nullptr;
+                if (source_type) {
+                    types::TypePtr unwrapped = source_type;
+                    if (unwrapped->is<types::RefType>()) {
+                        unwrapped = unwrapped->as<types::RefType>().inner;
+                    }
+                    if (unwrapped && unwrapped->is<types::NamedType>()) {
+                        concrete_type = unwrapped->as<types::NamedType>().name;
+                    }
+                }
+
+                if (!concrete_type.empty()) {
+                    MakeDynObjectInst inst;
+                    inst.data_ptr = val;
+                    inst.concrete_type = concrete_type;
+                    inst.behavior_name = dyn.behavior_name;
+                    inst.result_type = result_type;
+                    return emit(std::move(inst), result_type, cast.span);
+                }
+            }
+        }
+    }
+
     CastInst inst;
     inst.operand = val;
     inst.source_type = val.type;

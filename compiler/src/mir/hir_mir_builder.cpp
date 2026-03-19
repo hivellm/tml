@@ -53,9 +53,32 @@ void HirMirBuilder::build_declarations(const hir::HirModule& hir_module) {
         build_enum(e);
     }
 
+    // Collect behavior definitions for vtable generation
+    for (const auto& behavior : hir_module.behaviors) {
+        BehaviorDef bdef;
+        bdef.name = behavior.name;
+        for (const auto& method : behavior.methods) {
+            bdef.methods.push_back(method.name);
+        }
+        module_.behaviors.push_back(std::move(bdef));
+    }
+
     // Build impl blocks (adds methods)
     for (const auto& impl : hir_module.impls) {
         build_impl(impl);
+
+        // Collect impl metadata for vtable generation (only trait impls)
+        if (impl.behavior_name.has_value() && !impl.behavior_name->empty()) {
+            ImplDef idef;
+            idef.type_name = impl.type_name;
+            idef.behavior_name = *impl.behavior_name;
+            for (const auto& method : impl.methods) {
+                std::string func_name =
+                    method.mangled_name.empty() ? method.name : method.mangled_name;
+                idef.method_functions[method.name] = func_name;
+            }
+            module_.impls.push_back(std::move(idef));
+        }
     }
 
     // Build standalone functions
@@ -294,6 +317,16 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
     if (auto* iface_type = std::get_if<types::InterfaceType>(&type->kind)) {
         (void)iface_type;
         return make_ptr_type();
+    }
+
+    // Dynamic trait object types: dyn Behavior -> fat pointer { ptr, ptr }
+    if (auto* dyn_type = std::get_if<types::DynBehaviorType>(&type->kind)) {
+        std::vector<MirTypePtr> type_args;
+        for (const auto& arg : dyn_type->type_args) {
+            type_args.push_back(convert_type_impl(arg));
+        }
+        return std::make_shared<MirType>(
+            MirType{MirDynType{dyn_type->behavior_name, std::move(type_args)}});
     }
 
     // Default fallback

@@ -688,4 +688,121 @@ void MirCodegen::emit_closure_init_inst(const mir::ClosureInitInst& i,
     }
 }
 
+// ============================================================================
+// Vtable Emission for dyn Dispatch
+// ============================================================================
+
+void MirCodegen::emit_vtables(const mir::Module& module) {
+    // Build behavior_method_order_ from module behaviors
+    for (const auto& behavior : module.behaviors) {
+        if (behavior_method_order_.find(behavior.name) == behavior_method_order_.end()) {
+            behavior_method_order_[behavior.name] = behavior.methods;
+        }
+    }
+
+    // Build a function name lookup: maps mangled name -> true (for existence check)
+    std::unordered_set<std::string> available_functions;
+    for (const auto& func : module.functions) {
+        available_functions.insert(func.name);
+    }
+
+    // Emit vtables for each impl block that has a behavior
+    for (const auto& impl : module.impls) {
+        if (impl.behavior_name.empty())
+            continue;
+
+        std::string vtable_name = "@vtable." + impl.type_name + "." + impl.behavior_name;
+
+        // Skip if already emitted
+        if (emitted_vtables_.count(vtable_name))
+            continue;
+        emitted_vtables_.insert(vtable_name);
+
+        // Get method order for this behavior
+        auto bmo_it = behavior_method_order_.find(impl.behavior_name);
+        if (bmo_it == behavior_method_order_.end())
+            continue;
+
+        const auto& method_order = bmo_it->second;
+        if (method_order.empty())
+            continue;
+
+        // Build vtable type: { ptr, ptr, ... } (one ptr per method)
+        std::string vtable_type = "{ ";
+        for (size_t i = 0; i < method_order.size(); ++i) {
+            if (i > 0)
+                vtable_type += ", ";
+            vtable_type += "ptr";
+        }
+        vtable_type += " }";
+
+        // Build vtable value with function pointers
+        std::string vtable_value = "{ ";
+        bool all_found = true;
+        for (size_t i = 0; i < method_order.size(); ++i) {
+            if (i > 0)
+                vtable_value += ", ";
+
+            // Look up the function name for this method
+            auto mf_it = impl.method_functions.find(method_order[i]);
+            if (mf_it != impl.method_functions.end()) {
+                vtable_value += "ptr @" + quote_func_name(mf_it->second);
+            } else {
+                // Method not found in impl — this shouldn't happen for a valid program
+                all_found = false;
+                break;
+            }
+        }
+        vtable_value += " }";
+
+        if (!all_found)
+            continue;
+
+        // Emit the vtable global constant
+        // Use linkonce_odr so each CGU can have a copy (linker deduplicates)
+        std::string comdat_name = vtable_name.substr(1); // remove '@' prefix
+        emitln();
+        emitln("$" + comdat_name + " = comdat any");
+        emitln(vtable_name + " = linkonce_odr constant " + vtable_type + " " + vtable_value +
+               ", comdat");
+
+        // Register vtable
+        std::string key = impl.type_name + "::" + impl.behavior_name;
+        vtables_[key] = vtable_name;
+    }
+}
+
+// ============================================================================
+// MakeDynObject Instruction (fat pointer construction for dyn dispatch)
+// ============================================================================
+
+void MirCodegen::emit_make_dyn_object_inst(const mir::MakeDynObjectInst& i,
+                                           const std::string& result_reg,
+                                           const mir::InstructionData& inst) {
+    std::string data_ptr = get_value_reg(i.data_ptr);
+    std::string vtable_name = "@vtable." + i.concrete_type + "." + i.behavior_name;
+
+    // Emit the dyn type definition if not already emitted
+    if (emitted_dyn_types_.find(i.behavior_name) == emitted_dyn_types_.end()) {
+        emitted_dyn_types_.insert(i.behavior_name);
+        // The dyn type is always { ptr, ptr }, no separate named type needed
+    }
+
+    // Register the vtable for later emission
+    std::string vtable_key = i.concrete_type + "::" + i.behavior_name;
+    vtables_[vtable_key] = vtable_name;
+
+    // Construct the fat pointer: { data_ptr, vtable_ptr }
+    std::string tmp1 = new_temp();
+    emitln("    " + tmp1 + " = insertvalue { ptr, ptr } undef, ptr " + data_ptr + ", 0");
+    emitln("    " + result_reg + " = insertvalue { ptr, ptr } " + tmp1 + ", ptr " + vtable_name +
+           ", 1");
+
+    // Track the type for dyn dispatch resolution
+    if (inst.result != mir::INVALID_VALUE) {
+        value_types_[inst.result] = "{ ptr, ptr }";
+        value_dyn_behavior_[inst.result] = i.behavior_name;
+    }
+}
+
 } // namespace tml::codegen

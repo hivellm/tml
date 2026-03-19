@@ -77,6 +77,11 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     string_constants_.clear();
     value_string_contents_.clear();
     used_enum_types_.clear();
+    vtables_.clear();
+    behavior_method_order_.clear();
+    emitted_vtables_.clear();
+    emitted_dyn_types_.clear();
+    value_dyn_behavior_.clear();
 
     // First pass: collect string constants, enum types, and generic enum defs
     generic_enum_defs_.clear();
@@ -177,6 +182,9 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
             emit_function(func);
         }
     }
+
+    // Emit vtable constants for dyn dispatch
+    emit_vtables(module);
 
     // Emit entry point wrappers.
     // The user's `main` function is emitted as `tml_main` (see emit_function),
@@ -312,6 +320,9 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
             emit_function_declaration(func);
         }
     }
+
+    // Emit vtable constants for dyn dispatch (same as generate())
+    emit_vtables(module);
 
     // Emit entry point wrappers for the CGU that contains the `main` function.
     {

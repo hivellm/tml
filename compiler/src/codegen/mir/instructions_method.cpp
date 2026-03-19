@@ -347,6 +347,104 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         return;
     }
 
+    // ==========================================================================
+    // Dynamic dispatch through vtable (dyn Behavior)
+    // ==========================================================================
+    if (i.is_dyn_dispatch && !i.dyn_behavior_name.empty()) {
+        // The receiver is a fat pointer { data_ptr, vtable_ptr }
+        // We need to extract both, look up the method in the vtable, and call indirectly
+        std::string id = std::to_string(temp_counter_++);
+
+        // Determine the return type
+        mir::MirTypePtr ret_ptr = i.return_type;
+        if (!ret_ptr && inst.result != mir::INVALID_VALUE) {
+            ret_ptr = mir::make_ptr_type();
+        } else if (!ret_ptr) {
+            ret_ptr = mir::make_unit_type();
+        }
+        std::string ret_type = mir_type_to_llvm(ret_ptr);
+
+        // Spill the fat pointer to memory so we can GEP into it
+        std::string fat_ptr_alloca = "%dyn_fat." + id;
+        emitln("    " + fat_ptr_alloca + " = alloca { ptr, ptr }");
+        emitln("    store { ptr, ptr } " + receiver + ", ptr " + fat_ptr_alloca);
+
+        // Extract data_ptr (index 0)
+        std::string data_gep = "%dyn_data_gep." + id;
+        std::string data_ptr = "%dyn_data." + id;
+        emitln("    " + data_gep + " = getelementptr inbounds { ptr, ptr }, ptr " + fat_ptr_alloca +
+               ", i32 0, i32 0");
+        emitln("    " + data_ptr + " = load ptr, ptr " + data_gep);
+
+        // Extract vtable_ptr (index 1)
+        std::string vtable_gep = "%dyn_vtable_gep." + id;
+        std::string vtable_ptr = "%dyn_vtable." + id;
+        emitln("    " + vtable_gep + " = getelementptr inbounds { ptr, ptr }, ptr " +
+               fat_ptr_alloca + ", i32 0, i32 1");
+        emitln("    " + vtable_ptr + " = load ptr, ptr " + vtable_gep);
+
+        // Look up method index in behavior_method_order_
+        int method_idx = 0;
+        auto bmo_it = behavior_method_order_.find(i.dyn_behavior_name);
+        if (bmo_it != behavior_method_order_.end()) {
+            for (size_t mi = 0; mi < bmo_it->second.size(); ++mi) {
+                if (bmo_it->second[mi] == i.method_name) {
+                    method_idx = static_cast<int>(mi);
+                    break;
+                }
+            }
+        }
+
+        // Build vtable struct type
+        int num_methods = 1;
+        if (bmo_it != behavior_method_order_.end()) {
+            num_methods = static_cast<int>(bmo_it->second.size());
+        }
+        std::string vtable_type = "{ ";
+        for (int vi = 0; vi < num_methods; ++vi) {
+            if (vi > 0)
+                vtable_type += ", ";
+            vtable_type += "ptr";
+        }
+        vtable_type += " }";
+
+        // Load function pointer from vtable
+        std::string fn_gep = "%dyn_fn_gep." + id;
+        std::string fn_ptr = "%dyn_fn." + id;
+        emitln("    " + fn_gep + " = getelementptr inbounds " + vtable_type + ", ptr " +
+               vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
+        emitln("    " + fn_ptr + " = load ptr, ptr " + fn_gep);
+
+        // Build argument list: data_ptr as first arg (this/self), then regular args
+        std::string args_str = "ptr " + data_ptr;
+        for (size_t j = 0; j < i.args.size(); ++j) {
+            mir::MirTypePtr arg_ptr =
+                (j < i.arg_types.size() && i.arg_types[j]) ? i.arg_types[j] : i.args[j].type;
+            if (!arg_ptr) {
+                arg_ptr = mir::make_i32_type();
+            }
+            std::string arg_type = mir_type_to_llvm(arg_ptr);
+            if (arg_type == "void") {
+                arg_type = "{}";
+            }
+            std::string arg = get_value_reg(i.args[j]);
+            args_str += ", " + arg_type + " " + arg;
+        }
+
+        // Emit the indirect call
+        if (ret_type != "void" && !result_reg.empty()) {
+            emitln("    " + result_reg + " = call " + ret_type + " " + fn_ptr + "(" + args_str +
+                   ")");
+        } else {
+            emitln("    call void " + fn_ptr + "(" + args_str + ")");
+        }
+
+        if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
+            value_types_[inst.result] = ret_type;
+        }
+        return;
+    }
+
     // Normal method call path (non-inlined)
     mir::MirTypePtr ret_ptr = i.return_type;
     if (!ret_ptr && inst.result != mir::INVALID_VALUE) {

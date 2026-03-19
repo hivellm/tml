@@ -911,12 +911,19 @@ auto ThirLower::resolve_method(const hir::HirMethodCallExpr& call) -> ResolvedMe
         return resolved;
 
     // Check if receiver is a dyn behavior type (dynamic dispatch)
-    if (call.receiver_type->is<types::DynBehaviorType>()) {
-        resolved.is_virtual = true;
-        const auto& dyn = call.receiver_type->as<types::DynBehaviorType>();
-        resolved.behavior_name = dyn.behavior_name;
-        resolved.qualified_name = dyn.behavior_name + "::" + call.method_name;
-        return resolved;
+    // Handle both direct DynBehaviorType and ref dyn Behavior (RefType wrapping DynBehaviorType)
+    {
+        types::TypePtr dyn_check = call.receiver_type;
+        if (dyn_check->is<types::RefType>()) {
+            dyn_check = dyn_check->as<types::RefType>().inner;
+        }
+        if (dyn_check && dyn_check->is<types::DynBehaviorType>()) {
+            resolved.is_virtual = true;
+            const auto& dyn = dyn_check->as<types::DynBehaviorType>();
+            resolved.behavior_name = dyn.behavior_name;
+            resolved.qualified_name = dyn.behavior_name + "::" + call.method_name;
+            return resolved;
+        }
     }
 
     // Try to find the method as an inherent method first

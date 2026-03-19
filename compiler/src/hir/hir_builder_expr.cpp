@@ -472,6 +472,28 @@ auto HirBuilder::lower_method_call(const parser::MethodCallExpr& call) -> HirExp
         }
     }
 
+    // Handle dyn behavior method calls: ref dyn Behavior or dyn Behavior
+    if (return_type && return_type->is<types::PrimitiveType>() &&
+        return_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit) {
+        // Return type was not resolved — check for dyn dispatch
+        types::TypePtr dyn_check = receiver_type;
+        if (dyn_check && dyn_check->is<types::RefType>()) {
+            dyn_check = dyn_check->as<types::RefType>().inner;
+        }
+        if (dyn_check && dyn_check->is<types::DynBehaviorType>()) {
+            auto& dyn = dyn_check->as<types::DynBehaviorType>();
+            auto behavior_def = type_env_.lookup_behavior(dyn.behavior_name);
+            if (behavior_def) {
+                for (const auto& method : behavior_def->methods) {
+                    if (method.name == call.method) {
+                        return_type = type_env_.resolve(method.return_type);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     return make_hir_method_call(fresh_id(), std::move(receiver), call.method, std::move(type_args),
                                 std::move(args), receiver_type, return_type, call.span);
 }

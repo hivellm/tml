@@ -50,8 +50,31 @@ void ThirMirBuilder::build_declarations(const thir::ThirModule& thir_module) {
         build_enum(e);
     }
 
+    // Collect behavior definitions for vtable generation
+    for (const auto& behavior : thir_module.behaviors) {
+        BehaviorDef bdef;
+        bdef.name = behavior.name;
+        for (const auto& method : behavior.methods) {
+            bdef.methods.push_back(method.name);
+        }
+        module_.behaviors.push_back(std::move(bdef));
+    }
+
     for (const auto& impl : thir_module.impls) {
         build_impl(impl);
+
+        // Collect impl metadata for vtable generation (only trait impls)
+        if (impl.behavior_name.has_value() && !impl.behavior_name->empty()) {
+            ImplDef idef;
+            idef.type_name = impl.type_name;
+            idef.behavior_name = *impl.behavior_name;
+            for (const auto& method : impl.methods) {
+                std::string func_name =
+                    method.mangled_name.empty() ? method.name : method.mangled_name;
+                idef.method_functions[method.name] = func_name;
+            }
+            module_.impls.push_back(std::move(idef));
+        }
     }
 
     for (const auto& f : thir_module.functions) {
@@ -298,6 +321,17 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
     // impl Behavior types are opaque — lower to pointer (fat pointer in future)
     if (type->is<types::ImplBehaviorType>()) {
         return make_pointer_type(make_i8_type(), false);
+    }
+
+    // Dynamic trait object types: dyn Behavior -> fat pointer { ptr, ptr }
+    if (type->is<types::DynBehaviorType>()) {
+        const auto& dyn = type->as<types::DynBehaviorType>();
+        std::vector<MirTypePtr> type_args;
+        for (const auto& arg : dyn.type_args) {
+            type_args.push_back(convert_type(arg));
+        }
+        return std::make_shared<MirType>(
+            MirType{MirDynType{dyn.behavior_name, std::move(type_args)}});
     }
 
     return make_unit_type();
@@ -818,6 +852,36 @@ auto ThirMirBuilder::build_call(const thir::ThirCallExpr& call) -> Value {
 
 auto ThirMirBuilder::build_method_call(const thir::ThirMethodCallExpr& call) -> Value {
     auto receiver = build_expr(call.receiver);
+    auto result_type = convert_type(call.type);
+
+    // Handle dyn dispatch: emit MethodCallInst with dyn flags
+    if (call.resolved.is_virtual && call.resolved.behavior_name.has_value()) {
+        std::vector<Value> extra_args;
+        std::vector<MirTypePtr> extra_arg_types;
+        for (const auto& arg : call.args) {
+            auto val = build_expr(arg);
+            extra_args.push_back(val);
+            extra_arg_types.push_back(val.type);
+        }
+
+        MethodCallInst inst;
+        inst.receiver = receiver;
+        // Extract method name from qualified name (e.g., "Greetable::greet" -> "greet")
+        std::string method_name = call.resolved.qualified_name;
+        auto colon_pos = method_name.rfind("::");
+        if (colon_pos != std::string::npos) {
+            method_name = method_name.substr(colon_pos + 2);
+        }
+        inst.method_name = method_name;
+        inst.receiver_type = *call.resolved.behavior_name;
+        inst.args = std::move(extra_args);
+        inst.arg_types = std::move(extra_arg_types);
+        inst.return_type = result_type;
+        inst.is_dyn_dispatch = true;
+        inst.dyn_behavior_name = *call.resolved.behavior_name;
+        return emit(std::move(inst), result_type, call.span);
+    }
+
     std::vector<Value> args = {receiver};
     std::vector<MirTypePtr> arg_types = {receiver.type};
     for (const auto& arg : call.args) {
@@ -825,7 +889,6 @@ auto ThirMirBuilder::build_method_call(const thir::ThirMethodCallExpr& call) -> 
         args.push_back(val);
         arg_types.push_back(val.type);
     }
-    auto result_type = convert_type(call.type);
 
     CallInst inst;
     // Normalize :: to __ in method call names to match function definition mangling

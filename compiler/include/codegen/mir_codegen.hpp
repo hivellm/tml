@@ -141,6 +141,18 @@ private:
     // sret function tracking (func_name -> original return type as LLVM string)
     std::unordered_map<std::string, std::string> sret_functions_;
 
+    // Vtable tracking for dyn dispatch
+    // vtable key ("Type::Behavior") -> vtable global name ("@vtable.Type.Behavior")
+    std::unordered_map<std::string, std::string> vtables_;
+    // Behavior name -> ordered list of method names (for vtable slot indexing)
+    std::unordered_map<std::string, std::vector<std::string>> behavior_method_order_;
+    // Set of emitted vtable globals (to avoid duplicates)
+    std::set<std::string> emitted_vtables_;
+    // Set of emitted dyn type definitions (to avoid duplicates)
+    std::set<std::string> emitted_dyn_types_;
+    // ValueId -> semantic type for dyn dispatch tracking
+    std::unordered_map<mir::ValueId, std::string> value_dyn_behavior_;
+
     // Parameter name to (value_id, type) mapping for indirect calls
     std::unordered_map<std::string, std::pair<mir::ValueId, mir::MirTypePtr>> param_info_;
 
@@ -156,6 +168,7 @@ private:
     void emit_function_declaration(const mir::Function& func);
     void emit_main_wrapper(const mir::Module& module);
     void emit_test_entry_wrapper(const mir::Module& module);
+    void emit_vtables(const mir::Module& module);
     void emit_block(const mir::BasicBlock& block);
     void emit_instruction(const mir::InstructionData& inst);
     void emit_terminator(const mir::Terminator& term);
@@ -219,6 +232,8 @@ private:
     void emit_array_init_inst(const mir::ArrayInitInst& i, const std::string& result_reg);
     void emit_closure_init_inst(const mir::ClosureInitInst& i, const std::string& result_reg,
                                 const mir::InstructionData& inst);
+    void emit_make_dyn_object_inst(const mir::MakeDynObjectInst& i, const std::string& result_reg,
+                                   const mir::InstructionData& inst);
     void emit_atomic_load_inst(const mir::AtomicLoadInst& i, const std::string& result_reg,
                                const mir::InstructionData& inst);
     void emit_atomic_store_inst(const mir::AtomicStoreInst& i);

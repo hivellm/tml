@@ -479,6 +479,23 @@ auto HirMirBuilder::build_method_call(const hir::HirMethodCallExpr& call) -> Val
     inst.arg_types = std::move(arg_types);
     inst.return_type = return_type;
 
+    // Detect dyn dispatch: receiver_type is ref dyn Behavior or dyn Behavior
+    if (call.receiver_type) {
+        auto check_dyn = [&](const types::TypePtr& t) {
+            if (!t)
+                return;
+            if (auto* dyn_type = std::get_if<types::DynBehaviorType>(&t->kind)) {
+                inst.is_dyn_dispatch = true;
+                inst.dyn_behavior_name = dyn_type->behavior_name;
+            }
+        };
+        if (auto* ref_type = std::get_if<types::RefType>(&call.receiver_type->kind)) {
+            check_dyn(ref_type->inner);
+        } else {
+            check_dyn(call.receiver_type);
+        }
+    }
+
     return emit(inst, return_type, call.span);
 }
 

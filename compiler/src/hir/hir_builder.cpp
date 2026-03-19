@@ -829,6 +829,23 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
             }
         }
         return types::make_impl_behavior(behavior_name, std::move(type_args));
+    } else if (type.is<parser::DynType>()) {
+        const auto& dyn = type.as<parser::DynType>();
+        std::string behavior_name;
+        if (!dyn.behavior.segments.empty()) {
+            behavior_name = dyn.behavior.segments.back();
+        }
+        std::vector<types::TypePtr> type_args;
+        if (dyn.generics) {
+            for (const auto& arg : dyn.generics->args) {
+                if (arg.is_type()) {
+                    type_args.push_back(resolve_type(*arg.as_type()));
+                }
+            }
+        }
+        auto result = std::make_shared<types::Type>();
+        result->kind = types::DynBehaviorType{behavior_name, std::move(type_args), dyn.is_mut};
+        return result;
     }
 
     return types::make_unit();

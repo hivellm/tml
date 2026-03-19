@@ -113,6 +113,11 @@ auto Mem2RegPass::is_promotable(const Function& func, ValueId alloca_id, AllocaI
                                 return false;
                             }
                         }
+                    } else if constexpr (std::is_same_v<T, MakeDynObjectInst>) {
+                        // Address taken for dyn object construction - can't promote
+                        if (inner.data_ptr.id == alloca_id) {
+                            return false;
+                        }
                     }
 
                     return true; // Continue checking
