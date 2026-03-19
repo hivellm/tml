@@ -63,10 +63,12 @@
  *   4. mswsock.h — AcceptEx, GetAcceptExSockaddrs, TransmitFile
  */
 #define WIN32_LEAN_AND_MEAN
-#include <mswsock.h>
-#include <windows.h>
+// clang-format off
 #include <winsock2.h>
+#include <windows.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
+// clang-format on
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "mswsock.lib")
 
