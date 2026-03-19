@@ -1595,6 +1595,19 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     std::string ret_type =
         mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type) : "void";
 
+    // Determine if the return type requires sret convention.
+    // The SretConversionPass converts functions returning named struct types
+    // (and tuples with >2 elements) to use an sret pointer parameter.
+    // Indirect calls through fn pointers must match this convention.
+    bool needs_sret = false;
+    if (mir_func_type.return_type) {
+        if (std::holds_alternative<mir::MirStructType>(mir_func_type.return_type->kind)) {
+            needs_sret = true;
+        } else if (auto* tuple = std::get_if<mir::MirTupleType>(&mir_func_type.return_type->kind)) {
+            needs_sret = tuple->elements.size() > 2;
+        }
+    }
+
     // Extract function pointer and environment pointer from the fat pointer
     std::string fn_ptr = new_temp();
     std::string env_ptr = new_temp();
@@ -1607,6 +1620,14 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     for (size_t j = 0; j < i.args.size(); ++j) {
         arg_vals.push_back(get_value_reg(i.args[j]));
         arg_types.push_back(j < param_types.size() ? param_types[j] : "i64");
+    }
+
+    // If sret is needed, allocate a single sret slot before branching.
+    // Both thin and fat paths write to this slot; only one executes at runtime.
+    std::string sret_slot;
+    if (needs_sret) {
+        sret_slot = "%sret.slot." + std::to_string(spill_counter_++);
+        emitln("    " + sret_slot + " = alloca " + ret_type + ", align 8");
     }
 
     // Check if env is null to determine calling convention
@@ -1623,13 +1644,22 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     // Thin call path (no env — plain function pointer or non-capturing closure)
     emitln(label_thin + ":");
     std::string thin_args;
-    for (size_t j = 0; j < arg_vals.size(); ++j) {
-        if (j > 0)
+    if (needs_sret) {
+        // sret pointer is the first argument
+        thin_args = "ptr sret(" + ret_type + ") " + sret_slot;
+        for (size_t j = 0; j < arg_vals.size(); ++j) {
             thin_args += ", ";
-        thin_args += arg_types[j] + " " + arg_vals[j];
+            thin_args += arg_types[j] + " " + arg_vals[j];
+        }
+    } else {
+        for (size_t j = 0; j < arg_vals.size(); ++j) {
+            if (j > 0)
+                thin_args += ", ";
+            thin_args += arg_types[j] + " " + arg_vals[j];
+        }
     }
     std::string thin_result;
-    if (ret_type == "void") {
+    if (needs_sret || ret_type == "void") {
         emitln("    call void " + fn_ptr + "(" + thin_args + ")");
     } else {
         thin_result = new_temp();
@@ -1639,13 +1669,23 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
 
     // Fat call path (env non-null — capturing closure, env as first arg)
     emitln(label_fat + ":");
-    std::string fat_args = "ptr " + env_ptr;
-    for (size_t j = 0; j < arg_vals.size(); ++j) {
-        fat_args += ", ";
-        fat_args += arg_types[j] + " " + arg_vals[j];
+    std::string fat_args;
+    if (needs_sret) {
+        // sret pointer first, then env pointer, then user args
+        fat_args = "ptr sret(" + ret_type + ") " + sret_slot + ", ptr " + env_ptr;
+        for (size_t j = 0; j < arg_vals.size(); ++j) {
+            fat_args += ", ";
+            fat_args += arg_types[j] + " " + arg_vals[j];
+        }
+    } else {
+        fat_args = "ptr " + env_ptr;
+        for (size_t j = 0; j < arg_vals.size(); ++j) {
+            fat_args += ", ";
+            fat_args += arg_types[j] + " " + arg_vals[j];
+        }
     }
     std::string fat_result;
-    if (ret_type == "void") {
+    if (needs_sret || ret_type == "void") {
         emitln("    call void " + fn_ptr + "(" + fat_args + ")");
     } else {
         fat_result = new_temp();
@@ -1655,7 +1695,13 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
 
     // Merge block
     emitln(label_merge + ":");
-    if (ret_type != "void") {
+    if (needs_sret) {
+        // Load the result from the shared sret slot
+        emitln("    " + result_reg + " = load " + ret_type + ", ptr " + sret_slot + ", align 8");
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = ret_type;
+        }
+    } else if (ret_type != "void") {
         emitln("    " + result_reg + " = phi " + ret_type + " [ " + thin_result + ", %" +
                label_thin + " ], [ " + fat_result + ", %" + label_fat + " ]");
         if (inst.result != mir::INVALID_VALUE) {
