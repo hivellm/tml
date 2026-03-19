@@ -42,6 +42,7 @@
 
 use std::crypto::error::CryptoError
 use std::collections::Buffer
+use std::collections::buffer::{buf_get_data, buf_get_len, buf_read_byte_at, buf_mem_alloc, buf_write_byte_at, hex_digit_to_char}
 use core::str
 
 // ============================================================================
@@ -227,9 +228,28 @@ pub type Digest {
 
 impl Digest {
     /// Returns the digest as a hexadecimal string.
+    /// Uses Buffer's public helper functions instead of raw ptr_read/ptr_write.
     @allocates
     pub func to_hex(this) -> Str {
-        return this.data.to_hex()
+        let h: I64 = this.data.handle as I64
+        let data: *Unit = buf_get_data(h)
+        let len: I64 = buf_get_len(h)
+        if len == 0 {
+            let empty: *Unit = buf_mem_alloc(1)
+            buf_write_byte_at(empty, 0, 0)
+            return empty as Str
+        }
+        let hex_len: I64 = len * 2
+        let hex: *Unit = buf_mem_alloc(hex_len + 1)
+        var i: I64 = 0
+        loop (i < len) {
+            let byte_val: I32 = buf_read_byte_at(data, i)
+            buf_write_byte_at(hex, i * 2, hex_digit_to_char((byte_val / 16) % 16))
+            buf_write_byte_at(hex, i * 2 + 1, hex_digit_to_char(byte_val % 16))
+            i = i + 1
+        }
+        buf_write_byte_at(hex, hex_len, 0)
+        hex as Str
     }
 
     /// Returns the digest as a base64 string.
