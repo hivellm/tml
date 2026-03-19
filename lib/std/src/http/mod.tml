@@ -44,6 +44,7 @@ pub mod multipart
 pub mod parse
 pub mod dispatch
 pub mod worker
+pub mod iocp_worker
 pub mod app
 
 // ── Middleware & Framework ───────────────────────────────────

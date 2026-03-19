@@ -346,10 +346,126 @@ func find_slash(path: Str, from: I64, path_len: I64) -> I64 {
 // Insert Algorithm
 // ============================================================================
 
+/// Allocate a raw node (80 bytes zeroed) and write prefix + kind fields.
+/// Uses inline mem_alloc to avoid register clobbering from function calls.
+/// Returns node address as I64.
+func alloc_raw_node(prefix_i64: I64, kind: I64) -> I64 {
+    let pval: I64 = prefix_i64
+    let kval: I64 = kind
+    let mem: *Unit = lowlevel { mem_alloc(NODE_SIZE) }
+    let addr: I64 = mem as I64
+    zero_memory(addr, NODE_SIZE)
+    lowlevel { ptr_write[I64]((addr + OFF_PREFIX) as *I64, pval) }
+    lowlevel { ptr_write[I64]((addr + OFF_KIND) as *I64, kval) }
+    addr
+}
+
+/// Allocate a children array (zeroed) with INITIAL_CHILDREN_CAP entries.
+/// Returns array address as I64.
+func alloc_children_array() -> I64 {
+    let arr_size: I64 = INITIAL_CHILDREN_CAP * CHILD_ENTRY_SIZE
+    let mem: *Unit = lowlevel { mem_alloc(arr_size) }
+    let addr: I64 = mem as I64
+    zero_memory(addr, arr_size)
+    addr
+}
+
+/// Copy all node state (children, handler, param, wildcard, kind) from saved values
+/// into a target node. Does NOT set prefix — caller already did that via alloc_raw_node.
+func node_copy_state(target: I64, children_ptr: I64, children_count: I64, children_cap: I64,
+                     param_child: I64, wildcard_child: I64, handler: I64,
+                     param_name_i64: I64, kind: I64) {
+    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_PTR) as *I64, children_ptr) }
+    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_COUNT) as *I64, children_count) }
+    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_CAP) as *I64, children_cap) }
+    lowlevel { ptr_write[I64]((target + OFF_PARAM_CHILD) as *I64, param_child) }
+    lowlevel { ptr_write[I64]((target + OFF_WILDCARD_CHILD) as *I64, wildcard_child) }
+    lowlevel { ptr_write[I64]((target + OFF_HANDLER) as *I64, handler) }
+    lowlevel { ptr_write[I64]((target + OFF_PARAM_NAME) as *I64, param_name_i64) }
+    lowlevel { ptr_write[I64]((target + OFF_KIND) as *I64, kind) }
+}
+
+/// Write a child entry (key byte + node pointer) into a children array at a given index.
+func write_child_entry(arr: I64, index: I64, key_byte: I64, node_ptr: I64) {
+    let entry_base: I64 = arr + index * CHILD_ENTRY_SIZE
+    lowlevel { ptr_write[I64](entry_base as *I64, key_byte) }
+    lowlevel { ptr_write[I64]((entry_base + 8) as *I64, node_ptr) }
+}
+
+/// Reset a node to be a split point: set prefix, children, and clear handler/param/wildcard.
+func node_make_split_point(node: I64, prefix_i64: I64, children_arr: I64, children_count: I64) {
+    lowlevel { ptr_write[I64]((node + OFF_PREFIX) as *I64, prefix_i64) }
+    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_PTR) as *I64, children_arr) }
+    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_COUNT) as *I64, children_count) }
+    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_CAP) as *I64, INITIAL_CHILDREN_CAP as I64) }
+    lowlevel { ptr_write[I64]((node + OFF_HANDLER) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((node + OFF_PARAM_CHILD) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((node + OFF_WILDCARD_CHILD) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((node + OFF_PARAM_NAME) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((node + OFF_KIND) as *I64, NODE_STATIC as I64) }
+}
+
+/// Perform the radix tree split. Called when `common < child_len`.
+///
+/// Parameters are all saved as I64 to avoid register clobbering.
+/// - existing: the node being split (modified in-place)
+/// - common_prefix_i64: Str for the common prefix portion
+/// - child_suffix_i64: Str for the child's remaining suffix
+/// - child_suffix_byte: first byte of child suffix (as I64)
+/// - text_suffix_i64: Str for the new text's remaining suffix (0 if Case 2d)
+/// - text_suffix_byte: first byte of text suffix (as I64, 0 if Case 2d)
+/// - saved_*: all saved fields from the existing node
+/// - is_case_2d: true if new text IS the common prefix (no new child node needed)
+///
+/// Returns: the node where the handler should be set.
+///   Case 2d: returns existing (it's the handler node)
+///   Case 2c: returns the new child node for the text suffix
+func split_node(existing: I64,
+                common_prefix_i64: I64,
+                child_suffix_i64: I64,
+                child_suffix_byte: I64,
+                text_suffix_i64: I64,
+                text_suffix_byte: I64,
+                saved_children_ptr: I64,
+                saved_children_count: I64,
+                saved_children_cap: I64,
+                saved_param_child: I64,
+                saved_wildcard_child: I64,
+                saved_handler: I64,
+                saved_param_name_i64: I64,
+                saved_kind: I64,
+                is_case_2d: Bool) -> I64 {
+    // Allocate the child node that inherits the existing node's suffix + state.
+    let child_addr: I64 = alloc_raw_node(child_suffix_i64, saved_kind)
+    node_copy_state(child_addr, saved_children_ptr, saved_children_count, saved_children_cap,
+                    saved_param_child, saved_wildcard_child, saved_handler,
+                    saved_param_name_i64, saved_kind)
+
+    if is_case_2d {
+        // Case 2d: existing becomes the handler node with 1 child.
+        let split_arr: I64 = alloc_children_array()
+        write_child_entry(split_arr, 0, child_suffix_byte, child_addr)
+        node_make_split_point(existing, common_prefix_i64, split_arr, 1)
+        return existing
+    }
+
+    // Case 2c: create new node for the text suffix.
+    let new_addr: I64 = alloc_raw_node(text_suffix_i64, NODE_STATIC)
+    let new_children: I64 = alloc_children_array()
+    lowlevel { ptr_write[I64]((new_addr + OFF_CHILDREN_PTR) as *I64, new_children) }
+    lowlevel { ptr_write[I64]((new_addr + OFF_CHILDREN_CAP) as *I64, INITIAL_CHILDREN_CAP as I64) }
+
+    // Create children array for the split node (2 children).
+    let split_arr: I64 = alloc_children_array()
+    write_child_entry(split_arr, 0, child_suffix_byte, child_addr)
+    write_child_entry(split_arr, 1, text_suffix_byte, new_addr)
+    node_make_split_point(existing, common_prefix_i64, split_arr, 2)
+
+    return new_addr
+}
+
 /// Insert a static prefix into the radix tree. Returns the target node.
-/// Insert a static path segment into the tree.
-/// Uses character-by-character traversal (simple trie, no prefix splitting).
-/// This avoids the radix tree split corruption bug while maintaining O(path_len) lookup.
+/// Uses compressed radix tree with proper node splitting when prefixes diverge.
 func insert_static_child(parent: I64, text: Str) -> I64 {
     let text_len: I64 = str::len(text)
     if text_len == 0 { return parent }
@@ -380,12 +496,45 @@ func insert_static_child(parent: I64, text: Str) -> I64 {
         return insert_static_child(existing, suffix)
     }
 
-    // Case 2c: Need to split — WORKAROUND for memory corruption bug.
-    // Instead of splitting the existing node (which corrupts prefix pointers),
-    // we insert the new path as a separate child if first bytes differ after common.
-    // For now, fall back to inserting as separate entry (handled by linear scan in dispatch).
-    // This means the radix tree won't match this route, but the linear scan will.
-    return 0  // Signal to caller: radix tree can't handle this, use linear scan
+    // =========================================================================
+    // Case 2c/2d: common < child_len — need to split the existing node.
+    //
+    // Strategy: save ALL values to I64 locals BEFORE any allocations,
+    // then delegate to split_node() which has its own stack frame,
+    // isolating register pressure from the caller.
+    // =========================================================================
+
+    // Save all node fields as I64 BEFORE any allocation.
+    let saved_prefix_i64: I64 = child_prefix as I64
+    let saved_children_ptr: I64 = node_get_children_ptr(existing)
+    let saved_children_count: I64 = node_get_children_count(existing)
+    let saved_children_cap: I64 = node_get_children_cap(existing)
+    let saved_param_child: I64 = node_get_param_child(existing)
+    let saved_wildcard_child: I64 = node_get_wildcard_child(existing)
+    let saved_handler: I64 = node_get_handler(existing)
+    let saved_param_name_i64: I64 = node_get_param_name(existing) as I64
+    let saved_kind: I64 = node_get_kind(existing)
+
+    // Create substrings. Each str::substring allocates internally.
+    // Save each result as I64 immediately to protect against register clobbering.
+    let child_suffix_i64: I64 = str::substring(saved_prefix_i64 as Str, common, child_len) as I64
+    let child_suffix_byte: I64 = str::char_at(child_suffix_i64 as Str, 0) as I64
+    let common_prefix_i64: I64 = str::substring(saved_prefix_i64 as Str, 0, common) as I64
+
+    let is_case_2d: Bool = common == text_len
+    var text_suffix_i64: I64 = 0
+    var text_suffix_byte: I64 = 0
+    if not is_case_2d {
+        text_suffix_i64 = str::substring(text as I64 as Str, common, text_len) as I64
+        text_suffix_byte = str::char_at(text_suffix_i64 as Str, 0) as I64
+    }
+
+    // Delegate to split_node() — separate stack frame isolates register pressure.
+    return split_node(existing, common_prefix_i64, child_suffix_i64, child_suffix_byte,
+                      text_suffix_i64, text_suffix_byte,
+                      saved_children_ptr, saved_children_count, saved_children_cap,
+                      saved_param_child, saved_wildcard_child, saved_handler,
+                      saved_param_name_i64, saved_kind, is_case_2d)
 }
 
 /// Insert a route pattern into the tree rooted at `root`.
@@ -460,12 +609,7 @@ pub func insert(root: I64, path: Str, handler_id: I64) {
             // Build static prefix with leading '/'
             let segment: Str = str::substring(path, pos, seg_end)
             let static_text: Str = "/" + segment
-            let result: I64 = insert_static_child(current, static_text)
-            if result == 0 {
-                // Split needed but skipped (corruption workaround) — route will use linear scan
-                return
-            }
-            current = result
+            current = insert_static_child(current, static_text)
 
             pos = seg_end
         }

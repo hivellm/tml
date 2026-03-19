@@ -6,7 +6,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 ## Phase 1: Fix Critical Bugs — MOSTLY DONE
 
 - [x] 1.1 Fix routing — linear scan + radix tree for root (167K req/s)
-- [ ] 1.1b Fix radix tree split corruption — node prefix overwritten after split
+- [x] 1.1b Fix radix tree split corruption — proper split with saved locals + separate stack frames
 - [x] 1.2 Parse ALL headers in worker hot path (zero-copy nginx-style)
 - [x] 1.3 Fix Content-Length body reading — recv loop for large bodies
 - [x] 1.4 Fix pipelining — bodyless methods only (GET/HEAD safe)
@@ -31,7 +31,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 
 ## Phase 3: Enable Middleware & Hooks
 
-- [ ] 3.1 Fix Bool/i1 struct field codegen bug
+- [x] 3.1 Fix Bool/i1 struct field codegen bug — IncomingMessage.is_complete changed to I64
 - [ ] 3.2 Re-enable onRequest, preHandler, onSend, onResponse, onError hooks
 - [ ] 3.3 Re-enable middleware pipeline in app_dispatch
 - [ ] 3.4 Custom error handler support
@@ -42,6 +42,21 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [ ] 4.2 Fix event loop recv/send flow on Windows (WSAPoll + blocking send incompatibility)
 - [ ] 4.3 Proper body accumulation in event loop mode
 - [ ] 4.4 Multi-thread event loop with N pollers (Tokio model)
+
+## Phase 4b: IOCP — Windows High-Performance Async I/O
+
+- [x] 4b.1 Implement iocp.c runtime — tml_iocp_create/destroy, tml_iocp_associate
+- [x] 4b.2 Async WSARecv/WSASend via tml_iocp_recv/tml_iocp_send
+- [x] 4b.3 Completion dequeue via tml_iocp_wait (GetQueuedCompletionStatus)
+- [x] 4b.4 Custom sentinel posts via tml_iocp_post (graceful shutdown)
+- [x] 4b.5 IocpOperation alloc/free/accessor helpers (op_alloc, op_free, op_type, op_token, op_socket)
+- [x] 4b.6 AcceptEx support — tml_iocp_listen, tml_iocp_accept, tml_iocp_create_accept_socket, tml_iocp_update_accept_context
+- [x] 4b.7 Non-Windows stubs for cross-platform compilation
+- [x] 4b.8 Added iocp.c to compiler/CMakeLists.txt next to poll.c
+- [x] 4b.9 TML-side IOCP worker: iocp_worker.tml with app_listen_iocp
+- [x] 4b.10 IOCP integrated into App.listen_iocp() + linker fix (libtml_runtime.a + mswsock)
+- [ ] 4b.11 Fix IOCP pipeline stall with >100 connections (accept pool exhaustion)
+- [ ] 4b.12 Fix IOCP scaling >500 connections (slot allocation race)
 
 ## Phase 5: HTTP Client
 
@@ -62,6 +77,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 
 ## Performance (2026-03-18)
 
+### Thread Pool mode (app.listen)
 | Scenario | TML std::http | Node.js http | Ratio |
 |----------|--------------|-------------|-------|
 | 100c, no pipeline | 48K | 52K | 0.92x |
@@ -69,4 +85,14 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 | 100c, pipeline 100 | 169K | 94K | 1.80x |
 | 200c, pipeline 100 | 178K | ~94K | 1.89x |
 
-Codegen bugs fixed: 5 (extern declare, mul i32→i64, Unit call, kqueue, EWOULDBLOCK)
+### IOCP mode (app.listen_iocp) — NEW
+| Scenario | TML IOCP | Notes |
+|----------|----------|-------|
+| 100c, no pipeline | 60K | async I/O, no thread blocking |
+| 200c, no pipeline | 54K | scales with connections |
+| 10c, pipeline 2 | 63K | pipelining works |
+| 50c, pipeline 10 | 41K | some non-2xx (capacity) |
+
+IOCP bottlenecks remaining: accept pool exhaustion >100c, slot scan O(n), pipeline stall >100c
+
+Codegen bugs fixed: 7 (+Bool/i1 struct layout, +mut ref O3 dead store)

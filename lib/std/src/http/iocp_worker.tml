@@ -1,0 +1,666 @@
+//! IOCP-based HTTP server worker — Windows-native async I/O.
+//!
+//! Uses Windows I/O Completion Ports for maximum throughput:
+//!   - Create IOCP handle, associate listening socket
+//!   - Pre-issue N AcceptEx operations (async accept pool)
+//!   - N worker threads each call tml_iocp_wait() in a loop
+//!   - Completions: accept → recv → parse/dispatch → send → keepalive/close
+//!
+//! Connection state is managed in a flat array indexed by token.
+//! Each token maps to a connection slot with socket, recv/send buffers, and state.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
+use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
+                       app_has_header_end, app_has_connection_close, app_is_http11,
+                       app_is_bodyless_method, app_find_header_end_in_str,
+                       app_count_requests, app_request_offset,
+                       app_parse_headers, app_get_content_length,
+                       MAX_HEADERS, HEADER_ENTRY_SIZE}
+use std::http::worker::app_bind_listener
+
+// ════════════════════════════════════════════════════════════════════
+// IOCP FFI declarations
+// ════════════════════════════════════════════════════════════════════
+
+@extern("c") func tml_iocp_create(num_threads: I32) -> I64
+@extern("c") func tml_iocp_destroy(iocp: I64)
+@extern("c") func tml_iocp_associate(iocp: I64, socket: I64, token: I32) -> I32
+@extern("c") func tml_iocp_recv(socket: I64, buf: *Unit, len: I64, op: *Unit) -> I32
+@extern("c") func tml_iocp_send(socket: I64, buf: *Unit, len: I64, op: *Unit) -> I32
+@extern("c") func tml_iocp_wait(iocp: I64, token_out: *I32, op_out: *Unit, timeout_ms: I32) -> I64
+@extern("c") func tml_iocp_post(iocp: I64, token: I32, op: *Unit) -> I32
+@extern("c") func tml_iocp_op_alloc(socket: I64, op_type: I32, token: I32) -> I64
+@extern("c") func tml_iocp_op_free(op: *Unit)
+@extern("c") func tml_iocp_op_type(op: *Unit) -> I32
+@extern("c") func tml_iocp_op_token(op: *Unit) -> I32
+@extern("c") func tml_iocp_op_socket(op: *Unit) -> I64
+@extern("c") func tml_iocp_listen(port: I32, backlog: I32) -> I64
+@extern("c") func tml_iocp_accept(listen_socket: I64, accept_socket: I64, accept_buf: *Unit, buf_len: I64, op: *Unit) -> I32
+@extern("c") func tml_iocp_create_accept_socket() -> I64
+@extern("c") func tml_iocp_update_accept_context(listen_socket: I64, accept_socket: I64) -> I32
+
+// Existing FFI
+@extern("tml_sys_close") func sys_close(handle: I64) -> I64
+@extern("tml_thread_spawn") func raw_thread_spawn(f: *Unit, arg: *Unit, stack: U64) -> U64
+@extern("tml_thread_detach") func raw_thread_detach(h: U64) -> I32
+@extern("tml_thread_available_parallelism") func cpu_count() -> U32
+@extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
+@extern("tml_thread_sleep_ms") func thread_sleep_ms(ms: U64)
+
+// ════════════════════════════════════════════════════════════════════
+// Constants
+// ════════════════════════════════════════════════════════════════════
+
+const MAX_CONNS: I64 = 65536          // 64K concurrent connections
+const BUF_SIZE: I64 = 65536           // 64KB recv buffer per connection
+const ACCEPT_POOL_SIZE: I64 = 64      // pre-issue 64 accepts
+const ACCEPT_BUF_SIZE: I64 = 128      // AcceptEx buffer (addresses only, no data)
+const IPPROTO_TCP: I32 = 6
+const TCP_NODELAY: I32 = 1
+
+// IOCP operation types (must match C enum)
+const OP_TYPE_RECV: I32 = 0
+const OP_TYPE_SEND: I32 = 1
+const OP_TYPE_ACCEPT: I32 = 2
+
+// ════════════════════════════════════════════════════════════════════
+// Per-connection state (flat array indexed by token)
+// ════════════════════════════════════════════════════════════════════
+
+const CONN_SIZE: I64 = 80             // bytes per connection slot
+const CONN_SOCKET: I64 = 0            // I64 -- socket handle (0 = free)
+const CONN_RECV_BUF: I64 = 8          // I64 -- pointer to recv buffer (64KB)
+const CONN_RECV_USED: I64 = 16        // I64 -- bytes received so far
+const CONN_SEND_BUF: I64 = 24         // I64 -- pointer to response being sent (Str as I64)
+const CONN_SEND_LEN: I64 = 32         // I64 -- total bytes to send
+const CONN_SEND_SENT: I64 = 40        // I64 -- bytes sent so far
+const CONN_STATE: I64 = 48            // I64 -- 0=receiving, 1=sending
+const CONN_RECV_OP: I64 = 56          // I64 -- IocpOperation* for recv
+const CONN_SEND_OP: I64 = 64          // I64 -- IocpOperation* for send
+const CONN_FLAGS: I64 = 72            // I64 -- bit flags (keepalive, etc)
+
+// Connection flags
+const FLAG_KEEPALIVE: I64 = 1
+
+// ════════════════════════════════════════════════════════════════════
+// Shared IOCP state (passed to all worker threads)
+// ════════════════════════════════════════════════════════════════════
+
+const IOCP_SHARED_SIZE: I64 = 80
+const IOCP_OFF_HANDLE: I64 = 0        // IOCP handle
+const IOCP_OFF_LISTEN: I64 = 8        // listening socket
+const IOCP_OFF_TABLE: I64 = 16        // handler table
+const IOCP_OFF_COUNT: I64 = 24        // handler count
+const IOCP_OFF_TREES: I64 = 32        // radix tree roots
+const IOCP_OFF_CONNS: I64 = 40        // connection slot array
+const IOCP_OFF_MAX_CONNS: I64 = 48    // max connection slots
+const IOCP_OFF_BODY_LIMIT: I64 = 56   // body limit
+const IOCP_OFF_SHUTDOWN: I64 = 64     // shutdown flag
+const IOCP_OFF_ACCEPT_BUF: I64 = 72   // shared accept buffer ptr
+
+// Shared state for dispatch (same layout as worker.tml)
+const OFF_TABLE: I64 = 0
+const OFF_COUNT: I64 = 8
+const OFF_ROUTER: I64 = 16
+const OFF_MW_TABLE: I64 = 24
+const OFF_MW_COUNT: I64 = 32
+const OFF_SHUTDOWN: I64 = 40
+const OFF_READ_TIMEOUT: I64 = 48
+const OFF_WRITE_TIMEOUT: I64 = 56
+const OFF_IDLE_TIMEOUT: I64 = 64
+const OFF_BODY_LIMIT: I64 = 72
+const OFF_ON_REQUEST_TABLE: I64 = 80
+const OFF_ON_REQUEST_COUNT: I64 = 88
+const OFF_PRE_HANDLER_TABLE: I64 = 96
+const OFF_PRE_HANDLER_COUNT: I64 = 104
+const OFF_ON_SEND_TABLE: I64 = 112
+const OFF_ON_SEND_COUNT: I64 = 120
+const OFF_ON_RESPONSE_TABLE: I64 = 128
+const OFF_ON_RESPONSE_COUNT: I64 = 136
+const OFF_ON_ERROR_TABLE: I64 = 144
+const OFF_ON_ERROR_COUNT: I64 = 152
+const OFF_ERROR_HANDLER: I64 = 160
+
+const SHARED_SIZE: I64 = 336
+const ENTRY_SIZE: I64 = 24
+
+// ════════════════════════════════════════════════════════════════════
+// Connection slot helpers
+// ════════════════════════════════════════════════════════════════════
+
+func iocp_conn_get(conns: I64, idx: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((conns + idx * CONN_SIZE + field) as *I64) }
+}
+
+func iocp_conn_set(conns: I64, idx: I64, field: I64, val: I64) {
+    lowlevel { ptr_write[I64]((conns + idx * CONN_SIZE + field) as *I64, val) }
+}
+
+/// Find a free connection slot (CONN_SOCKET == 0 means free).
+/// Returns slot index, or -1 if no slots available.
+func find_free_slot(conns: I64, max_conns: I64) -> I64 {
+    var i: I64 = 0
+    loop (i < max_conns) {
+        if iocp_conn_get(conns, i, CONN_SOCKET) == 0 { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Close a connection: free buffers, free ops, close socket, mark slot free.
+func close_connection(conns: I64, token: I64) {
+    let socket: I64 = iocp_conn_get(conns, token, CONN_SOCKET)
+    if socket != 0 {
+        sys_close(socket)
+    }
+
+    let recv_buf: I64 = iocp_conn_get(conns, token, CONN_RECV_BUF)
+    if recv_buf != 0 {
+        lowlevel { mem_free(recv_buf as *Unit) }
+    }
+
+    let recv_op: I64 = iocp_conn_get(conns, token, CONN_RECV_OP)
+    if recv_op != 0 {
+        tml_iocp_op_free(recv_op as *Unit)
+    }
+
+    let send_op: I64 = iocp_conn_get(conns, token, CONN_SEND_OP)
+    if send_op != 0 {
+        tml_iocp_op_free(send_op as *Unit)
+    }
+
+    // Zero out the entire slot
+    var off: I64 = 0
+    loop (off < CONN_SIZE) {
+        lowlevel { ptr_write[I64]((conns + token * CONN_SIZE + off) as *I64, 0 as I64) }
+        off = off + 8
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Accept pool management
+// ════════════════════════════════════════════════════════════════════
+
+/// Issue a single AcceptEx operation into the accept pool.
+/// Allocates a fresh accept socket and accept buffer, then posts to IOCP.
+func issue_accept(iocp: I64, listen_socket: I64) {
+    let accept_socket: I64 = tml_iocp_create_accept_socket()
+    if accept_socket < 0 { return }
+
+    let accept_buf: I64 = lowlevel { mem_alloc(ACCEPT_BUF_SIZE) } as I64
+    // token -1 for accept ops (will be assigned a real token on completion)
+    let op: I64 = tml_iocp_op_alloc(accept_socket, OP_TYPE_ACCEPT, -1)
+    if op == 0 {
+        sys_close(accept_socket)
+        lowlevel { mem_free(accept_buf as *Unit) }
+        return
+    }
+    let result: I32 = tml_iocp_accept(listen_socket, accept_socket, accept_buf as *Unit, ACCEPT_BUF_SIZE, op as *Unit)
+    // AcceptEx returns 0 for ERROR_IO_PENDING (normal async), or non-zero on immediate error
+    if result < 0 {
+        tml_iocp_op_free(op as *Unit)
+        sys_close(accept_socket)
+        lowlevel { mem_free(accept_buf as *Unit) }
+    }
+}
+
+/// Pre-issue N AcceptEx operations to keep the accept pipeline full.
+func fill_accept_pool(iocp: I64, listen_socket: I64, count: I64) {
+    var i: I64 = 0
+    loop (i < count) {
+        issue_accept(iocp, listen_socket)
+        i = i + 1
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Request dispatch helper (reuses worker.tml dispatch_single logic)
+// ════════════════════════════════════════════════════════════════════
+
+/// Dispatch a single HTTP request from a recv buffer.
+/// Null-terminates in-place at buf+offset for zero-copy parsing.
+/// Returns the response string.
+func iocp_dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
+                          fd: I64, params_buf: I64, body_limit: I64) -> Str {
+    let req_buf: I64 = buf + offset
+    lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
+    let method: Str = app_zerocopy_method(req_buf, req_len)
+    let path: Str = app_zerocopy_path(req_buf, req_len)
+
+    let method_len: I64 = str::len(method)
+    var body: Str = ""
+    if method_len != 3 and not app_is_bodyless_method(method) {
+        body = app_extract_body(req_buf, req_len)
+        let body_len: I64 = str::len(body)
+        if body_limit > 0 and body_len > body_limit {
+            return RESPONSE_413
+        }
+    }
+
+    return app_dispatch(shared, method, path, body, fd, params_buf)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// IOCP Worker thread
+// ════════════════════════════════════════════════════════════════════
+
+/// Worker thread function for IOCP event loop.
+/// Each worker calls tml_iocp_wait() in a blocking loop, processing completions.
+/// Multiple workers on the same IOCP handle is the correct Windows pattern.
+pub func app_iocp_worker(arg: *Unit) {
+    let iocp_shared: I64 = arg as I64
+
+    let iocp: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_HANDLE) as *I64) }
+    let listen_socket: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_LISTEN) as *I64) }
+    let conns: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_CONNS) as *I64) }
+    let max_conns: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64) }
+    let body_limit: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_BODY_LIMIT) as *I64) }
+
+    // Build a dispatch-compatible shared state pointer from iocp_shared fields
+    let shared: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_TABLE) as *I64) }
+    // shared is actually the dispatch shared state block (allocated in app_listen_iocp)
+
+    // Per-worker allocations
+    let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+    let hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+    let hdrs_buf: I64 = lowlevel { mem_alloc(hdrs_buf_size) } as I64
+
+    // Token and op output slots for tml_iocp_wait
+    let token_slot: I64 = lowlevel { mem_alloc(8) } as I64
+    let op_slot: I64 = lowlevel { mem_alloc(8) } as I64
+
+    loop (true) {
+        // Check shutdown flag
+        let shutdown: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+
+        // Block until a completion arrives (-1 = infinite timeout)
+        let bytes: I64 = tml_iocp_wait(iocp, token_slot as *I32, op_slot as *Unit, -1)
+
+        // Read token and op from output slots
+        let token: I32 = lowlevel { ptr_read[I32](token_slot as *I32) }
+        let op: I64 = lowlevel { ptr_read[I64](op_slot as *I64) }
+
+        if bytes < 0 {
+            // Error or shutdown signal
+            if op != 0 { tml_iocp_op_free(op as *Unit) }
+            break
+        }
+
+        if op == 0 { continue }
+
+        let op_type: I32 = tml_iocp_op_type(op as *Unit)
+
+        // ── Accept completion ────────────────────────────────────
+        if op_type == OP_TYPE_ACCEPT {
+            let accept_socket: I64 = tml_iocp_op_socket(op as *Unit)
+            tml_iocp_op_free(op as *Unit)
+
+            if accept_socket <= 0 {
+                // Failed accept, replenish pool
+                issue_accept(iocp, listen_socket)
+                continue
+            }
+
+            // Update accept context so getpeername etc. work
+            tml_iocp_update_accept_context(listen_socket, accept_socket)
+
+            // Find a free connection slot
+            let slot: I64 = find_free_slot(conns, max_conns)
+            if slot < 0 {
+                // No slots available, reject connection
+                sys_close(accept_socket)
+                issue_accept(iocp, listen_socket)
+                continue
+            }
+
+            // Associate accepted socket with IOCP
+            let assoc_result: I32 = tml_iocp_associate(iocp, accept_socket, slot as I32)
+            if assoc_result != 0 {
+                sys_close(accept_socket)
+                issue_accept(iocp, listen_socket)
+                continue
+            }
+
+            // Set TCP_NODELAY for low latency
+            tml_sys_setsockopt(accept_socket, IPPROTO_TCP, TCP_NODELAY, 1)
+
+            // Initialize connection slot
+            let recv_buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+            iocp_conn_set(conns, slot, CONN_SOCKET, accept_socket)
+            iocp_conn_set(conns, slot, CONN_RECV_BUF, recv_buf)
+            iocp_conn_set(conns, slot, CONN_RECV_USED, 0)
+            iocp_conn_set(conns, slot, CONN_SEND_BUF, 0)
+            iocp_conn_set(conns, slot, CONN_SEND_LEN, 0)
+            iocp_conn_set(conns, slot, CONN_SEND_SENT, 0)
+            iocp_conn_set(conns, slot, CONN_STATE, 0)
+            iocp_conn_set(conns, slot, CONN_FLAGS, FLAG_KEEPALIVE)  // default keep-alive for HTTP/1.1
+
+            // Allocate recv and send operations for this connection
+            let recv_op: I64 = tml_iocp_op_alloc(accept_socket, OP_TYPE_RECV, slot as I32)
+            let send_op: I64 = tml_iocp_op_alloc(accept_socket, OP_TYPE_SEND, slot as I32)
+            iocp_conn_set(conns, slot, CONN_RECV_OP, recv_op)
+            iocp_conn_set(conns, slot, CONN_SEND_OP, send_op)
+
+            // Issue async recv to start reading the first request
+            tml_iocp_recv(accept_socket, recv_buf as *Unit, BUF_SIZE - 1, recv_op as *Unit)
+
+            // Replenish accept pool
+            issue_accept(iocp, listen_socket)
+            continue
+        }
+
+        // ── Recv completion ──────────────────────────────────────
+        if op_type == OP_TYPE_RECV {
+            let conn_token: I64 = token as I64
+            let socket: I64 = iocp_conn_get(conns, conn_token, CONN_SOCKET)
+
+            if bytes == 0 or socket == 0 {
+                // Connection closed by peer
+                close_connection(conns, conn_token)
+                continue
+            }
+
+            // Update recv used count
+            let prev_used: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_USED)
+            let new_used: I64 = prev_used + bytes
+            iocp_conn_set(conns, conn_token, CONN_RECV_USED, new_used)
+
+            let recv_buf: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_BUF)
+
+            // Check if we have a complete request (headers ending with \r\n\r\n)
+            if not app_has_header_end(recv_buf, new_used) {
+                // Need more data -- check if buffer is full
+                if new_used >= BUF_SIZE - 1 {
+                    // Headers too large, send 400 and close
+                    let err_response: Str = RESPONSE_400
+                    let err_len: I64 = str::len(err_response)
+                    let send_op: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_BUF, err_response as I64)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_LEN, err_len)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_SENT, 0)
+                    iocp_conn_set(conns, conn_token, CONN_STATE, 1)
+                    iocp_conn_set(conns, conn_token, CONN_FLAGS, 0)  // close after send
+                    tml_iocp_send(socket, err_response as *Unit, err_len, send_op as *Unit)
+                    continue
+                }
+                // Re-issue recv at current offset for more data
+                let recv_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_OP)
+                tml_iocp_recv(socket, (recv_buf + new_used) as *Unit, BUF_SIZE - new_used - 1, recv_op_ptr as *Unit)
+                continue
+            }
+
+            // ── Complete request received ────────────────────────
+            // Detect HTTP version and Connection header for keep-alive decision
+            let is_http11: Bool = app_is_http11(recv_buf, new_used)
+            var should_close: Bool = not is_http11
+            if not should_close {
+                should_close = app_has_connection_close(recv_buf, new_used)
+            }
+
+            if should_close {
+                iocp_conn_set(conns, conn_token, CONN_FLAGS, 0)
+            } else {
+                iocp_conn_set(conns, conn_token, CONN_FLAGS, FLAG_KEEPALIVE)
+            }
+
+            // ── Dispatch all complete requests in buffer ──────────
+            let num_pipelined: I64 = app_count_requests(recv_buf, new_used)
+
+            if num_pipelined <= 1 {
+                // Single request — fast path
+                let response: Str = iocp_dispatch_single(shared, recv_buf, 0, new_used, socket, params_buf, body_limit)
+                let resp_len: I64 = str::len(response)
+                let send_op: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
+                iocp_conn_set(conns, conn_token, CONN_SEND_BUF, response as I64)
+                iocp_conn_set(conns, conn_token, CONN_SEND_LEN, resp_len)
+                iocp_conn_set(conns, conn_token, CONN_SEND_SENT, 0)
+                iocp_conn_set(conns, conn_token, CONN_STATE, 1)
+                iocp_conn_set(conns, conn_token, CONN_RECV_USED, 0)
+                tml_iocp_send(socket, response as *Unit, resp_len, send_op as *Unit)
+            } else {
+                // Pipelined requests — batch dispatch, concatenate responses
+                let resp_buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+                var batch_pos: I64 = 0
+                var req_idx: I64 = 0
+                loop (req_idx < num_pipelined) {
+                    let req_start: I64 = app_request_offset(recv_buf, new_used, req_idx)
+                    if req_start < 0 { break }
+                    var req_end: I64 = new_used
+                    if req_idx + 1 < num_pipelined {
+                        let next: I64 = app_request_offset(recv_buf, new_used, req_idx + 1)
+                        if next > 0 { req_end = next }
+                    }
+                    let req_len: I64 = req_end - req_start
+                    let response: Str = iocp_dispatch_single(shared, recv_buf, req_start, req_len, socket, params_buf, body_limit)
+                    let resp_len: I64 = str::len(response)
+                    if batch_pos + resp_len <= BUF_SIZE {
+                        lowlevel { copy_nonoverlapping(response as *Unit, (resp_buf + batch_pos) as *Unit, resp_len) }
+                        batch_pos = batch_pos + resp_len
+                    }
+                    req_idx = req_idx + 1
+                }
+                if batch_pos > 0 {
+                    let send_op: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_BUF, resp_buf)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_LEN, batch_pos)
+                    iocp_conn_set(conns, conn_token, CONN_SEND_SENT, 0)
+                    iocp_conn_set(conns, conn_token, CONN_STATE, 1)
+                    iocp_conn_set(conns, conn_token, CONN_RECV_USED, 0)
+                    tml_iocp_send(socket, resp_buf as *Unit, batch_pos, send_op as *Unit)
+                } else {
+                    lowlevel { mem_free(resp_buf as *Unit) }
+                }
+            }
+            continue
+        }
+
+        // ── Send completion ──────────────────────────────────────
+        if op_type == OP_TYPE_SEND {
+            let conn_token: I64 = token as I64
+            let socket: I64 = iocp_conn_get(conns, conn_token, CONN_SOCKET)
+            if socket == 0 { continue }
+
+            let sent_so_far: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_SENT) + bytes
+            let send_len: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_LEN)
+            let remaining: I64 = send_len - sent_so_far
+
+            if remaining > 0 {
+                // Partial send -- continue sending from where we left off
+                iocp_conn_set(conns, conn_token, CONN_SEND_SENT, sent_so_far)
+                let send_buf: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_BUF)
+                let send_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
+                tml_iocp_send(socket, (send_buf + sent_so_far) as *Unit, remaining, send_op_ptr as *Unit)
+                continue
+            }
+
+            // Send complete
+            let flags: I64 = iocp_conn_get(conns, conn_token, CONN_FLAGS)
+            if flags == FLAG_KEEPALIVE {
+                // Keep-alive: reset for next request
+                iocp_conn_set(conns, conn_token, CONN_STATE, 0)
+                iocp_conn_set(conns, conn_token, CONN_RECV_USED, 0)
+                iocp_conn_set(conns, conn_token, CONN_SEND_BUF, 0)
+                iocp_conn_set(conns, conn_token, CONN_SEND_LEN, 0)
+                iocp_conn_set(conns, conn_token, CONN_SEND_SENT, 0)
+
+                // Re-issue recv for next request
+                let recv_buf: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_BUF)
+                let recv_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_OP)
+                tml_iocp_recv(socket, recv_buf as *Unit, BUF_SIZE - 1, recv_op_ptr as *Unit)
+            } else {
+                // Connection: close -- tear down
+                close_connection(conns, conn_token)
+            }
+            continue
+        }
+
+        // Unknown op type -- free the op and continue
+        if op != 0 { tml_iocp_op_free(op as *Unit) }
+    }
+
+    // Cleanup per-worker allocations
+    lowlevel { mem_free(params_buf as *Unit) }
+    lowlevel { mem_free(hdrs_buf as *Unit) }
+    lowlevel { mem_free(token_slot as *Unit) }
+    lowlevel { mem_free(op_slot as *Unit) }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// IOCP Listen — main entry point
+// ════════════════════════════════════════════════════════════════════
+
+/// Start an IOCP-based HTTP server on the given port.
+/// This is the highest-throughput option on Windows.
+/// Creates an IOCP handle, pre-issues AcceptEx operations,
+/// and spawns N worker threads that process completions.
+pub func app_listen_iocp(
+    table: I64, count: I64, trees: I64,
+    mw_table: I64, mw_count: I64,
+    on_request_table: I64, on_request_count: I64,
+    pre_handler_table: I64, pre_handler_count: I64,
+    on_send_table: I64, on_send_count: I64,
+    on_response_table: I64, on_response_count: I64,
+    on_error_table: I64, on_error_count: I64,
+    error_handler: I64,
+    read_timeout: I64, write_timeout: I64, idle_timeout: I64,
+    body_limit: I64, port: I64
+) {
+    let num_workers: I64 = cpu_count() as I64
+    if num_workers < 1 { return }
+
+    println("TML HTTP Server (IOCP)")
+    println("  Port:       " + port.to_string())
+    println("  Workers:    " + num_workers.to_string() + " (IOCP, async I/O)")
+    println("  Max Conns:  " + MAX_CONNS.to_string())
+    println("  Accept Pool:" + ACCEPT_POOL_SIZE.to_string())
+    println("  Keep-Alive: yes")
+    println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
+    println("  Middleware: " + mw_count.to_string())
+    println("  Routes:     " + count.to_string())
+    println("  Hooks:      onRequest=" + on_request_count.to_string() +
+            " preHandler=" + pre_handler_count.to_string() +
+            " onSend=" + on_send_count.to_string() +
+            " onResponse=" + on_response_count.to_string() +
+            " onError=" + on_error_count.to_string())
+    println("")
+
+    var i: I64 = 0
+    loop (i < count) {
+        let offset: I64 = i * ENTRY_SIZE
+        let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
+        let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
+        println("  " + m + "\t" + p)
+        i = i + 1
+    }
+    println("")
+
+    // ── Create IOCP handle ───────────────────────────────────────
+    let iocp: I64 = tml_iocp_create(num_workers as I32)
+    if iocp == 0 {
+        println("ERROR: could not create IOCP handle")
+        return
+    }
+
+    // ── Bind and listen ──────────────────────────────────────────
+    let listener: I64 = tml_iocp_listen(port as I32, 8192)
+    if listener < 0 {
+        println("ERROR: could not bind to port " + port.to_string())
+        tml_iocp_destroy(iocp)
+        return
+    }
+
+    // Associate listening socket with IOCP (token -1 for listener)
+    let assoc: I32 = tml_iocp_associate(iocp, listener, -1)
+    if assoc != 0 {
+        println("ERROR: could not associate listener with IOCP")
+        sys_close(listener)
+        tml_iocp_destroy(iocp)
+        return
+    }
+
+    println("Listening on http://localhost:" + port.to_string())
+
+    // ── Allocate dispatch shared state (same layout as worker.tml) ──
+    let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
+    var z: I64 = 0
+    loop (z < SHARED_SIZE) {
+        lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
+        z = z + 1
+    }
+
+    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
+    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_BODY_LIMIT) as *I64, body_limit) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64, on_request_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64, on_request_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64, pre_handler_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64, pre_handler_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_TABLE) as *I64, on_send_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_COUNT) as *I64, on_send_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64, on_response_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64, on_response_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_TABLE) as *I64, on_error_table) }
+    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
+    lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
+
+    // ── Allocate connection slot array ────────────────────────────
+    let conns_size: I64 = MAX_CONNS * CONN_SIZE
+    let conns: I64 = lowlevel { mem_alloc(conns_size) } as I64
+    // Zero all slots (CONN_SOCKET == 0 means free)
+    var cz: I64 = 0
+    loop (cz < conns_size) {
+        lowlevel { ptr_write[U8]((conns + cz) as *U8, 0 as U8) }
+        cz = cz + 1
+    }
+
+    // ── Build IOCP shared state block ────────────────────────────
+    let iocp_shared: I64 = lowlevel { mem_alloc(IOCP_SHARED_SIZE) } as I64
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_HANDLE) as *I64, iocp) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_LISTEN) as *I64, listener) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_TABLE) as *I64, shared) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_COUNT) as *I64, count) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_TREES) as *I64, trees) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_CONNS) as *I64, conns) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64, MAX_CONNS) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_BODY_LIMIT) as *I64, body_limit) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64, 0 as I64) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_ACCEPT_BUF) as *I64, 0 as I64) }
+
+    // ── Pre-issue accept pool ────────────────────────────────────
+    fill_accept_pool(iocp, listener, ACCEPT_POOL_SIZE)
+
+    // ── Spawn worker threads ─────────────────────────────────────
+    var w: I64 = 0
+    loop (w < num_workers) {
+        let h: U64 = raw_thread_spawn(app_iocp_worker as *Unit, iocp_shared as *Unit, 0 as U64)
+        if h != 0 as U64 {
+            raw_thread_detach(h)
+        }
+        w = w + 1
+    }
+
+    // ── Main thread blocks (IOCP workers handle everything) ──────
+    // Unlike the thread-pool model, IOCP doesn't need an accept loop.
+    // All accept/recv/send is handled by the IOCP completion port.
+    // Block until shutdown signal.
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+        // Sleep to avoid busy-wait (1 second poll)
+        thread_sleep_ms(1000 as U64)
+    }
+
+    // Cleanup
+    sys_close(listener)
+    tml_iocp_destroy(iocp)
+}

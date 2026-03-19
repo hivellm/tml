@@ -73,6 +73,7 @@ pub func main() -> I32 {
     app.get("/page", handle_html as I64)
     app.get("/text", handle_text as I64)
 
-    app.listen(3000)
+    // app.listen_iocp(3000)   // IOCP mode (Windows, async I/O — 60K req/s)
+    app.listen(3000)            // Thread pool mode (default — 169K req/s with pipelining)
     return 0
 }

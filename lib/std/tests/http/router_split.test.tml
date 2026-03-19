@@ -1,0 +1,146 @@
+// Tests for radix tree node splitting in std::http::router.
+// Exercises Case 2c (prefix divergence) and Case 2d (text is prefix of existing).
+use test::{assert, assert_eq}
+use std::http::router::{Router, RouteMatch}
+
+/// Case 2d: insert long route then short prefix of it.
+@test
+func test_split_short_prefix_of_long() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users/list", 1)
+    router.on("GET", "/users", 2)
+
+    let m1 = router.find("GET", "/users/list")
+    assert(m1.found, "should find /users/list after split")
+    assert_eq(m1.handler_id, 1, "/users/list handler")
+
+    let m2 = router.find("GET", "/users")
+    assert(m2.found, "should find /users after split")
+    assert_eq(m2.handler_id, 2, "/users handler")
+
+    router.destroy()
+    return 0
+}
+
+/// Case 2c: Two routes sharing a common prefix that diverges.
+/// "/users" and "/us" share "/us" then diverge ("ers" vs end-of-string).
+/// Actually this is Case 2d since "/us" is a prefix of "/users".
+/// Real Case 2c: "/users" and "/uploads" share "/u" then diverge.
+@test
+func test_split_diverging_prefix() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/users", 1)
+    router.on("GET", "/uploads", 2)
+
+    let m1 = router.find("GET", "/users")
+    assert(m1.found, "should find /users")
+    assert_eq(m1.handler_id, 1, "/users handler")
+
+    let m2 = router.find("GET", "/uploads")
+    assert(m2.found, "should find /uploads")
+    assert_eq(m2.handler_id, 2, "/uploads handler")
+
+    router.destroy()
+    return 0
+}
+
+/// Typical production scenario: root, health, users/:id, text, api/echo.
+@test
+func test_split_production_routes() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/", 10)
+    router.on("GET", "/health", 11)
+    router.on("GET", "/users/:id", 12)
+    router.on("GET", "/text", 13)
+    router.on("GET", "/api/echo", 14)
+
+    let m0 = router.find("GET", "/")
+    assert(m0.found, "should find /")
+    assert_eq(m0.handler_id, 10, "/ handler")
+
+    let m1 = router.find("GET", "/health")
+    assert(m1.found, "should find /health")
+    assert_eq(m1.handler_id, 11, "/health handler")
+
+    let m2 = router.find("GET", "/users/42")
+    assert(m2.found, "should find /users/42")
+    assert_eq(m2.handler_id, 12, "/users/:id handler")
+
+    let m3 = router.find("GET", "/text")
+    assert(m3.found, "should find /text")
+    assert_eq(m3.handler_id, 13, "/text handler")
+
+    let m4 = router.find("GET", "/api/echo")
+    assert(m4.found, "should find /api/echo")
+    assert_eq(m4.handler_id, 14, "/api/echo handler")
+
+    router.destroy()
+    return 0
+}
+
+/// Routes that share longer common prefixes with divergence deep in.
+@test
+func test_split_long_common_prefix() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/applications", 1)
+    router.on("GET", "/apply", 2)
+
+    let m1 = router.find("GET", "/applications")
+    assert(m1.found, "should find /applications")
+    assert_eq(m1.handler_id, 1, "/applications handler")
+
+    let m2 = router.find("GET", "/apply")
+    assert(m2.found, "should find /apply")
+    assert_eq(m2.handler_id, 2, "/apply handler")
+
+    // Verify unrelated routes still not found
+    let m3 = router.find("GET", "/app")
+    assert(not m3.found, "/app should not match")
+
+    router.destroy()
+    return 0
+}
+
+/// Reverse insertion order: short first, then longer that extends it.
+/// This tests Case 2b (recurse), not split — but ensures splits don't break it.
+@test
+func test_split_reverse_insert_order() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/us", 1)
+    router.on("GET", "/users", 2)
+
+    let m1 = router.find("GET", "/us")
+    assert(m1.found, "should find /us")
+    assert_eq(m1.handler_id, 1, "/us handler")
+
+    let m2 = router.find("GET", "/users")
+    assert(m2.found, "should find /users")
+    assert_eq(m2.handler_id, 2, "/users handler")
+
+    router.destroy()
+    return 0
+}
+
+/// Three-way split: routes sharing same first chars but diverging at different points.
+@test
+func test_split_three_routes_same_prefix() -> I32 {
+    let router = Router::new()
+    router.on("GET", "/test", 1)
+    router.on("GET", "/team", 2)
+    router.on("GET", "/temp", 3)
+
+    let m1 = router.find("GET", "/test")
+    assert(m1.found, "should find /test")
+    assert_eq(m1.handler_id, 1, "/test handler")
+
+    let m2 = router.find("GET", "/team")
+    assert(m2.found, "should find /team")
+    assert_eq(m2.handler_id, 2, "/team handler")
+
+    let m3 = router.find("GET", "/temp")
+    assert(m3.found, "should find /temp")
+    assert_eq(m3.handler_id, 3, "/temp handler")
+
+    router.destroy()
+    return 0
+}

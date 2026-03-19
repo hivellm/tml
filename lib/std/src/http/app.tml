@@ -43,6 +43,7 @@ use std::http::server_response::ServerResponse
 use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
                           app_status_text, app_find_route}
 use std::http::worker::{app_listen, app_listen_evloop, app_bind_listener, app_shutdown}
+use std::http::iocp_worker::{app_listen_iocp}
 use std::http::parse::MAX_PARAMS
 
 // Re-exports removed — import directly from std::http::worker or std::http::parse
@@ -332,6 +333,24 @@ impl App {
     /// Uses std::net::eventloop internally — WSAPoll on Windows, epoll on Linux.
     pub func listen_async(this, port: I64) {
         app_listen_evloop(
+            this.table, this.count, this.trees,
+            this.mw_table, this.mw_count,
+            this.on_request_table, this.on_request_count,
+            this.pre_handler_table, this.pre_handler_count,
+            this.on_send_table, this.on_send_count,
+            this.on_response_table, this.on_response_count,
+            this.on_error_table, this.on_error_count,
+            this.error_handler,
+            this.read_timeout, this.write_timeout, this.idle_timeout,
+            this.body_limit, port
+        )
+    }
+
+    /// Start server with IOCP (Windows, highest throughput).
+    /// Uses Windows I/O Completion Ports for truly async accept/recv/send.
+    /// This is the fastest option on Windows — zero blocking syscalls in the hot path.
+    pub func listen_iocp(this, port: I64) {
+        app_listen_iocp(
             this.table, this.count, this.trees,
             this.mw_table, this.mw_count,
             this.on_request_table, this.on_request_count,

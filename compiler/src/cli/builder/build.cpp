@@ -862,6 +862,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             registry->has_module("std::net::sys") || registry->has_module("std::net::tcp") ||
             registry->has_module("std::net::udp")) {
             link_options.link_flags.push_back("-lws2_32");
+            link_options.link_flags.push_back("-lmswsock"); // AcceptEx for IOCP
         }
         // Add Windows system libraries for OS module (Registry, user info)
         if (registry->has_module("std::os")) {

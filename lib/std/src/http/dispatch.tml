@@ -144,12 +144,14 @@ func rt_find_slash(path: Str, from: I64, plen: I64) -> I64 {
 }
 
 /// Inline radix-tree search. Returns handler_id (0 = not found).
-/// Stores up to MAX_PARAMS name/value pairs in params_buf.
-/// params_buf layout: [name0, value0, name1, value1, ...] as I64 (Str pointers).
-/// param_count is set to the number of extracted params.
-pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut ref I64) -> I64 {
+/// Stores params in params_buf and writes param count at params_buf + PARAM_COUNT_OFF.
+/// Using explicit ptr_write to a fixed offset avoids mut ref LLVM O3 dead-store bug.
+const PARAM_COUNT_OFF: I64 = 120  // offset within 128-byte params_buf for param count
+
+pub func app_find_route(root: I64, path: Str, params_buf: I64) -> I64 {
+    let pc_ptr: I64 = params_buf + PARAM_COUNT_OFF
+    lowlevel { ptr_write[I64](pc_ptr as *I64, 0 as I64) }
     let plen: I64 = str::len(path)
-    param_count = 0
 
     // Root route
     if path == "/" or plen == 0 {
@@ -158,6 +160,7 @@ pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut 
 
     var current: I64 = root
     var pos: I64 = 0
+    var pc: I64 = 0
 
     loop (pos < plen) {
         let c: I32 = str::char_at(path, pos)
@@ -178,22 +181,20 @@ pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut 
         // Try parametric child
         let param: I64 = rt_get(current, RT_PARAM_CHILD)
         if param != 0 {
-            // Skip leading /
             var cap_start: I64 = pos
             if cap_start < plen and str::char_at(path, cap_start) == 47 {
                 cap_start = cap_start + 1
             }
             let seg_end: I64 = rt_find_slash(path, cap_start, plen)
-            if param_count < MAX_PARAMS {
+            if pc < MAX_PARAMS {
                 let name: Str = rt_get(param, RT_PARAM_NAME) as Str
-                // Manual substring to avoid cross-module str::substring call
                 let vlen: I64 = seg_end - cap_start
                 let vbuf: I64 = lowlevel { mem_alloc(vlen + 1) } as I64
                 lowlevel { copy_nonoverlapping((path as I64 + cap_start) as *Unit, vbuf as *Unit, vlen) }
                 lowlevel { ptr_write[U8]((vbuf + vlen) as *U8, 0 as U8) }
                 let value: Str = vbuf as Str
-                app_store_param(params_buf, param_count, name, value)
-                param_count = param_count + 1
+                app_store_param(params_buf, pc, name, value)
+                pc = pc + 1
             }
             current = param
             pos = seg_end
@@ -207,12 +208,13 @@ pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut 
             if wc_start < plen and str::char_at(path, wc_start) == 47 {
                 wc_start = wc_start + 1
             }
-            if param_count < MAX_PARAMS {
+            if pc < MAX_PARAMS {
                 let name: Str = rt_get(wc, RT_PARAM_NAME) as Str
                 let value: Str = str::substring(path, wc_start, plen)
-                app_store_param(params_buf, param_count, name, value)
-                param_count = param_count + 1
+                app_store_param(params_buf, pc, name, value)
+                pc = pc + 1
             }
+            lowlevel { ptr_write[I64](pc_ptr as *I64, pc) }
             return rt_get(wc, RT_HANDLER)
         }
 
@@ -220,6 +222,7 @@ pub func app_find_route(root: I64, path: Str, params_buf: I64, param_count: mut 
         return 0
     }
 
+    lowlevel { ptr_write[I64](pc_ptr as *I64, pc) }
     return rt_get(current, RT_HANDLER)
 }
 
@@ -242,7 +245,7 @@ func app_make_request(method: Str, path: Str, body: Str, fd: I64,
         raw_header_count: param_count,
         req_body: body,
         req_version: "HTTP/1.1",
-        is_complete: true,
+        is_complete: 1,
         socket_fd: fd,
     }
 }
@@ -316,19 +319,7 @@ func app_run_error_hooks(hook_table: I64, hook_count: I64, error_handler: I64,
 }
 
 /// Radix-tree dispatch: look up handler_id by method and path.
-/// Returns handler fn_ptr (I64) and stores params into params_buf.
-/// Returns 0 if not found.
-func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
-                              params_buf: I64, param_count: mut ref I64) -> I64 {
-    let idx: I64 = method_index(method)
-    if idx < 0 { return 0 }
-    let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
-    if root == 0 { return 0 }
-    let handler_id: I64 = app_find_route(root, path, params_buf, ref param_count)
-    if handler_id <= 0 { return 0 }
-    let offset: I64 = (handler_id - 1) * ENTRY_SIZE
-    return lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
-}
+// (tree lookup is now inlined in app_dispatch)
 
 /// Main dispatch function. Looks up a route and calls handler(req) -> Str.
 ///
@@ -344,9 +335,11 @@ func app_dispatch_tree_lookup(table: I64, trees: I64, method: Str, path: Str,
 /// Linear scan dispatch — matches method + path against the flat handler table.
 /// Supports exact match and pattern matching for `:param` segments.
 /// Stores extracted path params into params_buf, sets param_count.
+/// Linear scan dispatch. Returns fn_ptr (I64). Writes param_count to count_ptr.
+/// 0 = not found.
 func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
-                       params_buf: I64, param_count: mut ref I64) -> I64 {
-    param_count = 0
+                       params_buf: I64, count_ptr: I64) -> I64 {
+    lowlevel { ptr_write[I64](count_ptr as *I64, 0 as I64) }
     var off: I64 = 0
     var i: I64 = 0
     loop (i < count) {
@@ -356,10 +349,9 @@ func app_linear_lookup(table: I64, count: I64, method: Str, path: Str,
             if p == path {
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
-            // Pattern match for :param segments
             let matched_params: I64 = app_pattern_match_extract(p, path, params_buf)
             if matched_params >= 0 {
-                param_count = matched_params
+                lowlevel { ptr_write[I64](count_ptr as *I64, matched_params) }
                 return lowlevel { ptr_read[I64]((table + off + 16) as *I64) }
             }
         }
@@ -421,21 +413,34 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
     let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
 
+    var fn_ptr: I64 = 0
     var param_count: I64 = 0
 
-    // ── Route lookup: radix tree (O(1) for exact paths), linear scan fallback ──
-    var fn_ptr: I64 = app_dispatch_tree_lookup(table, trees, method, path, params_buf, ref param_count)
-    if fn_ptr == 0 {
-        // Tree miss (split corruption, pattern routes) — linear scan fallback
-        fn_ptr = app_linear_lookup(table, count, method, path, params_buf, ref param_count)
+    // ── Route lookup: radix tree first (O(path_len)), linear scan fallback ──
+    // param_count is written to params_buf + PARAM_COUNT_OFF by app_find_route/app_linear_lookup
+    let midx: I64 = method_index(method)
+    if midx >= 0 {
+        let root: I64 = lowlevel { ptr_read[I64]((trees + midx * 8) as *I64) }
+        if root != 0 {
+            let handler_id: I64 = app_find_route(root, path, params_buf)
+            if handler_id > 0 {
+                let offset: I64 = (handler_id - 1) * ENTRY_SIZE
+                fn_ptr = lowlevel { ptr_read[I64]((table + offset + 16) as *I64) }
+            }
+        }
     }
+    if fn_ptr == 0 {
+        let count_ptr: I64 = params_buf + PARAM_COUNT_OFF
+        fn_ptr = app_linear_lookup(table, count, method, path, params_buf, count_ptr)
+    }
+    param_count = lowlevel { ptr_read[I64]((params_buf + PARAM_COUNT_OFF) as *I64) }
 
     // ── Construct IncomingMessage ─────────────────────────────────
     let req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, param_count)
 
     // ── Route not found ──────────────────────────────────────────
     if fn_ptr == 0 {
-        return app_error_response(404, "not found")
+        return RESPONSE_404
     }
 
     // ── Route handler ────────────────────────────────────────────

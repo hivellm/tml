@@ -749,6 +749,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including poll runtime: " << poll_obj);
             }
 
+            // net/ - iocp.c (IOCP async I/O: Windows only, stubs on other platforms)
+            fs::path iocp_c = runtime_dir / "net" / "iocp.c";
+            if (fs::exists(iocp_c)) {
+                std::string iocp_obj = ensure_c_compiled(to_forward_slashes(iocp_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(iocp_obj));
+                TML_LOG_DEBUG("build", "Including iocp runtime: " << iocp_obj);
+            }
+
             // collections/ - collections.c (buffer FFI for crypto/zlib)
             fs::path collections_c = runtime_dir / "collections" / "collections.c";
             if (fs::exists(collections_c)) {

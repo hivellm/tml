@@ -16,9 +16,10 @@ use std::http::cookie::parse_cookie
 
 /// An HTTP request received by the server (incoming message).
 ///
-/// All fields are primitive types (Str, I64, Bool) to avoid codegen
-/// issues with nested struct field offsets. Headers are accessed via
-/// a pointer stored as I64.
+/// All fields are primitive types (Str, I64) to avoid codegen issues.
+/// Bool fields replaced with I64 (0=false, 1=true) because structs with
+/// i1 fields cause LLVM IR type mismatches when passed through fn ptrs.
+/// Headers are accessed via a pointer stored as I64.
 pub type IncomingMessage {
     req_method: Str,         // "GET", "POST", etc.
     req_url: Str,
@@ -26,7 +27,7 @@ pub type IncomingMessage {
     raw_header_count: I64,
     req_body: Str,
     req_version: Str,        // "HTTP/1.1" etc.
-    is_complete: Bool,
+    is_complete: I64,        // 0=false, 1=true (was Bool — i1 codegen bug)
     socket_fd: I64,
 }
 
@@ -44,7 +45,7 @@ impl IncomingMessage {
             raw_header_count: 0,
             req_body: "",
             req_version: version,
-            is_complete: false,
+            is_complete: 0,
             socket_fd: -1 as I64,
         }
     }
@@ -58,7 +59,7 @@ impl IncomingMessage {
     pub func url(this) -> Str { this.req_url }
 
     /// Returns true if a complete HTTP message was received and parsed.
-    pub func complete(this) -> Bool { this.is_complete }
+    pub func complete(this) -> Bool { this.is_complete != 0 }
 
     /// Returns the request body (may be empty for GET/HEAD/DELETE).
     pub func body(this) -> Str { this.req_body }
@@ -417,7 +418,7 @@ pub func parse_request(raw: Str) -> Outcome[IncomingMessage, HttpError] {
         raw_header_count: raw_count,
         req_body: body_i64 as Str,
         req_version: version_i64 as Str,
-        is_complete: true,
+        is_complete: 1,
         socket_fd: -1 as I64,
     })
 }

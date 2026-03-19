@@ -193,9 +193,10 @@ std::string find_runtime_library() {
     // Search for pre-compiled runtime library
     // Priority: same dir as executable > build dir > known locations
 #ifdef _WIN32
-    std::string lib_name = "tml_runtime.lib";
+    // Try .lib first (MSVC convention), then .a (MinGW/Zig CC convention)
+    std::vector<std::string> lib_names = {"tml_runtime.lib", "libtml_runtime.a"};
 #else
-    std::string lib_name = "libtml_runtime.a";
+    std::vector<std::string> lib_names = {"libtml_runtime.a"};
 #endif
 
     std::vector<std::string> search_paths = {
@@ -211,10 +212,12 @@ std::string find_runtime_library() {
         "F:/Node/hivellm/tml/build/release",
     };
 
-    for (const auto& path : search_paths) {
-        fs::path lib_path = fs::path(path) / lib_name;
-        if (fs::exists(lib_path)) {
-            return to_forward_slashes(fs::absolute(lib_path).string());
+    for (const auto& lib_name : lib_names) {
+        for (const auto& path : search_paths) {
+            fs::path lib_path = fs::path(path) / lib_name;
+            if (fs::exists(lib_path)) {
+                return to_forward_slashes(fs::absolute(lib_path).string());
+            }
         }
     }
 
