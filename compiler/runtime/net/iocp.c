@@ -56,8 +56,11 @@
 #ifdef _WIN32
 
 /*
- * Order matters: winsock2.h must precede windows.h, and mswsock.h provides
- * the AcceptEx / GetAcceptExSockaddrs declarations and GUIDs.
+ * Include order is critical on Windows:
+ *   1. winsock2.h — must come BEFORE windows.h to avoid winsock.h conflicts
+ *   2. windows.h — provides LONG, DWORD, HANDLE, etc. needed by mswsock.h
+ *   3. ws2tcpip.h — IPv6 and protocol definitions
+ *   4. mswsock.h — AcceptEx, GetAcceptExSockaddrs, TransmitFile
  */
 #define WIN32_LEAN_AND_MEAN
 #include <mswsock.h>
