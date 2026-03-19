@@ -138,7 +138,7 @@ impl HnswIndex {
     ///
     /// @param dims Number of dimensions per vector (e.g., 128, 256, 512)
     pub func create(dims: I32) -> HnswIndex {
-        let h: *Unit = lowlevel { ffi_hnsw_create(dims) }
+        let h: *Unit = ffi_hnsw_create(dims)
         return HnswIndex { handle: h, dim: dims }
     }
 
@@ -148,7 +148,7 @@ impl HnswIndex {
     /// @param ef_construction Beam width for insertion (default 200)
     /// @param ef_search Beam width for search (default 50)
     pub func set_params(mut this, m: I32, ef_construction: I32, ef_search: I32) {
-        lowlevel { ffi_hnsw_set_params(this.handle, m, ef_construction, ef_search) }
+        ffi_hnsw_set_params(this.handle, m, ef_construction, ef_search)
     }
 
     /// Inserts a vector into the index.
@@ -159,7 +159,7 @@ impl HnswIndex {
     /// @param doc_id Unique document identifier
     /// @param embedding Pointer to F32 array of size `dims`
     pub func insert(mut this, doc_id: U32, embedding: *F32) {
-        lowlevel { ffi_hnsw_insert(this.handle, doc_id, embedding) }
+        ffi_hnsw_insert(this.handle, doc_id, embedding)
     }
 
     /// Searches for the k nearest neighbors to the query vector.
@@ -185,23 +185,23 @@ impl HnswIndex {
 
     /// Returns the number of indexed vectors.
     pub func size(this) -> I32 {
-        return lowlevel { ffi_hnsw_size(this.handle) }
+        return ffi_hnsw_size(this.handle)
     }
 
     /// Returns the vector dimensionality.
     pub func dims(this) -> I32 {
-        return lowlevel { ffi_hnsw_dims(this.handle) }
+        return ffi_hnsw_dims(this.handle)
     }
 
     /// Returns the maximum layer in the HNSW graph.
     pub func max_layer(this) -> I32 {
-        return lowlevel { ffi_hnsw_max_layer(this.handle) }
+        return ffi_hnsw_max_layer(this.handle)
     }
 
     /// Frees the underlying index resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { ffi_hnsw_destroy(this.handle) }
+            ffi_hnsw_destroy(this.handle)
             this.handle = null
         }
     }
@@ -233,7 +233,7 @@ impl TfIdfVectorizer {
     ///
     /// @param max_dims Maximum number of dimensions (vocabulary size, default 512)
     pub func create(max_dims: I32) -> TfIdfVectorizer {
-        let h: *Unit = lowlevel { ffi_tfidf_create(max_dims) }
+        let h: *Unit = ffi_tfidf_create(max_dims)
         return TfIdfVectorizer { handle: h }
     }
 
@@ -245,7 +245,7 @@ impl TfIdfVectorizer {
     /// @param doc_id Document identifier
     /// @param text Document text content
     pub func add_document(mut this, doc_id: U32, text: Str) {
-        lowlevel { ffi_tfidf_add_document(this.handle, doc_id, text) }
+        ffi_tfidf_add_document(this.handle, doc_id, text)
     }
 
     /// Builds the vectorizer from the training corpus.
@@ -253,7 +253,7 @@ impl TfIdfVectorizer {
     /// Selects the top-N terms by IDF as dimensions and computes
     /// IDF weights. Must be called before `vectorize()`.
     pub func build(mut this) {
-        lowlevel { ffi_tfidf_build(this.handle) }
+        ffi_tfidf_build(this.handle)
     }
 
     /// Converts text to an L2-normalized TF-IDF vector.
@@ -265,24 +265,24 @@ impl TfIdfVectorizer {
     /// @param out_vec Pre-allocated F32 buffer of size >= `dims()`
     /// @returns Actual number of dimensions written
     pub func vectorize(this, text: Str, out_vec: *F32) -> I32 {
-        return lowlevel { ffi_tfidf_vectorize(this.handle, text, out_vec) }
+        return ffi_tfidf_vectorize(this.handle, text, out_vec)
     }
 
     /// Returns the number of dimensions in output vectors.
     pub func dims(this) -> I32 {
-        return lowlevel { ffi_tfidf_dims(this.handle) }
+        return ffi_tfidf_dims(this.handle)
     }
 
     /// Returns whether the vectorizer has been built.
     pub func is_built(this) -> Bool {
-        let result: I32 = lowlevel { ffi_tfidf_is_built(this.handle) }
+        let result: I32 = ffi_tfidf_is_built(this.handle)
         return result != 0
     }
 
     /// Frees the underlying vectorizer resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { ffi_tfidf_destroy(this.handle) }
+            ffi_tfidf_destroy(this.handle)
             this.handle = null
         }
     }

@@ -4,7 +4,7 @@
 //! Supports JSON, URL-encoded form data, raw text, and raw binary.
 
 use core::str
-use core::intrinsics::{mem_alloc, ptr_write}
+use std::collections::Buffer
 use std::http::error::{HttpError, HttpErrorKind}
 
 /// Maximum body size (1 MB default).
@@ -138,9 +138,7 @@ pub func url_decode(s: Str) -> Str {
     let s_len: I64 = str::len(s)
     if s_len == 0 { return "" }
 
-    // Allocate output buffer (decoded is always <= input length)
-    let buf: I64 = lowlevel { mem_alloc(s_len + 1) } as I64
-    var out: I64 = 0
+    let buf = Buffer::new(s_len)
     var i: I64 = 0
 
     loop (i < s_len) {
@@ -149,22 +147,17 @@ pub func url_decode(s: Str) -> Str {
             let h1: I32 = str::char_at(s, i + 1)
             let h2: I32 = str::char_at(s, i + 2)
             let byte_val: I64 = hex_char_to_val(h1) * 16 + hex_char_to_val(h2)
-            lowlevel { ptr_write[U8]((buf + out) as *U8, byte_val as U8) }
-            out = out + 1
+            buf.write_byte(byte_val as I32)
             i = i + 3
         } else if c == 43 {  // '+' → space
-            lowlevel { ptr_write[U8]((buf + out) as *U8, 32 as U8) }
-            out = out + 1
+            buf.write_byte(32)
             i = i + 1
         } else {
-            lowlevel { ptr_write[U8]((buf + out) as *U8, c as U8) }
-            out = out + 1
+            buf.write_byte(c)
             i = i + 1
         }
     }
-    // Null-terminate
-    lowlevel { ptr_write[U8]((buf + out) as *U8, 0 as U8) }
-    return buf as Str
+    return buf.to_string()
 }
 
 /// Converts a hex character to its numeric value.

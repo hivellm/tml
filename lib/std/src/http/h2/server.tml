@@ -27,6 +27,7 @@ use std::http::h2::connection::{
     H2_CONN_EVENT_GOAWAY, H2_CONN_EVENT_STREAM_RESET,
 }
 use core::str
+use core::fmt::helpers::i64_to_str
 
 // ============================================================================
 // H2 request — decoded from stream headers
@@ -70,10 +71,9 @@ pub func h2_validate_preface(data: Buffer) -> Outcome[I64, H2Error] {
         return Err(H2Error::protocol_error("connection preface too short"))
     }
 
-    let preface_ptr: I64 = H2_CONNECTION_PREFACE as I64
     var i: I64 = 0
     loop (i < H2_CONNECTION_PREFACE_LEN) {
-        let expected: I32 = lowlevel { ptr_read[U8]((preface_ptr + i) as *U8) } as I32
+        let expected: I32 = str::char_at(H2_CONNECTION_PREFACE, i)
         let actual: I32 = data.get(i)
         if actual != expected {
             return Err(H2Error::protocol_error("invalid connection preface"))
@@ -83,8 +83,6 @@ pub func h2_validate_preface(data: Buffer) -> Outcome[I64, H2Error] {
 
     Ok(H2_CONNECTION_PREFACE_LEN)
 }
-
-use core::intrinsics::{ptr_read}
 
 // ============================================================================
 // Request header extraction
@@ -147,7 +145,7 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
 
     // Build response headers
     var resp_headers: List[HpackEntry] = List::new(4)
-    let status_str: Str = h2_i64_to_str(status)
+    let status_str: Str = i64_to_str(status)
     resp_headers.push(HpackEntry::new(":status", status_str))
     resp_headers.push(HpackEntry::new("content-type", content_type))
 
@@ -162,11 +160,9 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
     // Encode DATA frame if there's a body
     if has_body == 1 {
         let body_buf = Buffer::new(body_len)
-        let body_ptr: I64 = body as I64
         var i: I64 = 0
         loop (i < body_len) {
-            let b: I32 = lowlevel { ptr_read[U8]((body_ptr + i) as *U8) } as I32
-            body_buf.write_byte(b)
+            body_buf.write_byte(str::char_at(body, i))
             i = i + 1
         }
         let data_frame = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, stream_id, body_buf)
@@ -176,19 +172,6 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
     result
 }
 
-/// Convert a small positive integer to a string.
-func h2_i64_to_str(val: I64) -> Str {
-    if val == 200 { return "200" }
-    if val == 404 { return "404" }
-    if val == 500 { return "500" }
-    if val == 204 { return "204" }
-    if val == 301 { return "301" }
-    if val == 302 { return "302" }
-    if val == 400 { return "400" }
-    if val == 403 { return "403" }
-    if val == 405 { return "405" }
-    return "200"
-}
 
 /// Append src buffer bytes to dst buffer.
 func h2_buf_append(dst: Buffer, src: Buffer) {

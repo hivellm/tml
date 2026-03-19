@@ -6,6 +6,7 @@
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use core::fmt::helpers::i64_to_str
+use std::text::Text
 
 /// Rate limiter configuration.
 pub type RateLimitOptions {
@@ -38,14 +39,20 @@ pub type RateLimitResult {
 
 impl RateLimitResult {
     pub func headers(this) -> Str {
-        var result: Str = ""
-        result = "{result}X-RateLimit-Limit: {i64_to_str(this.limit)}\r\n"
-        result = "{result}X-RateLimit-Remaining: {i64_to_str(this.remaining)}\r\n"
-        result = "{result}X-RateLimit-Reset: {i64_to_str(this.reset_at)}\r\n"
+        var text = Text::new()
+        text.push_str("X-RateLimit-Limit: ")
+        text.push_str(i64_to_str(this.limit))
+        text.push_str("\r\nX-RateLimit-Remaining: ")
+        text.push_str(i64_to_str(this.remaining))
+        text.push_str("\r\nX-RateLimit-Reset: ")
+        text.push_str(i64_to_str(this.reset_at))
+        text.push_str("\r\n")
         if not this.allowed {
-            result = "{result}Retry-After: {i64_to_str(this.reset_at)}\r\n"
+            text.push_str("Retry-After: ")
+            text.push_str(i64_to_str(this.reset_at))
+            text.push_str("\r\n")
         }
-        return result
+        return text.as_str()
     }
 }
 

@@ -5,6 +5,7 @@
 
 use core::str
 use core::fmt::helpers::i64_to_str
+use std::text::Text
 
 /// A Server-Sent Event message.
 pub type SseEvent {
@@ -38,10 +39,12 @@ impl SseEvent {
     /// Serializes the SSE event to wire format.
     /// Output: "event: name\ndata: content\nid: 123\n\n"
     pub func serialize(this) -> Str {
-        var result: Str = ""
+        var builder: Text = Text::new()
 
         if str::len(this.event_type) > 0 {
-            result = "{result}event: {this.event_type}\n"
+            builder.push_str("event: ")
+            builder.push_str(this.event_type)
+            builder.push_str("\n")
         }
 
         // Data can be multi-line — each line needs "data: " prefix
@@ -54,24 +57,30 @@ impl SseEvent {
                     line_end = line_end + 1
                 }
                 let line: Str = str::substring(this.data, pos, line_end)
-                result = "{result}data: {line}\n"
+                builder.push_str("data: ")
+                builder.push_str(line)
+                builder.push_str("\n")
                 pos = line_end + 1
             }
         } else {
-            result = "{result}data: \n"
+            builder.push_str("data: \n")
         }
 
         if str::len(this.id) > 0 {
-            result = "{result}id: {this.id}\n"
+            builder.push_str("id: ")
+            builder.push_str(this.id)
+            builder.push_str("\n")
         }
 
         if this.retry > 0 {
-            result = "{result}retry: {i64_to_str(this.retry)}\n"
+            builder.push_str("retry: ")
+            builder.push_str(i64_to_str(this.retry))
+            builder.push_str("\n")
         }
 
         // Double newline terminates the event
-        result = "{result}\n"
-        return result
+        builder.push_str("\n")
+        return builder.as_str()
     }
 }
 
@@ -87,12 +96,12 @@ pub func sse_ping() -> Str {
 
 /// Returns the headers needed for an SSE response.
 pub func sse_headers() -> Str {
-    var result: Str = ""
-    result = "{result}Content-Type: text/event-stream\r\n"
-    result = "{result}Cache-Control: no-cache\r\n"
-    result = "{result}Connection: keep-alive\r\n"
-    result = "{result}X-Accel-Buffering: no\r\n"
-    return result
+    var builder: Text = Text::new()
+    builder.push_str("Content-Type: text/event-stream\r\n")
+    builder.push_str("Cache-Control: no-cache\r\n")
+    builder.push_str("Connection: keep-alive\r\n")
+    builder.push_str("X-Accel-Buffering: no\r\n")
+    return builder.as_str()
 }
 
 // ── StreamableHTTP helpers ──────────────────────────────────

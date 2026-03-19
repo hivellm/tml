@@ -27,6 +27,7 @@
 
 use core::str
 use core::encoding::hex
+use std::text::Text
 use std::crypto::hash::{Hash, HashAlgorithm, Digest}
 use std::collections::Buffer
 use std::collections::buffer::{buf_get_data, buf_read_byte_at}
@@ -450,70 +451,49 @@ impl Uuid {
     /// The 36-character canonical form with lowercase hex and hyphens.
     @allocates
     pub func to_string(this) -> Str {
-        // Output: 8-4-4-4-12 = 36 chars + null
-        let buf: *Unit = lowlevel { mem_alloc(37 as I64) }
-        let dst: I64 = buf as I64
-        var pos: I64 = 0
+        // Output: 8-4-4-4-12 = 36 chars
+        var text = Text::new()
 
         // Group 1: 8 hex chars from hi bits 63-32
         var i: I32 = 15
         loop (i >= 8) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
-            pos = pos + 1
+            text.push(hex::nibble_to_lower(nibble_at(this.hi, i)) as I32)
             i = i - 1
         }
-
-        // Hyphen
-        lowlevel { ptr_write[U8]((dst + pos) as *U8, 45 as U8) }
-        pos = pos + 1
+        text.push(45)  // '-'
 
         // Group 2: 4 hex chars from hi bits 31-16
         i = 7
         loop (i >= 4) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
-            pos = pos + 1
+            text.push(hex::nibble_to_lower(nibble_at(this.hi, i)) as I32)
             i = i - 1
         }
-
-        // Hyphen
-        lowlevel { ptr_write[U8]((dst + pos) as *U8, 45 as U8) }
-        pos = pos + 1
+        text.push(45)  // '-'
 
         // Group 3: 4 hex chars from hi bits 15-0
         i = 3
         loop (i >= 0) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.hi, i))) }
-            pos = pos + 1
+            text.push(hex::nibble_to_lower(nibble_at(this.hi, i)) as I32)
             i = i - 1
         }
-
-        // Hyphen
-        lowlevel { ptr_write[U8]((dst + pos) as *U8, 45 as U8) }
-        pos = pos + 1
+        text.push(45)  // '-'
 
         // Group 4: 4 hex chars from lo bits 63-48
         i = 15
         loop (i >= 12) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.lo, i))) }
-            pos = pos + 1
+            text.push(hex::nibble_to_lower(nibble_at(this.lo, i)) as I32)
             i = i - 1
         }
-
-        // Hyphen
-        lowlevel { ptr_write[U8]((dst + pos) as *U8, 45 as U8) }
-        pos = pos + 1
+        text.push(45)  // '-'
 
         // Group 5: 12 hex chars from lo bits 47-0
         i = 11
         loop (i >= 0) {
-            lowlevel { ptr_write[U8]((dst + pos) as *U8, hex::nibble_to_lower(nibble_at(this.lo, i))) }
-            pos = pos + 1
+            text.push(hex::nibble_to_lower(nibble_at(this.lo, i)) as I32)
             i = i - 1
         }
 
-        // Null terminate
-        lowlevel { ptr_write[U8]((dst + pos) as *U8, 0 as U8) }
-        return buf as Str
+        return text.as_str()
     }
 
     /// Format as URN: "urn:uuid:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"

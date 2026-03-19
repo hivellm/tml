@@ -14,6 +14,7 @@
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
 use std::http::headers::Headers
+use std::text::Text
 
 // ============================================================================
 // Hex helpers
@@ -23,15 +24,24 @@ use std::http::headers::Headers
 func i64_to_hex(n: I64) -> Str {
     if n == 0 { return "0" }
     let hex_chars: Str = "0123456789abcdef"
-    var result: Str = ""
+    // Collect digits least-significant-first into a 16-slot fixed array,
+    // then write them in reverse to produce the correct MSB-first string.
+    var digits: [Str; 16] = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+    var count: I64 = 0
     var val: I64 = n
     loop (val > 0) {
         let digit: I64 = val % 16
-        let ch: Str = str::substring(hex_chars, digit, digit + 1)
-        result = "{ch}{result}"
+        digits[count] = str::substring(hex_chars, digit, digit + 1)
+        count = count + 1
         val = val / 16
     }
-    return result
+    var builder: Text = Text::new()
+    var j: I64 = count - 1
+    loop (j >= 0) {
+        builder.push_str(digits[j])
+        j = j - 1
+    }
+    return builder.as_str()
 }
 
 /// Parses a hex string to I64. Returns -1 on invalid input.
@@ -106,7 +116,7 @@ pub func encode_body_multi_chunk(body: Str, chunk_size: I64) -> Str {
     if body_len == 0 {
         return encode_final_chunk()
     }
-    var result: Str = ""
+    var builder: Text = Text::new()
     var pos: I64 = 0
     loop (pos < body_len) {
         var end: I64 = pos + chunk_size
@@ -114,11 +124,11 @@ pub func encode_body_multi_chunk(body: Str, chunk_size: I64) -> Str {
             end = body_len
         }
         let chunk_data: Str = str::substring(body, pos, end)
-        result = "{result}{encode_chunk(chunk_data)}"
+        builder.push_str(encode_chunk(chunk_data))
         pos = end
     }
-    result = "{result}{encode_final_chunk()}"
-    return result
+    builder.push_str(encode_final_chunk())
+    return builder.as_str()
 }
 
 // ============================================================================

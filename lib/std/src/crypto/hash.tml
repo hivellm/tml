@@ -229,26 +229,7 @@ impl Digest {
     /// Returns the digest as a hexadecimal string.
     @allocates
     pub func to_hex(this) -> Str {
-        // Inline hex encoding — avoids FFI overhead of ffi_crypto_bytes_to_hex
-        let h: I64 = this.data.handle as I64
-        let data_ptr: I64 = lowlevel { ptr_read[I64](h as *I64) }
-        let data_len: I64 = lowlevel { ptr_read[I64]((h + 8) as *I64) }
-        let out_len: I64 = data_len * 2
-        let hex_table: Str = "0123456789abcdef"
-        let ht: I64 = hex_table as I64
-        let out: *Unit = lowlevel { mem_alloc(out_len + 1) }
-        var sp: I64 = data_ptr
-        var dp: I64 = out as I64
-        let end: I64 = sp + data_len
-        loop (sp < end) {
-            let b: I32 = lowlevel { ptr_read[U8](sp as *U8) } as I32
-            lowlevel { ptr_write[U8](dp as *U8, ptr_read[U8]((ht + ((b >> 4) & 15) as I64) as *U8)) }
-            lowlevel { ptr_write[U8]((dp + 1) as *U8, ptr_read[U8]((ht + (b & 15) as I64) as *U8)) }
-            sp = sp + 1
-            dp = dp + 2
-        }
-        lowlevel { ptr_write[U8](dp as *U8, 0 as U8) }
-        return out as Str
+        return this.data.to_hex()
     }
 
     /// Returns the digest as a base64 string.

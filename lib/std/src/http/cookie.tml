@@ -4,6 +4,8 @@
 //! and cookie attribute management per RFC 6265.
 
 use core::str
+use std::text::Text
+use core::fmt::helpers::i64_to_str
 
 /// A parsed HTTP cookie.
 pub type Cookie {
@@ -112,26 +114,33 @@ impl Cookie {
 
     /// Serializes to Set-Cookie header value.
     pub func to_set_cookie(this) -> Str {
-        var result: Str = "{this.name}={this.value}"
+        var builder: Text = Text::new()
+        builder.push_str(this.name)
+        builder.push_str("=")
+        builder.push_str(this.value)
         if str::len(this.path) > 0 {
-            result = "{result}; Path={this.path}"
+            builder.push_str("; Path=")
+            builder.push_str(this.path)
         }
         if str::len(this.domain) > 0 {
-            result = "{result}; Domain={this.domain}"
+            builder.push_str("; Domain=")
+            builder.push_str(this.domain)
         }
         if this.max_age >= 0 {
-            result = "{result}; Max-Age={this.max_age}"
+            builder.push_str("; Max-Age=")
+            builder.push_str(i64_to_str(this.max_age))
         }
         if this.http_only {
-            result = "{result}; HttpOnly"
+            builder.push_str("; HttpOnly")
         }
         if this.secure {
-            result = "{result}; Secure"
+            builder.push_str("; Secure")
         }
         if str::len(this.same_site) > 0 {
-            result = "{result}; SameSite={this.same_site}"
+            builder.push_str("; SameSite=")
+            builder.push_str(this.same_site)
         }
-        return result
+        return builder.as_str()
     }
 }
 

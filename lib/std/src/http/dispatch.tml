@@ -496,22 +496,8 @@ func app_status_line(code: I64) -> Str {
     if code == 502 { return "HTTP/1.1 502 Bad Gateway\r\n" }
     if code == 503 { return "HTTP/1.1 503 Service Unavailable\r\n" }
     // Fallback: build dynamically (rare path)
-    let status_str: Str = code.to_string()
     let status_text: Str = app_status_text(code)
-    let prefix: Str = "HTTP/1.1 "
-    let plen: I64 = 9 + str::len(status_str) + 1 + str::len(status_text) + 2
-    let p: I64 = lowlevel { mem_alloc(plen + 1) } as I64
-    var pos: I64 = 0
-    pos = app_buf_copy(p, pos, prefix)
-    pos = app_buf_copy(p, pos, status_str)
-    lowlevel { ptr_write[U8]((p + pos) as *U8, 32 as U8) }
-    pos = pos + 1
-    pos = app_buf_copy(p, pos, status_text)
-    lowlevel { ptr_write[U8]((p + pos) as *U8, 13 as U8) }
-    lowlevel { ptr_write[U8]((p + pos + 1) as *U8, 10 as U8) }
-    pos = pos + 2
-    lowlevel { ptr_write[U8]((p + pos) as *U8, 0 as U8) }
-    return p as Str
+    return `HTTP/1.1 {code} {status_text}\r\n`.as_str()
 }
 
 /// Fast integer to decimal string for Content-Length.
@@ -743,25 +729,6 @@ pub func app_build_response_into(buf: I64, status: I64, content_type: Str, body:
 /// Build a JSON error response following cmmv-server format.
 pub func app_error_response(status: I64, message: Str) -> Str {
     let status_text: Str = app_status_text(status)
-    let status_str: Str = status.to_string()
-    let body_prefix: Str = "{\"statusCode\":"
-    let body_err: Str = ",\"error\":\""
-    let body_msg: Str = "\",\"message\":\""
-    let body_suffix: Str = "\"}"
-    let status_str_len: I64 = str::len(status_str)
-    let status_text_len: I64 = str::len(status_text)
-    let message_len: I64 = str::len(message)
-    let body_len: I64 = 14 + status_str_len + 10 + status_text_len + 14 + message_len + 2
-    let body_buf: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
-    var bp: I64 = 0
-    bp = app_buf_copy(body_buf, bp, body_prefix)
-    bp = app_buf_copy(body_buf, bp, status_str)
-    bp = app_buf_copy(body_buf, bp, body_err)
-    bp = app_buf_copy(body_buf, bp, status_text)
-    bp = app_buf_copy(body_buf, bp, body_msg)
-    bp = app_buf_copy(body_buf, bp, message)
-    bp = app_buf_copy(body_buf, bp, body_suffix)
-    lowlevel { ptr_write[U8]((body_buf + bp) as *U8, 0 as U8) }
-    let body: Str = body_buf as Str
+    let body: Str = `{"statusCode":{status},"error":"{status_text}","message":"{message}"}`.as_str()
     return app_build_response(status, "application/json; charset=utf-8", body)
 }

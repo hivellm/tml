@@ -6,6 +6,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::text::Text
 
 /// A collection of HTTP headers with case-insensitive key lookup.
 ///
@@ -232,16 +233,19 @@ impl Headers {
         let vals_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
         let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
 
-        var result: Str = ""
+        var builder: Text = Text::new()
         var i: I64 = 0
         loop (i < cur_len) {
             let k: Str = lowlevel { ptr_read[I64]((keys_addr + i * 8) as *I64) } as Str
             let v_ptr: I64 = lowlevel { ptr_read[I64]((vals_addr + i * 16) as *I64) }
             let v: Str = v_ptr as Str
-            result = "{result}{k}: {v}\r\n"
+            builder.push_str(k)
+            builder.push_str(": ")
+            builder.push_str(v)
+            builder.push_str("\r\n")
             i = i + 1
         }
-        return result
+        return builder.as_str()
     }
 
     // ── Convenience accessors ───────────────────────────────

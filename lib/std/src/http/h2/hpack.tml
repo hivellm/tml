@@ -441,12 +441,10 @@ pub func hpack_encode_string(s: Str) -> Buffer {
         i = i + 1
     }
 
-    // Write string octets using lowlevel ptr reads to avoid str::char_at dependency
-    let str_ptr: I64 = s as I64
+    // Write string octets
     var j: I64 = 0
     loop (j < slen) {
-        let byte_val: U8 = lowlevel { ptr_read[U8]((str_ptr + j) as *U8) }
-        buf.write_byte(byte_val as I32)
+        buf.write_byte(str::char_at(s, j))
         j = j + 1
     }
 
@@ -480,18 +478,14 @@ pub func hpack_decode_string(data: Buffer, offset: I64) -> Outcome[HpackStrResul
         return Err(H2Error::hpack_invalid_encoding())
     }
 
-    // Build the string from raw bytes
-    // Allocate slen+1 bytes for null-terminated string
-    let str_ptr: I64 = lowlevel { mem_alloc(slen + 1) } as I64
+    // Build the string from buffer bytes
+    let str_buf = Buffer::new(slen)
     var i: I64 = 0
     loop (i < slen) {
-        let b: I32 = data.get(str_start + i)
-        lowlevel { ptr_write[U8]((str_ptr + i) as *U8, b as U8) }
+        str_buf.write_byte(data.get(str_start + i))
         i = i + 1
     }
-    lowlevel { ptr_write[U8]((str_ptr + slen) as *U8, 0 as U8) }
-
-    let result: Str = str_ptr as Str
+    let result: Str = str_buf.to_string()
     Ok(HpackStrResult { value: result, consumed: len_bytes + slen })
 }
 

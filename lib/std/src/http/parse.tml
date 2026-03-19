@@ -487,12 +487,8 @@ pub func app_extract_query(url: Str) -> Str {
     var i: I64 = 0
     loop (i < len) {
         if str::char_at(url, i) == 63 {  // '?'
-            let qlen: I64 = len - i - 1
-            if qlen <= 0 { return "" }
-            let qbuf: I64 = lowlevel { mem_alloc(qlen + 1) } as I64
-            lowlevel { copy_nonoverlapping((url as I64 + i + 1) as *Unit, qbuf as *Unit, qlen) }
-            lowlevel { ptr_write[U8]((qbuf + qlen) as *U8, 0 as U8) }
-            return qbuf as Str
+            if len - i - 1 <= 0 { return "" }
+            return str::substring_from(url, i + 1)
         }
         i = i + 1
     }
@@ -506,10 +502,7 @@ pub func app_extract_path_from_url(url: Str) -> Str {
     loop (i < len) {
         if str::char_at(url, i) == 63 {  // '?'
             if i == 0 { return "/" }
-            let pbuf: I64 = lowlevel { mem_alloc(i + 1) } as I64
-            lowlevel { copy_nonoverlapping(url as *Unit, pbuf as *Unit, i) }
-            lowlevel { ptr_write[U8]((pbuf + i) as *U8, 0 as U8) }
-            return pbuf as Str
+            return str::substring_to(url, i)
         }
         i = i + 1
     }
@@ -564,17 +557,9 @@ func app_pattern_match(pattern: Str, path: Str, params_buf: I64, pc: mut ref I64
                 val_end = val_end + 1
             }
             if pc < MAX_PARAMS {
-                // Name from pattern
-                let name_len: I64 = name_end - name_start
-                let nbuf: I64 = lowlevel { mem_alloc(name_len + 1) } as I64
-                lowlevel { copy_nonoverlapping((pattern as I64 + name_start) as *Unit, nbuf as *Unit, name_len) }
-                lowlevel { ptr_write[U8]((nbuf + name_len) as *U8, 0 as U8) }
-                // Value from path
-                let val_len: I64 = val_end - xp
-                let vbuf: I64 = lowlevel { mem_alloc(val_len + 1) } as I64
-                lowlevel { copy_nonoverlapping((path as I64 + xp) as *Unit, vbuf as *Unit, val_len) }
-                lowlevel { ptr_write[U8]((vbuf + val_len) as *U8, 0 as U8) }
-                app_store_param(params_buf, pc, nbuf as Str, vbuf as Str)
+                let name: Str = str::substring(pattern, name_start, name_end)
+                let value: Str = str::substring(path, xp, val_end)
+                app_store_param(params_buf, pc, name, value)
                 pc = pc + 1
             }
             pp = name_end

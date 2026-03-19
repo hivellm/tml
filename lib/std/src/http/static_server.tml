@@ -6,6 +6,7 @@
 
 use core::str
 use std::mime::Mime
+use std::text::Text
 use std::http::etag
 use std::http::cache_control::{CacheOptions, cache_control_header}
 use core::fmt::helpers::i64_to_str
@@ -168,31 +169,39 @@ pub func mime_for_extension(ext: Str) -> Str {
 
 /// Generates response headers for a static file.
 pub func static_file_headers(file_path: Str, content: Str, opts: ref StaticOptions) -> Str {
-    var result: Str = ""
+    var text = Text::new()
     let ext: Str = get_extension(file_path)
     let content_type: Str = mime_for_extension(ext)
     let content_len: I64 = str::len(content)
 
-    result = "{result}Content-Type: {content_type}\r\n"
-    result = "{result}Content-Length: {i64_to_str(content_len)}\r\n"
+    text.push_str("Content-Type: ")
+    text.push_str(content_type)
+    text.push_str("\r\n")
+    text.push_str("Content-Length: ")
+    text.push_str(i64_to_str(content_len))
+    text.push_str("\r\n")
 
     // ETag
     if opts.etag_enabled {
         let tag: Str = etag::generate(content)
-        result = "{result}ETag: {tag}\r\n"
+        text.push_str("ETag: ")
+        text.push_str(tag)
+        text.push_str("\r\n")
     }
 
     // Cache-Control
     if opts.immutable {
-        result = "{result}Cache-Control: public, max-age=31536000, immutable\r\n"
+        text.push_str("Cache-Control: public, max-age=31536000, immutable\r\n")
     } else if opts.max_age > 0 {
-        result = "{result}Cache-Control: public, max-age={i64_to_str(opts.max_age)}\r\n"
+        text.push_str("Cache-Control: public, max-age=")
+        text.push_str(i64_to_str(opts.max_age))
+        text.push_str("\r\n")
     }
 
     // Accept-Ranges for partial content support
-    result = "{result}Accept-Ranges: bytes\r\n"
+    text.push_str("Accept-Ranges: bytes\r\n")
 
-    return result
+    return text.as_str()
 }
 
 /// Returns true if the path starts with a dot or contains a /. segment.

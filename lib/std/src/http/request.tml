@@ -11,6 +11,7 @@ use std::http::method::Method
 use std::http::headers::Headers
 use std::http::version::HttpVersion
 use std::http::error::{HttpError, HttpErrorKind}
+use std::text::Text
 
 /// An HTTP request with method, URL, headers, and body.
 ///
@@ -298,38 +299,49 @@ impl Request {
         let path_query: Str = this.path_and_query()
         let version_str: Str = this.req_version.to_string()
 
+        var builder: Text = Text::new()
+
         // Request line
-        var result: Str = "{method_str} {path_query} {version_str}\r\n"
+        builder.push_str(method_str)
+        builder.push_str(" ")
+        builder.push_str(path_query)
+        builder.push_str(" ")
+        builder.push_str(version_str)
+        builder.push_str("\r\n")
 
         // Host header (mandatory in HTTP/1.1)
         if not this.req_headers.has("host") {
             let host_val: Str = this.host_header()
-            result = "{result}Host: {host_val}\r\n"
+            builder.push_str("Host: ")
+            builder.push_str(host_val)
+            builder.push_str("\r\n")
         }
 
         // User-Agent (default if not set)
         if not this.req_headers.has("user-agent") {
-            result = "{result}User-Agent: tml/1.0\r\n"
+            builder.push_str("User-Agent: tml/1.0\r\n")
         }
 
         // Content-Length for body (if not already set)
         let body_len: I64 = str::len(this.req_body)
         if body_len > 0 and not this.req_headers.has("content-length") {
-            result = "{result}Content-Length: {i64_to_str(body_len)}\r\n"
+            builder.push_str("Content-Length: ")
+            builder.push_str(i64_to_str(body_len))
+            builder.push_str("\r\n")
         }
 
         // All custom headers
-        result = "{result}{this.req_headers.serialize()}"
+        builder.push_str(this.req_headers.serialize())
 
         // Empty line separating headers from body
-        result = "{result}\r\n"
+        builder.push_str("\r\n")
 
         // Body
         if body_len > 0 {
-            result = "{result}{this.req_body}"
+            builder.push_str(this.req_body)
         }
 
-        return result
+        return builder.as_str()
     }
 
     /// Frees internal storage.

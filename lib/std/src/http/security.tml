@@ -4,6 +4,8 @@
 //! common web vulnerabilities. Inspired by Express.js `helmet` middleware.
 
 use core::str
+use std::text::Text
+use core::fmt::helpers::i64_to_str
 
 /// Security header configuration.
 pub type SecurityOptions {
