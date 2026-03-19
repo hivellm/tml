@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Language Reference** (2026-03-19) — Complete `docs/readme.md` indexing all language features, core/std library modules, types, and documentation links
+  - Mandatory consultation rule added to CLAUDE.md and `.claude/rules/consult-language-reference.md`
+  - Prevents future implementations from ignoring existing APIs
+
+- **HTTP Comparative Analysis** (2026-03-19) — Architecture analysis of nginx, Tokio/Hyper, Node.js, and Go net/http servers
+  - 4 individual reports + consolidated comparative analysis in `docs/analyses/`
+  - Gap analysis with prioritized improvement roadmap (Phases 7–10 in HTTP task)
+
+- **HTTP Date Header** (2026-03-19) — RFC 7231 §7.1.1.2 compliant `Date:` header in all HTTP responses
+  - Pure TML implementation: epoch→year/month/day/weekday conversion
+  - `app_http_date()` function in `dispatch.tml`
+
+- **HTTP URL Percent-Decoding** (2026-03-19) — `app_percent_decode()` in `parse.tml`
+  - Decodes `%XX` sequences and `+` to space, integrated into `app_zerocopy_path()`
+  - Enables routing paths like `/hello%20world` → `/hello world`
+
+- **HTTP Latency Measurement** (2026-03-19) — `time_ns()` instrumentation in thread pool worker
+  - Per-worker stats: request count, min/max/avg latency in microseconds
+
+### Changed
+- **IOCP Dynamic Recv Buffers** (2026-03-19) — Reduced per-connection recv buffer from 64KB to 8KB initial
+  - Grows dynamically (2x) up to 64KB max when headers don't fit
+  - Saves 56KB per connection (3.5GB at 65K connections)
+  - New `CONN_RECV_CAP` field in connection slot (88 bytes, was 80)
+
+### Fixed
+- **Language Gap Analysis** (2026-03-19) — Identified 3 codegen bugs (not missing features):
+  - Bool/i1 in structs through fn pointers → SEGFAULT
+  - `dyn Behavior` dispatch → invalid IR (undefined `%v1`)
+  - `async func` + `.await` chain → IR type mismatch (i64 vs i32)
+  - Template literals confirmed WORKING: `` `Hello, {name}!` `` compiles and runs
+
 - **Object Cache for LLVM Backend** (2026-03-14) — Hash-based `.obj` cache skips LLVM backend (IR→obj) on repeated runs
   - Cache key: SHA-256 of LLVM IR content; hit = skip entire backend compilation
   - Reduces re-test time for unchanged suites from seconds to milliseconds

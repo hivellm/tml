@@ -58,7 +58,55 @@ pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
     }
     if end <= path_start { return "/" }
     lowlevel { ptr_write[U8]((buf + end) as *U8, 0 as U8) }
+    // Percent-decode path in-place (e.g., %20 → space)
+    let path_len: I64 = end - path_start
+    app_percent_decode(buf + path_start, path_len)
     return (buf + path_start) as Str
+}
+
+/// Decode a hex character (0-9, A-F, a-f) to its value (0-15).
+/// Returns -1 if not a valid hex character.
+func hex_val(c: U8) -> I64 {
+    let v: I64 = c as I64
+    if v >= 48 and v <= 57 { return v - 48 }       // '0'-'9'
+    if v >= 65 and v <= 70 { return v - 55 }       // 'A'-'F'
+    if v >= 97 and v <= 102 { return v - 87 }      // 'a'-'f'
+    return -1
+}
+
+/// URL percent-decode a path in-place. Converts %XX sequences to bytes.
+/// Returns the new length (may be shorter than input). Null-terminates.
+/// Example: "/hello%20world" → "/hello world" (length 12)
+pub func app_percent_decode(buf: I64, len: I64) -> I64 {
+    var read: I64 = 0
+    var write: I64 = 0
+    loop (read < len) {
+        let c: U8 = lowlevel { ptr_read[U8]((buf + read) as *U8) }
+        if c == 37 as U8 and read + 2 < len {
+            // '%' followed by two hex chars
+            let h1: U8 = lowlevel { ptr_read[U8]((buf + read + 1) as *U8) }
+            let h2: U8 = lowlevel { ptr_read[U8]((buf + read + 2) as *U8) }
+            let v1: I64 = hex_val(h1)
+            let v2: I64 = hex_val(h2)
+            if v1 >= 0 and v2 >= 0 {
+                let decoded: U8 = (v1 * 16 + v2) as U8
+                lowlevel { ptr_write[U8]((buf + write) as *U8, decoded) }
+                write = write + 1
+                read = read + 3
+                continue
+            }
+        }
+        if c == 43 as U8 {
+            // '+' → space (common in query strings, also valid in paths)
+            lowlevel { ptr_write[U8]((buf + write) as *U8, 32 as U8) }
+        } else if read != write {
+            lowlevel { ptr_write[U8]((buf + write) as *U8, c) }
+        }
+        write = write + 1
+        read = read + 1
+    }
+    lowlevel { ptr_write[U8]((buf + write) as *U8, 0 as U8) }
+    return write
 }
 
 /// Detect HTTP version from request line. Returns true if HTTP/1.1, false if HTTP/1.0.

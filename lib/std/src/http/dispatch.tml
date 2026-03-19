@@ -15,6 +15,9 @@ use std::http::incoming::IncomingMessage
 use std::http::server_response::ServerResponse
 use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
 
+// System time for Date header (RFC 7231)
+@extern("tml_os_system_time_secs") func system_time_secs() -> I64
+
 // ════════════════════════════════════════════════════════════════════
 // Response constants
 // ════════════════════════════════════════════════════════════════════
@@ -545,16 +548,130 @@ func app_buf_copy(buf: I64, pos: I64, s: Str) -> I64 {
 // Pre-computed header fragments
 const HDR_CT: Str = "Content-Type: "
 const HDR_CL: Str = "Content-Length: "
+const HDR_DATE: Str = "\r\nDate: "
 const HDR_SUFFIX: Str = "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
 
-/// Build HTTP response — optimized hot path.
+// ════════════════════════════════════════════════════════════════════
+// HTTP Date header (RFC 7231 §7.1.1.2)
+// Format: "Thu, 01 Jan 1970 00:00:00 GMT"
+// Cached and refreshed every second (nginx pattern).
+// ════════════════════════════════════════════════════════════════════
+
+// Day-of-week names (Sun=0 .. Sat=6), each 3 chars
+const DOW_NAMES: Str = "SunMonTueWedThuFriSat"
+// Month names (Jan=1 .. Dec=12), each 3 chars
+const MON_NAMES: Str = "JanFebMarAprMayJunJulAugSepOctNovDec"
+
+// Date formatting: no global mutable state needed.
+// Computed fresh per call (~20 integer divs, <1µs — negligible vs network I/O).
+
+/// Returns true if year is a leap year.
+func is_leap_year(y: I64) -> Bool {
+    if y % 4 != 0 { return false }
+    if y % 100 != 0 { return true }
+    return y % 400 == 0
+}
+
+/// Days in month (1-indexed, 1=Jan).
+func days_in_month(m: I64, y: I64) -> I64 {
+    if m == 2 {
+        if is_leap_year(y) { return 29 }
+        return 28
+    }
+    if m == 4 or m == 6 or m == 9 or m == 11 { return 30 }
+    return 31
+}
+
+/// Format HTTP Date header value from epoch seconds.
+/// Returns a freshly allocated 29-byte string: "Thu, 01 Jan 1970 00:00:00 GMT"
+pub func app_http_date() -> Str {
+    let now: I64 = system_time_secs()
+    let secs_in_day: I64 = 86400
+
+    // Day of week: Jan 1 1970 was Thursday (4)
+    var dow: I64 = ((now / secs_in_day) + 4) % 7
+    if dow < 0 { dow = dow + 7 }
+
+    let time_of_day: I64 = now % secs_in_day
+    let hours: I64 = time_of_day / 3600
+    let mins: I64 = (time_of_day % 3600) / 60
+    let secs: I64 = time_of_day % 60
+
+    var days: I64 = now / secs_in_day
+    var year: I64 = 1970
+    loop (true) {
+        var days_in_year: I64 = 365
+        if is_leap_year(year) { days_in_year = 366 }
+        if days < days_in_year { break }
+        days = days - days_in_year
+        year = year + 1
+    }
+
+    var month: I64 = 1
+    loop (month <= 12) {
+        let dim: I64 = days_in_month(month, year)
+        if days < dim { break }
+        days = days - dim
+        month = month + 1
+    }
+    let day: I64 = days + 1
+
+    let buf: I64 = lowlevel { mem_alloc(30) } as I64
+
+    // Write "Thu, " (day of week)
+    let dow_off: I64 = dow * 3
+    lowlevel { copy_nonoverlapping((DOW_NAMES as I64 + dow_off) as *Unit, buf as *Unit, 3) }
+    lowlevel { ptr_write[U8]((buf + 3) as *U8, 44 as U8) }   // ','
+    lowlevel { ptr_write[U8]((buf + 4) as *U8, 32 as U8) }   // ' '
+
+    // Write "01" (day)
+    lowlevel { ptr_write[U8]((buf + 5) as *U8, (48 + day / 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 6) as *U8, (48 + day % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 7) as *U8, 32 as U8) }   // ' '
+
+    // Write "Jan" (month)
+    let mon_off: I64 = (month - 1) * 3
+    lowlevel { copy_nonoverlapping((MON_NAMES as I64 + mon_off) as *Unit, (buf + 8) as *Unit, 3) }
+    lowlevel { ptr_write[U8]((buf + 11) as *U8, 32 as U8) }  // ' '
+
+    // Write "1970" (year, 4 digits)
+    lowlevel { ptr_write[U8]((buf + 12) as *U8, (48 + (year / 1000) % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 13) as *U8, (48 + (year / 100) % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 14) as *U8, (48 + (year / 10) % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 15) as *U8, (48 + year % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 16) as *U8, 32 as U8) }  // ' '
+
+    // Write "00:00:00" (time)
+    lowlevel { ptr_write[U8]((buf + 17) as *U8, (48 + hours / 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 18) as *U8, (48 + hours % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 19) as *U8, 58 as U8) }  // ':'
+    lowlevel { ptr_write[U8]((buf + 20) as *U8, (48 + mins / 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 21) as *U8, (48 + mins % 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 22) as *U8, 58 as U8) }  // ':'
+    lowlevel { ptr_write[U8]((buf + 23) as *U8, (48 + secs / 10) as U8) }
+    lowlevel { ptr_write[U8]((buf + 24) as *U8, (48 + secs % 10) as U8) }
+
+    // Write " GMT\0"
+    lowlevel { ptr_write[U8]((buf + 25) as *U8, 32 as U8) }  // ' '
+    lowlevel { ptr_write[U8]((buf + 26) as *U8, 71 as U8) }  // 'G'
+    lowlevel { ptr_write[U8]((buf + 27) as *U8, 77 as U8) }  // 'M'
+    lowlevel { ptr_write[U8]((buf + 28) as *U8, 84 as U8) }  // 'T'
+    lowlevel { ptr_write[U8]((buf + 29) as *U8, 0 as U8) }   // null
+
+    return buf as Str
+}
+
+/// Build HTTP response — optimized hot path with Date header.
 pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
     let body_len: I64 = str::len(body)
     let status_line: Str = app_status_line(status)
     let sl_len: I64 = str::len(status_line)
     let ct_len: I64 = str::len(content_type)
     let hdr_suffix_len: I64 = str::len(HDR_SUFFIX)
-    let max_total: I64 = sl_len + 14 + ct_len + 2 + 16 + 10 + hdr_suffix_len + body_len
+    let date_val: Str = app_http_date()
+    let date_val_len: I64 = str::len(date_val)
+    // HDR_DATE ("\r\nDate: ") = 8 bytes + date_val (29 bytes) = 37 extra
+    let max_total: I64 = sl_len + 14 + ct_len + 2 + 16 + 10 + 8 + date_val_len + hdr_suffix_len + body_len
     let buf: I64 = lowlevel { mem_alloc(max_total + 1) } as I64
     var pos: I64 = 0
     lowlevel { copy_nonoverlapping(status_line as *Unit, buf as *Unit, sl_len) }
@@ -569,6 +686,11 @@ pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
     lowlevel { copy_nonoverlapping(HDR_CL as *Unit, (buf + pos) as *Unit, 16) }
     pos = pos + 16
     pos = app_itoa_content_length(buf, pos, body_len)
+    // Date header
+    lowlevel { copy_nonoverlapping(HDR_DATE as *Unit, (buf + pos) as *Unit, 8) }
+    pos = pos + 8
+    lowlevel { copy_nonoverlapping(date_val as *Unit, (buf + pos) as *Unit, date_val_len) }
+    pos = pos + date_val_len
     lowlevel { copy_nonoverlapping(HDR_SUFFIX as *Unit, (buf + pos) as *Unit, hdr_suffix_len) }
     pos = pos + hdr_suffix_len
     if body_len > 0 {
@@ -588,6 +710,8 @@ pub func app_build_response_into(buf: I64, status: I64, content_type: Str, body:
     let sl_len: I64 = str::len(status_line)
     let ct_len: I64 = str::len(content_type)
     let hdr_suffix_len: I64 = str::len(HDR_SUFFIX)
+    let date_val: Str = app_http_date()
+    let date_val_len: I64 = str::len(date_val)
     var pos: I64 = 0
     lowlevel { copy_nonoverlapping(status_line as *Unit, buf as *Unit, sl_len) }
     pos = sl_len
@@ -601,6 +725,11 @@ pub func app_build_response_into(buf: I64, status: I64, content_type: Str, body:
     lowlevel { copy_nonoverlapping(HDR_CL as *Unit, (buf + pos) as *Unit, 16) }
     pos = pos + 16
     pos = app_itoa_content_length(buf, pos, body_len)
+    // Date header
+    lowlevel { copy_nonoverlapping(HDR_DATE as *Unit, (buf + pos) as *Unit, 8) }
+    pos = pos + 8
+    lowlevel { copy_nonoverlapping(date_val as *Unit, (buf + pos) as *Unit, date_val_len) }
+    pos = pos + date_val_len
     lowlevel { copy_nonoverlapping(HDR_SUFFIX as *Unit, (buf + pos) as *Unit, hdr_suffix_len) }
     pos = pos + hdr_suffix_len
     if body_len > 0 {

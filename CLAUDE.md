@@ -2,6 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ MANDATORY: Consult Language Reference Before Implementing ⛔
+
+**Before writing ANY new TML code, you MUST read [docs/readme.md](docs/readme.md).**
+
+This is a HARD REQUIREMENT. The TML standard library has **500+ types, 5000+ functions**, and **template literals** already implemented. Past implementations ignored existing APIs (Buffer, Text, HashMap, List, Slice, Outcome, TcpStream, Mutex, template literals) and instead used raw `lowlevel` blocks everywhere — producing 692 unnecessary unsafe blocks in the HTTP module alone.
+
+**Rules:**
+
+1. **ALWAYS check [docs/readme.md](docs/readme.md)** for existing types before using `lowlevel { ptr_read/ptr_write/mem_alloc }`
+2. **Use `Text` for string building** — not manual `copy_nonoverlapping` chains
+3. **Use `Buffer` for byte manipulation** — not raw `ptr_read[U8]`/`ptr_write[U8]`
+4. **Use `HashMap`/`List` for collections** — not manual array+offset layouts
+5. **Use `Outcome[T,E]` with `!`** — not raw I64 error codes
+6. **Use template literals** — `` `Hello, {name}!` `` returns `Text`, works today
+7. **Use `Mutex[T]`/`Sync[T]` for shared state** — not manual memory layouts with offsets
+
+**The ONLY acceptable uses of `lowlevel` are:**
+- FFI calls to C runtime (`@extern("c")` wrappers)
+- Performance-critical inner loops where profiling proves the abstraction overhead matters
+- Implementing core library primitives (the types listed in docs/readme.md themselves)
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## Sandbox Directory (`.sandbox/`)
 
 Scratch space for temp files, IR dumps, experiments. Gitignored. Use freely, no permission needed.

@@ -71,9 +71,42 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 
 - [ ] 6.1 SO_REUSEPORT for zero-downtime restarts
 - [ ] 6.2 Multi-value header support (Set-Cookie, Vary)
-- [ ] 6.3 Connection: upgrade / WebSocket
+- [ ] 6.3 Connection: upgrade / WebSocket frame parser
 - [ ] 6.4 X-Request-Id generation
 - [ ] 6.5 Access logging (method, path, status, latency)
+
+## Phase 7: Memory & Buffer Optimization (from comparative analysis 2026-03-19)
+
+Reference: docs/analyses/comparative-analysis.md
+
+- [x] 7.1 Reduce recv buffer 64KB → 8KB with dynamic growth (IOCP: INITIAL_BUF_SIZE=8KB, grows 2x to 64KB)
+- [ ] 7.2 Per-worker buffer pool (arena allocator) — 0 malloc/free in steady state
+- [ ] 7.3 Dynamic IOCP connection slots — replace fixed 65K array with growable (start 4K, grow to 256K)
+- [ ] 7.4 Implement Bytes-like ref-counted buffer type for zero-copy sharing (Tokio pattern)
+- [ ] 7.5 Add backpressure — TCP flow control when handler is slow (Node.js/Hyper pattern)
+
+## Phase 8: Performance Instrumentation
+
+- [x] 8.1 Latency measurement — per-worker time_ns() tracking (min/max/avg_us) in thread pool worker
+- [ ] 8.2 Request/connection timeout enforcement (read_timeout, write_timeout, idle_timeout)
+- [ ] 8.3 Work-stealing for thread pool mode (Tokio model: LIFO local + FIFO global + steal-half)
+- [ ] 8.4 Graceful shutdown with connection draining (Go Server.Shutdown pattern)
+
+## Phase 9: TLS & HTTP/2
+
+- [ ] 9.1 TLS via @extern("c") to Schannel (Windows) / OpenSSL (Linux)
+- [ ] 9.2 ALPN negotiation for HTTP/2 detection
+- [ ] 9.3 HTTP/2 frame parser (9-byte header, binary protocol)
+- [ ] 9.4 HTTP/2 stream multiplexer (SETTINGS, HEADERS, DATA, RST_STREAM, GOAWAY)
+- [ ] 9.5 HPACK header compression (dynamic table)
+- [ ] 9.6 HTTP/2 flow control (WINDOW_UPDATE, per-stream + per-connection windows)
+
+## Phase 10: Advanced Optimizations
+
+- [ ] 10.1 SIMD-accelerated header parsing (LLVM vector intrinsics for CRLF/colon scan)
+- [ ] 10.2 sendfile()/TransmitFile for zero-copy static file serving
+- [ ] 10.3 Vectored I/O (writev/WSASend with multiple buffers)
+- [ ] 10.4 Offset-based parsing (replace null-termination with offset tracking)
 
 ## Performance (2026-03-18)
 

@@ -33,6 +33,9 @@ use std::net::eventloop::{NetEventLoop, Interest, Event}
 @extern("tml_thread_available_parallelism") func cpu_count() -> U32
 @extern("tml_thread_sleep_ms") func thread_sleep_ms(ms: U64)
 
+// High-resolution timer for latency measurement
+@extern("c") func time_ns() -> I64
+
 // Mutex FFI
 @extern("c") func tml_mutex_init(mutex: *Unit) -> I32
 @extern("c") func tml_mutex_lock(mutex: *Unit) -> I32
@@ -209,6 +212,12 @@ pub func app_worker(arg: *Unit) {
     // Response batch buffer for HTTP pipelining
     let resp_buf: I64 = lowlevel { mem_alloc(RESP_BUF_SIZE) } as I64
 
+    // Per-worker latency stats (nanoseconds)
+    var stat_requests: I64 = 0
+    var stat_latency_total_us: I64 = 0
+    var stat_latency_min_us: I64 = 999999999
+    var stat_latency_max_us: I64 = 0
+
     loop (true) {
         let fd: I64 = queue_pop(shared)
         if fd < 0 { break }
@@ -366,8 +375,15 @@ pub func app_worker(arg: *Unit) {
             // ── 6. HEAD support ────────────────────────────────────
             let is_head: Bool = method_len == 4 and str::char_at(method, 0) == 72
 
-            // ── 7. Dispatch to handler ─────────────────────────────
+            // ── 7. Dispatch to handler (with latency tracking) ─────
+            let t0: I64 = time_ns()
             let response: Str = app_dispatch(shared, method, path, body, fd, params_buf)
+            let t1: I64 = time_ns()
+            let latency_us: I64 = (t1 - t0) / 1000
+            stat_requests = stat_requests + 1
+            stat_latency_total_us = stat_latency_total_us + latency_us
+            if latency_us < stat_latency_min_us { stat_latency_min_us = latency_us }
+            if latency_us > stat_latency_max_us { stat_latency_max_us = latency_us }
             var send_len: I64 = str::len(response)
             if is_head {
                 let header_end: I64 = app_find_header_end_in_str(response)

@@ -1,0 +1,68 @@
+// Tests for URL percent-decoding
+use test::{assert, assert_eq}
+use core::str
+use core::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
+use std::http::parse::app_percent_decode
+
+/// Helper: copy string into a mutable buffer and return (buf_ptr, len).
+func to_buf(s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    let buf: I64 = lowlevel { mem_alloc(len + 1) } as I64
+    lowlevel { copy_nonoverlapping(s as *Unit, buf as *Unit, len) }
+    lowlevel { ptr_write[U8]((buf + len) as *U8, 0 as U8) }
+    return buf
+}
+
+@test
+func test_no_encoding() -> I32 {
+    let buf: I64 = to_buf("/hello/world")
+    let new_len: I64 = app_percent_decode(buf, 12)
+    assert_eq(new_len, 12, "no encoding, same length")
+    assert_eq(buf as Str, "/hello/world", "no change")
+    return 0
+}
+
+@test
+func test_space_encoding() -> I32 {
+    let buf: I64 = to_buf("/hello%20world")
+    let new_len: I64 = app_percent_decode(buf, 14)
+    assert_eq(new_len, 12, "decoded length")
+    assert_eq(buf as Str, "/hello world", "space decoded")
+    return 0
+}
+
+@test
+func test_slash_encoding() -> I32 {
+    let buf: I64 = to_buf("/path%2Fto%2Ffile")
+    let new_len: I64 = app_percent_decode(buf, 17)
+    assert_eq(new_len, 13, "decoded length")
+    assert_eq(buf as Str, "/path/to/file", "slash decoded")
+    return 0
+}
+
+@test
+func test_multiple_encodings() -> I32 {
+    let buf: I64 = to_buf("/a%20b%20c")
+    let new_len: I64 = app_percent_decode(buf, 10)
+    assert_eq(new_len, 6, "two spaces decoded")
+    assert_eq(buf as Str, "/a b c", "multiple decoded")
+    return 0
+}
+
+@test
+func test_lowercase_hex() -> I32 {
+    let buf: I64 = to_buf("/hello%2fworld")
+    let new_len: I64 = app_percent_decode(buf, 14)
+    assert_eq(new_len, 12, "lowercase hex decoded length")
+    assert_eq(buf as Str, "/hello/world", "lowercase hex decoded")
+    return 0
+}
+
+@test
+func test_plus_to_space() -> I32 {
+    let buf: I64 = to_buf("/hello+world")
+    let new_len: I64 = app_percent_decode(buf, 12)
+    assert_eq(new_len, 12, "plus same length")
+    assert_eq(buf as Str, "/hello world", "plus decoded to space")
+    return 0
+}

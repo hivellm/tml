@@ -49,12 +49,16 @@ use std::http::worker::app_bind_listener
 @extern("c") func tml_sys_setsockopt(handle: I64, level: I32, opt: I32, val: I32) -> I32
 @extern("tml_thread_sleep_ms") func thread_sleep_ms(ms: U64)
 
+// High-resolution timer for latency measurement
+@extern("c") func time_ns() -> I64
+
 // ════════════════════════════════════════════════════════════════════
 // Constants
 // ════════════════════════════════════════════════════════════════════
 
 const MAX_CONNS: I64 = 65536          // 64K concurrent connections
-const BUF_SIZE: I64 = 65536           // 64KB recv buffer per connection
+const BUF_SIZE: I64 = 65536           // 64KB max recv buffer per connection
+const INITIAL_BUF_SIZE: I64 = 8192    // 8KB initial recv buffer (nginx-inspired, saves 56KB/conn)
 const ACCEPT_POOL_SIZE: I64 = 64      // pre-issue 64 accepts
 const ACCEPT_BUF_SIZE: I64 = 128      // AcceptEx buffer (addresses only, no data)
 const IPPROTO_TCP: I32 = 6
@@ -69,9 +73,9 @@ const OP_TYPE_ACCEPT: I32 = 2
 // Per-connection state (flat array indexed by token)
 // ════════════════════════════════════════════════════════════════════
 
-const CONN_SIZE: I64 = 80             // bytes per connection slot
+const CONN_SIZE: I64 = 88             // bytes per connection slot
 const CONN_SOCKET: I64 = 0            // I64 -- socket handle (0 = free)
-const CONN_RECV_BUF: I64 = 8          // I64 -- pointer to recv buffer (64KB)
+const CONN_RECV_BUF: I64 = 8          // I64 -- pointer to recv buffer
 const CONN_RECV_USED: I64 = 16        // I64 -- bytes received so far
 const CONN_SEND_BUF: I64 = 24         // I64 -- pointer to response being sent (Str as I64)
 const CONN_SEND_LEN: I64 = 32         // I64 -- total bytes to send
@@ -80,6 +84,7 @@ const CONN_STATE: I64 = 48            // I64 -- 0=receiving, 1=sending
 const CONN_RECV_OP: I64 = 56          // I64 -- IocpOperation* for recv
 const CONN_SEND_OP: I64 = 64          // I64 -- IocpOperation* for send
 const CONN_FLAGS: I64 = 72            // I64 -- bit flags (keepalive, etc)
+const CONN_RECV_CAP: I64 = 80         // I64 -- recv buffer capacity (starts at INITIAL_BUF_SIZE, grows to BUF_SIZE)
 
 // Connection flags
 const FLAG_KEEPALIVE: I64 = 1
@@ -327,8 +332,9 @@ pub func app_iocp_worker(arg: *Unit) {
             // Set TCP_NODELAY for low latency
             tml_sys_setsockopt(accept_socket, IPPROTO_TCP, TCP_NODELAY, 1)
 
-            // Initialize connection slot
-            let recv_buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+            // Initialize connection slot with small initial buffer (8KB)
+            // Buffer grows dynamically to BUF_SIZE (64KB) only if needed
+            let recv_buf: I64 = lowlevel { mem_alloc(INITIAL_BUF_SIZE) } as I64
             iocp_conn_set(conns, slot, CONN_SOCKET, accept_socket)
             iocp_conn_set(conns, slot, CONN_RECV_BUF, recv_buf)
             iocp_conn_set(conns, slot, CONN_RECV_USED, 0)
@@ -337,6 +343,7 @@ pub func app_iocp_worker(arg: *Unit) {
             iocp_conn_set(conns, slot, CONN_SEND_SENT, 0)
             iocp_conn_set(conns, slot, CONN_STATE, 0)
             iocp_conn_set(conns, slot, CONN_FLAGS, FLAG_KEEPALIVE)  // default keep-alive for HTTP/1.1
+            iocp_conn_set(conns, slot, CONN_RECV_CAP, INITIAL_BUF_SIZE)
 
             // Allocate recv and send operations for this connection
             let recv_op: I64 = tml_iocp_op_alloc(accept_socket, OP_TYPE_RECV, slot as I32)
@@ -345,7 +352,7 @@ pub func app_iocp_worker(arg: *Unit) {
             iocp_conn_set(conns, slot, CONN_SEND_OP, send_op)
 
             // Issue async recv to start reading the first request
-            tml_iocp_recv(accept_socket, recv_buf as *Unit, BUF_SIZE - 1, recv_op as *Unit)
+            tml_iocp_recv(accept_socket, recv_buf as *Unit, INITIAL_BUF_SIZE - 1, recv_op as *Unit)
 
             // Replenish accept pool
             issue_accept(iocp, listen_socket)
@@ -372,9 +379,25 @@ pub func app_iocp_worker(arg: *Unit) {
 
             // Check if we have a complete request (headers ending with \r\n\r\n)
             if not app_has_header_end(recv_buf, new_used) {
+                let recv_cap: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_CAP)
+
                 // Need more data -- check if buffer is full
-                if new_used >= BUF_SIZE - 1 {
-                    // Headers too large, send 400 and close
+                if new_used >= recv_cap - 1 {
+                    if recv_cap < BUF_SIZE {
+                        // Grow buffer: double capacity up to BUF_SIZE (64KB)
+                        var new_cap: I64 = recv_cap * 2
+                        if new_cap > BUF_SIZE { new_cap = BUF_SIZE }
+                        let new_buf: I64 = lowlevel { mem_alloc(new_cap) } as I64
+                        lowlevel { copy_nonoverlapping(recv_buf as *Unit, new_buf as *Unit, new_used) }
+                        lowlevel { mem_free(recv_buf as *Unit) }
+                        iocp_conn_set(conns, conn_token, CONN_RECV_BUF, new_buf)
+                        iocp_conn_set(conns, conn_token, CONN_RECV_CAP, new_cap)
+                        // Re-issue recv with grown buffer
+                        let recv_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_OP)
+                        tml_iocp_recv(socket, (new_buf + new_used) as *Unit, new_cap - new_used - 1, recv_op_ptr as *Unit)
+                        continue
+                    }
+                    // Already at max (64KB) and still no complete headers — 400
                     let err_response: Str = RESPONSE_400
                     let err_len: I64 = str::len(err_response)
                     let send_op: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
@@ -388,7 +411,7 @@ pub func app_iocp_worker(arg: *Unit) {
                 }
                 // Re-issue recv at current offset for more data
                 let recv_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_OP)
-                tml_iocp_recv(socket, (recv_buf + new_used) as *Unit, BUF_SIZE - new_used - 1, recv_op_ptr as *Unit)
+                tml_iocp_recv(socket, (recv_buf + new_used) as *Unit, recv_cap - new_used - 1, recv_op_ptr as *Unit)
                 continue
             }
 
@@ -486,10 +509,11 @@ pub func app_iocp_worker(arg: *Unit) {
                 iocp_conn_set(conns, conn_token, CONN_SEND_LEN, 0)
                 iocp_conn_set(conns, conn_token, CONN_SEND_SENT, 0)
 
-                // Re-issue recv for next request
+                // Re-issue recv for next request (use current buffer capacity)
                 let recv_buf: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_BUF)
+                let recv_cap: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_CAP)
                 let recv_op_ptr: I64 = iocp_conn_get(conns, conn_token, CONN_RECV_OP)
-                tml_iocp_recv(socket, recv_buf as *Unit, BUF_SIZE - 1, recv_op_ptr as *Unit)
+                tml_iocp_recv(socket, recv_buf as *Unit, recv_cap - 1, recv_op_ptr as *Unit)
             } else {
                 // Connection: close -- tear down
                 close_connection(conns, conn_token)

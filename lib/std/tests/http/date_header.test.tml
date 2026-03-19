@@ -1,0 +1,30 @@
+// Tests for HTTP Date header generation (RFC 7231)
+use test::{assert, assert_eq}
+use core::str
+use std::http::dispatch::app_http_date
+
+@test
+func test_date_header_format() -> I32 {
+    let date: Str = app_http_date()
+    let len: I64 = str::len(date)
+    // HTTP Date format: "Thu, 01 Jan 1970 00:00:00 GMT" = 29 chars
+    assert_eq(len, 29, "date should be 29 chars")
+    return 0
+}
+
+@test
+func test_date_header_gmt_suffix() -> I32 {
+    let date: Str = app_http_date()
+    // Last 3 chars should be "GMT"
+    assert(str::ends_with(date, "GMT"), "should end with GMT")
+    return 0
+}
+
+@test
+func test_date_header_caching() -> I32 {
+    // Calling twice within the same second should return same value
+    let d1: Str = app_http_date()
+    let d2: Str = app_http_date()
+    assert_eq(d1, d2, "cached date should be same within 1 second")
+    return 0
+}
