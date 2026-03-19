@@ -35,7 +35,7 @@
 //! rs.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::events::EventEmitter
 
 // ============================================================================
@@ -131,12 +131,7 @@ func rbuf_append_str(h: I64, s: Str) {
     rbuf_ensure(h, slen)
     let len: I64 = rs_rd(h + 8)
     let data: I64 = rs_rd(h)
-    let src: I64 = s as I64
-    var i: I64 = 0
-    loop (i < slen) {
-        rs_wr_u8(data + len + i, rs_rd_u8(src + i))
-        i = i + 1
-    }
+    lowlevel { copy_nonoverlapping((s as I64) as *Unit, (data + len) as *Unit, slen) }
     rs_wr(h + 8, len + slen)
 }
 
@@ -153,13 +148,8 @@ func rbuf_prepend_str(h: I64, s: Str) {
         rs_wr_u8(data + slen + i, rs_rd_u8(data + i))
         i = i - 1
     }
-    // Copy new data to front
-    let src: I64 = s as I64
-    var j: I64 = 0
-    loop (j < slen) {
-        rs_wr_u8(data + j, rs_rd_u8(src + j))
-        j = j + 1
-    }
+    // Copy new data to front (non-overlapping — gap was created by shift)
+    lowlevel { copy_nonoverlapping((s as I64) as *Unit, data as *Unit, slen) }
     rs_wr(h + 8, len + slen)
 }
 
@@ -173,14 +163,9 @@ func rbuf_read(h: I64, size: I64) -> Str {
     let data: I64 = rs_rd(h)
     // Create string
     let str_buf: *Unit = rs_alloc(n + 1)
-    let str_addr: I64 = str_buf as I64
-    var i: I64 = 0
-    loop (i < n) {
-        rs_wr_u8(str_addr + i, rs_rd_u8(data + i))
-        i = i + 1
-    }
-    rs_wr_u8(str_addr + n, 0 as U8) // null terminator
-    // Shift remaining bytes left
+    lowlevel { copy_nonoverlapping(data as *Unit, str_buf, n) }
+    rs_wr_u8(str_buf as I64 + n, 0 as U8) // null terminator
+    // Shift remaining bytes left (overlapping — byte loop needed)
     let remaining: I64 = len - n
     var j: I64 = 0
     loop (j < remaining) {

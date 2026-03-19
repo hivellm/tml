@@ -39,7 +39,7 @@
 //! ws.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::events::EventEmitter
 
 // ============================================================================
@@ -124,12 +124,7 @@ func wbuf_append_str(h: I64, s: Str) {
     wbuf_ensure(h, slen)
     let len: I64 = ws_rd(h + 8)
     let data: I64 = ws_rd(h)
-    let src: I64 = s as I64
-    var i: I64 = 0
-    loop (i < slen) {
-        ws_wr_u8(data + len + i, ws_rd_u8(src + i))
-        i = i + 1
-    }
+    lowlevel { copy_nonoverlapping((s as I64) as *Unit, (data + len) as *Unit, slen) }
     ws_wr(h + 8, len + slen)
 }
 
@@ -138,11 +133,7 @@ func wbuf_append_bytes(h: I64, src_ptr: I64, count: I64) {
     wbuf_ensure(h, count)
     let len: I64 = ws_rd(h + 8)
     let data: I64 = ws_rd(h)
-    var i: I64 = 0
-    loop (i < count) {
-        ws_wr_u8(data + len + i, ws_rd_u8(src_ptr + i))
-        i = i + 1
-    }
+    lowlevel { copy_nonoverlapping(src_ptr as *Unit, (data + len) as *Unit, count) }
     ws_wr(h + 8, len + count)
 }
 
@@ -153,13 +144,8 @@ func wbuf_drain(h: I64) -> Str {
     if len == 0 { return "" }
     let data: I64 = ws_rd(h)
     let str_buf: *Unit = ws_alloc(len + 1)
-    let str_addr: I64 = str_buf as I64
-    var i: I64 = 0
-    loop (i < len) {
-        ws_wr_u8(str_addr + i, ws_rd_u8(data + i))
-        i = i + 1
-    }
-    ws_wr_u8(str_addr + len, 0 as U8)
+    lowlevel { copy_nonoverlapping(data as *Unit, str_buf, len) }
+    ws_wr_u8(str_buf as I64 + len, 0 as U8)
     ws_wr(h + 8, 0) // clear
     str_buf as Str
 }
