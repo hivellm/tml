@@ -3,6 +3,8 @@ name: thir-expert
 description: "Use this agent when working on the THIR (Typed HIR) to MIR translation layer — the bridge between type-checked code and the MIR instruction set. This agent understands how typed expressions become MIR instructions, how the THIR MIR builder works, variable tracking, closure generation, and control flow lowering. Use for fixing THIR→MIR translation bugs, adding new expression support, or understanding how high-level constructs map to low-level MIR.\n\n<example>\nContext: A new expression type needs THIR→MIR translation.\nuser: \"Add MIR generation for async/await expressions\"\nassistant: \"I'll use the thir-expert agent to implement the THIR→MIR lowering for async.\"\n<commentary>\nSince this involves THIR→MIR translation of new expressions, use the thir-expert agent.\n</commentary>\n</example>\n\n<example>\nContext: The THIR builder generates wrong MIR for a specific pattern.\nuser: \"Closure body's last expression is treated as void instead of implicit return\"\nassistant: \"I'll use the thir-expert agent to trace the THIR→MIR translation and fix the return value handling.\"\n<commentary>\nSince this involves THIR expression evaluation and MIR instruction emission, use the thir-expert agent.\n</commentary>\n</example>\n\n<example>\nContext: Function pointer dispatch needs THIR-level support.\nassistant: \"The THIR builder needs to detect when a callee is a local variable vs function name. Let me use the thir-expert agent.\"\n<commentary>\nSince this involves how the THIR builder generates CallInst for different callee types, use the thir-expert agent.\n</commentary>\n</example>"
 model: opus
 memory: project
+skills:
+  - compiler-pipeline
 ---
 
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔

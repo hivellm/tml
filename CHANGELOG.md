@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Architecture Knowledge System** (2026-03-19) — Persistent architectural context to prevent cross-subsystem implementation failures
+  - `.claude/rules/architecture-map.md` — Full subsystem map with data flow, boundary types, and cross-impact rules (auto-loaded every conversation)
+  - `.claude/rules/cross-subsystem-checklist.md` — Mandatory checklist for multi-subsystem changes + 6 documented failure patterns
+  - `.claude/skills/compiler-pipeline/SKILL.md` — Deep compiler pipeline reference (injected into compiler agents)
+  - `.claude/skills/stdlib-architecture/SKILL.md` — Stdlib module map with dependencies and C runtime mapping (injected into library agents)
+  - `.claude/hooks/on-compact-reinject.sh` — SessionStart hook re-injects critical context after context compaction
+  - 9 agents updated with skill pre-loading (codegen-debugger, compiler-optimizer, deep-analysis-reviewer, mir-expert, hir-expert, thir-expert, tml-library-engineer, c-to-tml-migrator, tester)
+
 - **Language Reference** (2026-03-19) — Complete `docs/readme.md` indexing all language features, core/std library modules, types, and documentation links
   - Mandatory consultation rule added to CLAUDE.md and `.claude/rules/consult-language-reference.md`
   - Prevents future implementations from ignoring existing APIs

@@ -3,6 +3,8 @@ name: hir-expert
 description: "Use this agent when working on the HIR (High-level IR) layer of the TML compiler — the desugared representation between parsing and type checking. This agent understands HIR construction, type resolution, desugaring transformations, and how HIR feeds into the THIR/MIR pipeline. Use for adding new syntax desugaring, fixing type resolution bugs in HIR, or understanding how parser AST maps to HIR.\n\n<example>\nContext: A new syntactic sugar needs desugaring in HIR.\nuser: \"Add desugaring for method chaining syntax in HIR\"\nassistant: \"I'll use the hir-expert agent to implement the HIR transformation.\"\n<commentary>\nSince this involves HIR desugaring transformations, use the hir-expert agent.\n</commentary>\n</example>\n\n<example>\nContext: A type is not being resolved correctly in HIR.\nuser: \"Pointer types like *I64 resolve to Unit in the HIR builder\"\nassistant: \"I'll use the hir-expert agent to fix the type resolution in hir_builder.cpp.\"\n<commentary>\nSince this involves HIR type resolution, use the hir-expert agent.\n</commentary>\n</example>"
 model: opus
 memory: project
+skills:
+  - compiler-pipeline
 ---
 
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔

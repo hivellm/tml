@@ -4,6 +4,8 @@ model: sonnet
 description: Writes tests, validates coverage, and enforces quality gates. Use after implementation to ensure code quality.
 tools: Read, Glob, Grep, Edit, Write, Bash
 maxTurns: 25
+skills:
+  - stdlib-architecture
 ---
 
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔

@@ -13,5 +13,15 @@
       "Agent(*)"
     ]
   },
-  "enabledMcpjsonServers": ["tml"]
+  "enabledMcpjsonServers": ["tml"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "type": "command",
+        "command": "bash .claude/hooks/on-compact-reinject.sh",
+        "timeout": 5000
+      }
+    ]
+  }
 }

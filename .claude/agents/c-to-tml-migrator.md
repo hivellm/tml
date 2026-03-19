@@ -3,6 +3,8 @@ name: c-to-tml-migrator
 description: "Use this agent when migrating C runtime code to pure TML implementations. This includes analyzing C files in compiler/runtime/ or lib/std/runtime/, designing equivalent TML implementations using memory intrinsics, and producing clean migration PRs. Use proactively when adding new functionality that could be implemented in pure TML instead of C.\n\n<example>\nContext: The user wants to migrate a string utility from C to TML.\nuser: \"Migrate str_repeat from C to pure TML\"\nassistant: \"I'll use the c-to-tml-migrator agent to analyze the C implementation and produce an equivalent pure TML version using memory intrinsics.\"\n<commentary>\nSince this is a C-to-TML migration task requiring analysis of both the C implementation and TML intrinsics, use the c-to-tml-migrator agent.\n</commentary>\n</example>\n\n<example>\nContext: A bug fix in C runtime code is an opportunity to migrate.\nassistant: \"This bug is in compiler/runtime/text/str_ops.c. Before fixing, let me check if this function can be migrated to pure TML instead.\"\n<commentary>\nProactive use: when fixing a bug in C runtime code marked for migration, launch the c-to-tml-migrator to evaluate migration feasibility.\n</commentary>\n</example>\n\n<example>\nContext: New functionality is being considered for C implementation.\nuser: \"We need a base64 encoder\"\nassistant: \"I'll use the c-to-tml-migrator agent to implement this in pure TML rather than adding new C code.\"\n<commentary>\nSince the project mandates minimizing new C code, use the c-to-tml-migrator to implement in pure TML.\n</commentary>\n</example>"
 model: sonnet
 memory: project
+skills:
+  - stdlib-architecture
 ---
 
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔

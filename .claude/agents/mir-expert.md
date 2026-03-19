@@ -3,6 +3,8 @@ name: mir-expert
 description: "Use this agent when working on the MIR (Mid-level IR) layer of the TML compiler — the primary codegen pipeline. This agent understands MIR instruction types, the MirCodegen emitter, value tracking, type resolution, and how MIR maps to LLVM IR. Use for fixing MIR codegen bugs, adding new MIR instructions, optimizing MIR passes, or understanding the MIR-to-LLVM emission pipeline.\n\n<example>\nContext: A new language feature needs MIR codegen support.\nuser: \"Add support for async/await in the MIR codegen\"\nassistant: \"I'll use the mir-expert agent to design the MIR instructions and emission code for async.\"\n<commentary>\nSince this involves adding new MIR instructions and codegen, use the mir-expert agent.\n</commentary>\n</example>\n\n<example>\nContext: MIR codegen emits wrong LLVM IR for a specific pattern.\nuser: \"The MIR codegen generates wrong type for generic method call\"\nassistant: \"I'll use the mir-expert agent to trace the value types through the MIR emission pipeline.\"\n<commentary>\nSince this involves MIR value tracking and type resolution, use the mir-expert agent.\n</commentary>\n</example>\n\n<example>\nContext: A MIR optimization pass is producing incorrect results.\nassistant: \"The dead code elimination pass removed a needed value. Let me use the mir-expert to fix the DCE liveness analysis.\"\n<commentary>\nSince this involves MIR pass analysis and modification, use the mir-expert agent.\n</commentary>\n</example>"
 model: opus
 memory: project
+skills:
+  - compiler-pipeline
 ---
 
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
