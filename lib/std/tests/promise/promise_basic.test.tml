@@ -1,0 +1,110 @@
+// Tests for Promise[T] — basic creation and state inspection
+use test::{assert, assert_eq}
+use std::promise::{Promise, PromiseState}
+
+// ============================================================================
+// Promise::resolve tests
+// ============================================================================
+
+@test
+func test_promise_resolve_i32() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    assert(p.is_fulfilled(), "resolved promise should be fulfilled")
+    assert(not p.is_pending(), "resolved promise should not be pending")
+    assert(not p.is_rejected(), "resolved promise should not be rejected")
+    assert(p.is_settled(), "resolved promise should be settled")
+    return 0
+}
+
+@test
+func test_promise_resolve_value() -> I32 {
+    let p: Promise[I32] = Promise::resolve(99)
+    assert_eq(p.unwrap(), 99, "resolved value should be 99")
+    return 0
+}
+
+@test
+func test_promise_resolve_unwrap_or() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    assert_eq(p.unwrap_or(0), 42, "unwrap_or on fulfilled should return value")
+    return 0
+}
+
+// ============================================================================
+// Promise::reject tests
+// ============================================================================
+
+@test
+func test_promise_reject() -> I32 {
+    let p: Promise[I32] = Promise::reject("oops")
+    assert(p.is_rejected(), "rejected promise should be rejected")
+    assert(not p.is_fulfilled(), "rejected promise should not be fulfilled")
+    assert(not p.is_pending(), "rejected promise should not be pending")
+    assert(p.is_settled(), "rejected promise should be settled")
+    return 0
+}
+
+@test
+func test_promise_reject_unwrap_or() -> I32 {
+    let p: Promise[I32] = Promise::reject("fail")
+    assert_eq(p.unwrap_or(-1), -1, "unwrap_or on rejected should return default")
+    return 0
+}
+
+// ============================================================================
+// Promise::pending tests
+// ============================================================================
+
+@test
+func test_promise_pending() -> I32 {
+    let p: Promise[I32] = Promise::pending()
+    assert(p.is_pending(), "pending promise should be pending")
+    assert(not p.is_fulfilled(), "pending promise should not be fulfilled")
+    assert(not p.is_rejected(), "pending promise should not be rejected")
+    assert(not p.is_settled(), "pending promise should not be settled")
+    return 0
+}
+
+@test
+func test_promise_pending_unwrap_or() -> I32 {
+    let p: Promise[I32] = Promise::pending()
+    assert_eq(p.unwrap_or(0), 0, "unwrap_or on pending should return default")
+    return 0
+}
+
+// ============================================================================
+// Promise::to_outcome tests
+// ============================================================================
+
+@test
+func test_promise_to_outcome_ok() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    let r: Outcome[I32, Str] = p.to_outcome()
+    when r {
+        Ok(v) => assert_eq(v, 42, "to_outcome Ok value should be 42"),
+        Err(_) => assert(false, "to_outcome should be Ok for fulfilled"),
+    }
+    return 0
+}
+
+@test
+func test_promise_to_outcome_err() -> I32 {
+    let p: Promise[I32] = Promise::reject("bad")
+    let r: Outcome[I32, Str] = p.to_outcome()
+    when r {
+        Ok(_) => assert(false, "to_outcome should be Err for rejected"),
+        Err(e) => assert_eq(e, "bad", "to_outcome Err should carry reason"),
+    }
+    return 0
+}
+
+@test
+func test_promise_to_outcome_pending() -> I32 {
+    let p: Promise[I32] = Promise::pending()
+    let r: Outcome[I32, Str] = p.to_outcome()
+    when r {
+        Ok(_) => assert(false, "to_outcome should be Err for pending"),
+        Err(e) => assert_eq(e, "pending", "to_outcome should say pending"),
+    }
+    return 0
+}

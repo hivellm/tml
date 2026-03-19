@@ -1,0 +1,646 @@
+//! HTTP/2 binary frame codec (RFC 7540).
+//!
+//! Implements encoding and decoding of HTTP/2 frames with their 9-byte headers.
+//! All multi-byte integers use network byte order (big-endian) per the spec.
+//!
+//! # Frame Format
+//!
+//! ```
+//! +-----------------------------------------------+
+//! |                 Length (24 bits)               |
+//! +---------------+---------------+---------------+
+//! |   Type (8)    |   Flags (8)   |
+//! +-+-------------+---------------+------+--------+
+//! |R|                 Stream ID (31 bits)         |
+//! +-+---------------------------------------------+
+//! |                Frame Payload ...               |
+//! +-----------------------------------------------+
+//! ```
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::http::h2::frame::{H2Frame, H2FrameType, h2_encode_frame, h2_decode_frame}
+//!
+//! let frame = H2Frame.new(H2FrameType::Ping, 0, 0, Buffer::new(8))
+//! let encoded = h2_encode_frame(ref frame)
+//! ```
+
+use std::collections::Buffer
+
+// ============================================================================
+// Error type
+// ============================================================================
+
+/// Errors that can occur during HTTP/2 frame or HPACK processing.
+pub type H2Error {
+    kind: I32,
+    detail: Str,
+}
+
+impl H2Error {
+    pub func frame_too_short() -> H2Error {
+        H2Error { kind: 1, detail: "frame too short: need at least 9 bytes" }
+    }
+
+    pub func invalid_frame_type(val: I32) -> H2Error {
+        H2Error { kind: 2, detail: "invalid frame type" }
+    }
+
+    pub func invalid_setting_id(id: I64) -> H2Error {
+        H2Error { kind: 3, detail: "invalid setting identifier" }
+    }
+
+    pub func invalid_stream_id() -> H2Error {
+        H2Error { kind: 4, detail: "invalid stream identifier" }
+    }
+
+    pub func frame_too_large() -> H2Error {
+        H2Error { kind: 5, detail: "frame payload exceeds maximum size" }
+    }
+
+    pub func hpack_index_out_of_range(index: I64) -> H2Error {
+        H2Error { kind: 6, detail: "HPACK index out of range" }
+    }
+
+    pub func hpack_invalid_encoding() -> H2Error {
+        H2Error { kind: 7, detail: "HPACK invalid encoding" }
+    }
+
+    pub func hpack_table_size_exceeded() -> H2Error {
+        H2Error { kind: 8, detail: "HPACK dynamic table size exceeded" }
+    }
+
+    pub func protocol_error(msg: Str) -> H2Error {
+        H2Error { kind: 9, detail: msg }
+    }
+
+    pub func settings_invalid_length() -> H2Error {
+        H2Error { kind: 10, detail: "SETTINGS payload length not a multiple of 6" }
+    }
+
+    /// Returns the error kind discriminant.
+    pub func error_kind(this) -> I32 { this.kind }
+
+    /// Returns the human-readable error message.
+    pub func message(this) -> Str { this.detail }
+}
+
+// ============================================================================
+// Frame type enumeration
+// ============================================================================
+
+/// HTTP/2 frame types (RFC 7540 Section 6).
+///
+/// Encoded as a struct with a discriminant I32 to avoid enum codegen issues.
+pub type H2FrameType {
+    value: I32,
+}
+
+impl H2FrameType {
+    /// DATA frame (0x0) — conveys arbitrary, variable-length sequences of octets.
+    pub func Data() -> H2FrameType { H2FrameType { value: 0 } }
+    /// HEADERS frame (0x1) — opens a stream, carries header block fragment.
+    pub func Headers() -> H2FrameType { H2FrameType { value: 1 } }
+    /// PRIORITY frame (0x2) — specifies sender-advised priority of a stream.
+    pub func Priority() -> H2FrameType { H2FrameType { value: 2 } }
+    /// RST_STREAM frame (0x3) — immediately terminates a stream.
+    pub func RstStream() -> H2FrameType { H2FrameType { value: 3 } }
+    /// SETTINGS frame (0x4) — configuration parameters for connection.
+    pub func Settings() -> H2FrameType { H2FrameType { value: 4 } }
+    /// PUSH_PROMISE frame (0x5) — notify peer of server-initiated stream.
+    pub func PushPromise() -> H2FrameType { H2FrameType { value: 5 } }
+    /// PING frame (0x6) — mechanism for measuring round-trip time.
+    pub func Ping() -> H2FrameType { H2FrameType { value: 6 } }
+    /// GOAWAY frame (0x7) — initiate shutdown of connection.
+    pub func GoAway() -> H2FrameType { H2FrameType { value: 7 } }
+    /// WINDOW_UPDATE frame (0x8) — flow-control window size change.
+    pub func WindowUpdate() -> H2FrameType { H2FrameType { value: 8 } }
+    /// CONTINUATION frame (0x9) — continue a sequence of header block fragments.
+    pub func Continuation() -> H2FrameType { H2FrameType { value: 9 } }
+
+    /// Returns the raw U8 wire value for this frame type.
+    pub func to_u8(this) -> I32 { this.value }
+
+    /// Returns the human-readable name of this frame type.
+    pub func to_string(this) -> Str {
+        if this.value == 0 { return "DATA" }
+        if this.value == 1 { return "HEADERS" }
+        if this.value == 2 { return "PRIORITY" }
+        if this.value == 3 { return "RST_STREAM" }
+        if this.value == 4 { return "SETTINGS" }
+        if this.value == 5 { return "PUSH_PROMISE" }
+        if this.value == 6 { return "PING" }
+        if this.value == 7 { return "GOAWAY" }
+        if this.value == 8 { return "WINDOW_UPDATE" }
+        if this.value == 9 { return "CONTINUATION" }
+        return "UNKNOWN"
+    }
+
+    /// True if this frame type equals another.
+    pub func eq(this, other: H2FrameType) -> Bool {
+        this.value == other.value
+    }
+}
+
+/// Converts a wire byte to a frame type. Returns Nothing for unknown types.
+pub func h2_frame_type_from_u8(val: I32) -> Maybe[H2FrameType] {
+    if val >= 0 and val <= 9 {
+        return Just(H2FrameType { value: val })
+    }
+    Nothing
+}
+
+/// Converts a frame type to its wire byte representation.
+pub func h2_frame_type_to_u8(ft: H2FrameType) -> I32 {
+    ft.value
+}
+
+// ============================================================================
+// Frame flags (RFC 7540 Section 6)
+// ============================================================================
+
+/// ACK flag (0x01) — used by SETTINGS and PING frames.
+pub const H2_FLAG_ACK: I32 = 0x01
+/// END_STREAM flag (0x01) — signals the last frame for a stream (DATA, HEADERS).
+pub const H2_FLAG_END_STREAM: I32 = 0x01
+/// END_HEADERS flag (0x04) — signals end of header block (HEADERS, PUSH_PROMISE, CONTINUATION).
+pub const H2_FLAG_END_HEADERS: I32 = 0x04
+/// PADDED flag (0x08) — indicates padding is present (DATA, HEADERS).
+pub const H2_FLAG_PADDED: I32 = 0x08
+/// PRIORITY flag (0x20) — indicates priority fields present (HEADERS).
+pub const H2_FLAG_PRIORITY: I32 = 0x20
+
+// ============================================================================
+// Frame structure
+// ============================================================================
+
+/// A parsed HTTP/2 frame.
+///
+/// The `payload` Buffer contains the frame body after the 9-byte header.
+/// The `stream_id` is the 31-bit stream identifier (high bit reserved, always 0).
+pub type H2Frame {
+    length: I64,
+    frame_type: H2FrameType,
+    flags: I32,
+    stream_id: I64,
+    payload: Buffer,
+}
+
+impl H2Frame {
+    /// Creates a new frame with the given parameters.
+    pub func new(ft: H2FrameType, flags: I32, stream_id: I64, payload: Buffer) -> H2Frame {
+        let len: I64 = payload.len()
+        H2Frame {
+            length: len,
+            frame_type: ft,
+            flags: flags,
+            stream_id: stream_id,
+            payload: payload,
+        }
+    }
+
+    /// Creates a SETTINGS frame with the given parameter pairs.
+    /// Each pair is (setting_id as I32, value as I64).
+    pub func settings(pairs: Buffer) -> H2Frame {
+        H2Frame.new(H2FrameType::Settings(), 0, 0, pairs)
+    }
+
+    /// Creates a SETTINGS ACK frame (empty payload, ACK flag).
+    pub func settings_ack() -> H2Frame {
+        H2Frame.new(H2FrameType::Settings(), H2_FLAG_ACK, 0, Buffer::new(0))
+    }
+
+    /// Creates a PING frame with 8 bytes of opaque data.
+    pub func ping(data: Buffer) -> H2Frame {
+        H2Frame.new(H2FrameType::Ping(), 0, 0, data)
+    }
+
+    /// Creates a PING ACK frame.
+    pub func ping_ack(data: Buffer) -> H2Frame {
+        H2Frame.new(H2FrameType::Ping(), H2_FLAG_ACK, 0, data)
+    }
+
+    /// Creates a GOAWAY frame.
+    /// last_stream_id: highest stream ID the sender will process.
+    /// error_code: HTTP/2 error code.
+    pub func goaway(last_stream_id: I64, error_code: I64) -> H2Frame {
+        let buf = Buffer::new(8)
+        // 4 bytes: last-stream-id (big-endian, 31 bits)
+        buf.write_u32_be(last_stream_id & 0x7FFFFFFF, 0)
+        // 4 bytes: error code (big-endian)
+        buf.write_u32_be(error_code, 4)
+        H2Frame.new(H2FrameType::GoAway(), 0, 0, buf)
+    }
+
+    /// Creates a WINDOW_UPDATE frame.
+    /// increment: the number of bytes the sender can transmit (31 bits, must be > 0).
+    pub func window_update(stream_id: I64, increment: I64) -> H2Frame {
+        let buf = Buffer::new(4)
+        buf.write_u32_be(increment & 0x7FFFFFFF, 0)
+        H2Frame.new(H2FrameType::WindowUpdate(), 0, stream_id, buf)
+    }
+
+    /// Creates a RST_STREAM frame.
+    pub func rst_stream(stream_id: I64, error_code: I64) -> H2Frame {
+        let buf = Buffer::new(4)
+        buf.write_u32_be(error_code, 0)
+        H2Frame.new(H2FrameType::RstStream(), 0, stream_id, buf)
+    }
+
+    /// Creates a DATA frame.
+    pub func data(stream_id: I64, payload: Buffer, end_stream: Bool) -> H2Frame {
+        var flags: I32 = 0
+        if end_stream {
+            flags = H2_FLAG_END_STREAM
+        }
+        H2Frame.new(H2FrameType::Data(), flags, stream_id, payload)
+    }
+
+    /// Creates a HEADERS frame.
+    pub func headers(stream_id: I64, header_block: Buffer, end_stream: Bool, end_headers: Bool) -> H2Frame {
+        var flags: I32 = 0
+        if end_stream {
+            flags = flags | H2_FLAG_END_STREAM
+        }
+        if end_headers {
+            flags = flags | H2_FLAG_END_HEADERS
+        }
+        H2Frame.new(H2FrameType::Headers(), flags, stream_id, header_block)
+    }
+
+    /// Returns true if the END_STREAM flag is set.
+    pub func is_end_stream(this) -> Bool {
+        // END_STREAM is 0x01, valid on DATA and HEADERS
+        (this.flags & H2_FLAG_END_STREAM) != 0
+    }
+
+    /// Returns true if the END_HEADERS flag is set.
+    pub func is_end_headers(this) -> Bool {
+        (this.flags & H2_FLAG_END_HEADERS) != 0
+    }
+
+    /// Returns true if the ACK flag is set.
+    pub func is_ack(this) -> Bool {
+        (this.flags & H2_FLAG_ACK) != 0
+    }
+
+    /// Returns true if the PADDED flag is set.
+    pub func is_padded(this) -> Bool {
+        (this.flags & H2_FLAG_PADDED) != 0
+    }
+
+    /// Returns true if the PRIORITY flag is set.
+    pub func is_priority(this) -> Bool {
+        (this.flags & H2_FLAG_PRIORITY) != 0
+    }
+}
+
+// ============================================================================
+// Frame encoding
+// ============================================================================
+
+/// Encode an HTTP/2 frame header and payload into a Buffer.
+///
+/// The output buffer contains:
+///   - Bytes 0-2: payload length (24-bit big-endian)
+///   - Byte 3: frame type
+///   - Byte 4: flags
+///   - Bytes 5-8: stream identifier (31-bit big-endian, R bit = 0)
+///   - Bytes 9+: payload
+///
+/// Parameters are passed individually to avoid struct-by-value codegen issues.
+pub func h2_encode_frame_raw(frame_type: I32, flags: I32, stream_id: I64, payload: Buffer) -> Buffer {
+    let payload_len: I64 = payload.len()
+    let total: I64 = 9 + payload_len
+    let buf = Buffer::new(total)
+
+    // Length (24-bit big-endian): byte 0 = MSB, byte 2 = LSB
+    buf.write_u8(((payload_len >> 16) & 0xFF) as I32, 0)
+    buf.write_u8(((payload_len >> 8) & 0xFF) as I32, 1)
+    buf.write_u8((payload_len & 0xFF) as I32, 2)
+
+    // Type (8 bits)
+    buf.write_u8(frame_type, 3)
+
+    // Flags (8 bits)
+    buf.write_u8(flags, 4)
+
+    // Stream ID (31 bits big-endian, R bit = 0)
+    let sid: I64 = stream_id & 0x7FFFFFFF
+    buf.write_u32_be(sid, 5)
+
+    // Copy payload bytes
+    var i: I64 = 0
+    loop (i < payload_len) {
+        buf.write_u8(payload.get(i), 9 + i)
+        i = i + 1
+    }
+
+    buf
+}
+
+/// Convenience wrapper: encode an H2Frame using its method.
+pub func h2_encode_frame(frame: H2Frame) -> Buffer {
+    h2_encode_frame_raw(frame.frame_type.to_u8(), frame.flags, frame.stream_id, frame.payload)
+}
+
+impl H2Frame {
+    /// Encode this frame into a Buffer (9-byte header + payload).
+    /// This method avoids struct-by-value issues by using `this` (pointer receiver).
+    pub func encode(this) -> Buffer {
+        h2_encode_frame_raw(this.frame_type.to_u8(), this.flags, this.stream_id, this.payload)
+    }
+}
+
+/// Decode an HTTP/2 frame from raw bytes.
+///
+/// Returns (frame, bytes_consumed) on success.
+/// The input must contain at least 9 bytes for the frame header.
+/// Returns an error if the data is too short for the header or the declared payload.
+pub func h2_decode_frame(data: Buffer) -> Outcome[(H2Frame, I64), H2Error] {
+    let data_len: I64 = data.len()
+    if data_len < 9 {
+        return Err(H2Error::frame_too_short())
+    }
+
+    // Parse 24-bit length (big-endian)
+    let b0: I64 = data.get(0) as I64
+    let b1: I64 = data.get(1) as I64
+    let b2: I64 = data.get(2) as I64
+    let payload_len: I64 = (b0 << 16) | (b1 << 8) | b2
+
+    // Check we have enough data for header + payload
+    let total_needed: I64 = 9 + payload_len
+    if data_len < total_needed {
+        return Err(H2Error::frame_too_short())
+    }
+
+    // Frame type
+    let type_byte: I32 = data.get(3)
+    let maybe_ft: Maybe[H2FrameType] = h2_frame_type_from_u8(type_byte)
+    // For unknown frame types, treat them as opaque (RFC 7540 Section 4.1)
+    // We still store them with their raw type byte.
+    var ft: H2FrameType = H2FrameType { value: type_byte }
+    if maybe_ft.is_just() {
+        ft = maybe_ft.unwrap()
+    }
+
+    // Flags
+    let flags: I32 = data.get(4)
+
+    // Stream ID (31-bit big-endian, mask off R bit)
+    let stream_id: I64 = data.read_u32_be(5) & 0x7FFFFFFF
+
+    // Extract payload
+    let payload = Buffer::new(payload_len)
+    var i: I64 = 0
+    loop (i < payload_len) {
+        payload.write_u8(data.get(9 + i), i)
+        i = i + 1
+    }
+
+    let frame = H2Frame {
+        length: payload_len,
+        frame_type: ft,
+        flags: flags,
+        stream_id: stream_id,
+        payload: payload,
+    }
+    Ok((frame, total_needed))
+}
+
+// ============================================================================
+// Settings types and helpers
+// ============================================================================
+
+/// HTTP/2 settings parameters (RFC 7540 Section 6.5.2).
+pub type H2Setting {
+    id: I32,
+}
+
+impl H2Setting {
+    /// SETTINGS_HEADER_TABLE_SIZE (0x1) — default 4096.
+    pub func HeaderTableSize() -> H2Setting { H2Setting { id: 1 } }
+    /// SETTINGS_ENABLE_PUSH (0x2) — default 1.
+    pub func EnablePush() -> H2Setting { H2Setting { id: 2 } }
+    /// SETTINGS_MAX_CONCURRENT_STREAMS (0x3) — default unlimited.
+    pub func MaxConcurrentStreams() -> H2Setting { H2Setting { id: 3 } }
+    /// SETTINGS_INITIAL_WINDOW_SIZE (0x4) — default 65535.
+    pub func InitialWindowSize() -> H2Setting { H2Setting { id: 4 } }
+    /// SETTINGS_MAX_FRAME_SIZE (0x5) — default 16384.
+    pub func MaxFrameSize() -> H2Setting { H2Setting { id: 5 } }
+    /// SETTINGS_MAX_HEADER_LIST_SIZE (0x6) — default unlimited.
+    pub func MaxHeaderListSize() -> H2Setting { H2Setting { id: 6 } }
+
+    /// Returns the raw 16-bit identifier.
+    pub func to_id(this) -> I32 { this.id }
+
+    /// True if this setting equals another.
+    pub func eq(this, other: H2Setting) -> Bool {
+        this.id == other.id
+    }
+
+    /// Human-readable name.
+    pub func to_string(this) -> Str {
+        if this.id == 1 { return "HEADER_TABLE_SIZE" }
+        if this.id == 2 { return "ENABLE_PUSH" }
+        if this.id == 3 { return "MAX_CONCURRENT_STREAMS" }
+        if this.id == 4 { return "INITIAL_WINDOW_SIZE" }
+        if this.id == 5 { return "MAX_FRAME_SIZE" }
+        if this.id == 6 { return "MAX_HEADER_LIST_SIZE" }
+        return "UNKNOWN"
+    }
+}
+
+/// Converts a 16-bit identifier to a setting type.
+pub func h2_setting_from_id(id: I32) -> Maybe[H2Setting] {
+    if id >= 1 and id <= 6 {
+        return Just(H2Setting { id: id })
+    }
+    Nothing
+}
+
+/// Encode a list of settings into a SETTINGS frame payload.
+///
+/// Each setting is encoded as 6 bytes: 2-byte identifier (big-endian) + 4-byte value (big-endian).
+/// The `settings` parameter is a flat buffer of (I32 id, I64 value) pairs represented
+/// as alternating calls to encode_setting_pair.
+pub func h2_encode_settings_pair(buf: Buffer, setting: H2Setting, value: I64) {
+    let offset: I64 = buf.len()
+    // 2-byte identifier (big-endian)
+    buf.write_u16_be(setting.to_id(), offset)
+    // 4-byte value (big-endian)
+    buf.write_u32_be(value, offset + 2)
+}
+
+/// A decoded SETTINGS parameter pair.
+pub type H2SettingPair {
+    id: I32,
+    value: I64,
+}
+
+impl H2SettingPair {
+    pub func new(id: I32, value: I64) -> H2SettingPair {
+        H2SettingPair { id: id, value: value }
+    }
+
+    /// Convert the id to an H2Setting (returns Nothing for unknown IDs).
+    pub func setting(this) -> Maybe[H2Setting] {
+        h2_setting_from_id(this.id)
+    }
+}
+
+/// Decoded SETTINGS result — stores setting pairs in a flat struct.
+/// Use `count()` and `get_id(i)`/`get_value(i)` to access individual pairs.
+pub type H2SettingsResult {
+    ids: Buffer,
+    values: Buffer,
+    count_val: I64,
+}
+
+impl H2SettingsResult {
+    pub func new() -> H2SettingsResult {
+        H2SettingsResult {
+            ids: Buffer::new(32),
+            values: Buffer::new(64),
+            count_val: 0,
+        }
+    }
+
+    pub func count(this) -> I64 { this.count_val }
+
+    pub func add(this, id: I32, value: I64) {
+        this.ids.write_u16_be(id, this.count_val * 2)
+        this.values.write_u32_be(value, this.count_val * 4)
+        this.count_val = this.count_val + 1
+    }
+
+    pub func get_id(this, index: I64) -> I32 {
+        this.ids.read_u16_be(index * 2)
+    }
+
+    pub func get_value(this, index: I64) -> I64 {
+        this.values.read_u32_be(index * 4)
+    }
+}
+
+/// Decode a SETTINGS frame payload into individual setting pairs.
+///
+/// The payload must be a multiple of 6 bytes.
+/// Returns an H2SettingsResult with the decoded pairs.
+/// Use `h2_setting_from_id` to convert raw IDs to H2Setting.
+///
+/// Unknown setting IDs are included as-is (RFC 7540 Section 6.5.2:
+/// "An endpoint that receives a SETTINGS frame with any unknown or
+/// unsupported identifier MUST ignore that setting.")
+pub func h2_decode_settings(payload: Buffer) -> Outcome[H2SettingsResult, H2Error] {
+    let plen: I64 = payload.len()
+    if plen % 6 != 0 {
+        return Err(H2Error::settings_invalid_length())
+    }
+
+    var result = H2SettingsResult::new()
+    var offset: I64 = 0
+    loop (offset + 6 <= plen) {
+        let id: I32 = payload.read_u16_be(offset)
+        let value: I64 = payload.read_u32_be(offset + 2)
+        result.add(id, value)
+        offset = offset + 6
+    }
+
+    Ok(result)
+}
+
+// ============================================================================
+// Connection preface
+// ============================================================================
+
+/// The HTTP/2 connection preface string (RFC 7540 Section 3.5).
+///
+/// The client connection preface starts with this 24-byte sequence:
+/// "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+/// followed by a SETTINGS frame.
+pub const H2_CONNECTION_PREFACE: Str = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+/// The length of the connection preface in bytes.
+pub const H2_CONNECTION_PREFACE_LEN: I64 = 24
+
+/// Maximum payload size for a frame (default, before SETTINGS negotiation).
+pub const H2_DEFAULT_MAX_FRAME_SIZE: I64 = 16384
+
+/// Minimum value for SETTINGS_MAX_FRAME_SIZE.
+pub const H2_MIN_MAX_FRAME_SIZE: I64 = 16384
+
+/// Maximum value for SETTINGS_MAX_FRAME_SIZE.
+pub const H2_MAX_MAX_FRAME_SIZE: I64 = 16777215
+
+/// Default initial window size.
+pub const H2_DEFAULT_INITIAL_WINDOW_SIZE: I64 = 65535
+
+/// Default header table size for HPACK.
+pub const H2_DEFAULT_HEADER_TABLE_SIZE: I64 = 4096
+
+// ============================================================================
+// HTTP/2 error codes (RFC 7540 Section 7)
+// ============================================================================
+
+/// HTTP/2 error codes used in RST_STREAM and GOAWAY frames.
+pub type H2ErrorCode {
+    value: I64,
+}
+
+impl H2ErrorCode {
+    /// No error (0x0).
+    pub func NoError() -> H2ErrorCode { H2ErrorCode { value: 0 } }
+    /// Protocol error (0x1).
+    pub func ProtocolError() -> H2ErrorCode { H2ErrorCode { value: 1 } }
+    /// Internal error (0x2).
+    pub func InternalError() -> H2ErrorCode { H2ErrorCode { value: 2 } }
+    /// Flow control error (0x3).
+    pub func FlowControlError() -> H2ErrorCode { H2ErrorCode { value: 3 } }
+    /// Settings timeout (0x4).
+    pub func SettingsTimeout() -> H2ErrorCode { H2ErrorCode { value: 4 } }
+    /// Stream closed (0x5).
+    pub func StreamClosed() -> H2ErrorCode { H2ErrorCode { value: 5 } }
+    /// Frame size error (0x6).
+    pub func FrameSizeError() -> H2ErrorCode { H2ErrorCode { value: 6 } }
+    /// Refused stream (0x7).
+    pub func RefusedStream() -> H2ErrorCode { H2ErrorCode { value: 7 } }
+    /// Cancel (0x8).
+    pub func Cancel() -> H2ErrorCode { H2ErrorCode { value: 8 } }
+    /// Compression error (0x9).
+    pub func CompressionError() -> H2ErrorCode { H2ErrorCode { value: 9 } }
+    /// Connect error (0xa).
+    pub func ConnectError() -> H2ErrorCode { H2ErrorCode { value: 10 } }
+    /// Enhance your calm (0xb).
+    pub func EnhanceYourCalm() -> H2ErrorCode { H2ErrorCode { value: 11 } }
+    /// Inadequate security (0xc).
+    pub func InadequateSecurity() -> H2ErrorCode { H2ErrorCode { value: 12 } }
+    /// HTTP/1.1 required (0xd).
+    pub func Http11Required() -> H2ErrorCode { H2ErrorCode { value: 13 } }
+
+    pub func to_value(this) -> I64 { this.value }
+
+    pub func eq(this, other: H2ErrorCode) -> Bool {
+        this.value == other.value
+    }
+
+    pub func to_string(this) -> Str {
+        if this.value == 0 { return "NO_ERROR" }
+        if this.value == 1 { return "PROTOCOL_ERROR" }
+        if this.value == 2 { return "INTERNAL_ERROR" }
+        if this.value == 3 { return "FLOW_CONTROL_ERROR" }
+        if this.value == 4 { return "SETTINGS_TIMEOUT" }
+        if this.value == 5 { return "STREAM_CLOSED" }
+        if this.value == 6 { return "FRAME_SIZE_ERROR" }
+        if this.value == 7 { return "REFUSED_STREAM" }
+        if this.value == 8 { return "CANCEL" }
+        if this.value == 9 { return "COMPRESSION_ERROR" }
+        if this.value == 10 { return "CONNECT_ERROR" }
+        if this.value == 11 { return "ENHANCE_YOUR_CALM" }
+        if this.value == 12 { return "INADEQUATE_SECURITY" }
+        if this.value == 13 { return "HTTP_1_1_REQUIRED" }
+        return "UNKNOWN"
+    }
+}

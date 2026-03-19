@@ -1,0 +1,229 @@
+// Tests for HTTP/2 frame decoding
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2FrameType,
+    H2Setting,
+    H2_FLAG_ACK,
+    H2_FLAG_END_STREAM,
+    H2_FLAG_END_HEADERS,
+    h2_encode_frame_raw,
+    h2_decode_frame,
+    h2_encode_settings_pair,
+    h2_decode_settings,
+    h2_setting_from_id,
+}
+
+@test
+func test_decode_settings_frame() -> I32 {
+    // Encode a SETTINGS frame, then decode it
+    let payload = Buffer::new(12)
+    h2_encode_settings_pair(payload, H2Setting::MaxConcurrentStreams(), 100)
+    h2_encode_settings_pair(payload, H2Setting::InitialWindowSize(), 65535)
+
+    let encoded = h2_encode_frame_raw(4, 0, 0, payload)
+    let result = h2_decode_frame(encoded)
+    assert(result.is_ok(), "decode ok")
+
+    let pair = result.unwrap()
+    let frame = pair.0
+    let consumed: I64 = pair.1
+
+    assert_eq(consumed, 21, "consumed 9 + 12 = 21")
+    assert_eq(frame.frame_type.to_u8(), 4, "type SETTINGS")
+    assert_eq(frame.flags, 0, "flags 0")
+    assert_eq(frame.stream_id, 0, "sid 0")
+    assert_eq(frame.length, 12, "payload len 12")
+    return 0
+}
+
+@test
+func test_decode_ping_frame() -> I32 {
+    let ping_data = Buffer::new(8)
+    var i: I64 = 0
+    loop (i < 8) {
+        ping_data.write_u8((0xAA + i) as I32, i)
+        i = i + 1
+    }
+    let encoded = h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ping_data)
+    let result = h2_decode_frame(encoded)
+    assert(result.is_ok(), "decode ping ok")
+
+    let pair = result.unwrap()
+    let frame = pair.0
+    assert_eq(frame.frame_type.to_u8(), 6, "type PING")
+    assert_eq(frame.flags, H2_FLAG_ACK, "ACK flag")
+    assert_eq(frame.length, 8, "payload len 8")
+    assert_eq(frame.payload.get(0), 0xAA, "payload[0]")
+    assert_eq(frame.payload.get(7), 0xAA + 7, "payload[7]")
+    return 0
+}
+
+@test
+func test_decode_data_frame() -> I32 {
+    let payload = Buffer::new(5)
+    payload.write_u8(0x48, 0)
+    payload.write_u8(0x65, 1)
+    payload.write_u8(0x6C, 2)
+    payload.write_u8(0x6C, 3)
+    payload.write_u8(0x6F, 4)
+
+    let encoded = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, 1, payload)
+    let result = h2_decode_frame(encoded)
+    assert(result.is_ok(), "decode data ok")
+
+    let pair = result.unwrap()
+    let frame = pair.0
+    assert_eq(frame.frame_type.to_u8(), 0, "type DATA")
+    assert_eq(frame.flags, H2_FLAG_END_STREAM, "END_STREAM")
+    assert_eq(frame.stream_id, 1, "sid = 1")
+    assert_eq(frame.length, 5, "payload 5")
+    assert_eq(frame.payload.get(0), 0x48, "H")
+    assert_eq(frame.payload.get(4), 0x6F, "o")
+    return 0
+}
+
+@test
+func test_decode_too_short() -> I32 {
+    // Less than 9 bytes should return error
+    let short = Buffer::new(4)
+    short.write_u8(0, 0)
+    short.write_u8(0, 1)
+    short.write_u8(0, 2)
+    short.write_u8(0, 3)
+    let result = h2_decode_frame(short)
+    assert(result.is_err(), "too short -> error")
+    return 0
+}
+
+@test
+func test_decode_truncated_payload() -> I32 {
+    // Header says 10 bytes payload, but only 5 bytes available after header
+    let buf = Buffer::new(14)
+    // Length = 10
+    buf.write_u8(0, 0)
+    buf.write_u8(0, 1)
+    buf.write_u8(10, 2)
+    // Type = DATA
+    buf.write_u8(0, 3)
+    // Flags = 0
+    buf.write_u8(0, 4)
+    // Stream ID = 0
+    buf.write_u32_be(0, 5)
+    // Only write 5 bytes of payload (need 10)
+    var i: I64 = 0
+    loop (i < 5) {
+        buf.write_u8(0, 9 + i)
+        i = i + 1
+    }
+    let result = h2_decode_frame(buf)
+    assert(result.is_err(), "truncated payload -> error")
+    return 0
+}
+
+@test
+func test_decode_settings_payload() -> I32 {
+    // Build raw settings payload: 2 entries
+    let payload = Buffer::new(12)
+    h2_encode_settings_pair(payload, H2Setting::HeaderTableSize(), 8192)
+    h2_encode_settings_pair(payload, H2Setting::MaxFrameSize(), 32768)
+
+    let result = h2_decode_settings(payload)
+    assert(result.is_ok(), "decode settings ok")
+
+    let settings = result.unwrap()
+    assert_eq(settings.count(), 2, "2 settings")
+
+    assert_eq(settings.get_id(0), 1, "first id = HEADER_TABLE_SIZE")
+    assert_eq(settings.get_value(0), 8192, "first value = 8192")
+
+    assert_eq(settings.get_id(1), 5, "second id = MAX_FRAME_SIZE")
+    assert_eq(settings.get_value(1), 32768, "second value = 32768")
+    return 0
+}
+
+@test
+func test_decode_settings_invalid_length() -> I32 {
+    // 7 bytes is not a multiple of 6
+    let payload = Buffer::new(7)
+    var i: I64 = 0
+    loop (i < 7) {
+        payload.write_u8(0, i)
+        i = i + 1
+    }
+    let result = h2_decode_settings(payload)
+    assert(result.is_err(), "invalid settings length -> error")
+    return 0
+}
+
+@test
+func test_setting_from_id() -> I32 {
+    let s1: Maybe[H2Setting] = h2_setting_from_id(1)
+    assert(s1.is_just(), "id 1 valid")
+    assert_eq(s1.unwrap().to_id(), 1, "id 1 = HEADER_TABLE_SIZE")
+
+    let s6: Maybe[H2Setting] = h2_setting_from_id(6)
+    assert(s6.is_just(), "id 6 valid")
+    assert_eq(s6.unwrap().to_id(), 6, "id 6 = MAX_HEADER_LIST_SIZE")
+
+    let s0: Maybe[H2Setting] = h2_setting_from_id(0)
+    assert(s0.is_nothing(), "id 0 invalid")
+
+    let s7: Maybe[H2Setting] = h2_setting_from_id(7)
+    assert(s7.is_nothing(), "id 7 invalid")
+    return 0
+}
+
+@test
+func test_decode_roundtrip_window_update() -> I32 {
+    let payload = Buffer::new(4)
+    payload.write_u32_be(32768, 0)
+    let encoded = h2_encode_frame_raw(8, 0, 42, payload)
+
+    let result = h2_decode_frame(encoded)
+    assert(result.is_ok(), "roundtrip ok")
+
+    let pair = result.unwrap()
+    let frame = pair.0
+    assert_eq(frame.frame_type.to_u8(), 8, "WINDOW_UPDATE")
+    assert_eq(frame.stream_id, 42, "sid = 42")
+    assert_eq(frame.payload.read_u32_be(0), 32768, "increment = 32768")
+    return 0
+}
+
+@test
+func test_decode_multiple_frames() -> I32 {
+    // Build a buffer with two frames concatenated
+    let p1 = Buffer::new(8)
+    var i: I64 = 0
+    loop (i < 8) {
+        p1.write_u8(0x11, i)
+        i = i + 1
+    }
+    let f1 = h2_encode_frame_raw(6, 0, 0, p1)  // PING
+
+    let p2 = Buffer::new(4)
+    p2.write_u32_be(1, 0)
+    let f2 = h2_encode_frame_raw(8, 0, 1, p2)  // WINDOW_UPDATE
+
+    // Combine both frames into one buffer
+    let combined = Buffer::new(f1.len() + f2.len())
+    var j: I64 = 0
+    loop (j < f1.len()) {
+        combined.write_u8(f1.get(j), j)
+        j = j + 1
+    }
+    var k: I64 = 0
+    loop (k < f2.len()) {
+        combined.write_u8(f2.get(k), f1.len() + k)
+        k = k + 1
+    }
+
+    // Decode first frame
+    let r1 = h2_decode_frame(combined)
+    assert(r1.is_ok(), "first frame ok")
+    let pair1 = r1.unwrap()
+    assert_eq(pair1.0.frame_type.to_u8(), 6, "first = PING")
+    assert_eq(pair1.1, 17, "first consumed 17")
+    return 0
+}

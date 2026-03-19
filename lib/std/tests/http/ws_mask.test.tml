@@ -1,0 +1,7 @@
+// Placeholder — WebSocket tests consolidated into ws_websocket.test.tml
+use test::{assert_eq}
+
+@test
+func test_ws_mask_noop() -> I32 {
+    return 0
+}

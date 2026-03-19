@@ -96,10 +96,11 @@ Reference: docs/analyses/comparative-analysis.md
 
 - [ ] 9.1 TLS via @extern("c") to Schannel (Windows) / OpenSSL (Linux)
 - [ ] 9.2 ALPN negotiation for HTTP/2 detection
-- [ ] 9.3 HTTP/2 frame parser (9-byte header, binary protocol)
-- [ ] 9.4 HTTP/2 stream multiplexer (SETTINGS, HEADERS, DATA, RST_STREAM, GOAWAY)
-- [ ] 9.5 HPACK header compression (dynamic table)
-- [ ] 9.6 HTTP/2 flow control (WINDOW_UPDATE, per-stream + per-connection windows)
+- [x] 9.3 HTTP/2 frame parser (9-byte header, binary protocol) — lib/std/src/http/h2/frame.tml
+- [x] 9.4 HTTP/2 stream multiplexer (SETTINGS, HEADERS, DATA, RST_STREAM, GOAWAY) — lib/std/src/http/h2/stream.tml + connection.tml
+- [x] 9.5 HPACK header compression (dynamic table) — lib/std/src/http/h2/hpack.tml
+- [x] 9.6 HTTP/2 flow control (WINDOW_UPDATE, per-stream + per-connection windows) — tested in h2_flow_control.test.tml
+- [x] 9.7 HTTP/2 server integration (preface validation, request extraction, response building) — lib/std/src/http/h2/server.tml
 
 ## Phase 10: Advanced Optimizations
 

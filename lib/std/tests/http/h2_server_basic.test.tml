@@ -1,0 +1,91 @@
+// v1
+use test
+use std::collections::Buffer
+use std::http::h2::frame::{H2_CONNECTION_PREFACE, H2_CONNECTION_PREFACE_LEN}
+use std::http::h2::hpack::{HpackEntry}
+use std::http::h2::server::{H2Request, h2_validate_preface, h2_extract_request}
+use core::intrinsics::{ptr_read}
+
+@test
+func test_validate_preface_valid() -> Outcome[Unit, Str] {
+    // Build a buffer containing the valid preface
+    let buf = Buffer::new(32)
+    let preface_ptr: I64 = H2_CONNECTION_PREFACE as I64
+    var i: I64 = 0
+    loop (i < H2_CONNECTION_PREFACE_LEN) {
+        let b: I32 = lowlevel { ptr_read[U8]((preface_ptr + i) as *U8) } as I32
+        buf.write_byte(b)
+        i = i + 1
+    }
+    let consumed = h2_validate_preface(buf)!
+    assert_eq(consumed, 24)
+    Ok(())
+}
+
+@test
+func test_validate_preface_too_short() -> Outcome[Unit, Str] {
+    let buf = Buffer::new(4)
+    buf.write_byte(0x50)  // 'P'
+    buf.write_byte(0x52)  // 'R'
+    buf.write_byte(0x49)  // 'I'
+    let result = h2_validate_preface(buf)
+    assert_true(result.is_err())
+    Ok(())
+}
+
+@test
+func test_validate_preface_invalid() -> Outcome[Unit, Str] {
+    let buf = Buffer::new(24)
+    var i: I64 = 0
+    loop (i < 24) {
+        buf.write_byte(0x00)
+        i = i + 1
+    }
+    let result = h2_validate_preface(buf)
+    assert_true(result.is_err())
+    Ok(())
+}
+
+@test
+func test_extract_request() -> Outcome[Unit, Str] {
+    var headers: List[HpackEntry] = List::new(8)
+    headers.push(HpackEntry::new(":method", "GET"))
+    headers.push(HpackEntry::new(":path", "/api/users"))
+    headers.push(HpackEntry::new(":scheme", "https"))
+    headers.push(HpackEntry::new(":authority", "example.com"))
+    headers.push(HpackEntry::new("accept", "application/json"))
+
+    let req = h2_extract_request(1, headers, 1)
+    assert_eq(req.stream_id, 1)
+    assert_eq(req.method, "GET")
+    assert_eq(req.path, "/api/users")
+    assert_eq(req.scheme, "https")
+    assert_eq(req.authority, "example.com")
+    assert_eq(req.end_stream, 1)
+    Ok(())
+}
+
+@test
+func test_extract_request_post_with_content_length() -> Outcome[Unit, Str] {
+    var headers: List[HpackEntry] = List::new(8)
+    headers.push(HpackEntry::new(":method", "POST"))
+    headers.push(HpackEntry::new(":path", "/upload"))
+    headers.push(HpackEntry::new("content-length", "1024"))
+
+    let req = h2_extract_request(3, headers, 0)
+    assert_eq(req.method, "POST")
+    assert_eq(req.path, "/upload")
+    assert_eq(req.content_length, 1024)
+    assert_eq(req.end_stream, 0)
+    Ok(())
+}
+
+@test
+func test_h2_request_new() -> Outcome[Unit, Str] {
+    let req = H2Request::new(5)
+    assert_eq(req.stream_id, 5)
+    assert_eq(req.method, "")
+    assert_eq(req.path, "")
+    assert_eq(req.content_length, 0)
+    Ok(())
+}

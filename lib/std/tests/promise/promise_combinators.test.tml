@@ -1,0 +1,157 @@
+// Tests for Promise combinators — all, race, any, all_settled
+use test::{assert, assert_eq}
+use core::alloc::Shared
+use std::promise::{Promise, PromiseState,
+    promise_all_i32, promise_race_i32, promise_any_i32}
+
+// Concrete constructors to avoid generic monomorphization bug in List.push.
+// When Promise::resolve(v) is passed directly to List[Promise[I32]].push(),
+// the codegen emits Promise__T instead of Promise__I32.
+func resolved(v: I32) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Fulfilled(v)) }
+}
+
+func rejected(e: Str) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Rejected(e)) }
+}
+
+func pending_i32() -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Pending) }
+}
+
+// ============================================================================
+// promise_all_i32 tests
+// ============================================================================
+
+@test
+func test_all_all_fulfilled() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(resolved(1))
+    promises.push(resolved(2))
+    promises.push(resolved(3))
+    let result: Promise[List[I32]] = promise_all_i32(promises)
+    assert(result.is_fulfilled(), "all fulfilled should produce fulfilled")
+    let values: List[I32] = result.unwrap()
+    assert_eq(values.len(), 3, "should have 3 values")
+    assert_eq(values.get(0), 1, "first value should be 1")
+    assert_eq(values.get(1), 2, "second value should be 2")
+    assert_eq(values.get(2), 3, "third value should be 3")
+    return 0
+}
+
+@test
+func test_all_one_rejected() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(resolved(1))
+    promises.push(rejected("fail"))
+    promises.push(resolved(3))
+    let result: Promise[List[I32]] = promise_all_i32(promises)
+    assert(result.is_rejected(), "one rejection should reject all")
+    return 0
+}
+
+@test
+func test_all_one_pending() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(resolved(1))
+    promises.push(pending_i32())
+    promises.push(resolved(3))
+    let result: Promise[List[I32]] = promise_all_i32(promises)
+    assert(result.is_pending(), "one pending should keep all pending")
+    return 0
+}
+
+@test
+func test_all_empty() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    let result: Promise[List[I32]] = promise_all_i32(promises)
+    assert(result.is_fulfilled(), "empty list should fulfill with empty list")
+    let values: List[I32] = result.unwrap()
+    assert_eq(values.len(), 0, "should have 0 values")
+    return 0
+}
+
+// ============================================================================
+// promise_race_i32 tests
+// ============================================================================
+
+@test
+func test_race_first_fulfilled() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(resolved(42))
+    promises.push(pending_i32())
+    promises.push(pending_i32())
+    let result: Promise[I32] = promise_race_i32(promises)
+    assert(result.is_fulfilled(), "race should fulfill with first settled")
+    assert_eq(result.unwrap(), 42, "race should return first fulfilled value")
+    return 0
+}
+
+@test
+func test_race_first_rejected() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(rejected("error"))
+    promises.push(resolved(42))
+    let result: Promise[I32] = promise_race_i32(promises)
+    assert(result.is_rejected(), "race should reject with first settled rejection")
+    return 0
+}
+
+@test
+func test_race_all_pending() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(pending_i32())
+    promises.push(pending_i32())
+    let result: Promise[I32] = promise_race_i32(promises)
+    assert(result.is_pending(), "race with all pending should be pending")
+    return 0
+}
+
+@test
+func test_race_second_fulfilled() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(pending_i32())
+    promises.push(resolved(99))
+    let result: Promise[I32] = promise_race_i32(promises)
+    assert(result.is_fulfilled(), "race should find second fulfilled")
+    assert_eq(result.unwrap(), 99, "race should return 99")
+    return 0
+}
+
+// ============================================================================
+// promise_any_i32 tests
+// ============================================================================
+
+@test
+func test_any_one_fulfilled() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(rejected("a"))
+    promises.push(resolved(42))
+    promises.push(rejected("c"))
+    let result: Promise[I32] = promise_any_i32(promises)
+    assert(result.is_fulfilled(), "any should fulfill with first fulfilled")
+    assert_eq(result.unwrap(), 42, "any should return 42")
+    return 0
+}
+
+@test
+func test_any_all_rejected() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(rejected("a"))
+    promises.push(rejected("b"))
+    promises.push(rejected("c"))
+    let result: Promise[I32] = promise_any_i32(promises)
+    assert(result.is_rejected(), "all rejected should reject any")
+    return 0
+}
+
+@test
+func test_any_with_pending() -> I32 {
+    var promises: List[Promise[I32]] = List::new(4)
+    promises.push(rejected("a"))
+    promises.push(pending_i32())
+    promises.push(rejected("c"))
+    let result: Promise[I32] = promise_any_i32(promises)
+    assert(result.is_pending(), "any with pending and no fulfilled should be pending")
+    return 0
+}

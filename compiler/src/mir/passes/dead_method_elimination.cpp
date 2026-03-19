@@ -57,6 +57,11 @@ auto DeadMethodEliminationPass::is_entry_point(const Function& func) const -> bo
         }
     }
 
+    // HTTP route-decorated functions are entry points
+    if (func.route_info.has_value()) {
+        return true;
+    }
+
     // Constructors are entry points (they can be called from anywhere)
     auto underscore = func.name.rfind("_new");
     if (underscore != std::string::npos &&

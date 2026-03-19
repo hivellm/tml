@@ -922,9 +922,30 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                         // Set payload if present
                         if (has_payload && !call.args.empty()) {
+                            // For nested generics like Poll[Outcome[I64, MyError]], propagate
+                            // the inner type as expected_enum_type_ before generating the
+                            // inner expression, so that Outcome::Ok(42) gets the correct
+                            // type args (I64, MyError) instead of defaulting to (I32, I32).
+                            std::string saved_expected = expected_enum_type_;
+                            if (!enum_type.empty() && enum_type.starts_with("%struct.")) {
+                                std::string mangled = enum_type.substr(8); // Skip "%struct."
+                                auto sep = mangled.find("__");
+                                if (sep != std::string::npos) {
+                                    std::string type_arg_str = mangled.substr(sep + 2);
+                                    size_t num_type_params = gen_enum_decl.generics.size();
+                                    if (num_type_params == 1 &&
+                                        type_arg_str.find("__") != std::string::npos) {
+                                        // The type arg itself is a generic type - set expected
+                                        // type for inner expression
+                                        expected_enum_type_ = "%struct." + type_arg_str;
+                                    }
+                                }
+                            }
+
                             if (call.args.size() == 1) {
                                 // Single-arg variant
                                 std::string payload = gen_expr(*call.args[0]);
+                                expected_enum_type_ = saved_expected;
 
                                 // Mark variable as consumed (moved into enum variant)
                                 // to prevent double-free at scope exit
@@ -990,6 +1011,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                         }
                                     }
                                 }
+                                expected_enum_type_ = saved_expected;
                                 // Build tuple type string: { type0, type1, ... }
                                 std::string tuple_type = "{ ";
                                 for (size_t ai = 0; ai < arg_types.size(); ++ai) {

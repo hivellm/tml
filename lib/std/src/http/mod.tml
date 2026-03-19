@@ -46,6 +46,13 @@ pub mod dispatch
 pub mod worker
 pub mod iocp_worker
 pub mod app
+pub mod controller
+
+// ── WebSocket Protocol (RFC 6455) ─────────────────────────────
+pub mod websocket
+
+// ── HTTP/2 Protocol (RFC 7540 + RFC 7541) ─────────────────────
+pub mod h2
 
 // ── Middleware & Framework ───────────────────────────────────
 pub mod cors
@@ -91,3 +98,5 @@ pub use std::http::range::{ByteRange, parse_range, content_range, content_range_
 pub use std::http::cache_control::{CacheOptions, cache_control_header}
 pub use std::http::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
 pub use std::http::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}
+pub use std::http::controller::{Controller, ControllerInfo, register_controller, register_controllers, register_all}
+pub use std::http::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage, ws_accept_key, ws_upgrade_response, ws_validate_upgrade, ws_encode_frame, ws_decode_frame, ws_assemble_message, ws_close_frame, ws_apply_mask, ws_mask, ws_unmask}

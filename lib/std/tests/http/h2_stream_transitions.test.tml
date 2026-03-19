@@ -1,0 +1,139 @@
+// v2
+use test
+use std::http::h2::frame::{H2_FLAG_END_STREAM, H2_FLAG_END_HEADERS}
+use std::http::h2::stream::{
+    H2Stream, H2StreamState, H2StreamResult,
+    H2_EVENT_NONE, H2_EVENT_HEADERS_COMPLETE, H2_EVENT_DATA,
+    H2_EVENT_RESET, H2_EVENT_WINDOW_UPDATE,
+}
+
+@test
+func test_recv_headers_idle_to_open() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(1, 65535, 65535)
+    let r = s.recv_headers(H2_FLAG_END_HEADERS)!
+    assert_true(s.get_state().eq(H2StreamState::Open()))
+    assert_eq(r.event_type, H2_EVENT_HEADERS_COMPLETE)
+    assert_eq(r.end_stream, 0)
+    Ok(())
+}
+
+@test
+func test_recv_headers_end_stream() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(3, 65535, 65535)
+    let flags: I32 = H2_FLAG_END_HEADERS | H2_FLAG_END_STREAM
+    let r = s.recv_headers(flags)!
+    assert_true(s.get_state().eq(H2StreamState::HalfClosedRemote()))
+    assert_eq(r.event_type, H2_EVENT_HEADERS_COMPLETE)
+    assert_eq(r.end_stream, 1)
+    Ok(())
+}
+
+@test
+func test_recv_data_open() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(5, 65535, 65535)
+    s.recv_headers(H2_FLAG_END_HEADERS)!
+
+    let r = s.recv_data(0, 100)!
+    assert_eq(r.event_type, H2_EVENT_DATA)
+    assert_eq(r.end_stream, 0)
+    assert_eq(r.data_len, 100)
+    assert_true(s.get_state().eq(H2StreamState::Open()))
+    assert_eq(s.get_recv_window(), 65535 - 100)
+    Ok(())
+}
+
+@test
+func test_recv_data_end_stream() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(7, 65535, 65535)
+    s.recv_headers(H2_FLAG_END_HEADERS)!
+    let r = s.recv_data(H2_FLAG_END_STREAM, 50)!
+    assert_eq(r.end_stream, 1)
+    assert_true(s.get_state().eq(H2StreamState::HalfClosedRemote()))
+    Ok(())
+}
+
+@test
+func test_recv_rst_stream() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(9, 65535, 65535)
+    s.recv_headers(H2_FLAG_END_HEADERS)!
+    let r = s.recv_rst_stream(8)!
+    assert_eq(r.event_type, H2_EVENT_RESET)
+    assert_eq(r.error_code, 8)
+    assert_true(s.get_state().eq(H2StreamState::Closed()))
+    Ok(())
+}
+
+@test
+func test_recv_rst_stream_idle_error() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(11, 65535, 65535)
+    let result = s.recv_rst_stream(0)
+    assert_true(result.is_err())
+    Ok(())
+}
+
+@test
+func test_recv_window_update() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(13, 65535, 65535)
+    s.recv_headers(H2_FLAG_END_HEADERS)!
+    let r = s.recv_window_update(1000)!
+    assert_eq(r.event_type, H2_EVENT_WINDOW_UPDATE)
+    assert_eq(r.window_increment, 1000)
+    assert_eq(s.get_send_window(), 65535 + 1000)
+    Ok(())
+}
+
+@test
+func test_recv_window_update_zero_error() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(15, 65535, 65535)
+    s.recv_headers(H2_FLAG_END_HEADERS)!
+    let result = s.recv_window_update(0)
+    assert_true(result.is_err())
+    Ok(())
+}
+
+@test
+func test_recv_headers_continuation() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(17, 65535, 65535)
+    let r1 = s.recv_headers(0)!  // no END_HEADERS
+    assert_true(s.get_state().eq(H2StreamState::Open()))
+    assert_eq(r1.event_type, H2_EVENT_NONE)
+
+    let r2 = s.recv_continuation(H2_FLAG_END_HEADERS)!
+    assert_eq(r2.event_type, H2_EVENT_HEADERS_COMPLETE)
+    Ok(())
+}
+
+@test
+func test_send_headers_idle_to_open() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(19, 65535, 65535)
+    s.send_headers(0)!
+    assert_true(s.get_state().eq(H2StreamState::Open()))
+    Ok(())
+}
+
+@test
+func test_send_headers_end_stream() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(21, 65535, 65535)
+    s.send_headers(1)!
+    assert_true(s.get_state().eq(H2StreamState::HalfClosedLocal()))
+    Ok(())
+}
+
+@test
+func test_send_data() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(23, 65535, 65535)
+    s.send_headers(0)!
+    s.send_data(100, 0)!
+    assert_true(s.get_state().eq(H2StreamState::Open()))
+    assert_eq(s.get_send_window(), 65535 - 100)
+    Ok(())
+}
+
+@test
+func test_send_data_end_stream() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(25, 65535, 65535)
+    s.send_headers(0)!
+    s.send_data(100, 1)!
+    assert_true(s.get_state().eq(H2StreamState::HalfClosedLocal()))
+    Ok(())
+}

@@ -168,6 +168,7 @@ private:
     void emit_function_declaration(const mir::Function& func);
     void emit_main_wrapper(const mir::Module& module);
     void emit_test_entry_wrapper(const mir::Module& module);
+    void emit_route_registration(const mir::Module& module);
     void emit_vtables(const mir::Module& module);
     void emit_block(const mir::BasicBlock& block);
     void emit_instruction(const mir::InstructionData& inst);

@@ -54,6 +54,29 @@ Major release with query-based incremental compilation, embedded LLVM/LLD, 35+ n
 
 - **Performance** — O0 pipeline overhaul (SROA, Mem2Reg, EarlyCSE, inlining), SSA struct construction (`insertvalue`/`extractvalue`), entry-block alloca hoisting, nullable Maybe optimization (8 bytes instead of 16).
 
+### Added (Async Network Stack — 2026-03-19)
+
+- **Multi-threaded Executor** — Work-stealing executor with N workers, global task queue, graceful shutdown (`lib/std/src/runtime/multi_executor.tml`)
+- **Thread Spawn** — `thread::spawn_fn`, `thread::spawn_i64`, `spawn_blocking` with trampoline pattern
+- **AsyncRead/AsyncWrite** behaviors + `AsyncBufReader`/`AsyncBufWriter` (`lib/std/src/stream/async_io.tml`, `async_buffered.tml`)
+- **BufferView** — Zero-copy buffer view for network protocols (`lib/std/src/net/buffer_view.tml`)
+- **ALPN** — TLS protocol negotiation via `TlsContext::set_alpn_protocols()`
+- **select2** — Future combinator for racing two futures (`lib/core/src/future/select.tml`)
+- **Promise[T]** — JavaScript-style promises with resolve/reject/then/catch/all/race/any (`lib/std/src/promise/mod.tml`)
+- **Observable[T]** — Reactive streams with 8 operators + Subject/BehaviorSubject/ReplaySubject (`lib/std/src/observable/mod.tml`)
+- **WebSocket RFC 6455** — Frame codec, masking, handshake using `std::crypto::sha1` (`lib/std/src/http/websocket.tml`)
+- **HTTP/2 RFC 7540** — Binary frame codec, 10 frame types, stream state machine, connection management (`lib/std/src/http/h2/`)
+- **HPACK RFC 7541** — Header compression with static table (61 entries), dynamic table, integer/string codec
+- **Controller pattern** — `Controller` behavior for route registration (`lib/std/src/http/controller.tml`)
+- **@Get/@Post/@Put/@Delete/@Patch decorators** — Full compiler pipeline: parser → type checker → HIR → THIR → MIR → codegen. Generates `__tml_register_routes()` auto-registration
+- **Pipe operator `|>`** — Left-associative syntactic sugar: `x |> f` → `f(x)`, `x |> f(a)` → `f(x, a)`, `x |> .method()` → `x.method()`
+- **Waker::wake()** — Fixed vtable function pointer dispatch (was panicking)
+
+### Fixed (Codegen — 2026-03-19)
+
+- **Nested generic monomorphization** — `Poll[Outcome[I64, IoError]]` was generating `%struct.Outcome__I32__I32` instead of correct type. Fixed `expected_enum_type_` propagation in call.cpp.
+- **Generic static → container push** — `list.push(GenericType::static_method(42))` emitted unresolved `GenericType__T` instead of `GenericType__I32`. Fixed type substitution in `infer_expr_type`.
+
 ### Fixed (Codegen Gaps — 2026-03-19)
 
 - **async/await type mismatch** — Fixed state machine codegen producing i64 where i32 was expected. Added AwaitInst handler to MIR codegen path. Async functions with `.await` now work end-to-end for all return types.
@@ -62,7 +85,7 @@ Major release with query-based incremental compilation, embedded LLVM/LLD, 35+ n
 - **sret convention for indirect calls** — Function pointer calls returning structs were missing sret convention, causing SEGFAULT. Direct calls had sret but indirect calls skipped it.
 
 ### Stats
-- **Tests**: ~1553 tests, 1180 passing, 0 failures, ~373 compile errors (pre-existing)
+- **Tests**: 1599 tests, 1130 passing, 0 runtime failures, ~469 compile errors (pre-existing)
 - **Coverage**: 15528/15628 functions (99%)
 - **Compiler size**: ~100MB monolithic, or thin launcher + plugin DLLs (modular)
 

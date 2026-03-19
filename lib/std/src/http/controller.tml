@@ -1,0 +1,265 @@
+//! Controller pattern for organizing HTTP route handlers.
+//!
+//! Controllers group related route handlers under a common URL prefix,
+//! providing a structured way to organize HTTP endpoints.
+//!
+//! # The Controller Behavior
+//!
+//! The `Controller` behavior defines two methods:
+//! - `prefix()` — returns the URL prefix for all routes in this controller
+//! - `register()` — registers all routes with the application
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::http::controller::Controller
+//! use std::http::app::App
+//! use std::http::incoming::IncomingMessage
+//! use std::http::dispatch::app_build_response
+//!
+//! type UserController {}
+//!
+//! func get_users(req: IncomingMessage) -> Str {
+//!     app_build_response(200, "application/json", "[{\"id\":1}]")
+//! }
+//!
+//! func get_user(req: IncomingMessage) -> Str {
+//!     app_build_response(200, "application/json", "{\"id\":1}")
+//! }
+//!
+//! func create_user(req: IncomingMessage) -> Str {
+//!     app_build_response(201, "application/json", "{\"id\":2}")
+//! }
+//!
+//! impl Controller for UserController {
+//!     func prefix(this) -> Str { return "/users" }
+//!     func register(this, app: mut ref App) {
+//!         app.get("/users", get_users as I64)
+//!         app.get("/users/:id", get_user as I64)
+//!         app.post("/users", create_user as I64)
+//!     }
+//! }
+//!
+//! pub func main() -> I32 {
+//!     var app: App = App::new()
+//!     let ctrl = UserController {}
+//!     ctrl.register(ref app)
+//!     app.listen(3000)
+//!     return 0
+//! }
+//! ```
+//!
+//! # Why Controllers?
+//!
+//! As applications grow, having all route registrations in `main()` becomes
+//! unwieldy. Controllers let you:
+//! - Group related endpoints (users, products, auth, etc.)
+//! - Encapsulate handler functions alongside their registration
+//! - Compose applications from independent controller modules
+//! - Keep `main()` clean and focused on application setup
+//!
+//! # Registration Helper
+//!
+//! The `register_controllers` function takes a list of controller registration
+//! functions and applies them all to an App:
+//!
+//! ```tml
+//! register_controllers(ref app, controllers)
+//! ```
+
+use std::http::app::App
+
+// ============================================================================
+// Controller Behavior
+// ============================================================================
+
+/// A behavior for types that group HTTP route handlers under a URL prefix.
+///
+/// Implementing `Controller` on a type allows it to register a set of
+/// related routes with an `App`. Each controller typically handles one
+/// domain (users, products, auth, etc.).
+///
+/// # Required Methods
+///
+/// - `prefix()` — The base URL path for this controller's routes
+/// - `register()` — Registers all routes with the given `App`
+///
+/// # Conventions
+///
+/// - The prefix should start with `/` (e.g., `"/users"`, `"/api/v1/products"`)
+/// - Route paths passed to `app.get()`, etc. should include the full prefix
+/// - Handlers are passed as `I64` function pointers per the App API
+pub behavior Controller {
+    /// Returns the URL prefix for this controller's routes.
+    ///
+    /// This is used for documentation and introspection. The actual
+    /// route paths are registered in `register()`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func prefix(this) -> Str { return "/users" }
+    /// ```
+    func prefix(this) -> Str
+
+    /// Registers all routes for this controller with the given application.
+    ///
+    /// Implementations should call `app.get()`, `app.post()`, etc. to
+    /// register their handlers.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func register(this, app: mut ref App) {
+    ///     app.get("/users", list_users as I64)
+    ///     app.post("/users", create_user as I64)
+    ///     app.get("/users/:id", get_user as I64)
+    ///     app.put("/users/:id", update_user as I64)
+    ///     app.delete("/users/:id", delete_user as I64)
+    /// }
+    /// ```
+    func register(this, app: mut ref App)
+}
+
+// ============================================================================
+// Registration helpers
+// ============================================================================
+
+/// A controller registration function.
+///
+/// This type alias represents a function that takes a mutable reference
+/// to an `App` and registers routes on it. This is a concrete alternative
+/// to the generic `Controller` behavior that avoids codegen issues with
+/// generic trait dispatch.
+///
+/// # Examples
+///
+/// ```tml
+/// func register_user_routes(app: mut ref App) {
+///     app.get("/users", list_users as I64)
+///     app.post("/users", create_user as I64)
+/// }
+///
+/// func register_product_routes(app: mut ref App) {
+///     app.get("/products", list_products as I64)
+/// }
+///
+/// pub func main() -> I32 {
+///     var app: App = App::new()
+///     register_user_routes(ref app)
+///     register_product_routes(ref app)
+///     app.listen(3000)
+///     return 0
+/// }
+/// ```
+pub type ControllerFn = func(mut ref App)
+
+/// Registers multiple controller registration functions with an App.
+///
+/// This is a convenience function for applying many controllers at once.
+/// Each function in the list is called with a mutable reference to the App.
+///
+/// # Arguments
+///
+/// - `app` — The application to register routes on
+/// - `controllers` — A list of controller registration functions
+///
+/// # Examples
+///
+/// ```tml
+/// var controllers: List[ControllerFn] = List::new(4)
+/// controllers.push(register_user_routes)
+/// controllers.push(register_product_routes)
+/// controllers.push(register_auth_routes)
+///
+/// var app: App = App::new()
+/// register_controllers(ref app, controllers)
+/// app.listen(3000)
+/// ```
+pub func register_controllers(app: mut ref App, controllers: List[func(mut ref App)]) {
+    let len: I64 = controllers.len()
+    var i: I64 = 0
+    loop (i < len) {
+        let register_fn: func(mut ref App) = controllers.get(i)
+        register_fn(app)
+        i = i + 1
+    }
+}
+
+/// Registers a single controller registration function with an App.
+///
+/// This is a convenience wrapper for calling a registration function.
+///
+/// # Examples
+///
+/// ```tml
+/// var app: App = App::new()
+/// register_controller(ref app, register_user_routes)
+/// ```
+pub func register_controller(app: mut ref App, register_fn: func(mut ref App)) {
+    register_fn(app)
+}
+
+// ============================================================================
+// ControllerInfo — metadata about a controller for introspection
+// ============================================================================
+
+/// Metadata about a controller for introspection and documentation.
+///
+/// This type pairs a URL prefix with a registration function, allowing
+/// applications to enumerate their controllers and their prefixes.
+///
+/// # Examples
+///
+/// ```tml
+/// let info = ControllerInfo::new("/users", register_user_routes)
+/// println("Controller: " + info.prefix)
+/// info.register(ref app)
+/// ```
+pub type ControllerInfo {
+    /// The URL prefix for this controller's routes.
+    pub prefix: Str,
+    /// The function that registers this controller's routes.
+    pub register_fn: func(mut ref App)
+}
+
+impl ControllerInfo {
+    /// Creates a new `ControllerInfo` with the given prefix and registration function.
+    pub func new(prefix: Str, register_fn: func(mut ref App)) -> ControllerInfo {
+        return ControllerInfo { prefix: prefix, register_fn: register_fn }
+    }
+
+    /// Registers this controller's routes with the given App.
+    pub func register(this, app: mut ref App) {
+        let f: func(mut ref App) = this.register_fn
+        f(app)
+    }
+}
+
+/// Registers all controllers described by a list of `ControllerInfo` items.
+///
+/// # Arguments
+///
+/// - `app` — The application to register routes on
+/// - `controllers` — A list of ControllerInfo items
+///
+/// # Examples
+///
+/// ```tml
+/// var controllers: List[ControllerInfo] = List::new(4)
+/// controllers.push(ControllerInfo::new("/users", register_user_routes))
+/// controllers.push(ControllerInfo::new("/products", register_product_routes))
+///
+/// var app: App = App::new()
+/// register_all(ref app, controllers)
+/// app.listen(3000)
+/// ```
+pub func register_all(app: mut ref App, controllers: List[ControllerInfo]) {
+    let len: I64 = controllers.len()
+    var i: I64 = 0
+    loop (i < len) {
+        let info: ControllerInfo = controllers.get(i)
+        info.register(app)
+        i = i + 1
+    }
+}

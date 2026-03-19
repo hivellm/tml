@@ -626,6 +626,31 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
+    // Validate HTTP route decorators
+    for (const auto& decorator : func.decorators) {
+        if (decorator.name == "Get" || decorator.name == "Post" || decorator.name == "Put" ||
+            decorator.name == "Delete" || decorator.name == "Patch" || decorator.name == "Head" ||
+            decorator.name == "Options") {
+            if (decorator.args.empty()) {
+                error("@" + decorator.name + " requires a path argument, e.g. @" + decorator.name +
+                          "(\"/path\")",
+                      decorator.span, "T090");
+            } else if (decorator.args.size() > 1) {
+                error("@" + decorator.name + " takes exactly one path argument", decorator.span,
+                      "T090");
+            } else if (!decorator.args[0]->is<parser::LiteralExpr>() ||
+                       decorator.args[0]->as<parser::LiteralExpr>().token.kind !=
+                           lexer::TokenKind::StringLiteral) {
+                error("@" + decorator.name +
+                          " argument must be a string literal, e.g. \"/users/:id\"",
+                      decorator.span, "T090");
+            }
+        } else if (decorator.name == "Controller") {
+            error("@Controller is only valid on type declarations, not functions", decorator.span,
+                  "T090");
+        }
+    }
+
     // Set up generic type parameters for proper resolution of T::AssociatedType in signatures
     // This is needed so resolve_type can recognize "T::Owned" as an associated type of param T
     std::unordered_map<std::string, TypePtr> saved_type_params = current_type_params_;

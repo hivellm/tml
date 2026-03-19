@@ -1,0 +1,86 @@
+//! HTTP/2 protocol support (RFC 7540 + RFC 7541).
+//!
+//! Provides binary frame codec, HPACK header compression, stream state
+//! machine, and connection management for HTTP/2.
+
+pub mod frame
+pub mod hpack
+pub mod stream
+pub mod connection
+pub mod server
+
+pub use std::http::h2::frame::{
+    H2Error,
+    H2FrameType,
+    H2Frame,
+    H2Setting,
+    H2SettingPair,
+    H2SettingsResult,
+    H2ErrorCode,
+    H2_FLAG_ACK,
+    H2_FLAG_END_STREAM,
+    H2_FLAG_END_HEADERS,
+    H2_FLAG_PADDED,
+    H2_FLAG_PRIORITY,
+    H2_CONNECTION_PREFACE,
+    H2_CONNECTION_PREFACE_LEN,
+    H2_DEFAULT_MAX_FRAME_SIZE,
+    H2_DEFAULT_INITIAL_WINDOW_SIZE,
+    H2_DEFAULT_HEADER_TABLE_SIZE,
+    h2_frame_type_from_u8,
+    h2_frame_type_to_u8,
+    h2_encode_frame,
+    h2_encode_frame_raw,
+    h2_decode_frame,
+    h2_setting_from_id,
+    h2_encode_settings_pair,
+    h2_decode_settings,
+}
+
+pub use std::http::h2::hpack::{
+    HpackEntry,
+    HpackIntResult,
+    HpackStrResult,
+    HpackFindResult,
+    HpackDynamicTable,
+    HpackContext,
+    hpack_static_table_entry,
+    hpack_encode_integer,
+    hpack_decode_integer,
+    hpack_encode_string,
+    hpack_decode_string,
+    hpack_encode_headers,
+    hpack_decode_headers,
+}
+
+pub use std::http::h2::stream::{
+    H2StreamState,
+    H2StreamResult,
+    H2Stream,
+    H2_EVENT_NONE,
+    H2_EVENT_HEADERS_COMPLETE,
+    H2_EVENT_DATA,
+    H2_EVENT_RESET,
+    H2_EVENT_WINDOW_UPDATE,
+}
+
+pub use std::http::h2::server::{
+    H2Request,
+    h2_validate_preface,
+    h2_extract_request,
+    h2_build_response,
+}
+
+pub use std::http::h2::connection::{
+    H2Settings,
+    H2ConnectionEvent,
+    H2Connection,
+    H2_CONN_EVENT_NONE,
+    H2_CONN_EVENT_REQUEST,
+    H2_CONN_EVENT_DATA,
+    H2_CONN_EVENT_STREAM_RESET,
+    H2_CONN_EVENT_GOAWAY,
+    H2_CONN_EVENT_SETTINGS_ACK,
+    H2_CONN_EVENT_PING,
+    H2_CONN_EVENT_WINDOW_UPDATE,
+}

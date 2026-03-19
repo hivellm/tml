@@ -1,0 +1,86 @@
+use test
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2_FLAG_ACK, H2_FLAG_END_HEADERS, H2_FLAG_END_STREAM,
+    h2_decode_frame, h2_decode_settings,
+}
+use std::http::h2::connection::{
+    H2Connection, H2Settings, H2ConnectionEvent,
+    H2_CONN_EVENT_NONE, H2_CONN_EVENT_REQUEST, H2_CONN_EVENT_SETTINGS_ACK,
+    H2_CONN_EVENT_PING, H2_CONN_EVENT_GOAWAY,
+}
+
+// ── Settings ──────────────────────────────────────────────────────
+
+@test
+func test_settings_defaults() -> Outcome[Unit, Str] {
+    let s = H2Settings::defaults()
+    assert_eq(s.header_table_size, 4096)
+    assert_eq(s.enable_push, 1)
+    assert_eq(s.max_concurrent_streams, 100)
+    assert_eq(s.initial_window_size, 65535)
+    assert_eq(s.max_frame_size, 16384)
+    assert_eq(s.max_header_list_size, 8192)
+    Ok(())
+}
+
+@test
+func test_settings_server_defaults() -> Outcome[Unit, Str] {
+    let s = H2Settings::server_defaults()
+    assert_eq(s.enable_push, 0)
+    assert_eq(s.max_concurrent_streams, 100)
+    Ok(())
+}
+
+@test
+func test_settings_encode_decode() -> Outcome[Unit, Str] {
+    let s = H2Settings::server_defaults()
+    let encoded = s.encode()
+    // 6 settings * 6 bytes = 36 bytes
+    assert_eq(encoded.len(), 36)
+    // Decode them back
+    let result = h2_decode_settings(encoded)!
+    assert_eq(result.count(), 6)
+    // First setting should be HEADER_TABLE_SIZE=4096
+    assert_eq(result.get_id(0), 1)
+    assert_eq(result.get_value(0), 4096)
+    Ok(())
+}
+
+// ── Connection creation ───────────────────────────────────────────
+
+@test
+func test_connection_new() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    assert_eq(conn.active_streams(), 0)
+    assert_false(conn.is_goaway_sent())
+    assert_false(conn.is_goaway_received())
+    assert_eq(conn.get_send_window(), 65535)
+    assert_eq(conn.get_recv_window(), 65535)
+    Ok(())
+}
+
+@test
+func test_connection_encode_settings() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let buf = conn.encode_settings()
+    // 9-byte frame header + 36-byte payload = 45 bytes
+    assert_eq(buf.len(), 45)
+    // Frame type should be SETTINGS (4)
+    assert_eq(buf.get(3), 4)
+    // Stream ID should be 0
+    assert_eq(buf.read_u32_be(5), 0)
+    Ok(())
+}
+
+@test
+func test_connection_encode_settings_ack() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let buf = conn.encode_settings_ack()
+    // 9-byte frame header + 0 payload
+    assert_eq(buf.len(), 9)
+    // Frame type = SETTINGS (4), flags = ACK (1)
+    assert_eq(buf.get(3), 4)
+    assert_eq(buf.get(4), 1)
+    Ok(())
+}

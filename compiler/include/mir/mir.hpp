@@ -40,6 +40,17 @@
 
 namespace tml::mir {
 
+// ============================================================================
+// Route Decorator Metadata
+// ============================================================================
+
+enum class RouteMethod { Get, Post, Put, Delete, Patch, Head, Options };
+
+struct RouteInfo {
+    RouteMethod method;
+    std::string path;
+};
+
 // Forward declarations
 struct BasicBlock;
 struct Function;
@@ -825,6 +836,7 @@ struct Function {
     bool is_async = false;                          // Whether this is an async function
     std::optional<AsyncStateMachine> state_machine; // State machine for async functions
     std::vector<std::string> attributes;            // @inline, @noinline, etc.
+    std::optional<RouteInfo> route_info;            // HTTP route decorator metadata
 
     // sret (struct return) calling convention support
     bool uses_sret = false;                ///< True if function uses sret parameter for return

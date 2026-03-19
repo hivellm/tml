@@ -133,6 +133,12 @@ void HirMirBuilder::build_function(const hir::HirFunction& func) {
     mir_func.is_public = func.is_public;
     mir_func.is_async = func.is_async;
     mir_func.attributes = func.attributes;
+    if (func.route_info.has_value()) {
+        mir_func.route_info = RouteInfo{
+            .method = static_cast<RouteMethod>(static_cast<int>(func.route_info->method)),
+            .path = func.route_info->path,
+        };
+    }
 
     // Create entry block
     mir_func.next_block_id = 0;

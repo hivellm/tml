@@ -1,0 +1,70 @@
+// Test basic multi-threaded executor: create, submit tasks, run, verify completion.
+use test
+use std::runtime::multi_executor::{MultiExecutor, Task}
+
+// A simple task function that writes 1 to the address pointed to by data.
+func mark_done(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 1 as I64) }
+}
+
+@test
+func test_create_and_destroy() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(2)
+    exec.destroy()
+    Ok(())
+}
+
+@test
+func test_submit_and_run_single_task() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(1)
+
+    // Allocate a flag on the heap that the task will set
+    let flag_ptr: I64 = lowlevel { mem_alloc(8 as U64) } as I64
+    lowlevel { ptr_write[I64](flag_ptr as *I64, 0 as I64) }
+
+    exec.submit(mark_done, flag_ptr)
+    exec.run()
+
+    let flag_val: I64 = lowlevel { ptr_read[I64](flag_ptr as *I64) }
+    assert_eq(flag_val, 1)
+
+    exec.destroy()
+    lowlevel { mem_free(flag_ptr as *Unit) }
+    Ok(())
+}
+
+@test
+func test_submit_multiple_tasks() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(2)
+
+    // Allocate 4 flags
+    let flags_ptr: I64 = lowlevel { mem_alloc(32 as U64) } as I64
+    var i: I64 = 0
+    loop (i < 4) {
+        lowlevel { ptr_write[I64]((flags_ptr + i * 8) as *I64, 0 as I64) }
+        i = i + 1
+    }
+
+    // Submit 4 tasks, each setting a different flag
+    i = 0
+    loop (i < 4) {
+        exec.submit(mark_done, flags_ptr + i * 8)
+        i = i + 1
+    }
+
+    exec.run()
+
+    // Verify all 4 flags were set
+    i = 0
+    loop (i < 4) {
+        let val: I64 = lowlevel { ptr_read[I64]((flags_ptr + i * 8) as *I64) }
+        assert_eq(val, 1)
+        i = i + 1
+    }
+
+    assert_eq(exec.completed_count(), 4)
+
+    exec.destroy()
+    lowlevel { mem_free(flags_ptr as *Unit) }
+    Ok(())
+}

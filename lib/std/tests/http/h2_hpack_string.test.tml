@@ -1,0 +1,56 @@
+// Tests for HPACK string encoding/decoding
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::hpack::{
+    HpackStrResult,
+    hpack_encode_string,
+    hpack_decode_string,
+}
+
+@test
+func test_encode_string_literal() -> I32 {
+    let buf = hpack_encode_string("hello")
+    assert_eq(buf.get(0), 5, "length byte = 5")
+    assert_eq(buf.get(1), 0x68, "h")
+    assert_eq(buf.get(2), 0x65, "e")
+    assert_eq(buf.get(3), 0x6C, "l")
+    assert_eq(buf.get(4), 0x6C, "l")
+    assert_eq(buf.get(5), 0x6F, "o")
+    assert_eq(buf.len(), 6, "total len = 6")
+    return 0
+}
+
+@test
+func test_decode_string_literal() -> I32 {
+    let buf = Buffer::new(8)
+    buf.write_u8(3, 0)
+    buf.write_u8(0x61, 1)
+    buf.write_u8(0x62, 2)
+    buf.write_u8(0x63, 3)
+
+    let result = hpack_decode_string(buf, 0)
+    assert(result.is_ok(), "decode ok")
+    let r: HpackStrResult = result.unwrap()
+    assert_eq(r.value, "abc", "value = abc")
+    assert_eq(r.consumed, 4, "consumed 4 bytes")
+    return 0
+}
+
+@test
+func test_encode_string_empty() -> I32 {
+    let buf = hpack_encode_string("")
+    assert_eq(buf.get(0), 0, "length byte = 0")
+    assert_eq(buf.len(), 1, "total len = 1")
+    return 0
+}
+
+@test
+func test_string_roundtrip() -> I32 {
+    let original: Str = "custom-header-value"
+    let encoded = hpack_encode_string(original)
+    let result = hpack_decode_string(encoded, 0)
+    assert(result.is_ok(), "decode ok")
+    let r: HpackStrResult = result.unwrap()
+    assert_eq(r.value, original, "roundtrip match")
+    return 0
+}

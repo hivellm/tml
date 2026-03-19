@@ -92,6 +92,41 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
             collect_enum_types_from_type(param.type);
         }
 
+        // Collect string constants for HTTP route decorators
+        if (func.route_info.has_value()) {
+            auto register_str = [this](const std::string& s) {
+                if (string_constants_.find(s) == string_constants_.end()) {
+                    string_constants_[s] = "@.str." + std::to_string(string_constants_.size());
+                }
+            };
+            std::string method_str;
+            switch (func.route_info->method) {
+            case mir::RouteMethod::Get:
+                method_str = "GET";
+                break;
+            case mir::RouteMethod::Post:
+                method_str = "POST";
+                break;
+            case mir::RouteMethod::Put:
+                method_str = "PUT";
+                break;
+            case mir::RouteMethod::Delete:
+                method_str = "DELETE";
+                break;
+            case mir::RouteMethod::Patch:
+                method_str = "PATCH";
+                break;
+            case mir::RouteMethod::Head:
+                method_str = "HEAD";
+                break;
+            case mir::RouteMethod::Options:
+                method_str = "OPTIONS";
+                break;
+            }
+            register_str(method_str);
+            register_str(func.route_info->path);
+        }
+
         for (const auto& block : func.blocks) {
             for (const auto& inst : block.instructions) {
                 if (auto* const_inst = std::get_if<mir::ConstantInst>(&inst.inst)) {
@@ -195,6 +230,9 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         emit_test_entry_wrapper(module);
     }
 
+    // Emit route registration function for @Get/@Post/etc. decorators
+    emit_route_registration(module);
+
     // Module identification metadata
     emitln();
     emitln("!llvm.ident = !{!0}");
@@ -230,6 +268,41 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         collect_enum_types_from_type(func.return_type);
         for (const auto& param : func.params) {
             collect_enum_types_from_type(param.type);
+        }
+
+        // Collect route decorator strings for CGU
+        if (func.route_info.has_value()) {
+            auto register_str = [this](const std::string& s) {
+                if (string_constants_.find(s) == string_constants_.end()) {
+                    string_constants_[s] = "@.str." + std::to_string(string_constants_.size());
+                }
+            };
+            std::string method_str;
+            switch (func.route_info->method) {
+            case mir::RouteMethod::Get:
+                method_str = "GET";
+                break;
+            case mir::RouteMethod::Post:
+                method_str = "POST";
+                break;
+            case mir::RouteMethod::Put:
+                method_str = "PUT";
+                break;
+            case mir::RouteMethod::Delete:
+                method_str = "DELETE";
+                break;
+            case mir::RouteMethod::Patch:
+                method_str = "PATCH";
+                break;
+            case mir::RouteMethod::Head:
+                method_str = "HEAD";
+                break;
+            case mir::RouteMethod::Options:
+                method_str = "OPTIONS";
+                break;
+            }
+            register_str(method_str);
+            register_str(func.route_info->path);
         }
 
         for (const auto& block : func.blocks) {
@@ -339,6 +412,7 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
             } else if (!options_.test_entry_name.empty()) {
                 emit_test_entry_wrapper(module);
             }
+            emit_route_registration(module);
         }
     }
 
@@ -351,6 +425,12 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
 }
 
 void MirCodegen::emit_function_declaration(const mir::Function& func) {
+    // Skip __tml_register_routes declaration — the codegen will generate
+    // a define for this function when HTTP route decorators are present
+    if (func.name == "__tml_register_routes") {
+        return;
+    }
+
     std::string ret_type = mir_type_to_llvm(func.return_type);
     // Rename `main` based on entry mode:
     // - generate_exe_main: rename to tml_main (C entry wrapper calls it)
@@ -469,6 +549,100 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
     }
 
     emitln("  ret i32 0");
+    emitln("}");
+    emitln();
+}
+
+void MirCodegen::emit_route_registration(const mir::Module& module) {
+    struct RouteEntry {
+        std::string method_str;
+        std::string path;
+        std::string func_name;
+    };
+    std::vector<RouteEntry> routes;
+
+    for (const auto& func : module.functions) {
+        if (!func.route_info.has_value())
+            continue;
+        std::string method_str;
+        switch (func.route_info->method) {
+        case mir::RouteMethod::Get:
+            method_str = "GET";
+            break;
+        case mir::RouteMethod::Post:
+            method_str = "POST";
+            break;
+        case mir::RouteMethod::Put:
+            method_str = "PUT";
+            break;
+        case mir::RouteMethod::Delete:
+            method_str = "DELETE";
+            break;
+        case mir::RouteMethod::Patch:
+            method_str = "PATCH";
+            break;
+        case mir::RouteMethod::Head:
+            method_str = "HEAD";
+            break;
+        case mir::RouteMethod::Options:
+            method_str = "OPTIONS";
+            break;
+        }
+        routes.push_back({method_str, func.route_info->path, func.name});
+    }
+
+    if (routes.empty())
+        return;
+
+    emitln("; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
+    emitln("; Inline registration: writes directly to the flat handler table (24 bytes/entry)");
+    emitln("define void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
+    emitln("entry:");
+    emitln("  %count_init = load i64, ptr %count_ptr");
+
+    for (size_t i = 0; i < routes.size(); ++i) {
+        const auto& route = routes[i];
+        std::string idx = std::to_string(i);
+        std::string method_global = string_constants_[route.method_str];
+        std::string path_global = string_constants_[route.path];
+        size_t method_len = route.method_str.size() + 1;
+        size_t path_len = route.path.size() + 1;
+
+        // Compute offset = (count + i) * 24
+        emitln("  %slot_" + idx + " = add i64 %count_init, " + std::to_string(i));
+        emitln("  %offset_" + idx + " = mul i64 %slot_" + idx + ", 24");
+        emitln("  %base_" + idx + " = add i64 %table, %offset_" + idx);
+
+        // Get method and path string pointers
+        emitln("  %method_" + idx + " = getelementptr [" + std::to_string(method_len) +
+               " x i8], ptr " + method_global + ", i32 0, i32 0");
+        emitln("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) + " x i8], ptr " +
+               path_global + ", i32 0, i32 0");
+        emitln("  %handler_" + idx + " = ptrtoint ptr @" + quote_func_name(route.func_name) +
+               " to i64");
+
+        // Write method ptr at offset + 0
+        emitln("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
+        emitln("  %mptr_" + idx + " = inttoptr i64 %base_" + idx + " to ptr");
+        emitln("  store i64 %method_i64_" + idx + ", ptr %mptr_" + idx);
+
+        // Write path ptr at offset + 8
+        emitln("  %path_off_" + idx + " = add i64 %base_" + idx + ", 8");
+        emitln("  %path_i64_" + idx + " = ptrtoint ptr %path_" + idx + " to i64");
+        emitln("  %pptr_" + idx + " = inttoptr i64 %path_off_" + idx + " to ptr");
+        emitln("  store i64 %path_i64_" + idx + ", ptr %pptr_" + idx);
+
+        // Write handler ptr at offset + 16
+        emitln("  %hndl_off_" + idx + " = add i64 %base_" + idx + ", 16");
+        emitln("  %hptr_" + idx + " = inttoptr i64 %hndl_off_" + idx + " to ptr");
+        emitln("  store i64 %handler_" + idx + ", ptr %hptr_" + idx);
+    }
+
+    // Update count = count + N
+    emitln("  %new_count = add i64 %count_init, " + std::to_string(routes.size()));
+    emitln("  store i64 %new_count, ptr %count_ptr");
+
+    emitln("  ret void");
     emitln("}");
     emitln();
 }

@@ -1,0 +1,821 @@
+//! WebSocket protocol implementation (RFC 6455).
+//!
+//! Provides frame encoding/decoding, upgrade handshake, masking, and message
+//! assembly for the WebSocket protocol. Pure TML implementation using existing
+//! crypto (SHA1) and encoding (Base64) modules.
+//!
+//! # Examples
+//!
+//! ## Server-Side Upgrade
+//!
+//! ```tml
+//! use std::http::websocket::{ws_validate_upgrade, ws_upgrade_response}
+//!
+//! let client_key = ws_validate_upgrade(ref headers)!
+//! let response = ws_upgrade_response(client_key)
+//! // Send response bytes over TCP...
+//! ```
+//!
+//! ## Frame Encoding
+//!
+//! ```tml
+//! use std::http::websocket::{WsFrame, WsOpcode, ws_encode_frame}
+//!
+//! let frame = WsFrame.text("Hello, WebSocket!")
+//! let encoded = ws_encode_frame(ref frame)
+//! ```
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::collections::Buffer
+use std::http::headers::Headers
+use std::text::Text
+use std::crypto::hash::sha1
+use std::crypto::constants::bytes_to_base64
+
+// SHA1 and Base64 are provided by std::crypto — no manual reimplementation needed.
+
+// ============================================================================
+// WebSocket Opcodes (RFC 6455 Section 5.2)
+// ============================================================================
+
+/// WebSocket frame opcodes as defined in RFC 6455 Section 5.2.
+pub type WsOpcode {
+    value: I32,
+}
+
+impl WsOpcode {
+    /// Continuation frame (0x0).
+    pub func Continuation() -> WsOpcode { WsOpcode { value: 0 } }
+    /// Text frame (0x1).
+    pub func Text() -> WsOpcode { WsOpcode { value: 1 } }
+    /// Binary frame (0x2).
+    pub func Binary() -> WsOpcode { WsOpcode { value: 2 } }
+    /// Connection close (0x8).
+    pub func Close() -> WsOpcode { WsOpcode { value: 8 } }
+    /// Ping (0x9).
+    pub func Ping() -> WsOpcode { WsOpcode { value: 9 } }
+    /// Pong (0xA).
+    pub func Pong() -> WsOpcode { WsOpcode { value: 10 } }
+
+    /// Returns the raw opcode value.
+    pub func raw(this) -> I32 { this.value }
+
+    /// Returns true if the opcode represents a control frame.
+    pub func is_control(this) -> Bool {
+        this.value >= 8
+    }
+
+    /// Returns true if the opcode represents a data frame.
+    pub func is_data(this) -> Bool {
+        this.value < 8
+    }
+
+    /// Returns the opcode name as a string.
+    pub func name(this) -> Str {
+        if this.value == 0 { return "Continuation" }
+        if this.value == 1 { return "Text" }
+        if this.value == 2 { return "Binary" }
+        if this.value == 8 { return "Close" }
+        if this.value == 9 { return "Ping" }
+        if this.value == 10 { return "Pong" }
+        return "Unknown"
+    }
+
+    /// Creates an opcode from a raw integer value.
+    /// Returns Nothing for reserved opcodes.
+    pub func from_raw(value: I32) -> Maybe[WsOpcode] {
+        if value == 0 or value == 1 or value == 2 {
+            return Just(WsOpcode { value: value })
+        }
+        if value == 8 or value == 9 or value == 10 {
+            return Just(WsOpcode { value: value })
+        }
+        return Nothing
+    }
+}
+
+// ============================================================================
+// WebSocket Close Codes (RFC 6455 Section 7.4.1)
+// ============================================================================
+
+/// WebSocket close status codes per RFC 6455 Section 7.4.1.
+pub type WsCloseCode {
+    value: I32,
+}
+
+impl WsCloseCode {
+    /// 1000: Normal closure.
+    pub func Normal() -> WsCloseCode { WsCloseCode { value: 1000 } }
+    /// 1001: Endpoint going away (e.g., server shutting down).
+    pub func GoingAway() -> WsCloseCode { WsCloseCode { value: 1001 } }
+    /// 1002: Protocol error.
+    pub func ProtocolError() -> WsCloseCode { WsCloseCode { value: 1002 } }
+    /// 1003: Unsupported data type received.
+    pub func UnsupportedData() -> WsCloseCode { WsCloseCode { value: 1003 } }
+    /// 1007: Invalid frame payload data (e.g., non-UTF-8 in text frame).
+    pub func InvalidPayload() -> WsCloseCode { WsCloseCode { value: 1007 } }
+    /// 1008: Policy violation.
+    pub func PolicyViolation() -> WsCloseCode { WsCloseCode { value: 1008 } }
+    /// 1009: Message too big.
+    pub func MessageTooBig() -> WsCloseCode { WsCloseCode { value: 1009 } }
+    /// 1010: Missing extension.
+    pub func MissingExtension() -> WsCloseCode { WsCloseCode { value: 1010 } }
+    /// 1011: Internal server error.
+    pub func InternalError() -> WsCloseCode { WsCloseCode { value: 1011 } }
+
+    /// Returns the raw close code value.
+    pub func raw(this) -> I32 { this.value }
+
+    /// Returns the close code name.
+    pub func name(this) -> Str {
+        if this.value == 1000 { return "Normal Closure" }
+        if this.value == 1001 { return "Going Away" }
+        if this.value == 1002 { return "Protocol Error" }
+        if this.value == 1003 { return "Unsupported Data" }
+        if this.value == 1007 { return "Invalid Payload" }
+        if this.value == 1008 { return "Policy Violation" }
+        if this.value == 1009 { return "Message Too Big" }
+        if this.value == 1010 { return "Missing Extension" }
+        if this.value == 1011 { return "Internal Error" }
+        return "Unknown"
+    }
+
+    /// Creates a close code from a raw integer.
+    pub func from_raw(value: I32) -> WsCloseCode {
+        WsCloseCode { value: value }
+    }
+}
+
+// ============================================================================
+// WebSocket Error Type
+// ============================================================================
+
+/// Errors that can occur during WebSocket operations.
+pub type WsError {
+    kind: I32,
+    message: Str,
+}
+
+impl WsError {
+    /// Invalid or missing upgrade headers.
+    pub func InvalidUpgrade(msg: Str) -> WsError { WsError { kind: 1, message: msg } }
+    /// Malformed frame.
+    pub func InvalidFrame(msg: Str) -> WsError { WsError { kind: 2, message: msg } }
+    /// Payload exceeds maximum size.
+    pub func PayloadTooLarge() -> WsError { WsError { kind: 3, message: "Payload too large" } }
+    /// Invalid UTF-8 in text frame.
+    pub func InvalidUtf8() -> WsError { WsError { kind: 4, message: "Invalid UTF-8 in text frame" } }
+    /// Protocol violation.
+    pub func ProtocolError(msg: Str) -> WsError { WsError { kind: 5, message: msg } }
+    /// Connection was closed.
+    pub func ConnectionClosed() -> WsError { WsError { kind: 6, message: "Connection closed" } }
+    /// Incomplete frame (need more data).
+    pub func IncompleteFrame() -> WsError { WsError { kind: 7, message: "Incomplete frame" } }
+
+    /// Returns true if this is a specific error kind.
+    pub func is_incomplete(this) -> Bool { this.kind == 7 }
+    pub func is_protocol_error(this) -> Bool { this.kind == 5 }
+    pub func is_invalid_frame(this) -> Bool { this.kind == 2 }
+    pub func is_invalid_upgrade(this) -> Bool { this.kind == 1 }
+}
+
+// ============================================================================
+// WebSocket Frame (RFC 6455 Section 5)
+// ============================================================================
+
+/// A parsed WebSocket frame.
+///
+/// Represents a single frame in the WebSocket protocol, which may be one of
+/// several fragments that compose a complete message.
+pub type WsFrame {
+    /// True (1) if this is the final fragment of a message.
+    /// Stored as I64 to avoid Bool struct layout codegen issues.
+    fin: I64,
+    /// The opcode identifying the frame type.
+    opcode: WsOpcode,
+    /// True (1) if the payload is masked (required for client-to-server frames).
+    /// Stored as I64 to avoid Bool struct layout codegen issues.
+    masked: I64,
+    /// The 4-byte masking key (relevant only when masked is true).
+    /// Stored as I32 to avoid U8 struct layout codegen issues.
+    mask_key_0: I32,
+    mask_key_1: I32,
+    mask_key_2: I32,
+    mask_key_3: I32,
+    /// The frame payload data.
+    payload: Buffer,
+}
+
+impl WsFrame {
+    /// Creates a new frame with the given parameters.
+    pub func new(fin: I64, opcode: WsOpcode, payload: Buffer) -> WsFrame {
+        WsFrame {
+            fin: fin,
+            opcode: opcode,
+            masked: 0,
+            mask_key_0: 0,
+            mask_key_1: 0,
+            mask_key_2: 0,
+            mask_key_3: 0,
+            payload: payload,
+        }
+    }
+
+    /// Creates a text frame with the given string payload.
+    pub func text(data: Str) -> WsFrame {
+        WsFrame.new(1, WsOpcode.Text(), Buffer.from_string(data))
+    }
+
+    /// Creates a binary frame.
+    pub func binary(data: Buffer) -> WsFrame {
+        WsFrame.new(1, WsOpcode.Binary(), data)
+    }
+
+    /// Creates a ping frame with optional payload.
+    pub func ping(data: Buffer) -> WsFrame {
+        WsFrame.new(1, WsOpcode.Ping(), data)
+    }
+
+    /// Creates a pong frame with optional payload.
+    pub func pong(data: Buffer) -> WsFrame {
+        WsFrame.new(1, WsOpcode.Pong(), data)
+    }
+
+    /// Creates a close frame with status code and reason.
+    pub func close(code: WsCloseCode, reason: Str) -> WsFrame {
+        let payload = Buffer.new(2 + str::len(reason))
+        // Close frame payload: 2-byte status code (big-endian) + UTF-8 reason
+        payload.write_u16_be(code.raw(), 0)
+        // Write reason string bytes after the 2-byte code
+        let reason_len = str::len(reason)
+        var i: I64 = 0
+        loop (i < reason_len) {
+            let byte = str::char_at(reason, i)
+            payload.write_byte(byte)
+            i = i + 1
+        }
+        // Fix: write_byte appends, but we already wrote the 2-byte code via write_u16_be
+        // which sets len to 2. Then write_byte appends after that. So payload is correct:
+        // [code_hi, code_lo, reason_byte_0, reason_byte_1, ...]
+        WsFrame.new(1, WsOpcode.Close(), payload)
+    }
+
+    /// Creates a close frame with no status code.
+    pub func close_empty() -> WsFrame {
+        WsFrame.new(1, WsOpcode.Close(), Buffer.new(0))
+    }
+
+    /// Returns the payload length.
+    pub func payload_len(this) -> I64 {
+        this.payload.len()
+    }
+}
+
+// ============================================================================
+// WebSocket Message (assembled from frames)
+// ============================================================================
+
+/// A complete WebSocket message assembled from one or more frames.
+pub type WsMessage {
+    /// 1 = Text, 2 = Binary, 8 = Close, 9 = Ping, 10 = Pong
+    kind: I32,
+    /// Text content (for Text messages).
+    text_data: Str,
+    /// Binary content (for Binary, Ping, Pong messages).
+    binary_data: Buffer,
+    /// Close code (for Close messages, 0 if not present).
+    close_code: I32,
+    /// Close reason (for Close messages).
+    close_reason: Str,
+}
+
+impl WsMessage {
+    /// Creates a text message.
+    pub func text(data: Str) -> WsMessage {
+        WsMessage {
+            kind: 1,
+            text_data: data,
+            binary_data: Buffer.new(0),
+            close_code: 0,
+            close_reason: "",
+        }
+    }
+
+    /// Creates a binary message.
+    pub func binary(data: Buffer) -> WsMessage {
+        WsMessage {
+            kind: 2,
+            text_data: "",
+            binary_data: data,
+            close_code: 0,
+            close_reason: "",
+        }
+    }
+
+    /// Creates a close message with optional code and reason.
+    pub func close(code: I32, reason: Str) -> WsMessage {
+        WsMessage {
+            kind: 8,
+            text_data: "",
+            binary_data: Buffer.new(0),
+            close_code: code,
+            close_reason: reason,
+        }
+    }
+
+    /// Creates a ping message.
+    pub func ping(data: Buffer) -> WsMessage {
+        WsMessage {
+            kind: 9,
+            text_data: "",
+            binary_data: data,
+            close_code: 0,
+            close_reason: "",
+        }
+    }
+
+    /// Creates a pong message.
+    pub func pong(data: Buffer) -> WsMessage {
+        WsMessage {
+            kind: 10,
+            text_data: "",
+            binary_data: data,
+            close_code: 0,
+            close_reason: "",
+        }
+    }
+
+    /// Returns true if this is a text message.
+    pub func is_text(this) -> Bool { this.kind == 1 }
+    /// Returns true if this is a binary message.
+    pub func is_binary(this) -> Bool { this.kind == 2 }
+    /// Returns true if this is a close message.
+    pub func is_close(this) -> Bool { this.kind == 8 }
+    /// Returns true if this is a ping message.
+    pub func is_ping(this) -> Bool { this.kind == 9 }
+    /// Returns true if this is a pong message.
+    pub func is_pong(this) -> Bool { this.kind == 10 }
+}
+
+// ============================================================================
+// Upgrade Handshake (RFC 6455 Section 4.2.2)
+// ============================================================================
+
+/// The WebSocket GUID used in the Sec-WebSocket-Accept calculation.
+/// This is a magic string defined in RFC 6455 Section 4.2.2.
+pub const WS_GUID: Str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+/// Computes the Sec-WebSocket-Accept key from the client's Sec-WebSocket-Key.
+///
+/// Per RFC 6455 Section 4.2.2:
+/// 1. Concatenate the client key with the GUID
+/// 2. Take the SHA-1 hash
+/// 3. Base64-encode the result
+///
+/// # Examples
+///
+/// ```tml
+/// // RFC 6455 Section 4.2.2 test vector
+/// let accept = ws_accept_key("dGhlIHNhbXBsZSBub25jZQ==")
+/// assert(accept == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+/// ```
+pub func ws_accept_key(client_key: Str) -> Str {
+    let combined = client_key + WS_GUID
+    let digest = sha1(combined)
+    return digest.to_base64()
+}
+
+/// Generates the complete HTTP/1.1 101 Switching Protocols response
+/// for a WebSocket upgrade.
+///
+/// The response includes the required headers per RFC 6455 Section 4.2.2:
+/// - `Upgrade: websocket`
+/// - `Connection: Upgrade`
+/// - `Sec-WebSocket-Accept: {accept_key}`
+pub func ws_upgrade_response(client_key: Str) -> Str {
+    let accept = ws_accept_key(client_key)
+    let resp = Text.new()
+    resp.push_str("HTTP/1.1 101 Switching Protocols\r\n")
+    resp.push_str("Upgrade: websocket\r\n")
+    resp.push_str("Connection: Upgrade\r\n")
+    resp.push_str("Sec-WebSocket-Accept: ")
+    resp.push_str(accept)
+    resp.push_str("\r\n\r\n")
+    return resp.as_str()
+}
+
+/// Validates that the given headers represent a valid WebSocket upgrade request.
+///
+/// Checks for:
+/// - `Upgrade: websocket` header (case-insensitive value)
+/// - `Connection: Upgrade` header (case-insensitive value, may be in a list)
+/// - `Sec-WebSocket-Key` header present and non-empty
+///
+/// Returns the client key on success, or a WsError on failure.
+pub func ws_validate_upgrade(headers: ref Headers) -> Outcome[Str, WsError] {
+    // Check Upgrade header
+    let upgrade = headers.get("Upgrade")
+    if str::len(upgrade) == 0 {
+        return Err(WsError.InvalidUpgrade("Missing Upgrade header"))
+    }
+    let upgrade_lower = str::to_lowercase(upgrade)
+    if upgrade_lower != "websocket" {
+        return Err(WsError.InvalidUpgrade("Upgrade header must be 'websocket'"))
+    }
+
+    // Check Connection header — must contain "upgrade" (may be comma-separated list)
+    let connection = headers.get("Connection")
+    if str::len(connection) == 0 {
+        return Err(WsError.InvalidUpgrade("Missing Connection header"))
+    }
+    let conn_lower = str::to_lowercase(connection)
+    if not str::contains(conn_lower, "upgrade") {
+        return Err(WsError.InvalidUpgrade("Connection header must contain 'upgrade'"))
+    }
+
+    // Check Sec-WebSocket-Key
+    let key = headers.get("Sec-WebSocket-Key")
+    if str::len(key) == 0 {
+        return Err(WsError.InvalidUpgrade("Missing Sec-WebSocket-Key header"))
+    }
+
+    return Ok(key)
+}
+
+// ============================================================================
+// Frame Masking (RFC 6455 Section 5.3)
+// ============================================================================
+
+/// Applies or removes the XOR mask on frame payload data.
+///
+/// Per RFC 6455 Section 5.3, masking is performed by XORing each byte of the
+/// payload with `mask_key[i % 4]`. Since XOR is its own inverse, the same
+/// function is used for both masking and unmasking.
+pub func ws_apply_mask(buf: ref Buffer, mask_key_0: I32, mask_key_1: I32, mask_key_2: I32, mask_key_3: I32) {
+    let data_len = buf.len()
+    var i: I64 = 0
+    loop (i < data_len) {
+        let original = buf.get(i)
+        let mod4 = i % 4
+        var mask_byte: I32 = mask_key_0
+        if mod4 == 1 { mask_byte = mask_key_1 }
+        if mod4 == 2 { mask_byte = mask_key_2 }
+        if mod4 == 3 { mask_byte = mask_key_3 }
+        let masked = original ^ mask_byte
+        buf.set(i, masked)
+        i = i + 1
+    }
+}
+
+/// Convenience alias — masking and unmasking are the same operation (XOR).
+pub func ws_mask(buf: ref Buffer, mk0: I32, mk1: I32, mk2: I32, mk3: I32) {
+    ws_apply_mask(buf, mk0, mk1, mk2, mk3)
+}
+
+/// Convenience alias — masking and unmasking are the same operation (XOR).
+pub func ws_unmask(buf: ref Buffer, mk0: I32, mk1: I32, mk2: I32, mk3: I32) {
+    ws_apply_mask(buf, mk0, mk1, mk2, mk3)
+}
+
+// ============================================================================
+// Frame Encoding (RFC 6455 Section 5.2)
+// ============================================================================
+
+/// Encodes a WebSocket frame into a byte buffer ready for transmission.
+///
+/// Frame format (RFC 6455 Section 5.2):
+/// ```
+///  0                   1                   2                   3
+///  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+/// +-+-+-+-+-------+-+-------------+-------------------------------+
+/// |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+/// |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+/// |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+/// | |1|2|3|       |K|             |                               |
+/// +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+/// |     Extended payload length continued, if payload len == 127  |
+/// + - - - - - - - - - - - - - - - +-------------------------------+
+/// |                               |Masking-key, if MASK set to 1  |
+/// +-------------------------------+-------------------------------+
+/// | Masking-key (continued)       |          Payload Data         |
+/// +-------------------------------- - - - - - - - - - - - - - - - +
+/// :                     Payload Data continued ...                :
+/// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+/// |                     Payload Data (continued)                  |
+/// +---------------------------------------------------------------+
+/// ```
+pub func ws_encode_frame(frame: ref WsFrame) -> Buffer {
+    let payload_len = frame.payload.len()
+
+    // Calculate total frame size
+    var header_size: I64 = 2  // First two bytes always present
+    if payload_len <= 125 {
+        // 7-bit length fits in second byte
+    } else if payload_len <= 65535 {
+        header_size = header_size + 2  // 16-bit extended length
+    } else {
+        header_size = header_size + 8  // 64-bit extended length
+    }
+    if frame.masked != 0 {
+        header_size = header_size + 4  // 4-byte mask key
+    }
+
+    let total_size = header_size + payload_len
+    let result = Buffer.new(total_size)
+
+    // Byte 0: FIN bit + opcode
+    var byte0: I32 = frame.opcode.raw() % 16
+    if frame.fin != 0 {
+        byte0 = byte0 + 128  // Set FIN bit (0x80)
+    }
+    result.write_byte(byte0)
+
+    // Byte 1: MASK bit + payload length
+    var byte1: I32 = 0
+    if frame.masked != 0 {
+        byte1 = 128  // Set MASK bit (0x80)
+    }
+
+    if payload_len <= 125 {
+        byte1 = byte1 + payload_len as I32
+        result.write_byte(byte1)
+    } else if payload_len <= 65535 {
+        byte1 = byte1 + 126
+        result.write_byte(byte1)
+        // 16-bit extended length in network byte order (big-endian)
+        result.write_byte(((payload_len / 256) % 256) as I32)
+        result.write_byte((payload_len % 256) as I32)
+    } else {
+        byte1 = byte1 + 127
+        result.write_byte(byte1)
+        // 64-bit extended length in network byte order (big-endian)
+        result.write_byte(((payload_len / 72057594037927936) % 256) as I32)  // byte 7
+        result.write_byte(((payload_len / 281474976710656) % 256) as I32)    // byte 6
+        result.write_byte(((payload_len / 1099511627776) % 256) as I32)      // byte 5
+        result.write_byte(((payload_len / 4294967296) % 256) as I32)         // byte 4
+        result.write_byte(((payload_len / 16777216) % 256) as I32)           // byte 3
+        result.write_byte(((payload_len / 65536) % 256) as I32)              // byte 2
+        result.write_byte(((payload_len / 256) % 256) as I32)                // byte 1
+        result.write_byte((payload_len % 256) as I32)                         // byte 0
+    }
+
+    // Mask key (if masked)
+    if frame.masked != 0 {
+        result.write_byte(frame.mask_key_0)
+        result.write_byte(frame.mask_key_1)
+        result.write_byte(frame.mask_key_2)
+        result.write_byte(frame.mask_key_3)
+    }
+
+    // Payload data
+    var i: I64 = 0
+    loop (i < payload_len) {
+        let byte = frame.payload.get(i)
+        if frame.masked != 0 {
+            let mod4 = i % 4
+            var mask_byte: I32 = frame.mask_key_0
+            if mod4 == 1 { mask_byte = frame.mask_key_1 }
+            if mod4 == 2 { mask_byte = frame.mask_key_2 }
+            if mod4 == 3 { mask_byte = frame.mask_key_3 }
+            result.write_byte(byte ^ mask_byte)
+        } else {
+            result.write_byte(byte)
+        }
+        i = i + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// Frame Decoding (RFC 6455 Section 5.2)
+// ============================================================================
+
+/// Decodes a WebSocket frame from raw bytes.
+///
+/// Returns the decoded frame and the number of bytes consumed on success.
+/// Returns `WsError::IncompleteFrame` if the buffer does not contain a
+/// complete frame (caller should buffer more data and retry).
+///
+/// # Arguments
+///
+/// * `data` — A buffer containing the raw frame bytes.
+///
+/// # Returns
+///
+/// `Outcome[(WsFrame, I64), WsError]` — the frame and bytes consumed, or an error.
+pub func ws_decode_frame(data: ref Buffer) -> Outcome[(WsFrame, I64), WsError] {
+    let data_len = data.len()
+
+    // Need at least 2 bytes for the header
+    if data_len < 2 {
+        return Err(WsError.IncompleteFrame())
+    }
+
+    let byte0 = data.get(0)
+    let byte1 = data.get(1)
+
+    // Parse byte 0
+    let fin: I64 = if (byte0 / 128) == 1 { 1 } else { 0 }
+    let rsv = (byte0 / 16) % 8          // Bits 4-6 (reserved, must be 0)
+    let opcode_raw = byte0 % 16          // Bits 0-3
+
+    // RSV bits must be 0 unless an extension negotiates otherwise
+    if rsv != 0 {
+        return Err(WsError.ProtocolError("RSV bits must be 0"))
+    }
+
+    // Validate opcode
+    if opcode_raw != 0 and opcode_raw != 1 and opcode_raw != 2 and opcode_raw != 8 and opcode_raw != 9 and opcode_raw != 10 {
+        return Err(WsError.InvalidFrame("Unknown opcode"))
+    }
+
+    let opcode = WsOpcode { value: opcode_raw }
+
+    // Parse byte 1
+    let is_masked: I64 = if (byte1 / 128) == 1 { 1 } else { 0 }
+    let len7 = byte1 % 128              // Bits 0-6
+
+    // Determine payload length and header offset
+    var payload_len: I64 = 0
+    var offset: I64 = 2
+
+    if len7 <= 125 {
+        payload_len = len7 as I64
+    } else if len7 == 126 {
+        // 16-bit extended length
+        if data_len < 4 {
+            return Err(WsError.IncompleteFrame())
+        }
+        payload_len = data.get(2) as I64 * 256 + data.get(3) as I64
+        offset = 4
+    } else {
+        // 64-bit extended length (len7 == 127)
+        if data_len < 10 {
+            return Err(WsError.IncompleteFrame())
+        }
+        payload_len = data.get(2) as I64 * 72057594037927936
+                    + data.get(3) as I64 * 281474976710656
+                    + data.get(4) as I64 * 1099511627776
+                    + data.get(5) as I64 * 4294967296
+                    + data.get(6) as I64 * 16777216
+                    + data.get(7) as I64 * 65536
+                    + data.get(8) as I64 * 256
+                    + data.get(9) as I64
+        offset = 10
+
+        // The most significant bit must be 0 (RFC 6455 Section 5.2)
+        if payload_len < 0 {
+            return Err(WsError.ProtocolError("Payload length MSB must be 0"))
+        }
+    }
+
+    // Control frames must not have payload > 125 bytes (RFC 6455 Section 5.5)
+    if opcode.is_control() and payload_len > 125 {
+        return Err(WsError.ProtocolError("Control frame payload exceeds 125 bytes"))
+    }
+
+    // Control frames must not be fragmented (RFC 6455 Section 5.5)
+    if opcode.is_control() and fin == 0 {
+        return Err(WsError.ProtocolError("Control frames must not be fragmented"))
+    }
+
+    // Read mask key if present
+    var mk0: I32 = 0
+    var mk1: I32 = 0
+    var mk2: I32 = 0
+    var mk3: I32 = 0
+    if is_masked != 0 {
+        if data_len < offset + 4 {
+            return Err(WsError.IncompleteFrame())
+        }
+        mk0 = data.get(offset)
+        mk1 = data.get(offset + 1)
+        mk2 = data.get(offset + 2)
+        mk3 = data.get(offset + 3)
+        offset = offset + 4
+    }
+
+    // Check we have enough data for the payload
+    let total_frame_size = offset + payload_len
+    if data_len < total_frame_size {
+        return Err(WsError.IncompleteFrame())
+    }
+
+    // Read payload
+    let payload = Buffer.new(payload_len)
+    var i: I64 = 0
+    loop (i < payload_len) {
+        let byte = data.get(offset + i)
+        if is_masked != 0 {
+            let mod4 = i % 4
+            var mask_byte: I32 = mk0
+            if mod4 == 1 { mask_byte = mk1 }
+            if mod4 == 2 { mask_byte = mk2 }
+            if mod4 == 3 { mask_byte = mk3 }
+            payload.write_byte(byte ^ mask_byte)
+        } else {
+            payload.write_byte(byte)
+        }
+        i = i + 1
+    }
+
+    let frame = WsFrame {
+        fin: fin,
+        opcode: opcode,
+        masked: is_masked,
+        mask_key_0: mk0,
+        mask_key_1: mk1,
+        mask_key_2: mk2,
+        mask_key_3: mk3,
+        payload: payload,
+    }
+
+    return Ok((frame, total_frame_size))
+}
+
+// ============================================================================
+// Message Assembly (RFC 6455 Section 5.4)
+// ============================================================================
+
+/// Assembles a complete WebSocket message from a sequence of frames.
+///
+/// Per RFC 6455 Section 5.4, a message consists of:
+/// - A single frame with FIN=1, OR
+/// - A first frame with FIN=0, followed by zero or more continuation frames
+///   with FIN=0, and a final continuation frame with FIN=1.
+///
+/// Control frames (close, ping, pong) are always single-frame messages.
+pub func ws_assemble_message(first_frame: ref WsFrame) -> Outcome[WsMessage, WsError] {
+    let opcode_val = first_frame.opcode.raw()
+
+    // Single-frame message (FIN=1)
+    if opcode_val == 1 {
+        // Text message
+        let text = first_frame.payload.to_string()
+        return Ok(WsMessage.text(text))
+    }
+    if opcode_val == 2 {
+        // Binary message — copy the payload
+        let payload_len = first_frame.payload.len()
+        let copy = Buffer.new(payload_len)
+        var i: I64 = 0
+        loop (i < payload_len) {
+            copy.write_byte(first_frame.payload.get(i))
+            i = i + 1
+        }
+        return Ok(WsMessage.binary(copy))
+    }
+    if opcode_val == 8 {
+        // Close message
+        let payload_len = first_frame.payload.len()
+        if payload_len == 0 {
+            return Ok(WsMessage.close(0, ""))
+        }
+        if payload_len == 1 {
+            return Err(WsError.ProtocolError("Close frame payload must be 0 or >= 2 bytes"))
+        }
+        // First 2 bytes are the close code (big-endian)
+        let code = first_frame.payload.get(0) * 256 + first_frame.payload.get(1)
+        // Remaining bytes are the UTF-8 reason string
+        if payload_len > 2 {
+            let reason_buf = first_frame.payload.slice(2, payload_len)
+            let reason = reason_buf.to_string()
+            return Ok(WsMessage.close(code, reason))
+        }
+        return Ok(WsMessage.close(code, ""))
+    }
+    if opcode_val == 9 {
+        // Ping
+        let payload_len = first_frame.payload.len()
+        let copy = Buffer.new(payload_len)
+        var i: I64 = 0
+        loop (i < payload_len) {
+            copy.write_byte(first_frame.payload.get(i))
+            i = i + 1
+        }
+        return Ok(WsMessage.ping(copy))
+    }
+    if opcode_val == 10 {
+        // Pong
+        let payload_len = first_frame.payload.len()
+        let copy = Buffer.new(payload_len)
+        var i: I64 = 0
+        loop (i < payload_len) {
+            copy.write_byte(first_frame.payload.get(i))
+            i = i + 1
+        }
+        return Ok(WsMessage.pong(copy))
+    }
+
+    return Err(WsError.ProtocolError("Unknown opcode in message assembly"))
+}
+
+/// Creates a close frame from a close code and reason string.
+///
+/// This is a convenience function that creates a properly formatted close frame
+/// with the 2-byte status code followed by the UTF-8 reason.
+pub func ws_close_frame(code: WsCloseCode, reason: Str) -> WsFrame {
+    WsFrame.close(code, reason)
+}

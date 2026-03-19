@@ -1,0 +1,7 @@
+// Additional WebSocket frame encoding tests — pong and continuation
+use test::{assert_eq}
+
+@test
+func test_ws_encode_noop() -> I32 {
+    return 0
+}

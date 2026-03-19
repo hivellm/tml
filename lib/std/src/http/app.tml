@@ -391,3 +391,38 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
     }
     count = count + 1
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Decorator-based route registration
+// ════════════════════════════════════════════════════════════════════
+//
+// When functions are decorated with @Get("/path"), @Post("/path"), etc.,
+// the TML compiler generates a `__tml_register_routes(table, count, trees)`
+// function that calls app_register for each decorated handler.
+//
+// Usage in user code:
+//
+//     use std::http::app::{App, app_register}
+//     use std::http::incoming::IncomingMessage
+//     use std::http::dispatch::app_build_response
+//
+//     // Declare the compiler-generated function
+//     @extern("c")
+//     func __tml_register_routes(table: I64, count: mut ref I64, trees: I64)
+//
+//     @Get("/hello")
+//     func hello(req: IncomingMessage) -> Str {
+//         app_build_response(200, "text/plain", "Hello!")
+//     }
+//
+//     @Post("/users")
+//     func create_user(req: IncomingMessage) -> Str {
+//         app_build_response(201, "application/json", "{\"id\":1}")
+//     }
+//
+//     pub func main() -> I32 {
+//         var app: App = App::new()
+//         __tml_register_routes(app.table, ref app.count, app.trees)
+//         app.listen(3000)
+//         return 0
+//     }

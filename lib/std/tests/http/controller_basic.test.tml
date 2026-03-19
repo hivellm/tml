@@ -1,0 +1,72 @@
+// Tests for Controller pattern — behavior definition and registration helpers
+use test::{assert, assert_eq}
+use std::http::app::App
+use std::http::controller::{ControllerInfo, register_controller, register_controllers}
+use std::http::incoming::IncomingMessage
+use std::http::dispatch::app_build_response
+
+// ── Sample handler functions ─────────────────────────────────
+
+func handle_list(req: IncomingMessage) -> Str {
+    return app_build_response(200, "application/json", "[]")
+}
+
+func handle_get(req: IncomingMessage) -> Str {
+    return app_build_response(200, "application/json", "{}")
+}
+
+func handle_create(req: IncomingMessage) -> Str {
+    return app_build_response(201, "application/json", "{}")
+}
+
+// ── Controller registration functions ────────────────────────
+
+func register_user_routes(app: mut ref App) {
+    app.get("/users", handle_list as I64)
+    app.get("/users/:id", handle_get as I64)
+    app.post("/users", handle_create as I64)
+}
+
+func register_product_routes(app: mut ref App) {
+    app.get("/products", handle_list as I64)
+    app.get("/products/:id", handle_get as I64)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_register_controller_fn() -> I32 {
+    var app: App = App::new()
+    register_controller(ref app, register_user_routes)
+    // If we got here without crashing, registration worked
+    // App.count tracks the number of registered routes
+    assert_eq(app.count, 3, "should have 3 user routes registered")
+    return 0
+}
+
+@test
+func test_register_multiple_controllers() -> I32 {
+    var app: App = App::new()
+    register_controller(ref app, register_user_routes)
+    register_controller(ref app, register_product_routes)
+    assert_eq(app.count, 5, "should have 5 total routes registered")
+    return 0
+}
+
+@test
+func test_controller_info_new() -> I32 {
+    let info: ControllerInfo = ControllerInfo::new("/users", register_user_routes)
+    assert_eq(info.prefix, "/users", "prefix should be /users")
+    return 0
+}
+
+@test
+func test_controller_info_register() -> I32 {
+    var app: App = App::new()
+    let info: ControllerInfo = ControllerInfo::new("/users", register_user_routes)
+    info.register(ref app)
+    assert_eq(app.count, 3, "should have 3 routes after controller info register")
+    return 0
+}

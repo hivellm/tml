@@ -1,0 +1,38 @@
+// Test graceful shutdown of the multi-threaded executor.
+use test
+use std::runtime::multi_executor::MultiExecutor
+
+// A no-op task to verify shutdown doesn't hang
+func noop_task(data: I64) {
+    // Do nothing
+}
+
+@test
+func test_shutdown_empty_executor() -> Outcome[Unit, Str] {
+    // Create executor with no tasks, run should return immediately
+    let exec: MultiExecutor = MultiExecutor::new(2)
+    exec.run()
+    assert_eq(exec.completed_count(), 0)
+    assert_eq(exec.active_count(), 0)
+    exec.destroy()
+    Ok(())
+}
+
+@test
+func test_shutdown_after_tasks_complete() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(2)
+
+    // Submit a few no-op tasks
+    exec.submit(noop_task, 0)
+    exec.submit(noop_task, 0)
+    exec.submit(noop_task, 0)
+
+    exec.run()
+
+    // After run() returns, all tasks should be done
+    assert_eq(exec.completed_count(), 3)
+    assert_eq(exec.active_count(), 0)
+
+    exec.destroy()
+    Ok(())
+}

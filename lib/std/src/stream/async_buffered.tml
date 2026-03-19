@@ -1,0 +1,536 @@
+//! Async buffered stream wrappers for efficient non-blocking I/O.
+//!
+//! `AsyncBufReader` adds an internal byte buffer to any `AsyncRead` source,
+//! enabling line-oriented reading and reducing the number of underlying
+//! poll_read calls.
+//!
+//! `AsyncBufWriter` batches writes and flushes when the buffer is full
+//! or on explicit poll_flush. Reduces syscall overhead for small writes.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::stream::async_buffered::AsyncBufReader
+//!
+//! var reader = AsyncBufReader::new(4096)
+//! // Use with any AsyncRead source via poll_read_line, poll_fill_buf, etc.
+//! reader.destroy()
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+use core::task::{Poll, Context}
+use core::intrinsics::{ptr_read, ptr_write}
+use std::stream::async_io::{AsyncRead, AsyncWrite}
+
+// ============================================================================
+// Memory helpers
+// ============================================================================
+
+func abuf_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
+
+func abuf_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
+
+func abuf_read_byte(data: *Unit, index: I64) -> U8 {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_read[U8](p) }
+}
+
+func abuf_write_byte(data: *Unit, index: I64, val: U8) {
+    let p: *U8 = (data as I64 + index) as *U8
+    lowlevel { ptr_write[U8](p, val) }
+}
+
+// ============================================================================
+// AsyncBufReader
+// ============================================================================
+
+/// Default buffer capacity for AsyncBufReader (8 KB).
+const DEFAULT_ASYNC_READ_BUF: I64 = 8192
+
+/// A buffered wrapper that adds line-reading capability to any async source.
+///
+/// Maintains an internal byte buffer. When `poll_read_line()` is called, it
+/// scans for `\n` (or `\r\n`) in the buffer. If not found, it polls the
+/// underlying source for more data.
+///
+/// Unlike the synchronous `BufferedReader`, all read operations return
+/// `Poll[...]` and may return `Pending` when the underlying source
+/// would block.
+pub type AsyncBufReader {
+    /// Internal buffer memory
+    buf_data: *Unit,
+    /// Buffer capacity
+    buf_cap: I64,
+    /// Current scan position in the buffer
+    pos: I64,
+    /// Number of valid bytes in the buffer
+    filled: I64
+}
+
+impl AsyncBufReader {
+    /// Creates a new AsyncBufReader with default capacity (8 KB).
+    pub func new() -> AsyncBufReader {
+        AsyncBufReader::with_capacity(DEFAULT_ASYNC_READ_BUF)
+    }
+
+    /// Creates a new AsyncBufReader with the specified buffer capacity.
+    pub func with_capacity(capacity: I64) -> AsyncBufReader {
+        var cap: I64 = capacity
+        if cap <= 0 {
+            cap = DEFAULT_ASYNC_READ_BUF
+        }
+        let buf_data: *Unit = abuf_alloc(cap)
+        AsyncBufReader {
+            buf_data: buf_data,
+            buf_cap: cap,
+            pos: 0,
+            filled: 0
+        }
+    }
+
+    /// Returns the number of bytes currently buffered and available for reading.
+    pub func buffered(this) -> I64 {
+        this.filled - this.pos
+    }
+
+    /// Returns the buffer capacity.
+    pub func capacity(this) -> I64 {
+        this.buf_cap
+    }
+
+    /// Compacts the internal buffer by moving unread data to the beginning.
+    ///
+    /// This is called automatically before filling the buffer when the
+    /// read position has advanced past the start.
+    func compact(mut this) {
+        if this.pos > 0 {
+            let remaining: I64 = this.filled - this.pos
+            var i: I64 = 0
+            loop (i < remaining) {
+                abuf_write_byte(this.buf_data, i, abuf_read_byte(this.buf_data, this.pos + i))
+                i = i + 1
+            }
+            this.pos = 0
+            this.filled = remaining
+        }
+    }
+
+    /// Polls to fill the internal buffer from the given async source.
+    ///
+    /// Compacts existing data first if needed, then attempts to read
+    /// from the source into the remaining buffer space.
+    ///
+    /// Returns `Poll::Ready(Ok(n))` with the number of new bytes read,
+    /// `Poll::Ready(Ok(0))` if the buffer is full or source is at EOF,
+    /// `Poll::Pending` if the source would block.
+    pub func poll_fill_buf[R: AsyncRead](mut this, source: mut ref R, cx: mut ref Context[Unit]) -> Poll[Outcome[I64, IoError]] {
+        // Compact if needed
+        this.compact()
+
+        let space: I64 = this.buf_cap - this.filled
+        if space <= 0 {
+            return Poll::Ready(Ok(0 as I64))
+        }
+
+        // Create a temporary slice view into the free portion of our buffer.
+        // We read byte-by-byte from the source into our internal buffer
+        // by passing a stack-allocated array and copying.
+        var temp: [U8; 8192] = [0 as U8; 8192]
+        var read_len: I64 = space
+        if read_len > 8192 {
+            read_len = 8192
+        }
+
+        // Poll the source
+        let poll_result: Poll[Outcome[I64, IoError]] = source.poll_read(cx, mut ref temp)
+        when poll_result {
+            Pending => return Poll::Pending,
+            Ready(outcome) => {
+                when outcome {
+                    Err(e) => return Poll::Ready(Err(e)),
+                    Ok(n) => {
+                        // Copy bytes from temp into our buffer
+                        var actual: I64 = n
+                        if actual > space {
+                            actual = space
+                        }
+                        var i: I64 = 0
+                        loop (i < actual) {
+                            abuf_write_byte(this.buf_data, this.filled + i, temp[i])
+                            i = i + 1
+                        }
+                        this.filled = this.filled + actual
+                        return Poll::Ready(Ok(actual))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Polls to read a single line from the async source.
+    ///
+    /// Scans for `\n` in the buffer. If the line ends with `\r\n`, the
+    /// `\r` is also stripped. Returns the line content without delimiters.
+    ///
+    /// Returns `Poll::Ready(Ok(line))` when a complete line is found,
+    /// `Poll::Ready(Ok(""))` on EOF with no remaining data,
+    /// `Poll::Pending` when more data is needed from the source.
+    pub func poll_read_line[R: AsyncRead](mut this, source: mut ref R, cx: mut ref Context[Unit]) -> Poll[Outcome[Str, IoError]] {
+        // First, check if we already have a complete line in the buffer
+        var newline_at: I64 = 0 - 1
+        var scan: I64 = this.pos
+        loop (scan < this.filled) {
+            let bval: I64 = abuf_read_byte(this.buf_data, scan) as I64
+            if bval == 10 {
+                newline_at = scan
+                break
+            }
+            scan = scan + 1
+        }
+
+        if newline_at >= 0 {
+            // Found newline, extract the line
+            return Poll::Ready(Ok(this.extract_line(newline_at)))
+        }
+
+        // No newline found — try to fill the buffer
+        let fill_result: Poll[Outcome[I64, IoError]] = this.poll_fill_buf(source, cx)
+        when fill_result {
+            Pending => return Poll::Pending,
+            Ready(outcome) => {
+                when outcome {
+                    Err(e) => return Poll::Ready(Err(e)),
+                    Ok(n) => {
+                        if n == 0 {
+                            // EOF — return remaining buffered data as a line
+                            let remaining: I64 = this.filled - this.pos
+                            if remaining == 0 {
+                                return Poll::Ready(Ok(""))
+                            }
+                            return Poll::Ready(Ok(this.extract_remaining()))
+                        }
+
+                        // Data was added — re-scan for newline
+                        var scan2: I64 = this.filled - n
+                        if scan2 < this.pos {
+                            scan2 = this.pos
+                        }
+                        var newline_at2: I64 = 0 - 1
+                        loop (scan2 < this.filled) {
+                            let bval: I64 = abuf_read_byte(this.buf_data, scan2) as I64
+                            if bval == 10 {
+                                newline_at2 = scan2
+                                break
+                            }
+                            scan2 = scan2 + 1
+                        }
+
+                        if newline_at2 >= 0 {
+                            return Poll::Ready(Ok(this.extract_line(newline_at2)))
+                        }
+
+                        // Still no newline — need more data
+                        return Poll::Pending
+                    }
+                }
+            }
+        }
+    }
+
+    /// Polls to read bytes until a delimiter byte is found.
+    ///
+    /// Returns `Poll::Ready(Ok(data))` with all bytes up to (but not
+    /// including) the delimiter, `Poll::Ready(Ok(""))` on EOF,
+    /// `Poll::Pending` when more data is needed.
+    pub func poll_read_until[R: AsyncRead](mut this, source: mut ref R, cx: mut ref Context[Unit], delimiter: U8) -> Poll[Outcome[Str, IoError]] {
+        // Check if delimiter is already in buffer
+        var delim_at: I64 = 0 - 1
+        var scan: I64 = this.pos
+        loop (scan < this.filled) {
+            if abuf_read_byte(this.buf_data, scan) == delimiter {
+                delim_at = scan
+                break
+            }
+            scan = scan + 1
+        }
+
+        if delim_at >= 0 {
+            // Found delimiter, extract up to it
+            let len: I64 = delim_at - this.pos
+            let result: *Unit = abuf_alloc(len + 1)
+            var i: I64 = 0
+            loop (i < len) {
+                abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
+                i = i + 1
+            }
+            abuf_write_byte(result, len, 0 as U8)
+            this.pos = delim_at + 1  // Skip past delimiter
+            return Poll::Ready(Ok(result as Str))
+        }
+
+        // No delimiter found — try to fill
+        let fill_result: Poll[Outcome[I64, IoError]] = this.poll_fill_buf(source, cx)
+        when fill_result {
+            Pending => return Poll::Pending,
+            Ready(outcome) => {
+                when outcome {
+                    Err(e) => return Poll::Ready(Err(e)),
+                    Ok(n) => {
+                        if n == 0 {
+                            // EOF
+                            let remaining: I64 = this.filled - this.pos
+                            if remaining == 0 {
+                                return Poll::Ready(Ok(""))
+                            }
+                            return Poll::Ready(Ok(this.extract_remaining()))
+                        }
+
+                        // Re-scan for delimiter in newly filled data
+                        var scan2: I64 = this.filled - n
+                        if scan2 < this.pos {
+                            scan2 = this.pos
+                        }
+                        var delim_at2: I64 = 0 - 1
+                        loop (scan2 < this.filled) {
+                            if abuf_read_byte(this.buf_data, scan2) == delimiter {
+                                delim_at2 = scan2
+                                break
+                            }
+                            scan2 = scan2 + 1
+                        }
+
+                        if delim_at2 >= 0 {
+                            let len: I64 = delim_at2 - this.pos
+                            let result: *Unit = abuf_alloc(len + 1)
+                            var i: I64 = 0
+                            loop (i < len) {
+                                abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
+                                i = i + 1
+                            }
+                            abuf_write_byte(result, len, 0 as U8)
+                            this.pos = delim_at2 + 1
+                            return Poll::Ready(Ok(result as Str))
+                        }
+
+                        return Poll::Pending
+                    }
+                }
+            }
+        }
+    }
+
+    /// Extracts a line from the buffer ending at the given newline position.
+    /// Strips `\r` before `\n` if present.
+    func extract_line(mut this, newline_at: I64) -> Str {
+        var end: I64 = newline_at
+        // Strip \r before \n
+        if end > this.pos {
+            let prev_byte: I64 = abuf_read_byte(this.buf_data, end - 1) as I64
+            if prev_byte == 13 {
+                end = end - 1
+            }
+        }
+
+        let line_len: I64 = end - this.pos
+        let result: *Unit = abuf_alloc(line_len + 1)
+        var k: I64 = 0
+        loop (k < line_len) {
+            abuf_write_byte(result, k, abuf_read_byte(this.buf_data, this.pos + k))
+            k = k + 1
+        }
+        abuf_write_byte(result, line_len, 0 as U8)
+
+        // Advance past \n
+        this.pos = newline_at + 1
+
+        result as Str
+    }
+
+    /// Extracts all remaining buffered data as a string.
+    func extract_remaining(mut this) -> Str {
+        let remaining: I64 = this.filled - this.pos
+        let result: *Unit = abuf_alloc(remaining + 1)
+        var i: I64 = 0
+        loop (i < remaining) {
+            abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
+            i = i + 1
+        }
+        abuf_write_byte(result, remaining, 0 as U8)
+        this.pos = this.filled
+        result as Str
+    }
+
+    /// Frees the internal buffer memory.
+    pub func destroy(mut this) {
+        if this.buf_data != null {
+            abuf_free(this.buf_data)
+            this.buf_data = null
+        }
+    }
+}
+
+// ============================================================================
+// AsyncBufWriter
+// ============================================================================
+
+/// Default buffer capacity for AsyncBufWriter (8 KB).
+const DEFAULT_ASYNC_WRITE_BUF: I64 = 8192
+
+/// A buffered wrapper that batches writes to any async sink.
+///
+/// Buffers small writes internally and flushes when the buffer is full
+/// or when `poll_flush()` is called explicitly. Reduces the number of
+/// underlying poll_write calls for better performance.
+pub type AsyncBufWriter {
+    /// Internal buffer memory
+    buf_data: *Unit,
+    /// Buffer capacity
+    buf_cap: I64,
+    /// Number of bytes currently buffered
+    len: I64
+}
+
+impl AsyncBufWriter {
+    /// Creates a new AsyncBufWriter with default capacity (8 KB).
+    pub func new() -> AsyncBufWriter {
+        AsyncBufWriter::with_capacity(DEFAULT_ASYNC_WRITE_BUF)
+    }
+
+    /// Creates a new AsyncBufWriter with the specified buffer capacity.
+    pub func with_capacity(capacity: I64) -> AsyncBufWriter {
+        var cap: I64 = capacity
+        if cap <= 0 {
+            cap = DEFAULT_ASYNC_WRITE_BUF
+        }
+        let buf_data: *Unit = abuf_alloc(cap)
+        AsyncBufWriter {
+            buf_data: buf_data,
+            buf_cap: cap,
+            len: 0
+        }
+    }
+
+    /// Returns the number of bytes currently buffered.
+    pub func buffered(this) -> I64 {
+        this.len
+    }
+
+    /// Returns the buffer capacity.
+    pub func capacity(this) -> I64 {
+        this.buf_cap
+    }
+
+    /// Polls to write data through the buffer to the underlying sink.
+    ///
+    /// If the data fits in the buffer, it is buffered and `Ready(Ok(n))`
+    /// is returned immediately. If the buffer would overflow, the buffer
+    /// is flushed first before buffering the new data.
+    pub func poll_write[W: AsyncWrite](mut this, sink: mut ref W, cx: mut ref Context[Unit], data: ref [U8]) -> Poll[Outcome[I64, IoError]] {
+        let data_len: I64 = data.len() as I64
+        let space: I64 = this.buf_cap - this.len
+
+        if data_len <= space {
+            // Data fits in buffer — copy it in
+            var i: I64 = 0
+            loop (i < data_len) {
+                abuf_write_byte(this.buf_data, this.len + i, data[i])
+                i = i + 1
+            }
+            this.len = this.len + data_len
+            return Poll::Ready(Ok(data_len))
+        }
+
+        // Buffer would overflow — flush first
+        let flush_result: Poll[Outcome[Unit, IoError]] = this.poll_flush_inner(sink, cx)
+        when flush_result {
+            Pending => return Poll::Pending,
+            Ready(outcome) => {
+                when outcome {
+                    Err(e) => return Poll::Ready(Err(e)),
+                    Ok(_) => {
+                        // After flushing, if data is larger than buffer, write directly
+                        if data_len > this.buf_cap {
+                            return sink.poll_write(cx, data)
+                        }
+                        // Otherwise buffer it
+                        var i: I64 = 0
+                        loop (i < data_len) {
+                            abuf_write_byte(this.buf_data, this.len + i, data[i])
+                            i = i + 1
+                        }
+                        this.len = this.len + data_len
+                        return Poll::Ready(Ok(data_len))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Polls to flush all buffered data to the underlying sink.
+    ///
+    /// Writes all buffered bytes to the sink. May return `Pending` if
+    /// the sink cannot accept all data immediately.
+    pub func poll_flush[W: AsyncWrite](mut this, sink: mut ref W, cx: mut ref Context[Unit]) -> Poll[Outcome[Unit, IoError]] {
+        this.poll_flush_inner(sink, cx)
+    }
+
+    /// Internal flush implementation.
+    func poll_flush_inner[W: AsyncWrite](mut this, sink: mut ref W, cx: mut ref Context[Unit]) -> Poll[Outcome[Unit, IoError]] {
+        if this.len == 0 {
+            return Poll::Ready(Ok(()))
+        }
+
+        // Write buffered data via a temporary stack array
+        var temp: [U8; 8192] = [0 as U8; 8192]
+        var to_write: I64 = this.len
+        if to_write > 8192 {
+            to_write = 8192
+        }
+
+        // Copy from our buffer to temp
+        var i: I64 = 0
+        loop (i < to_write) {
+            temp[i] = abuf_read_byte(this.buf_data, i)
+            i = i + 1
+        }
+
+        let poll_result: Poll[Outcome[I64, IoError]] = sink.poll_write(cx, ref temp)
+        when poll_result {
+            Pending => return Poll::Pending,
+            Ready(outcome) => {
+                when outcome {
+                    Err(e) => return Poll::Ready(Err(e)),
+                    Ok(n) => {
+                        // Shift remaining data forward
+                        var j: I64 = 0
+                        let remaining: I64 = this.len - n
+                        loop (j < remaining) {
+                            abuf_write_byte(this.buf_data, j, abuf_read_byte(this.buf_data, n + j))
+                            j = j + 1
+                        }
+                        this.len = remaining
+
+                        if this.len == 0 {
+                            // Flush underlying sink too
+                            return sink.poll_flush(cx)
+                        }
+                        // Still have data to flush
+                        return Poll::Pending
+                    }
+                }
+            }
+        }
+    }
+
+    /// Frees the internal buffer memory.
+    pub func destroy(mut this) {
+        if this.buf_data != null {
+            abuf_free(this.buf_data)
+            this.buf_data = null
+        }
+    }
+}

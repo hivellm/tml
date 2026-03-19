@@ -1,0 +1,54 @@
+// v2
+use test
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2_FLAG_END_HEADERS, H2_FLAG_END_STREAM,
+}
+use std::http::h2::hpack::{HpackContext, HpackEntry, hpack_encode_headers}
+use std::http::h2::connection::{H2Connection, H2_CONN_EVENT_DATA}
+
+@test
+func test_connection_recv_window_decrements() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    assert_eq(conn.get_recv_window(), 65535)
+
+    // Open stream 1
+    var ctx = HpackContext::new(4096)
+    var h: List[HpackEntry] = List::new(4)
+    h.push(HpackEntry::new(":method", "POST"))
+    let hb = hpack_encode_headers(mut ref ctx, h)
+    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, hb)!
+
+    // Send 100 bytes of DATA
+    let data = Buffer::new(100)
+    var i: I64 = 0
+    loop (i < 100) {
+        data.write_byte(0x41)
+        i = i + 1
+    }
+    let ev = conn.process_frame(0, 0, 1, data)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_DATA)
+    assert_eq(ev.data_len, 100)
+    assert_eq(conn.get_recv_window(), 65535 - 100)
+    Ok(())
+}
+
+@test
+func test_connection_send_window_update() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(4)
+    payload.write_u32_be(100000, 0)
+    conn.process_frame(8, 0, 0, payload)!
+    assert_eq(conn.get_send_window(), 65535 + 100000)
+    Ok(())
+}
+
+@test
+func test_window_update_zero_error() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(4)
+    payload.write_u32_be(0, 0)
+    let result = conn.process_frame(8, 0, 0, payload)
+    assert_true(result.is_err())
+    Ok(())
+}

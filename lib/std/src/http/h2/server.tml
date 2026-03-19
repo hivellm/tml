@@ -1,0 +1,201 @@
+//! HTTP/2 server integration — bridges H2Connection to the App framework.
+//!
+//! The H2Server reads raw bytes from a socket, decodes frames, processes
+//! them through H2Connection, and dispatches requests to the application
+//! handler. Responses are encoded as HTTP/2 frames and sent back.
+//!
+//! # Usage
+//!
+//! This module is designed to be called from the HTTP server's connection
+//! handler when an HTTP/2 connection is detected (via ALPN or connection
+//! preface). It handles:
+//!   1. Connection preface validation
+//!   2. SETTINGS exchange
+//!   3. Frame decode/dispatch loop
+//!   4. Response encoding (HEADERS + DATA frames)
+
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2Error, H2_CONNECTION_PREFACE, H2_CONNECTION_PREFACE_LEN,
+    H2_FLAG_END_HEADERS, H2_FLAG_END_STREAM,
+    h2_decode_frame, h2_encode_frame_raw,
+}
+use std::http::h2::hpack::{HpackEntry, hpack_decode_headers}
+use std::http::h2::connection::{
+    H2Connection, H2ConnectionEvent,
+    H2_CONN_EVENT_NONE, H2_CONN_EVENT_REQUEST, H2_CONN_EVENT_DATA,
+    H2_CONN_EVENT_GOAWAY, H2_CONN_EVENT_STREAM_RESET,
+}
+use core::str
+
+// ============================================================================
+// H2 request — decoded from stream headers
+// ============================================================================
+
+/// A decoded HTTP/2 request (scalar fields only for safe return).
+pub type H2Request {
+    stream_id: I64,
+    method: Str,
+    path: Str,
+    authority: Str,
+    scheme: Str,
+    content_length: I64,
+    end_stream: I64,
+}
+
+impl H2Request {
+    pub func new(stream_id: I64) -> H2Request {
+        H2Request {
+            stream_id: stream_id,
+            method: "",
+            path: "",
+            authority: "",
+            scheme: "",
+            content_length: 0,
+            end_stream: 0,
+        }
+    }
+}
+
+// ============================================================================
+// Connection preface helpers
+// ============================================================================
+
+/// Validate the HTTP/2 client connection preface.
+///
+/// Returns the number of bytes consumed (24) on success, or error.
+/// The preface must be exactly "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".
+pub func h2_validate_preface(data: Buffer) -> Outcome[I64, H2Error] {
+    if data.len() < H2_CONNECTION_PREFACE_LEN {
+        return Err(H2Error::protocol_error("connection preface too short"))
+    }
+
+    let preface_ptr: I64 = H2_CONNECTION_PREFACE as I64
+    var i: I64 = 0
+    loop (i < H2_CONNECTION_PREFACE_LEN) {
+        let expected: I32 = lowlevel { ptr_read[U8]((preface_ptr + i) as *U8) } as I32
+        let actual: I32 = data.get(i)
+        if actual != expected {
+            return Err(H2Error::protocol_error("invalid connection preface"))
+        }
+        i = i + 1
+    }
+
+    Ok(H2_CONNECTION_PREFACE_LEN)
+}
+
+use core::intrinsics::{ptr_read}
+
+// ============================================================================
+// Request header extraction
+// ============================================================================
+
+/// Extract pseudo-headers from a decoded header list into an H2Request.
+pub func h2_extract_request(stream_id: I64, headers: List[HpackEntry], end_stream: I64) -> H2Request {
+    var req = H2Request::new(stream_id)
+    req.end_stream = end_stream
+
+    var i: I64 = 0
+    loop (i < headers.len()) {
+        let entry: HpackEntry = headers.get(i)
+        if entry.name == ":method" {
+            req.method = entry.value
+        } else if entry.name == ":path" {
+            req.path = entry.value
+        } else if entry.name == ":authority" {
+            req.authority = entry.value
+        } else if entry.name == ":scheme" {
+            req.scheme = entry.value
+        } else if entry.name == "content-length" {
+            // Parse content-length (simple numeric parse)
+            req.content_length = h2_parse_i64(entry.value)
+        }
+        i = i + 1
+    }
+
+    req
+}
+
+/// Simple integer parser for content-length values.
+func h2_parse_i64(s: Str) -> I64 {
+    let slen: I64 = str::len(s)
+    var result: I64 = 0
+    var i: I64 = 0
+    loop (i < slen) {
+        let c: I32 = str::char_at(s, i)
+        if c >= 48 and c <= 57 {
+            result = result * 10 + (c - 48) as I64
+        }
+        i = i + 1
+    }
+    result
+}
+
+// ============================================================================
+// Response building
+// ============================================================================
+
+/// Build a simple HTTP/2 response as encoded frames (HEADERS + optional DATA).
+///
+/// Returns a Buffer containing:
+///   - A HEADERS frame with :status and content-type
+///   - A DATA frame with the body (if non-empty)
+///
+/// `conn` is used for HPACK encoding.
+pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, content_type: Str, body: Str) -> Buffer {
+    let result = Buffer::new(512)
+
+    // Build response headers
+    var resp_headers: List[HpackEntry] = List::new(4)
+    let status_str: Str = h2_i64_to_str(status)
+    resp_headers.push(HpackEntry::new(":status", status_str))
+    resp_headers.push(HpackEntry::new("content-type", content_type))
+
+    let body_len: I64 = str::len(body)
+    let has_body: I64 = if body_len > 0 { 1 } else { 0 }
+
+    // Encode HEADERS frame
+    let end_stream_on_headers: I64 = if has_body == 0 { 1 } else { 0 }
+    let headers_frame = conn.encode_headers(stream_id, resp_headers, end_stream_on_headers)
+    h2_buf_append(result, headers_frame)
+
+    // Encode DATA frame if there's a body
+    if has_body == 1 {
+        let body_buf = Buffer::new(body_len)
+        let body_ptr: I64 = body as I64
+        var i: I64 = 0
+        loop (i < body_len) {
+            let b: I32 = lowlevel { ptr_read[U8]((body_ptr + i) as *U8) } as I32
+            body_buf.write_byte(b)
+            i = i + 1
+        }
+        let data_frame = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, stream_id, body_buf)
+        h2_buf_append(result, data_frame)
+    }
+
+    result
+}
+
+/// Convert a small positive integer to a string.
+func h2_i64_to_str(val: I64) -> Str {
+    if val == 200 { return "200" }
+    if val == 404 { return "404" }
+    if val == 500 { return "500" }
+    if val == 204 { return "204" }
+    if val == 301 { return "301" }
+    if val == 302 { return "302" }
+    if val == 400 { return "400" }
+    if val == 403 { return "403" }
+    if val == 405 { return "405" }
+    return "200"
+}
+
+/// Append src buffer bytes to dst buffer.
+func h2_buf_append(dst: Buffer, src: Buffer) {
+    let slen: I64 = src.len()
+    var i: I64 = 0
+    loop (i < slen) {
+        dst.write_byte(src.get(i))
+        i = i + 1
+    }
+}

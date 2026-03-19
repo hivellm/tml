@@ -17,6 +17,14 @@
 
 ## Recent Fixes (2026-03-19)
 
+### Nested Generic Enum Monomorphization -- FIXED
+- Bug: `Poll[Outcome[I64, MyError]]` generated `%struct.Outcome__I32__I32` instead of `%struct.Outcome__I64__MyError`
+- Root cause: In AST codegen `call.cpp`, when generating inner enum constructors (e.g., `Outcome::Ok(42)` inside `Poll::Ready(...)`), `expected_enum_type_` was not propagated from the outer constructor to the inner one. Unresolved generic params defaulted to I32.
+- Fix: Before calling `gen_expr` for the inner arg, extract the inner type from the outer mangled name and set `expected_enum_type_`. For single-type-param enums like `Poll[T]`, parse `Poll__Outcome__I64__MyError` to extract `Outcome__I64__MyError` as the expected inner type.
+- File: `compiler/src/codegen/llvm/expr/call.cpp:924` (pending_generic_enums_ path)
+- Limitation: Only handles single-type-param outer enums. Multi-type-param nesting (e.g., Outcome[Maybe[I32], Str]) requires proper mangled name parsing.
+- Note: Type checker changes (types_checker.cpp, expr_call.cpp) were attempted but caused regressions; reverted. The codegen-level fix is sufficient.
+
 ### Async/Await Stale Cache + MIR AwaitInst -- FIXED
 - Root cause: `compiler_build_hash()` in `query_incr.cpp` used `__DATE__`/`__TIME__` which only changes when THAT file is recompiled. Incremental C++ builds don't recompile it when codegen files change.
 - Fix: Changed to use binary mtime (`GetModuleHandleExA` on Windows, `/proc/self/exe` on Linux)

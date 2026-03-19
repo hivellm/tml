@@ -1,0 +1,134 @@
+// Tests for ReplaySubjectI32 — replays last N values to new subscribers
+use test::{assert, assert_eq}
+use std::observable::{
+    replay_subject_new_i32, replay_subject_push_i32,
+    replay_subject_count_i32, replay_subject_get_i32,
+    subject_is_completed_i32, subject_has_error_i32,
+    subject_complete_i32, subject_error_i32
+}
+
+// ============================================================================
+// Buffer management
+// ============================================================================
+
+@test
+func test_replay_subject_empty_buffer() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    assert_eq(replay_subject_count_i32(rs), 0, "new replay subject should have 0 values")
+    return 0
+}
+
+@test
+func test_replay_subject_push_values() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    replay_subject_push_i32(rs, 10)
+    replay_subject_push_i32(rs, 20)
+    assert_eq(replay_subject_count_i32(rs), 2, "should have 2 values")
+    assert_eq(replay_subject_get_i32(rs, 0), 10, "first value should be 10")
+    assert_eq(replay_subject_get_i32(rs, 1), 20, "second value should be 20")
+    return 0
+}
+
+@test
+func test_replay_subject_fill_buffer() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    replay_subject_push_i32(rs, 1)
+    replay_subject_push_i32(rs, 2)
+    replay_subject_push_i32(rs, 3)
+    assert_eq(replay_subject_count_i32(rs), 3, "should have 3 values")
+    assert_eq(replay_subject_get_i32(rs, 0), 1, "first")
+    assert_eq(replay_subject_get_i32(rs, 1), 2, "second")
+    assert_eq(replay_subject_get_i32(rs, 2), 3, "third")
+    return 0
+}
+
+@test
+func test_replay_subject_buffer_overflow() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    replay_subject_push_i32(rs, 1)
+    replay_subject_push_i32(rs, 2)
+    replay_subject_push_i32(rs, 3)
+    replay_subject_push_i32(rs, 4)  // evicts 1
+
+    assert_eq(replay_subject_count_i32(rs), 3, "should still have 3 values")
+    assert_eq(replay_subject_get_i32(rs, 0), 2, "oldest should be 2")
+    assert_eq(replay_subject_get_i32(rs, 1), 3, "middle should be 3")
+    assert_eq(replay_subject_get_i32(rs, 2), 4, "newest should be 4")
+    return 0
+}
+
+@test
+func test_replay_subject_double_overflow() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(2)
+    replay_subject_push_i32(rs, 1)
+    replay_subject_push_i32(rs, 2)
+    replay_subject_push_i32(rs, 3)  // evicts 1
+    replay_subject_push_i32(rs, 4)  // evicts 2
+
+    assert_eq(replay_subject_get_i32(rs, 0), 3, "should be 3")
+    assert_eq(replay_subject_get_i32(rs, 1), 4, "should be 4")
+    return 0
+}
+
+// ============================================================================
+// Replay on subscribe pattern (caller-managed)
+// ============================================================================
+
+@test
+func test_replay_subject_replay_on_subscribe() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    replay_subject_push_i32(rs, 10)
+    replay_subject_push_i32(rs, 20)
+    replay_subject_push_i32(rs, 30)
+
+    // Simulate subscribe: replay buffered values
+    var sum: I32 = 0
+    let count: I64 = replay_subject_count_i32(rs)
+    var i: I64 = 0
+    loop (i < count) {
+        sum = sum + replay_subject_get_i32(rs, i)
+        i = i + 1
+    }
+    assert_eq(sum, 60, "replayed 10+20+30 = 60")
+    return 0
+}
+
+@test
+func test_replay_subject_replay_with_overflow() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(2)
+    replay_subject_push_i32(rs, 1)
+    replay_subject_push_i32(rs, 2)
+    replay_subject_push_i32(rs, 3)
+    replay_subject_push_i32(rs, 4)
+
+    // Replay: should get [3, 4]
+    var sum: I32 = 0
+    let count: I64 = replay_subject_count_i32(rs)
+    var i: I64 = 0
+    loop (i < count) {
+        sum = sum + replay_subject_get_i32(rs, i)
+        i = i + 1
+    }
+    assert_eq(sum, 7, "3+4 = 7")
+    return 0
+}
+
+// ============================================================================
+// Completion and error
+// ============================================================================
+
+@test
+func test_replay_subject_complete() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    subject_complete_i32(rs)
+    assert(subject_is_completed_i32(rs), "should be completed")
+    return 0
+}
+
+@test
+func test_replay_subject_error() -> I32 {
+    let rs: List[I64] = replay_subject_new_i32(3)
+    subject_error_i32(rs)
+    assert(subject_has_error_i32(rs), "should have error")
+    return 0
+}

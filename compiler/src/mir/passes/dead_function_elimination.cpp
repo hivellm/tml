@@ -47,6 +47,11 @@ static auto is_entry_point(const Function& func) -> bool {
         }
     }
 
+    // HTTP route-decorated functions are entry points
+    if (func.route_info.has_value()) {
+        return true;
+    }
+
     // run_all_* functions are entry points (benchmark/test runners)
     if (func.name.find("run_all_") == 0) {
         return true;

@@ -108,7 +108,12 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     bool has_derive_deserialize = false;
     bool has_derive_fromstr = false;
     for (const auto& decorator : decl.decorators) {
-        if (decorator.name == "interior_mutable") {
+        if (decorator.name == "Get" || decorator.name == "Post" || decorator.name == "Put" ||
+            decorator.name == "Delete" || decorator.name == "Patch" || decorator.name == "Head" ||
+            decorator.name == "Options") {
+            error("@" + decorator.name + " is only valid on function declarations, not types",
+                  decorator.span, "T090");
+        } else if (decorator.name == "interior_mutable") {
             is_interior_mutable = true;
         } else if (decorator.name == "derive") {
             // Check for @derive arguments

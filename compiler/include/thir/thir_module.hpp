@@ -12,6 +12,17 @@
 namespace tml::thir {
 
 // ============================================================================
+// Route Decorator Metadata (mirrors hir::RouteInfo)
+// ============================================================================
+
+enum class RouteMethod { Get, Post, Put, Delete, Patch, Head, Options };
+
+struct RouteInfo {
+    RouteMethod method;
+    std::string path;
+};
+
+// ============================================================================
 // Declaration Types
 // ============================================================================
 
@@ -36,6 +47,7 @@ struct ThirFunction {
     bool is_extern;
     std::optional<std::string> extern_abi;
     std::vector<std::string> attributes;
+    std::optional<RouteInfo> route_info;
     SourceSpan span;
 };
 

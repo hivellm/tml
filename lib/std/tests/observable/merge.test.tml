@@ -1,0 +1,66 @@
+// Tests for merge and concat operators
+use test::{assert, assert_eq}
+use std::observable::{
+    ObservableI32,
+    observable_of2_i32, observable_of3_i32, observable_empty_i32,
+    observable_merge_i32, observable_concat_i32,
+    obs_subscribe_next_i32
+}
+
+@test
+func test_merge_two_streams() -> I32 {
+    let a: ObservableI32 = observable_of2_i32(1, 2)
+    let b: ObservableI32 = observable_of3_i32(10, 20, 30)
+    let merged: ObservableI32 = observable_merge_i32(a, b)
+
+    var sum: I32 = 0
+    var count: I64 = 0
+    obs_subscribe_next_i32(merged, do(v: I32) {
+        sum = sum + v
+        count = count + 1
+    })
+    assert_eq(count, 5, "should have 5 total values")
+    assert_eq(sum, 63, "1+2+10+20+30 = 63")
+    return 0
+}
+
+@test
+func test_merge_with_empty() -> I32 {
+    let a: ObservableI32 = observable_of2_i32(1, 2)
+    let b: ObservableI32 = observable_empty_i32()
+    let merged: ObservableI32 = observable_merge_i32(a, b)
+
+    var sum: I32 = 0
+    obs_subscribe_next_i32(merged, do(v: I32) { sum = sum + v })
+    assert_eq(sum, 3, "merge with empty should give 1+2 = 3")
+    return 0
+}
+
+@test
+func test_concat_two_streams() -> I32 {
+    let a: ObservableI32 = observable_of2_i32(1, 2)
+    let b: ObservableI32 = observable_of2_i32(3, 4)
+    let concat: ObservableI32 = observable_concat_i32(a, b)
+
+    var sum: I32 = 0
+    var count: I64 = 0
+    obs_subscribe_next_i32(concat, do(v: I32) {
+        sum = sum + v
+        count = count + 1
+    })
+    assert_eq(count, 4, "should have 4 values")
+    assert_eq(sum, 10, "1+2+3+4 = 10")
+    return 0
+}
+
+@test
+func test_merge_both_empty() -> I32 {
+    let a: ObservableI32 = observable_empty_i32()
+    let b: ObservableI32 = observable_empty_i32()
+    let merged: ObservableI32 = observable_merge_i32(a, b)
+
+    var count: I64 = 0
+    obs_subscribe_next_i32(merged, do(v: I32) { count = count + 1 })
+    assert_eq(count, 0, "merging two empty should emit nothing")
+    return 0
+}

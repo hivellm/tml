@@ -437,6 +437,9 @@ private:
     /// @return The corresponding HIR operator
     static auto convert_unary_op(parser::UnaryOp op) -> HirUnaryOp;
 
+    /// Extract a RouteMethod from a decorator name if it is an HTTP route decorator.
+    static auto extract_route_method(const std::string& name) -> std::optional<RouteMethod>;
+
     /// Get the field index for a struct field.
     ///
     /// @param struct_name The struct type name

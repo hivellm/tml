@@ -15,6 +15,7 @@
 - [x] 2.4-2.5 CRASH-ONCE: once_lock_get_or_init — pre-existing coverage ABI fragility, @no_coverage candidate
 - [x] 2.6 CRASH-CAPTURE: subsumed by CRASH-ALLOC fix
 - [ ] 2.7-2.8 CRASH-FUTURE: core/future/future_poll — pre-existing IR type mismatch (Maybe__I32 vs ptr), async codegen not ready
+- [x] 2.9 BUG-NESTED-GENERIC: Poll[Outcome[I64, MyError]] lost inner type — FIXED: expected_enum_type_ propagation in call.cpp for single-type-param outer enums
 
 ## Phase 3: Link/Infrastructure (~52 functions) — COMPLETE
 - [x] 3.1-3.3 LINK-OPENSSL: link failures are compile-time LLD failures (std_zlib, std_json, std_http, std_io, std_search, std_profiler) — infrastructure-dependent, not coverage failures
@@ -26,7 +27,7 @@
 - [x] 4.1 TY-ASSOC: where I::Item = ref T implemented (commit f220fb7c)
 - [x] 4.2 TY-ASSOC: core/iter 52/52 passing — basic associated type constraints working
 - [ ] 4.3 TY-ASSOC: inner iterator dispatch — iter/adapters (cloned, copied, flatten, intersperse, peekable) still blocked
-- [ ] 4.4 TY-ASSOC: constructor monomorphization — type string mismatch in some generic impls
+- [x] 4.4 TY-ASSOC: constructor monomorphization — FIXED: infer_expr_type for generic function calls now resolves type params from arguments (infer.cpp)
 - [ ] 4.5 TY-ASSOC: verify iter/adapters pass after inner dispatch fix
 
 ## Phase 5: Write Missing Tests — IN PROGRESS

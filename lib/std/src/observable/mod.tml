@@ -1,0 +1,460 @@
+//! Reactive programming primitives — Observable[T] and Subject types.
+//!
+//! Implements the Observer pattern with push-based value streams, inspired
+//! by RxJS. Values are pushed from producers to consumers through callbacks.
+//!
+//! # Working Types
+//!
+//! - **`ObservableI32`** — Lazy push-based value stream with enum-based sources.
+//!   Supports factory functions (of2, of3, from_list, empty, never, throw) and
+//!   operators (map, filter, take, skip, scan, distinct, merge, concat).
+//!
+//! - **Subject state functions** — `subject_new_i32()` returns a `List[I64]`
+//!   tracking completed/error/next_id state. Observer callbacks must be
+//!   managed by the caller due to function-pointer-in-List codegen limitations.
+//!
+//! # Known Limitations (codegen bugs)
+//!
+//! - Cross-module closures: closure symbols not emitted in LLVM IR
+//! - Struct GEP: structs with List fields crash when passed by value
+//! - List[func(T)]: function pointer stride/layout causes runtime crash
+//! - These prevent a fully-encapsulated Subject type. The workaround is
+//!   state-only subjects with caller-managed callbacks.
+
+// ============================================================================
+// Subscription
+// ============================================================================
+
+/// A handle representing an active subscription.
+pub type Subscription {
+    active: Bool,
+    id: I64
+}
+
+impl Subscription {
+    /// Returns `true` if this subscription is still active.
+    pub func is_active(this) -> Bool {
+        return this.active
+    }
+}
+
+// ============================================================================
+// Observer[T]
+// ============================================================================
+
+/// Callbacks for receiving values from an Observable.
+pub type Observer[T] {
+    on_next: func(T),
+    on_error: func(Str),
+    on_complete: func()
+}
+
+// ============================================================================
+// ObsSourceI32
+// ============================================================================
+
+/// Source type for ObservableI32.
+pub type ObsSourceI32 {
+    Of2(I32, I32),
+    Of3(I32, I32, I32),
+    FromList(List[I32]),
+    Empty,
+    Never,
+    Throw(Str)
+}
+
+// ============================================================================
+// ObservableI32
+// ============================================================================
+
+/// A lazy push-based value stream of I32 values.
+pub type ObservableI32 {
+    source: ObsSourceI32
+}
+
+/// No-op error handler.
+pub func noop_error(msg: Str) {}
+
+/// No-op completion handler.
+pub func noop_complete() {}
+
+/// Subscribes to an ObservableI32 with a full Observer.
+pub func obs_subscribe_i32(obs: ObservableI32, observer: Observer[I32]) -> Subscription {
+    when obs.source {
+        Of2(a, b) => {
+            (observer.on_next)(a)
+            (observer.on_next)(b)
+            (observer.on_complete)()
+            return Subscription { active: false, id: 0 }
+        },
+        Of3(a, b, c) => {
+            (observer.on_next)(a)
+            (observer.on_next)(b)
+            (observer.on_next)(c)
+            (observer.on_complete)()
+            return Subscription { active: false, id: 0 }
+        },
+        FromList(list) => {
+            let len: I64 = list.len()
+            var i: I64 = 0
+            loop (i < len) {
+                (observer.on_next)(list.get(i))
+                i = i + 1
+            }
+            (observer.on_complete)()
+            return Subscription { active: false, id: 0 }
+        },
+        Empty => {
+            (observer.on_complete)()
+            return Subscription { active: false, id: 0 }
+        },
+        Never => {
+            return Subscription { active: true, id: 0 }
+        },
+        Throw(msg) => {
+            (observer.on_error)(msg)
+            return Subscription { active: false, id: 0 }
+        }
+    }
+}
+
+/// Subscribes with only an on_next callback.
+pub func obs_subscribe_next_i32(obs: ObservableI32, on_next: func(I32)) -> Subscription {
+    let observer: Observer[I32] = Observer {
+        on_next: on_next,
+        on_error: noop_error,
+        on_complete: noop_complete
+    }
+    return obs_subscribe_i32(obs, observer)
+}
+
+// ── Factory functions ──────────────────────────────────────────
+
+/// Emits two values and completes.
+pub func observable_of2_i32(a: I32, b: I32) -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::Of2(a, b) }
+}
+
+/// Emits three values and completes.
+pub func observable_of3_i32(a: I32, b: I32, c: I32) -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::Of3(a, b, c) }
+}
+
+/// Emits values from a List[I32].
+pub func observable_from_list_i32(list: List[I32]) -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::FromList(list) }
+}
+
+/// Completes immediately.
+pub func observable_empty_i32() -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::Empty }
+}
+
+/// Never emits.
+pub func observable_never_i32() -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::Never }
+}
+
+/// Immediately errors.
+pub func observable_throw_i32(msg: Str) -> ObservableI32 {
+    return ObservableI32 { source: ObsSourceI32::Throw(msg) }
+}
+
+// ── Collect helper ─────────────────────────────────────────────
+
+/// Collects all values from an ObservableI32 into a List[I32].
+/// Uses direct enum dispatch to avoid closures (cross-module closure bug).
+pub func obs_collect_i32(obs: ObservableI32) -> List[I32] {
+    var results: List[I32] = List::new(8)
+    when obs.source {
+        Of2(a, b) => {
+            results.push(a)
+            results.push(b)
+        },
+        Of3(a, b, c) => {
+            results.push(a)
+            results.push(b)
+            results.push(c)
+        },
+        FromList(list) => {
+            let len: I64 = list.len()
+            var i: I64 = 0
+            loop (i < len) {
+                results.push(list.get(i))
+                i = i + 1
+            }
+        },
+        Empty => {},
+        Never => {},
+        Throw(_) => {}
+    }
+    return results
+}
+
+// ── Operators (closure-free) ───────────────────────────────────
+//
+// All operators collect source values first, then transform the list.
+// This avoids cross-module closures entirely.
+
+/// Transforms each value using `f`.
+pub func observable_map_i32(source: ObservableI32, f: func(I32) -> I32) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(values.len())
+    let len: I64 = values.len()
+    var i: I64 = 0
+    loop (i < len) {
+        results.push(f(values.get(i)))
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Filters values by predicate.
+pub func observable_filter_i32(source: ObservableI32, predicate: func(I32) -> Bool) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(values.len())
+    let len: I64 = values.len()
+    var i: I64 = 0
+    loop (i < len) {
+        let v: I32 = values.get(i)
+        if predicate(v) {
+            results.push(v)
+        }
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Takes only the first `count` values.
+pub func observable_take_i32(source: ObservableI32, count: I64) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(count)
+    let len: I64 = values.len()
+    var i: I64 = 0
+    loop (i < len and i < count) {
+        results.push(values.get(i))
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Skips the first `count` values.
+pub func observable_skip_i32(source: ObservableI32, count: I64) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(8)
+    let len: I64 = values.len()
+    var i: I64 = count
+    loop (i < len) {
+        results.push(values.get(i))
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Accumulates with a reducer, emitting each intermediate result.
+pub func observable_scan_i32(source: ObservableI32, seed: I32, reducer: func(I32, I32) -> I32) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(values.len())
+    var acc: I32 = seed
+    let len: I64 = values.len()
+    var i: I64 = 0
+    loop (i < len) {
+        acc = reducer(acc, values.get(i))
+        results.push(acc)
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Emits only when value differs from previous.
+pub func observable_distinct_i32(source: ObservableI32) -> ObservableI32 {
+    let values: List[I32] = obs_collect_i32(source)
+    var results: List[I32] = List::new(values.len())
+    var has_prev: Bool = false
+    var prev: I32 = 0
+    let len: I64 = values.len()
+    var i: I64 = 0
+    loop (i < len) {
+        let v: I32 = values.get(i)
+        if not has_prev or prev != v {
+            has_prev = true
+            prev = v
+            results.push(v)
+        }
+        i = i + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Merges two streams.
+pub func observable_merge_i32(a: ObservableI32, b: ObservableI32) -> ObservableI32 {
+    let va: List[I32] = obs_collect_i32(a)
+    let vb: List[I32] = obs_collect_i32(b)
+    var results: List[I32] = List::new(va.len() + vb.len())
+    var i: I64 = 0
+    loop (i < va.len()) {
+        results.push(va.get(i))
+        i = i + 1
+    }
+    var j: I64 = 0
+    loop (j < vb.len()) {
+        results.push(vb.get(j))
+        j = j + 1
+    }
+    return ObservableI32 { source: ObsSourceI32::FromList(results) }
+}
+
+/// Concatenates two streams (same as merge for synchronous observables).
+pub func observable_concat_i32(a: ObservableI32, b: ObservableI32) -> ObservableI32 {
+    return observable_merge_i32(a, b)
+}
+
+// ============================================================================
+// Subject state management — List[I64] based
+// ============================================================================
+//
+// Subject state is a List[I64] with layout:
+//   [0] = completed (0 or 1)
+//   [1] = has_error (0 or 1)
+//   [2] = next_id counter
+//
+// Observer callbacks must be managed by the caller because:
+//   - List[func(T)] crashes at runtime (stride/layout bug)
+//   - Struct wrappers with List fields cause GEP codegen bug
+//   - Cross-module closures don't emit LLVM symbols
+//
+// Use subject_new_i32() to create state, check flags, and set completion/error.
+// For multicast push, manage callbacks locally in the test/caller.
+
+/// Creates a new subject state handle.
+pub func subject_new_i32() -> List[I64] {
+    var state: List[I64] = List::new(4)
+    state.push(0)   // [0] = completed
+    state.push(0)   // [1] = has_error
+    state.push(1)   // [2] = next_id
+    return state
+}
+
+/// Returns `true` if the subject has completed.
+pub func subject_is_completed_i32(subj: List[I64]) -> Bool {
+    return subj.get(0) != 0
+}
+
+/// Returns `true` if the subject has errored.
+pub func subject_has_error_i32(subj: List[I64]) -> Bool {
+    return subj.get(1) != 0
+}
+
+/// Marks the subject as completed.
+pub func subject_complete_i32(subj: List[I64]) {
+    if subj.get(0) != 0 {
+        return
+    }
+    if subj.get(1) != 0 {
+        return
+    }
+    subj.set(0, 1)
+}
+
+/// Marks the subject as errored.
+pub func subject_error_i32(subj: List[I64]) {
+    if subj.get(0) != 0 {
+        return
+    }
+    if subj.get(1) != 0 {
+        return
+    }
+    subj.set(1, 1)
+}
+
+/// Returns the next subscription ID and increments the counter.
+pub func subject_next_id_i32(subj: List[I64]) -> I64 {
+    let id: I64 = subj.get(2)
+    subj.set(2, id + 1)
+    return id
+}
+
+// ============================================================================
+// BehaviorSubject state — extends subject state
+// ============================================================================
+//
+// Layout: [0]=completed, [1]=has_error, [2]=next_id, [3]=current_value
+
+/// Creates a new behavior subject state with an initial value.
+pub func behavior_subject_new_i32(initial: I32) -> List[I64] {
+    var state: List[I64] = List::new(4)
+    state.push(0)   // [0] = completed
+    state.push(0)   // [1] = has_error
+    state.push(1)   // [2] = next_id
+    let init_i64: I64 = initial
+    state.push(init_i64)  // [3] = current_value
+    return state
+}
+
+/// Returns the current value.
+pub func behavior_subject_value_i32(bs: List[I64]) -> I32 {
+    let val: I64 = bs.get(3)
+    let result: I32 = val
+    return result
+}
+
+/// Updates the current value.
+pub func behavior_subject_set_value_i32(bs: List[I64], value: I32) {
+    let val_i64: I64 = value
+    bs.set(3, val_i64)
+}
+
+// ============================================================================
+// ReplaySubject state — extends subject state with ring buffer
+// ============================================================================
+//
+// Layout: [0]=completed, [1]=has_error, [2]=next_id, [3]=buffer_size,
+//         [4]=value_count, [5..5+buffer_size-1]=value_slots
+
+/// Creates a new replay subject state with the given buffer size.
+pub func replay_subject_new_i32(buffer_size: I64) -> List[I64] {
+    var state: List[I64] = List::new(buffer_size + 8)
+    state.push(0)             // [0] = completed
+    state.push(0)             // [1] = has_error
+    state.push(1)             // [2] = next_id
+    state.push(buffer_size)   // [3] = buffer_size
+    state.push(0)             // [4] = value_count
+    var i: I64 = 0
+    loop (i < buffer_size) {
+        state.push(0)
+        i = i + 1
+    }
+    return state
+}
+
+/// Adds a value to the replay buffer.
+pub func replay_subject_push_i32(rs: List[I64], value: I32) {
+    let buffer_size: I64 = rs.get(3)
+    let value_count: I64 = rs.get(4)
+    let val_i64: I64 = value
+
+    if value_count < buffer_size {
+        rs.set(5 + value_count, val_i64)
+        rs.set(4, value_count + 1)
+    } else {
+        // Shift left, dropping oldest
+        var i: I64 = 0
+        loop (i < buffer_size - 1) {
+            rs.set(5 + i, rs.get(5 + i + 1))
+            i = i + 1
+        }
+        rs.set(5 + buffer_size - 1, val_i64)
+    }
+}
+
+/// Returns the number of buffered values.
+pub func replay_subject_count_i32(rs: List[I64]) -> I64 {
+    return rs.get(4)
+}
+
+/// Returns the buffered value at the given index.
+pub func replay_subject_get_i32(rs: List[I64], index: I64) -> I32 {
+    let val: I64 = rs.get(5 + index)
+    let result: I32 = val
+    return result
+}

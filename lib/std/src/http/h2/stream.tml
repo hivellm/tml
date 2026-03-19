@@ -1,0 +1,306 @@
+//! HTTP/2 stream state machine (RFC 7540 Section 5.1).
+//!
+//! Each HTTP/2 stream has a lifecycle defined by a state machine.
+//! Frames cause transitions between states; invalid transitions produce
+//! protocol errors.
+//!
+//! Stream IDs: odd = client-initiated, even = server-initiated, 0 = connection.
+//!
+//! # Design Note
+//!
+//! H2Stream is a pure scalar struct (no Buffer/pointer fields) so it can
+//! safely be stored in raw memory via ptr_read/ptr_write. Header block
+//! accumulation is handled by the connection layer, which owns the Buffers.
+
+use std::http::h2::frame::{
+    H2Error,
+    H2_FLAG_END_STREAM, H2_FLAG_END_HEADERS,
+}
+
+// ============================================================================
+// Stream state
+// ============================================================================
+
+/// HTTP/2 stream states (RFC 7540 Section 5.1).
+pub type H2StreamState {
+    value: I32,
+}
+
+impl H2StreamState {
+    pub func Idle() -> H2StreamState { H2StreamState { value: 0 } }
+    pub func ReservedLocal() -> H2StreamState { H2StreamState { value: 1 } }
+    pub func ReservedRemote() -> H2StreamState { H2StreamState { value: 2 } }
+    pub func Open() -> H2StreamState { H2StreamState { value: 3 } }
+    pub func HalfClosedLocal() -> H2StreamState { H2StreamState { value: 4 } }
+    pub func HalfClosedRemote() -> H2StreamState { H2StreamState { value: 5 } }
+    pub func Closed() -> H2StreamState { H2StreamState { value: 6 } }
+
+    pub func eq(this, other: H2StreamState) -> Bool {
+        this.value == other.value
+    }
+
+    pub func to_string(this) -> Str {
+        if this.value == 0 { return "idle" }
+        if this.value == 1 { return "reserved (local)" }
+        if this.value == 2 { return "reserved (remote)" }
+        if this.value == 3 { return "open" }
+        if this.value == 4 { return "half-closed (local)" }
+        if this.value == 5 { return "half-closed (remote)" }
+        if this.value == 6 { return "closed" }
+        return "unknown"
+    }
+}
+
+// ============================================================================
+// Stream result — scalar-only return type
+// ============================================================================
+
+/// Result of a stream frame-processing method. Scalar-only (no Buffer fields).
+pub type H2StreamResult {
+    event_type: I32,
+    end_stream: I64,
+    data_len: I64,
+    error_code: I64,
+    window_increment: I64,
+}
+
+pub const H2_EVENT_NONE: I32 = 0
+pub const H2_EVENT_HEADERS_COMPLETE: I32 = 1
+pub const H2_EVENT_DATA: I32 = 2
+pub const H2_EVENT_RESET: I32 = 3
+pub const H2_EVENT_WINDOW_UPDATE: I32 = 4
+
+impl H2StreamResult {
+    pub func none() -> H2StreamResult {
+        H2StreamResult { event_type: 0, end_stream: 0, data_len: 0, error_code: 0, window_increment: 0 }
+    }
+    pub func headers_complete(end_stream: I64) -> H2StreamResult {
+        H2StreamResult { event_type: 1, end_stream: end_stream, data_len: 0, error_code: 0, window_increment: 0 }
+    }
+    pub func data(data_len: I64, end_stream: I64) -> H2StreamResult {
+        H2StreamResult { event_type: 2, end_stream: end_stream, data_len: data_len, error_code: 0, window_increment: 0 }
+    }
+    pub func reset(error_code: I64) -> H2StreamResult {
+        H2StreamResult { event_type: 3, end_stream: 1, data_len: 0, error_code: error_code, window_increment: 0 }
+    }
+    pub func window_update(increment: I64) -> H2StreamResult {
+        H2StreamResult { event_type: 4, end_stream: 0, data_len: 0, error_code: 0, window_increment: increment }
+    }
+}
+
+// ============================================================================
+// Stream — pure scalar struct (safe for ptr_read/ptr_write)
+// ============================================================================
+
+/// An HTTP/2 stream. Pure scalar struct — no Buffer/pointer fields.
+///
+/// Header block accumulation is managed by the connection layer.
+pub type H2Stream {
+    id: I64,
+    state: H2StreamState,
+    send_window: I64,
+    recv_window: I64,
+    /// Whether we are in the middle of receiving a header block.
+    receiving_headers: I64,
+    /// Whether END_STREAM was received.
+    end_stream_received: I64,
+    /// Whether we have sent END_STREAM.
+    end_stream_sent: I64,
+}
+
+impl H2Stream {
+    pub func new(id: I64, initial_send_window: I64, initial_recv_window: I64) -> H2Stream {
+        H2Stream {
+            id: id,
+            state: H2StreamState::Idle(),
+            send_window: initial_send_window,
+            recv_window: initial_recv_window,
+            receiving_headers: 0,
+            end_stream_received: 0,
+            end_stream_sent: 0,
+        }
+    }
+
+    pub func get_id(this) -> I64 { this.id }
+    pub func get_state(this) -> H2StreamState { this.state }
+
+    pub func is_client_initiated(this) -> Bool {
+        this.id > 0 and (this.id % 2) == 1
+    }
+
+    pub func is_server_initiated(this) -> Bool {
+        this.id > 0 and (this.id % 2) == 0
+    }
+
+    pub func can_recv(this) -> Bool {
+        let s: I32 = this.state.value
+        s == 0 or s == 3 or s == 4 or s == 2
+    }
+
+    pub func can_send(this) -> Bool {
+        let s: I32 = this.state.value
+        s == 0 or s == 3 or s == 5 or s == 1
+    }
+
+    pub func get_send_window(this) -> I64 { this.send_window }
+    pub func get_recv_window(this) -> I64 { this.recv_window }
+
+    // ── Receive-side state transitions ─────────────────────────────
+
+    /// Process received HEADERS flags. Updates state machine.
+    /// Returns headers_complete result if END_HEADERS is set.
+    pub func recv_headers(this, flags: I32) -> Outcome[H2StreamResult, H2Error] {
+        let s: I32 = this.state.value
+        let has_end_stream: I64 = if (flags & H2_FLAG_END_STREAM) != 0 { 1 } else { 0 }
+        let has_end_headers: I64 = if (flags & H2_FLAG_END_HEADERS) != 0 { 1 } else { 0 }
+
+        if s == 0 {
+            this.state = H2StreamState::Open()
+        } else if s == 2 {
+            this.state = H2StreamState::HalfClosedLocal()
+        } else if s == 4 or s == 3 {
+            // Trailing headers in HalfClosedLocal or Open
+        } else {
+            return Err(H2Error::protocol_error("HEADERS in invalid state"))
+        }
+
+        if has_end_stream == 1 {
+            this.end_stream_received = 1
+        }
+        this.receiving_headers = 1
+
+        if has_end_headers == 1 {
+            this.receiving_headers = 0
+            if this.end_stream_received == 1 {
+                let cur: I32 = this.state.value
+                if cur == 3 { this.state = H2StreamState::HalfClosedRemote() }
+                else if cur == 4 { this.state = H2StreamState::Closed() }
+            }
+            return Ok(H2StreamResult::headers_complete(this.end_stream_received))
+        }
+
+        Ok(H2StreamResult::none())
+    }
+
+    /// Process received CONTINUATION flags.
+    pub func recv_continuation(this, flags: I32) -> Outcome[H2StreamResult, H2Error] {
+        if this.receiving_headers != 1 {
+            return Err(H2Error::protocol_error("unexpected CONTINUATION"))
+        }
+
+        let has_end_headers: I64 = if (flags & H2_FLAG_END_HEADERS) != 0 { 1 } else { 0 }
+
+        if has_end_headers == 1 {
+            this.receiving_headers = 0
+            if this.end_stream_received == 1 {
+                let cur: I32 = this.state.value
+                if cur == 3 { this.state = H2StreamState::HalfClosedRemote() }
+                else if cur == 4 { this.state = H2StreamState::Closed() }
+            }
+            return Ok(H2StreamResult::headers_complete(this.end_stream_received))
+        }
+
+        Ok(H2StreamResult::none())
+    }
+
+    /// Process received DATA. payload_len consumed from receive window.
+    pub func recv_data(this, flags: I32, payload_len: I64) -> Outcome[H2StreamResult, H2Error] {
+        let s: I32 = this.state.value
+        if s != 3 and s != 4 {
+            return Err(H2Error::protocol_error("DATA in invalid state"))
+        }
+
+        let has_end_stream: I64 = if (flags & H2_FLAG_END_STREAM) != 0 { 1 } else { 0 }
+
+        this.recv_window = this.recv_window - payload_len
+        if this.recv_window < 0 {
+            return Err(H2Error::protocol_error("flow control window exceeded"))
+        }
+
+        if has_end_stream == 1 {
+            this.end_stream_received = 1
+            if s == 3 { this.state = H2StreamState::HalfClosedRemote() }
+            else if s == 4 { this.state = H2StreamState::Closed() }
+        }
+
+        Ok(H2StreamResult::data(payload_len, has_end_stream))
+    }
+
+    /// Process received RST_STREAM.
+    pub func recv_rst_stream(this, error_code: I64) -> Outcome[H2StreamResult, H2Error] {
+        if this.state.value == 0 {
+            return Err(H2Error::protocol_error("RST_STREAM on idle stream"))
+        }
+        this.state = H2StreamState::Closed()
+        Ok(H2StreamResult::reset(error_code))
+    }
+
+    /// Process received WINDOW_UPDATE.
+    pub func recv_window_update(this, increment: I64) -> Outcome[H2StreamResult, H2Error] {
+        if increment == 0 {
+            return Err(H2Error::protocol_error("WINDOW_UPDATE zero increment"))
+        }
+        if increment > 2147483647 {
+            return Err(H2Error::protocol_error("WINDOW_UPDATE too large"))
+        }
+        if this.state.value == 6 {
+            return Ok(H2StreamResult::none())
+        }
+        this.send_window = this.send_window + increment
+        if this.send_window > 2147483647 {
+            return Err(H2Error::protocol_error("send window overflow"))
+        }
+        Ok(H2StreamResult::window_update(increment))
+    }
+
+    // ── Send-side transitions ──────────────────────────────────────
+
+    pub func send_headers(this, end_stream: I64) -> Outcome[Unit, H2Error] {
+        let s: I32 = this.state.value
+        if s == 0 { this.state = H2StreamState::Open() }
+        else if s == 1 { this.state = H2StreamState::HalfClosedRemote() }
+        else if s == 3 or s == 5 { /* trailing headers */ }
+        else { return Err(H2Error::protocol_error("cannot send HEADERS")) }
+
+        if end_stream == 1 {
+            this.end_stream_sent = 1
+            let cur: I32 = this.state.value
+            if cur == 3 { this.state = H2StreamState::HalfClosedLocal() }
+            else if cur == 5 { this.state = H2StreamState::Closed() }
+        }
+        Ok(())
+    }
+
+    pub func send_data(this, length: I64, end_stream: I64) -> Outcome[Unit, H2Error] {
+        let s: I32 = this.state.value
+        if s != 3 and s != 5 {
+            return Err(H2Error::protocol_error("cannot send DATA"))
+        }
+        this.send_window = this.send_window - length
+        if this.send_window < 0 {
+            return Err(H2Error::protocol_error("send window insufficient"))
+        }
+        if end_stream == 1 {
+            this.end_stream_sent = 1
+            if s == 3 { this.state = H2StreamState::HalfClosedLocal() }
+            else if s == 5 { this.state = H2StreamState::Closed() }
+        }
+        Ok(())
+    }
+
+    pub func send_rst_stream(this) -> Outcome[Unit, H2Error] {
+        if this.state.value == 0 {
+            return Err(H2Error::protocol_error("cannot RST_STREAM idle"))
+        }
+        this.state = H2StreamState::Closed()
+        Ok(())
+    }
+
+    pub func adjust_send_window(this, delta: I64) {
+        this.send_window = this.send_window + delta
+    }
+
+    pub func adjust_recv_window(this, delta: I64) {
+        this.recv_window = this.recv_window + delta
+    }
+}

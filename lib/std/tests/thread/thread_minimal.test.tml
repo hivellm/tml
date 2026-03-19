@@ -1,0 +1,13 @@
+// Minimal thread tests — validates basic operations work.
+// Note: t.name() is blocked by Maybe[Str] codegen crash from Thread struct.
+use test
+use std::thread
+
+@test
+func test_current_id() -> Outcome[Unit, Str] {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    assert_true(raw > 0 as U64)
+    Ok(())
+}

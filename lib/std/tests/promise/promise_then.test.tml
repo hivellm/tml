@@ -1,0 +1,99 @@
+// Tests for Promise chaining — map, catch, finally
+use test::{assert, assert_eq}
+use std::promise::{Promise, promise_map_i32, promise_catch_i32, promise_finally_i32}
+
+// ============================================================================
+// promise_map_i32 tests
+// ============================================================================
+
+func double(x: I32) -> I32 { return x * 2 }
+func add_ten(x: I32) -> I32 { return x + 10 }
+
+@test
+func test_map_fulfilled() -> I32 {
+    let p: Promise[I32] = Promise::resolve(21)
+    let mapped: Promise[I32] = promise_map_i32(p, double)
+    assert(mapped.is_fulfilled(), "mapped promise should be fulfilled")
+    assert_eq(mapped.unwrap(), 42, "21 * 2 should be 42")
+    return 0
+}
+
+@test
+func test_map_rejected_propagates() -> I32 {
+    let p: Promise[I32] = Promise::reject("fail")
+    let mapped: Promise[I32] = promise_map_i32(p, double)
+    assert(mapped.is_rejected(), "mapping a rejected promise should propagate rejection")
+    return 0
+}
+
+@test
+func test_map_pending_propagates() -> I32 {
+    let p: Promise[I32] = Promise::pending()
+    let mapped: Promise[I32] = promise_map_i32(p, double)
+    assert(mapped.is_pending(), "mapping a pending promise should stay pending")
+    return 0
+}
+
+@test
+func test_map_chain() -> I32 {
+    let p: Promise[I32] = Promise::resolve(5)
+    let step1: Promise[I32] = promise_map_i32(p, double)       // 10
+    let step2: Promise[I32] = promise_map_i32(step1, add_ten)  // 20
+    assert_eq(step2.unwrap(), 20, "5 * 2 + 10 should be 20")
+    return 0
+}
+
+// ============================================================================
+// promise_catch_i32 tests
+// ============================================================================
+
+func recover(_e: Str) -> I32 { return -1 }
+
+@test
+func test_catch_rejected() -> I32 {
+    let p: Promise[I32] = Promise::reject("error")
+    let caught: Promise[I32] = promise_catch_i32(p, recover)
+    assert(caught.is_fulfilled(), "caught promise should be fulfilled")
+    assert_eq(caught.unwrap(), -1, "recovery should produce -1")
+    return 0
+}
+
+@test
+func test_catch_fulfilled_passthrough() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    let caught: Promise[I32] = promise_catch_i32(p, recover)
+    assert(caught.is_fulfilled(), "fulfilled should pass through catch")
+    assert_eq(caught.unwrap(), 42, "value should be unchanged")
+    return 0
+}
+
+@test
+func test_catch_pending_passthrough() -> I32 {
+    let p: Promise[I32] = Promise::pending()
+    let caught: Promise[I32] = promise_catch_i32(p, recover)
+    assert(caught.is_pending(), "pending should pass through catch")
+    return 0
+}
+
+// ============================================================================
+// promise_finally_i32 tests
+// ============================================================================
+
+func noop_cleanup() {}
+
+@test
+func test_finally_fulfilled() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    let result: Promise[I32] = promise_finally_i32(p, noop_cleanup)
+    assert(result.is_fulfilled(), "finally should preserve fulfilled state")
+    assert_eq(result.unwrap(), 42, "finally should preserve value")
+    return 0
+}
+
+@test
+func test_finally_rejected() -> I32 {
+    let p: Promise[I32] = Promise::reject("error")
+    let result: Promise[I32] = promise_finally_i32(p, noop_cleanup)
+    assert(result.is_rejected(), "finally should preserve rejected state")
+    return 0
+}

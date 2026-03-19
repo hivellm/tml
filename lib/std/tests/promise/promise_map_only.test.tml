@@ -1,0 +1,63 @@
+// Tests for Promise edge cases — value extraction and state transitions
+use test::{assert, assert_eq}
+use std::promise::{Promise, PromiseState}
+
+@test
+func test_promise_value_fulfilled() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    let v: Maybe[I32] = p.value()
+    when v {
+        Just(x) => assert_eq(x, 42, "value should be 42"),
+        Nothing => assert(false, "fulfilled promise should have a value"),
+    }
+    return 0
+}
+
+@test
+func test_promise_value_rejected() -> I32 {
+    let p: Promise[I32] = Promise::reject("err")
+    let v: Maybe[I32] = p.value()
+    when v {
+        Just(_) => assert(false, "rejected promise should not have a value"),
+        Nothing => assert(true, "value() on rejected returns Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_promise_error_rejected() -> I32 {
+    let p: Promise[I32] = Promise::reject("timeout")
+    let e: Maybe[Str] = p.error()
+    when e {
+        Just(msg) => assert_eq(msg, "timeout", "error should be timeout"),
+        Nothing => assert(false, "rejected promise should have an error"),
+    }
+    return 0
+}
+
+@test
+func test_promise_error_fulfilled() -> I32 {
+    let p: Promise[I32] = Promise::resolve(42)
+    let e: Maybe[Str] = p.error()
+    when e {
+        Just(_) => assert(false, "fulfilled promise should not have an error"),
+        Nothing => assert(true, "error() on fulfilled returns Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_promise_state_enum() -> I32 {
+    let s1: PromiseState[I32] = PromiseState::Pending
+    assert(s1.is_pending(), "Pending state should be pending")
+    assert(not s1.is_settled(), "Pending state should not be settled")
+
+    let s2: PromiseState[I32] = PromiseState::Fulfilled(10)
+    assert(s2.is_fulfilled(), "Fulfilled state should be fulfilled")
+    assert(s2.is_settled(), "Fulfilled state should be settled")
+
+    let s3: PromiseState[I32] = PromiseState::Rejected("err")
+    assert(s3.is_rejected(), "Rejected state should be rejected")
+    assert(s3.is_settled(), "Rejected state should be settled")
+    return 0
+}

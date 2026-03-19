@@ -1,0 +1,179 @@
+// Tests for HPACK integer encoding/decoding (RFC 7541 Section 5.1)
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::hpack::{
+    HpackIntResult,
+    hpack_encode_integer,
+    hpack_decode_integer,
+}
+
+@test
+func test_encode_integer_fits_in_prefix() -> I32 {
+    // RFC 7541 Section C.1.1: 10 with 5-bit prefix
+    // 10 < 31 (2^5 - 1), so single byte
+    let buf = hpack_encode_integer(10, 5)
+    assert_eq(buf.len(), 1, "single byte")
+    assert_eq(buf.get(0), 10, "value = 10")
+    return 0
+}
+
+@test
+func test_encode_integer_exceeds_prefix() -> I32 {
+    // RFC 7541 Section C.1.2: 1337 with 5-bit prefix
+    // max_prefix = 31, 1337 >= 31
+    // First byte: 31 (0x1F)
+    // 1337 - 31 = 1306
+    // 1306 % 128 = 26, 1306 / 128 = 10
+    // Second byte: 26 + 128 = 154 (0x9A)
+    // Third byte: 10 (0x0A)
+    let buf = hpack_encode_integer(1337, 5)
+    assert_eq(buf.len(), 3, "3 bytes")
+    assert_eq(buf.get(0), 31, "first byte = 31")
+    assert_eq(buf.get(1), 154, "second byte = 154")
+    assert_eq(buf.get(2), 10, "third byte = 10")
+    return 0
+}
+
+@test
+func test_encode_integer_max_prefix() -> I32 {
+    // Value exactly at max prefix (2^5 - 1 = 31) with 5-bit prefix
+    // 31 >= 31, so multi-byte
+    // First byte: 31
+    // Remaining: 31 - 31 = 0
+    // Second byte: 0
+    let buf = hpack_encode_integer(31, 5)
+    assert_eq(buf.len(), 2, "2 bytes")
+    assert_eq(buf.get(0), 31, "first = 31")
+    assert_eq(buf.get(1), 0, "second = 0")
+    return 0
+}
+
+@test
+func test_encode_integer_zero() -> I32 {
+    let buf = hpack_encode_integer(0, 5)
+    assert_eq(buf.len(), 1, "single byte for 0")
+    assert_eq(buf.get(0), 0, "value = 0")
+    return 0
+}
+
+@test
+func test_encode_integer_7bit_prefix() -> I32 {
+    // 42 with 7-bit prefix: max_prefix = 127
+    // 42 < 127, so single byte
+    let buf = hpack_encode_integer(42, 7)
+    assert_eq(buf.len(), 1, "single byte")
+    assert_eq(buf.get(0), 42, "value = 42")
+    return 0
+}
+
+@test
+func test_decode_integer_single_byte() -> I32 {
+    // Decode 10 from 5-bit prefix
+    let data = Buffer::new(1)
+    data.write_u8(10, 0)  // 00001010
+
+    let result = hpack_decode_integer(data, 0, 5)
+    assert(result.is_ok(), "decode ok")
+    let pair = result.unwrap()
+    assert_eq(pair.value, 10, "value = 10")
+    assert_eq(pair.consumed, 1, "consumed 1 byte")
+    return 0
+}
+
+@test
+func test_decode_integer_multi_byte() -> I32 {
+    // Decode 1337 from 5-bit prefix
+    // Wire: [31, 154, 10]
+    let data = Buffer::new(3)
+    data.write_u8(31, 0)   // 0x1F
+    data.write_u8(154, 1)  // 0x9A
+    data.write_u8(10, 2)   // 0x0A
+
+    let result = hpack_decode_integer(data, 0, 5)
+    assert(result.is_ok(), "decode ok")
+    let pair = result.unwrap()
+    assert_eq(pair.value, 1337, "value = 1337")
+    assert_eq(pair.consumed, 3, "consumed 3 bytes")
+    return 0
+}
+
+@test
+func test_decode_integer_with_offset() -> I32 {
+    // Data with some prefix bytes, decode starting at offset 2
+    let data = Buffer::new(5)
+    data.write_u8(0xFF, 0)  // junk
+    data.write_u8(0xFF, 1)  // junk
+    data.write_u8(10, 2)    // value = 10 with 5-bit prefix
+
+    let result = hpack_decode_integer(data, 2, 5)
+    assert(result.is_ok(), "decode ok")
+    let pair = result.unwrap()
+    assert_eq(pair.value, 10, "value = 10")
+    assert_eq(pair.consumed, 1, "consumed 1 byte")
+    return 0
+}
+
+@test
+func test_decode_integer_empty_buffer() -> I32 {
+    let data = Buffer::new(1)
+    let result = hpack_decode_integer(data, 0, 5)
+    assert(result.is_err(), "empty -> error")
+    return 0
+}
+
+@test
+func test_encode_decode_roundtrip() -> I32 {
+    // Test various values roundtrip through encode -> decode
+    let values: List[I64] = List::new(8)
+    values.push(0)
+    values.push(1)
+    values.push(30)
+    values.push(31)
+    values.push(127)
+    values.push(255)
+    values.push(1337)
+    values.push(16384)
+
+    var i: I64 = 0
+    loop (i < values.len()) {
+        let val: I64 = values.get(i)
+        let encoded = hpack_encode_integer(val, 5)
+        let result = hpack_decode_integer(encoded, 0, 5)
+        assert(result.is_ok(), "roundtrip ok")
+        let pair = result.unwrap()
+        assert_eq(pair.value, val, "roundtrip value")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_encode_decode_various_prefix_sizes() -> I32 {
+    // Test with different prefix sizes (1 through 8)
+    let val: I64 = 200
+    var prefix: I64 = 1
+    loop (prefix <= 8) {
+        let encoded = hpack_encode_integer(val, prefix)
+        let result = hpack_decode_integer(encoded, 0, prefix)
+        assert(result.is_ok(), "roundtrip ok")
+        let pair = result.unwrap()
+        assert_eq(pair.value, val, "value matches")
+        prefix = prefix + 1
+    }
+    return 0
+}
+
+@test
+func test_decode_integer_prefix_mask() -> I32 {
+    // First byte has extra bits in the high positions
+    // With 5-bit prefix, top 3 bits should be masked off
+    let data = Buffer::new(1)
+    // 0xEA = 11101010 — bottom 5 bits = 01010 = 10
+    data.write_u8(0xEA, 0)
+
+    let result = hpack_decode_integer(data, 0, 5)
+    assert(result.is_ok(), "decode with mask ok")
+    let pair = result.unwrap()
+    assert_eq(pair.value, 10, "masked value = 10")
+    return 0
+}

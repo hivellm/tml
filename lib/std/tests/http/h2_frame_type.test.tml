@@ -1,0 +1,101 @@
+// Tests for HTTP/2 frame type encoding/decoding
+use test::{assert, assert_eq}
+use std::http::h2::frame::{
+    H2FrameType,
+    h2_frame_type_from_u8,
+    h2_frame_type_to_u8,
+    H2_FLAG_ACK,
+    H2_FLAG_END_STREAM,
+    H2_FLAG_END_HEADERS,
+    H2_FLAG_PADDED,
+    H2_FLAG_PRIORITY,
+}
+
+@test
+func test_frame_type_to_u8() -> I32 {
+    assert_eq(H2FrameType::Data().to_u8(), 0, "DATA = 0x0")
+    assert_eq(H2FrameType::Headers().to_u8(), 1, "HEADERS = 0x1")
+    assert_eq(H2FrameType::Priority().to_u8(), 2, "PRIORITY = 0x2")
+    assert_eq(H2FrameType::RstStream().to_u8(), 3, "RST_STREAM = 0x3")
+    assert_eq(H2FrameType::Settings().to_u8(), 4, "SETTINGS = 0x4")
+    assert_eq(H2FrameType::PushPromise().to_u8(), 5, "PUSH_PROMISE = 0x5")
+    assert_eq(H2FrameType::Ping().to_u8(), 6, "PING = 0x6")
+    assert_eq(H2FrameType::GoAway().to_u8(), 7, "GOAWAY = 0x7")
+    assert_eq(H2FrameType::WindowUpdate().to_u8(), 8, "WINDOW_UPDATE = 0x8")
+    assert_eq(H2FrameType::Continuation().to_u8(), 9, "CONTINUATION = 0x9")
+    return 0
+}
+
+@test
+func test_frame_type_from_u8_valid() -> I32 {
+    let data: Maybe[H2FrameType] = h2_frame_type_from_u8(0)
+    assert(data.is_just(), "0 -> Data")
+    assert_eq(data.unwrap().to_u8(), 0, "unwrap Data")
+
+    let settings: Maybe[H2FrameType] = h2_frame_type_from_u8(4)
+    assert(settings.is_just(), "4 -> Settings")
+    assert_eq(settings.unwrap().to_u8(), 4, "unwrap Settings")
+
+    let cont: Maybe[H2FrameType] = h2_frame_type_from_u8(9)
+    assert(cont.is_just(), "9 -> Continuation")
+    assert_eq(cont.unwrap().to_u8(), 9, "unwrap Continuation")
+    return 0
+}
+
+@test
+func test_frame_type_from_u8_invalid() -> I32 {
+    let out_of_range: Maybe[H2FrameType] = h2_frame_type_from_u8(10)
+    assert(out_of_range.is_nothing(), "10 -> Nothing")
+
+    let negative: Maybe[H2FrameType] = h2_frame_type_from_u8(-1)
+    assert(negative.is_nothing(), "-1 -> Nothing")
+
+    let large: Maybe[H2FrameType] = h2_frame_type_from_u8(255)
+    assert(large.is_nothing(), "255 -> Nothing")
+    return 0
+}
+
+@test
+func test_frame_type_to_string() -> I32 {
+    assert_eq(H2FrameType::Data().to_string(), "DATA", "DATA name")
+    assert_eq(H2FrameType::Headers().to_string(), "HEADERS", "HEADERS name")
+    assert_eq(H2FrameType::Settings().to_string(), "SETTINGS", "SETTINGS name")
+    assert_eq(H2FrameType::Ping().to_string(), "PING", "PING name")
+    assert_eq(H2FrameType::GoAway().to_string(), "GOAWAY", "GOAWAY name")
+    assert_eq(H2FrameType::WindowUpdate().to_string(), "WINDOW_UPDATE", "WINDOW_UPDATE name")
+    assert_eq(H2FrameType::Continuation().to_string(), "CONTINUATION", "CONTINUATION name")
+    return 0
+}
+
+@test
+func test_frame_type_roundtrip() -> I32 {
+    // Verify from_u8(to_u8(x)) == x for all types
+    var i: I32 = 0
+    loop (i <= 9) {
+        let maybe_ft: Maybe[H2FrameType] = h2_frame_type_from_u8(i)
+        assert(maybe_ft.is_just(), "roundtrip valid")
+        assert_eq(h2_frame_type_to_u8(maybe_ft.unwrap()), i, "roundtrip value")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_frame_type_equality() -> I32 {
+    let a = H2FrameType::Data()
+    let b = H2FrameType::Data()
+    let c = H2FrameType::Headers()
+    assert(a.eq(b), "Data == Data")
+    assert(not a.eq(c), "Data != Headers")
+    return 0
+}
+
+@test
+func test_flag_constants() -> I32 {
+    assert_eq(H2_FLAG_ACK, 0x01, "ACK = 0x01")
+    assert_eq(H2_FLAG_END_STREAM, 0x01, "END_STREAM = 0x01")
+    assert_eq(H2_FLAG_END_HEADERS, 0x04, "END_HEADERS = 0x04")
+    assert_eq(H2_FLAG_PADDED, 0x08, "PADDED = 0x08")
+    assert_eq(H2_FLAG_PRIORITY, 0x20, "PRIORITY = 0x20")
+    return 0
+}

@@ -1,0 +1,43 @@
+// Test UnitJoinHandle and I64JoinHandle methods.
+use test
+use std::thread::{spawn_fn, spawn_i64, UnitJoinHandle, I64JoinHandle}
+
+@test
+func test_unit_handle_is_finished_before_join() -> Outcome[Unit, Str] {
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        // Quick task
+    })
+    // Give thread time to complete
+    thread::sleep_ms(50 as U64)
+    // Before joining, is_finished should be false (we haven't called join yet)
+    assert_false(handle.is_finished())
+    Ok(())
+}
+
+@test
+func test_unit_handle_is_finished_after_join() -> Outcome[Unit, Str] {
+    let mut handle: UnitJoinHandle = spawn_fn(do() {
+        // Quick task
+    })
+    let result = handle.join()
+    assert_true(result.is_ok())
+    // After joining, is_finished should be true
+    assert_true(handle.is_finished())
+    Ok(())
+}
+
+@test
+func test_i64_handle_double_join_returns_error() -> Outcome[Unit, Str] {
+    let mut handle: I64JoinHandle = spawn_i64(do() -> I64 {
+        return 7
+    })
+    // First join should succeed
+    let result1 = handle.join()
+    assert_true(result1.is_ok())
+    assert_eq(result1.unwrap(), 7)
+
+    // Second join should return AlreadyJoined error
+    let result2 = handle.join()
+    assert_true(result2.is_err())
+    Ok(())
+}

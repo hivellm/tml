@@ -1,0 +1,235 @@
+// Tests for HTTP/2 frame encoding
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2FrameType,
+    H2Setting,
+    H2ErrorCode,
+    H2_FLAG_ACK,
+    H2_FLAG_END_STREAM,
+    H2_FLAG_END_HEADERS,
+    H2_CONNECTION_PREFACE_LEN,
+    H2_DEFAULT_MAX_FRAME_SIZE,
+    H2_DEFAULT_INITIAL_WINDOW_SIZE,
+    H2_DEFAULT_HEADER_TABLE_SIZE,
+    h2_encode_frame_raw,
+    h2_encode_settings_pair,
+}
+
+@test
+func test_encode_empty_settings_frame() -> I32 {
+    let payload = Buffer::new(8)
+    let encoded = h2_encode_frame_raw(4, 0, 0, payload)
+
+    assert_eq(encoded.len(), 9, "settings empty len")
+    assert_eq(encoded.get(0), 0, "len byte 0")
+    assert_eq(encoded.get(1), 0, "len byte 1")
+    assert_eq(encoded.get(2), 0, "len byte 2")
+    assert_eq(encoded.get(3), 4, "type SETTINGS")
+    assert_eq(encoded.get(4), 0, "flags 0")
+    assert_eq(encoded.get(5), 0, "sid byte 0")
+    assert_eq(encoded.get(6), 0, "sid byte 1")
+    assert_eq(encoded.get(7), 0, "sid byte 2")
+    assert_eq(encoded.get(8), 0, "sid byte 3")
+    return 0
+}
+
+@test
+func test_encode_settings_ack() -> I32 {
+    let payload = Buffer::new(8)
+    let encoded = h2_encode_frame_raw(4, H2_FLAG_ACK, 0, payload)
+
+    assert_eq(encoded.len(), 9, "settings ack len")
+    assert_eq(encoded.get(3), 4, "type SETTINGS")
+    assert_eq(encoded.get(4), H2_FLAG_ACK, "ACK flag")
+    assert_eq(encoded.get(0), 0, "len 0")
+    return 0
+}
+
+@test
+func test_encode_ping_frame() -> I32 {
+    let data = Buffer::new(8)
+    var i: I64 = 0
+    loop (i < 8) {
+        data.write_u8((i + 1) as I32, i)
+        i = i + 1
+    }
+    // PING = type 6
+    let encoded = h2_encode_frame_raw(6, 0, 0, data)
+
+    assert_eq(encoded.len(), 17, "ping len")
+    assert_eq(encoded.get(0), 0, "len hi")
+    assert_eq(encoded.get(1), 0, "len mid")
+    assert_eq(encoded.get(2), 8, "len lo")
+    assert_eq(encoded.get(3), 6, "type PING")
+    assert_eq(encoded.get(4), 0, "flags 0")
+    assert_eq(encoded.get(9), 1, "payload[0]")
+    assert_eq(encoded.get(10), 2, "payload[1]")
+    assert_eq(encoded.get(16), 8, "payload[7]")
+    return 0
+}
+
+@test
+func test_encode_data_frame_with_end_stream() -> I32 {
+    let payload = Buffer::new(5)
+    payload.write_u8(0x48, 0)  // 'H'
+    payload.write_u8(0x65, 1)  // 'e'
+    payload.write_u8(0x6C, 2)  // 'l'
+    payload.write_u8(0x6C, 3)  // 'l'
+    payload.write_u8(0x6F, 4)  // 'o'
+    // DATA = type 0, END_STREAM flag, stream_id = 1
+    let encoded = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, 1, payload)
+
+    assert_eq(encoded.len(), 14, "data frame len")
+    assert_eq(encoded.get(2), 5, "payload len = 5")
+    assert_eq(encoded.get(3), 0, "type DATA")
+    assert_eq(encoded.get(4), H2_FLAG_END_STREAM, "END_STREAM flag")
+    assert_eq(encoded.get(8), 1, "sid byte 3 = 1")
+    assert_eq(encoded.get(9), 0x48, "H")
+    assert_eq(encoded.get(10), 0x65, "e")
+    assert_eq(encoded.get(13), 0x6F, "o")
+    return 0
+}
+
+@test
+func test_encode_headers_frame() -> I32 {
+    let header_block = Buffer::new(10)
+    header_block.write_u8(0x82, 0)  // Indexed: :method GET
+    header_block.write_u8(0x84, 1)  // Indexed: :path /
+
+    // HEADERS = type 1, END_HEADERS flag, stream_id = 3
+    let encoded = h2_encode_frame_raw(1, H2_FLAG_END_HEADERS, 3, header_block)
+
+    assert_eq(encoded.len(), 11, "headers frame len")
+    assert_eq(encoded.get(3), 1, "type HEADERS")
+    assert_eq(encoded.get(4), H2_FLAG_END_HEADERS, "END_HEADERS flag")
+    assert_eq(encoded.get(8), 3, "sid = 3")
+    return 0
+}
+
+@test
+func test_encode_goaway_frame() -> I32 {
+    // Build GOAWAY payload: 4 bytes last_stream_id + 4 bytes error_code
+    let payload = Buffer::new(8)
+    payload.write_u32_be(100, 0)  // last_stream_id = 100
+    payload.write_u32_be(0, 4)    // error_code = NO_ERROR
+    // GOAWAY = type 7, stream_id = 0 (connection-level)
+    let encoded = h2_encode_frame_raw(7, 0, 0, payload)
+
+    assert_eq(encoded.len(), 17, "goaway len")
+    assert_eq(encoded.get(3), 7, "type GOAWAY")
+    assert_eq(encoded.get(12), 100, "last_sid byte 3")
+    assert_eq(encoded.get(16), 0, "err byte 3")
+    return 0
+}
+
+@test
+func test_encode_window_update_frame() -> I32 {
+    let payload = Buffer::new(4)
+    payload.write_u32_be(65535, 0)
+    // WINDOW_UPDATE = type 8, stream_id = 5
+    let encoded = h2_encode_frame_raw(8, 0, 5, payload)
+
+    assert_eq(encoded.len(), 13, "window_update len")
+    assert_eq(encoded.get(3), 8, "type WINDOW_UPDATE")
+    assert_eq(encoded.get(8), 5, "sid = 5")
+    assert_eq(encoded.get(11), 0xFF, "inc byte 2")
+    assert_eq(encoded.get(12), 0xFF, "inc byte 3")
+    return 0
+}
+
+@test
+func test_encode_rst_stream_frame() -> I32 {
+    let payload = Buffer::new(4)
+    payload.write_u32_be(8, 0)  // error code 8 = CANCEL
+    // RST_STREAM = type 3, stream_id = 7
+    let encoded = h2_encode_frame_raw(3, 0, 7, payload)
+
+    assert_eq(encoded.len(), 13, "rst_stream len")
+    assert_eq(encoded.get(3), 3, "type RST_STREAM")
+    assert_eq(encoded.get(8), 7, "sid = 7")
+    assert_eq(encoded.get(12), 8, "error = CANCEL")
+    return 0
+}
+
+@test
+func test_encode_settings_pairs() -> I32 {
+    let buf = Buffer::new(12)
+    h2_encode_settings_pair(buf, H2Setting::MaxConcurrentStreams(), 100)
+    h2_encode_settings_pair(buf, H2Setting::InitialWindowSize(), 65535)
+
+    assert_eq(buf.len(), 12, "settings pairs len")
+    assert_eq(buf.read_u16_be(0), 3, "setting 1 id")
+    assert_eq(buf.read_u32_be(2), 100, "setting 1 value")
+    assert_eq(buf.read_u16_be(6), 4, "setting 2 id")
+    assert_eq(buf.read_u32_be(8), 65535, "setting 2 value")
+    return 0
+}
+
+@test
+func test_connection_preface_constants() -> I32 {
+    assert_eq(H2_CONNECTION_PREFACE_LEN, 24, "preface len = 24")
+    assert_eq(H2_DEFAULT_MAX_FRAME_SIZE, 16384, "default max frame size")
+    assert_eq(H2_DEFAULT_INITIAL_WINDOW_SIZE, 65535, "default window size")
+    assert_eq(H2_DEFAULT_HEADER_TABLE_SIZE, 4096, "default header table size")
+    return 0
+}
+
+@test
+func test_error_code_values() -> I32 {
+    assert_eq(H2ErrorCode::NoError().to_value(), 0, "NO_ERROR = 0")
+    assert_eq(H2ErrorCode::ProtocolError().to_value(), 1, "PROTOCOL_ERROR = 1")
+    assert_eq(H2ErrorCode::InternalError().to_value(), 2, "INTERNAL_ERROR = 2")
+    assert_eq(H2ErrorCode::FlowControlError().to_value(), 3, "FLOW_CONTROL_ERROR = 3")
+    assert_eq(H2ErrorCode::Cancel().to_value(), 8, "CANCEL = 8")
+    assert_eq(H2ErrorCode::Http11Required().to_value(), 13, "HTTP_1_1_REQUIRED = 13")
+    return 0
+}
+
+@test
+func test_error_code_to_string() -> I32 {
+    assert_eq(H2ErrorCode::NoError().to_string(), "NO_ERROR", "NO_ERROR name")
+    assert_eq(H2ErrorCode::ProtocolError().to_string(), "PROTOCOL_ERROR", "PROTOCOL_ERROR name")
+    assert_eq(H2ErrorCode::Cancel().to_string(), "CANCEL", "CANCEL name")
+    return 0
+}
+
+@test
+func test_setting_to_string() -> I32 {
+    assert_eq(H2Setting::HeaderTableSize().to_string(), "HEADER_TABLE_SIZE", "name 1")
+    assert_eq(H2Setting::EnablePush().to_string(), "ENABLE_PUSH", "name 2")
+    assert_eq(H2Setting::MaxConcurrentStreams().to_string(), "MAX_CONCURRENT_STREAMS", "name 3")
+    assert_eq(H2Setting::InitialWindowSize().to_string(), "INITIAL_WINDOW_SIZE", "name 4")
+    assert_eq(H2Setting::MaxFrameSize().to_string(), "MAX_FRAME_SIZE", "name 5")
+    assert_eq(H2Setting::MaxHeaderListSize().to_string(), "MAX_HEADER_LIST_SIZE", "name 6")
+    return 0
+}
+
+@test
+func test_encode_large_stream_id() -> I32 {
+    // Stream ID uses only 31 bits (max = 2^31 - 1 = 2147483647)
+    let payload = Buffer::new(4)
+    payload.write_u32_be(1, 0)
+    // WINDOW_UPDATE = type 8, stream_id = 0x7FFFFFFF
+    let encoded = h2_encode_frame_raw(8, 0, 2147483647, payload)
+
+    // Stream ID bytes (big-endian, R bit = 0)
+    assert_eq(encoded.get(5), 0x7F, "sid byte 0 = 0x7F")
+    assert_eq(encoded.get(6), 0xFF, "sid byte 1 = 0xFF")
+    assert_eq(encoded.get(7), 0xFF, "sid byte 2 = 0xFF")
+    assert_eq(encoded.get(8), 0xFF, "sid byte 3 = 0xFF")
+    return 0
+}
+
+@test
+func test_encode_combined_flags() -> I32 {
+    let payload = Buffer::new(2)
+    payload.write_u8(0x82, 0)
+    payload.write_u8(0x84, 1)
+    // HEADERS with END_STREAM | END_HEADERS = 0x01 | 0x04 = 0x05
+    let flags: I32 = H2_FLAG_END_STREAM | H2_FLAG_END_HEADERS
+    let encoded = h2_encode_frame_raw(1, flags, 1, payload)
+
+    assert_eq(encoded.get(4), 5, "combined flags = 0x05")
+    return 0
+}

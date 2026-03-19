@@ -124,6 +124,12 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
     mir_func.return_type = convert_type(func.return_type);
     mir_func.is_public = func.is_public;
     mir_func.attributes = func.attributes;
+    if (func.route_info.has_value()) {
+        mir_func.route_info = RouteInfo{
+            .method = static_cast<RouteMethod>(static_cast<int>(func.route_info->method)),
+            .path = func.route_info->path,
+        };
+    }
 
     // Add parameters
     for (const auto& param : func.params) {

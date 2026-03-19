@@ -1,0 +1,571 @@
+//! Multi-threaded work-stealing task executor.
+//!
+//! Provides a thread pool executor that distributes tasks across multiple
+//! OS threads with work-stealing for load balancing.
+//!
+//! # Architecture
+//!
+//! The executor maintains:
+//! - A **global queue** protected by a mutex for task submission
+//! - A **shutdown flag** for graceful termination
+//! - Worker threads spawned via raw OS thread API
+//!
+//! # Task Model
+//!
+//! Tasks are represented as `func(I64)` — a function taking a single I64
+//! argument (which can encode a pointer to arbitrary user data). This avoids
+//! generic closure limitations in the current compiler.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::runtime::multi_executor::MultiExecutor
+//!
+//! var exec = MultiExecutor::new(2)  // 2 worker threads
+//!
+//! exec.submit(do(data: I64) {
+//!     println("Task running with data: " + data.to_string())
+//! }, 42)
+//!
+//! // Start workers and process all tasks, then shut down
+//! exec.run()
+//! exec.destroy()
+//! ```
+
+// FFI declarations — mutex functions take raw pointers to avoid
+// mut ref RawMutex codegen issues with heap-allocated structs
+@extern("tml_mutex_init")
+func ffi_mutex_init(mutex: *Unit) -> I32
+
+@extern("tml_mutex_destroy")
+func ffi_mutex_destroy(mutex: *Unit) -> I32
+
+@extern("tml_mutex_lock")
+func ffi_mutex_lock(mutex: *Unit) -> I32
+
+@extern("tml_mutex_unlock")
+func ffi_mutex_unlock(mutex: *Unit) -> I32
+
+@extern("tml_thread_spawn")
+func ffi_thread_spawn(func_ptr: *Unit, arg: *Unit, stack_size: U64) -> U64
+
+@extern("tml_thread_join")
+func ffi_thread_join(thread_handle: U64) -> I32
+
+@extern("tml_thread_yield")
+func ffi_thread_yield()
+
+@extern("tml_thread_available_parallelism")
+func ffi_thread_available_parallelism() -> U32
+
+@extern("tml_thread_sleep_ms")
+func ffi_thread_sleep_ms(milliseconds: U64)
+
+// ============================================================================
+// Task
+// ============================================================================
+
+/// A unit of work for the executor.
+///
+/// Each task holds a function pointer and an opaque I64 user data value.
+/// The function is called with the user data when the task is executed.
+pub type Task {
+    /// The function to execute. Takes a single I64 argument.
+    fn_ptr: I64,
+    /// Opaque user data passed to the function.
+    user_data: I64,
+    /// Unique task identifier.
+    id: I64,
+}
+
+// Each Task is 24 bytes (3 x I64 fields).
+const TASK_SIZE: I64 = 24
+const TASK_OFF_FN: I64 = 0
+const TASK_OFF_DATA: I64 = 8
+const TASK_OFF_ID: I64 = 16
+
+// Initial capacity for task queue
+const INITIAL_QUEUE_CAP: I64 = 64
+
+// ============================================================================
+// TaskQueue — mutex-protected growable array of Task
+// ============================================================================
+
+// TaskQueue is operated on purely through raw pointers.
+// Layout (88 bytes total):
+//   [0..8]    items_ptr: I64   — pointer to heap-allocated Task array
+//   [8..16]   len: I64         — current number of tasks
+//   [16..24]  cap: I64         — allocated capacity (number of Task slots)
+//   [24..88]  mutex: 64 bytes  — platform mutex (SRWLOCK on Windows, pthread_mutex_t on Unix)
+
+// TaskQueue struct size: 8 + 8 + 8 + 64 = 88 bytes
+const TASK_QUEUE_SIZE: I64 = 88
+
+// ============================================================================
+// SharedState — heap-allocated state shared between main thread and workers
+// ============================================================================
+//
+// Layout (all I64, 8 bytes each):
+//   [0..8]     = queue_ptr: I64        — pointer to heap-allocated TaskQueue
+//   [8..16]    = shutdown_flag: I64    — 0 = running, 1 = shutdown requested
+//   [16..24]   = next_task_id: I64    — counter for task IDs
+//   [24..32]   = active_tasks: I64    — tasks submitted but not yet completed
+//   [32..40]   = completed_tasks: I64 — tasks completed
+
+const SS_OFF_QUEUE: I64 = 0
+const SS_OFF_SHUTDOWN: I64 = 8
+const SS_OFF_NEXT_ID: I64 = 16
+const SS_OFF_ACTIVE: I64 = 24
+const SS_OFF_COMPLETED: I64 = 32
+const SHARED_STATE_SIZE: I64 = 40
+
+// ============================================================================
+// Worker Context — passed as arg to each worker thread
+// ============================================================================
+//
+// Layout:
+//   [0..8]   = state_ptr: I64     — pointer to SharedState
+//   [8..16]  = worker_id: I64     — this worker's index
+
+const WC_OFF_STATE: I64 = 0
+const WC_OFF_ID: I64 = 8
+const WORKER_CTX_SIZE: I64 = 16
+
+// ============================================================================
+// TaskQueue operations (via raw pointer)
+// ============================================================================
+
+/// Initialize a TaskQueue at the given heap address.
+func tq_init(tq_ptr: I64, initial_cap: I64) {
+    let alloc_size: I64 = initial_cap * TASK_SIZE
+    let items: I64 = lowlevel { mem_alloc(alloc_size as U64) } as I64
+    if items == 0 {
+        panic("TaskQueue: allocation failed")
+    }
+
+    // Write fields: items_ptr, len, cap
+    lowlevel {
+        ptr_write[I64](tq_ptr as *I64, items)
+        ptr_write[I64]((tq_ptr + 8) as *I64, 0 as I64)
+        ptr_write[I64]((tq_ptr + 16) as *I64, initial_cap)
+    }
+
+    // Initialize the mutex (at offset 24 in the struct)
+    // RawMutex is 64 bytes of zeroes, then we call init
+    let mutex_ptr: I64 = tq_ptr + 24
+    // Zero out the mutex area
+    let zero_i: I64 = 0
+    lowlevel {
+        let end: I64 = mutex_ptr + 64
+        let p: I64 = mutex_ptr
+        // Zero 64 bytes (8 iterations of 8 bytes)
+        ptr_write[I64](p as *I64, 0 as I64)
+        ptr_write[I64]((p + 8) as *I64, 0 as I64)
+        ptr_write[I64]((p + 16) as *I64, 0 as I64)
+        ptr_write[I64]((p + 24) as *I64, 0 as I64)
+        ptr_write[I64]((p + 32) as *I64, 0 as I64)
+        ptr_write[I64]((p + 40) as *I64, 0 as I64)
+        ptr_write[I64]((p + 48) as *I64, 0 as I64)
+        ptr_write[I64]((p + 56) as *I64, 0 as I64)
+    }
+    // Call init via pointer cast
+    ffi_mutex_init(mutex_ptr as *Unit)
+}
+
+/// Push a task onto a TaskQueue at the given heap address.
+func tq_push(tq_ptr: I64, fn_ptr: I64, user_data: I64, task_id: I64) {
+    let mutex_ptr: I64 = tq_ptr + 24
+    ffi_mutex_lock(mutex_ptr as *Unit)
+
+    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
+    let cap: I64 = lowlevel { ptr_read[I64]((tq_ptr + 16) as *I64) }
+
+    // Grow if needed
+    let current_items: I64 = items
+    let current_cap: I64 = cap
+    if len >= current_cap {
+        let new_cap: I64 = current_cap * 2
+        let new_size: I64 = new_cap * TASK_SIZE
+        let new_items: I64 = lowlevel { mem_alloc(new_size as U64) } as I64
+        if new_items == 0 {
+            ffi_mutex_unlock(mutex_ptr as *Unit)
+            panic("TaskQueue: grow allocation failed")
+        }
+        let old_size: I64 = len * TASK_SIZE
+        lowlevel {
+            copy_nonoverlapping(current_items as *Unit, new_items as *Unit, old_size as U64)
+            mem_free(current_items as *Unit)
+            ptr_write[I64](tq_ptr as *I64, new_items)
+            ptr_write[I64]((tq_ptr + 16) as *I64, new_cap)
+        }
+    }
+
+    // Re-read items_ptr in case we grew
+    let final_items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    let task_off: I64 = len * TASK_SIZE
+    let slot_addr: I64 = final_items + task_off
+    lowlevel {
+        ptr_write[I64]((slot_addr + TASK_OFF_FN) as *I64, fn_ptr)
+        ptr_write[I64]((slot_addr + TASK_OFF_DATA) as *I64, user_data)
+        ptr_write[I64]((slot_addr + TASK_OFF_ID) as *I64, task_id)
+        ptr_write[I64]((tq_ptr + 8) as *I64, len + 1)
+    }
+
+    ffi_mutex_unlock(mutex_ptr as *Unit)
+}
+
+/// Pop a task from the front of a TaskQueue. Returns 1 if a task was popped
+/// (and writes fn_ptr, user_data, task_id to the provided out pointers),
+/// or 0 if the queue was empty.
+func tq_pop(tq_ptr: I64, out_fn: I64, out_data: I64, out_id: I64) -> I64 {
+    let mutex_ptr: I64 = tq_ptr + 24
+    ffi_mutex_lock(mutex_ptr as *Unit)
+
+    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
+    if len == 0 {
+        ffi_mutex_unlock(mutex_ptr as *Unit)
+        return 0
+    }
+
+    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+
+    // Read task at index 0
+    let fn_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_FN) as *I64) }
+    let data_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_DATA) as *I64) }
+    let id_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_ID) as *I64) }
+
+    // Shift remaining tasks forward
+    let new_len: I64 = len - 1
+    if new_len > 0 {
+        let src: I64 = items + TASK_SIZE
+        let copy_size: I64 = new_len * TASK_SIZE
+        lowlevel { copy_nonoverlapping(src as *Unit, items as *Unit, copy_size as U64) }
+    }
+    lowlevel { ptr_write[I64]((tq_ptr + 8) as *I64, new_len) }
+
+    ffi_mutex_unlock(mutex_ptr as *Unit)
+
+    // Write outputs
+    lowlevel {
+        ptr_write[I64](out_fn as *I64, fn_val)
+        ptr_write[I64](out_data as *I64, data_val)
+        ptr_write[I64](out_id as *I64, id_val)
+    }
+    return 1
+}
+
+/// Get the length of a TaskQueue.
+func tq_len(tq_ptr: I64) -> I64 {
+    let mutex_ptr: I64 = tq_ptr + 24
+    ffi_mutex_lock(mutex_ptr as *Unit)
+    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
+    ffi_mutex_unlock(mutex_ptr as *Unit)
+    return len
+}
+
+/// Destroy a TaskQueue and free its memory.
+func tq_destroy(tq_ptr: I64) {
+    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    if items != 0 {
+        lowlevel { mem_free(items as *Unit) }
+    }
+    let mutex_ptr: I64 = tq_ptr + 24
+    ffi_mutex_destroy(mutex_ptr as *Unit)
+}
+
+// ============================================================================
+// Worker Entry Point
+// ============================================================================
+
+/// Worker thread entry point. Called by the OS with arg = pointer to WorkerContext.
+func worker_entry(arg: *Unit) {
+    let ctx: I64 = arg as I64
+    let state_ptr: I64 = lowlevel { ptr_read[I64]((ctx + WC_OFF_STATE) as *I64) }
+    let _worker_id: I64 = lowlevel { ptr_read[I64]((ctx + WC_OFF_ID) as *I64) }
+
+    // Free the worker context — we've read everything we need
+    lowlevel { mem_free(ctx as *Unit) }
+
+    let queue_ptr: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_QUEUE) as *I64) }
+
+    // Allocate scratch space for popped task fields (3 x I64)
+    let scratch: I64 = lowlevel { mem_alloc(24 as U64) } as I64
+
+    // Worker loop
+    loop (true) {
+        // Check shutdown flag
+        let shutdown: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 {
+            // Drain remaining tasks before exiting
+            loop (true) {
+                let got: I64 = tq_pop(queue_ptr, scratch, scratch + 8, scratch + 16)
+                if got == 0 {
+                    break
+                }
+                let fn_val: I64 = lowlevel { ptr_read[I64](scratch as *I64) }
+                let data_val: I64 = lowlevel { ptr_read[I64]((scratch + 8) as *I64) }
+                run_task(fn_val, data_val)
+                // Update counters
+                lowlevel {
+                    let c: I64 = ptr_read[I64]((state_ptr + SS_OFF_COMPLETED) as *I64)
+                    ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, c + 1)
+                    let a: I64 = ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64)
+                    ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, a - 1)
+                }
+            }
+            lowlevel { mem_free(scratch as *Unit) }
+            return
+        }
+
+        // Try to get a task
+        let got: I64 = tq_pop(queue_ptr, scratch, scratch + 8, scratch + 16)
+        if got != 0 {
+            let fn_val: I64 = lowlevel { ptr_read[I64](scratch as *I64) }
+            let data_val: I64 = lowlevel { ptr_read[I64]((scratch + 8) as *I64) }
+            run_task(fn_val, data_val)
+            // Update counters
+            lowlevel {
+                let c: I64 = ptr_read[I64]((state_ptr + SS_OFF_COMPLETED) as *I64)
+                ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, c + 1)
+                let a: I64 = ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64)
+                ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, a - 1)
+            }
+        } else {
+            // No tasks — brief sleep to avoid busy spin
+            ffi_thread_sleep_ms(1 as U64)
+        }
+    }
+}
+
+/// Execute a task function with its user data.
+func run_task(fn_ptr: I64, user_data: I64) {
+    let f: func(I64) = fn_ptr as func(I64)
+    f(user_data)
+}
+
+// ============================================================================
+// MultiExecutor
+// ============================================================================
+
+/// A multi-threaded task executor with a global shared queue.
+///
+/// Workers pull tasks from the global queue and execute them. The executor
+/// supports submitting tasks before or during execution, and graceful shutdown.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::runtime::multi_executor::MultiExecutor
+///
+/// var exec = MultiExecutor::new(4)
+///
+/// exec.submit(do(data: I64) {
+///     println("Processing: " + data.to_string())
+/// }, 100)
+///
+/// exec.run()
+/// exec.destroy()
+/// ```
+pub type MultiExecutor {
+    /// Number of worker threads.
+    worker_count: I64,
+    /// Pointer to heap-allocated array of U64 OS thread handles.
+    handles_ptr: I64,
+    /// Number of worker threads that have been started.
+    handles_len: I64,
+    /// Pointer to the SharedState block.
+    state_ptr: I64,
+    /// Pointer to the heap-allocated TaskQueue.
+    queue_ptr: I64,
+    /// Whether run() has been called.
+    started: I64,
+}
+
+impl MultiExecutor {
+    /// Creates a new executor with the specified number of worker threads.
+    ///
+    /// Workers are not started until `run()` is called.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `workers` is less than 1 or if memory allocation fails.
+    pub func new(workers: I64) -> MultiExecutor {
+        if workers < 1 {
+            panic("MultiExecutor::new: workers must be >= 1")
+        }
+
+        // Allocate shared state
+        let state_ptr: I64 = lowlevel { mem_alloc(SHARED_STATE_SIZE as U64) } as I64
+        if state_ptr == 0 {
+            panic("MultiExecutor::new: shared state allocation failed")
+        }
+
+        // Allocate TaskQueue on heap
+        let queue_ptr: I64 = lowlevel { mem_alloc(TASK_QUEUE_SIZE as U64) } as I64
+        if queue_ptr == 0 {
+            panic("MultiExecutor::new: queue allocation failed")
+        }
+        tq_init(queue_ptr, INITIAL_QUEUE_CAP)
+
+        // Initialize shared state
+        lowlevel {
+            ptr_write[I64]((state_ptr + SS_OFF_QUEUE) as *I64, queue_ptr)
+            ptr_write[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64, 0 as I64)
+            ptr_write[I64]((state_ptr + SS_OFF_NEXT_ID) as *I64, 1 as I64)
+            ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, 0 as I64)
+            ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, 0 as I64)
+        }
+
+        // Allocate handles array (one U64 per worker)
+        let handles_size: I64 = workers * 8
+        let handles_ptr: I64 = lowlevel { mem_alloc(handles_size as U64) } as I64
+        if handles_ptr == 0 {
+            panic("MultiExecutor::new: handles allocation failed")
+        }
+
+        return MultiExecutor {
+            worker_count: workers,
+            handles_ptr: handles_ptr,
+            handles_len: 0,
+            state_ptr: state_ptr,
+            queue_ptr: queue_ptr,
+            started: 0,
+        }
+    }
+
+    /// Creates a new executor with a number of workers equal to the
+    /// available hardware parallelism (CPU count).
+    pub func with_default_workers() -> MultiExecutor {
+        let cpus: I64 = ffi_thread_available_parallelism() as I64
+        if cpus < 1 {
+            return MultiExecutor::new(1)
+        }
+        return MultiExecutor::new(cpus)
+    }
+
+    /// Submits a task to the executor.
+    ///
+    /// The task function will be called with the provided `user_data` argument
+    /// on one of the worker threads. Tasks can be submitted before or after
+    /// `run()` is called.
+    ///
+    /// Returns the unique task ID assigned to this task.
+    pub func submit(this, task_fn: func(I64), user_data: I64) -> I64 {
+        // Allocate next task ID (not atomic — submit must be called from one thread)
+        let task_id: I64 = lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_NEXT_ID) as *I64) }
+        lowlevel { ptr_write[I64]((this.state_ptr + SS_OFF_NEXT_ID) as *I64, task_id + 1) }
+
+        // Increment active count
+        let active: I64 = lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64) }
+        lowlevel { ptr_write[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64, active + 1) }
+
+        tq_push(this.queue_ptr, task_fn as I64, user_data, task_id)
+
+        return task_id
+    }
+
+    /// Starts the worker threads and blocks until all submitted tasks complete,
+    /// then signals shutdown and joins all workers.
+    pub func run(this) {
+        start_workers(this.state_ptr, this.queue_ptr, this.worker_count, this.handles_ptr)
+        wait_for_all(this.state_ptr)
+        signal_shutdown(this.state_ptr)
+        join_workers(this.handles_ptr, this.worker_count)
+    }
+
+    /// Returns the number of tasks that have been completed.
+    pub func completed_count(this) -> I64 {
+        return lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_COMPLETED) as *I64) }
+    }
+
+    /// Returns the number of tasks still pending (submitted but not completed).
+    pub func active_count(this) -> I64 {
+        return lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64) }
+    }
+
+    /// Destroys the executor and frees all resources.
+    ///
+    /// Must be called after `run()`. Calling destroy on a running executor
+    /// is undefined behavior.
+    pub func destroy(this) {
+        // Free handles array
+        if this.handles_ptr != 0 {
+            lowlevel { mem_free(this.handles_ptr as *Unit) }
+        }
+
+        // Free the queue
+        if this.queue_ptr != 0 {
+            tq_destroy(this.queue_ptr)
+            lowlevel { mem_free(this.queue_ptr as *Unit) }
+        }
+
+        // Free shared state
+        if this.state_ptr != 0 {
+            lowlevel { mem_free(this.state_ptr as *Unit) }
+        }
+    }
+}
+
+// ============================================================================
+// Internal helpers (free functions to avoid mut this codegen issues)
+// ============================================================================
+
+/// Spawn worker threads and store their OS handles.
+func start_workers(state_ptr: I64, queue_ptr: I64, count: I64, handles_ptr: I64) {
+    var i: I64 = 0
+    loop (i < count) {
+        // Allocate worker context (freed by the worker after reading)
+        let ctx: I64 = lowlevel { mem_alloc(WORKER_CTX_SIZE as U64) } as I64
+        if ctx == 0 {
+            panic("MultiExecutor: worker context allocation failed")
+        }
+        lowlevel {
+            ptr_write[I64]((ctx + WC_OFF_STATE) as *I64, state_ptr)
+            ptr_write[I64]((ctx + WC_OFF_ID) as *I64, i)
+        }
+
+        // Spawn the worker thread
+        let handle: U64 = ffi_thread_spawn(
+            worker_entry as *Unit,
+            ctx as *Unit,
+            0 as U64
+        )
+        if handle == 0 as U64 {
+            panic("MultiExecutor: failed to spawn worker thread")
+        }
+
+        // Store the OS handle
+        lowlevel { ptr_write[U64]((handles_ptr + i * 8) as *U64, handle) }
+
+        i = i + 1
+    }
+}
+
+/// Wait until all active tasks have been completed.
+func wait_for_all(state_ptr: I64) {
+    loop (true) {
+        let active: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64) }
+        if active <= 0 {
+            return
+        }
+        ffi_thread_sleep_ms(1 as U64)
+    }
+}
+
+/// Signal all workers to shut down.
+func signal_shutdown(state_ptr: I64) {
+    lowlevel { ptr_write[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64, 1 as I64) }
+}
+
+/// Join all worker threads.
+func join_workers(handles_ptr: I64, count: I64) {
+    var i: I64 = 0
+    loop (i < count) {
+        let handle: U64 = lowlevel { ptr_read[U64]((handles_ptr + i * 8) as *U64) }
+        if handle != 0 as U64 {
+            ffi_thread_join(handle)
+        }
+        i = i + 1
+    }
+}

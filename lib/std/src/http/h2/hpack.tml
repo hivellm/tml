@@ -1,0 +1,701 @@
+//! HPACK header compression (RFC 7541).
+//!
+//! Implements encoding and decoding of HTTP/2 headers using the HPACK
+//! compression format. Supports indexed header fields, literal header
+//! fields with and without indexing, and dynamic table size updates.
+//!
+//! Huffman encoding is NOT used for encoding (literal strings only).
+//! Huffman decoding is not implemented in this initial version; attempts
+//! to decode Huffman-encoded strings will return an error.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::http::h2::hpack::{HpackContext, hpack_encode_headers, hpack_decode_headers}
+//!
+//! var ctx = HpackContext::new(4096)
+//! let encoded = hpack_encode_headers(mut ref ctx, headers)
+//! ```
+
+use std::collections::Buffer
+use std::http::h2::frame::H2Error
+use core::str
+
+// ============================================================================
+// Static table (RFC 7541 Appendix A) — 61 entries
+// ============================================================================
+
+/// An HPACK header table entry (name-value pair).
+pub type HpackEntry {
+    name: Str,
+    value: Str,
+}
+
+impl HpackEntry {
+    pub func new(name: Str, value: Str) -> HpackEntry {
+        HpackEntry { name: name, value: value }
+    }
+}
+
+/// Look up an entry in the HPACK static table (index 1..61).
+/// Returns Nothing for index 0 or index > 61.
+pub func hpack_static_table_entry(index: I64) -> Maybe[HpackEntry] {
+    // RFC 7541 Appendix A — all 61 static entries
+    if index == 1  { return Just(HpackEntry::new(":authority", "")) }
+    if index == 2  { return Just(HpackEntry::new(":method", "GET")) }
+    if index == 3  { return Just(HpackEntry::new(":method", "POST")) }
+    if index == 4  { return Just(HpackEntry::new(":path", "/")) }
+    if index == 5  { return Just(HpackEntry::new(":path", "/index.html")) }
+    if index == 6  { return Just(HpackEntry::new(":scheme", "http")) }
+    if index == 7  { return Just(HpackEntry::new(":scheme", "https")) }
+    if index == 8  { return Just(HpackEntry::new(":status", "200")) }
+    if index == 9  { return Just(HpackEntry::new(":status", "204")) }
+    if index == 10 { return Just(HpackEntry::new(":status", "206")) }
+    if index == 11 { return Just(HpackEntry::new(":status", "304")) }
+    if index == 12 { return Just(HpackEntry::new(":status", "400")) }
+    if index == 13 { return Just(HpackEntry::new(":status", "404")) }
+    if index == 14 { return Just(HpackEntry::new(":status", "500")) }
+    if index == 15 { return Just(HpackEntry::new("accept-charset", "")) }
+    if index == 16 { return Just(HpackEntry::new("accept-encoding", "gzip, deflate")) }
+    if index == 17 { return Just(HpackEntry::new("accept-language", "")) }
+    if index == 18 { return Just(HpackEntry::new("accept-ranges", "")) }
+    if index == 19 { return Just(HpackEntry::new("accept", "")) }
+    if index == 20 { return Just(HpackEntry::new("access-control-allow-origin", "")) }
+    if index == 21 { return Just(HpackEntry::new("age", "")) }
+    if index == 22 { return Just(HpackEntry::new("allow", "")) }
+    if index == 23 { return Just(HpackEntry::new("authorization", "")) }
+    if index == 24 { return Just(HpackEntry::new("cache-control", "")) }
+    if index == 25 { return Just(HpackEntry::new("content-disposition", "")) }
+    if index == 26 { return Just(HpackEntry::new("content-encoding", "")) }
+    if index == 27 { return Just(HpackEntry::new("content-language", "")) }
+    if index == 28 { return Just(HpackEntry::new("content-length", "")) }
+    if index == 29 { return Just(HpackEntry::new("content-location", "")) }
+    if index == 30 { return Just(HpackEntry::new("content-range", "")) }
+    if index == 31 { return Just(HpackEntry::new("content-type", "")) }
+    if index == 32 { return Just(HpackEntry::new("cookie", "")) }
+    if index == 33 { return Just(HpackEntry::new("date", "")) }
+    if index == 34 { return Just(HpackEntry::new("etag", "")) }
+    if index == 35 { return Just(HpackEntry::new("expect", "")) }
+    if index == 36 { return Just(HpackEntry::new("expires", "")) }
+    if index == 37 { return Just(HpackEntry::new("from", "")) }
+    if index == 38 { return Just(HpackEntry::new("host", "")) }
+    if index == 39 { return Just(HpackEntry::new("if-match", "")) }
+    if index == 40 { return Just(HpackEntry::new("if-modified-since", "")) }
+    if index == 41 { return Just(HpackEntry::new("if-none-match", "")) }
+    if index == 42 { return Just(HpackEntry::new("if-range", "")) }
+    if index == 43 { return Just(HpackEntry::new("if-unmodified-since", "")) }
+    if index == 44 { return Just(HpackEntry::new("last-modified", "")) }
+    if index == 45 { return Just(HpackEntry::new("link", "")) }
+    if index == 46 { return Just(HpackEntry::new("location", "")) }
+    if index == 47 { return Just(HpackEntry::new("max-forwards", "")) }
+    if index == 48 { return Just(HpackEntry::new("proxy-authenticate", "")) }
+    if index == 49 { return Just(HpackEntry::new("proxy-authorization", "")) }
+    if index == 50 { return Just(HpackEntry::new("range", "")) }
+    if index == 51 { return Just(HpackEntry::new("referer", "")) }
+    if index == 52 { return Just(HpackEntry::new("refresh", "")) }
+    if index == 53 { return Just(HpackEntry::new("retry-after", "")) }
+    if index == 54 { return Just(HpackEntry::new("server", "")) }
+    if index == 55 { return Just(HpackEntry::new("set-cookie", "")) }
+    if index == 56 { return Just(HpackEntry::new("strict-transport-security", "")) }
+    if index == 57 { return Just(HpackEntry::new("transfer-encoding", "")) }
+    if index == 58 { return Just(HpackEntry::new("user-agent", "")) }
+    if index == 59 { return Just(HpackEntry::new("vary", "")) }
+    if index == 60 { return Just(HpackEntry::new("via", "")) }
+    if index == 61 { return Just(HpackEntry::new("www-authenticate", "")) }
+    Nothing
+}
+
+/// Search the static table for a header name+value match.
+/// Returns HpackFindResult where:
+///   - index > 0 means a match was found at that index
+///   - name_only is true if only the name matched (value differs)
+///   - index == 0 means no match at all
+func hpack_static_find_result(name: Str, value: Str) -> HpackFindResult {
+    var name_match_index: I64 = 0
+
+    // Search static table entries 1..61
+    var i: I64 = 1
+    loop (i <= 61) {
+        let entry: Maybe[HpackEntry] = hpack_static_table_entry(i)
+        if entry.is_just() {
+            let e: HpackEntry = entry.unwrap()
+            if e.name == name {
+                if e.value == value {
+                    // Exact match (name + value)
+                    return HpackFindResult { index: i, name_only: false }
+                }
+                // Name-only match — remember first one
+                if name_match_index == 0 {
+                    name_match_index = i
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    if name_match_index > 0 {
+        return HpackFindResult { index: name_match_index, name_only: true }
+    }
+    HpackFindResult { index: 0, name_only: false }
+}
+
+// ============================================================================
+// Dynamic table
+// ============================================================================
+
+/// HPACK dynamic table (RFC 7541 Section 2.3.2).
+///
+/// The dynamic table is a FIFO — newest entries are at the front (index 0 in
+/// the internal list), which corresponds to the lowest HPACK index in the
+/// dynamic table region (static_table_size + 1).
+///
+/// Each entry has an overhead of 32 bytes per RFC 7541 Section 4.1.
+pub type HpackDynamicTable {
+    entries: List[HpackEntry],
+    size: I64,
+    max_size: I64,
+}
+
+/// Overhead bytes per dynamic table entry (RFC 7541 Section 4.1).
+const HPACK_ENTRY_OVERHEAD: I64 = 32
+
+impl HpackDynamicTable {
+    /// Creates a new empty dynamic table with the given maximum size in octets.
+    pub func new(max_size: I64) -> HpackDynamicTable {
+        HpackDynamicTable {
+            entries: List::new(16),
+            size: 0,
+            max_size: max_size,
+        }
+    }
+
+    /// Returns the number of entries in the dynamic table.
+    pub func len(this) -> I64 {
+        this.entries.len()
+    }
+
+    /// Returns the current size of the dynamic table in octets.
+    pub func current_size(this) -> I64 {
+        this.size
+    }
+
+    /// Returns the maximum size of the dynamic table in octets.
+    pub func max_table_size(this) -> I64 {
+        this.max_size
+    }
+
+    /// Gets an entry from the dynamic table by zero-based internal index.
+    /// Index 0 is the newest (most recently added) entry.
+    pub func get(this, index: I64) -> Maybe[HpackEntry] {
+        if index < 0 or index >= this.entries.len() {
+            return Nothing
+        }
+        // List stores newest at front (index 0)
+        let e: HpackEntry = this.entries.get(index)
+        Just(HpackEntry::new(e.name, e.value))
+    }
+
+    /// Adds a new entry to the front of the dynamic table.
+    /// Evicts entries from the back if necessary to stay within max_size.
+    pub func add(this, name: Str, value: Str) {
+        let entry_size: I64 = str::len(name) + str::len(value) + HPACK_ENTRY_OVERHEAD
+
+        // Evict entries from the back to make room
+        this.evict_to_size(this.max_size - entry_size)
+
+        // If the entry itself is larger than the max table, clear everything
+        // (RFC 7541 Section 4.4: "an entry larger than the maximum size
+        // causes the table to be emptied")
+        if entry_size > this.max_size {
+            this.clear()
+            return
+        }
+
+        // Insert at front — shift existing entries back by one
+        // We do this by pushing a placeholder and then shifting
+        let new_entry = HpackEntry::new(name, value)
+        // Add to front: use insert_front approach
+        // Since List doesn't have insert_at(0), we rebuild:
+        // Push new entry, then we need it at position 0.
+        // Actually, we'll use a simple approach: push to end and rotate
+        // No — simpler: create new list, push new entry, copy old entries
+        var new_list: List[HpackEntry] = List::new(this.entries.len() + 1)
+        new_list.push(new_entry)
+        var i: I64 = 0
+        loop (i < this.entries.len()) {
+            new_list.push(this.entries.get(i))
+            i = i + 1
+        }
+        this.entries = new_list
+        this.size = this.size + entry_size
+    }
+
+    /// Evicts entries from the back of the table until current_size <= target_size.
+    pub func evict_to_size(this, target_size: I64) {
+        var target: I64 = target_size
+        if target < 0 {
+            target = 0
+        }
+        loop (this.size > target and this.entries.len() > 0) {
+            let last_idx: I64 = this.entries.len() - 1
+            let last: HpackEntry = this.entries.get(last_idx)
+            let entry_size: I64 = str::len(last.name) + str::len(last.value) + HPACK_ENTRY_OVERHEAD
+            this.size = this.size - entry_size
+            this.entries.pop()
+        }
+    }
+
+    /// Sets a new maximum size and evicts entries if necessary.
+    pub func set_max_size(this, new_max: I64) {
+        this.max_size = new_max
+        this.evict_to_size(new_max)
+    }
+
+    /// Clears all entries from the dynamic table.
+    pub func clear(this) {
+        this.entries = List::new(16)
+        this.size = 0
+    }
+
+    /// Searches the dynamic table for a matching entry.
+    /// Returns HpackFindResult where index < 0 means no match.
+    pub func find_result(this, name: Str, value: Str) -> HpackFindResult {
+        var name_match_index: I64 = -1
+        var i: I64 = 0
+        loop (i < this.entries.len()) {
+            let e: HpackEntry = this.entries.get(i)
+            if e.name == name {
+                if e.value == value {
+                    return HpackFindResult { index: i, name_only: false }
+                }
+                if name_match_index < 0 {
+                    name_match_index = i
+                }
+            }
+            i = i + 1
+        }
+        if name_match_index >= 0 {
+            return HpackFindResult { index: name_match_index, name_only: true }
+        }
+        HpackFindResult { index: -1, name_only: false }
+    }
+}
+
+// ============================================================================
+// HPACK context
+// ============================================================================
+
+/// HPACK encoder/decoder context.
+///
+/// Maintains the dynamic table state that is shared between encoder and decoder.
+/// Each direction of the connection has its own context.
+pub type HpackContext {
+    dynamic_table: HpackDynamicTable,
+}
+
+impl HpackContext {
+    /// Creates a new HPACK context with the given dynamic table max size.
+    pub func new(max_table_size: I64) -> HpackContext {
+        HpackContext {
+            dynamic_table: HpackDynamicTable::new(max_table_size),
+        }
+    }
+
+    /// Looks up a header by HPACK index (1-based).
+    /// Indices 1..61 are static table entries.
+    /// Indices 62+ are dynamic table entries (62 = newest).
+    pub func get_entry(this, index: I64) -> Maybe[HpackEntry] {
+        if index <= 0 {
+            return Nothing
+        }
+        if index <= 61 {
+            return hpack_static_table_entry(index)
+        }
+        // Dynamic table: index 62 = dynamic_table[0] (newest)
+        let dyn_index: I64 = index - 62
+        this.dynamic_table.get(dyn_index)
+    }
+}
+
+// ============================================================================
+// Result types (avoid tuples in Outcome due to codegen limitations)
+// ============================================================================
+
+/// Result of decoding an HPACK integer: value and bytes consumed.
+pub type HpackIntResult {
+    value: I64,
+    consumed: I64,
+}
+
+/// Result of decoding an HPACK string: value and bytes consumed.
+pub type HpackStrResult {
+    value: Str,
+    consumed: I64,
+}
+
+/// Result of searching for a header in a table.
+pub type HpackFindResult {
+    index: I64,
+    name_only: Bool,
+}
+
+/// Result of decoding a literal header field (name + value + position).
+type HpackLiteralResult {
+    name: Str,
+    value: Str,
+    next_pos: I64,
+}
+
+// ============================================================================
+// HPACK integer encoding/decoding (RFC 7541 Section 5.1)
+// ============================================================================
+
+/// Encode an integer using HPACK's variable-length integer encoding.
+///
+/// `prefix_bits` is the number of bits available in the first octet (1-8).
+/// Returns a Buffer containing the encoded bytes.
+///
+/// The first byte of the result should be OR'd with any prefix bits by the caller.
+pub func hpack_encode_integer(value: I64, prefix_bits: I64) -> Buffer {
+    let buf = Buffer::new(8)
+    let max_prefix: I64 = (1 << prefix_bits) - 1
+
+    if value < max_prefix {
+        buf.write_byte(value as I32)
+        return buf
+    }
+
+    // Value doesn't fit in prefix — use multi-byte encoding
+    buf.write_byte(max_prefix as I32)
+    var remaining: I64 = value - max_prefix
+    loop (remaining >= 128) {
+        buf.write_byte(((remaining % 128) + 128) as I32)
+        remaining = remaining / 128
+    }
+    buf.write_byte(remaining as I32)
+    buf
+}
+
+/// Decode an HPACK integer from a byte buffer at the given offset.
+///
+/// `prefix_bits` is the number of bits in the first octet used for the integer.
+/// Returns HpackIntResult with (value, bytes_consumed) on success.
+pub func hpack_decode_integer(data: Buffer, offset: I64, prefix_bits: I64) -> Outcome[HpackIntResult, H2Error] {
+    let data_len: I64 = data.len()
+    if offset >= data_len {
+        return Err(H2Error::hpack_invalid_encoding())
+    }
+
+    let max_prefix: I64 = (1 << prefix_bits) - 1
+    let first_byte: I64 = (data.get(offset) as I64) & max_prefix
+
+    if first_byte < max_prefix {
+        return Ok(HpackIntResult { value: first_byte, consumed: 1 })
+    }
+
+    // Multi-byte integer
+    var value: I64 = max_prefix
+    var shift: I64 = 0
+    var pos: I64 = offset + 1
+    loop (pos < data_len) {
+        let b: I64 = data.get(pos) as I64
+        value = value + ((b & 127) << shift)
+        shift = shift + 7
+        pos = pos + 1
+        if (b & 128) == 0 {
+            return Ok(HpackIntResult { value: value, consumed: pos - offset })
+        }
+        // Guard against overflow (integers larger than reasonable)
+        if shift > 63 {
+            return Err(H2Error::hpack_invalid_encoding())
+        }
+    }
+
+    Err(H2Error::hpack_invalid_encoding())
+}
+
+// ============================================================================
+// HPACK string encoding/decoding (RFC 7541 Section 5.2)
+// ============================================================================
+
+/// Encode a string using HPACK literal encoding (no Huffman).
+///
+/// Format: H(0) + Length(7+) + String octets
+/// The H bit is 0 for non-Huffman encoding.
+pub func hpack_encode_string(s: Str) -> Buffer {
+    let slen: I64 = str::len(s)
+    let buf = Buffer::new(slen + 4)
+
+    // Encode length with 7-bit prefix (H=0, so high bit of first byte is 0)
+    let len_encoded = hpack_encode_integer(slen, 7)
+    // First byte: H=0 (bit 7), rest is the integer
+    var i: I64 = 0
+    loop (i < len_encoded.len()) {
+        let b: I32 = len_encoded.get(i)
+        if i == 0 {
+            // Ensure H bit is 0 (it should be since we used 7-bit prefix)
+            buf.write_byte(b & 0x7F)
+        } else {
+            buf.write_byte(b)
+        }
+        i = i + 1
+    }
+
+    // Write string octets using lowlevel ptr reads to avoid str::char_at dependency
+    let str_ptr: I64 = s as I64
+    var j: I64 = 0
+    loop (j < slen) {
+        let byte_val: U8 = lowlevel { ptr_read[U8]((str_ptr + j) as *U8) }
+        buf.write_byte(byte_val as I32)
+        j = j + 1
+    }
+
+    buf
+}
+
+/// Decode an HPACK string from a byte buffer at the given offset.
+///
+/// Returns HpackStrResult with (value, bytes_consumed) on success.
+/// Returns an error if Huffman encoding is used (not implemented).
+pub func hpack_decode_string(data: Buffer, offset: I64) -> Outcome[HpackStrResult, H2Error] {
+    let data_len: I64 = data.len()
+    if offset >= data_len {
+        return Err(H2Error::hpack_invalid_encoding())
+    }
+
+    let first_byte: I32 = data.get(offset)
+    let is_huffman: Bool = (first_byte & 0x80) != 0
+
+    if is_huffman {
+        return Err(H2Error::protocol_error("Huffman encoding not supported"))
+    }
+
+    // Decode the string length (7-bit prefix)
+    let len_result: HpackIntResult = hpack_decode_integer(data, offset, 7)!
+    let slen: I64 = len_result.value
+    let len_bytes: I64 = len_result.consumed
+
+    let str_start: I64 = offset + len_bytes
+    if str_start + slen > data_len {
+        return Err(H2Error::hpack_invalid_encoding())
+    }
+
+    // Build the string from raw bytes
+    // Allocate slen+1 bytes for null-terminated string
+    let str_ptr: I64 = lowlevel { mem_alloc(slen + 1) } as I64
+    var i: I64 = 0
+    loop (i < slen) {
+        let b: I32 = data.get(str_start + i)
+        lowlevel { ptr_write[U8]((str_ptr + i) as *U8, b as U8) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((str_ptr + slen) as *U8, 0 as U8) }
+
+    let result: Str = str_ptr as Str
+    Ok(HpackStrResult { value: result, consumed: len_bytes + slen })
+}
+
+// ============================================================================
+// HPACK header encoding (RFC 7541 Section 6)
+// ============================================================================
+
+/// Encode a list of header name-value pairs using HPACK.
+///
+/// Attempts indexed representations where possible (static table).
+/// Falls back to literal with incremental indexing for cache efficiency.
+///
+/// The `headers` parameter is a List of HpackEntry (name, value pairs).
+pub func hpack_encode_headers(ctx: mut ref HpackContext, headers: List[HpackEntry]) -> Buffer {
+    let buf = Buffer::new(256)
+
+    var i: I64 = 0
+    loop (i < headers.len()) {
+        let header: HpackEntry = headers.get(i)
+        let name: Str = header.name
+        let value: Str = header.value
+
+        // Search static table first
+        let static_result: HpackFindResult = hpack_static_find_result(name, value)
+
+        // Search dynamic table
+        let dyn_result: HpackFindResult = ctx.dynamic_table.find_result(name, value)
+
+        if static_result.index > 0 and not static_result.name_only {
+            // Exact match in static table — use indexed header field (Section 6.1)
+            // Format: 1xxxxxxx (7-bit prefix, high bit = 1)
+            let encoded = hpack_encode_integer(static_result.index, 7)
+            var j: I64 = 0
+            loop (j < encoded.len()) {
+                let b: I32 = encoded.get(j)
+                if j == 0 {
+                    buf.write_byte(b | 0x80)  // Set high bit
+                } else {
+                    buf.write_byte(b)
+                }
+                j = j + 1
+            }
+        } else if dyn_result.index >= 0 and not dyn_result.name_only {
+            // Exact match in dynamic table — use indexed header field
+            let hpack_index: I64 = dyn_result.index + 62
+            let encoded = hpack_encode_integer(hpack_index, 7)
+            var j: I64 = 0
+            loop (j < encoded.len()) {
+                let b: I32 = encoded.get(j)
+                if j == 0 {
+                    buf.write_byte(b | 0x80)
+                } else {
+                    buf.write_byte(b)
+                }
+                j = j + 1
+            }
+        } else {
+            // No exact match — use literal with incremental indexing (Section 6.2.1)
+            // Format: 01xxxxxx (6-bit prefix)
+            var name_index: I64 = 0
+            if static_result.index > 0 {
+                name_index = static_result.index
+            } else if dyn_result.index >= 0 {
+                name_index = dyn_result.index + 62
+            }
+
+            if name_index > 0 {
+                // Literal with name index
+                let encoded = hpack_encode_integer(name_index, 6)
+                var j: I64 = 0
+                loop (j < encoded.len()) {
+                    let b: I32 = encoded.get(j)
+                    if j == 0 {
+                        buf.write_byte((b & 0x3F) | 0x40)  // 01 prefix
+                    } else {
+                        buf.write_byte(b)
+                    }
+                    j = j + 1
+                }
+            } else {
+                // Literal with new name (name_index = 0)
+                buf.write_byte(0x40)  // 01000000
+                let name_encoded = hpack_encode_string(name)
+                var j: I64 = 0
+                loop (j < name_encoded.len()) {
+                    buf.write_byte(name_encoded.get(j))
+                    j = j + 1
+                }
+            }
+
+            // Encode the value
+            let val_encoded = hpack_encode_string(value)
+            var k: I64 = 0
+            loop (k < val_encoded.len()) {
+                buf.write_byte(val_encoded.get(k))
+                k = k + 1
+            }
+
+            // Add to dynamic table
+            ctx.dynamic_table.add(name, value)
+        }
+
+        i = i + 1
+    }
+
+    buf
+}
+
+// ============================================================================
+// HPACK header decoding (RFC 7541 Section 6)
+// ============================================================================
+
+/// Helper: decode a literal header field (name + value) from the current position.
+/// `name_index`: if > 0, the name comes from the indexed entry; if 0, read from wire.
+/// Returns the next position after the header field.
+func hpack_decode_literal(ctx: mut ref HpackContext, data: Buffer, pos: I64, name_index: I64) -> Outcome[HpackLiteralResult, H2Error] {
+    var current_pos: I64 = pos
+    var name: Str = ""
+
+    if name_index > 0 {
+        let maybe_entry: Maybe[HpackEntry] = ctx.get_entry(name_index)
+        if maybe_entry.is_nothing() {
+            return Err(H2Error::hpack_index_out_of_range(name_index))
+        }
+        name = maybe_entry.unwrap().name
+    } else {
+        let name_result: HpackStrResult = hpack_decode_string(data, current_pos)!
+        name = name_result.value
+        current_pos = current_pos + name_result.consumed
+    }
+
+    let val_result: HpackStrResult = hpack_decode_string(data, current_pos)!
+    current_pos = current_pos + val_result.consumed
+
+    Ok(HpackLiteralResult { name: name, value: val_result.value, next_pos: current_pos })
+}
+
+/// Decode HPACK-encoded headers from a byte buffer.
+///
+/// Returns a List[HpackEntry] of decoded header name-value pairs.
+pub func hpack_decode_headers(ctx: mut ref HpackContext, data: Buffer) -> Outcome[List[HpackEntry], H2Error] {
+    var result: List[HpackEntry] = List::new(16)
+    let data_len: I64 = data.len()
+    var pos: I64 = 0
+
+    loop (pos < data_len) {
+        let first_byte: I32 = data.get(pos)
+
+        if (first_byte & 0x80) != 0 {
+            // Indexed header field (Section 6.1): 1xxxxxxx
+            let idx_result: HpackIntResult = hpack_decode_integer(data, pos, 7)!
+            pos = pos + idx_result.consumed
+
+            let maybe_entry: Maybe[HpackEntry] = ctx.get_entry(idx_result.value)
+            if maybe_entry.is_nothing() {
+                return Err(H2Error::hpack_index_out_of_range(idx_result.value))
+            }
+            let entry: HpackEntry = maybe_entry.unwrap()
+            result.push(HpackEntry::new(entry.name, entry.value))
+
+        } else if (first_byte & 0xC0) == 0x40 {
+            // Literal with incremental indexing (Section 6.2.1): 01xxxxxx
+            let idx_result: HpackIntResult = hpack_decode_integer(data, pos, 6)!
+            pos = pos + idx_result.consumed
+
+            let lit: HpackLiteralResult = hpack_decode_literal(ctx, data, pos, idx_result.value)!
+            pos = lit.next_pos
+
+            // Add to dynamic table
+            ctx.dynamic_table.add(lit.name, lit.value)
+            result.push(HpackEntry::new(lit.name, lit.value))
+
+        } else if (first_byte & 0xF0) == 0x00 {
+            // Literal without indexing (Section 6.2.2): 0000xxxx
+            let idx_result: HpackIntResult = hpack_decode_integer(data, pos, 4)!
+            pos = pos + idx_result.consumed
+
+            let lit: HpackLiteralResult = hpack_decode_literal(ctx, data, pos, idx_result.value)!
+            pos = lit.next_pos
+
+            // Do NOT add to dynamic table
+            result.push(HpackEntry::new(lit.name, lit.value))
+
+        } else if (first_byte & 0xF0) == 0x10 {
+            // Literal never indexed (Section 6.2.3): 0001xxxx
+            let idx_result: HpackIntResult = hpack_decode_integer(data, pos, 4)!
+            pos = pos + idx_result.consumed
+
+            let lit: HpackLiteralResult = hpack_decode_literal(ctx, data, pos, idx_result.value)!
+            pos = lit.next_pos
+
+            // Do NOT add to dynamic table
+            result.push(HpackEntry::new(lit.name, lit.value))
+
+        } else if (first_byte & 0xE0) == 0x20 {
+            // Dynamic table size update (Section 6.3): 001xxxxx
+            let size_result: HpackIntResult = hpack_decode_integer(data, pos, 5)!
+            pos = pos + size_result.consumed
+
+            ctx.dynamic_table.set_max_size(size_result.value)
+        } else {
+            return Err(H2Error::hpack_invalid_encoding())
+        }
+    }
+
+    Ok(result)
+}

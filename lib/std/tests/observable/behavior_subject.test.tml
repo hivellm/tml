@@ -1,0 +1,125 @@
+// Tests for BehaviorSubjectI32 — replays current value to new subscribers
+use test::{assert, assert_eq}
+use std::observable::{
+    behavior_subject_new_i32, behavior_subject_value_i32,
+    behavior_subject_set_value_i32,
+    subject_is_completed_i32, subject_has_error_i32,
+    subject_complete_i32, subject_error_i32
+}
+
+// ============================================================================
+// Creation and current value
+// ============================================================================
+
+@test
+func test_behavior_subject_initial_value() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(42)
+    assert_eq(behavior_subject_value_i32(bs), 42, "initial value should be 42")
+    return 0
+}
+
+@test
+func test_behavior_subject_set_value() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(0)
+    behavior_subject_set_value_i32(bs, 99)
+    assert_eq(behavior_subject_value_i32(bs), 99, "updated value should be 99")
+    return 0
+}
+
+@test
+func test_behavior_subject_negative_value() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(-10)
+    assert_eq(behavior_subject_value_i32(bs), -10, "should handle negative values")
+    return 0
+}
+
+// ============================================================================
+// Replay on subscribe pattern (caller-managed callbacks)
+// ============================================================================
+
+@test
+func test_behavior_subject_replay_on_subscribe() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(10)
+    var received: I32 = 0
+    let cb: func(I32) = do(v: I32) { received = v }
+
+    // Simulate subscribe: replay current value
+    cb(behavior_subject_value_i32(bs))
+    assert_eq(received, 10, "subscriber should immediately receive current value 10")
+    return 0
+}
+
+@test
+func test_behavior_subject_push_updates_current() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(0)
+    var sum: I32 = 0
+    let cb: func(I32) = do(v: I32) { sum = sum + v }
+
+    // Subscribe: replay current (0)
+    cb(behavior_subject_value_i32(bs))
+    assert_eq(sum, 0, "should receive initial 0")
+
+    // Push 10
+    behavior_subject_set_value_i32(bs, 10)
+    if not subject_is_completed_i32(bs) {
+        cb(10)
+    }
+    assert_eq(sum, 10, "sum should be 0 + 10 = 10")
+
+    // Push 20
+    behavior_subject_set_value_i32(bs, 20)
+    if not subject_is_completed_i32(bs) {
+        cb(20)
+    }
+    assert_eq(sum, 30, "sum should be 10 + 20 = 30")
+    assert_eq(behavior_subject_value_i32(bs), 20, "current value should be 20")
+    return 0
+}
+
+// ============================================================================
+// Completion and error use shared subject state
+// ============================================================================
+
+@test
+func test_behavior_subject_complete() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(0)
+    assert(not subject_is_completed_i32(bs), "should not be completed initially")
+    subject_complete_i32(bs)
+    assert(subject_is_completed_i32(bs), "should be completed")
+    return 0
+}
+
+@test
+func test_behavior_subject_error() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(0)
+    subject_error_i32(bs)
+    assert(subject_has_error_i32(bs), "should have error")
+    return 0
+}
+
+@test
+func test_behavior_subject_no_push_after_complete() -> I32 {
+    let bs: List[I64] = behavior_subject_new_i32(0)
+    var count: I64 = 0
+    let cb: func(I32) = do(v: I32) { count = count + 1 }
+
+    // Subscribe + receive initial
+    cb(behavior_subject_value_i32(bs))
+
+    // Push before complete
+    behavior_subject_set_value_i32(bs, 10)
+    if not subject_is_completed_i32(bs) {
+        cb(10)
+    }
+
+    subject_complete_i32(bs)
+
+    // Push after complete — should not call
+    behavior_subject_set_value_i32(bs, 20)
+    if not subject_is_completed_i32(bs) {
+        cb(20)
+    }
+
+    assert_eq(count, 2, "should receive initial + 1 value before complete")
+    return 0
+}

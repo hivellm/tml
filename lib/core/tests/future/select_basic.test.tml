@@ -1,0 +1,64 @@
+// Tests for select2 types — SelectResult and IndexedResult
+use test::{assert, assert_eq}
+use core::future::select::{SelectResult, IndexedResult}
+
+// ============================================================================
+// SelectResult type tests
+// ============================================================================
+
+@test
+func test_select_result_first() -> I32 {
+    let r: SelectResult[I32, Str] = SelectResult::First(42)
+    assert(r.is_first(), "First variant should return true for is_first")
+    assert(not r.is_second(), "First variant should return false for is_second")
+    return 0
+}
+
+@test
+func test_select_result_second() -> I32 {
+    let r: SelectResult[I32, Str] = SelectResult::Second("hello")
+    assert(not r.is_first(), "Second variant should return false for is_first")
+    assert(r.is_second(), "Second variant should return true for is_second")
+    return 0
+}
+
+@test
+func test_select_result_first_with_when() -> I32 {
+    let r: SelectResult[I32, I32] = SelectResult::First(10)
+    let value: I32 = when r {
+        First(v) => v,
+        Second(v) => v
+    }
+    assert_eq(value, 10, "First variant should carry value 10")
+    return 0
+}
+
+@test
+func test_select_result_second_with_when() -> I32 {
+    let r: SelectResult[I32, I32] = SelectResult::Second(20)
+    let value: I32 = when r {
+        First(v) => v,
+        Second(v) => v
+    }
+    assert_eq(value, 20, "Second variant should carry value 20")
+    return 0
+}
+
+// ============================================================================
+// IndexedResult type tests
+// ============================================================================
+
+@test
+func test_indexed_result_creation() -> I32 {
+    let r: IndexedResult[I32] = IndexedResult { index: 3, value: 42 }
+    assert_eq(r.index, 3, "index should be 3")
+    assert_eq(r.value, 42, "value should be 42")
+    return 0
+}
+
+@test
+func test_indexed_result_zero_index() -> I32 {
+    let r: IndexedResult[Str] = IndexedResult { index: 0, value: "first" }
+    assert_eq(r.index, 0, "index should be 0")
+    return 0
+}

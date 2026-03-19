@@ -50,6 +50,27 @@
 namespace tml::hir {
 
 // ============================================================================
+// Route Decorator Metadata
+// ============================================================================
+
+/// HTTP method for a route decorator.
+enum class RouteMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Head,
+    Options,
+};
+
+/// Route information extracted from HTTP decorators (@Get, @Post, etc.).
+struct RouteInfo {
+    RouteMethod method;
+    std::string path;
+};
+
+// ============================================================================
 // Function Declarations
 // ============================================================================
 
@@ -137,6 +158,7 @@ struct HirFunction {
     bool is_extern;
     std::optional<std::string> extern_abi;
     std::vector<std::string> attributes;
+    std::optional<RouteInfo> route_info;
     SourceSpan span;
 };
 

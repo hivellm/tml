@@ -1,0 +1,40 @@
+//! Tests for AsyncBufReader and AsyncBufWriter.
+
+use test::{assert, assert_eq}
+use std::stream::async_buffered::{AsyncBufReader, AsyncBufWriter}
+
+@test
+func test_async_buf_reader_new() -> I32 {
+    var reader: AsyncBufReader = AsyncBufReader::new()
+    assert_eq(reader.capacity(), 8192 as I64, "default capacity should be 8192")
+    assert_eq(reader.buffered(), 0 as I64, "initially empty")
+    reader.destroy()
+    return 0
+}
+
+@test
+func test_async_buf_reader_with_capacity() -> I32 {
+    var reader: AsyncBufReader = AsyncBufReader::with_capacity(4096)
+    assert_eq(reader.capacity(), 4096 as I64, "custom capacity should be 4096")
+    assert_eq(reader.buffered(), 0 as I64, "initially empty")
+    reader.destroy()
+    return 0
+}
+
+@test
+func test_async_buf_writer_new() -> I32 {
+    var writer: AsyncBufWriter = AsyncBufWriter::new()
+    assert_eq(writer.capacity(), 8192 as I64, "default capacity should be 8192")
+    assert_eq(writer.buffered(), 0 as I64, "initially empty")
+    writer.destroy()
+    return 0
+}
+
+@test
+func test_async_buf_writer_with_capacity() -> I32 {
+    var writer: AsyncBufWriter = AsyncBufWriter::with_capacity(2048)
+    assert_eq(writer.capacity(), 2048 as I64, "custom capacity should be 2048")
+    assert_eq(writer.buffered(), 0 as I64, "initially empty")
+    writer.destroy()
+    return 0
+}

@@ -1,0 +1,539 @@
+//! JavaScript-style Promise[T] for asynchronous value resolution.
+//!
+//! A `Promise[T]` represents a value that will be available at some point
+//! in the future. Unlike futures (which are poll-based), promises use a
+//! callback/resolution model inspired by JavaScript's `Promise`.
+//!
+//! # State Machine
+//!
+//! A promise is always in one of three states:
+//!
+//! - **Pending** — The value is not yet available
+//! - **Fulfilled(T)** — The operation completed successfully with a value
+//! - **Rejected(Str)** — The operation failed with an error message
+//!
+//! Once a promise transitions from Pending to Fulfilled or Rejected,
+//! its state never changes again.
+//!
+//! # Creating Promises
+//!
+//! ```tml
+//! use std::promise::Promise
+//!
+//! // Immediately resolved
+//! let p: Promise[I32] = Promise::resolve(42)
+//! assert(p.is_fulfilled())
+//!
+//! // Immediately rejected
+//! let p: Promise[I32] = Promise::reject("failed")
+//! assert(p.is_rejected())
+//! ```
+//!
+//! # Chaining
+//!
+//! ```tml
+//! let doubled: Promise[I32] = promise_map_i32(Promise::resolve(21), do(x: I32) -> I32 { x * 2 })
+//! // doubled is fulfilled with 42
+//! ```
+//!
+//! # Combinators
+//!
+//! - `promise_all_i32(promises)` — Resolves when ALL promises resolve
+//! - `promise_race_i32(promises)` — Settles with whichever settles first
+//! - `promise_any_i32(promises)` — Resolves with first fulfillment
+//! - `promise_all_settled_i32(promises)` — Always resolves with all states
+
+use core::alloc::Shared
+
+// ============================================================================
+// PromiseState — The three possible states of a promise
+// ============================================================================
+
+/// The state of a `Promise[T]`.
+///
+/// A promise starts as `Pending` and transitions to either `Fulfilled` or
+/// `Rejected` exactly once. This enum captures all three possible states.
+///
+/// # Variants
+///
+/// - `Pending` — The value is not yet available
+/// - `Fulfilled(T)` — The operation succeeded with the contained value
+/// - `Rejected(Str)` — The operation failed with an error message
+pub type PromiseState[T] {
+    /// The promise has not yet been resolved or rejected.
+    Pending,
+    /// The promise completed successfully with the given value.
+    Fulfilled(T),
+    /// The promise failed with the given error message.
+    Rejected(Str)
+}
+
+impl[T] PromiseState[T] {
+    /// Returns `true` if the promise is still pending.
+    pub func is_pending(this) -> Bool {
+        when this {
+            Pending => return true,
+            _ => return false
+        }
+    }
+
+    /// Returns `true` if the promise was fulfilled successfully.
+    pub func is_fulfilled(this) -> Bool {
+        when this {
+            Fulfilled(_) => return true,
+            _ => return false
+        }
+    }
+
+    /// Returns `true` if the promise was rejected with an error.
+    pub func is_rejected(this) -> Bool {
+        when this {
+            Rejected(_) => return true,
+            _ => return false
+        }
+    }
+
+    /// Returns `true` if the promise has settled (fulfilled or rejected).
+    pub func is_settled(this) -> Bool {
+        when this {
+            Pending => return false,
+            _ => return true
+        }
+    }
+}
+
+// ============================================================================
+// Promise[T] — A reference-counted shared promise
+// ============================================================================
+
+/// A JavaScript-style promise for asynchronous value resolution.
+///
+/// `Promise[T]` wraps a `PromiseState[T]` behind a `Shared` reference-counted
+/// pointer, allowing multiple consumers to observe the same promise's outcome.
+///
+/// Promises are eagerly resolved — they do not require polling. Once created
+/// in a `Fulfilled` or `Rejected` state, the value is immediately available.
+///
+/// # Thread Safety
+///
+/// `Promise[T]` uses `Shared[T]` (non-atomic reference counting) and is
+/// **not thread-safe**. This matches JavaScript's single-threaded Promise
+/// semantics. For thread-safe async, use `Future` with an executor instead.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::promise::Promise
+///
+/// let p: Promise[I32] = Promise::resolve(42)
+/// assert(p.is_fulfilled())
+/// assert_eq(p.value(), Just(42))
+///
+/// let failed: Promise[I32] = Promise::reject("timeout")
+/// assert(failed.is_rejected())
+/// assert_eq(failed.error(), Just("timeout"))
+/// ```
+pub type Promise[T] {
+    /// The shared state of this promise.
+    inner: Shared[PromiseState[T]]
+}
+
+impl[T] Promise[T] {
+    // ── Constructors ─────────────────────────────────────────────
+
+    /// Creates a new pending promise.
+    ///
+    /// A pending promise has no value yet. It can be used as a placeholder
+    /// in combinator operations.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::pending()
+    /// assert(p.is_pending())
+    /// ```
+    pub func pending() -> Promise[T] {
+        return Promise { inner: Shared::new(PromiseState::Pending) }
+    }
+
+    /// Creates a promise that is immediately fulfilled with the given value.
+    ///
+    /// This is the most common way to create a promise when the value
+    /// is already available.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::resolve(42)
+    /// assert(p.is_fulfilled())
+    /// ```
+    pub func resolve(value: T) -> Promise[T] {
+        return Promise { inner: Shared::new(PromiseState::Fulfilled(value)) }
+    }
+
+    /// Creates a promise that is immediately rejected with an error message.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::reject("connection refused")
+    /// assert(p.is_rejected())
+    /// ```
+    pub func reject(reason: Str) -> Promise[T] {
+        return Promise { inner: Shared::new(PromiseState::Rejected(reason)) }
+    }
+
+    // ── State Inspection ─────────────────────────────────────────
+
+    /// Returns the current state of the promise.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::resolve(42)
+    /// when p.state() {
+    ///     Pending => println("still waiting"),
+    ///     Fulfilled(v) => println("got: " + v.to_string()),
+    ///     Rejected(e) => println("error: " + e),
+    /// }
+    /// ```
+    pub func state(this) -> PromiseState[T] {
+        return this.inner.get()
+    }
+
+    /// Returns `true` if the promise is still pending.
+    pub func is_pending(this) -> Bool {
+        return this.inner.get().is_pending()
+    }
+
+    /// Returns `true` if the promise was fulfilled.
+    pub func is_fulfilled(this) -> Bool {
+        return this.inner.get().is_fulfilled()
+    }
+
+    /// Returns `true` if the promise was rejected.
+    pub func is_rejected(this) -> Bool {
+        return this.inner.get().is_rejected()
+    }
+
+    /// Returns `true` if the promise has settled (fulfilled or rejected).
+    pub func is_settled(this) -> Bool {
+        return this.inner.get().is_settled()
+    }
+
+    /// Returns the fulfilled value if the promise is fulfilled, or `Nothing`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::resolve(42)
+    /// assert_eq(p.value(), Just(42))
+    ///
+    /// let pending: Promise[I32] = Promise::pending()
+    /// assert_eq(pending.value(), Nothing)
+    /// ```
+    pub func value(this) -> Maybe[T] {
+        when this.inner.get() {
+            Fulfilled(v) => return Just(v),
+            _ => return Nothing
+        }
+    }
+
+    /// Returns the rejection reason if the promise is rejected, or `Nothing`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::reject("failed")
+    /// assert_eq(p.error(), Just("failed"))
+    /// ```
+    pub func error(this) -> Maybe[Str] {
+        when this.inner.get() {
+            Rejected(e) => return Just(e),
+            _ => return Nothing
+        }
+    }
+
+    /// Unwraps the fulfilled value, panicking if the promise is not fulfilled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the promise is pending or rejected.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::resolve(42)
+    /// assert_eq(p.unwrap(), 42)
+    /// ```
+    pub func unwrap(this) -> T {
+        when this.inner.get() {
+            Fulfilled(v) => return v,
+            Rejected(e) => panic("Promise::unwrap called on rejected promise: " + e),
+            Pending => panic("Promise::unwrap called on pending promise")
+        }
+    }
+
+    /// Unwraps the fulfilled value, or returns the given default.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::reject("oops")
+    /// assert_eq(p.unwrap_or(0), 0)
+    /// ```
+    pub func unwrap_or(this, default: T) -> T {
+        when this.inner.get() {
+            Fulfilled(v) => return v,
+            _ => return default
+        }
+    }
+
+    /// Converts a fulfilled promise to an `Outcome::Ok`, or a rejected
+    /// promise to an `Outcome::Err`. Returns `Err("pending")` if pending.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let p: Promise[I32] = Promise::resolve(42)
+    /// let result: Outcome[I32, Str] = p.to_outcome()
+    /// assert_eq(result, Ok(42))
+    /// ```
+    pub func to_outcome(this) -> Outcome[T, Str] {
+        when this.inner.get() {
+            Fulfilled(v) => return Ok(v),
+            Rejected(e) => return Err(e),
+            Pending => return Err("pending")
+        }
+    }
+}
+
+// ============================================================================
+// Promise combinators for I32
+// ============================================================================
+//
+// Generic combinators like `then[U](f: func(T) -> U) -> Promise[U]` require
+// generic trait dispatch which has known codegen bugs. These concrete I32
+// versions work today and demonstrate the patterns. Generic versions will be
+// added once the compiler's generic method dispatch is fixed.
+
+// ── Internal helpers for concrete I32 promises ───────────────────
+// These avoid calling generic Promise[T] static methods which trigger
+// the "Promise__T vs Promise__I32" codegen monomorphization bug.
+
+func make_fulfilled_i32(v: I32) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Fulfilled(v)) }
+}
+
+func make_rejected_i32(e: Str) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Rejected(e)) }
+}
+
+func make_pending_i32() -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Pending) }
+}
+
+/// Maps a fulfilled I32 promise through a transformation function.
+///
+/// If the source promise is fulfilled, applies `f` to the value and wraps the
+/// result in a new fulfilled promise. If the source is rejected, propagates
+/// the rejection. If pending, propagates pending.
+///
+/// # Examples
+///
+/// ```tml
+/// let p: Promise[I32] = Promise::resolve(21)
+/// let doubled: Promise[I32] = promise_map_i32(p, do(x: I32) -> I32 { x * 2 })
+/// assert_eq(doubled.unwrap(), 42)
+/// ```
+pub func promise_map_i32(p: Promise[I32], f: func(I32) -> I32) -> Promise[I32] {
+    when p.state() {
+        Fulfilled(v) => return make_fulfilled_i32(f(v)),
+        Rejected(e) => return make_rejected_i32(e),
+        Pending => return make_pending_i32()
+    }
+}
+
+/// Handles rejection of an I32 promise with a recovery function.
+///
+/// If the promise is rejected, applies `f` to the error message to produce
+/// a recovery value. If fulfilled, passes through unchanged.
+///
+/// # Examples
+///
+/// ```tml
+/// let failed: Promise[I32] = Promise::reject("oops")
+/// let recovered: Promise[I32] = promise_catch_i32(failed, do(e: Str) -> I32 { -1 })
+/// assert_eq(recovered.unwrap(), -1)
+/// ```
+pub func promise_catch_i32(p: Promise[I32], f: func(Str) -> I32) -> Promise[I32] {
+    when p.state() {
+        Rejected(e) => return make_fulfilled_i32(f(e)),
+        Fulfilled(v) => return make_fulfilled_i32(v),
+        Pending => return make_pending_i32()
+    }
+}
+
+/// Runs a cleanup function regardless of the promise state.
+///
+/// The cleanup function receives no arguments and its return value is ignored.
+/// The original promise state is propagated unchanged.
+pub func promise_finally_i32(p: Promise[I32], cleanup: func()) -> Promise[I32] {
+    cleanup()
+    when p.state() {
+        Fulfilled(v) => return make_fulfilled_i32(v),
+        Rejected(e) => return make_rejected_i32(e),
+        Pending => return make_pending_i32()
+    }
+}
+
+// ============================================================================
+// Promise static combinators — all, race, any, all_settled
+// ============================================================================
+
+/// Waits for all promises to fulfill, or rejects on the first rejection.
+///
+/// Given a list of I32 promises, returns a new promise that:
+/// - Fulfills with a `List[I32]` of all values (in order) if ALL fulfill
+/// - Rejects with the first rejection reason if ANY rejects
+/// - Remains pending if any promise is still pending and none rejected
+///
+/// # Examples
+///
+/// ```tml
+/// var promises: List[Promise[I32]] = List::new(4)
+/// promises.push(Promise::resolve(1))
+/// promises.push(Promise::resolve(2))
+/// promises.push(Promise::resolve(3))
+/// let all: Promise[List[I32]] = promise_all_i32(promises)
+/// assert(all.is_fulfilled())
+/// ```
+pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
+    let len: I64 = promises.len()
+    var results: List[I32] = List::new(len)
+    var has_pending: Bool = false
+
+    var i: I64 = 0
+    loop (i < len) {
+        let p: Promise[I32] = promises.get(i)
+        when p.state() {
+            Fulfilled(v) => {
+                results.push(v)
+            },
+            Rejected(e) => {
+                let r: Promise[List[I32]] = Promise { inner: Shared::new(PromiseState::Rejected(e)) }
+                return r
+            },
+            Pending => {
+                has_pending = true
+                results.push(0)  // placeholder
+            }
+        }
+        i = i + 1
+    }
+
+    if has_pending {
+        let r: Promise[List[I32]] = Promise { inner: Shared::new(PromiseState::Pending) }
+        return r
+    }
+    let r: Promise[List[I32]] = Promise { inner: Shared::new(PromiseState::Fulfilled(results)) }
+    return r
+}
+
+/// Returns the first settled promise (fulfilled or rejected).
+///
+/// Given a list of I32 promises, returns a new promise that settles with
+/// the same state as whichever input promise settled first (by index order).
+///
+/// # Examples
+///
+/// ```tml
+/// var promises: List[Promise[I32]] = List::new(4)
+/// promises.push(Promise::pending())
+/// promises.push(Promise::resolve(42))
+/// let winner: Promise[I32] = promise_race_i32(promises)
+/// assert_eq(winner.unwrap(), 42)
+/// ```
+pub func promise_race_i32(promises: List[Promise[I32]]) -> Promise[I32] {
+    let len: I64 = promises.len()
+    var i: I64 = 0
+    loop (i < len) {
+        let p: Promise[I32] = promises.get(i)
+        when p.state() {
+            Fulfilled(v) => return make_fulfilled_i32(v),
+            Rejected(e) => return make_rejected_i32(e),
+            Pending => {}
+        }
+        i = i + 1
+    }
+    // All pending
+    return make_pending_i32()
+}
+
+/// Returns the first fulfilled promise, or rejects if all reject.
+///
+/// Given a list of I32 promises, returns a new promise that:
+/// - Fulfills with the first fulfilled value
+/// - Rejects with "All promises rejected" if ALL reject
+/// - Remains pending if any is pending and none fulfilled
+pub func promise_any_i32(promises: List[Promise[I32]]) -> Promise[I32] {
+    let len: I64 = promises.len()
+    var all_rejected: Bool = true
+    var has_pending: Bool = false
+
+    var i: I64 = 0
+    loop (i < len) {
+        let p: Promise[I32] = promises.get(i)
+        when p.state() {
+            Fulfilled(v) => return make_fulfilled_i32(v),
+            Rejected(_) => {},
+            Pending => {
+                all_rejected = false
+                has_pending = true
+            }
+        }
+        i = i + 1
+    }
+
+    if all_rejected and not has_pending {
+        return make_rejected_i32("All promises rejected")
+    }
+    return make_pending_i32()
+}
+
+/// Returns the settlement state of all promises.
+///
+/// Always fulfills (never rejects). The result is a list of `PromiseState[I32]`
+/// values, one per input promise. Each state is either `Fulfilled(v)` or
+/// `Rejected(e)`. If any input is still pending, the result promise is pending.
+pub func promise_all_settled_i32(promises: List[Promise[I32]]) -> Promise[List[PromiseState[I32]]] {
+    let len: I64 = promises.len()
+    var results: List[PromiseState[I32]] = List::new(len)
+    var has_pending: Bool = false
+
+    var i: I64 = 0
+    loop (i < len) {
+        let p: Promise[I32] = promises.get(i)
+        let s: PromiseState[I32] = p.state()
+        when s {
+            Pending => {
+                has_pending = true
+                results.push(PromiseState::Pending)
+            },
+            Fulfilled(v) => {
+                results.push(PromiseState::Fulfilled(v))
+            },
+            Rejected(e) => {
+                results.push(PromiseState::Rejected(e))
+            }
+        }
+        i = i + 1
+    }
+
+    if has_pending {
+        let r: Promise[List[PromiseState[I32]]] = Promise { inner: Shared::new(PromiseState::Pending) }
+        return r
+    }
+    let r: Promise[List[PromiseState[I32]]] = Promise { inner: Shared::new(PromiseState::Fulfilled(results)) }
+    return r
+}

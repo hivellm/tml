@@ -1,0 +1,145 @@
+// Tests for SubjectI32 — state management and multicast pattern
+use test::{assert, assert_eq}
+use std::observable::{
+    subject_new_i32, subject_complete_i32, subject_error_i32,
+    subject_is_completed_i32, subject_has_error_i32, subject_next_id_i32
+}
+
+// ============================================================================
+// Subject state management
+// ============================================================================
+
+@test
+func test_subject_new() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    assert(not subject_is_completed_i32(subj), "new subject should not be completed")
+    assert(not subject_has_error_i32(subj), "new subject should not have error")
+    return 0
+}
+
+@test
+func test_subject_complete() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    subject_complete_i32(subj)
+    assert(subject_is_completed_i32(subj), "subject should be completed")
+    assert(not subject_has_error_i32(subj), "completed subject should not have error")
+    return 0
+}
+
+@test
+func test_subject_error() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    subject_error_i32(subj)
+    assert(subject_has_error_i32(subj), "subject should have error")
+    assert(not subject_is_completed_i32(subj), "errored subject should not be completed")
+    return 0
+}
+
+@test
+func test_subject_complete_idempotent() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    subject_complete_i32(subj)
+    subject_complete_i32(subj)  // second call is no-op
+    assert(subject_is_completed_i32(subj), "subject should still be completed")
+    return 0
+}
+
+@test
+func test_subject_error_after_complete_ignored() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    subject_complete_i32(subj)
+    subject_error_i32(subj)  // ignored because already completed
+    assert(subject_is_completed_i32(subj), "should be completed")
+    assert(not subject_has_error_i32(subj), "error after complete should be ignored")
+    return 0
+}
+
+@test
+func test_subject_complete_after_error_ignored() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    subject_error_i32(subj)
+    subject_complete_i32(subj)  // ignored because already errored
+    assert(subject_has_error_i32(subj), "should have error")
+    assert(not subject_is_completed_i32(subj), "complete after error should be ignored")
+    return 0
+}
+
+@test
+func test_subject_next_id() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    let id1: I64 = subject_next_id_i32(subj)
+    let id2: I64 = subject_next_id_i32(subj)
+    let id3: I64 = subject_next_id_i32(subj)
+    assert_eq(id1, 1, "first id should be 1")
+    assert_eq(id2, 2, "second id should be 2")
+    assert_eq(id3, 3, "third id should be 3")
+    return 0
+}
+
+// ============================================================================
+// Multicast pattern — caller manages callbacks
+// ============================================================================
+
+@test
+func test_subject_multicast_pattern() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    var received_a: I32 = 0
+    var received_b: I32 = 0
+    let cb_a: func(I32) = do(v: I32) { received_a = v }
+    let cb_b: func(I32) = do(v: I32) { received_b = v }
+
+    // Simulate subject_next: push value to all callbacks
+    let value: I32 = 42
+    if not subject_is_completed_i32(subj) and not subject_has_error_i32(subj) {
+        cb_a(value)
+        cb_b(value)
+    }
+
+    assert_eq(received_a, 42, "subscriber A should receive 42")
+    assert_eq(received_b, 42, "subscriber B should receive 42")
+    return 0
+}
+
+@test
+func test_subject_no_push_after_complete() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    var count: I64 = 0
+    let cb: func(I32) = do(v: I32) { count = count + 1 }
+
+    // Push before complete
+    if not subject_is_completed_i32(subj) {
+        cb(1)
+    }
+
+    subject_complete_i32(subj)
+
+    // Push after complete — should not call
+    if not subject_is_completed_i32(subj) {
+        cb(2)
+    }
+
+    assert_eq(count, 1, "should only receive 1 value before complete")
+    return 0
+}
+
+@test
+func test_subject_no_push_after_error() -> I32 {
+    let subj: List[I64] = subject_new_i32()
+    var count: I64 = 0
+    let cb: func(I32) = do(v: I32) { count = count + 1 }
+
+    // Push before error
+    if not subject_has_error_i32(subj) {
+        cb(1)
+    }
+
+    subject_error_i32(subj)
+
+    // Push after error — should not call
+    if not subject_has_error_i32(subj) {
+        cb(2)
+    }
+
+    assert_eq(count, 1, "should only receive 1 value before error")
+    return 0
+}

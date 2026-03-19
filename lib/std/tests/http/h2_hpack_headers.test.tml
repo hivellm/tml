@@ -1,0 +1,228 @@
+// Tests for HPACK header encoding and decoding (RFC 7541 Section 6)
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::hpack::{
+    HpackEntry,
+    HpackContext,
+    HpackDynamicTable,
+    hpack_encode_headers,
+    hpack_decode_headers,
+}
+
+@test
+func test_encode_indexed_method_get() -> I32 {
+    // Encode :method GET — should use indexed representation (static table index 2)
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(1)
+    headers.push(HpackEntry::new(":method", "GET"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // Index 2 fits in 7-bit prefix: 0x80 | 2 = 0x82
+    assert_eq(encoded.get(0), 0x82, "indexed :method GET = 0x82")
+    assert_eq(encoded.len(), 1, "1 byte for indexed header")
+    return 0
+}
+
+@test
+func test_encode_indexed_path() -> I32 {
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(1)
+    headers.push(HpackEntry::new(":path", "/"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // Index 4: 0x80 | 4 = 0x84
+    assert_eq(encoded.get(0), 0x84, "indexed :path / = 0x84")
+    assert_eq(encoded.len(), 1, "1 byte")
+    return 0
+}
+
+@test
+func test_encode_indexed_scheme_https() -> I32 {
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(1)
+    headers.push(HpackEntry::new(":scheme", "https"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // Index 7: 0x80 | 7 = 0x87
+    assert_eq(encoded.get(0), 0x87, "indexed :scheme https = 0x87")
+    assert_eq(encoded.len(), 1, "1 byte")
+    return 0
+}
+
+@test
+func test_encode_indexed_status_200() -> I32 {
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(1)
+    headers.push(HpackEntry::new(":status", "200"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // Index 8: 0x80 | 8 = 0x88
+    assert_eq(encoded.get(0), 0x88, "indexed :status 200 = 0x88")
+    return 0
+}
+
+@test
+func test_encode_literal_with_name_index() -> I32 {
+    // content-type: text/html — static entry 31 has name only
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(1)
+    headers.push(HpackEntry::new("content-type", "text/html"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // First byte: 01xxxxxx with index 31
+    // 31 < 63 (2^6-1), so: 0x40 | 31 = 0x5F
+    assert_eq(encoded.get(0), 0x5F, "literal with index 31")
+    // Value "text/html": length = 9
+    assert_eq(encoded.get(1), 9, "value length = 9")
+    return 0
+}
+
+@test
+func test_encode_multiple_indexed_headers() -> I32 {
+    var ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(3)
+    headers.push(HpackEntry::new(":method", "GET"))
+    headers.push(HpackEntry::new(":path", "/"))
+    headers.push(HpackEntry::new(":scheme", "https"))
+
+    let encoded = hpack_encode_headers(mut ref ctx, headers)
+    // All three are exact static matches: 0x82, 0x84, 0x87
+    assert_eq(encoded.get(0), 0x82, "first = :method GET")
+    assert_eq(encoded.get(1), 0x84, "second = :path /")
+    assert_eq(encoded.get(2), 0x87, "third = :scheme https")
+    assert_eq(encoded.len(), 3, "3 bytes total")
+    return 0
+}
+
+@test
+func test_decode_indexed_header() -> I32 {
+    // 0x82 = indexed :method GET
+    var ctx = HpackContext::new(4096)
+    let data = Buffer::new(1)
+    data.write_u8(0x82, 0)
+
+    let result = hpack_decode_headers(mut ref ctx, data)
+    assert(result.is_ok(), "decode ok")
+
+    let headers: List[HpackEntry] = result.unwrap()
+    assert_eq(headers.len(), 1, "1 header")
+    let h: HpackEntry = headers.get(0)
+    assert_eq(h.name, ":method", "name = :method")
+    assert_eq(h.value, "GET", "value = GET")
+    return 0
+}
+
+@test
+func test_decode_multiple_indexed() -> I32 {
+    // 0x82 0x84 0x87 = :method GET, :path /, :scheme https
+    var ctx = HpackContext::new(4096)
+    let data = Buffer::new(3)
+    data.write_u8(0x82, 0)
+    data.write_u8(0x84, 1)
+    data.write_u8(0x87, 2)
+
+    let result = hpack_decode_headers(mut ref ctx, data)
+    assert(result.is_ok(), "decode ok")
+
+    let headers: List[HpackEntry] = result.unwrap()
+    assert_eq(headers.len(), 3, "3 headers")
+
+    assert_eq(headers.get(0).name, ":method", "h0 name")
+    assert_eq(headers.get(0).value, "GET", "h0 value")
+    assert_eq(headers.get(1).name, ":path", "h1 name")
+    assert_eq(headers.get(1).value, "/", "h1 value")
+    assert_eq(headers.get(2).name, ":scheme", "h2 name")
+    assert_eq(headers.get(2).value, "https", "h2 value")
+    return 0
+}
+
+@test
+func test_encode_decode_roundtrip() -> I32 {
+    // Encode and decode a set of indexed headers
+    var enc_ctx = HpackContext::new(4096)
+    var headers: List[HpackEntry] = List::new(3)
+    headers.push(HpackEntry::new(":method", "GET"))
+    headers.push(HpackEntry::new(":path", "/"))
+    headers.push(HpackEntry::new(":scheme", "https"))
+
+    let encoded = hpack_encode_headers(mut ref enc_ctx, headers)
+
+    var dec_ctx = HpackContext::new(4096)
+    let result = hpack_decode_headers(mut ref dec_ctx, encoded)
+    assert(result.is_ok(), "roundtrip decode ok")
+
+    let decoded: List[HpackEntry] = result.unwrap()
+    assert_eq(decoded.len(), 3, "3 headers")
+    assert_eq(decoded.get(0).name, ":method", "rt h0 name")
+    assert_eq(decoded.get(0).value, "GET", "rt h0 value")
+    assert_eq(decoded.get(1).name, ":path", "rt h1 name")
+    assert_eq(decoded.get(1).value, "/", "rt h1 value")
+    assert_eq(decoded.get(2).name, ":scheme", "rt h2 name")
+    assert_eq(decoded.get(2).value, "https", "rt h2 value")
+    return 0
+}
+
+@test
+func test_dynamic_table_basic() -> I32 {
+    var table = HpackDynamicTable::new(4096)
+    assert_eq(table.len(), 0, "empty table")
+    assert_eq(table.current_size(), 0, "size 0")
+
+    table.add("custom-key", "custom-value")
+    assert_eq(table.len(), 1, "1 entry")
+
+    let entry: Maybe[HpackEntry] = table.get(0)
+    assert(entry.is_just(), "entry exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, "custom-key", "name match")
+    assert_eq(e.value, "custom-value", "value match")
+
+    // Size = len("custom-key") + len("custom-value") + 32 = 10 + 12 + 32 = 54
+    assert_eq(table.current_size(), 54, "size = 54")
+    return 0
+}
+
+@test
+func test_dynamic_table_eviction() -> I32 {
+    var table = HpackDynamicTable::new(64)
+    table.add("a", "b")
+    assert_eq(table.len(), 1, "1 entry")
+
+    // "c" + "d" + 32 = 34, total would be 68 > 64
+    table.add("c", "d")
+    assert_eq(table.len(), 1, "still 1 after eviction")
+
+    let entry: Maybe[HpackEntry] = table.get(0)
+    assert(entry.is_just(), "entry exists")
+    assert_eq(entry.unwrap().name, "c", "newest = c")
+    return 0
+}
+
+@test
+func test_dynamic_table_clear() -> I32 {
+    var table = HpackDynamicTable::new(4096)
+    table.add("name1", "val1")
+    table.add("name2", "val2")
+    assert_eq(table.len(), 2, "2 entries")
+
+    table.clear()
+    assert_eq(table.len(), 0, "cleared")
+    assert_eq(table.current_size(), 0, "size 0")
+    return 0
+}
+
+@test
+func test_context_get_entry_static() -> I32 {
+    let ctx = HpackContext::new(4096)
+    let e1: Maybe[HpackEntry] = ctx.get_entry(1)
+    assert(e1.is_just(), "index 1 ok")
+    assert_eq(e1.unwrap().name, ":authority", ":authority")
+
+    let e61: Maybe[HpackEntry] = ctx.get_entry(61)
+    assert(e61.is_just(), "index 61 ok")
+    assert_eq(e61.unwrap().name, "www-authenticate", "www-authenticate")
+
+    let e0: Maybe[HpackEntry] = ctx.get_entry(0)
+    assert(e0.is_nothing(), "index 0 invalid")
+    return 0
+}

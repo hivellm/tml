@@ -1,5 +1,14 @@
 # TML Library Engineer Memory
 
+## HTTP/2 Module (Sprint 8+9, 2026-03-19) — COMPLETE
+See [h2_module_notes.md](h2_module_notes.md)
+- `lib/std/src/http/h2/` — frame.tml, hpack.tml, stream.tml, connection.tml, server.tml
+- 13 test files all passing (7 Sprint 8 + 6 Sprint 9)
+- **CRITICAL**: structs stored on heap via ptr_read/ptr_write MUST be pure scalar (no Buffer/pointer fields)
+- **CRITICAL**: return types through Outcome MUST be scalar-only (no Buffer fields)
+- **CRITICAL**: private methods in impl blocks cannot be resolved — use `pub` for all methods
+- Incremental cache ignores dependency changes — add comment `// vN` to force test rehash
+
 ## Array Module Coverage (2026-03-08) — 21/39 = 53.8%
 
 **Covered (21)**: len, is_empty, get, get_mut, first, first_mut, last, last_mut, map,

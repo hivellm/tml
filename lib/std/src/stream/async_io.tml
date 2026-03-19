@@ -1,0 +1,95 @@
+//! Async I/O behaviors for non-blocking byte stream operations.
+//!
+//! This module provides the asynchronous counterparts to `Readable` and
+//! `Writable` behaviors, designed for use with the async task system.
+//!
+//! # Behaviors
+//!
+//! - [`AsyncRead`] — Non-blocking byte source (async counterpart to `Readable`)
+//! - [`AsyncWrite`] — Non-blocking byte sink (async counterpart to `Writable`)
+//!
+//! # Usage with AsyncTcpStream
+//!
+//! The `AsyncTcpStream` type implements both behaviors, returning `Pending`
+//! when the underlying socket would block and `Ready` when data can be
+//! transferred.
+//!
+//! ```tml
+//! use std::stream::async_io::{AsyncRead, AsyncWrite}
+//! use std::net::async_tcp::AsyncTcpStream
+//! use core::task::{Poll, Context}
+//!
+//! func poll_echo(stream: mut ref AsyncTcpStream, cx: mut ref Context[Unit],
+//!                buf: mut ref [U8]) -> Poll[Outcome[I64, IoError]] {
+//!     let poll_result = stream.poll_read(cx, buf)
+//!     poll_result
+//! }
+//! ```
+
+use core::error::{IoError, IoErrorKind}
+use core::task::{Poll, Context}
+
+/// A non-blocking byte source that can be polled for readiness.
+///
+/// This is the async counterpart to `Readable`. Instead of blocking until
+/// data is available, `poll_read` returns `Pending` when no data is ready
+/// and arranges for the task to be woken when data arrives.
+///
+/// # Contract
+///
+/// - `poll_read()` fills the provided buffer with up to `buf.len()` bytes
+/// - Returns `Poll::Ready(Ok(n))` with the number of bytes read
+/// - Returns `Poll::Ready(Ok(0))` to signal end-of-stream (EOF)
+/// - Returns `Poll::Ready(Err(e))` on I/O error
+/// - Returns `Poll::Pending` when no data is available yet
+///
+/// When returning `Pending`, the implementation must arrange for the
+/// task's waker (from `cx`) to be notified when data becomes available.
+pub behavior AsyncRead {
+    /// Attempt to read bytes from the source into `buf`.
+    ///
+    /// Returns `Poll::Ready(Ok(n))` with the number of bytes read,
+    /// `Poll::Ready(Ok(0))` on EOF, `Poll::Ready(Err(e))` on error,
+    /// or `Poll::Pending` if no data is available yet.
+    func poll_read(mut this, cx: mut ref Context[Unit], buf: mut ref [U8]) -> Poll[Outcome[I64, IoError]]
+}
+
+/// A non-blocking byte sink that can be polled for readiness.
+///
+/// This is the async counterpart to `Writable`. Instead of blocking until
+/// the sink can accept data, `poll_write` returns `Pending` when the sink
+/// is not ready.
+///
+/// # Contract
+///
+/// - `poll_write()` writes up to `buf.len()` bytes from the provided buffer
+/// - Returns `Poll::Ready(Ok(n))` with the number of bytes written
+/// - Returns `Poll::Ready(Err(e))` on I/O error
+/// - Returns `Poll::Pending` when the sink cannot accept data yet
+/// - `poll_flush()` ensures all buffered data reaches the underlying sink
+/// - `poll_shutdown()` initiates a graceful shutdown of the sink
+///
+/// When returning `Pending`, the implementation must arrange for the
+/// task's waker (from `cx`) to be notified when the sink becomes ready.
+pub behavior AsyncWrite {
+    /// Attempt to write bytes from `buf` into the sink.
+    ///
+    /// Returns `Poll::Ready(Ok(n))` with the number of bytes written,
+    /// `Poll::Ready(Err(e))` on error, or `Poll::Pending` if the sink
+    /// cannot accept data yet.
+    func poll_write(mut this, cx: mut ref Context[Unit], buf: ref [U8]) -> Poll[Outcome[I64, IoError]]
+
+    /// Attempt to flush all buffered data to the underlying destination.
+    ///
+    /// For unbuffered sinks (e.g., raw TCP), this typically returns
+    /// `Poll::Ready(Ok(()))` immediately. For buffered sinks, this
+    /// forces all pending data to be written.
+    func poll_flush(mut this, cx: mut ref Context[Unit]) -> Poll[Outcome[Unit, IoError]]
+
+    /// Attempt to shut down the sink gracefully.
+    ///
+    /// This signals that no more data will be written. For TCP streams,
+    /// this sends a FIN packet. The shutdown may not complete immediately,
+    /// returning `Pending` if the shutdown handshake is still in progress.
+    func poll_shutdown(mut this, cx: mut ref Context[Unit]) -> Poll[Outcome[Unit, IoError]]
+}

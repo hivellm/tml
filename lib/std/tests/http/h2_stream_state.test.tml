@@ -1,0 +1,48 @@
+// v2
+use test
+use std::http::h2::frame::{H2_FLAG_END_STREAM, H2_FLAG_END_HEADERS}
+use std::http::h2::stream::{H2Stream, H2StreamState}
+
+@test
+func test_stream_new_idle() -> Outcome[Unit, Str] {
+    let s = H2Stream::new(1, 65535, 65535)
+    assert_eq(s.get_id(), 1)
+    assert_true(s.get_state().eq(H2StreamState::Idle()))
+    assert_eq(s.get_send_window(), 65535)
+    assert_eq(s.get_recv_window(), 65535)
+    Ok(())
+}
+
+@test
+func test_stream_client_initiated() -> Outcome[Unit, Str] {
+    let s1 = H2Stream::new(1, 65535, 65535)
+    assert_true(s1.is_client_initiated())
+    assert_false(s1.is_server_initiated())
+    Ok(())
+}
+
+@test
+func test_stream_server_initiated() -> Outcome[Unit, Str] {
+    let s2 = H2Stream::new(2, 65535, 65535)
+    assert_false(s2.is_client_initiated())
+    assert_true(s2.is_server_initiated())
+    Ok(())
+}
+
+@test
+func test_stream_state_names() -> Outcome[Unit, Str] {
+    assert_eq(H2StreamState::Idle().to_string(), "idle")
+    assert_eq(H2StreamState::Open().to_string(), "open")
+    assert_eq(H2StreamState::Closed().to_string(), "closed")
+    assert_eq(H2StreamState::HalfClosedLocal().to_string(), "half-closed (local)")
+    assert_eq(H2StreamState::HalfClosedRemote().to_string(), "half-closed (remote)")
+    Ok(())
+}
+
+@test
+func test_stream_can_send_recv() -> Outcome[Unit, Str] {
+    let s = H2Stream::new(1, 65535, 65535)
+    assert_true(s.can_send())
+    assert_true(s.can_recv())
+    Ok(())
+}

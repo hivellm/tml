@@ -1,0 +1,15 @@
+// Test thread spawning with I64 return value.
+use test
+use std::thread::{spawn_i64, I64JoinHandle}
+
+@test
+func test_spawn_i64_return_value() -> Outcome[Unit, Str] {
+    let handle: I64JoinHandle = spawn_i64(do() -> I64 {
+        return 42
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+    Ok(())
+}

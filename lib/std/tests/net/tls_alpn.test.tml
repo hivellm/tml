@@ -1,0 +1,71 @@
+//! Tests for TLS ALPN wire format encoding.
+//!
+//! Tests the pure TML `encode_alpn_wire_format` function which encodes
+//! protocol names into the ALPN wire format (length-prefixed byte sequences).
+//! These tests do NOT require OpenSSL or TLS runtime linkage.
+
+use test::{assert, assert_eq}
+use std::net::tls::{encode_alpn_wire_format, AlpnWireData}
+
+@test
+func test_alpn_encode_empty_list() -> I32 {
+    let protocols: [Str; 0] = []
+    when encode_alpn_wire_format(ref protocols) {
+        Err(_) => return 1,
+        Ok(wire) => {
+            assert(wire.is_empty(), "empty list should produce empty wire format")
+            assert_eq(wire.len(), 0 as I64, "length should be 0")
+            return 0
+        }
+    }
+}
+
+@test
+func test_alpn_encode_single_h2() -> I32 {
+    let protocols: [Str; 1] = ["h2"]
+    when encode_alpn_wire_format(ref protocols) {
+        Err(_) => return 1,
+        Ok(wire) => {
+            // "h2" -> [2, 'h', '2'] = [2, 104, 50]
+            assert_eq(wire.len(), 3 as I64, "h2 should be 3 bytes")
+            assert_eq(wire.get(0) as I64, 2 as I64, "length prefix should be 2")
+            assert_eq(wire.get(1) as I64, 104 as I64, "h = 104")
+            assert_eq(wire.get(2) as I64, 50 as I64, "2 = 50")
+            var mw: AlpnWireData = wire
+            mw.destroy()
+            return 0
+        }
+    }
+}
+
+@test
+func test_alpn_encode_h2_http11() -> I32 {
+    let protocols: [Str; 2] = ["h2", "http/1.1"]
+    when encode_alpn_wire_format(ref protocols) {
+        Err(_) => return 1,
+        Ok(wire) => {
+            // Total: 1+2 + 1+8 = 12 bytes
+            assert_eq(wire.len(), 12 as I64, "wire format should be 12 bytes")
+
+            // "h2" = length prefix 2, then 'h'=104, '2'=50
+            assert_eq(wire.get(0) as I64, 2 as I64, "h2 length prefix")
+            assert_eq(wire.get(1) as I64, 104 as I64, "h")
+            assert_eq(wire.get(2) as I64, 50 as I64, "2")
+
+            // "http/1.1" = length prefix 8
+            assert_eq(wire.get(3) as I64, 8 as I64, "http/1.1 length prefix")
+            assert_eq(wire.get(4) as I64, 104 as I64, "h")
+            assert_eq(wire.get(5) as I64, 116 as I64, "t")
+            assert_eq(wire.get(6) as I64, 116 as I64, "t")
+            assert_eq(wire.get(7) as I64, 112 as I64, "p")
+            assert_eq(wire.get(8) as I64, 47 as I64, "/")
+            assert_eq(wire.get(9) as I64, 49 as I64, "1")
+            assert_eq(wire.get(10) as I64, 46 as I64, ".")
+            assert_eq(wire.get(11) as I64, 49 as I64, "1")
+
+            var mw: AlpnWireData = wire
+            mw.destroy()
+            return 0
+        }
+    }
+}

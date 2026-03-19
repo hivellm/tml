@@ -1,0 +1,79 @@
+// Test multiple tasks incrementing a shared atomic counter.
+use test
+use std::runtime::multi_executor::MultiExecutor
+
+// Increment the I64 at the given address by 1.
+// Note: This is not truly atomic (TML atomics use lowlevel blocks that
+// aren't real hardware atomics in debug mode), but with the mutex-protected
+// queue ensuring tasks don't overlap on the same core, this works for
+// verifying that all tasks actually execute.
+func increment_counter(data: I64) {
+    lowlevel {
+        let current: I64 = ptr_read[I64](data as *I64)
+        ptr_write[I64](data as *I64, current + 1)
+    }
+}
+
+@test
+func test_counter_single_worker() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(1)
+
+    let counter_ptr: I64 = lowlevel { mem_alloc(8 as U64) } as I64
+    lowlevel { ptr_write[I64](counter_ptr as *I64, 0 as I64) }
+
+    // Submit 10 tasks all incrementing the same counter
+    var i: I64 = 0
+    loop (i < 10) {
+        exec.submit(increment_counter, counter_ptr)
+        i = i + 1
+    }
+
+    exec.run()
+
+    let final_val: I64 = lowlevel { ptr_read[I64](counter_ptr as *I64) }
+    assert_eq(final_val, 10)
+    assert_eq(exec.completed_count(), 10)
+
+    exec.destroy()
+    lowlevel { mem_free(counter_ptr as *Unit) }
+    Ok(())
+}
+
+@test
+func test_counter_multiple_workers() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::new(4)
+
+    // Each worker gets its own counter to avoid races
+    // Allocate 4 counters
+    let counters_ptr: I64 = lowlevel { mem_alloc(32 as U64) } as I64
+    var i: I64 = 0
+    loop (i < 4) {
+        lowlevel { ptr_write[I64]((counters_ptr + i * 8) as *I64, 0 as I64) }
+        i = i + 1
+    }
+
+    // Submit 20 tasks: 5 per counter
+    i = 0
+    loop (i < 20) {
+        let counter_idx: I64 = i % 4
+        exec.submit(increment_counter, counters_ptr + counter_idx * 8)
+        i = i + 1
+    }
+
+    exec.run()
+
+    // Sum all counters — should total 20
+    var total: I64 = 0
+    i = 0
+    loop (i < 4) {
+        let val: I64 = lowlevel { ptr_read[I64]((counters_ptr + i * 8) as *I64) }
+        total = total + val
+        i = i + 1
+    }
+    assert_eq(total, 20)
+    assert_eq(exec.completed_count(), 20)
+
+    exec.destroy()
+    lowlevel { mem_free(counters_ptr as *Unit) }
+    Ok(())
+}

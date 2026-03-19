@@ -1,0 +1,185 @@
+// WebSocket protocol tests (RFC 6455)
+// All WS tests in one file to avoid suite-bundling struct duplication crash.
+use test::{assert, assert_eq}
+use std::http::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, ws_encode_frame, ws_mask, ws_unmask, ws_decode_frame, ws_assemble_message}
+use std::collections::Buffer
+use core::str
+
+// ── Opcode Tests ─────────────────────────────────────────────
+
+@test
+func test_opcode_values() -> I32 {
+    assert_eq(WsOpcode.Continuation().raw(), 0, "Continuation")
+    assert_eq(WsOpcode.Text().raw(), 1, "Text")
+    assert_eq(WsOpcode.Binary().raw(), 2, "Binary")
+    assert_eq(WsOpcode.Close().raw(), 8, "Close")
+    assert_eq(WsOpcode.Ping().raw(), 9, "Ping")
+    assert_eq(WsOpcode.Pong().raw(), 10, "Pong")
+    assert(WsOpcode.Close().is_control(), "Close is control")
+    assert(not WsOpcode.Text().is_control(), "Text not control")
+    assert(WsOpcode.Text().is_data(), "Text is data")
+    assert(not WsOpcode.Close().is_data(), "Close not data")
+    assert_eq(WsOpcode.Text().name(), "Text", "name Text")
+    assert_eq(WsOpcode.Close().name(), "Close", "name Close")
+    return 0
+}
+
+// ── Close Code Tests ─────────────────────────────────────────
+
+@test
+func test_close_codes() -> I32 {
+    assert_eq(WsCloseCode.Normal().raw(), 1000, "Normal")
+    assert_eq(WsCloseCode.GoingAway().raw(), 1001, "GoingAway")
+    assert_eq(WsCloseCode.ProtocolError().raw(), 1002, "ProtocolError")
+    assert_eq(WsCloseCode.UnsupportedData().raw(), 1003, "UnsupportedData")
+    assert_eq(WsCloseCode.InvalidPayload().raw(), 1007, "InvalidPayload")
+    assert_eq(WsCloseCode.MessageTooBig().raw(), 1009, "MessageTooBig")
+    assert_eq(WsCloseCode.InternalError().raw(), 1011, "InternalError")
+    assert_eq(WsCloseCode.Normal().name(), "Normal Closure", "name Normal")
+    assert_eq(WsCloseCode.InternalError().name(), "Internal Error", "name InternalError")
+    return 0
+}
+
+// ── Error Type Tests ─────────────────────────────────────────
+
+@test
+func test_error_kinds() -> I32 {
+    let e1 = WsError.InvalidUpgrade("test")
+    assert(e1.is_invalid_upgrade(), "is invalid upgrade")
+    assert(not e1.is_incomplete(), "not incomplete")
+    let e2 = WsError.IncompleteFrame()
+    assert(e2.is_incomplete(), "is incomplete")
+    let e3 = WsError.ProtocolError("bad")
+    assert(e3.is_protocol_error(), "is protocol error")
+    let e4 = WsError.InvalidFrame("frame")
+    assert(e4.is_invalid_frame(), "is invalid frame")
+    return 0
+}
+
+// ── Masking Tests ────────────────────────────────────────────
+
+@test
+func test_mask_xor() -> I32 {
+    let buf = Buffer.from_string("Hello")
+    ws_mask(ref buf, 0x37, 0xfa, 0x21, 0x3d)
+    // 'H'(0x48) ^ 0x37 = 0x7f
+    assert_eq(buf.get(0), 0x7f, "masked 0")
+    // 'e'(0x65) ^ 0xfa = 0x9f
+    assert_eq(buf.get(1), 0x9f, "masked 1")
+    // 'l'(0x6c) ^ 0x21 = 0x4d
+    assert_eq(buf.get(2), 0x4d, "masked 2")
+    // 'l'(0x6c) ^ 0x3d = 0x51
+    assert_eq(buf.get(3), 0x51, "masked 3")
+    // 'o'(0x6f) ^ 0x37 = 0x58 (key wraps i%4==0)
+    assert_eq(buf.get(4), 0x58, "masked 4")
+    return 0
+}
+
+@test
+func test_mask_unmask_roundtrip() -> I32 {
+    let buf = Buffer.from_string("Hello")
+    ws_mask(ref buf, 0x37, 0xfa, 0x21, 0x3d)
+    ws_unmask(ref buf, 0x37, 0xfa, 0x21, 0x3d)
+    assert_eq(buf.get(0), 0x48, "H")
+    assert_eq(buf.get(1), 0x65, "e")
+    assert_eq(buf.get(2), 0x6c, "l")
+    assert_eq(buf.get(3), 0x6c, "l")
+    assert_eq(buf.get(4), 0x6f, "o")
+    return 0
+}
+
+@test
+func test_mask_empty() -> I32 {
+    let buf = Buffer.new(0)
+    ws_mask(ref buf, 0xff, 0xff, 0xff, 0xff)
+    assert_eq(buf.len(), 0, "still empty")
+    return 0
+}
+
+// ── Frame Encoding Tests ─────────────────────────────────────
+
+@test
+func test_encode_text() -> I32 {
+    let frame = WsFrame.text("Hello")
+    let encoded = ws_encode_frame(ref frame)
+    assert_eq(encoded.get(0), 0x81, "FIN + text")
+    assert_eq(encoded.get(1), 0x05, "length 5")
+    assert_eq(encoded.get(2), 0x48, "H")
+    assert_eq(encoded.get(3), 0x65, "e")
+    assert_eq(encoded.get(4), 0x6c, "l")
+    assert_eq(encoded.get(5), 0x6c, "l")
+    assert_eq(encoded.get(6), 0x6f, "o")
+    assert_eq(encoded.len(), 7, "total 7")
+    return 0
+}
+
+@test
+func test_encode_empty() -> I32 {
+    let frame = WsFrame.new(1, WsOpcode.Text(), Buffer.new(0))
+    let encoded = ws_encode_frame(ref frame)
+    assert_eq(encoded.get(0), 0x81, "FIN + text")
+    assert_eq(encoded.get(1), 0x00, "length 0")
+    assert_eq(encoded.len(), 2, "header only")
+    return 0
+}
+
+@test
+func test_encode_ping() -> I32 {
+    let frame = WsFrame.ping(Buffer.new(0))
+    let encoded = ws_encode_frame(ref frame)
+    assert_eq(encoded.get(0), 0x89, "FIN + ping")
+    assert_eq(encoded.get(1), 0x00, "empty")
+    assert_eq(encoded.len(), 2, "header only")
+    return 0
+}
+
+// ── Frame Decoding Tests ─────────────────────────────────────
+
+@test
+func test_decode_text() -> I32 {
+    let raw = Buffer.new(7)
+    raw.write_byte(0x81)  // FIN + text
+    raw.write_byte(0x05)  // len 5
+    raw.write_byte(0x48)  // H
+    raw.write_byte(0x65)  // e
+    raw.write_byte(0x6c)  // l
+    raw.write_byte(0x6c)  // l
+    raw.write_byte(0x6f)  // o
+    let result = ws_decode_frame(ref raw)
+    assert(result.is_ok(), "decode succeeds")
+    return 0
+}
+
+@test
+func test_decode_incomplete() -> I32 {
+    let raw = Buffer.new(1)
+    raw.write_byte(0x81)
+    let result = ws_decode_frame(ref raw)
+    assert(result.is_err(), "incomplete frame")
+    return 0
+}
+
+@test
+func test_decode_empty() -> I32 {
+    let raw = Buffer.new(0)
+    let result = ws_decode_frame(ref raw)
+    assert(result.is_err(), "empty buffer")
+    return 0
+}
+
+// ── Message Assembly Tests ───────────────────────────────────
+
+@test
+func test_assemble_text() -> I32 {
+    let frame = WsFrame.text("Hello")
+    let result = ws_assemble_message(ref frame)
+    assert(result.is_ok(), "text assembly succeeds")
+    return 0
+}
+
+// NOTE: ws_accept_key and ws_upgrade_response are BLOCKED by a codegen bug
+// where I64 bitwise operations in SHA1 computation loops corrupt specific
+// hash state bytes. The SHA1 implementation produces 15/20 correct bytes
+// but 5 bytes get corrupted to 0xFF. This is a known TML codegen issue
+// with complex I64 bitwise arithmetic in loop bodies.
+// See: else-if chain codegen bug (separate if blocks also affected).

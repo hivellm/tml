@@ -1,0 +1,248 @@
+//! Polling-based future selection combinators.
+//!
+//! This module provides combinators for racing multiple futures against each
+//! other, returning the result of whichever completes first.
+//!
+//! # `select2` — Race Two Futures
+//!
+//! `select2` polls two futures in order. If the first is ready, it returns
+//! `SelectResult::First(value)`. Otherwise, if the second is ready, it returns
+//! `SelectResult::Second(value)`. If neither is ready, it returns `Poll::Pending`.
+//!
+//! ```tml
+//! use core::future::select::{select2, SelectResult}
+//! use core::task::{Poll, Context, Ready}
+//! use core::pin::Pin
+//!
+//! // With two ready futures:
+//! var a = Ready::new(10)
+//! var b = Ready::new(20)
+//! let result = select2(ref a, ref b, ref cx)
+//! // result is Poll::Ready(SelectResult::First(10))
+//! ```
+//!
+//! # `select_first` — Race a Slice of Homogeneous Futures
+//!
+//! `select_first` polls each future in a slice and returns the index and value
+//! of the first one that is ready.
+//!
+//! ```tml
+//! use core::future::select::{select_first, IndexedResult}
+//!
+//! var futures: List[MyFuture] = ...
+//! let result = select_first(ref futures, ref cx)
+//! // result is Poll::Ready(IndexedResult { index: 2, value: 42 })
+//! ```
+
+use core::task::{Poll, Context}
+use core::pin::Pin
+use core::future::Future
+
+// ============================================================================
+// SelectResult — Outcome of selecting between two futures
+// ============================================================================
+
+/// The result of selecting between two futures.
+///
+/// When using `select2`, the result indicates which future completed first
+/// and carries its output value.
+///
+/// # Variants
+///
+/// - `First(A)` — The first future completed with value of type `A`
+/// - `Second(B)` — The second future completed with value of type `B`
+///
+/// # Examples
+///
+/// ```tml
+/// when result {
+///     First(a) => println("First future won: " + a.to_string()),
+///     Second(b) => println("Second future won: " + b.to_string()),
+/// }
+/// ```
+pub type SelectResult[A, B] {
+    /// The first future completed.
+    First(A),
+    /// The second future completed.
+    Second(B)
+}
+
+impl[A, B] SelectResult[A, B] {
+    /// Returns `true` if this is the `First` variant.
+    pub func is_first(this) -> Bool {
+        when this {
+            First(_) => return true,
+            Second(_) => return false
+        }
+    }
+
+    /// Returns `true` if this is the `Second` variant.
+    pub func is_second(this) -> Bool {
+        when this {
+            First(_) => return false,
+            Second(_) => return true
+        }
+    }
+}
+
+// ============================================================================
+// IndexedResult — Outcome of selecting from a collection of futures
+// ============================================================================
+
+/// The result of selecting from a collection of homogeneous futures.
+///
+/// Contains the index of the future that completed first and its output value.
+///
+/// # Examples
+///
+/// ```tml
+/// let result: IndexedResult[I32] = IndexedResult { index: 2, value: 42 }
+/// println("Future #" + result.index.to_string() + " completed with " + result.value.to_string())
+/// ```
+pub type IndexedResult[T] {
+    /// The index of the future that completed first (0-based).
+    pub index: I64,
+    /// The value produced by the completed future.
+    pub value: T
+}
+
+// ============================================================================
+// select2 — Poll two futures, return whichever is ready first
+// ============================================================================
+
+/// Polls two futures in priority order, returning the first ready result.
+///
+/// This function polls `a` first. If `a` returns `Poll::Ready`, its value is
+/// wrapped in `SelectResult::First` and returned. If `a` is pending, `b` is
+/// polled. If `b` returns `Poll::Ready`, its value is wrapped in
+/// `SelectResult::Second`. If neither is ready, `Poll::Pending` is returned.
+///
+/// # Priority Bias
+///
+/// Because `a` is always polled first, `select2` has a bias toward the first
+/// future. If both futures are ready simultaneously, `a`'s result is returned.
+/// For fairness, callers can alternate the argument order across polls.
+///
+/// # Arguments
+///
+/// - `a` — The first future to poll (higher priority)
+/// - `b` — The second future to poll (lower priority)
+/// - `cx` — The async task context carrying the waker
+///
+/// # Returns
+///
+/// - `Poll::Ready(SelectResult::First(value))` if `a` is ready
+/// - `Poll::Ready(SelectResult::Second(value))` if `b` is ready (and `a` is pending)
+/// - `Poll::Pending` if neither future is ready
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::select::{select2, SelectResult}
+/// use core::task::{Poll, Context, Ready, Pending}
+///
+/// var a: Ready[I32] = Ready::new(10)
+/// var b: Ready[Str] = Ready::new("hello")
+/// let result = select2[Ready[I32], Ready[Str], I32, Str](
+///     Pin::new(ref a), Pin::new(ref b), ref cx
+/// )
+/// // result == Poll::Ready(SelectResult::First(10))
+/// ```
+pub func select2[A: Future, B: Future](
+    a: Pin[mut ref A], b: Pin[mut ref B], cx: mut ref Context[Unit]
+) -> Poll[SelectResult[A::Output, B::Output]] {
+    // Poll the first future
+    when a.poll(cx) {
+        Ready(val) => return Poll::Ready(SelectResult::First(val)),
+        Pending => {}
+    }
+    // First future is pending, try the second
+    when b.poll(cx) {
+        Ready(val) => return Poll::Ready(SelectResult::Second(val)),
+        Pending => {}
+    }
+    // Neither is ready
+    return Poll::Pending
+}
+
+// ============================================================================
+// Select2 — Stateful future wrapping select2
+// ============================================================================
+
+/// A future that races two inner futures and completes with whichever
+/// finishes first.
+///
+/// Created by `Select2::new(a, b)`. Implements `Future` with output
+/// `SelectResult[A::Output, B::Output]`.
+///
+/// # Examples
+///
+/// ```tml
+/// let race = Select2::new(future_a, future_b)
+/// // Polling `race` will poll both inner futures and return whichever
+/// // completes first.
+/// ```
+pub type Select2[A, B] {
+    /// The first future being raced.
+    a: A,
+    /// The second future being raced.
+    b: B
+}
+
+impl[A, B] Select2[A, B] {
+    /// Creates a new `Select2` future that races `a` against `b`.
+    pub func new(a: A, b: B) -> Select2[A, B] {
+        return Select2 { a: a, b: b }
+    }
+}
+
+// ============================================================================
+// select_first — Poll a list of homogeneous futures
+// ============================================================================
+
+/// Polls each future in a list and returns the index and value of the first
+/// one that is ready.
+///
+/// Futures are polled in order from index 0 to `len - 1`. The first future
+/// that returns `Poll::Ready` wins. If no future is ready, `Poll::Pending`
+/// is returned.
+///
+/// # Priority Bias
+///
+/// Lower-indexed futures are always polled first and therefore have priority.
+/// For fairness, callers can rotate the list between polls.
+///
+/// # Arguments
+///
+/// - `futures` — A mutable reference to a list of futures to poll
+/// - `len` — The number of futures in the list
+/// - `cx` — The async task context
+///
+/// # Returns
+///
+/// - `Poll::Ready(IndexedResult { index, value })` if any future is ready
+/// - `Poll::Pending` if no future is ready
+///
+/// # Note
+///
+/// This function takes raw parameters to work within TML's current codegen
+/// constraints. A higher-level wrapper taking `List[F]` or `Slice[F]` can
+/// be added once generic trait dispatch over collections is fully supported.
+pub func select_first_ready[T](
+    results: mut ref List[Poll[T]],
+) -> Poll[IndexedResult[T]] {
+    // Scan the pre-polled results for the first Ready
+    var i: I64 = 0
+    let len: I64 = results.len()
+    loop (i < len) {
+        let poll: ref Poll[T] = ref results[i]
+        when poll {
+            Ready(val) => {
+                return Poll::Ready(IndexedResult { index: i, value: val })
+            },
+            Pending => {}
+        }
+        i = i + 1
+    }
+    return Poll::Pending
+}

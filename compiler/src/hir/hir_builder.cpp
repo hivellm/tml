@@ -252,9 +252,22 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
     hir_func.extern_abi = func.extern_abi;
     hir_func.span = func.span;
 
-    // Extract attributes
+    // Extract attributes and route decorators
     for (const auto& decorator : func.decorators) {
         hir_func.attributes.push_back(decorator.name);
+        // Extract HTTP route decorator metadata
+        auto route_method = extract_route_method(decorator.name);
+        if (route_method.has_value() && !decorator.args.empty()) {
+            if (decorator.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                    hir_func.route_info = RouteInfo{
+                        .method = route_method.value(),
+                        .path = lit.token.string_value().value,
+                    };
+                }
+            }
+        }
     }
 
     // Store current function context
@@ -604,6 +617,18 @@ auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> Hir
 
             for (const auto& decorator : method.decorators) {
                 hir_func.attributes.push_back(decorator.name);
+                auto route_method = extract_route_method(decorator.name);
+                if (route_method.has_value() && !decorator.args.empty()) {
+                    if (decorator.args[0]->is<parser::LiteralExpr>()) {
+                        const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                            hir_func.route_info = RouteInfo{
+                                .method = route_method.value(),
+                                .path = lit.token.string_value().value,
+                            };
+                        }
+                    }
+                }
             }
 
             current_func_name_ = method.name;
@@ -978,6 +1003,24 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
             }
         },
         expr.kind);
+}
+
+auto HirBuilder::extract_route_method(const std::string& name) -> std::optional<RouteMethod> {
+    if (name == "Get")
+        return RouteMethod::Get;
+    if (name == "Post")
+        return RouteMethod::Post;
+    if (name == "Put")
+        return RouteMethod::Put;
+    if (name == "Delete")
+        return RouteMethod::Delete;
+    if (name == "Patch")
+        return RouteMethod::Patch;
+    if (name == "Head")
+        return RouteMethod::Head;
+    if (name == "Options")
+        return RouteMethod::Options;
+    return std::nullopt;
 }
 
 auto HirBuilder::get_field_index(const std::string& struct_name, const std::string& field_name)

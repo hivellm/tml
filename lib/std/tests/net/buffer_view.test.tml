@@ -1,0 +1,253 @@
+//! Tests for BufferView zero-copy byte views.
+
+use test::{assert, assert_eq}
+use std::net::buffer_view::BufferView
+use core::intrinsics::{ptr_write}
+
+// Helper: allocate a test buffer with known content "Hello, World!" (13 bytes)
+func make_test_data() -> *U8 {
+    let buf: *Unit = lowlevel { mem_alloc(13 as I64) }
+    let bytes: [U8; 13] = [72 as U8, 101 as U8, 108 as U8, 108 as U8, 111 as U8, 44 as U8, 32 as U8, 87 as U8, 111 as U8, 114 as U8, 108 as U8, 100 as U8, 33 as U8]
+    var i: I64 = 0
+    loop (i < 13) {
+        let p: *U8 = (buf as I64 + i) as *U8
+        lowlevel { ptr_write[U8](p, bytes[i]) }
+        i = i + 1
+    }
+    buf as *U8
+}
+
+func free_test_data(ptr: *U8) {
+    lowlevel { mem_free(ptr as *Unit) }
+}
+
+// ============================================================================
+// Basic construction and accessors
+// ============================================================================
+
+@test
+func test_buffer_view_empty() -> I32 {
+    let view: BufferView = BufferView::empty()
+    assert(view.is_empty(), "empty view should be empty")
+    assert_eq(view.len(), 0 as I64, "empty view length should be 0")
+    return 0
+}
+
+@test
+func test_buffer_view_from_raw() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+    assert_eq(view.len(), 13 as I64, "length should be 13")
+    assert(not view.is_empty(), "should not be empty")
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_get() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+
+    // 'H' = 72
+    when view.get(0) {
+        Just(b) => assert_eq(b as I64, 72 as I64, "first byte should be H=72"),
+        Nothing => return 1
+    }
+    // '!' = 33
+    when view.get(12) {
+        Just(b) => assert_eq(b as I64, 33 as I64, "last byte should be !=33"),
+        Nothing => return 1
+    }
+    // Out of bounds
+    when view.get(13) {
+        Just(_) => return 1,
+        Nothing => assert(true, "out of bounds returns Nothing")
+    }
+    when view.get(0 - 1) {
+        Just(_) => return 1,
+        Nothing => assert(true, "negative index returns Nothing")
+    }
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_get_unchecked() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+    let b: U8 = view.get_unchecked(0)
+    assert_eq(b as I64, 72 as I64, "get_unchecked(0) should be H=72")
+    let b2: U8 = view.get_unchecked(7)
+    assert_eq(b2 as I64, 87 as I64, "get_unchecked(7) should be W=87")
+    free_test_data(data)
+    return 0
+}
+
+// ============================================================================
+// Slicing
+// ============================================================================
+
+@test
+func test_buffer_view_slice() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+
+    // Slice "Hello" (bytes 0-5)
+    when view.slice(0, 5) {
+        Just(sub) => {
+            assert_eq(sub.len(), 5 as I64, "slice length should be 5")
+            when sub.get(0) {
+                Just(b) => assert_eq(b as I64, 72 as I64, "H"),
+                Nothing => return 1
+            }
+            when sub.get(4) {
+                Just(b) => assert_eq(b as I64, 111 as I64, "o"),
+                Nothing => return 1
+            }
+        },
+        Nothing => return 1
+    }
+
+    // Slice "World" (bytes 7-12)
+    when view.slice(7, 12) {
+        Just(sub) => {
+            assert_eq(sub.len(), 5 as I64, "slice length should be 5")
+            when sub.get(0) {
+                Just(b) => assert_eq(b as I64, 87 as I64, "W"),
+                Nothing => return 1
+            }
+        },
+        Nothing => return 1
+    }
+
+    // Invalid slice (out of bounds)
+    when view.slice(0, 14) {
+        Just(_) => return 1,
+        Nothing => assert(true, "out of bounds returns Nothing")
+    }
+
+    // Invalid slice (start > end)
+    when view.slice(5, 3) {
+        Just(_) => return 1,
+        Nothing => assert(true, "start > end returns Nothing")
+    }
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_slice_from() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+
+    when view.slice_from(7) {
+        Just(sub) => {
+            assert_eq(sub.len(), 6 as I64, "slice_from(7) should be 6 bytes")
+            when sub.get(0) {
+                Just(b) => assert_eq(b as I64, 87 as I64, "W"),
+                Nothing => return 1
+            }
+        },
+        Nothing => return 1
+    }
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_slice_to() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+
+    when view.slice_to(5) {
+        Just(sub) => {
+            assert_eq(sub.len(), 5 as I64, "slice_to(5) should be 5 bytes")
+        },
+        Nothing => return 1
+    }
+
+    free_test_data(data)
+    return 0
+}
+
+// ============================================================================
+// Search and comparison
+// ============================================================================
+
+@test
+func test_buffer_view_find_byte() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 13)
+
+    // Find ',' (44) at index 5
+    let comma_idx: I64 = view.find_byte(44 as U8)
+    assert_eq(comma_idx, 5 as I64, "comma should be at index 5")
+
+    // Find '!' (33) at index 12
+    let bang_idx: I64 = view.find_byte(33 as U8)
+    assert_eq(bang_idx, 12 as I64, "bang should be at index 12")
+
+    // Not found
+    let missing: I64 = view.find_byte(0 as U8)
+    assert_eq(missing, 0 - 1 as I64, "null byte not found should return -1")
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_to_string() -> I32 {
+    let data: *U8 = make_test_data()
+    let view: BufferView = BufferView::from_raw(data, 0, 5)
+
+    let s: Str = view.to_string()
+    assert_eq(s, "Hello", "should convert to Hello")
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_equals() -> I32 {
+    let data: *U8 = make_test_data()
+    let v1: BufferView = BufferView::from_raw(data, 0, 5)
+    let v2: BufferView = BufferView::from_raw(data, 0, 5)
+    let v3: BufferView = BufferView::from_raw(data, 7, 5)
+
+    assert(v1.equals(ref v2), "same range should be equal")
+    assert(not v1.equals(ref v3), "different ranges should not be equal")
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_with_offset() -> I32 {
+    let data: *U8 = make_test_data()
+    // Create a view starting at offset 7 ("World!")
+    let view: BufferView = BufferView::from_raw(data, 7, 6)
+    assert_eq(view.len(), 6 as I64, "length should be 6")
+
+    when view.get(0) {
+        Just(b) => assert_eq(b as I64, 87 as I64, "first byte should be W=87"),
+        Nothing => return 1
+    }
+    when view.get(5) {
+        Just(b) => assert_eq(b as I64, 33 as I64, "last byte should be !=33"),
+        Nothing => return 1
+    }
+
+    free_test_data(data)
+    return 0
+}
+
+@test
+func test_buffer_view_empty_to_string() -> I32 {
+    let view: BufferView = BufferView::empty()
+    let s: Str = view.to_string()
+    assert_eq(s, "", "empty view to_string should be empty")
+    return 0
+}

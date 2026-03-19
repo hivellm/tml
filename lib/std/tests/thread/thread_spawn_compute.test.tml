@@ -1,0 +1,56 @@
+// Test thread spawning with actual computation and multiple threads.
+use test
+use std::thread::{spawn_fn, spawn_i64, UnitJoinHandle, I64JoinHandle, Builder}
+
+@test
+func test_spawn_i64_computation() -> Outcome[Unit, Str] {
+    // Spawn a thread that performs a computation
+    let handle: I64JoinHandle = spawn_i64(do() -> I64 {
+        var sum: I64 = 0
+        var i: I64 = 1
+        loop (i <= 100) {
+            sum = sum + i
+            i = i + 1
+        }
+        return sum
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    // Sum of 1..100 = 5050
+    assert_eq(result.unwrap(), 5050)
+    Ok(())
+}
+
+@test
+func test_spawn_builder_with_name() -> Outcome[Unit, Str] {
+    // Test Builder::spawn_fn with a name
+    let result = Builder::new()
+        .name("test-worker")
+        .spawn_fn(do() {
+            thread::sleep_ms(5 as U64)
+        })
+
+    assert_true(result.is_ok())
+    let handle: UnitJoinHandle = result.unwrap()
+    let join_result = handle.join()
+    assert_true(join_result.is_ok())
+    Ok(())
+}
+
+@test
+func test_spawn_builder_with_stack_size() -> Outcome[Unit, Str] {
+    // Test Builder::spawn_i64 with custom stack size
+    let result = Builder::new()
+        .stack_size(2097152 as U64)  // 2MB stack
+        .spawn_i64(do() -> I64 {
+            return 99
+        })
+
+    assert_true(result.is_ok())
+    let handle: I64JoinHandle = result.unwrap()
+    let join_result = handle.join()
+    assert_true(join_result.is_ok())
+    assert_eq(join_result.unwrap(), 99)
+    Ok(())
+}

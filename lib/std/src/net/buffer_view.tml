@@ -1,0 +1,258 @@
+//! Zero-copy byte buffer view for efficient network I/O.
+//!
+//! `BufferView` provides a lightweight, non-owning view into a contiguous
+//! byte region. It enables zero-copy parsing and slicing of network data
+//! without allocating new buffers.
+//!
+//! # Design
+//!
+//! `BufferView` is intentionally simple — it stores a raw pointer, an offset,
+//! and a length. It does NOT own the underlying memory. The caller must
+//! ensure the source data remains valid for the lifetime of the view.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::net::buffer_view::BufferView
+//!
+//! // Create from a raw pointer (e.g., from a Buffer or network recv)
+//! let view = BufferView::from_raw(data_ptr, 0, 100)
+//! let header = view.slice(0, 12)   // First 12 bytes
+//! let payload = view.slice(12, 100) // Remaining bytes
+//! let byte = view.get(0)            // First byte
+//! ```
+
+use core::intrinsics::{ptr_read, ptr_write}
+
+/// A zero-copy, non-owning view into a contiguous byte region.
+///
+/// `BufferView` is a lightweight struct that references a byte range without
+/// copying or owning the underlying data. This makes it ideal for parsing
+/// network protocol headers and payloads without allocation.
+///
+/// # Safety
+///
+/// The underlying data must remain valid and unmodified for the entire
+/// lifetime of the `BufferView`. The view does NOT own the memory and
+/// will NOT free it on destruction.
+pub type BufferView {
+    /// Pointer to the start of the underlying byte data.
+    data: *U8,
+    /// Byte offset into the data where this view begins.
+    offset: I64,
+    /// Number of bytes in this view.
+    length: I64
+}
+
+impl BufferView {
+    /// Creates a new BufferView from a raw pointer with the given offset and length.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `data + offset + length` does not exceed
+    /// the bounds of the allocated memory region.
+    pub func from_raw(data: *U8, offset: I64, length: I64) -> BufferView {
+        BufferView {
+            data: data,
+            offset: offset,
+            length: length
+        }
+    }
+
+    /// Creates a BufferView from a byte array slice.
+    ///
+    /// The view references the slice's underlying memory directly (zero-copy).
+    pub func from_slice(slice: ref [U8]) -> BufferView {
+        let len: I64 = slice.len() as I64
+        // Get the pointer to the slice data
+        let data_ptr: *U8 = lowlevel {
+            let ptr: *U8 = slice as *U8
+            ptr
+        }
+        BufferView {
+            data: data_ptr,
+            offset: 0,
+            length: len
+        }
+    }
+
+    /// Creates an empty BufferView.
+    pub func empty() -> BufferView {
+        BufferView {
+            data: null as *U8,
+            offset: 0,
+            length: 0
+        }
+    }
+
+    /// Returns the number of bytes in this view.
+    pub func len(this) -> I64 {
+        this.length
+    }
+
+    /// Returns whether this view is empty (zero bytes).
+    pub func is_empty(this) -> Bool {
+        this.length == 0
+    }
+
+    /// Returns the byte at the given index within this view.
+    ///
+    /// Returns `Nothing` if the index is out of bounds.
+    pub func get(this, index: I64) -> Maybe[U8] {
+        if index < 0 or index >= this.length {
+            return Nothing
+        }
+        let addr: I64 = this.data as I64 + this.offset + index
+        let p: *U8 = addr as *U8
+        let byte: U8 = lowlevel { ptr_read[U8](p) }
+        return Just(byte)
+    }
+
+    /// Returns the byte at the given index without bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `0 <= index < length`.
+    pub func get_unchecked(this, index: I64) -> U8 {
+        let addr: I64 = this.data as I64 + this.offset + index
+        let p: *U8 = addr as *U8
+        lowlevel { ptr_read[U8](p) }
+    }
+
+    /// Creates a sub-view of this view from `start` to `end` (exclusive).
+    ///
+    /// Returns `Nothing` if the range is out of bounds.
+    pub func slice(this, start: I64, end: I64) -> Maybe[BufferView] {
+        if start < 0 or end < start or end > this.length {
+            return Nothing
+        }
+        return Just(BufferView {
+            data: this.data,
+            offset: this.offset + start,
+            length: end - start
+        })
+    }
+
+    /// Creates a sub-view starting at `start` through the end of this view.
+    ///
+    /// Returns `Nothing` if `start` is out of bounds.
+    pub func slice_from(this, start: I64) -> Maybe[BufferView] {
+        this.slice(start, this.length)
+    }
+
+    /// Creates a sub-view from the beginning up to `end` (exclusive).
+    ///
+    /// Returns `Nothing` if `end` is out of bounds.
+    pub func slice_to(this, end: I64) -> Maybe[BufferView] {
+        this.slice(0, end)
+    }
+
+    /// Splits this view into two at the given index.
+    ///
+    /// Returns `(left, right)` where `left` contains bytes `[0, mid)`
+    /// and `right` contains bytes `[mid, length)`.
+    ///
+    /// Returns `Nothing` if `mid` is out of bounds.
+    pub func split_at(this, mid: I64) -> Maybe[(BufferView, BufferView)] {
+        if mid < 0 or mid > this.length {
+            return Nothing
+        }
+        let left: BufferView = BufferView {
+            data: this.data,
+            offset: this.offset,
+            length: mid
+        }
+        let right: BufferView = BufferView {
+            data: this.data,
+            offset: this.offset + mid,
+            length: this.length - mid
+        }
+        return Just((left, right))
+    }
+
+    /// Searches for a byte value in this view.
+    ///
+    /// Returns the index of the first occurrence, or -1 if not found.
+    pub func find_byte(this, needle: U8) -> I64 {
+        var i: I64 = 0
+        loop (i < this.length) {
+            let addr: I64 = this.data as I64 + this.offset + i
+            let p: *U8 = addr as *U8
+            let b: U8 = lowlevel { ptr_read[U8](p) }
+            if b == needle {
+                return i
+            }
+            i = i + 1
+        }
+        return 0 - 1
+    }
+
+    /// Returns whether this view starts with the given byte sequence.
+    pub func starts_with(this, prefix: ref [U8]) -> Bool {
+        let prefix_len: I64 = prefix.len() as I64
+        if prefix_len > this.length {
+            return false
+        }
+        var i: I64 = 0
+        loop (i < prefix_len) {
+            let addr: I64 = this.data as I64 + this.offset + i
+            let p: *U8 = addr as *U8
+            let b: U8 = lowlevel { ptr_read[U8](p) }
+            if b != prefix[i] {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Copies the view's bytes into a new heap-allocated buffer.
+    ///
+    /// This is the "escape hatch" for when you need owned data.
+    /// The caller must free the returned pointer.
+    pub func to_owned_bytes(this) -> *U8 {
+        if this.length == 0 {
+            return null as *U8
+        }
+        let buf: *Unit = lowlevel { mem_alloc(this.length) }
+        let src: I64 = this.data as I64 + this.offset
+        lowlevel { copy_nonoverlapping(src as *Unit, buf, this.length as U64) }
+        return buf as *U8
+    }
+
+    /// Copies the view's bytes into a string.
+    ///
+    /// Assumes the bytes are valid UTF-8. The returned string is
+    /// heap-allocated and null-terminated.
+    pub func to_string(this) -> Str {
+        if this.length == 0 {
+            return ""
+        }
+        let buf: *Unit = lowlevel { mem_alloc(this.length + 1) }
+        let src: I64 = this.data as I64 + this.offset
+        lowlevel { copy_nonoverlapping(src as *Unit, buf, this.length as U64) }
+        // Null-terminate
+        let term_ptr: *U8 = (buf as I64 + this.length) as *U8
+        lowlevel { ptr_write[U8](term_ptr, 0 as U8) }
+        return buf as Str
+    }
+
+    /// Compares two BufferViews for byte equality.
+    pub func equals(this, other: ref BufferView) -> Bool {
+        if this.length != other.length {
+            return false
+        }
+        var i: I64 = 0
+        loop (i < this.length) {
+            let a_addr: I64 = this.data as I64 + this.offset + i
+            let b_addr: I64 = other.data as I64 + other.offset + i
+            let a: U8 = lowlevel { ptr_read[U8](a_addr as *U8) }
+            let b: U8 = lowlevel { ptr_read[U8](b_addr as *U8) }
+            if a != b {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}

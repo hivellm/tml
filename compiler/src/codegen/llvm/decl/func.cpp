@@ -379,6 +379,17 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         TML_DEBUG_LN("[EXTERN] Processing @extern: func.name="
                      << func.name << " symbol=" << symbol_name << " ret=" << ret_type);
 
+        // Skip __tml_register_routes declaration — the codegen will generate
+        // a define for this function when HTTP route decorators are present.
+        // Emitting both declare and define for the same symbol is invalid LLVM IR.
+        if (symbol_name == "__tml_register_routes") {
+            // Still register the function mapping so call sites resolve correctly
+            std::string func_type = ret_type + " (" + param_types + ")";
+            functions_[func.name] =
+                FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec, true, func.name};
+            return;
+        }
+
         // Skip if already declared (prevents duplicate declarations when module is imported
         // multiple times)
         if (declared_externals_.find(symbol_name) != declared_externals_.end()) {

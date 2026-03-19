@@ -1,0 +1,41 @@
+// Test basic thread spawning with the trampoline pattern.
+use test
+use std::thread::{spawn_fn, spawn_i64, UnitJoinHandle, I64JoinHandle, Builder}
+
+@test
+func test_spawn_fn_unit() -> Outcome[Unit, Str] {
+    // Spawn a thread that does nothing and returns Unit
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        // No-op — just verify we can spawn and join
+    })
+
+    // Join should succeed
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}
+
+@test
+func test_spawn_fn_with_side_effect() -> Outcome[Unit, Str] {
+    // Spawn a thread that calls sleep (proves it actually ran)
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        thread::sleep_ms(10 as U64)
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}
+
+@test
+func test_spawn_i64_return_value() -> Outcome[Unit, Str] {
+    // Spawn a thread that returns an I64 value
+    let handle: I64JoinHandle = spawn_i64(do() -> I64 {
+        return 42
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+    Ok(())
+}

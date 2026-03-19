@@ -1,0 +1,35 @@
+// Test spawn_blocking functionality.
+use test
+use std::thread::{spawn_blocking, spawn_blocking_i64, UnitJoinHandle, I64JoinHandle}
+
+@test
+func test_spawn_blocking_unit() -> Outcome[Unit, Str] {
+    let handle: UnitJoinHandle = spawn_blocking(do() {
+        // Simulate blocking work
+        thread::sleep_ms(10 as U64)
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}
+
+@test
+func test_spawn_blocking_i64() -> Outcome[Unit, Str] {
+    let handle: I64JoinHandle = spawn_blocking_i64(do() -> I64 {
+        // Simulate blocking computation
+        var total: I64 = 0
+        var i: I64 = 0
+        loop (i < 1000) {
+            total = total + i
+            i = i + 1
+        }
+        return total
+    })
+
+    let result = handle.join()
+    assert_true(result.is_ok())
+    // Sum of 0..999 = 999 * 1000 / 2 = 499500
+    assert_eq(result.unwrap(), 499500)
+    Ok(())
+}

@@ -1563,6 +1563,42 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // Fall back to looking up in TypeEnv (for library functions)
             auto func_sig = env_.lookup_func(callee_ident.name);
             if (func_sig.has_value()) {
+                // For generic functions, the return type may contain unresolved
+                // type parameters (stored as NamedType, not GenericType, by the
+                // type checker). Infer concrete types from call arguments and
+                // substitute into the return type. Without this, a variable
+                // holding the return value of a generic function would have an
+                // unresolved semantic type (e.g., List[Promise[T]] instead of
+                // List[Promise[I32]]), causing downstream method dispatch to
+                // emit wrong symbol names.
+                if (!func_sig->type_params.empty()) {
+                    auto gen_it = pending_generic_funcs_.find(callee_ident.name);
+                    if (gen_it != pending_generic_funcs_.end()) {
+                        const auto& gen_func = *gen_it->second;
+                        std::unordered_set<std::string> generic_names;
+                        for (const auto& g : gen_func.generics) {
+                            generic_names.insert(g.name);
+                        }
+                        std::unordered_map<std::string, types::TypePtr> bindings;
+                        for (size_t i = 0; i < call.args.size() && i < gen_func.params.size();
+                             ++i) {
+                            types::TypePtr arg_type = infer_expr_type(*call.args[i]);
+                            if (arg_type && gen_func.params[i].type) {
+                                unify_types(*gen_func.params[i].type, arg_type, generic_names,
+                                            bindings);
+                            }
+                        }
+                        if (!bindings.empty()) {
+                            return types::substitute_type(func_sig->return_type, bindings);
+                        }
+                    }
+                    // Inside a monomorphized generic function, apply
+                    // current_type_subs_ to resolve type params from the
+                    // enclosing scope.
+                    if (!current_type_subs_.empty()) {
+                        return apply_type_substitutions(func_sig->return_type, current_type_subs_);
+                    }
+                }
                 return func_sig->return_type;
             }
 
@@ -1572,6 +1608,34 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 for (const auto& [mod_name, mod] : all_modules) {
                     auto func_it = mod.functions.find(callee_ident.name);
                     if (func_it != mod.functions.end()) {
+                        // Same generic resolution for module registry lookups
+                        if (!func_it->second.type_params.empty()) {
+                            auto gen_it = pending_generic_funcs_.find(callee_ident.name);
+                            if (gen_it != pending_generic_funcs_.end()) {
+                                const auto& gen_func = *gen_it->second;
+                                std::unordered_set<std::string> generic_names;
+                                for (const auto& g : gen_func.generics) {
+                                    generic_names.insert(g.name);
+                                }
+                                std::unordered_map<std::string, types::TypePtr> bindings;
+                                for (size_t i = 0;
+                                     i < call.args.size() && i < gen_func.params.size(); ++i) {
+                                    types::TypePtr arg_type = infer_expr_type(*call.args[i]);
+                                    if (arg_type && gen_func.params[i].type) {
+                                        unify_types(*gen_func.params[i].type, arg_type,
+                                                    generic_names, bindings);
+                                    }
+                                }
+                                if (!bindings.empty()) {
+                                    return types::substitute_type(func_it->second.return_type,
+                                                                  bindings);
+                                }
+                            }
+                            if (!current_type_subs_.empty()) {
+                                return apply_type_substitutions(func_it->second.return_type,
+                                                                current_type_subs_);
+                            }
+                        }
                         return func_it->second.return_type;
                     }
                 }

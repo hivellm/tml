@@ -1,0 +1,41 @@
+// Tests for Waker::wake, wake_by_ref, and duplicate (vtable fn ptr dispatch v4)
+use test::{assert}
+use core::task::{Waker, RawWaker, RawWakerVTable}
+use core::ptr::RawPtr
+
+func noop_clone(p: RawPtr[Unit]) -> RawWaker {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    return RawWaker::new(p, ref vtable)
+}
+func noop_wake(p: RawPtr[Unit]) {}
+func noop_drop(p: RawPtr[Unit]) {}
+
+@test
+func test_waker_wake_no_panic() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    w.wake()
+    return 0
+}
+
+@test
+func test_waker_wake_by_ref_no_panic() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    w.wake_by_ref()
+    return 0
+}
+
+@test
+func test_waker_duplicate_no_panic() -> I32 {
+    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    let data: RawPtr[Unit] = RawPtr::null_ptr()
+    let raw: RawWaker = RawWaker::new(data, ref vtable)
+    let w: Waker = Waker::from_raw(raw)
+    let w2: Waker = w.duplicate()
+    return 0
+}

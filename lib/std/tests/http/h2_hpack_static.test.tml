@@ -1,0 +1,143 @@
+// Tests for HPACK static table lookup (RFC 7541 Appendix A)
+use test::{assert, assert_eq}
+use std::http::h2::hpack::{
+    HpackEntry,
+    hpack_static_table_entry,
+}
+
+@test
+func test_static_table_authority() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(1)
+    assert(entry.is_just(), "index 1 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":authority", "name = :authority")
+    assert_eq(e.value, "", "value = empty")
+    return 0
+}
+
+@test
+func test_static_table_method_get() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(2)
+    assert(entry.is_just(), "index 2 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":method", "name = :method")
+    assert_eq(e.value, "GET", "value = GET")
+    return 0
+}
+
+@test
+func test_static_table_method_post() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(3)
+    assert(entry.is_just(), "index 3 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":method", "name = :method")
+    assert_eq(e.value, "POST", "value = POST")
+    return 0
+}
+
+@test
+func test_static_table_path_root() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(4)
+    assert(entry.is_just(), "index 4 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":path", "name = :path")
+    assert_eq(e.value, "/", "value = /")
+    return 0
+}
+
+@test
+func test_static_table_scheme_https() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(7)
+    assert(entry.is_just(), "index 7 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":scheme", "name = :scheme")
+    assert_eq(e.value, "https", "value = https")
+    return 0
+}
+
+@test
+func test_static_table_status_200() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(8)
+    assert(entry.is_just(), "index 8 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":status", "name = :status")
+    assert_eq(e.value, "200", "value = 200")
+    return 0
+}
+
+@test
+func test_static_table_status_404() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(13)
+    assert(entry.is_just(), "index 13 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, ":status", "name = :status")
+    assert_eq(e.value, "404", "value = 404")
+    return 0
+}
+
+@test
+func test_static_table_accept_encoding() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(16)
+    assert(entry.is_just(), "index 16 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, "accept-encoding", "name = accept-encoding")
+    assert_eq(e.value, "gzip, deflate", "value = gzip, deflate")
+    return 0
+}
+
+@test
+func test_static_table_content_type() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(31)
+    assert(entry.is_just(), "index 31 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, "content-type", "name = content-type")
+    assert_eq(e.value, "", "value = empty")
+    return 0
+}
+
+@test
+func test_static_table_last_entry() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(61)
+    assert(entry.is_just(), "index 61 exists")
+    let e: HpackEntry = entry.unwrap()
+    assert_eq(e.name, "www-authenticate", "name = www-authenticate")
+    assert_eq(e.value, "", "value = empty")
+    return 0
+}
+
+@test
+func test_static_table_index_zero() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(0)
+    assert(entry.is_nothing(), "index 0 = Nothing")
+    return 0
+}
+
+@test
+func test_static_table_index_62() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(62)
+    assert(entry.is_nothing(), "index 62 = Nothing")
+    return 0
+}
+
+@test
+func test_static_table_negative_index() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(-1)
+    assert(entry.is_nothing(), "-1 = Nothing")
+    return 0
+}
+
+@test
+func test_static_table_cookie() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(32)
+    assert(entry.is_just(), "index 32 exists")
+    assert_eq(entry.unwrap().name, "cookie", "cookie")
+    return 0
+}
+
+@test
+func test_static_table_user_agent() -> I32 {
+    let entry: Maybe[HpackEntry] = hpack_static_table_entry(58)
+    assert(entry.is_just(), "index 58 exists")
+    assert_eq(entry.unwrap().name, "user-agent", "user-agent")
+    return 0
+}

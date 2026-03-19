@@ -138,6 +138,12 @@ auto ThirLower::lower_function(const hir::HirFunction& func) -> ThirFunction {
     result.is_extern = func.is_extern;
     result.extern_abi = func.extern_abi;
     result.attributes = func.attributes;
+    if (func.route_info.has_value()) {
+        result.route_info = thir::RouteInfo{
+            .method = static_cast<thir::RouteMethod>(static_cast<int>(func.route_info->method)),
+            .path = func.route_info->path,
+        };
+    }
     result.span = func.span;
 
     for (const auto& p : func.params) {

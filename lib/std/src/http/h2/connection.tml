@@ -1,0 +1,797 @@
+//! HTTP/2 connection management (RFC 7540 Sections 3-6).
+//!
+//! Manages the connection-level state: stream table, HPACK contexts,
+//! settings negotiation, flow control, and GOAWAY handling.
+//!
+//! # Design
+//!
+//! The stream table is implemented as a flat array of stream pointers
+//! (allocated via `mem_alloc`) indexed by a linear scan. This avoids
+//! generic HashMap[I64, H2Stream] codegen issues. HTTP/2 connections
+//! typically have < 100 concurrent streams, so linear scan is fine.
+//!
+//! All "send" methods return a `Buffer` containing the encoded frame(s)
+//! to write to the wire. The caller is responsible for actually sending.
+
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2Frame, H2FrameType, H2Error, H2ErrorCode,
+    H2Setting, H2SettingPair, H2SettingsResult,
+    H2_FLAG_ACK, H2_FLAG_END_STREAM, H2_FLAG_END_HEADERS,
+    H2_CONNECTION_PREFACE, H2_CONNECTION_PREFACE_LEN,
+    H2_DEFAULT_MAX_FRAME_SIZE, H2_DEFAULT_INITIAL_WINDOW_SIZE,
+    H2_DEFAULT_HEADER_TABLE_SIZE,
+    h2_encode_frame_raw, h2_decode_frame, h2_decode_settings,
+    h2_encode_settings_pair,
+}
+use std::http::h2::hpack::{
+    HpackContext, HpackEntry,
+    hpack_encode_headers, hpack_decode_headers,
+}
+use std::http::h2::stream::{
+    H2Stream, H2StreamState, H2StreamResult,
+    H2_EVENT_NONE, H2_EVENT_HEADERS_COMPLETE, H2_EVENT_DATA,
+    H2_EVENT_RESET, H2_EVENT_WINDOW_UPDATE,
+}
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+
+// ============================================================================
+// Settings
+// ============================================================================
+
+/// HTTP/2 connection settings (RFC 7540 Section 6.5.2).
+pub type H2Settings {
+    header_table_size: I64,
+    enable_push: I64,
+    max_concurrent_streams: I64,
+    initial_window_size: I64,
+    max_frame_size: I64,
+    max_header_list_size: I64,
+}
+
+impl H2Settings {
+    /// Creates settings with RFC 7540 default values.
+    pub func defaults() -> H2Settings {
+        H2Settings {
+            header_table_size: 4096,
+            enable_push: 1,
+            max_concurrent_streams: 100,
+            initial_window_size: 65535,
+            max_frame_size: 16384,
+            max_header_list_size: 8192,
+        }
+    }
+
+    /// Creates server-side settings (push disabled).
+    pub func server_defaults() -> H2Settings {
+        H2Settings {
+            header_table_size: 4096,
+            enable_push: 0,
+            max_concurrent_streams: 100,
+            initial_window_size: 65535,
+            max_frame_size: 16384,
+            max_header_list_size: 8192,
+        }
+    }
+
+    /// Applies a setting from a decoded SETTINGS frame pair.
+    /// Unknown settings are ignored per RFC 7540.
+    pub func apply(this, setting_id: I32, value: I64) {
+        if setting_id == 1 { this.header_table_size = value }
+        else if setting_id == 2 { this.enable_push = value }
+        else if setting_id == 3 { this.max_concurrent_streams = value }
+        else if setting_id == 4 { this.initial_window_size = value }
+        else if setting_id == 5 { this.max_frame_size = value }
+        else if setting_id == 6 { this.max_header_list_size = value }
+        // Unknown settings silently ignored (RFC 7540 Section 6.5.2)
+    }
+
+    /// Encode these settings into a SETTINGS frame payload buffer.
+    pub func encode(this) -> Buffer {
+        let buf = Buffer::new(36)  // 6 settings * 6 bytes each
+        h2_encode_settings_pair(buf, H2Setting::HeaderTableSize(), this.header_table_size)
+        h2_encode_settings_pair(buf, H2Setting::EnablePush(), this.enable_push)
+        h2_encode_settings_pair(buf, H2Setting::MaxConcurrentStreams(), this.max_concurrent_streams)
+        h2_encode_settings_pair(buf, H2Setting::InitialWindowSize(), this.initial_window_size)
+        h2_encode_settings_pair(buf, H2Setting::MaxFrameSize(), this.max_frame_size)
+        h2_encode_settings_pair(buf, H2Setting::MaxHeaderListSize(), this.max_header_list_size)
+        buf
+    }
+}
+
+// ============================================================================
+// Stream table — flat array with linear scan
+// ============================================================================
+
+/// Maximum number of concurrent streams in the stream table.
+const MAX_STREAMS: I64 = 256
+
+/// Size of one stream-table slot: pointer (8 bytes).
+const SLOT_SIZE: I64 = 8
+
+/// Simple stream table: fixed-size array of H2Stream pointers.
+/// Slot i contains a pointer to H2Stream (or 0 if empty).
+/// Stream lookup is by linear scan matching stream ID.
+type H2StreamTable {
+    /// Raw pointer to array of MAX_STREAMS I64 slots.
+    slots: I64,
+    /// Number of active streams.
+    count: I64,
+}
+
+impl H2StreamTable {
+    /// Creates a new empty stream table.
+    pub func new() -> H2StreamTable {
+        let size: I64 = MAX_STREAMS * SLOT_SIZE
+        let ptr: I64 = lowlevel { mem_alloc(size) } as I64
+        // Zero-initialize all slots
+        var i: I64 = 0
+        loop (i < MAX_STREAMS) {
+            lowlevel { ptr_write[I64]((ptr + i * SLOT_SIZE) as *I64, 0 as I64) }
+            i = i + 1
+        }
+        H2StreamTable { slots: ptr, count: 0 }
+    }
+
+    /// Find a stream by ID. Returns the stream pointer (I64) or 0 if not found.
+    pub func find(this, stream_id: I64) -> I64 {
+        var i: I64 = 0
+        loop (i < MAX_STREAMS) {
+            let slot_ptr: I64 = this.slots + i * SLOT_SIZE
+            let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
+            if stream_ptr != 0 {
+                let sid: I64 = lowlevel { ptr_read[I64](stream_ptr as *I64) }
+                if sid == stream_id {
+                    return stream_ptr
+                }
+            }
+            i = i + 1
+        }
+        return 0
+    }
+
+    /// Insert a stream into the first empty slot. Returns the slot index or -1 if full.
+    pub func insert(this, stream_ptr: I64) -> I64 {
+        var i: I64 = 0
+        loop (i < MAX_STREAMS) {
+            let slot_ptr: I64 = this.slots + i * SLOT_SIZE
+            let existing: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
+            if existing == 0 {
+                lowlevel { ptr_write[I64](slot_ptr as *I64, stream_ptr) }
+                this.count = this.count + 1
+                return i
+            }
+            i = i + 1
+        }
+        return -1
+    }
+
+    /// Remove a stream by ID. Returns the removed stream pointer or 0.
+    pub func remove(this, stream_id: I64) -> I64 {
+        var i: I64 = 0
+        loop (i < MAX_STREAMS) {
+            let slot_ptr: I64 = this.slots + i * SLOT_SIZE
+            let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
+            if stream_ptr != 0 {
+                let sid: I64 = lowlevel { ptr_read[I64](stream_ptr as *I64) }
+                if sid == stream_id {
+                    lowlevel { ptr_write[I64](slot_ptr as *I64, 0 as I64) }
+                    this.count = this.count - 1
+                    return stream_ptr
+                }
+            }
+            i = i + 1
+        }
+        return 0
+    }
+
+    /// Returns the number of active streams.
+    pub func active_count(this) -> I64 { this.count }
+}
+
+// ============================================================================
+// Connection-level event
+// ============================================================================
+
+/// Connection-level event produced by processing a frame.
+///
+/// Scalar-only struct (no Buffer fields) for safe return through Outcome.
+pub type H2ConnectionEvent {
+    /// Event type:
+    ///   0 = None
+    ///   1 = Request (headers complete on a stream; read stream headers)
+    ///   2 = Data (data received on a stream)
+    ///   3 = StreamReset
+    ///   4 = GoAway (connection is shutting down)
+    ///   5 = SettingsAck (our settings were acknowledged)
+    ///   6 = Ping (ping received, pong already sent)
+    ///   7 = WindowUpdate
+    event_type: I32,
+    /// Stream ID (0 for connection-level events).
+    stream_id: I64,
+    /// For Data: payload length.
+    data_len: I64,
+    /// For errors: error code.
+    error_code: I64,
+    /// For GoAway: last stream ID.
+    last_stream_id: I64,
+    /// Whether END_STREAM was set.
+    end_stream: I64,
+}
+
+pub const H2_CONN_EVENT_NONE: I32 = 0
+pub const H2_CONN_EVENT_REQUEST: I32 = 1
+pub const H2_CONN_EVENT_DATA: I32 = 2
+pub const H2_CONN_EVENT_STREAM_RESET: I32 = 3
+pub const H2_CONN_EVENT_GOAWAY: I32 = 4
+pub const H2_CONN_EVENT_SETTINGS_ACK: I32 = 5
+pub const H2_CONN_EVENT_PING: I32 = 6
+pub const H2_CONN_EVENT_WINDOW_UPDATE: I32 = 7
+
+impl H2ConnectionEvent {
+    pub func none() -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_NONE,
+            stream_id: 0,
+            data_len: 0,
+            error_code: 0,
+            last_stream_id: 0,
+            end_stream: 0,
+        }
+    }
+
+    pub func request(stream_id: I64, end_stream: I64) -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_REQUEST,
+            stream_id: stream_id,
+            data_len: 0,
+            error_code: 0,
+            last_stream_id: 0,
+            end_stream: end_stream,
+        }
+    }
+
+    pub func data(stream_id: I64, data_len: I64, end_stream: I64) -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_DATA,
+            stream_id: stream_id,
+            data_len: data_len,
+            error_code: 0,
+            last_stream_id: 0,
+            end_stream: end_stream,
+        }
+    }
+
+    pub func stream_reset(stream_id: I64, error_code: I64) -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_STREAM_RESET,
+            stream_id: stream_id,
+            data_len: 0,
+            error_code: error_code,
+            last_stream_id: 0,
+            end_stream: 1,
+        }
+    }
+
+    pub func goaway(last_stream_id: I64, error_code: I64) -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_GOAWAY,
+            stream_id: 0,
+            data_len: 0,
+            error_code: error_code,
+            last_stream_id: last_stream_id,
+            end_stream: 0,
+        }
+    }
+
+    pub func settings_ack() -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_SETTINGS_ACK,
+            stream_id: 0,
+            data_len: 0,
+            error_code: 0,
+            last_stream_id: 0,
+            end_stream: 0,
+        }
+    }
+
+    pub func ping() -> H2ConnectionEvent {
+        H2ConnectionEvent {
+            event_type: H2_CONN_EVENT_PING,
+            stream_id: 0,
+            data_len: 0,
+            error_code: 0,
+            last_stream_id: 0,
+            end_stream: 0,
+        }
+    }
+}
+
+// ============================================================================
+// Connection
+// ============================================================================
+
+/// An HTTP/2 connection (server-side).
+///
+/// Manages streams, HPACK contexts, settings, and flow control.
+/// Use `process_frame` to feed decoded frames and get events back.
+/// Use `encode_*` methods to create frames for sending.
+pub type H2Connection {
+    /// Stream table.
+    streams: H2StreamTable,
+    /// Next stream ID to allocate (server: even, starting at 2).
+    next_stream_id: I64,
+    /// Highest client stream ID we've seen.
+    last_client_stream_id: I64,
+    /// HPACK encoder context (for sending headers).
+    hpack_encoder: HpackContext,
+    /// HPACK decoder context (for receiving headers).
+    hpack_decoder: HpackContext,
+    /// Our local settings (what we advertise).
+    local_settings: H2Settings,
+    /// Remote peer's settings (what they advertised).
+    remote_settings: H2Settings,
+    /// Connection-level send window (our ability to send data).
+    send_window: I64,
+    /// Connection-level receive window (peer's ability to send us data).
+    recv_window: I64,
+    /// Whether we've sent GOAWAY.
+    goaway_sent: I64,
+    /// Whether we've received GOAWAY.
+    goaway_received: I64,
+    /// Last stream ID from GOAWAY.
+    goaway_last_stream_id: I64,
+    /// Whether we've received the peer's initial SETTINGS.
+    settings_received: I64,
+    /// Buffer for pending outbound frames (to be sent to wire).
+    outbound: Buffer,
+}
+
+impl H2Connection {
+    /// Creates a new server-side HTTP/2 connection.
+    pub func new() -> H2Connection {
+        let local = H2Settings::server_defaults()
+        let remote = H2Settings::defaults()
+        H2Connection {
+            streams: H2StreamTable::new(),
+            next_stream_id: 2,
+            last_client_stream_id: 0,
+            hpack_encoder: HpackContext::new(local.header_table_size),
+            hpack_decoder: HpackContext::new(remote.header_table_size),
+            local_settings: local,
+            remote_settings: remote,
+            send_window: 65535,
+            recv_window: 65535,
+            goaway_sent: 0,
+            goaway_received: 0,
+            goaway_last_stream_id: 0,
+            settings_received: 0,
+            outbound: Buffer::new(1024),
+        }
+    }
+
+    /// Returns the number of active streams.
+    pub func active_streams(this) -> I64 {
+        this.streams.active_count()
+    }
+
+    /// Returns whether GOAWAY has been sent.
+    pub func is_goaway_sent(this) -> Bool {
+        this.goaway_sent == 1
+    }
+
+    /// Returns whether GOAWAY has been received.
+    pub func is_goaway_received(this) -> Bool {
+        this.goaway_received == 1
+    }
+
+    /// Returns the connection-level send window.
+    pub func get_send_window(this) -> I64 { this.send_window }
+
+    /// Returns the connection-level receive window.
+    pub func get_recv_window(this) -> I64 { this.recv_window }
+
+    /// Returns a reference to local settings.
+    pub func get_local_settings(this) -> H2Settings { this.local_settings }
+
+    /// Returns a reference to remote settings.
+    pub func get_remote_settings(this) -> H2Settings { this.remote_settings }
+
+    // ── Outbound frame encoding ────────────────────────────────────
+
+    /// Encode our SETTINGS frame into a Buffer for sending.
+    pub func encode_settings(this) -> Buffer {
+        let payload = this.local_settings.encode()
+        h2_encode_frame_raw(4, 0, 0, payload)  // type=SETTINGS, no flags, stream 0
+    }
+
+    /// Encode a SETTINGS ACK frame.
+    pub func encode_settings_ack(this) -> Buffer {
+        let empty = Buffer::new(0)
+        h2_encode_frame_raw(4, H2_FLAG_ACK, 0, empty)  // type=SETTINGS, ACK flag
+    }
+
+    /// Encode a GOAWAY frame.
+    /// Uses h2_encode_frame_raw to avoid H2Frame struct-by-value issues.
+    pub func encode_goaway(this, error_code: I64) -> Buffer {
+        let buf = Buffer::new(8)
+        buf.write_u32_be(this.last_client_stream_id & 0x7FFFFFFF, 0)
+        buf.write_u32_be(error_code, 4)
+        h2_encode_frame_raw(7, 0, 0, buf)  // type=GOAWAY, stream 0
+    }
+
+    /// Encode a WINDOW_UPDATE frame for the given stream (or stream 0 for connection).
+    pub func encode_window_update(this, stream_id: I64, increment: I64) -> Buffer {
+        let buf = Buffer::new(4)
+        buf.write_u32_be(increment & 0x7FFFFFFF, 0)
+        h2_encode_frame_raw(8, 0, stream_id, buf)  // type=WINDOW_UPDATE
+    }
+
+    /// Encode a PING ACK frame with the given 8 bytes of opaque data.
+    pub func encode_ping_ack(this, ping_data: Buffer) -> Buffer {
+        h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ping_data)  // type=PING, ACK flag
+    }
+
+    /// Encode a RST_STREAM frame.
+    pub func encode_rst_stream(this, stream_id: I64, error_code: I64) -> Buffer {
+        let buf = Buffer::new(4)
+        buf.write_u32_be(error_code, 0)
+        h2_encode_frame_raw(3, 0, stream_id, buf)  // type=RST_STREAM
+    }
+
+    /// Encode a HEADERS response frame for the given stream.
+    ///
+    /// `headers` is a List of HpackEntry (name-value pairs).
+    /// `end_stream` controls whether END_STREAM flag is set.
+    pub func encode_headers(this, stream_id: I64, headers: List[HpackEntry], end_stream: I64) -> Buffer {
+        let header_block = hpack_encode_headers(mut ref this.hpack_encoder, headers)
+        var flags: I32 = H2_FLAG_END_HEADERS
+        if end_stream == 1 {
+            flags = flags | H2_FLAG_END_STREAM
+        }
+        h2_encode_frame_raw(1, flags, stream_id, header_block)  // type=HEADERS
+    }
+
+    /// Encode a DATA frame for the given stream.
+    pub func encode_data(this, stream_id: I64, data: Buffer, end_stream: I64) -> Buffer {
+        var flags: I32 = 0
+        if end_stream == 1 {
+            flags = H2_FLAG_END_STREAM
+        }
+        h2_encode_frame_raw(0, flags, stream_id, data)  // type=DATA
+    }
+
+    // ── Frame processing ───────────────────────────────────────────
+
+    /// Process a decoded frame and return a connection event.
+    ///
+    /// This is the main entry point for the connection. Feed it decoded
+    /// H2Frame values and it will:
+    ///   1. Route to the correct stream (or handle connection-level frames)
+    ///   2. Update state machines
+    ///   3. Return an event describing what happened
+    ///
+    /// The caller should check the event type and take action:
+    ///   - H2_CONN_EVENT_REQUEST: dispatch to application handler
+    ///   - H2_CONN_EVENT_DATA: accumulate request body
+    ///   - H2_CONN_EVENT_GOAWAY: stop accepting new streams
+    ///   etc.
+    pub func process_frame(this, frame_type: I32, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        // Connection-level frames (stream_id == 0)
+        if stream_id == 0 {
+            if frame_type == 4 {
+                // SETTINGS
+                return this.handle_settings(flags, payload)
+            } else if frame_type == 6 {
+                // PING
+                return this.handle_ping(flags, payload)
+            } else if frame_type == 7 {
+                // GOAWAY
+                return this.handle_goaway(payload)
+            } else if frame_type == 8 {
+                // WINDOW_UPDATE (connection-level)
+                return this.handle_connection_window_update(payload)
+            }
+            // Unknown frame types on stream 0: ignore per spec
+            return Ok(H2ConnectionEvent::none())
+        }
+
+        // Stream-level frames
+        if frame_type == 1 {
+            // HEADERS
+            return this.handle_headers(flags, stream_id, payload)
+        } else if frame_type == 0 {
+            // DATA
+            return this.handle_data(flags, stream_id, payload)
+        } else if frame_type == 3 {
+            // RST_STREAM
+            return this.handle_rst_stream(stream_id, payload)
+        } else if frame_type == 8 {
+            // WINDOW_UPDATE (stream-level)
+            return this.handle_stream_window_update(stream_id, payload)
+        } else if frame_type == 9 {
+            // CONTINUATION
+            return this.handle_continuation(flags, stream_id, payload)
+        } else if frame_type == 2 {
+            // PRIORITY — acknowledged but not implemented
+            return Ok(H2ConnectionEvent::none())
+        }
+
+        // Unknown frame type on a stream: ignore per spec
+        Ok(H2ConnectionEvent::none())
+    }
+
+    // ── Internal handlers ──────────────────────────────────────────
+
+    /// Handle a SETTINGS frame (stream 0).
+    pub func handle_settings(this, flags: I32, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if (flags & H2_FLAG_ACK) != 0 {
+            // SETTINGS ACK — peer acknowledged our settings
+            return Ok(H2ConnectionEvent::settings_ack())
+        }
+
+        // Decode and apply settings
+        let result: H2SettingsResult = h2_decode_settings(payload)!
+        var i: I64 = 0
+        let count: I64 = result.count()
+        loop (i < count) {
+            let id: I32 = result.get_id(i)
+            let value: I64 = result.get_value(i)
+
+            // Validate specific settings
+            if id == 4 {
+                // INITIAL_WINDOW_SIZE must be <= 2^31-1
+                if value > 2147483647 {
+                    return Err(H2Error::protocol_error("INITIAL_WINDOW_SIZE exceeds 2^31-1"))
+                }
+                // Adjust all existing streams' send windows by the delta
+                let old_val: I64 = this.remote_settings.initial_window_size
+                let delta: I64 = value - old_val
+                this.adjust_all_stream_send_windows(delta)
+            } else if id == 5 {
+                // MAX_FRAME_SIZE must be between 2^14 and 2^24-1
+                if value < 16384 or value > 16777215 {
+                    return Err(H2Error::protocol_error("MAX_FRAME_SIZE out of range"))
+                }
+            } else if id == 2 {
+                // ENABLE_PUSH must be 0 or 1
+                if value != 0 and value != 1 {
+                    return Err(H2Error::protocol_error("ENABLE_PUSH must be 0 or 1"))
+                }
+            }
+
+            this.remote_settings.apply(id, value)
+            i = i + 1
+        }
+
+        this.settings_received = 1
+        Ok(H2ConnectionEvent::none())
+    }
+
+    /// Handle a PING frame (stream 0).
+    pub func handle_ping(this, flags: I32, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if payload.len() != 8 {
+            return Err(H2Error::protocol_error("PING payload must be 8 bytes"))
+        }
+        if (flags & H2_FLAG_ACK) != 0 {
+            // PING ACK — response to our ping
+            return Ok(H2ConnectionEvent::ping())
+        }
+        // Queue a PING ACK in the outbound buffer
+        // Use h2_encode_frame_raw directly to avoid H2Frame struct-by-value issues
+        let pong = h2_encode_frame_raw(6, H2_FLAG_ACK, 0, payload)  // type=PING, ACK flag
+        h2_conn_append_buf(this.outbound, pong)
+        Ok(H2ConnectionEvent::ping())
+    }
+
+    /// Handle a GOAWAY frame (stream 0).
+    pub func handle_goaway(this, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if payload.len() < 8 {
+            return Err(H2Error::protocol_error("GOAWAY payload too short"))
+        }
+        let last_id: I64 = payload.read_u32_be(0) & 0x7FFFFFFF
+        let error_code: I64 = payload.read_u32_be(4)
+        this.goaway_received = 1
+        this.goaway_last_stream_id = last_id
+        Ok(H2ConnectionEvent::goaway(last_id, error_code))
+    }
+
+    /// Handle a connection-level WINDOW_UPDATE (stream 0).
+    pub func handle_connection_window_update(this, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if payload.len() != 4 {
+            return Err(H2Error::protocol_error("WINDOW_UPDATE payload must be 4 bytes"))
+        }
+        let increment: I64 = payload.read_u32_be(0) & 0x7FFFFFFF
+        if increment == 0 {
+            return Err(H2Error::protocol_error("WINDOW_UPDATE with zero increment"))
+        }
+        this.send_window = this.send_window + increment
+        if this.send_window > 2147483647 {
+            return Err(H2Error::protocol_error("connection send window overflow"))
+        }
+        Ok(H2ConnectionEvent::none())
+    }
+
+    /// Handle a HEADERS frame on a stream.
+    pub func handle_headers(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        // Look up or create the stream
+        var stream_ptr: I64 = this.streams.find(stream_id)
+        if stream_ptr == 0 {
+            // New stream — validate stream ID
+            if stream_id <= this.last_client_stream_id {
+                return Err(H2Error::protocol_error("stream ID must increase"))
+            }
+            if this.goaway_sent == 1 {
+                return Err(H2Error::protocol_error("new stream after GOAWAY"))
+            }
+
+            // Create a new stream
+            stream_ptr = h2_conn_create_stream(stream_id, this.remote_settings.initial_window_size, this.local_settings.initial_window_size)
+            let slot = this.streams.insert(stream_ptr)
+            if slot < 0 {
+                lowlevel { mem_free(stream_ptr as *Unit) }
+                return Err(H2Error::protocol_error("too many concurrent streams"))
+            }
+            this.last_client_stream_id = stream_id
+        }
+
+        // Process the HEADERS on the stream
+        // Read stream from heap, mutate, write back
+        var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+        let result: H2StreamResult = stream.recv_headers(flags)!
+        lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+
+        if result.event_type == H2_EVENT_HEADERS_COMPLETE {
+            return Ok(H2ConnectionEvent::request(stream_id, result.end_stream))
+        }
+
+        Ok(H2ConnectionEvent::none())
+    }
+
+    /// Handle a CONTINUATION frame on a stream.
+    pub func handle_continuation(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        let stream_ptr: I64 = this.streams.find(stream_id)
+        if stream_ptr == 0 {
+            return Err(H2Error::protocol_error("CONTINUATION on unknown stream"))
+        }
+
+        var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+        let result: H2StreamResult = stream.recv_continuation(flags)!
+        lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+
+        if result.event_type == H2_EVENT_HEADERS_COMPLETE {
+            return Ok(H2ConnectionEvent::request(stream_id, result.end_stream))
+        }
+
+        Ok(H2ConnectionEvent::none())
+    }
+
+    /// Handle a DATA frame on a stream.
+    pub func handle_data(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        let stream_ptr: I64 = this.streams.find(stream_id)
+        if stream_ptr == 0 {
+            return Err(H2Error::protocol_error("DATA on unknown stream"))
+        }
+
+        let payload_len: I64 = payload.len()
+
+        // Update connection-level receive window
+        this.recv_window = this.recv_window - payload_len
+        if this.recv_window < 0 {
+            return Err(H2Error::protocol_error("connection receive window exceeded"))
+        }
+
+        // Process on stream
+        var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+        let result: H2StreamResult = stream.recv_data(flags, payload_len)!
+        lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+
+        Ok(H2ConnectionEvent::data(stream_id, payload_len, result.end_stream))
+    }
+
+    /// Handle a RST_STREAM frame on a stream.
+    pub func handle_rst_stream(this, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if payload.len() != 4 {
+            return Err(H2Error::protocol_error("RST_STREAM payload must be 4 bytes"))
+        }
+        let error_code: I64 = payload.read_u32_be(0)
+
+        let stream_ptr: I64 = this.streams.find(stream_id)
+        if stream_ptr == 0 {
+            return Err(H2Error::protocol_error("RST_STREAM on unknown stream"))
+        }
+
+        var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+        stream.recv_rst_stream(error_code)!
+        lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+
+        Ok(H2ConnectionEvent::stream_reset(stream_id, error_code))
+    }
+
+    /// Handle a stream-level WINDOW_UPDATE.
+    pub func handle_stream_window_update(this, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+        if payload.len() != 4 {
+            return Err(H2Error::protocol_error("WINDOW_UPDATE payload must be 4 bytes"))
+        }
+        let increment: I64 = payload.read_u32_be(0) & 0x7FFFFFFF
+
+        let stream_ptr: I64 = this.streams.find(stream_id)
+        if stream_ptr == 0 {
+            // Per RFC 7540 Section 5.1, WINDOW_UPDATE on a closed/unknown stream
+            // can be ignored in some cases. For simplicity, ignore it.
+            return Ok(H2ConnectionEvent::none())
+        }
+
+        var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+        stream.recv_window_update(increment)!
+        lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+
+        Ok(H2ConnectionEvent::none())
+    }
+
+    /// Adjust all active streams' send windows by a delta (SETTINGS change).
+    pub func adjust_all_stream_send_windows(this, delta: I64) {
+        var i: I64 = 0
+        loop (i < MAX_STREAMS) {
+            let slot_ptr: I64 = this.streams.slots + i * SLOT_SIZE
+            let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
+            if stream_ptr != 0 {
+                var stream: H2Stream = lowlevel { ptr_read[H2Stream](stream_ptr as *H2Stream) }
+                stream.adjust_send_window(delta)
+                lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
+            }
+            i = i + 1
+        }
+    }
+
+    /// Take any pending outbound frame bytes (e.g., PING ACK queued during processing).
+    /// Returns the outbound buffer content and clears it.
+    pub func take_outbound(this) -> Buffer {
+        let len: I64 = this.outbound.len()
+        let result = Buffer::new(len)
+        var i: I64 = 0
+        loop (i < len) {
+            result.write_byte(this.outbound.get(i))
+            i = i + 1
+        }
+        this.outbound.clear()
+        result
+    }
+
+    /// Returns true if there are pending outbound bytes.
+    pub func has_outbound(this) -> Bool {
+        this.outbound.len() > 0
+    }
+
+    /// Get a stream by ID (returns pointer or 0).
+    pub func get_stream_ptr(this, stream_id: I64) -> I64 {
+        this.streams.find(stream_id)
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Allocate and initialize a new H2Stream on the heap, return its pointer.
+func h2_conn_create_stream(id: I64, send_window: I64, recv_window: I64) -> I64 {
+    let stream = H2Stream::new(id, send_window, recv_window)
+    // Allocate space for the stream struct on the heap
+    // H2Stream has 8 fields: I64, H2StreamState(I32), I64, I64, Buffer, I64, I64, I64
+    // Total size = approximately 64 bytes (8 fields * 8 bytes max alignment)
+    // H2Stream is now pure scalar: 7 fields * 8 bytes = 56 bytes, pad to 128
+    let size: I64 = 128
+    let ptr: I64 = lowlevel { mem_alloc(size) } as I64
+    lowlevel { ptr_write[H2Stream](ptr as *H2Stream, stream) }
+    ptr
+}
+
+/// Append one buffer's bytes to another.
+func h2_conn_append_buf(dst: Buffer, src: Buffer) {
+    let src_len: I64 = src.len()
+    var i: I64 = 0
+    loop (i < src_len) {
+        dst.write_byte(src.get(i))
+        i = i + 1
+    }
+}

@@ -1,0 +1,105 @@
+// v3
+use test
+use std::collections::Buffer
+use std::http::h2::frame::{
+    H2_FLAG_ACK, H2_FLAG_END_HEADERS, H2_FLAG_END_STREAM,
+    h2_encode_settings_pair, H2Setting,
+}
+use std::http::h2::connection::{
+    H2Connection, H2_CONN_EVENT_NONE, H2_CONN_EVENT_SETTINGS_ACK,
+    H2_CONN_EVENT_PING, H2_CONN_EVENT_GOAWAY,
+}
+
+@test
+func test_connection_new() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    assert_eq(conn.active_streams(), 0)
+    assert_false(conn.is_goaway_sent())
+    assert_false(conn.is_goaway_received())
+    assert_eq(conn.get_send_window(), 65535)
+    Ok(())
+}
+
+@test
+func test_process_settings() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(6)
+    h2_encode_settings_pair(payload, H2Setting::InitialWindowSize(), 32768)
+    let ev = conn.process_frame(4, 0, 0, payload)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_NONE)
+    let remote = conn.get_remote_settings()
+    assert_eq(remote.initial_window_size, 32768)
+    Ok(())
+}
+
+@test
+func test_process_settings_ack() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let empty = Buffer::new(0)
+    let ev = conn.process_frame(4, H2_FLAG_ACK, 0, empty)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_SETTINGS_ACK)
+    Ok(())
+}
+
+@test
+func test_process_ping() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(8)
+    var i: I64 = 0
+    loop (i < 8) {
+        payload.write_byte((i + 1) as I32)
+        i = i + 1
+    }
+    let ev = conn.process_frame(6, 0, 0, payload)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_PING)
+    assert_true(conn.has_outbound())
+    let outbound = conn.take_outbound()
+    assert_eq(outbound.len(), 17)  // 9 header + 8 payload
+    assert_eq(outbound.get(3), 6)  // PING type
+    assert_eq(outbound.get(4), 1)  // ACK flag
+    Ok(())
+}
+
+@test
+func test_process_goaway() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(8)
+    payload.write_u32_be(5, 0)
+    payload.write_u32_be(0, 4)
+    let ev = conn.process_frame(7, 0, 0, payload)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_GOAWAY)
+    assert_eq(ev.last_stream_id, 5)
+    assert_eq(ev.error_code, 0)
+    assert_true(conn.is_goaway_received())
+    Ok(())
+}
+
+@test
+func test_process_connection_window_update() -> Outcome[Unit, Str] {
+    var conn = H2Connection::new()
+    let payload = Buffer::new(4)
+    payload.write_u32_be(10000, 0)
+    let ev = conn.process_frame(8, 0, 0, payload)!
+    assert_eq(ev.event_type, H2_CONN_EVENT_NONE)
+    assert_eq(conn.get_send_window(), 65535 + 10000)
+    Ok(())
+}
+
+@test
+func test_encode_settings() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let buf = conn.encode_settings()
+    assert_eq(buf.len(), 45)  // 9 header + 36 payload (6 settings)
+    assert_eq(buf.get(3), 4)  // SETTINGS type
+    Ok(())
+}
+
+@test
+func test_encode_settings_ack() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let buf = conn.encode_settings_ack()
+    assert_eq(buf.len(), 9)  // empty payload
+    assert_eq(buf.get(3), 4)  // SETTINGS type
+    assert_eq(buf.get(4), 1)  // ACK flag
+    Ok(())
+}
