@@ -23,7 +23,7 @@ use std::http::h2::frame::{
 
 /// HTTP/2 stream states (RFC 7540 Section 5.1).
 pub type H2StreamState {
-    value: I32,
+    value: I64,
 }
 
 impl H2StreamState {
@@ -57,18 +57,18 @@ impl H2StreamState {
 
 /// Result of a stream frame-processing method. Scalar-only (no Buffer fields).
 pub type H2StreamResult {
-    event_type: I32,
+    event_type: I64,
     end_stream: I64,
     data_len: I64,
     error_code: I64,
     window_increment: I64,
 }
 
-pub const H2_EVENT_NONE: I32 = 0
-pub const H2_EVENT_HEADERS_COMPLETE: I32 = 1
-pub const H2_EVENT_DATA: I32 = 2
-pub const H2_EVENT_RESET: I32 = 3
-pub const H2_EVENT_WINDOW_UPDATE: I32 = 4
+pub const H2_EVENT_NONE: I64 = 0
+pub const H2_EVENT_HEADERS_COMPLETE: I64 = 1
+pub const H2_EVENT_DATA: I64 = 2
+pub const H2_EVENT_RESET: I64 = 3
+pub const H2_EVENT_WINDOW_UPDATE: I64 = 4
 
 impl H2StreamResult {
     pub func none() -> H2StreamResult {
@@ -133,12 +133,12 @@ impl H2Stream {
     }
 
     pub func can_recv(this) -> Bool {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         s == 0 or s == 3 or s == 4 or s == 2
     }
 
     pub func can_send(this) -> Bool {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         s == 0 or s == 3 or s == 5 or s == 1
     }
 
@@ -150,7 +150,7 @@ impl H2Stream {
     /// Process received HEADERS flags. Updates state machine.
     /// Returns headers_complete result if END_HEADERS is set.
     pub func recv_headers(this, flags: I32) -> Outcome[H2StreamResult, H2Error] {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         let has_end_stream: I64 = if (flags & H2_FLAG_END_STREAM) != 0 { 1 } else { 0 }
         let has_end_headers: I64 = if (flags & H2_FLAG_END_HEADERS) != 0 { 1 } else { 0 }
 
@@ -172,7 +172,7 @@ impl H2Stream {
         if has_end_headers == 1 {
             this.receiving_headers = 0
             if this.end_stream_received == 1 {
-                let cur: I32 = this.state.value
+                let cur: I64 = this.state.value
                 if cur == 3 { this.state = H2StreamState::HalfClosedRemote() }
                 else if cur == 4 { this.state = H2StreamState::Closed() }
             }
@@ -193,7 +193,7 @@ impl H2Stream {
         if has_end_headers == 1 {
             this.receiving_headers = 0
             if this.end_stream_received == 1 {
-                let cur: I32 = this.state.value
+                let cur: I64 = this.state.value
                 if cur == 3 { this.state = H2StreamState::HalfClosedRemote() }
                 else if cur == 4 { this.state = H2StreamState::Closed() }
             }
@@ -205,7 +205,7 @@ impl H2Stream {
 
     /// Process received DATA. payload_len consumed from receive window.
     pub func recv_data(this, flags: I32, payload_len: I64) -> Outcome[H2StreamResult, H2Error] {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         if s != 3 and s != 4 {
             return Err(H2Error::protocol_error("DATA in invalid state"))
         }
@@ -256,7 +256,7 @@ impl H2Stream {
     // ── Send-side transitions ──────────────────────────────────────
 
     pub func send_headers(this, end_stream: I64) -> Outcome[Unit, H2Error] {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         if s == 0 { this.state = H2StreamState::Open() }
         else if s == 1 { this.state = H2StreamState::HalfClosedRemote() }
         else if s == 3 or s == 5 { /* trailing headers */ }
@@ -264,7 +264,7 @@ impl H2Stream {
 
         if end_stream == 1 {
             this.end_stream_sent = 1
-            let cur: I32 = this.state.value
+            let cur: I64 = this.state.value
             if cur == 3 { this.state = H2StreamState::HalfClosedLocal() }
             else if cur == 5 { this.state = H2StreamState::Closed() }
         }
@@ -272,7 +272,7 @@ impl H2Stream {
     }
 
     pub func send_data(this, length: I64, end_stream: I64) -> Outcome[Unit, H2Error] {
-        let s: I32 = this.state.value
+        let s: I64 = this.state.value
         if s != 3 and s != 5 {
             return Err(H2Error::protocol_error("cannot send DATA"))
         }
