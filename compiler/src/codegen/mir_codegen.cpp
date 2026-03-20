@@ -678,6 +678,8 @@ void MirCodegen::emit_preamble() {
     emitln("declare i64 @strlen(ptr)");
     emitln("declare ptr @malloc(i64)");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
+    emitln("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
+    emitln("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
     emitln();
 
     // str_concat_opt: null-safe string concatenation (inlined from runtime.cpp)

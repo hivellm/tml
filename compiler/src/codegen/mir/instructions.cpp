@@ -1372,6 +1372,169 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         return;
     }
 
+    // memcpy(dst, src, size) / mem_copy(dst, src, size) — non-overlapping copy (byte count)
+    if ((base_name == "memcpy" || base_name == "mem_copy") && i.args.size() >= 3) {
+        std::string dst = get_value_reg(i.args[0]);
+        std::string src = get_value_reg(i.args[1]);
+        std::string size = get_value_reg(i.args[2]);
+
+        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
+            auto vt = value_types_.find(v.id);
+            std::string vtype;
+            if (vt != value_types_.end())
+                vtype = vt->second;
+            else if (v.type)
+                vtype = mir_type_to_llvm(v.type);
+            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
+                std::string id = std::to_string(temp_counter_++);
+                std::string conv = "%itp.mc." + id;
+                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
+                reg = conv;
+            }
+        };
+        ensure_ptr_local(i.args[0], dst);
+        ensure_ptr_local(i.args[1], src);
+
+        // Promote i32 size to i64
+        auto sz_vt = value_types_.find(i.args[2].id);
+        std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
+                              : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
+                                                          : "i64";
+        if (sz_type == "i32") {
+            std::string ext = "%ext.mc." + std::to_string(temp_counter_++);
+            emitln("    " + ext + " = sext i32 " + size + " to i64");
+            size = ext;
+        }
+
+        emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+               size + ", i1 false)");
+        return;
+    }
+
+    // memmove(dst, src, size) / mem_move(dst, src, size) / copy(src, dst, count)
+    // Overlapping-safe memory copy; lowered to @llvm.memmove.p0.p0.i64.
+    if ((base_name == "memmove" || base_name == "mem_move" || base_name == "copy") &&
+        i.args.size() >= 3) {
+        // copy(src, dst, count) uses (src, dst, count); the others use (dst, src, size)
+        bool src_first = (base_name == "copy");
+        std::string first = get_value_reg(i.args[0]);
+        std::string second = get_value_reg(i.args[1]);
+        std::string size = get_value_reg(i.args[2]);
+        std::string dst = src_first ? second : first;
+        std::string src = src_first ? first : second;
+        const mir::Value& dst_v = src_first ? i.args[1] : i.args[0];
+        const mir::Value& src_v = src_first ? i.args[0] : i.args[1];
+
+        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
+            auto vt = value_types_.find(v.id);
+            std::string vtype;
+            if (vt != value_types_.end())
+                vtype = vt->second;
+            else if (v.type)
+                vtype = mir_type_to_llvm(v.type);
+            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
+                std::string id = std::to_string(temp_counter_++);
+                std::string conv = "%itp.mm." + id;
+                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
+                reg = conv;
+            }
+        };
+        ensure_ptr_local(dst_v, dst);
+        ensure_ptr_local(src_v, src);
+
+        // Promote i32 size/count to i64
+        auto sz_vt = value_types_.find(i.args[2].id);
+        std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
+                              : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
+                                                          : "i64";
+        if (sz_type == "i32") {
+            std::string ext = "%ext.mm." + std::to_string(temp_counter_++);
+            emitln("    " + ext + " = sext i32 " + size + " to i64");
+            size = ext;
+        }
+
+        emitln("    call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+               size + ", i1 false)");
+        return;
+    }
+
+    // memset(dst, value, size) / mem_set(dst, value, size) / mem_zero(dst, size)
+    // write_bytes(dst, val, count) — fills count*sizeof(T) bytes
+    // Lowered to @llvm.memset.p0.i64.
+    if ((base_name == "memset" || base_name == "mem_set" || base_name == "mem_zero" ||
+         base_name == "write_bytes") &&
+        i.args.size() >= 2) {
+        std::string dst = get_value_reg(i.args[0]);
+
+        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
+            auto vt = value_types_.find(v.id);
+            std::string vtype;
+            if (vt != value_types_.end())
+                vtype = vt->second;
+            else if (v.type)
+                vtype = mir_type_to_llvm(v.type);
+            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
+                std::string id = std::to_string(temp_counter_++);
+                std::string conv = "%itp.ms." + id;
+                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
+                reg = conv;
+            }
+        };
+        ensure_ptr_local(i.args[0], dst);
+
+        // mem_zero(dst, size): two-arg form, fill byte is 0
+        if (base_name == "mem_zero" && i.args.size() >= 2) {
+            std::string size = get_value_reg(i.args[1]);
+            auto sz_vt = value_types_.find(i.args[1].id);
+            std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
+                                  : i.args[1].type            ? mir_type_to_llvm(i.args[1].type)
+                                                              : "i64";
+            if (sz_type == "i32") {
+                std::string ext = "%ext.mz." + std::to_string(temp_counter_++);
+                emitln("    " + ext + " = sext i32 " + size + " to i64");
+                size = ext;
+            }
+            emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 0, i64 " + size +
+                   ", i1 false)");
+            return;
+        }
+
+        // Three-arg form: memset(dst, val, size) / mem_set(dst, val, size) / write_bytes(dst, val,
+        // count)
+        if (i.args.size() >= 3) {
+            std::string val = get_value_reg(i.args[1]);
+            std::string size = get_value_reg(i.args[2]);
+
+            // Truncate fill byte to i8 if needed
+            auto val_vt = value_types_.find(i.args[1].id);
+            std::string val_type = val_vt != value_types_.end() ? val_vt->second
+                                   : i.args[1].type             ? mir_type_to_llvm(i.args[1].type)
+                                                                : "i32";
+            if (val_type != "i8") {
+                std::string trunc = "%trunc.ms." + std::to_string(temp_counter_++);
+                emitln("    " + trunc + " = trunc " + val_type + " " + val + " to i8");
+                val = trunc;
+            }
+
+            // Promote size/count to i64
+            auto sz_vt = value_types_.find(i.args[2].id);
+            std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
+                                  : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
+                                                              : "i64";
+            if (sz_type == "i32") {
+                std::string ext = "%ext.ms." + std::to_string(temp_counter_++);
+                emitln("    " + ext + " = sext i32 " + size + " to i64");
+                size = ext;
+            }
+
+            emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val + ", i64 " +
+                   size + ", i1 false)");
+            return;
+        }
+
+        return; // malformed call — skip
+    }
+
     // ========================================================================
     // Inline primitive to_string / debug_string (Char, Str, Bool)
     // These may arrive as CallInst with func_name "Type::method" when the
