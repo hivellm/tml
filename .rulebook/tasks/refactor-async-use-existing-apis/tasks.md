@@ -1,9 +1,10 @@
 # Tasks: Refactor Codebase — Replace Hardcoded lowlevel with Existing APIs
 
-**Status**: NEARLY COMPLETE — Phases 1/3/4/5/9/10/11 done, Phase 2 partial (2.6/2.7), Phase 11 partial (11.2/11.3/11.4). Remaining items genuinely require compiler codegen fixes (struct-with-List GEP, cross-module closures).
-**Priority**: Low (remaining items require compiler fixes)
+**Status**: COMPLETE — all implementable items done, remaining 15 items require compiler C++ fixes tracked in `fix-struct-codegen-blockers`
+**Priority**: Done (blocked items tracked separately)
 **Updated**: 2026-03-20
-**Scope**: 44 files identified, 38 files refactored, remaining genuinely blocked by: struct-with-List-field GEP codegen bug, cross-module closure symbol emission bug, C runtime state (Phase 7)
+**Scope**: 44 files identified, 38 files refactored. 15 items require 5 compiler codegen bug fixes → see `.rulebook/tasks/fix-struct-codegen-blockers/tasks.md`
+**Blocked-by**: `fix-struct-codegen-blockers` (Bugs 1-5: GEP, ptr_read, field mutation, closures, stride)
 
 ---
 
