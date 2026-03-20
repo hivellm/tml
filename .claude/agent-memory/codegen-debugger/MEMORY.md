@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [generic-method-fold-fix.md](generic-method-fold-fix.md) - Iterator::fold[B] method-level generic monomorphization: 3-bug chain (2026-03-20, FIXED)
 - [fnptr-literal-coercion-fix.md](fnptr-literal-coercion-fix.md) - Function pointer call integer literal i32→i64 coercion (2026-03-20, FIXED)
 - [ptr-read-write-struct-fix.md](ptr-read-write-struct-fix.md) - ptr_read/ptr_write multi-field struct: 4-bug chain (type checker + HIR + MIR + codegen) (2026-03-20, FIXED)
 - [struct-field-mutation-fix.md](struct-field-mutation-fix.md) - Mutable struct field assignment dead code bug in THIR MIR builder (2026-03-20, FIXED)

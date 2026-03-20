@@ -1453,7 +1453,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                                                 }
                                                 found = generate_default_method(
                                                     pim.mangled_type_name, dflt_trait, tm,
-                                                    &impl_decl);
+                                                    &impl_decl, pim.method_type_suffix);
                                                 current_type_subs_ = saved_ts;
                                                 break;
                                             }
@@ -1676,7 +1676,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                                                     }
                                                     found = generate_default_method(
                                                         pim.mangled_type_name, gc_td, tm,
-                                                        &impl_decl);
+                                                        &impl_decl, pim.method_type_suffix);
                                                     current_type_subs_ = saved_ts2;
                                                     break;
                                                 }

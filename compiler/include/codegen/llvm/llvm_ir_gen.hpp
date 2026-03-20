@@ -705,8 +705,8 @@ private:
     // Generate a default behavior method implementation for a given type
     // Returns true if generation succeeded, false if skipped
     bool generate_default_method(const std::string& type_name, const parser::TraitDecl* trait_decl,
-                                 const parser::FuncDecl& trait_method,
-                                 const parser::ImplDecl* impl);
+                                 const parser::FuncDecl& trait_method, const parser::ImplDecl* impl,
+                                 const std::string& method_type_suffix = "");
 
     // ============ OOP Class Support (C#-style) ============
     // Tracks classes with single inheritance and virtual dispatch

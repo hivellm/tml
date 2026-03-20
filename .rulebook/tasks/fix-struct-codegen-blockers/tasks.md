@@ -87,6 +87,32 @@ Verified 2026-03-20: List[I64] with function pointers cast to/from I64 works cor
 
 ---
 
+## Bug 6: Iterator::fold[B] method-level generic monomorphization — FIXED
+
+`items.iter().fold(0, do(acc: I64, x: I64) -> I64 { acc + x })` generated `%struct.B` (unsized type error).
+
+**Root cause**: 3 interconnected bugs in AST codegen:
+1. `generate_default_method` in `dyn.cpp:417` unconditionally rejected methods with generics (`!trait_method.generics.empty()`)
+2. Method-level type param inference in `method_impl.cpp:229` miscounted `impl_param_count` (set to `named.type_args.size()` which equaled `type_params.size()`, causing the inference loop to never execute)
+3. `GenericType` not handled in type param matching (only `NamedType` was checked), and `param_offset` for `this` was hardcoded to 1 even when params omitted `this`
+
+**Fix (4 files)**:
+- `compiler/src/codegen/llvm/core/dyn.cpp`: Allow method-level generics in `generate_default_method` when all params have substitutions; add `method_type_suffix` parameter
+- `compiler/src/codegen/llvm/expr/method_impl.cpp`: Fix `impl_param_count` overflow, add `GenericType` handling, compute `param_offset` dynamically, two-pass inference (FuncType first, then bare params)
+- `compiler/src/codegen/llvm/core/generic.cpp`: Pass `pim.method_type_suffix` to `generate_default_method`
+- `compiler/include/codegen/llvm/llvm_ir_gen.hpp`: Add `method_type_suffix` default param to `generate_default_method`
+- `compiler/src/hir/hir_builder_expr.cpp`: Add generic type param inference for MIR path (helper + `substitute_method_generics`)
+
+- [x] 6.1 Diagnose: `%struct.B` in LLVM IR from unsized alloca
+- [x] 6.2 Fix type param inference (impl_param_count, GenericType, param_offset)
+- [x] 6.3 Fix generate_default_method to allow method-level generics
+- [x] 6.4 Verify: `fold(0, closure)` returns correct i64 result
+- [x] 6.5 Regression: 52/52 iter tests, 70/70 collections tests, 50/50 types+str+slice tests
+
+**Unblocks**: ALL iterator adapter methods (fold, for_each, map, filter, cloned, copied, flatten, intersperse, peekable, etc.)
+
+---
+
 ## Downstream: Items now unblocked (implement these)
 
 | Item | What to do | Blocked by |

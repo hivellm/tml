@@ -401,7 +401,8 @@ void LLVMIRGen::emit_vtables() {
 bool LLVMIRGen::generate_default_method(const std::string& type_name,
                                         const parser::TraitDecl* trait_decl,
                                         const parser::FuncDecl& trait_method,
-                                        const parser::ImplDecl* impl) {
+                                        const parser::ImplDecl* impl,
+                                        const std::string& method_type_suffix) {
     // Skip if trait method has no default implementation
     if (!trait_method.body.has_value())
         return false;
@@ -413,9 +414,19 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     if (type_name == "Unit" || llvm_type_name(type_name) == "void")
         return false;
 
-    // Skip methods with their own generic parameters
-    if (!trait_method.generics.empty())
-        return false;
+    // Allow method-level generics IF all generic params have substitutions.
+    // e.g., fold[B] with B -> I64 in current_type_subs_ can be monomorphized.
+    if (!trait_method.generics.empty()) {
+        bool all_resolved = true;
+        for (const auto& gp : trait_method.generics) {
+            if (current_type_subs_.find(gp.name) == current_type_subs_.end()) {
+                all_resolved = false;
+                break;
+            }
+        }
+        if (!all_resolved)
+            return false;
+    }
 
     // Skip methods with where clauses
     if (trait_method.where_clause.has_value() &&
@@ -428,8 +439,12 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
     // llvm_type_from_semantic maps FuncType -> "{ ptr, ptr }" (fat pointer),
     // and gen_block handles indirect calls through { ptr, ptr } locals.
 
-    std::string method_name = type_name + "_" + trait_method.name;
-    std::string func_llvm_name = mangle_impl_method(type_name, trait_method.name);
+    std::string full_method_name = trait_method.name;
+    if (!method_type_suffix.empty()) {
+        full_method_name += "__" + method_type_suffix;
+    }
+    std::string method_name = type_name + "_" + full_method_name;
+    std::string func_llvm_name = mangle_impl_method(type_name, full_method_name);
 
     // Skip if already generated
     if (functions_.find(method_name) != functions_.end())

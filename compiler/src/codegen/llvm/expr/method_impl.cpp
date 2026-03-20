@@ -188,6 +188,10 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     std::string method_type_suffix;
     bool is_imported = false;
 
+    // Determine the offset for func_sig->params: if 'this' is included, offset=1.
+    // Default behavior methods from module binary cache may omit 'this' (offset=0).
+    size_t param_offset = (func_sig->params.size() > call.args.size()) ? 1 : 0;
+
     // Handle method-level generic type arguments
     if (!call.type_args.empty() && !func_sig->type_params.empty()) {
         size_t impl_param_count = named.type_args.size();
@@ -209,46 +213,88 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     // Infer method-level type parameters from argument types
     else if (call.type_args.empty() && !func_sig->type_params.empty()) {
         size_t impl_param_count = named.type_args.size();
-        for (size_t tp_idx = impl_param_count; tp_idx < func_sig->type_params.size(); ++tp_idx) {
-            const std::string& type_param = func_sig->type_params[tp_idx];
-            for (size_t p_idx = 1; p_idx < func_sig->params.size() && p_idx - 1 < call.args.size();
-                 ++p_idx) {
-                const auto& param_type = func_sig->params[p_idx];
-                if (param_type && param_type->is<types::NamedType>()) {
-                    const auto& param_named = param_type->as<types::NamedType>();
-                    // Case 1: Bare type parameter — param IS the type param (e.g., err: E)
-                    if (param_named.name == type_param && param_named.type_args.empty()) {
-                        if (type_subs.find(type_param) == type_subs.end()) {
-                            auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
-                            if (arg_type) {
-                                type_subs[type_param] = arg_type;
-                                if (!method_type_suffix.empty()) {
-                                    method_type_suffix += "__";
+        // If the receiver has more type_args than the func_sig has type_params,
+        // the impl-level params were already substituted in the func_sig. All remaining
+        // type_params are method-level (e.g., fold[B] on ListIter[I64] where
+        // func_sig->type_params=["B"] but named.type_args=["I64"]).
+        if (impl_param_count >= func_sig->type_params.size()) {
+            impl_param_count = 0;
+        }
+        // Two-pass inference: first infer from FuncType/ClosureType params (more specific,
+        // e.g., closure return type), then from bare type params (less specific, e.g., literals).
+        // This ensures fold(0, do(acc: I64, x: I64) -> I64 { ... }) infers B=I64 from
+        // the closure, not B=I32 from the literal 0.
+        for (int pass = 0; pass < 2; ++pass) {
+            for (size_t tp_idx = impl_param_count; tp_idx < func_sig->type_params.size();
+                 ++tp_idx) {
+                const std::string& type_param = func_sig->type_params[tp_idx];
+                for (size_t p_idx = param_offset;
+                     p_idx < func_sig->params.size() && (p_idx - param_offset) < call.args.size();
+                     ++p_idx) {
+                    const auto& param_type = func_sig->params[p_idx];
+
+                    // Pass 0: only FuncType/ClosureType params (more specific inference)
+                    // Pass 1: only bare GenericType/NamedType params (less specific, e.g.,
+                    // literals)
+                    if (pass == 1) {
+                        // Handle GenericType parameters (e.g., fold[B] where init: B)
+                        if (param_type && param_type->is<types::GenericType>()) {
+                            const auto& gen = param_type->as<types::GenericType>();
+                            if (gen.name == type_param) {
+                                if (type_subs.find(type_param) == type_subs.end()) {
+                                    auto arg_type =
+                                        infer_expr_type(*call.args[p_idx - param_offset]);
+                                    if (arg_type) {
+                                        type_subs[type_param] = arg_type;
+                                        if (!method_type_suffix.empty()) {
+                                            method_type_suffix += "__";
+                                        }
+                                        method_type_suffix += mangle_type(arg_type);
+                                    }
                                 }
-                                method_type_suffix += mangle_type(arg_type);
                             }
                         }
-                    }
-                    // Case 2: Type param inside generic type args (e.g., Maybe[U])
-                    else {
-                        for (size_t ta_idx = 0; ta_idx < param_named.type_args.size(); ++ta_idx) {
-                            const auto& ta = param_named.type_args[ta_idx];
-                            if (ta && ta->is<types::NamedType>()) {
-                                const auto& ta_named = ta->as<types::NamedType>();
-                                if (ta_named.name == type_param) {
-                                    if (type_subs.find(type_param) == type_subs.end()) {
-                                        auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
-                                        if (arg_type && arg_type->is<types::NamedType>()) {
-                                            const auto& arg_named =
-                                                arg_type->as<types::NamedType>();
-                                            if (ta_idx < arg_named.type_args.size()) {
-                                                auto inferred = arg_named.type_args[ta_idx];
-                                                if (inferred) {
-                                                    type_subs[type_param] = inferred;
-                                                    if (!method_type_suffix.empty()) {
-                                                        method_type_suffix += "__";
+                        if (param_type && param_type->is<types::NamedType>()) {
+                            const auto& param_named = param_type->as<types::NamedType>();
+                            // Case 1: Bare type parameter — param IS the type param (e.g., err: E)
+                            if (param_named.name == type_param && param_named.type_args.empty()) {
+                                if (type_subs.find(type_param) == type_subs.end()) {
+                                    auto arg_type =
+                                        infer_expr_type(*call.args[p_idx - param_offset]);
+                                    if (arg_type) {
+                                        type_subs[type_param] = arg_type;
+                                        if (!method_type_suffix.empty()) {
+                                            method_type_suffix += "__";
+                                        }
+                                        method_type_suffix += mangle_type(arg_type);
+                                    }
+                                }
+                            }
+                            // Case 2: Type param inside generic type args (e.g., Maybe[U])
+                            else {
+                                for (size_t ta_idx = 0; ta_idx < param_named.type_args.size();
+                                     ++ta_idx) {
+                                    const auto& ta = param_named.type_args[ta_idx];
+                                    if (ta && ta->is<types::NamedType>()) {
+                                        const auto& ta_named = ta->as<types::NamedType>();
+                                        if (ta_named.name == type_param) {
+                                            if (type_subs.find(type_param) == type_subs.end()) {
+                                                auto arg_type = infer_expr_type(
+                                                    *call.args[p_idx - param_offset]);
+                                                if (arg_type && arg_type->is<types::NamedType>()) {
+                                                    const auto& arg_named =
+                                                        arg_type->as<types::NamedType>();
+                                                    if (ta_idx < arg_named.type_args.size()) {
+                                                        auto inferred = arg_named.type_args[ta_idx];
+                                                        if (inferred) {
+                                                            type_subs[type_param] = inferred;
+                                                            if (!method_type_suffix.empty()) {
+                                                                method_type_suffix += "__";
+                                                            }
+                                                            method_type_suffix +=
+                                                                mangle_type(inferred);
+                                                        }
                                                     }
-                                                    method_type_suffix += mangle_type(inferred);
                                                 }
                                             }
                                         }
@@ -256,36 +302,60 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                 }
                             }
                         }
-                    }
-                }
-                // Handle FuncType parameters: func(E) -> F where F is the type param
-                else if (param_type && param_type->is<types::FuncType>()) {
-                    const auto& func_type = param_type->as<types::FuncType>();
-                    // Check if the return type is the type parameter we're looking for
-                    if (func_type.return_type && func_type.return_type->is<types::NamedType>()) {
-                        const auto& ret_named = func_type.return_type->as<types::NamedType>();
-                        if (ret_named.name == type_param && ret_named.type_args.empty()) {
-                            // Only infer if we haven't already inferred this type param
-                            // (multiple function params may share the same return type param)
-                            if (type_subs.find(type_param) == type_subs.end()) {
-                                // Infer from the argument's return type
-                                auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
-                                if (arg_type && arg_type->is<types::FuncType>()) {
-                                    const auto& arg_func = arg_type->as<types::FuncType>();
-                                    if (arg_func.return_type) {
-                                        type_subs[type_param] = arg_func.return_type;
-                                        if (!method_type_suffix.empty()) {
-                                            method_type_suffix += "__";
+                    } // end pass == 1
+
+                    if (pass == 0) {
+                        // Handle FuncType parameters: func(E) -> F where F is the type param
+                        if (param_type && param_type->is<types::FuncType>()) {
+                            const auto& func_type = param_type->as<types::FuncType>();
+                            // Check if the return type is the type parameter we're looking for
+                            // Handle both NamedType("B") and GenericType("B") representations
+                            bool ret_matches_param = false;
+                            if (func_type.return_type &&
+                                func_type.return_type->is<types::GenericType>()) {
+                                ret_matches_param =
+                                    func_type.return_type->as<types::GenericType>().name ==
+                                    type_param;
+                            } else if (func_type.return_type &&
+                                       func_type.return_type->is<types::NamedType>()) {
+                                const auto& ret_named =
+                                    func_type.return_type->as<types::NamedType>();
+                                ret_matches_param =
+                                    ret_named.name == type_param && ret_named.type_args.empty();
+                            }
+                            if (ret_matches_param) {
+                                if (type_subs.find(type_param) == type_subs.end()) {
+                                    // Infer from the argument's return type
+                                    auto arg_type =
+                                        infer_expr_type(*call.args[p_idx - param_offset]);
+                                    if (arg_type && arg_type->is<types::FuncType>()) {
+                                        const auto& arg_func = arg_type->as<types::FuncType>();
+                                        if (arg_func.return_type) {
+                                            type_subs[type_param] = arg_func.return_type;
+                                            if (!method_type_suffix.empty()) {
+                                                method_type_suffix += "__";
+                                            }
+                                            method_type_suffix += mangle_type(arg_func.return_type);
                                         }
-                                        method_type_suffix += mangle_type(arg_func.return_type);
+                                    }
+                                    // Also try ClosureType arguments
+                                    else if (arg_type && arg_type->is<types::ClosureType>()) {
+                                        const auto& arg_clos = arg_type->as<types::ClosureType>();
+                                        if (arg_clos.return_type) {
+                                            type_subs[type_param] = arg_clos.return_type;
+                                            if (!method_type_suffix.empty()) {
+                                                method_type_suffix += "__";
+                                            }
+                                            method_type_suffix += mangle_type(arg_clos.return_type);
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
+                    } // end pass == 0
                 }
             }
-        }
+        } // end for (pass)
     }
 
     // Handle generic type arguments
@@ -748,28 +818,17 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
         types::TypePtr param_type_resolved;
-        // func_sig usually has 'this' at index 0 (semantic params), so offset is 1.
-        // However, default behavior methods from module binary cache may omit 'this',
-        // so fall back to direct indexing when i+1 is out of bounds but i is valid.
-        if (func_sig && i + 1 < func_sig->params.size()) {
-            param_type_resolved = func_sig->params[i + 1];
+        // Determine parameter index: func_sig may or may not include 'this' at index 0.
+        // Use param_offset (computed earlier) for consistent indexing.
+        // param_offset = 1 when 'this' is present, 0 when omitted.
+        size_t sig_idx = i + param_offset;
+        if (func_sig && sig_idx < func_sig->params.size()) {
+            param_type_resolved = func_sig->params[sig_idx];
             if (!type_subs.empty()) {
                 param_type_resolved = types::substitute_type(param_type_resolved, type_subs);
             }
             expected_type = llvm_type_from_semantic(param_type_resolved);
             // Function-typed parameters use fat pointer { ptr, ptr }
-            if (param_type_resolved->is<types::FuncType>()) {
-                expected_type = "{ ptr, ptr }";
-            }
-        }
-        // Fallback for func_sig without 'this': default behavior methods from module
-        // binary cache store params WITHOUT 'this', so params[0] is the first real arg.
-        else if (func_sig && i < func_sig->params.size()) {
-            param_type_resolved = func_sig->params[i];
-            if (!type_subs.empty()) {
-                param_type_resolved = types::substitute_type(param_type_resolved, type_subs);
-            }
-            expected_type = llvm_type_from_semantic(param_type_resolved);
             if (param_type_resolved->is<types::FuncType>()) {
                 expected_type = "{ ptr, ptr }";
             }
