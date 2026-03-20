@@ -222,6 +222,33 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                     found_mod_name = mod_name;
                     found_param_types = found_func_it->second.params;
 
+                    // Resolve re-exports: if this function was re-exported from a
+                    // sub-module (pub use submod::{func}), use the SOURCE module path
+                    // for mangling so the symbol matches the definition site.
+                    // Without this, re-exported functions get mangled with the parent
+                    // module path, causing undefined symbol errors.
+                    std::string found_bare = found_func_it->first;
+                    for (const auto& re : mod.re_exports) {
+                        if (re.is_glob) {
+                            // Glob re-export: check if source module has this function
+                            auto src_mod = env_.module_registry()->get_module(re.source_path);
+                            if (src_mod.has_value() && src_mod->functions.count(found_bare) > 0) {
+                                found_mod_name = re.source_path;
+                                break;
+                            }
+                        } else {
+                            // Named re-export: check if function is in the symbol list
+                            for (const auto& sym : re.symbols) {
+                                if (sym == found_bare) {
+                                    found_mod_name = re.source_path;
+                                    break;
+                                }
+                            }
+                            if (found_mod_name != mod_name)
+                                break;
+                        }
+                    }
+
                     // Queue instantiation for non-generic library static methods (e.g., Text::from)
                     // Only for Type::method calls (sanitized_name has no ::)
                     // Generic types are handled separately via expected_enum_type_ context
