@@ -370,6 +370,19 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
         }
     }
 
+    // Extract generic type arguments from callee (e.g., ptr_read[MyState])
+    std::vector<HirType> type_args;
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>();
+        if (path.generics) {
+            for (const auto& ga : path.generics->args) {
+                if (ga.is_type()) {
+                    type_args.push_back(resolve_type(*ga.as_type()));
+                }
+            }
+        }
+    }
+
     // Lower arguments
     std::vector<HirExprPtr> args;
     for (const auto& arg : call.args) {
@@ -411,6 +424,17 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
         }
     }
 
+    // For generic intrinsics like ptr_read[T], the type checker registers the return type
+    // as I32 (placeholder). Override it with the actual type argument T so that downstream
+    // MIR building and codegen see the correct struct type for field access, etc.
+    if (!type_args.empty() && type_args[0]) {
+        static const std::unordered_set<std::string> read_intrinsics = {
+            "ptr_read", "ptr_read_volatile", "ptr_read_unaligned", "volatile_read", "transmute"};
+        if (read_intrinsics.count(func_name)) {
+            return_type = type_args[0];
+        }
+    }
+
     // Mangle func_name for class static methods: "Class::method" -> "Class__method"
     std::string mangled_func_name = func_name;
     auto pos = func_name.find("::");
@@ -423,8 +447,8 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
         }
     }
 
-    return make_hir_call(fresh_id(), mangled_func_name, {}, std::move(args), return_type,
-                         call.span);
+    return make_hir_call(fresh_id(), mangled_func_name, std::move(type_args), std::move(args),
+                         return_type, call.span);
 }
 
 // ============================================================================

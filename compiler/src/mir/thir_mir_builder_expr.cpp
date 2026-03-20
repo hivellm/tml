@@ -378,8 +378,24 @@ auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
     auto value = build_expr(assign.value);
 
     // For simple variable targets, use SSA-style set_variable (no alloca/store)
+    // Exception: alloca-backed struct vars need store to the alloca pointer.
     if (assign.target->is<thir::ThirVarExpr>()) {
         const auto& var = assign.target->as<thir::ThirVarExpr>();
+        if (ctx_.mut_struct_vars.count(var.name) > 0) {
+            Value alloca_ptr = get_variable(var.name);
+            if (alloca_ptr.type) {
+                if (auto* ptr_t = std::get_if<MirPointerType>(&alloca_ptr.type->kind)) {
+                    if (ptr_t->pointee && ptr_t->pointee->is_struct()) {
+                        StoreInst store;
+                        store.ptr = alloca_ptr;
+                        store.value = value;
+                        store.value_type = value.type;
+                        emit_void(std::move(store), assign.span);
+                        return const_unit();
+                    }
+                }
+            }
+        }
         set_variable(var.name, value);
         return const_unit();
     }
@@ -436,6 +452,55 @@ auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
         store.value_type = value.type;
         emit_void(std::move(store), assign.span);
         return const_unit();
+    }
+
+    // For field targets (p.x = val), use GEP on the alloca-backed struct pointer.
+    // If the base object is an alloca-backed mutable struct variable, we GEP to
+    // the field and store directly. For pointer-based objects, the generic
+    // fallback handles it (build_expr on field access yields the address).
+    if (assign.target->is<thir::ThirFieldExpr>()) {
+        const auto& field = assign.target->as<thir::ThirFieldExpr>();
+
+        // Check if the object is a mutable struct variable backed by alloca
+        if (field.object->is<thir::ThirVarExpr>()) {
+            const auto& var = field.object->as<thir::ThirVarExpr>();
+            if (ctx_.mut_struct_vars.count(var.name) > 0) {
+                Value alloca_ptr = get_variable(var.name);
+                if (alloca_ptr.type) {
+                    if (auto* ptr_t = std::get_if<MirPointerType>(&alloca_ptr.type->kind)) {
+                        MirTypePtr struct_type = ptr_t->pointee;
+                        if (struct_type && struct_type->is_struct()) {
+                            // GEP to the field: alloca_ptr[0][field_index]
+                            Value zero_idx = const_int(0, 32, false);
+                            Value field_idx =
+                                const_int(static_cast<int64_t>(field.field_index), 32, false);
+
+                            auto field_ptr_type = make_pointer_type(value.type, false);
+
+                            GetElementPtrInst gep;
+                            gep.base = alloca_ptr;
+                            gep.base_type = struct_type;
+                            gep.indices = {zero_idx, field_idx};
+                            gep.result_type = field_ptr_type;
+
+                            Value ptr = emit(std::move(gep), field_ptr_type, field.span);
+
+                            StoreInst store;
+                            store.ptr = ptr;
+                            store.value = value;
+                            store.value_type = value.type;
+                            emit_void(std::move(store), assign.span);
+                            return const_unit();
+                        }
+                    }
+                }
+            }
+        }
+
+        // For nested field access (e.g., p.inner.x) or pointer-based field access,
+        // try to resolve the chain to an alloca base.
+        // Walk up the chain: if the root is an alloca-backed struct var, emit
+        // a chain of GEPs. Otherwise, fall through to the generic store path.
     }
 
     // For non-variable targets (field access, etc.), use memory store

@@ -1,6 +1,8 @@
 # Codegen Debugger Memory
 
 ## Index
+- [ptr-read-write-struct-fix.md](ptr-read-write-struct-fix.md) - ptr_read/ptr_write multi-field struct: 4-bug chain (type checker + HIR + MIR + codegen) (2026-03-20, FIXED)
+- [struct-field-mutation-fix.md](struct-field-mutation-fix.md) - Mutable struct field assignment dead code bug in THIR MIR builder (2026-03-20, FIXED)
 - [dyn-boxing-casting-fix.md](dyn-boxing-casting-fix.md) - ref dyn Behavior fat pointer type resolution: 7 bugs in type/cast/enum/store/alloca (2026-03-19, FIXED)
 - [when-pattern-binding-fix.md](when-pattern-binding-fix.md) - When-pattern enum payload bindings alias payload_ptr (fixes Maybe[mut ref T] dangling pointer, 2026-03-19, FIXED)
 - [nullable-maybe-double-load.md](nullable-maybe-double-load.md) - Nullable Maybe[ref T] double-load crash in method dispatch (2026-03-19, FIXED)

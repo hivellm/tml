@@ -941,7 +941,29 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
                     }
                 }
                 if (auto sig = type_env_.lookup_func(func_name)) {
+                    // For generic functions with explicit type args, substitute
+                    if (!sig->type_params.empty() && e.callee->template is<parser::PathExpr>()) {
+                        const auto& path = e.callee->template as<parser::PathExpr>();
+                        if (path.generics && !path.generics->args.empty()) {
+                            std::unordered_map<std::string, types::TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < sig->type_params.size() && i < path.generics->args.size();
+                                 ++i) {
+                                if (path.generics->args[i].is_type()) {
+                                    subs[sig->type_params[i]] =
+                                        resolve_type(*path.generics->args[i].as_type());
+                                }
+                            }
+                            return types::substitute_type(sig->return_type, subs);
+                        }
+                    }
                     return type_env_.resolve(sig->return_type);
+                }
+                return types::make_unit();
+            } else if constexpr (std::is_same_v<T, parser::LowlevelExpr>) {
+                // Recurse into the lowlevel block's trailing expression
+                if (e.expr) {
+                    return get_expr_type(**e.expr);
                 }
                 return types::make_unit();
             } else if constexpr (std::is_same_v<T, parser::FieldExpr>) {

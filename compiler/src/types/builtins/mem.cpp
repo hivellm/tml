@@ -180,58 +180,45 @@ void TypeEnv::init_builtin_mem() {
     // ptr_read_unaligned[T](ptr: *Unit) -> T - Unaligned read
     // ptr_write_unaligned[T](ptr: *Unit, value: T) - Unaligned write
     // These are generic intrinsics - the type checker registers them with *Unit params
-    // but codegen resolves the actual type from type parameters.
+    // These are generic intrinsics with type parameter T. The type checker resolves
+    // ptr_read[MyState](p) -> MyState via generic substitution, enabling correct field
+    // access, struct layout, and MIR type tracking downstream.
 
-    // ptr_read[T](ptr: *Unit) -> I32 (type resolved at codegen)
-    functions_["ptr_read"].push_back(FuncSig{"ptr_read",
-                                             {make_ptr(make_unit())},
-                                             make_primitive(PrimitiveKind::I32),
-                                             {},
-                                             false,
-                                             builtin_span});
+    // Create a generic type parameter T for use in signatures
+    auto generic_T = std::make_shared<Type>();
+    generic_T->kind = GenericType{"T", {}};
 
-    // ptr_write[T](ptr: *Unit, value: I32) -> Unit
-    functions_["ptr_write"].push_back(
-        FuncSig{"ptr_write",
-                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
-                make_unit(),
-                {},
-                false,
-                builtin_span});
+    // ptr_read[T](ptr: *Unit) -> T
+    functions_["ptr_read"].push_back(
+        FuncSig{"ptr_read", {make_ptr(make_unit())}, generic_T, {"T"}, false, builtin_span});
 
-    // ptr_read_volatile[T](ptr: *Unit) -> I32
-    functions_["ptr_read_volatile"].push_back(FuncSig{"ptr_read_volatile",
-                                                      {make_ptr(make_unit())},
-                                                      make_primitive(PrimitiveKind::I32),
-                                                      {},
-                                                      false,
-                                                      builtin_span});
+    // ptr_write[T](ptr: *Unit, value: T) -> Unit
+    functions_["ptr_write"].push_back(FuncSig{
+        "ptr_write", {make_ptr(make_unit()), generic_T}, make_unit(), {"T"}, false, builtin_span});
 
-    // ptr_write_volatile[T](ptr: *Unit, value: I32) -> Unit
-    functions_["ptr_write_volatile"].push_back(
-        FuncSig{"ptr_write_volatile",
-                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
-                make_unit(),
-                {},
-                false,
-                builtin_span});
+    // ptr_read_volatile[T](ptr: *Unit) -> T
+    functions_["ptr_read_volatile"].push_back(FuncSig{
+        "ptr_read_volatile", {make_ptr(make_unit())}, generic_T, {"T"}, false, builtin_span});
 
-    // ptr_read_unaligned[T](ptr: *Unit) -> I32
-    functions_["ptr_read_unaligned"].push_back(FuncSig{"ptr_read_unaligned",
-                                                       {make_ptr(make_unit())},
-                                                       make_primitive(PrimitiveKind::I32),
-                                                       {},
+    // ptr_write_volatile[T](ptr: *Unit, value: T) -> Unit
+    functions_["ptr_write_volatile"].push_back(FuncSig{"ptr_write_volatile",
+                                                       {make_ptr(make_unit()), generic_T},
+                                                       make_unit(),
+                                                       {"T"},
                                                        false,
                                                        builtin_span});
 
-    // ptr_write_unaligned[T](ptr: *Unit, value: I32) -> Unit
-    functions_["ptr_write_unaligned"].push_back(
-        FuncSig{"ptr_write_unaligned",
-                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
-                make_unit(),
-                {},
-                false,
-                builtin_span});
+    // ptr_read_unaligned[T](ptr: *Unit) -> T
+    functions_["ptr_read_unaligned"].push_back(FuncSig{
+        "ptr_read_unaligned", {make_ptr(make_unit())}, generic_T, {"T"}, false, builtin_span});
+
+    // ptr_write_unaligned[T](ptr: *Unit, value: T) -> Unit
+    functions_["ptr_write_unaligned"].push_back(FuncSig{"ptr_write_unaligned",
+                                                        {make_ptr(make_unit()), generic_T},
+                                                        make_unit(),
+                                                        {"T"},
+                                                        false,
+                                                        builtin_span});
 
     // memcpy(dst: *Unit, src: *Unit, size: I64) -> Unit
     functions_["memcpy"].push_back(

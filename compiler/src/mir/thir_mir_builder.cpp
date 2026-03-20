@@ -602,6 +602,26 @@ void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
                 return;
             }
 
+            // For mutable struct variables, allocate via alloca so field mutation
+            // (p.x = 99) can use GEP + store. Without this, structs live as SSA
+            // values (insertvalue chain) which have no address for field stores.
+            if (bp.is_mut && init_val.type && init_val.type->is_struct()) {
+                auto ptr_type = make_pointer_type(init_val.type, true);
+                AllocaInst alloca;
+                alloca.alloc_type = init_val.type;
+                alloca.name = bp.name;
+                alloca.is_volatile = let.is_volatile;
+                auto alloca_val = emit(std::move(alloca), ptr_type);
+                StoreInst store;
+                store.ptr = alloca_val;
+                store.value = init_val;
+                store.value_type = init_val.type;
+                emit_void(std::move(store));
+                ctx_.variables[bp.name] = alloca_val;
+                ctx_.mut_struct_vars.insert(bp.name);
+                return;
+            }
+
             build_pattern_binding(let.pattern, init_val);
             return;
         }
@@ -725,12 +745,12 @@ auto ThirMirBuilder::build_var(const thir::ThirVarExpr& var) -> Value {
         return emit(std::move(const_inst), func_type);
     }
 
-    // For mutable array variables stored via alloca, emit a load to get the current value.
-    // The variable holds an alloca pointer; reading the variable should produce the array value.
+    // For mutable array/struct variables stored via alloca, emit a load to get the current value.
+    // The variable holds an alloca pointer; reading the variable should produce the value.
     if (ctx_.mut_struct_vars.count(var.name) > 0 && result.type) {
         if (auto* ptr_type = std::get_if<MirPointerType>(&result.type->kind)) {
             MirTypePtr pointee = ptr_type->pointee;
-            if (pointee && pointee->is_array()) {
+            if (pointee && (pointee->is_array() || pointee->is_struct())) {
                 LoadInst load;
                 load.ptr = result;
                 load.result_type = pointee;
@@ -840,6 +860,13 @@ auto ThirMirBuilder::build_call(const thir::ThirCallExpr& call) -> Value {
     inst.args = std::move(args);
     inst.arg_types = std::move(arg_types);
     inst.return_type = result_type;
+
+    // Propagate generic type arguments (e.g., [MyState] in ptr_read[MyState]).
+    // These are critical for intrinsics like ptr_read/ptr_write where the type checker
+    // registers a placeholder return type (I32) but codegen needs the actual type.
+    for (const auto& ta : call.type_args) {
+        inst.type_args.push_back(convert_type(ta));
+    }
 
     // Check if the callee is a local variable holding a function pointer.
     // When `let f: func(I32) -> I32 = add100; f(42)` is compiled, the parser

@@ -404,6 +404,8 @@ struct CallInst {
     std::vector<Value> args;
     std::vector<MirTypePtr> arg_types; // Types of arguments
     MirTypePtr return_type;
+    std::vector<MirTypePtr>
+        type_args; ///< Generic type arguments (e.g., [MyState] in ptr_read[MyState]).
     std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
     bool is_stack_eligible = false;        ///< True if result can be stack-allocated (for allocs).
 

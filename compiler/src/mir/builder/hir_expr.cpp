@@ -419,6 +419,11 @@ auto HirMirBuilder::build_call(const hir::HirCallExpr& call) -> Value {
     inst.arg_types = std::move(arg_types);
     inst.return_type = return_type;
 
+    // Propagate generic type arguments (e.g., [MyState] in ptr_read[MyState]).
+    for (const auto& ta : call.type_args) {
+        inst.type_args.push_back(convert_type(ta));
+    }
+
     return emit(inst, return_type, call.span);
 }
 

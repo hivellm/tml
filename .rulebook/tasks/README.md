@@ -10,7 +10,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 1 | **fix-struct-codegen-blockers** | Not started | 0/18 | Bug 1 (GEP generic): diagnose IR for struct with List[I64] field |
+| 1 | **fix-struct-codegen-blockers** | 80% | 14/18 | Bug 4.4 closure+List crash (pre-existing) |
 | 2 | **codegen-structural-fixes** | 80% | 28/40 | 4.3 inner iterator dispatch + 5.2-5.5 write tests |
 | 3 | **fix-codegen-coverage-blockers** | 70% | 28/44 | Phase 1 generic trait dispatch -> () |
 

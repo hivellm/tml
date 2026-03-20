@@ -982,15 +982,31 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string ptr_arg = get_value_reg(i.args[0]);
         std::string val_arg = get_value_reg(i.args[1]);
 
-        // Determine the element type from the value argument
+        // Determine the element type. Priority:
+        // 1) Generic type argument [T] from call (most reliable)
+        // 2) value_types_ of the value argument
+        // 3) MIR type of the value argument
+        // 4) Declared arg_types
+        // 5) Fallback i32
         std::string elem_type = "i32"; // default
-        auto val_vt = value_types_.find(i.args[1].id);
-        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-            elem_type = val_vt->second;
-        } else if (i.args[1].type) {
-            elem_type = mir_type_to_llvm(i.args[1].type);
+
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
         }
-        if (i.arg_types.size() >= 2 && i.arg_types[1]) {
+
+        if (elem_type == "i32") {
+            auto val_vt = value_types_.find(i.args[1].id);
+            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+                elem_type = val_vt->second;
+            } else if (i.args[1].type) {
+                elem_type = mir_type_to_llvm(i.args[1].type);
+            }
+        }
+        if (elem_type == "i32" && i.arg_types.size() >= 2 && i.arg_types[1]) {
             std::string declared = mir_type_to_llvm(i.arg_types[1]);
             if (declared != "void" && declared != "i32") {
                 elem_type = declared;
@@ -1022,20 +1038,31 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string ptr_arg = get_value_reg(i.args[0]);
 
         // Determine the element type. Priority:
-        // 1) Pointee type from pointer argument's MIR type (most reliable for generic [T])
-        // 2) Return type from MIR CallInst (may be I32 default from type checker)
-        // 3) Fallback i32
+        // 1) Generic type argument [T] from call (most reliable for struct types)
+        // 2) Pointee type from pointer argument's MIR type
+        // 3) Return type from MIR CallInst (may be I32 default from type checker)
+        // 4) Fallback i32
         std::string elem_type = "i32";
 
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
+        }
+
         // Check pointer argument's pointee type
-        mir::MirTypePtr arg_type =
-            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-        if (arg_type) {
-            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                if (pt->pointee) {
-                    std::string pointee = mir_type_to_llvm(pt->pointee);
-                    if (pointee != "void" && pointee != "{}")
-                        elem_type = pointee;
+        if (elem_type == "i32") {
+            mir::MirTypePtr arg_type =
+                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+            if (arg_type) {
+                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                    if (pt->pointee) {
+                        std::string pointee = mir_type_to_llvm(pt->pointee);
+                        if (pointee != "void" && pointee != "{}")
+                            elem_type = pointee;
+                    }
                 }
             }
         }
@@ -1074,14 +1101,23 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string ptr_arg = get_value_reg(i.args[0]);
 
         std::string elem_type = "i32";
-        mir::MirTypePtr arg_type =
-            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-        if (arg_type) {
-            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                if (pt->pointee) {
-                    std::string pointee = mir_type_to_llvm(pt->pointee);
-                    if (pointee != "void" && pointee != "{}")
-                        elem_type = pointee;
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
+        }
+        if (elem_type == "i32") {
+            mir::MirTypePtr arg_type =
+                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+            if (arg_type) {
+                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                    if (pt->pointee) {
+                        std::string pointee = mir_type_to_llvm(pt->pointee);
+                        if (pointee != "void" && pointee != "{}")
+                            elem_type = pointee;
+                    }
                 }
             }
         }
@@ -1119,11 +1155,20 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string val_arg = get_value_reg(i.args[1]);
 
         std::string elem_type = "i32";
-        auto val_vt = value_types_.find(i.args[1].id);
-        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-            elem_type = val_vt->second;
-        } else if (i.args[1].type) {
-            elem_type = mir_type_to_llvm(i.args[1].type);
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
+        }
+        if (elem_type == "i32") {
+            auto val_vt = value_types_.find(i.args[1].id);
+            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+                elem_type = val_vt->second;
+            } else if (i.args[1].type) {
+                elem_type = mir_type_to_llvm(i.args[1].type);
+            }
         }
 
         std::string ptr_reg = ptr_arg;
@@ -1150,14 +1195,23 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string ptr_arg = get_value_reg(i.args[0]);
 
         std::string elem_type = "i32";
-        mir::MirTypePtr arg_type =
-            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-        if (arg_type) {
-            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                if (pt->pointee) {
-                    std::string pointee = mir_type_to_llvm(pt->pointee);
-                    if (pointee != "void" && pointee != "{}")
-                        elem_type = pointee;
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
+        }
+        if (elem_type == "i32") {
+            mir::MirTypePtr arg_type =
+                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+            if (arg_type) {
+                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                    if (pt->pointee) {
+                        std::string pointee = mir_type_to_llvm(pt->pointee);
+                        if (pointee != "void" && pointee != "{}")
+                            elem_type = pointee;
+                    }
                 }
             }
         }
@@ -1194,11 +1248,20 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string val_arg = get_value_reg(i.args[1]);
 
         std::string elem_type = "i32";
-        auto val_vt = value_types_.find(i.args[1].id);
-        if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-            elem_type = val_vt->second;
-        } else if (i.args[1].type) {
-            elem_type = mir_type_to_llvm(i.args[1].type);
+        // Highest priority: explicit generic type argument [T]
+        if (!i.type_args.empty() && i.type_args[0]) {
+            std::string ta = mir_type_to_llvm(i.type_args[0]);
+            if (ta != "void" && ta != "i32") {
+                elem_type = ta;
+            }
+        }
+        if (elem_type == "i32") {
+            auto val_vt = value_types_.find(i.args[1].id);
+            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
+                elem_type = val_vt->second;
+            } else if (i.args[1].type) {
+                elem_type = mir_type_to_llvm(i.args[1].type);
+            }
         }
 
         std::string ptr_reg = ptr_arg;
