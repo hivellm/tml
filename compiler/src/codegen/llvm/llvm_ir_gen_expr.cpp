@@ -114,6 +114,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_base_expr(expr.as<parser::BaseExpr>());
     } else if (expr.is<parser::NewExpr>()) {
         return gen_new_expr(expr.as<parser::NewExpr>());
+    } else if (expr.is<parser::RangeExpr>()) {
+        return gen_range(expr.as<parser::RangeExpr>());
     } else {
         report_error("Unsupported expression type", expr.span, "C002");
         return "0";
@@ -183,6 +185,66 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
             pending_str_temps_.push_back(result);
         }
     }
+    return result;
+}
+
+auto LLVMIRGen::gen_range(const parser::RangeExpr& range) -> std::string {
+    // Determine the element type from start or end expression
+    std::string elem_llvm_type = "i32"; // Default
+
+    // Generate start and end values
+    std::string start_val = "0";
+    std::string end_val = "0";
+
+    if (range.start) {
+        start_val = gen_expr(**range.start);
+        elem_llvm_type = last_expr_type_;
+    }
+    if (range.end) {
+        end_val = gen_expr(**range.end);
+        if (!range.start) {
+            elem_llvm_type = last_expr_type_;
+        }
+    }
+
+    // The LLVM struct type: { elem_type, elem_type } for Range,
+    // { elem_type, elem_type, i1 } for RangeInclusive
+    std::string struct_type;
+    if (range.inclusive) {
+        struct_type = "{ " + elem_llvm_type + ", " + elem_llvm_type + ", i1 }";
+    } else {
+        struct_type = "{ " + elem_llvm_type + ", " + elem_llvm_type + " }";
+    }
+
+    // Allocate struct on stack and store fields
+    std::string alloca_reg = fresh_reg();
+    emit_line("  " + alloca_reg + " = alloca " + struct_type);
+
+    // Store start field (index 0)
+    std::string start_ptr = fresh_reg();
+    emit_line("  " + start_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+              alloca_reg + ", i32 0, i32 0");
+    emit_line("  store " + elem_llvm_type + " " + start_val + ", ptr " + start_ptr);
+
+    // Store end field (index 1)
+    std::string end_ptr = fresh_reg();
+    emit_line("  " + end_ptr + " = getelementptr inbounds " + struct_type + ", ptr " + alloca_reg +
+              ", i32 0, i32 1");
+    emit_line("  store " + elem_llvm_type + " " + end_val + ", ptr " + end_ptr);
+
+    // For RangeInclusive, store exhausted=false (index 2)
+    if (range.inclusive) {
+        std::string exhausted_ptr = fresh_reg();
+        emit_line("  " + exhausted_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 2");
+        emit_line("  store i1 false, ptr " + exhausted_ptr);
+    }
+
+    // Load the struct value
+    std::string result = fresh_reg();
+    emit_line("  " + result + " = load " + struct_type + ", ptr " + alloca_reg);
+
+    last_expr_type_ = struct_type;
     return result;
 }
 

@@ -26,7 +26,7 @@ TML_MODULE("compiler")
 //! |------------|-----------------|-------------|
 //! | `return`   | `check_return`  | Never       |
 //! | `break`    | `check_break`   | Never       |
-//! | `to/through` | `check_range` | Slice[I64]  |
+//! | `to/through` | `check_range` | Range[T] / RangeInclusive[T] |
 
 #include "types/checker.hpp"
 
@@ -180,7 +180,12 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
     } else if (iter_type->is<NamedType>()) {
         // Check if it's a collection type (List, HashMap, Buffer, Vec)
         const auto& named = iter_type->as<NamedType>();
-        if (named.name == "List" || named.name == "Vec" || named.name == "Buffer") {
+        if ((named.name == "Range" || named.name == "RangeInclusive" ||
+             named.name == "RangeFrom") &&
+            !named.type_args.empty()) {
+            // Range[T] / RangeInclusive[T] / RangeFrom[T] — element type is T
+            element_type = named.type_args[0];
+        } else if (named.name == "List" || named.name == "Vec" || named.name == "Buffer") {
             // For List/Vec/Buffer, elements are I32 (stored as i64 but converted)
             element_type = make_primitive(PrimitiveKind::I32);
         } else if (named.name == "HashMap") {
@@ -247,9 +252,16 @@ auto TypeChecker::check_range(const parser::RangeExpr& range) -> TypePtr {
         }
     }
 
-    // Both start and end should have compatible types
-    // For simplicity, ranges always produce I64 slices
-    return make_slice(make_primitive(PrimitiveKind::I64));
+    // Determine the element type T for Range[T] / RangeInclusive[T].
+    // Use the start type if present, otherwise the end type.
+    // Both default to I64 if neither is present.
+    TypePtr elem_type = range.start ? start_type : end_type;
+
+    // Return Range[T] for exclusive (..) or RangeInclusive[T] for inclusive (..=/through)
+    std::string range_type_name = range.inclusive ? "RangeInclusive" : "Range";
+    auto result = std::make_shared<Type>();
+    result->kind = NamedType{range_type_name, "", {elem_type}};
+    return result;
 }
 
 // Forward declaration from helpers.cpp

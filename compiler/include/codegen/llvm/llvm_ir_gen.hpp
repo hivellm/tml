@@ -1131,6 +1131,9 @@ private:
     // Generate new expression (new ClassName(args))
     auto gen_new_expr(const parser::NewExpr& new_expr) -> std::string;
 
+    // Generate range expression (a..b or a..=b) as Range/RangeInclusive struct
+    auto gen_range(const parser::RangeExpr& range) -> std::string;
+
     // ============ Generic Instantiation Support ============
     // Tracks generic type/function instantiations to avoid duplicates
     // and generate specialized code for each unique type argument combination

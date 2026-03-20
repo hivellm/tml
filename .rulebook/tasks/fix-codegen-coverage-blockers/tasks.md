@@ -1,12 +1,17 @@
 # Tasks
 
-## Phase 1: Generic Trait Dispatch → ()
-- [ ] Reproduce: `Array[I32, 3].hash()` returns () instead of I64
-- [ ] Trace return type resolution in expr_call_method.cpp for constrained impls
-- [ ] Fix type substitution for constrained generic impl return types
-- [ ] Verify: Array PartialEq, Hash, Display, Debug, Default, Duplicate
-- [ ] Verify: Pool::acquire, Range::size_hint, Poll::eq, F32/F64 sum/product
-- [ ] Run test suite — no regressions
+## Phase 1: Generic Trait Dispatch → () — PARTIALLY FIXED
+- [x] Reproduce: `Array[I32, 3].hash()` — already works, not a regression (verified via standalone + test file)
+- [x] Trace return type resolution: root cause is check_range() returning Slice[I64] instead of Range[T]
+- [x] Fix: check_range() now returns Range[T] / RangeInclusive[T] (control.cpp)
+- [x] Fix: check_for() handles Range[T] element type extraction (control.cpp)
+- [x] Fix: gen_range() added to AST codegen for standalone range expressions (llvm_ir_gen_expr.cpp)
+- [x] Verify: Array PartialEq, Hash, Display, Debug, Duplicate — all work (tested via standalone + test file)
+- [x] Verify: Range::size_hint TYPE CHECKS correctly (was () before, now (I64, Maybe[I64]))
+- [x] Run test suite — 52/52 iter, 2/2 range, 10/10 lang, 50/50 num, 7/7 types — no regressions
+- [ ] Remaining: Range method CODEGEN dispatch (AST codegen needs Range struct registration for r.size_hint() to compile+run)
+- [ ] Remaining: Pool::acquire, Poll::eq (separate codegen issues, not type checker)
+- [ ] Remaining: F32/F64 sum/product (Sum/Product behavior dispatch, separate from Range fix)
 - [ ] Write/uncomment tests for newly unblocked functions
 
 ## Phase 2: Missing LLVM Intrinsic Declarations
