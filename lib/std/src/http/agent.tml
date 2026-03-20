@@ -110,14 +110,16 @@ impl AgentOptions {
 /// An HTTP Agent manages connection pooling configuration.
 ///
 /// Uses a simple array-based pool stored as I64 pointers.
-/// Pool entries: {name_ptr: I64, fd: I64} pairs.
+/// Pool entries: {name_ptr: I64, fd: I64} pairs (16 bytes each).
 pub type Agent {
     opts: AgentOptions,
-    pool_ptr: I64,       // array of {name_i64, fd} pairs
+    pool_entries: I64,   // heap ptr to [{name: I64, fd: I64}] × cap
     pool_count: I64,
     pool_cap: I64,
     total_active: I64,
 }
+
+const POOL_ENTRY_SIZE: I64 = 16  // 2 × I64
 
 impl Agent {
     /// Creates a new Agent with the given options.
@@ -125,7 +127,7 @@ impl Agent {
         let cap: I64 = 16
         Agent {
             opts: opts,
-            pool_ptr: lowlevel { mem_alloc(cap * 16) } as I64,
+            pool_entries: lowlevel { mem_alloc(cap * POOL_ENTRY_SIZE) } as I64,
             pool_count: 0,
             pool_cap: cap,
             total_active: 0,
@@ -187,16 +189,16 @@ impl Agent {
         // Grow if needed
         if this.pool_count >= this.pool_cap {
             let new_cap: I64 = this.pool_cap * 2
-            let new_ptr: I64 = lowlevel { mem_alloc(new_cap * 16) } as I64
-            lowlevel { copy_nonoverlapping(this.pool_ptr as *Unit, new_ptr as *Unit, this.pool_cap * 16) }
-            lowlevel { mem_free(this.pool_ptr as *Unit) }
-            this.pool_ptr = new_ptr
+            let new_entries: I64 = lowlevel { mem_alloc(new_cap * POOL_ENTRY_SIZE) } as I64
+            lowlevel { copy_nonoverlapping(this.pool_entries as *Unit, new_entries as *Unit, this.pool_cap * POOL_ENTRY_SIZE) }
+            lowlevel { mem_free(this.pool_entries as *Unit) }
+            this.pool_entries = new_entries
             this.pool_cap = new_cap
         }
 
-        let offset: I64 = this.pool_count * 16
-        lowlevel { ptr_write[I64]((this.pool_ptr + offset) as *I64, name as I64) }
-        lowlevel { ptr_write[I64]((this.pool_ptr + offset + 8) as *I64, fd) }
+        let offset: I64 = this.pool_count * POOL_ENTRY_SIZE
+        lowlevel { ptr_write[I64]((this.pool_entries + offset) as *I64, name as I64) }
+        lowlevel { ptr_write[I64]((this.pool_entries + offset + 8) as *I64, fd) }
         this.pool_count = this.pool_count + 1
     }
 
@@ -204,18 +206,15 @@ impl Agent {
     pub func get_from_pool(mut this, name: Str) -> I64 {
         var i: I64 = this.pool_count - 1
         loop (i >= 0) {
-            let offset: I64 = i * 16
-            let entry_name: Str = lowlevel { ptr_read[I64]((this.pool_ptr + offset) as *I64) } as Str
+            let offset: I64 = i * POOL_ENTRY_SIZE
+            let entry_name: Str = lowlevel { ptr_read[I64]((this.pool_entries + offset) as *I64) } as Str
             if entry_name == name {
-                let fd: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + offset + 8) as *I64) }
+                let fd: I64 = lowlevel { ptr_read[I64]((this.pool_entries + offset + 8) as *I64) }
                 // Remove by swapping with last
                 let last: I64 = this.pool_count - 1
                 if i != last {
-                    let last_offset: I64 = last * 16
-                    let ln: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + last_offset) as *I64) }
-                    let lf: I64 = lowlevel { ptr_read[I64]((this.pool_ptr + last_offset + 8) as *I64) }
-                    lowlevel { ptr_write[I64]((this.pool_ptr + offset) as *I64, ln) }
-                    lowlevel { ptr_write[I64]((this.pool_ptr + offset + 8) as *I64, lf) }
+                    let loff: I64 = last * POOL_ENTRY_SIZE
+                    lowlevel { copy_nonoverlapping((this.pool_entries + loff) as *Unit, (this.pool_entries + offset) as *Unit, POOL_ENTRY_SIZE) }
                 }
                 this.pool_count = this.pool_count - 1
                 return fd
@@ -227,8 +226,8 @@ impl Agent {
 
     /// Frees pool memory (does NOT close sockets).
     pub func destroy(this) {
-        if this.pool_ptr != 0 {
-            lowlevel { mem_free(this.pool_ptr as *Unit) }
+        if this.pool_entries != 0 {
+            lowlevel { mem_free(this.pool_entries as *Unit) }
         }
     }
 }

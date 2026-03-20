@@ -50,12 +50,9 @@ func get_reason_phrase(code: I64) -> Str {
 
 // ── Header helpers (reconstruct Headers from raw pointer) ──
 
-/// Reconstructs a Headers wrapper from a raw handle pointer.
-/// Headers is just `{ handle: *Unit }` — we create the wrapper and overwrite
-/// its handle field to point at the existing allocation.
+/// Reconstructs a Headers wrapper from a raw HashMap handle pointer.
 func headers_from_ptr(hdr_ptr: I64) -> Headers {
-    let hdrs: Headers = Headers { handle: hdr_ptr as *Unit }
-    hdrs
+    Headers::from_handle(hdr_ptr)
 }
 
 /// Sets a header in the raw headers block pointed to by hdr_ptr.

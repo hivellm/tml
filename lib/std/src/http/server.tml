@@ -6,6 +6,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::collections::Buffer
 use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
 use std::net::tcp::TcpListener
 use std::net::sys::RawSocket
@@ -172,49 +173,34 @@ impl HttpServer {
     }
 }
 
-/// Reads raw HTTP request data from a socket into a heap buffer.
+/// Reads raw HTTP request data from a socket into a Buffer.
 func read_request(fd: I64) -> Outcome[Str, HttpError] {
-    var capacity: I64 = 8192
-    var data_ptr: I64 = lowlevel { mem_alloc(capacity) } as I64
-    var total: I64 = 0
+    var buf: Buffer = Buffer::new(8192)
 
     let chunk_size: I64 = 4096
     let chunk_ptr: I64 = lowlevel { mem_alloc(chunk_size) } as I64
 
+    var total: I64 = 0
     loop (total < MAX_REQUEST_SIZE) {
         let n: I64 = tml_sys_recv(fd, chunk_ptr as *Unit, chunk_size)
         if n <= 0 { break }
 
-        // Grow buffer if needed
-        if total + n >= capacity {
-            let new_cap: I64 = capacity * 2
-            let new_data: I64 = lowlevel { mem_alloc(new_cap) } as I64
-            lowlevel { copy_nonoverlapping(data_ptr as *Unit, new_data as *Unit, total) }
-            lowlevel { mem_free(data_ptr as *Unit) }
-            data_ptr = new_data
-            capacity = new_cap
-        }
-
-        // Copy chunk
-        lowlevel { copy_nonoverlapping(chunk_ptr as *Unit, (data_ptr + total) as *Unit, n) }
+        buf.write_from_ptr(chunk_ptr, n)
         total = total + n
 
         // Check for end of headers: scan for \r\n\r\n in the last few bytes
-        if app_has_header_end(data_ptr, total) {
+        if app_has_header_end(buf.data_ptr(), total) {
             lowlevel { mem_free(chunk_ptr as *Unit) }
-            lowlevel { ptr_write[U8]((data_ptr + total) as *U8, 0 as U8) }
-            return Ok(data_ptr as Str)
+            return Ok(buf.to_string())
         }
     }
 
     lowlevel { mem_free(chunk_ptr as *Unit) }
 
     if total == 0 {
-        lowlevel { mem_free(data_ptr as *Unit) }
         return Err(HttpError::connection_failed("no data received"))
     }
 
-    lowlevel { ptr_write[U8]((data_ptr + total) as *U8, 0 as U8) }
-    return Ok(data_ptr as Str)
+    return Ok(buf.to_string())
 }
 

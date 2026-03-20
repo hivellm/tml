@@ -13,6 +13,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use std::collections::Buffer
 use std::http::headers::Headers
 use std::text::Text
 
@@ -151,11 +152,7 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
     let data_len: I64 = str::len(data)
     var pos: I64 = 0
 
-    // Accumulate body in a growing buffer
-    var buf_cap: I64 = 4096
-    var buf: I64 = lowlevel { mem_alloc(buf_cap) } as I64
-    var buf_len: I64 = 0
-
+    var buf: Buffer = Buffer::new(4096)
     let trailers: Headers = Headers::new()
 
     loop (pos < data_len) {
@@ -169,9 +166,8 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
         }
         if line_end >= data_len - 1 {
             // Incomplete chunk header
-            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
             return ChunkedResult {
-                body: buf as Str,
+                body: buf.to_string(),
                 trailers: trailers,
                 complete: false,
                 bytes_consumed: pos,
@@ -194,9 +190,8 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
 
         if chunk_size < 0 {
             // Invalid chunk size
-            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
             return ChunkedResult {
-                body: buf as Str,
+                body: buf.to_string(),
                 trailers: trailers,
                 complete: false,
                 bytes_consumed: pos,
@@ -237,10 +232,8 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
                 pos = tline_end + 2
             }
 
-            // Null-terminate and return
-            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
             return ChunkedResult {
-                body: buf as Str,
+                body: buf.to_string(),
                 trailers: trailers,
                 complete: true,
                 bytes_consumed: pos,
@@ -250,32 +243,16 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
         // Read chunk_size bytes of data
         if pos + chunk_size > data_len {
             // Not enough data yet
-            lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
             return ChunkedResult {
-                body: buf as Str,
+                body: buf.to_string(),
                 trailers: trailers,
                 complete: false,
                 bytes_consumed: pos,
             }
         }
 
-        // Grow buffer if needed
-        if buf_len + chunk_size + 1 >= buf_cap {
-            var new_cap: I64 = buf_cap * 2
-            loop (new_cap < buf_len + chunk_size + 1) {
-                new_cap = new_cap * 2
-            }
-            let new_buf: I64 = lowlevel { mem_alloc(new_cap) } as I64
-            lowlevel { copy_nonoverlapping(buf as *Unit, new_buf as *Unit, buf_len) }
-            lowlevel { mem_free(buf as *Unit) }
-            buf = new_buf
-            buf_cap = new_cap
-        }
-
         // Copy chunk data to buffer
-        let src: I64 = (data as I64) + pos
-        lowlevel { copy_nonoverlapping(src as *Unit, (buf + buf_len) as *Unit, chunk_size) }
-        buf_len = buf_len + chunk_size
+        buf.write_from_ptr((data as I64) + pos, chunk_size)
         pos = pos + chunk_size
 
         // Skip trailing \r\n after chunk data
@@ -285,9 +262,8 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
     }
 
     // Ran out of data without final chunk
-    lowlevel { ptr_write[U8]((buf + buf_len) as *U8, 0 as U8) }
     return ChunkedResult {
-        body: buf as Str,
+        body: buf.to_string(),
         trailers: trailers,
         complete: false,
         bytes_consumed: pos,

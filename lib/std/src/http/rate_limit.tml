@@ -56,107 +56,96 @@ impl RateLimitResult {
     }
 }
 
-/// In-memory rate limiter.
-/// All state is stored on the heap via a handle pointer.
-/// Handle layout: [entry_count: I64, entry_cap: I64, window_ms: I64, max_req: I64, entries...]
-/// Each entry: [key_ptr: I64, count: I64, window_start: I64] = 24 bytes
+/// In-memory rate limiter with typed fields.
+/// Entries are stored as a flat array of {key, count, window_start} triplets
+/// on the heap, managed via lowlevel (justified: fixed-stride array with
+/// linear scan, no existing collection supports 3-field stride).
 pub type RateLimiter {
-    handle: I64,  // pointer to heap state
+    window_ms: I64,
+    max_requests: I64,
+    entries: I64,       // heap ptr to [{key: I64, count: I64, start: I64}] × cap
+    entry_count: I64,
+    entry_cap: I64,
 }
 
-const RL_OFF_COUNT: I64 = 0
-const RL_OFF_CAP: I64 = 8
-const RL_OFF_WINDOW: I64 = 16
-const RL_OFF_MAX: I64 = 24
-const RL_OFF_ENTRIES: I64 = 32
+const ENTRY_STRIDE: I64 = 24  // 3 × I64
 
 impl RateLimiter {
     pub func new(opts: RateLimitOptions) -> RateLimiter {
         let cap: I64 = 64
-        let total_size: I64 = RL_OFF_ENTRIES + cap * 24
-        let h: I64 = lowlevel { mem_alloc(total_size) } as I64
-        lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, 0) }
-        lowlevel { ptr_write[I64]((h + RL_OFF_CAP) as *I64, cap) }
-        lowlevel { ptr_write[I64]((h + RL_OFF_WINDOW) as *I64, opts.window_ms) }
-        lowlevel { ptr_write[I64]((h + RL_OFF_MAX) as *I64, opts.max_requests) }
-        RateLimiter { handle: h }
+        RateLimiter {
+            window_ms: opts.window_ms,
+            max_requests: opts.max_requests,
+            entries: lowlevel { mem_alloc(cap * ENTRY_STRIDE) } as I64,
+            entry_count: 0,
+            entry_cap: cap,
+        }
     }
 
-    pub func check(this, key: Str, now_ms: I64) -> RateLimitResult {
-        let h: I64 = this.handle
-        let count: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_COUNT) as *I64) }
-        let cap: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_CAP) as *I64) }
-        let window_ms: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_WINDOW) as *I64) }
-        let max_req: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_MAX) as *I64) }
+    pub func check(mut this, key: Str, now_ms: I64) -> RateLimitResult {
+        let max_req: I64 = this.max_requests
 
         // Search for existing entry
         var i: I64 = 0
-        loop (i < count) {
-            let off: I64 = RL_OFF_ENTRIES + i * 24
-            let entry_key: Str = lowlevel { ptr_read[I64]((h + off) as *I64) } as Str
+        loop (i < this.entry_count) {
+            let off: I64 = i * ENTRY_STRIDE
+            let entry_key: Str = lowlevel { ptr_read[I64]((this.entries + off) as *I64) } as Str
             if entry_key == key {
-                let entry_count: I64 = lowlevel { ptr_read[I64]((h + off + 8) as *I64) }
-                let entry_start: I64 = lowlevel { ptr_read[I64]((h + off + 16) as *I64) }
+                let entry_count: I64 = lowlevel { ptr_read[I64]((this.entries + off + 8) as *I64) }
+                let entry_start: I64 = lowlevel { ptr_read[I64]((this.entries + off + 16) as *I64) }
 
-                if now_ms - entry_start >= window_ms {
+                if now_ms - entry_start >= this.window_ms {
                     // Reset window
-                    lowlevel { ptr_write[I64]((h + off + 8) as *I64, 1) }
-                    lowlevel { ptr_write[I64]((h + off + 16) as *I64, now_ms) }
+                    lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, 1) }
+                    lowlevel { ptr_write[I64]((this.entries + off + 16) as *I64, now_ms) }
                     return RateLimitResult {
                         allowed: true, remaining: max_req - 1,
-                        limit: max_req, reset_at: now_ms + window_ms,
+                        limit: max_req, reset_at: now_ms + this.window_ms,
                     }
                 }
 
                 let new_count: I64 = entry_count + 1
-                lowlevel { ptr_write[I64]((h + off + 8) as *I64, new_count) }
+                lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, new_count) }
 
                 if new_count > max_req {
                     return RateLimitResult {
                         allowed: false, remaining: 0,
-                        limit: max_req, reset_at: entry_start + window_ms,
+                        limit: max_req, reset_at: entry_start + this.window_ms,
                     }
                 }
                 return RateLimitResult {
                     allowed: true, remaining: max_req - new_count,
-                    limit: max_req, reset_at: entry_start + window_ms,
+                    limit: max_req, reset_at: entry_start + this.window_ms,
                 }
             }
             i = i + 1
         }
 
         // New entry
-        let off: I64 = RL_OFF_ENTRIES + count * 24
-        lowlevel { ptr_write[I64]((h + off) as *I64, key as I64) }
-        lowlevel { ptr_write[I64]((h + off + 8) as *I64, 1) }
-        lowlevel { ptr_write[I64]((h + off + 16) as *I64, now_ms) }
-        lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, count + 1) }
+        let off: I64 = this.entry_count * ENTRY_STRIDE
+        lowlevel { ptr_write[I64]((this.entries + off) as *I64, key as I64) }
+        lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, 1) }
+        lowlevel { ptr_write[I64]((this.entries + off + 16) as *I64, now_ms) }
+        this.entry_count = this.entry_count + 1
 
         return RateLimitResult {
             allowed: true, remaining: max_req - 1,
-            limit: max_req, reset_at: now_ms + window_ms,
+            limit: max_req, reset_at: now_ms + this.window_ms,
         }
     }
 
-    pub func reset(this, key: Str) {
-        let h: I64 = this.handle
-        let count: I64 = lowlevel { ptr_read[I64]((h + RL_OFF_COUNT) as *I64) }
+    pub func reset(mut this, key: Str) {
         var i: I64 = 0
-        loop (i < count) {
-            let off: I64 = RL_OFF_ENTRIES + i * 24
-            let entry_key: Str = lowlevel { ptr_read[I64]((h + off) as *I64) } as Str
+        loop (i < this.entry_count) {
+            let off: I64 = i * ENTRY_STRIDE
+            let entry_key: Str = lowlevel { ptr_read[I64]((this.entries + off) as *I64) } as Str
             if entry_key == key {
-                let last: I64 = count - 1
+                let last: I64 = this.entry_count - 1
                 if i != last {
-                    let loff: I64 = RL_OFF_ENTRIES + last * 24
-                    let lk: I64 = lowlevel { ptr_read[I64]((h + loff) as *I64) }
-                    let lc: I64 = lowlevel { ptr_read[I64]((h + loff + 8) as *I64) }
-                    let lw: I64 = lowlevel { ptr_read[I64]((h + loff + 16) as *I64) }
-                    lowlevel { ptr_write[I64]((h + off) as *I64, lk) }
-                    lowlevel { ptr_write[I64]((h + off + 8) as *I64, lc) }
-                    lowlevel { ptr_write[I64]((h + off + 16) as *I64, lw) }
+                    let loff: I64 = last * ENTRY_STRIDE
+                    lowlevel { copy_nonoverlapping((this.entries + loff) as *Unit, (this.entries + off) as *Unit, ENTRY_STRIDE) }
                 }
-                lowlevel { ptr_write[I64]((h + RL_OFF_COUNT) as *I64, last) }
+                this.entry_count = last
                 return
             }
             i = i + 1
@@ -164,8 +153,8 @@ impl RateLimiter {
     }
 
     pub func destroy(this) {
-        if this.handle != 0 {
-            lowlevel { mem_free(this.handle as *Unit) }
+        if this.entries != 0 {
+            lowlevel { mem_free(this.entries as *Unit) }
         }
     }
 }

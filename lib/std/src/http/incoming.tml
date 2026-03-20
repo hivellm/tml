@@ -35,9 +35,7 @@ impl IncomingMessage {
     /// Creates an empty IncomingMessage (for testing or manual construction).
     pub func new(method: Str, url: Str, version: Str) -> IncomingMessage {
         let hdrs: Headers = Headers::new()
-        // Store headers pointer, escape @allocates
-        let hdrs_addr: I64 = (ref hdrs) as I64
-        let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+        let hdrs_ptr: I64 = hdrs.to_handle()
         IncomingMessage {
             req_method: method,
             req_url: url,
@@ -285,7 +283,7 @@ impl IncomingMessage {
 /// Reconstructs a Headers wrapper and delegates to Headers::get().
 func get_header_from_ptr(hdr: I64, name: Str) -> Str {
     if hdr == 0 { return "" }
-    let hdrs: Headers = Headers { handle: hdr as *Unit }
+    let hdrs: Headers = Headers::from_handle(hdr)
     hdrs.get(name)
 }
 
@@ -293,7 +291,7 @@ func get_header_from_ptr(hdr: I64, name: Str) -> Str {
 /// Reconstructs a Headers wrapper and delegates to Headers::has().
 func has_header_from_ptr(hdr: I64, name: Str) -> Bool {
     if hdr == 0 { return false }
-    let hdrs: Headers = Headers { handle: hdr as *Unit }
+    let hdrs: Headers = Headers::from_handle(hdr)
     hdrs.has(name)
 }
 
@@ -385,9 +383,8 @@ pub func parse_request(raw: Str) -> Outcome[IncomingMessage, HttpError] {
     // Body is everything after headers (escape @allocates)
     let body_i64: I64 = str::substring(raw, pos, raw_len) as I64
 
-    // Get headers handle pointer (escape @allocates)
-    let hdrs_addr: I64 = (ref headers) as I64
-    let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+    // Get headers handle pointer
+    let hdrs_ptr: I64 = headers.to_handle()
 
     return Ok(IncomingMessage {
         req_method: method_str_i64 as Str,

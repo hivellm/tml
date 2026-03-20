@@ -18,6 +18,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use std::collections::Buffer
 use std::http::method::Method
 use std::http::request::Request
 use std::http::response::Response
@@ -154,12 +155,9 @@ impl HttpClient {
 /// Reads all data from a connection until EOF.
 /// Returns the raw response as a string.
 func read_all(conn: Connection) -> Outcome[Str, HttpError] {
-    // Accumulate into a growing buffer
-    var capacity: I64 = 32768
-    var data: *Unit = lowlevel { mem_alloc(capacity) }
-    var total: I64 = 0
+    var buf: Buffer = Buffer::new(32768)
 
-    // Heap-allocated read buffer avoids stack arrays (which generate
+    // Heap-allocated read chunk avoids stack arrays (which generate
     // element-by-element IR that overflows the LLVM compilation stack).
     let chunk_size: I64 = 8192
     let chunk: *Unit = lowlevel { mem_alloc(chunk_size) }
@@ -169,6 +167,7 @@ func read_all(conn: Connection) -> Outcome[Str, HttpError] {
     let is_tls: Bool = conn.is_tls
     let fd: I64 = conn.fd
 
+    var total: I64 = 0
     loop (total < MAX_RESPONSE_SIZE) {
         // Read directly via FFI — no stack array involved
         var n: I64 = 0
@@ -182,26 +181,11 @@ func read_all(conn: Connection) -> Outcome[Str, HttpError] {
             break
         }
 
-        // Grow accumulation buffer if needed
-        if total + n >= capacity {
-            let new_cap: I64 = capacity * 2
-            let new_data: *Unit = lowlevel { mem_alloc(new_cap) }
-            lowlevel { copy_nonoverlapping(data, new_data, total) }
-            lowlevel { mem_free(data) }
-            data = new_data
-            capacity = new_cap
-        }
-
-        // Copy chunk into accumulation buffer
-        let dst: I64 = (data as I64) + total
-        lowlevel { copy_nonoverlapping(chunk, dst as *Unit, n) }
+        buf.write_from_ptr(chunk as I64, n)
         total = total + n
     }
 
     lowlevel { mem_free(chunk) }
 
-    // Null-terminate and return as Str
-    lowlevel { ptr_write[U8](((data as I64) + total) as *U8, 0 as U8) }
-    let result_i64: I64 = data as I64
-    return Ok(result_i64 as Str)
+    return Ok(buf.to_string())
 }
