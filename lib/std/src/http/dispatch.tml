@@ -11,6 +11,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::fmt::helpers::i64_to_str
 use std::http::incoming::IncomingMessage
 use std::http::server_response::ServerResponse
 use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
@@ -497,7 +498,7 @@ func app_status_line(code: I64) -> Str {
     if code == 503 { return "HTTP/1.1 503 Service Unavailable\r\n" }
     // Fallback: build dynamically (rare path)
     let status_text: Str = app_status_text(code)
-    return `HTTP/1.1 {code} {status_text}\r\n`.as_str()
+    return "HTTP/1.1 " + i64_to_str(code) + " " + status_text + "\r\n"
 }
 
 /// Fast integer to decimal string for Content-Length.
@@ -618,7 +619,7 @@ pub func app_http_date() -> Str {
     let mm: Str = two_digit(mins)
     let ss: Str = two_digit(secs)
 
-    return `{dow_name}, {dd} {mon_name} {yy} {hh}:{mm}:{ss} GMT`.as_str()
+    return dow_name + ", " + dd + " " + mon_name + " " + yy + " " + hh + ":" + mm + ":" + ss + " GMT"
 }
 
 /// Build HTTP response — optimized hot path with Date header.
@@ -703,6 +704,6 @@ pub func app_build_response_into(buf: I64, status: I64, content_type: Str, body:
 /// Build a JSON error response following cmmv-server format.
 pub func app_error_response(status: I64, message: Str) -> Str {
     let status_text: Str = app_status_text(status)
-    let body: Str = `{"statusCode":{status},"error":"{status_text}","message":"{message}"}`.as_str()
+    let body: Str = "{\"statusCode\":" + i64_to_str(status) + ",\"error\":\"" + status_text + "\",\"message\":\"" + message + "\"}"
     return app_build_response(status, "application/json; charset=utf-8", body)
 }

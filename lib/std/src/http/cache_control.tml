@@ -5,6 +5,7 @@
 
 use core::str
 use core::fmt::helpers::i64_to_str
+use std::text::Text
 
 /// Cache-Control configuration.
 pub type CacheOptions {
@@ -104,34 +105,38 @@ impl CacheOptions {
 
 /// Generates the Cache-Control header value from options.
 pub func cache_control_header(opts: ref CacheOptions) -> Str {
-    var parts: Str = ""
+    var text = Text::new()
 
-    if opts.is_public { parts = add_part(parts, "public") }
-    if opts.is_private { parts = add_part(parts, "private") }
-    if opts.no_cache { parts = add_part(parts, "no-cache") }
-    if opts.no_store { parts = add_part(parts, "no-store") }
-    if opts.no_transform { parts = add_part(parts, "no-transform") }
-    if opts.must_revalidate { parts = add_part(parts, "must-revalidate") }
-    if opts.proxy_revalidate { parts = add_part(parts, "proxy-revalidate") }
+    if opts.is_public { cc_append(text, "public") }
+    if opts.is_private { cc_append(text, "private") }
+    if opts.no_cache { cc_append(text, "no-cache") }
+    if opts.no_store { cc_append(text, "no-store") }
+    if opts.no_transform { cc_append(text, "no-transform") }
+    if opts.must_revalidate { cc_append(text, "must-revalidate") }
+    if opts.proxy_revalidate { cc_append(text, "proxy-revalidate") }
     if opts.max_age >= 0 {
-        parts = add_part(parts, "max-age={i64_to_str(opts.max_age)}")
+        cc_append(text, "max-age=")
+        text.push_str(i64_to_str(opts.max_age))
     }
     if opts.s_maxage >= 0 {
-        parts = add_part(parts, "s-maxage={i64_to_str(opts.s_maxage)}")
+        cc_append(text, "s-maxage=")
+        text.push_str(i64_to_str(opts.s_maxage))
     }
-    if opts.immutable { parts = add_part(parts, "immutable") }
+    if opts.immutable { cc_append(text, "immutable") }
     if opts.stale_while_revalidate >= 0 {
-        parts = add_part(parts, "stale-while-revalidate={i64_to_str(opts.stale_while_revalidate)}")
+        cc_append(text, "stale-while-revalidate=")
+        text.push_str(i64_to_str(opts.stale_while_revalidate))
     }
     if opts.stale_if_error >= 0 {
-        parts = add_part(parts, "stale-if-error={i64_to_str(opts.stale_if_error)}")
+        cc_append(text, "stale-if-error=")
+        text.push_str(i64_to_str(opts.stale_if_error))
     }
 
-    return parts
+    return text.as_str()
 }
 
-/// Helper: append a part with comma separator.
-func add_part(existing: Str, part: Str) -> Str {
-    if str::len(existing) == 0 { return part }
-    return "{existing}, {part}"
+/// Helper: append a directive with comma separator.
+func cc_append(text: Text, part: Str) {
+    if text.len() > 0 { text.push_str(", ") }
+    text.push_str(part)
 }

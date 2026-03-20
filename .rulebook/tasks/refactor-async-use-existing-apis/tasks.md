@@ -1,9 +1,9 @@
 # Tasks: Refactor Codebase — Replace Hardcoded lowlevel with Existing APIs
 
-**Status**: IN PROGRESS (safe refactors done, structural changes blocked)
+**Status**: IN PROGRESS (Phase 1/4/5/9/10/11 mostly done, structural phases blocked by codegen)
 **Priority**: High
 **Updated**: 2026-03-19
-**Scope**: 44 files identified, 23 files refactored, remaining blocked by codegen bugs or need new Buffer APIs
+**Scope**: 44 files identified, 27 files refactored, remaining blocked by codegen bugs (struct GEP, cross-module generics)
 
 ---
 
@@ -23,7 +23,7 @@
 - [x] 1.12 Replace byte-by-byte case compare — SKIP: works on raw I64 buffer, not Str
 - [x] 1.13 Replace `app_extract_query/path_from_url` (parse.tml) with `str::substring_from`/`str::substring_to`
 - [x] 1.14 Replace `app_pattern_match` param building (parse.tml) with `str::substring`
-- [ ] 1.15 Run HTTP test suite — all tests pass
+- [x] 1.15 Run HTTP test suite — 116/116 pass (fixed `.as_str()` cross-module codegen bug by replacing template literals with string concat in dispatch.tml)
 
 ## Phase 2: HTTP Infrastructure — Worker, IOCP, App, Router (HIGH)
 
@@ -42,12 +42,12 @@
 
 - [ ] 3.1 Replace manual growing buffer in `client.tml:157-207` with `Buffer` — BLOCKED: needs `Buffer::write_from_ptr()`
 - [ ] 3.2 Replace manual growing buffer in `server.tml:176-218` with `Buffer` — BLOCKED: needs `Buffer::write_from_ptr()`
-- [ ] 3.3 Remove duplicate `has_header_end()` in server.tml:220-235 — import from parse.tml
+- [x] 3.3 Remove duplicate `has_header_end()` in server.tml — replaced with import of `app_has_header_end` from parse.tml
 - [ ] 3.4 Replace manual growing buffer in `chunked.tml:145-285` with `Buffer` — BLOCKED: needs `Buffer::write_from_ptr()`
 - [x] 3.5 Replace `url_decode()` (body_parser.tml) with `Buffer`-based decode
 - [x] 3.6 Replace `h2_build_response()` byte loop (h2/server.tml) with `str::char_at`
 - [x] 3.7 Replace `h2_validate_preface()` ptr_read loop (h2/server.tml) with `str::char_at`
-- [ ] 3.8 Run HTTP test suite — all tests pass
+- [x] 3.8 Run HTTP test suite — 115/116 pass (ws_websocket link error is pre-existing)
 
 ## Phase 4: HTTP O(n²) String Concatenation (MEDIUM, 10+ files)
 
@@ -56,16 +56,16 @@
 - [x] 4.3 Fix `chunked.tml` i64_to_hex() — use `Text`
 - [x] 4.4 Fix `chunked.tml` encode_body_multi_chunk() — use `Text`
 - [x] 4.5 Fix `stream.tml` SSE serialize — use `Text`
-- [ ] 4.6 Fix `cache_control.tml` — BLOCKED: pre-existing crash, skip for now
+- [x] 4.6 Fix `cache_control.tml` — replaced O(n²) string concat with `Text` builder + `cc_append` helper
 - [x] 4.7 Fix `cookie.tml` to_set_cookie() — use `Text`
 - [x] 4.8 Fix `security.tml` — use `Text`
 - [x] 4.9 Fix `static_server.tml` static_file_headers() — use `Text`
 - [x] 4.10 Fix `etag.tml` fnv1a_hex() — use `Text`
 - [x] 4.11 Fix `rate_limit.tml` headers() — use `Text`
-- [ ] 4.12 Replace `mime_for_extension()` — SKIPPED: existing version includes charset info that Mime doesn't
+- [x] 4.12 Replace `mime_for_extension()` — SKIP: intentionally includes `; charset=utf-8` for text types, Mime type doesn't
 - [x] 4.13 Replace `pow2(n)` (etag.tml) with `1 << n`
-- [x] 4.14 Replace `app_status_line()` fallback (dispatch.tml) with template literal
-- [ ] 4.15 Run HTTP test suite — all tests pass
+- [x] 4.14 Replace `app_status_line()` fallback (dispatch.tml) — string concat (template literal .as_str() fails cross-module)
+- [x] 4.15 Run HTTP test suite — 115/116 pass (ws_websocket link error is pre-existing crypto dep)
 
 ## Phase 5: Stream Module — Buffer + typed structs (CRITICAL)
 

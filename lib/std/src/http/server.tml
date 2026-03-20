@@ -12,6 +12,7 @@ use std::net::sys::RawSocket
 use std::http::incoming::{IncomingMessage, parse_request}
 use std::http::server_response::ServerResponse
 use std::http::error::{HttpError, HttpErrorKind}
+use std::http::parse::app_has_header_end
 
 /// FFI declarations — all return I64 to avoid i32 codegen issues
 @extern("c")
@@ -199,7 +200,7 @@ func read_request(fd: I64) -> Outcome[Str, HttpError] {
         total = total + n
 
         // Check for end of headers: scan for \r\n\r\n in the last few bytes
-        if has_header_end(data_ptr, total) {
+        if app_has_header_end(data_ptr, total) {
             lowlevel { mem_free(chunk_ptr as *Unit) }
             lowlevel { ptr_write[U8]((data_ptr + total) as *U8, 0 as U8) }
             return Ok(data_ptr as Str)
@@ -217,19 +218,3 @@ func read_request(fd: I64) -> Outcome[Str, HttpError] {
     return Ok(data_ptr as Str)
 }
 
-/// Checks if the buffer contains \r\n\r\n (end of HTTP headers).
-func has_header_end(buf: I64, len: I64) -> Bool {
-    if len < 4 { return false }
-    var i: I64 = 3
-    loop (i < len) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
-            return true
-        }
-        i = i + 1
-    }
-    return false
-}
