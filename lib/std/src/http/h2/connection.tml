@@ -788,10 +788,7 @@ func h2_conn_create_stream(id: I64, send_window: I64, recv_window: I64) -> I64 {
 
 /// Append one buffer's bytes to another.
 func h2_conn_append_buf(dst: Buffer, src: Buffer) {
+    let dst_len: I64 = dst.len()
     let src_len: I64 = src.len()
-    var i: I64 = 0
-    loop (i < src_len) {
-        dst.write_byte(src.get(i))
-        i = i + 1
-    }
+    src.copy_to(ref dst, dst_len, 0, src_len)
 }

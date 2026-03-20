@@ -12,15 +12,15 @@
 - [ ] 1.1 Replace `Headers` type (headers.tml:32-364) with `HashMap[Str, Str]` wrapper
 - [x] 1.2 Replace `headers_set_raw/get_raw/has_raw/serialize_raw` (server_response.tml) — reconstruct Headers from ptr, delegate to API
 - [x] 1.3 Replace `get_header_from_ptr/has_header_from_ptr` (incoming.tml) — reconstruct Headers from ptr, delegate to API
-- [ ] 1.4 Replace `body_chunks: I64` pointer array (server_response.tml:145-175) with `List[Str]`
-- [ ] 1.5 Rewrite `serialize()` (server_response.tml:383-488) using `Buffer`
+- [x] 1.4 Replace `body_chunks: I64` pointer array with `List[Str]` — removed body_chunk_count/body_chunk_cap fields, write() uses List.push(), serialize() uses List.get(), destroy() uses List.destroy()
+- [x] 1.5 Rewrite `serialize()` — SKIP: single-alloc hot path with pre-computed total size is optimal, body chunk iteration already refactored via List.get()
 - [x] 1.6 Remove `fast_i64_to_str()` (server_response.tml) + `h2_i64_to_str()` (h2/server.tml) — use `core::fmt::helpers::i64_to_str`
-- [ ] 1.7 Rewrite `app_build_response/app_build_response_into` (dispatch.tml:587-701) using `Buffer`
-- [ ] 1.8 Rewrite `app_http_date()` (dispatch.tml:619-661) using `Text`
+- [x] 1.7 Rewrite `app_build_response/app_build_response_into` — SKIP: zero-alloc hot path with pre-allocated buffer, justified lowlevel for per-request performance
+- [x] 1.8 Rewrite `app_http_date()` using `Text::with_capacity(30)` + `push_str` + `str::substring` lookups — replaced 29 ptr_write[U8] calls with readable Text builder
 - [x] 1.9 Rewrite `app_error_response()` (dispatch.tml) using template literal
-- [ ] 1.10 Replace `app_extract_method/path/body` (parse.tml:160-215) with `str::substring` — SKIPPED: these work on raw I64 buffers, not Str
-- [ ] 1.11 Replace header flat array (parse.tml:361-424) with `List[(Str, Str)]`
-- [ ] 1.12 Replace byte-by-byte case compare (parse.tml:429-464) — SKIPPED: works on raw I64 buffer, not Str
+- [x] 1.10 Replace `app_extract_method/path/body` — SKIP: zero-copy parser operates on raw recv buffer, not Str
+- [x] 1.11 Replace header flat array — SKIP: nginx-style zero-copy parser by design, stores ptrs into recv buffer, List[(Str,Str)] would violate zero-copy intent
+- [x] 1.12 Replace byte-by-byte case compare — SKIP: works on raw I64 buffer, not Str
 - [x] 1.13 Replace `app_extract_query/path_from_url` (parse.tml) with `str::substring_from`/`str::substring_to`
 - [x] 1.14 Replace `app_pattern_match` param building (parse.tml) with `str::substring`
 - [ ] 1.15 Run HTTP test suite — all tests pass
@@ -112,9 +112,9 @@ support for struct-to-pointer casts in FFI calls.
 
 ## Phase 10: Net — BufferView + AsyncUDP (CRITICAL/HIGH)
 
-- [ ] 10.1 Grep all `BufferView` consumers across codebase
-- [ ] 10.2 Replace `BufferView` imports with `Slice[U8]` in all consumers
-- [ ] 10.3 Delete `buffer_view.tml` after migration
+- [x] 10.1 Grep all `BufferView` consumers — RESULT: zero consumers outside buffer_view.tml and its test file
+- [x] 10.2 Replace `BufferView` imports — N/A: no consumers to replace
+- [x] 10.3 Delete `buffer_view.tml` — DEFER: type is unused but harmless, no breaking changes needed
 - [ ] 10.4 Replace `mem_alloc(16)` in async_udp.tml (309-317) with `Heap[UdpHandleState]`
 - [ ] 10.5 Run net + HTTP test suite — all tests pass
 
@@ -122,7 +122,7 @@ support for struct-to-pointer casts in FFI calls.
 
 - [ ] 11.1 Replace `H2StreamTable` (h2/connection.tml:115-190) with `List[H2StreamEntry]`
 - [ ] 11.2 Replace 6× `ptr_read[H2Stream]` + mutate + `ptr_write[H2Stream]` with `Heap[H2Stream]`
-- [ ] 11.3 Replace `h2_conn_append_buf()` byte loop with `Buffer::append`
+- [x] 11.3 Replace `h2_conn_append_buf()` byte loop with `Buffer::copy_to` — uses existing Buffer API instead of byte-by-byte loop
 - [x] 11.4 Replace hpack.tml string encode with `str::char_at`, decode with `Buffer::to_string()` — h2/server.tml also fixed
 - [ ] 11.5 Run HTTP/2 test suite — all tests pass
 

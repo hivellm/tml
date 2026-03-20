@@ -568,8 +568,16 @@ func days_in_month(m: I64, y: I64) -> I64 {
     return 31
 }
 
+// Zero-padded 2-digit lookup table: "00" .. "59" (covers day, hour, min, sec)
+const DIGITS_00_59: Str = "000102030405060708091011121314151617181920212223242526272829303132333435363738394041424344454647484950515253545556575859"
+
+/// Returns a zero-padded 2-digit string for values 0..59.
+func two_digit(n: I64) -> Str {
+    str::substring(DIGITS_00_59, n * 2, n * 2 + 2)
+}
+
 /// Format HTTP Date header value from epoch seconds.
-/// Returns a freshly allocated 29-byte string: "Thu, 01 Jan 1970 00:00:00 GMT"
+/// Returns "Thu, 01 Jan 1970 00:00:00 GMT" (RFC 7231 §7.1.1.2).
 pub func app_http_date() -> Str {
     let now: I64 = system_time_secs()
     let secs_in_day: I64 = 86400
@@ -602,49 +610,15 @@ pub func app_http_date() -> Str {
     }
     let day: I64 = days + 1
 
-    let buf: I64 = lowlevel { mem_alloc(30) } as I64
+    let dow_name: Str = str::substring(DOW_NAMES, dow * 3, dow * 3 + 3)
+    let mon_name: Str = str::substring(MON_NAMES, (month - 1) * 3, (month - 1) * 3 + 3)
+    let dd: Str = two_digit(day)
+    let yy: Str = two_digit(year / 100) + two_digit(year % 100)
+    let hh: Str = two_digit(hours)
+    let mm: Str = two_digit(mins)
+    let ss: Str = two_digit(secs)
 
-    // Write "Thu, " (day of week)
-    let dow_off: I64 = dow * 3
-    lowlevel { copy_nonoverlapping((DOW_NAMES as I64 + dow_off) as *Unit, buf as *Unit, 3) }
-    lowlevel { ptr_write[U8]((buf + 3) as *U8, 44 as U8) }   // ','
-    lowlevel { ptr_write[U8]((buf + 4) as *U8, 32 as U8) }   // ' '
-
-    // Write "01" (day)
-    lowlevel { ptr_write[U8]((buf + 5) as *U8, (48 + day / 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 6) as *U8, (48 + day % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 7) as *U8, 32 as U8) }   // ' '
-
-    // Write "Jan" (month)
-    let mon_off: I64 = (month - 1) * 3
-    lowlevel { copy_nonoverlapping((MON_NAMES as I64 + mon_off) as *Unit, (buf + 8) as *Unit, 3) }
-    lowlevel { ptr_write[U8]((buf + 11) as *U8, 32 as U8) }  // ' '
-
-    // Write "1970" (year, 4 digits)
-    lowlevel { ptr_write[U8]((buf + 12) as *U8, (48 + (year / 1000) % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 13) as *U8, (48 + (year / 100) % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 14) as *U8, (48 + (year / 10) % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 15) as *U8, (48 + year % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 16) as *U8, 32 as U8) }  // ' '
-
-    // Write "00:00:00" (time)
-    lowlevel { ptr_write[U8]((buf + 17) as *U8, (48 + hours / 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 18) as *U8, (48 + hours % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 19) as *U8, 58 as U8) }  // ':'
-    lowlevel { ptr_write[U8]((buf + 20) as *U8, (48 + mins / 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 21) as *U8, (48 + mins % 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 22) as *U8, 58 as U8) }  // ':'
-    lowlevel { ptr_write[U8]((buf + 23) as *U8, (48 + secs / 10) as U8) }
-    lowlevel { ptr_write[U8]((buf + 24) as *U8, (48 + secs % 10) as U8) }
-
-    // Write " GMT\0"
-    lowlevel { ptr_write[U8]((buf + 25) as *U8, 32 as U8) }  // ' '
-    lowlevel { ptr_write[U8]((buf + 26) as *U8, 71 as U8) }  // 'G'
-    lowlevel { ptr_write[U8]((buf + 27) as *U8, 77 as U8) }  // 'M'
-    lowlevel { ptr_write[U8]((buf + 28) as *U8, 84 as U8) }  // 'T'
-    lowlevel { ptr_write[U8]((buf + 29) as *U8, 0 as U8) }   // null
-
-    return buf as Str
+    return `{dow_name}, {dd} {mon_name} {yy} {hh}:{mm}:{ss} GMT`.as_str()
 }
 
 /// Build HTTP response — optimized hot path with Date header.

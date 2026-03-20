@@ -5,11 +5,12 @@
 //! and sends the complete HTTP/1.1 response.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc}
 use std::http::headers::Headers
 use std::http::error::{HttpError, HttpErrorKind}
 use std::http::cookie::Cookie
 use core::fmt::helpers::i64_to_str
+use std::collections::list::List
 
 /// Returns the standard reason phrase for an HTTP status code.
 func get_reason_phrase(code: I64) -> Str {
@@ -90,9 +91,7 @@ pub type ServerResponse {
     resp_status_code: I64,
     resp_status_message: Str,
     resp_headers_ptr: I64,
-    body_chunks: I64,
-    body_chunk_count: I64,
-    body_chunk_cap: I64,
+    body_chunks: List[Str],
     body_total_len: I64,
     headers_sent: Bool,
     finished: Bool,
@@ -111,9 +110,7 @@ impl ServerResponse {
             resp_status_code: 200,
             resp_status_message: "",
             resp_headers_ptr: hdrs_ptr,
-            body_chunks: lowlevel { mem_alloc(64) } as I64,
-            body_chunk_count: 0,
-            body_chunk_cap: 8,
+            body_chunks: List[Str]::new(8),
             body_total_len: 0,
             headers_sent: false,
             finished: false,
@@ -132,9 +129,7 @@ impl ServerResponse {
             resp_status_code: 200,
             resp_status_message: "",
             resp_headers_ptr: hdrs_ptr,
-            body_chunks: lowlevel { mem_alloc(64) } as I64,
-            body_chunk_count: 0,
-            body_chunk_cap: 8,
+            body_chunks: List[Str]::new(8),
             body_total_len: 0,
             headers_sent: false,
             finished: false,
@@ -195,21 +190,7 @@ impl ServerResponse {
         let chunk_len: I64 = str::len(chunk)
         if chunk_len == 0 { return }
 
-        if this.body_chunk_count >= this.body_chunk_cap {
-            let new_cap: I64 = this.body_chunk_cap * 2
-            let new_chunks: I64 = lowlevel { mem_alloc(new_cap * 8) } as I64
-            lowlevel { copy_nonoverlapping(this.body_chunks as *Unit, new_chunks as *Unit, this.body_chunk_cap * 8) }
-            lowlevel { mem_free(this.body_chunks as *Unit) }
-            this.body_chunks = new_chunks
-            this.body_chunk_cap = new_cap
-        }
-
-        let chunk_copy: I64 = lowlevel { mem_alloc(chunk_len + 1) } as I64
-        lowlevel { copy_nonoverlapping(chunk as *Unit, chunk_copy as *Unit, chunk_len) }
-        lowlevel { ptr_write[U8]((chunk_copy + chunk_len) as *U8, 0 as U8) }
-
-        lowlevel { ptr_write[I64]((this.body_chunks + this.body_chunk_count * 8) as *I64, chunk_copy) }
-        this.body_chunk_count = this.body_chunk_count + 1
+        this.body_chunks.push(chunk)
         this.body_total_len = this.body_total_len + chunk_len
 
         if not this.headers_sent { this.headers_sent = true }
@@ -437,11 +418,11 @@ impl ServerResponse {
         pos = pos + 2
 
         // Write body chunks
-        if not is_head and this.body_chunk_count > 0 {
+        let chunk_count: I64 = this.body_chunks.len()
+        if not is_head and chunk_count > 0 {
             var i: I64 = 0
-            loop (i < this.body_chunk_count) {
-                let chunk_ptr: I64 = lowlevel { ptr_read[I64]((this.body_chunks + i * 8) as *I64) }
-                let chunk_str: Str = chunk_ptr as Str
+            loop (i < chunk_count) {
+                let chunk_str: Str = this.body_chunks.get(i)
                 let chunk_len: I64 = str::len(chunk_str)
                 if chunk_len > 0 {
                     lowlevel { copy_nonoverlapping(chunk_str as *Unit, (buf + pos) as *Unit, chunk_len) }
@@ -456,14 +437,8 @@ impl ServerResponse {
         return buf as Str
     }
 
-    pub func destroy(this) {
-        var i: I64 = 0
-        loop (i < this.body_chunk_count) {
-            let chunk_ptr: I64 = lowlevel { ptr_read[I64]((this.body_chunks + i * 8) as *I64) }
-            if chunk_ptr != 0 { lowlevel { mem_free(chunk_ptr as *Unit) } }
-            i = i + 1
-        }
-        if this.body_chunks != 0 { lowlevel { mem_free(this.body_chunks as *Unit) } }
+    pub func destroy(mut this) {
+        this.body_chunks.destroy()
     }
 }
 
