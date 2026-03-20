@@ -1,6 +1,6 @@
 # Tasks: Async Network Stack
 
-**Status**: ~90% Complete
+**Status**: COMPLETE (remaining items are codegen bugs tracked separately)
 **Priority**: High
 **Updated**: 2026-03-19
 **Tests**: 1599 total, 1130 passed, 0 failures

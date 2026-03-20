@@ -42,7 +42,7 @@
 - [ ] 6.2 Update coverage-blockers-report.md with final numbers
 - [ ] 6.3 Commit all changes
 
-## Current Failures Summary (2026-03-16) — 1408/1477 passing
+## Current Failures Summary (2026-03-20) — 1545/1599 passing
 - [ ] KNOWN: core/array/array_zip_eq — pre-existing
 - [ ] KNOWN: core/future/future_poll — pre-existing async IR mismatch
 - [ ] KNOWN: std/net/tls_cert_verify — real network dependency
