@@ -11,7 +11,7 @@
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
 | 1 | ~~fix-struct-codegen-blockers~~ | **ARCHIVED** | 18/18 | Archived 2026-03-20 |
-| 2 | **codegen-structural-fixes** | 80% | 28/40 | 4.3 inner iterator dispatch + 5.2-5.5 write tests |
+| 2 | **codegen-structural-fixes** | 90% | 36/40 | 5.4-5.5 write missing tests (buffer 67 funcs, fmt/json gaps) |
 | 3 | **fix-codegen-coverage-blockers** | 70% | 28/44 | Phase 1 generic trait dispatch -> () |
 
 ## Tier 2: Medium Priority (product features)

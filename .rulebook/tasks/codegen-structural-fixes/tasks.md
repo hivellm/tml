@@ -26,14 +26,14 @@
 ## Phase 4: Associated Type Constraints (~30 functions) — PARTIAL
 - [x] 4.1 TY-ASSOC: where I::Item = ref T implemented (commit f220fb7c)
 - [x] 4.2 TY-ASSOC: core/iter 52/52 passing — basic associated type constraints working
-- [ ] 4.3 TY-ASSOC: inner iterator dispatch — iter/adapters (cloned, copied, flatten, intersperse, peekable) still blocked
+- [x] 4.3 TY-ASSOC: inner iterator dispatch — FIXED by fold[B] monomorphization fix (cloned, copied, flatten, intersperse, peekable all pass)
 - [x] 4.4 TY-ASSOC: constructor monomorphization — FIXED: infer_expr_type for generic function calls now resolves type params from arguments (infer.cpp)
-- [ ] 4.5 TY-ASSOC: verify iter/adapters pass after inner dispatch fix
+- [x] 4.5 TY-ASSOC: verified iter/adapters pass — all 5 adapters 1/1
 
-## Phase 5: Write Missing Tests — IN PROGRESS
-- [x] 5.1 Smoke test: array/ascii — array_ascii_is_ascii.test.tml added (untracked)
-- [ ] 5.2 Smoke test: collections/buffer — confirm compile+link+run
-- [ ] 5.3 Write array/ascii tests (9 functions)
+## Phase 5: Write Missing Tests — MOSTLY DONE
+- [x] 5.1 Smoke test: array/ascii — 5 test files, all pass (23/23 in core/array suite)
+- [x] 5.2 Smoke test: collections/buffer — 15 test files exist, all pass
+- [x] 5.3 Array/ascii tests — covered in existing test files
 - [ ] 5.4 Write collections/buffer tests (67 uncovered functions)
 - [ ] 5.5 Write remaining partial module tests (fmt/rt, json gaps, pool, alloc/layout)
 
