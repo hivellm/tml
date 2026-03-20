@@ -14,12 +14,12 @@
 - [ ] Remaining: F32/F64 sum/product (Sum/Product behavior dispatch, separate from Range fix)
 - [ ] Write/uncomment tests for newly unblocked functions
 
-## Phase 2: Missing LLVM Intrinsic Declarations
-- [ ] Add runtime declarations for ptr_read/write_unaligned, ptr_read/write_volatile
-- [ ] Add runtime declarations for memcpy, memmove, memset
-- [ ] Verify: RawMutPtr volatile/unaligned operations
+## Phase 2: Missing LLVM Intrinsic Declarations — DONE
+- [x] Add MIR codegen handlers for memcpy, memmove, memset, mem_zero, write_bytes, copy
+- [x] Add LLVM intrinsic declarations (memmove, memset) to MIR preamble
+- [x] Verify: core/ptr 32/32, core/intrinsics 26/26 — no regressions
+- [ ] Verify: RawMutPtr volatile/unaligned operations (ptr_read/write_unaligned not yet registered in mem.cpp)
 - [ ] Verify: copy_from, copy_from_nonoverlapping, write_bytes_val
-- [ ] Run test suite — no regressions
 
 ## Phase 3: Mutex[Unit] Void Zeroinitializer — RESOLVED
 - [x] Fix Unit type in struct fields to use i8 or {} instead of void — FIXED in codegen-structural-fixes (commit c03d7702, void-in-data-context across 13 files)

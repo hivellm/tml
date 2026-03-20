@@ -12,7 +12,7 @@
 |---|------|--------|----------|-----------|
 | 1 | ~~fix-struct-codegen-blockers~~ | **ARCHIVED** | 18/18 | Archived 2026-03-20 |
 | 2 | **codegen-structural-fixes** | 90% | 36/40 | 5.4-5.5 write missing tests (buffer 67 funcs, fmt/json gaps) |
-| 3 | **fix-codegen-coverage-blockers** | 70% | 28/44 | Phase 1 generic trait dispatch -> () |
+| 3 | **fix-codegen-coverage-blockers** | 80% | 36/44 | Phase 1 remaining (Pool, Poll, Sum), Phase 2 volatile/unaligned |
 
 ## Tier 2: Medium Priority (product features)
 
