@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [fnptr-literal-coercion-fix.md](fnptr-literal-coercion-fix.md) - Function pointer call integer literal i32→i64 coercion (2026-03-20, FIXED)
 - [ptr-read-write-struct-fix.md](ptr-read-write-struct-fix.md) - ptr_read/ptr_write multi-field struct: 4-bug chain (type checker + HIR + MIR + codegen) (2026-03-20, FIXED)
 - [struct-field-mutation-fix.md](struct-field-mutation-fix.md) - Mutable struct field assignment dead code bug in THIR MIR builder (2026-03-20, FIXED)
 - [dyn-boxing-casting-fix.md](dyn-boxing-casting-fix.md) - ref dyn Behavior fat pointer type resolution: 7 bugs in type/cast/enum/store/alloca (2026-03-19, FIXED)
@@ -19,6 +20,16 @@
 - [array-mut-this-dispatch.md](array-mut-this-dispatch.md) - Array `mut this` method dispatch failure
 - [gen-path-unsigned-flag.md](gen-path-unsigned-flag.md) - gen_path() missing last_expr_is_unsigned_ (I32::MIN sext bug)
 - [compiler-test-suite-issues.md](compiler-test-suite-issues.md) - Compiler test suite collision patterns
+
+## Recent Fixes (2026-03-20)
+
+### Function Pointer Call Integer Literal Coercion -- FIXED
+- Bug: `f(42)` where `f: func(I64) -> I64` generated `call i64 %fn(i32 42)` — i32/i64 mismatch corrupted stack
+- Root cause: AST codegen `call.cpp` function pointer call paths used `gen_expr` + `last_expr_type_` for arg types. Integer literals default to i32 but the declared param type is i64. No coercion was applied.
+- Fix: 3 call sites in `call.cpp` now extract declared param types from FuncType/ClosureType and sext integer args when src_bits < dst_bits
+- Files: `compiler/src/codegen/llvm/expr/call.cpp` (FieldExpr fat ptr ~264, IdentExpr fat ptr ~1635, IdentExpr thin ptr ~1809)
+- MIR path already correct: `emit_indirect_call` uses `mir_func_type.params` for arg types, not expression-inferred types
+- Note: Original repro also had `List[I64]::new()` without required `initial_capacity` arg — type checker gap (separate issue)
 
 ## Recent Fixes (2026-03-19)
 

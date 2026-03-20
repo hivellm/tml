@@ -1,6 +1,6 @@
 # Tasks: Fix Struct Codegen Blockers
 
-**Status**: In Progress — Bug 1+2+3+5 FIXED, Bug 4 partially fixed (simple case OK, closure+List crash is separate pre-existing bug)
+**Status**: In Progress — Bug 1+2+3+5 FIXED, Bug 4 FIXED (integer literal coercion in fnptr calls)
 **Priority**: High — blocks 15 refactor items across HTTP, streams, async, events
 **Updated**: 2026-03-20
 **Origin**: Extracted from `refactor-async-use-existing-apis`
@@ -59,18 +59,25 @@ Fix: moved the mutable struct alloca logic inside the same binding pattern block
 
 **Unblocks**: 2.1-2.4 (SharedState), 2.9 (RingBuffer), 5.2/5.4 (streams)
 
-## Bug 4: cross-module closure return type — PARTIALLY FIXED
+## Bug 4: cross-module closure return type — FIXED
 
 Simple closure case now works: `func apply(f: func(I64) -> I64, val: I64) -> I64` returns correct i64.
 
-**Verified 2026-03-20**: Simple closure parameter works. BUT: closure call + List operations in same function crashes (access violation). This is a **pre-existing** bug (crashes on baseline too) — likely an sret/calling convention conflict when closure call coexists with C-backed collection methods.
+**Root cause**: Integer literal arguments in function pointer calls were not coerced to match declared parameter types. `f(42)` where `f: func(I64) -> I64` generated `call i64 %fn(i32 42)` instead of `call i64 %fn(i64 42)`. The i32/i64 mismatch corrupted the stack.
+
+**Fix (1 file, 3 call sites)**: `compiler/src/codegen/llvm/expr/call.cpp`
+- FieldExpr fat pointer call (line ~264): coerce args using FuncType.params
+- IdentExpr fat pointer call (line ~1635): coerce args using semantic_type FuncType/ClosureType params
+- IdentExpr thin pointer call (line ~1809): same coercion for thin fn ptr path
+
+**Note**: The original repro used `List[I64]::new()` without the required `initial_capacity` argument. This is a type checker gap (should reject missing required arg), but not a codegen bug. With `List[I64]::new(4)`, the closure+List combination works correctly.
 
 - [x] 4.1 Diagnose: simple closure return type is now correct
 - [x] 4.2 Simple closure parameter with I64 return — WORKS
 - [x] 4.3 Test: `apply(do(x) { x * 2 }, 21)` returns 42 correctly
-- [ ] 4.4 NEW BUG: closure call + List in same function → access violation (pre-existing, separate issue)
+- [x] 4.4 closure call + List in same function — FIXED (integer literal coercion)
 
-**Unblocks**: 8.6 (iterator adapters — partially), 8.3-8.5 (observable — blocked by closure+List crash)
+**Unblocks**: 8.3-8.6 (observable/iterators with closures)
 
 ## Bug 5: List[func(T)] stride — ALREADY FIXED
 
@@ -91,4 +98,4 @@ Verified 2026-03-20: List[I64] with function pointers cast to/from I64 works cor
 | 2.1-2.5 SharedState/ConnectionSlot | Typed struct with ptr_read/write | Nothing (Bug 2+3 FIXED) |
 | 5.2/5.4 Stream handle structs | Typed struct with ptr_read/write | Nothing (Bug 2+3 FIXED) |
 | 2.9 queue RingBuffer | Typed struct with field mutation | Nothing (Bug 3 FIXED) |
-| 8.3-8.6 Observable/iterators | Closure parameters across modules | Closure+List crash (pre-existing) |
+| 8.3-8.6 Observable/iterators | Closure parameters across modules | Nothing (Bug 4 FIXED) |

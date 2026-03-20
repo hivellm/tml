@@ -261,12 +261,33 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 env_ptr = "";
             }
 
-            // Build user argument list
+            // Build user argument list, coercing to declared param types
             std::vector<std::string> arg_vals;
             std::vector<std::string> arg_types;
-            for (const auto& arg : call.args) {
-                arg_vals.push_back(gen_expr(*arg));
-                arg_types.push_back(last_expr_type_);
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                std::string val = gen_expr(*call.args[i]);
+                std::string arg_type = last_expr_type_;
+                // Coerce integer arguments to match declared parameter type
+                if (i < ft.params.size()) {
+                    std::string decl_type = llvm_type_from_semantic(ft.params[i]);
+                    auto int_bits = [](const std::string& t) -> int {
+                        if (t.size() > 1 && t[0] == 'i' &&
+                            std::isdigit(static_cast<unsigned char>(t[1])))
+                            return std::stoi(t.substr(1));
+                        return -1;
+                    };
+                    int src_bits = int_bits(arg_type);
+                    int dst_bits = int_bits(decl_type);
+                    if (src_bits > 0 && dst_bits > src_bits) {
+                        std::string coerced = fresh_reg();
+                        emit_line("  " + coerced + " = sext " + arg_type + " " + val + " to " +
+                                  decl_type);
+                        val = coerced;
+                        arg_type = decl_type;
+                    }
+                }
+                arg_vals.push_back(val);
+                arg_types.push_back(arg_type);
             }
 
             // Build call signature
@@ -1611,23 +1632,46 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         std::string env_ptr = fresh_reg();
         emit_line("  " + env_ptr + " = extractvalue { ptr, ptr } " + fat_ptr + ", 1");
 
-        // Generate user arguments
-        std::vector<std::pair<std::string, std::string>> user_args;
-        for (size_t i = 0; i < call.args.size(); ++i) {
-            std::string val = gen_expr(*call.args[i]);
-            user_args.push_back({val, last_expr_type_});
-        }
-
-        // Determine return type from semantic type if available
+        // Extract declared parameter types and return type from semantic type
+        std::vector<types::TypePtr> declared_params;
         std::string ret_type = "i32";
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
                 ret_type = llvm_type_from_semantic(func_type.return_type);
+                declared_params = func_type.params;
             } else if (local_it->second.semantic_type->is<types::ClosureType>()) {
                 const auto& closure_type = local_it->second.semantic_type->as<types::ClosureType>();
                 ret_type = llvm_type_from_semantic(closure_type.return_type);
+                declared_params = closure_type.params;
             }
+        }
+
+        // Generate user arguments, coercing to declared param types
+        std::vector<std::pair<std::string, std::string>> user_args;
+        for (size_t i = 0; i < call.args.size(); ++i) {
+            std::string val = gen_expr(*call.args[i]);
+            std::string arg_type = last_expr_type_;
+            // Coerce integer arguments to match declared parameter type
+            if (i < declared_params.size()) {
+                std::string decl_type = llvm_type_from_semantic(declared_params[i]);
+                auto int_bits = [](const std::string& t) -> int {
+                    if (t.size() > 1 && t[0] == 'i' &&
+                        std::isdigit(static_cast<unsigned char>(t[1])))
+                        return std::stoi(t.substr(1));
+                    return -1;
+                };
+                int src_bits = int_bits(arg_type);
+                int dst_bits = int_bits(decl_type);
+                if (src_bits > 0 && dst_bits > src_bits) {
+                    std::string coerced = fresh_reg();
+                    emit_line("  " + coerced + " = sext " + arg_type + " " + val + " to " +
+                              decl_type);
+                    val = coerced;
+                    arg_type = decl_type;
+                }
+            }
+            user_args.push_back({val, arg_type});
         }
 
         if (is_capturing) {
@@ -1762,20 +1806,44 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        for (size_t i = 0; i < call.args.size(); ++i) {
-            std::string val = gen_expr(*call.args[i]);
-            arg_vals.push_back({val, last_expr_type_});
-        }
-
+        // Extract declared parameter types and return type from semantic type
+        std::vector<types::TypePtr> thin_declared_params;
         std::string ret_type = "i32";
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
                 ret_type = llvm_type_from_semantic(func_type.return_type);
+                thin_declared_params = func_type.params;
             } else if (local_it->second.semantic_type->is<types::ClosureType>()) {
                 const auto& closure_type = local_it->second.semantic_type->as<types::ClosureType>();
                 ret_type = llvm_type_from_semantic(closure_type.return_type);
+                thin_declared_params = closure_type.params;
             }
+        }
+
+        for (size_t i = 0; i < call.args.size(); ++i) {
+            std::string val = gen_expr(*call.args[i]);
+            std::string arg_type = last_expr_type_;
+            // Coerce integer arguments to match declared parameter type
+            if (i < thin_declared_params.size()) {
+                std::string decl_type = llvm_type_from_semantic(thin_declared_params[i]);
+                auto int_bits = [](const std::string& t) -> int {
+                    if (t.size() > 1 && t[0] == 'i' &&
+                        std::isdigit(static_cast<unsigned char>(t[1])))
+                        return std::stoi(t.substr(1));
+                    return -1;
+                };
+                int src_bits = int_bits(arg_type);
+                int dst_bits = int_bits(decl_type);
+                if (src_bits > 0 && dst_bits > src_bits) {
+                    std::string coerced = fresh_reg();
+                    emit_line("  " + coerced + " = sext " + arg_type + " " + val + " to " +
+                              decl_type);
+                    val = coerced;
+                    arg_type = decl_type;
+                }
+            }
+            arg_vals.push_back({val, arg_type});
         }
 
         std::string func_type_sig = ret_type + " (";
