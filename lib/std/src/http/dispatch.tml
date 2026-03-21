@@ -670,6 +670,61 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
 }
 
 // ════════════════════════════════════════════════════════════════════
+// Request ID generation
+// ════════════════════════════════════════════════════════════════════
+
+@extern("c") func time_ns() -> I64
+
+/// Global request counter for unique IDs (monotonically increasing).
+var g_request_counter: I64 = 0
+
+/// Generates a unique request ID string.
+/// Format: hex(timestamp_ns) + "-" + hex(counter)
+/// Example: "1a2b3c4d-0042"
+pub func generate_request_id() -> Str {
+    g_request_counter = g_request_counter + 1
+    let ts: I64 = time_ns()
+    let ts_hex: Str = i64_to_hex_lower(ts)
+    let cnt_hex: Str = i64_to_hex_lower(g_request_counter)
+    return ts_hex + "-" + cnt_hex
+}
+
+/// Converts I64 to lowercase hex string (no prefix).
+func i64_to_hex_lower(n: I64) -> Str {
+    if n == 0 { return "0" }
+    let hex_chars: Str = "0123456789abcdef"
+    var digits: [I32; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    var count: I64 = 0
+    var val: I64 = n
+    loop (val > 0) {
+        digits[count] = (val % 16) as I32
+        count = count + 1
+        val = val / 16
+    }
+    // Build string in reverse (MSB first)
+    let result_buf: I64 = lowlevel { mem_alloc(count + 1) } as I64
+    var i: I64 = 0
+    loop (i < count) {
+        let d: I32 = digits[count - 1 - i]
+        let c: I32 = str::char_at(hex_chars, d as I64)
+        lowlevel { ptr_write[U8]((result_buf + i) as *U8, c as U8) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((result_buf + count) as *U8, 0 as U8) }
+    return result_buf as Str
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Access logging
+// ════════════════════════════════════════════════════════════════════
+
+/// Logs an HTTP request in Common Log Format style.
+/// Output: METHOD PATH STATUS LATENCY_US
+pub func app_log_request(method: Str, path: Str, status: I64, latency_us: I64) {
+    println(method + " " + path + " " + i64_to_str(status) + " " + i64_to_str(latency_us) + "us")
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Status helpers
 // ════════════════════════════════════════════════════════════════════
 
