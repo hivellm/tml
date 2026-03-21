@@ -31,7 +31,7 @@
 |---|------|--------|----------|-----------|
 | 9 | ~~optimize-codegen-like-rust~~ | **ARCHIVED** | 37/37 | Archived 2026-03-21 |
 | 10 | **implement-reflection** | 41% | 37/90 | Phase 5: get_field, set_field methods |
-| 11 | **zig-inspired-test-migration** | 65% | 11/17 | 1.7 fix library_decls_only |
+| 11 | **zig-inspired-test-migration** | 71% | 12/17 | 1.8 stdlib .obj hang, 2.6-2.8 mega-binary |
 | 12 | **package-manager** | 16% | 7/45 | Phase 1 git dependencies |
 | 13 | **language-completeness-roadmap** | 36% | 60/169 | Tracking doc — update with recent progress |
 

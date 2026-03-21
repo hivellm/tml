@@ -1,6 +1,6 @@
 # Tasks: Zig-Inspired Test Migration
 
-**Status**: In Progress — obj_cache hash fix + processed_module_paths tracking added. Cached state optimization blocked on impl dedup + range type mismatch.
+**Status**: In Progress (71%) — comprehensive bootstrap + obj_cache hash + processed_module_paths done. Remaining: stdlib .obj hang, mega-binary verification.
 
 ## Key Findings (2026-03-16)
 
@@ -30,9 +30,9 @@
 - [x] 1.4 `cached_library_state` in QueryOptions
 - [x] 1.5 `provide_codegen_unit()` passthrough to LLVMIRGen
 - [x] 1.6 `emit_referenced_library_declarations()` fallback to functions_ map
-- [ ] 1.7 Fix `library_decls_only=true` to declare ALL library functions (not just bootstrap imports)
+- [x] 1.7 Comprehensive bootstrap — test_bootstrap.tml imports ALL library modules (core+std+test)
 - [ ] 1.8 Fix comprehensive stdlib .obj build (287 modules hangs — needs incremental/batched approach)
-- [ ] 1.9 Verify all 1483 tests pass with library_decls_only=true + stdlib .obj
+- [ ] 1.9 Verify all tests pass with library_decls_only=true + stdlib .obj
 
 ## 2. Suite Aggregation (Mega-Binary) — IMPLEMENTED, BLOCKED ON 1.7
 
