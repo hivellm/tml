@@ -378,10 +378,6 @@ pub func app_get_param(req: IncomingMessage, name: Str) -> Str {
 /// Run all 2-param hooks in a hook table (onRequest, preHandler, onSend, onResponse).
 /// Returns true if the pipeline should continue (res not yet finished).
 /// Returns false if a hook called res.end() and short-circuited the pipeline.
-///
-/// NOTE: Not called from app_dispatch currently due to a codegen bug where
-/// ServerResponse (Bool fields / i1 type) causes LLVM IR errors through fn ptrs.
-/// Will be re-enabled when that bug is fixed.
 func app_run_hooks(hook_table: I64, hook_count: I64, req: IncomingMessage, res: ServerResponse) -> Bool {
     var i: I64 = 0
     loop (i < hook_count) {
@@ -398,10 +394,7 @@ func app_run_hooks(hook_table: I64, hook_count: I64, req: IncomingMessage, res: 
 }
 
 /// Run all onError hooks (3-param: req, res, error_msg).
-///
-/// NOTE: Not called from app_dispatch currently due to a codegen bug where
-/// ServerResponse (Bool fields / i1 type) causes LLVM IR errors through fn ptrs.
-/// Will be re-enabled when that bug is fixed.
+/// Called when no route matches (404) or on handler errors.
 func app_run_error_hooks(hook_table: I64, hook_count: I64, error_handler: I64,
                          req: IncomingMessage, res: ServerResponse, msg: Str) {
     // Run custom error handler first if set
@@ -642,6 +635,14 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
             }
             lin_off = lin_off + ENTRY_SIZE
             lin_idx = lin_idx + 1
+        }
+        // ── onError hooks for 404 ──
+        if on_error_count > 0 or error_handler != 0 {
+            let res: ServerResponse = ServerResponse::for_request(fd, method)
+            app_run_error_hooks(on_error_table, on_error_count, error_handler, req, res, "Not Found")
+            if res.is_finished() {
+                return res.serialize()
+            }
         }
         return RESPONSE_404
     }
