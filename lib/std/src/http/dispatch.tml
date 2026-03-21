@@ -675,18 +675,11 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
 
 @extern("c") func time_ns() -> I64
 
-/// Global request counter for unique IDs (monotonically increasing).
-var g_request_counter: I64 = 0
-
-/// Generates a unique request ID string.
-/// Format: hex(timestamp_ns) + "-" + hex(counter)
-/// Example: "1a2b3c4d-0042"
+/// Generates a unique request ID string using timestamp.
+/// Format: hex(timestamp_ns)
 pub func generate_request_id() -> Str {
-    g_request_counter = g_request_counter + 1
     let ts: I64 = time_ns()
-    let ts_hex: Str = i64_to_hex_lower(ts)
-    let cnt_hex: Str = i64_to_hex_lower(g_request_counter)
-    return ts_hex + "-" + cnt_hex
+    return i64_to_hex_lower(ts)
 }
 
 /// Converts I64 to lowercase hex string (no prefix).

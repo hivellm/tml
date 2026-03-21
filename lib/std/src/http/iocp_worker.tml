@@ -146,23 +146,11 @@ func iocp_conn_set(conns: I64, idx: I64, field: I64, val: I64) {
 
 /// Find a free connection slot (CONN_SOCKET == 0 means free).
 /// Returns slot index, or -1 if no slots available.
-/// Global hint for next free slot — reduces O(n) scan to O(1) amortized.
-/// Multiple workers may race on this but that's OK — worst case is
-/// a brief linear scan from the hint position, not from 0.
-var g_slot_hint: I64 = 0
-
 func find_free_slot(conns: I64, max_conns: I64) -> I64 {
-    // Start search from hint (last known free region)
-    var i: I64 = g_slot_hint
-    var checked: I64 = 0
-    loop (checked < max_conns) {
-        if i >= max_conns { i = 0 }
-        if iocp_conn_get(conns, i, CONN_SOCKET) == 0 {
-            g_slot_hint = i + 1
-            return i
-        }
+    var i: I64 = 0
+    loop (i < max_conns) {
+        if iocp_conn_get(conns, i, CONN_SOCKET) == 0 { return i }
         i = i + 1
-        checked = checked + 1
     }
     return -1
 }
