@@ -72,8 +72,8 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [ ] 6.1 SO_REUSEPORT for zero-downtime restarts
 - [ ] 6.2 Multi-value header support (Set-Cookie, Vary)
 - [x] 6.3 WebSocket frame parser — 821 lines in websocket.tml (already implemented)
-- [ ] 6.4 X-Request-Id generation
-- [ ] 6.5 Access logging (method, path, status, latency)
+- [x] 6.4 X-Request-Id — generate_request_id() with hex(timestamp)-hex(counter)
+- [x] 6.5 Access logging — app_log_request(method, path, status, latency_us)
 
 ## Phase 7: Memory & Buffer Optimization (from comparative analysis 2026-03-19)
 
