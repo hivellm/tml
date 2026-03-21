@@ -38,17 +38,29 @@ const MAX_RESPONSE_SIZE: I64 = 8388608
 /// An HTTP client that sends requests and returns parsed responses.
 pub type HttpClient {
     user_agent: Str,
+    max_redirects: I64,
+    timeout_ms: I64,
 }
 
 impl HttpClient {
     /// Creates a new HTTP client with default settings.
     pub func new() -> HttpClient {
-        HttpClient { user_agent: "tml/1.0" }
+        HttpClient { user_agent: "tml/1.0", max_redirects: 10, timeout_ms: 30000 }
     }
 
     /// Creates a client with a custom User-Agent.
     pub func with_user_agent(ua: Str) -> HttpClient {
-        HttpClient { user_agent: ua }
+        HttpClient { user_agent: ua, max_redirects: 10, timeout_ms: 30000 }
+    }
+
+    /// Sets the maximum number of redirects to follow (default 10, 0 = no redirects).
+    pub func max_redirects(this, n: I64) -> HttpClient {
+        HttpClient { user_agent: this.user_agent, max_redirects: n, timeout_ms: this.timeout_ms }
+    }
+
+    /// Sets the request timeout in milliseconds (default 30000).
+    pub func timeout(this, ms: I64) -> HttpClient {
+        HttpClient { user_agent: this.user_agent, max_redirects: this.max_redirects, timeout_ms: ms }
     }
 
     // ── Convenience methods ───────────────────────────────────
@@ -110,7 +122,48 @@ impl HttpClient {
     // ── Core send ─────────────────────────────────────────────
 
     /// Sends a Request and returns the parsed Response.
+    /// Automatically follows 3xx redirects up to max_redirects times.
     pub func send(this, req: Request) -> Outcome[Response, HttpError] {
+        let resp = this.send_once(req)
+        when resp {
+            Err(e) => return Err(e),
+            Ok(r) => {
+                let code: I32 = r.status().code()
+                if this.max_redirects > 0 and (code == 301 or code == 302 or code == 303 or code == 307 or code == 308) {
+                    let location: Str = r.headers().get("location")
+                    if str::len(location) > 0 {
+                        return this.follow_redirects(location, this.max_redirects - 1)
+                    }
+                }
+                return Ok(r)
+            },
+        }
+    }
+
+    /// Follow redirect chain with GET requests.
+    func follow_redirects(this, url: Str, remaining: I64) -> Outcome[Response, HttpError] {
+        let req = Request::get(url)
+            .header("User-Agent", this.user_agent)
+            .header("Connection", "close")
+            .header("Accept", "*/*")
+        let resp = this.send_once(req)
+        when resp {
+            Err(e) => return Err(e),
+            Ok(r) => {
+                let code: I32 = r.status().code()
+                if remaining > 0 and (code == 301 or code == 302 or code == 303 or code == 307 or code == 308) {
+                    let location: Str = r.headers().get("location")
+                    if str::len(location) > 0 {
+                        return this.follow_redirects(location, remaining - 1)
+                    }
+                }
+                return Ok(r)
+            },
+        }
+    }
+
+    /// Sends a single request without redirect handling.
+    func send_once(this, req: Request) -> Outcome[Response, HttpError] {
         let host: Str = req.host()
         if str::len(host) == 0 {
             return Err(HttpError::invalid_url("no host in URL"))
