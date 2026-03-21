@@ -25,9 +25,10 @@ use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
 
 pub const RESPONSE_404: Str = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 23\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"not found\"}"
 pub const RESPONSE_500: Str = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 36\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"internal server error\"}"
-pub const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
+pub const RESPONSE_405: Str = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json\r\nContent-Length: 30\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n{\"error\":\"method not allowed\"}"
 pub const RESPONSE_400: Str = "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 25\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"bad request\"}"
 pub const RESPONSE_413: Str = "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\nContent-Length: 33\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"payload too large\"}"
+pub const RESPONSE_501: Str = "HTTP/1.1 501 Not Implemented\r\nContent-Type: application/json\r\nContent-Length: 27\r\nServer: TML\r\nConnection: close\r\n\r\n{\"error\":\"not implemented\"}"
 
 // ════════════════════════════════════════════════════════════════════
 // Shared state memory layout offsets
@@ -65,6 +66,15 @@ const METHOD_PATCH: I64 = 4
 const METHOD_HEAD: I64 = 5
 const METHOD_OPTIONS: I64 = 6
 
+// Method names indexed by METHOD_* constants (for Allow header construction)
+const METHOD_NAMES_0: Str = "GET"
+const METHOD_NAMES_1: Str = "POST"
+const METHOD_NAMES_2: Str = "PUT"
+const METHOD_NAMES_3: Str = "DELETE"
+const METHOD_NAMES_4: Str = "PATCH"
+const METHOD_NAMES_5: Str = "HEAD"
+const METHOD_NAMES_6: Str = "OPTIONS"
+
 func method_index(method: Str) -> I64 {
     // Fast path: check first char then length
     let len: I64 = str::len(method)
@@ -88,6 +98,96 @@ func method_index(method: Str) -> I64 {
     if len == 6 { return METHOD_DELETE }
     if len == 7 { return METHOD_OPTIONS }
     return -1
+}
+
+/// Returns the name string for a routable method index (0-6).
+func method_name_by_index(idx: I64) -> Str {
+    if idx == 0 { return METHOD_NAMES_0 }
+    if idx == 1 { return METHOD_NAMES_1 }
+    if idx == 2 { return METHOD_NAMES_2 }
+    if idx == 3 { return METHOD_NAMES_3 }
+    if idx == 4 { return METHOD_NAMES_4 }
+    if idx == 5 { return METHOD_NAMES_5 }
+    if idx == 6 { return METHOD_NAMES_6 }
+    return ""
+}
+
+/// Returns true if `method` is a recognized HTTP/1.1 method.
+/// Includes TRACE and CONNECT which are valid but not routable.
+func app_is_known_method(method: Str) -> Bool {
+    let len: I64 = str::len(method)
+    if len == 3 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 71 { return true }  // GET
+        if c == 80 { return true }  // PUT
+    }
+    if len == 4 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 80 { return true }  // POST
+        if c == 72 { return true }  // HEAD
+    }
+    if len == 5 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 80 { return true }  // PATCH
+        if c == 84 { return true }  // TRACE
+    }
+    if len == 6 { return true }  // DELETE
+    if len == 7 {
+        let c: I32 = str::char_at(method, 0)
+        if c == 79 { return true }  // OPTIONS
+        if c == 67 { return true }  // CONNECT
+    }
+    return false
+}
+
+/// Build a 405 Method Not Allowed response with an Allow header listing all
+/// methods that have a registered route for `path`. Checks all 7 method trees.
+/// Returns RESPONSE_405 (without Allow) if no other method matches (shouldn't happen).
+func app_build_405_with_allow(trees: I64, path: Str, params_buf: I64) -> Str {
+    // Collect which methods match this path
+    // Build Allow value as a concatenated string (max 7 methods x 8 chars = ~56 chars)
+    var allow: Str = ""
+    var idx: I64 = 0
+    loop (idx < 7) {
+        let root: I64 = lowlevel { ptr_read[I64]((trees + idx * 8) as *I64) }
+        if root != 0 {
+            let handler_id: I64 = app_find_route(root, path, params_buf)
+            if handler_id > 0 {
+                let name: Str = method_name_by_index(idx)
+                if str::len(allow) == 0 {
+                    allow = name
+                } else {
+                    allow = allow + ", " + name
+                }
+            }
+        }
+        idx = idx + 1
+    }
+    if str::len(allow) == 0 {
+        return RESPONSE_405
+    }
+    // Build response with Allow header
+    let body: Str = "{\"error\":\"method not allowed\"}"
+    let body_len: I64 = str::len(body)
+    let allow_len: I64 = str::len(allow)
+    // "HTTP/1.1 405 Method Not Allowed\r\nAllow: " + allow + "\r\nContent-Type: application/json\r\nContent-Length: 30\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n" + body
+    let prefix: Str = "HTTP/1.1 405 Method Not Allowed\r\nAllow: "
+    let suffix: Str = "\r\nContent-Type: application/json\r\nContent-Length: 30\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+    let prefix_len: I64 = str::len(prefix)
+    let suffix_len: I64 = str::len(suffix)
+    let total: I64 = prefix_len + allow_len + suffix_len + body_len
+    let rbuf: I64 = lowlevel { mem_alloc(total + 1) } as I64
+    var pos: I64 = 0
+    lowlevel { copy_nonoverlapping(prefix as *Unit, (rbuf + pos) as *Unit, prefix_len) }
+    pos = pos + prefix_len
+    lowlevel { copy_nonoverlapping(allow as *Unit, (rbuf + pos) as *Unit, allow_len) }
+    pos = pos + allow_len
+    lowlevel { copy_nonoverlapping(suffix as *Unit, (rbuf + pos) as *Unit, suffix_len) }
+    pos = pos + suffix_len
+    lowlevel { copy_nonoverlapping(body as *Unit, (rbuf + pos) as *Unit, body_len) }
+    pos = pos + body_len
+    lowlevel { ptr_write[U8]((rbuf + pos) as *U8, 0 as U8) }
+    return rbuf as Str
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -420,6 +520,12 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     var fn_ptr: I64 = 0
     var param_count: I64 = 0
 
+    // ── 2.7: Reject completely unknown methods with 501 Not Implemented ──
+    // RFC 7231 §6.6.2: server MUST respond 501 for unrecognised methods.
+    if not app_is_known_method(method) {
+        return RESPONSE_501
+    }
+
     // ── Route lookup: radix tree first (O(path_len)), linear scan fallback ──
     // param_count is written to params_buf + PARAM_COUNT_OFF by app_find_route/app_linear_lookup
     let midx: I64 = method_index(method)
@@ -444,6 +550,76 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
 
     // ── Route not found ──────────────────────────────────────────
     if fn_ptr == 0 {
+        // ── 2.6: Check if path exists with a different method → 405 with Allow ──
+        // RFC 7231 §6.5.5: server MUST generate Allow header when returning 405.
+        // Only check the radix trees (registered routes) — linear scan table is
+        // a superset: if the path is in the table with any method, it will be found.
+        if trees != 0 {
+            var any_method_matches: Bool = false
+            var check_idx: I64 = 0
+            loop (check_idx < 7) {
+                let root: I64 = lowlevel { ptr_read[I64]((trees + check_idx * 8) as *I64) }
+                if root != 0 {
+                    let hid: I64 = app_find_route(root, path, params_buf)
+                    if hid > 0 { any_method_matches = true; break }
+                }
+                check_idx = check_idx + 1
+            }
+            if any_method_matches {
+                return app_build_405_with_allow(trees, path, params_buf)
+            }
+        }
+        // Also check linear-scan table for any method matching this path
+        var lin_idx: I64 = 0
+        var lin_off: I64 = 0
+        loop (lin_idx < count) {
+            let p: Str = lowlevel { ptr_read[I64]((table + lin_off + 8) as *I64) } as Str
+            if p == path {
+                // Path matches in flat table but wrong method — build 405
+                // Use linear table methods to build Allow header
+                var allow: Str = ""
+                var scan_idx: I64 = 0
+                var scan_off: I64 = 0
+                loop (scan_idx < count) {
+                    let sp: Str = lowlevel { ptr_read[I64]((table + scan_off + 8) as *I64) } as Str
+                    if sp == path {
+                        let sm: Str = lowlevel { ptr_read[I64]((table + scan_off) as *I64) } as Str
+                        if str::len(allow) == 0 {
+                            allow = sm
+                        } else {
+                            allow = allow + ", " + sm
+                        }
+                    }
+                    scan_off = scan_off + ENTRY_SIZE
+                    scan_idx = scan_idx + 1
+                }
+                if str::len(allow) > 0 {
+                    let body: Str = "{\"error\":\"method not allowed\"}"
+                    let body_len: I64 = str::len(body)
+                    let allow_len: I64 = str::len(allow)
+                    let prefix: Str = "HTTP/1.1 405 Method Not Allowed\r\nAllow: "
+                    let suffix: Str = "\r\nContent-Type: application/json\r\nContent-Length: 30\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+                    let prefix_len: I64 = str::len(prefix)
+                    let suffix_len: I64 = str::len(suffix)
+                    let total: I64 = prefix_len + allow_len + suffix_len + body_len
+                    let rbuf: I64 = lowlevel { mem_alloc(total + 1) } as I64
+                    var pos: I64 = 0
+                    lowlevel { copy_nonoverlapping(prefix as *Unit, (rbuf + pos) as *Unit, prefix_len) }
+                    pos = pos + prefix_len
+                    lowlevel { copy_nonoverlapping(allow as *Unit, (rbuf + pos) as *Unit, allow_len) }
+                    pos = pos + allow_len
+                    lowlevel { copy_nonoverlapping(suffix as *Unit, (rbuf + pos) as *Unit, suffix_len) }
+                    pos = pos + suffix_len
+                    lowlevel { copy_nonoverlapping(body as *Unit, (rbuf + pos) as *Unit, body_len) }
+                    pos = pos + body_len
+                    lowlevel { ptr_write[U8]((rbuf + pos) as *U8, 0 as U8) }
+                    return rbuf as Str
+                }
+                return RESPONSE_405
+            }
+            lin_off = lin_off + ENTRY_SIZE
+            lin_idx = lin_idx + 1
+        }
         return RESPONSE_404
     }
 

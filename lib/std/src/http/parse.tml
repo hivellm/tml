@@ -480,6 +480,16 @@ pub func app_get_content_length(headers_buf: I64, header_count: I64) -> I64 {
     return result
 }
 
+/// Check if request has "Expect: 100-continue" header (RFC 7231 §5.1.1).
+/// Uses the headers_buf parsed by app_parse_headers.
+/// Returns true if the client expects a 100 Continue before sending the body.
+pub func app_has_expect_continue(headers_buf: I64, header_count: I64) -> Bool {
+    let expect_val: Str = app_get_header(headers_buf, header_count, "expect")
+    if str::len(expect_val) == 0 { return false }
+    // RFC 7231: value must be "100-continue" (case-insensitive)
+    return str::contains(str::to_lowercase(expect_val), "100-continue")
+}
+
 /// Check if Transfer-Encoding header contains "chunked" (case-insensitive).
 /// Uses the headers_buf parsed by app_parse_headers.
 pub func app_has_chunked_encoding(headers_buf: I64, header_count: I64) -> Bool {

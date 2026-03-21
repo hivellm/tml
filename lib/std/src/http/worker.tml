@@ -16,7 +16,7 @@ use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_is_bodyless_method, app_find_header_end_in_str,
                        app_count_requests, app_request_offset,
                        app_parse_headers, app_get_content_length,
-                       app_has_chunked_encoding,
+                       app_has_chunked_encoding, app_has_expect_continue,
                        MAX_HEADERS, HEADER_ENTRY_SIZE}
 use std::http::chunked::{recv_chunked_body, decode_chunked}
 use std::net::eventloop::{NetEventLoop, Interest, Event}
@@ -328,6 +328,14 @@ pub func app_worker(arg: *Unit) {
             let method: Str = app_zerocopy_method(buf, total)
             let path: Str = app_zerocopy_path(buf, total)
             let method_len: I64 = str::len(method)
+
+            // ── 4b. Expect: 100-continue (RFC 7231 §5.1.1) ────────
+            // If client sent "Expect: 100-continue", send 100 Continue before
+            // reading the body so the client knows it's safe to proceed.
+            if not app_is_bodyless_method(method) and app_has_expect_continue(hdrs_buf, hdr_count) {
+                let resp_100: Str = "HTTP/1.1 100 Continue\r\n\r\n"
+                tml_sys_send(fd, resp_100 as *Unit, str::len(resp_100))
+            }
 
             // ── 5. Read body (chunked or Content-Length) ─────────────
             var body: Str = ""
