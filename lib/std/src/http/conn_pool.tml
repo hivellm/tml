@@ -1,0 +1,90 @@
+//! HTTP connection pool — reuse TCP connections for keep-alive.
+//!
+//! Maintains a pool of idle connections keyed by host:port.
+//! Connections are reused when available, reducing latency from
+//! DNS + TCP + TLS handshake on repeated requests to the same server.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+
+/// Maximum idle connections per host.
+const MAX_IDLE_PER_HOST: I64 = 4
+
+/// Maximum total idle connections.
+const MAX_IDLE_TOTAL: I64 = 32
+
+/// A pool entry: fd + is_tls + ssl_ptr for one idle connection.
+type PoolEntry {
+    fd: I64,
+    ssl_ptr: I64,
+    is_tls: I64,    // 0=plain, 1=tls
+}
+
+/// A simple connection pool using a flat array of entries.
+/// Each entry stores: key (host:port string), fd, ssl_ptr, is_tls.
+/// Layout: [key0, entry0, key1, entry1, ...] each 32 bytes (key_ptr:8, fd:8, ssl:8, tls:8)
+pub type ConnectionPool {
+    data: I64,       // ptr to flat array
+    count: I64,      // number of entries
+    capacity: I64,   // max entries
+}
+
+const ENTRY_SIZE: I64 = 32  // key_ptr(8) + fd(8) + ssl_ptr(8) + is_tls(8)
+
+impl ConnectionPool {
+    /// Creates a new connection pool.
+    pub func new() -> ConnectionPool {
+        let cap: I64 = MAX_IDLE_TOTAL
+        let data: I64 = lowlevel { mem_alloc(cap * ENTRY_SIZE) } as I64
+        ConnectionPool { data: data, count: 0, capacity: cap }
+    }
+
+    /// Try to get an idle connection for the given host:port.
+    /// Returns (fd, ssl_ptr, is_tls) or (-1, 0, 0) if none available.
+    pub func take(this, key: Str) -> PoolEntry {
+        var i: I64 = 0
+        loop (i < this.count) {
+            let offset: I64 = i * ENTRY_SIZE
+            let stored_key: Str = lowlevel { ptr_read[I64]((this.data + offset) as *I64) } as Str
+            if stored_key == key {
+                // Found — extract entry
+                let fd: I64 = lowlevel { ptr_read[I64]((this.data + offset + 8) as *I64) }
+                let ssl: I64 = lowlevel { ptr_read[I64]((this.data + offset + 16) as *I64) }
+                let tls: I64 = lowlevel { ptr_read[I64]((this.data + offset + 24) as *I64) }
+                // Remove by swapping with last entry
+                let last: I64 = (this.count - 1) * ENTRY_SIZE
+                if i < this.count - 1 {
+                    lowlevel { ptr_write[I64]((this.data + offset) as *I64, ptr_read[I64]((this.data + last) as *I64)) }
+                    lowlevel { ptr_write[I64]((this.data + offset + 8) as *I64, ptr_read[I64]((this.data + last + 8) as *I64)) }
+                    lowlevel { ptr_write[I64]((this.data + offset + 16) as *I64, ptr_read[I64]((this.data + last + 16) as *I64)) }
+                    lowlevel { ptr_write[I64]((this.data + offset + 24) as *I64, ptr_read[I64]((this.data + last + 24) as *I64)) }
+                }
+                this.count = this.count - 1
+                return PoolEntry { fd: fd, ssl_ptr: ssl, is_tls: tls }
+            }
+            i = i + 1
+        }
+        return PoolEntry { fd: -1 as I64, ssl_ptr: 0, is_tls: 0 }
+    }
+
+    /// Return an idle connection to the pool.
+    pub func put(this, key: Str, fd: I64, ssl_ptr: I64, is_tls: I64) {
+        if this.count >= this.capacity {
+            return  // Pool full — connection will be closed by caller
+        }
+        let offset: I64 = this.count * ENTRY_SIZE
+        lowlevel { ptr_write[I64]((this.data + offset) as *I64, key as I64) }
+        lowlevel { ptr_write[I64]((this.data + offset + 8) as *I64, fd) }
+        lowlevel { ptr_write[I64]((this.data + offset + 16) as *I64, ssl_ptr) }
+        lowlevel { ptr_write[I64]((this.data + offset + 24) as *I64, is_tls) }
+        this.count = this.count + 1
+    }
+
+    /// Returns the number of idle connections in the pool.
+    pub func len(this) -> I64 { this.count }
+
+    /// Destroys the pool and frees memory.
+    pub func destroy(this) {
+        lowlevel { mem_free(this.data as *Unit) }
+    }
+}
