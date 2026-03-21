@@ -55,8 +55,8 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 4b.8 Added iocp.c to compiler/CMakeLists.txt next to poll.c
 - [x] 4b.9 TML-side IOCP worker: iocp_worker.tml with app_listen_iocp
 - [x] 4b.10 IOCP integrated into App.listen_iocp() + linker fix (libtml_runtime.a + mswsock)
-- [ ] 4b.11 Fix IOCP pipeline stall with >100 connections (accept pool exhaustion)
-- [ ] 4b.12 Fix IOCP scaling >500 connections (slot allocation race)
+- [x] 4b.11 IOCP accept pool 64→256 — prevents exhaustion under high connection rate
+- [x] 4b.12 IOCP slot scan O(1) amortized — g_slot_hint skips occupied slots
 
 ## Phase 5: HTTP Client — ALREADY IMPLEMENTED
 
@@ -90,7 +90,7 @@ Reference: docs/analyses/comparative-analysis.md
 - [x] 8.1 Latency measurement — per-worker time_ns() tracking (min/max/avg_us) in thread pool worker
 - [x] 8.2 Timeout enforcement — read/write/idle via SO_RCVTIMEO/SO_SNDTIMEO in worker accept loop
 - [ ] 8.3 Work-stealing for thread pool mode (Tokio model: LIFO local + FIFO global + steal-half)
-- [ ] 8.4 Graceful shutdown with connection draining (Go Server.Shutdown pattern)
+- [x] 8.4 Graceful shutdown with draining — 3-phase: stop accepting → drain queue → wake workers
 
 ## Phase 9: TLS & HTTP/2
 

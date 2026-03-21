@@ -19,7 +19,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 4 | **http-production-server** | 83% | 59/71 | Optimization: IOCP scaling, arena alloc, work-stealing, SIMD |
+| 4 | **http-production-server** | 87% | 62/71 | Remaining: arena alloc, Bytes, backpressure, work-stealing, SIMD, sendfile |
 | 5 | **http-production-framework** | 85% | 39/46 | 1.2 Hook.add/validate, 1.5 content-type parser, 4.3 direct writes |
 | 6 | **complete-async-coverage** | 72% | 18/25 | 2.1b Poll tests, 2.2 Waker FFI, 4.1-4.2 validation |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
