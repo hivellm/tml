@@ -529,7 +529,7 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     // ── 2.7: Reject completely unknown methods with 501 Not Implemented ──
     // RFC 7231 §6.6.2: server MUST respond 501 for unrecognised methods.
     if not app_is_known_method(method) {
-        return RESPONSE_501
+        return app_build_response(501, "application/json", "{\"error\":\"not implemented\"}")
     }
 
     // ── Route lookup: radix tree first (O(path_len)), linear scan fallback ──
@@ -644,7 +644,7 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
                 return res.serialize()
             }
         }
-        return RESPONSE_404
+        return app_build_response(404, "application/json", "{\"error\":\"not found\"}")
     }
 
     // ── preHandler hooks (after routing, before handler) ─────────
