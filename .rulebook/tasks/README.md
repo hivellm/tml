@@ -1,7 +1,7 @@
 # Tasks — Priority Table
 
 **Updated**: 2026-03-21
-**Active**: 20 tasks | **Archived**: 8
+**Active**: 19 tasks | **Archived**: 9
 **Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
 **Version**: 0.2.1
 
@@ -20,8 +20,8 @@
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
 | 4 | **http-production-server** | 83% | 59/71 | Optimization: IOCP scaling, arena alloc, work-stealing, SIMD |
-| 5 | **http-production-framework** | 75% | 35/46 | 1.2 Hook.add/validate, 1.5 content-type parser |
-| 6 | **complete-async-coverage** | 60% | 15/25 | Write missing tests (iter adapters now unblocked) |
+| 5 | **http-production-framework** | 85% | 39/46 | 1.2 Hook.add/validate, 1.5 content-type parser, 4.3 direct writes |
+| 6 | **complete-async-coverage** | 72% | 18/25 | 2.1b Poll tests, 2.2 Waker FFI, 4.1-4.2 validation |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
 | 8 | **zig-cc-compiler-integration** | 45% | 8/18 | 3.1 zig cc detection in compiler_setup.cpp |
 
@@ -89,6 +89,7 @@ implement-reflection (33/70)
 
 | Task | Date | Reason |
 |------|------|--------|
+| tml-language-gaps | 2026-03-21 | 6/6 gaps + 2 dyn fixes: Bool/i1, dyn, async, templates, nullable, pattern |
 | codegen-structural-fixes | 2026-03-21 | 40/40: Pin dispatch, cross-module field resolution, future_poll |
 | fix-codegen-coverage-blockers | 2026-03-21 | 44/44: generics, intrinsics, closures, Pin, field resolution |
 | fix-struct-codegen-blockers | 2026-03-20 | 18/18: ptr_read/write, field mutation, fnptr coercion, fold[B] |
