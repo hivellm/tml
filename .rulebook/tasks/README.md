@@ -18,7 +18,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 4 | **http-production-server** | 95% | 52/55 | Phase 4 event loop (3), 5.3 conn pooling |
+| 4 | **http-production-server** | 83% | 59/71 | Phase 1-6+8-9 DONE. Remaining: IOCP scaling, memory opt, SIMD, zero-copy |
 | 5 | **http-production-framework** | 75% | 35/46 | 1.2 Hook.add/validate, 1.5 content-type parser |
 | 6 | **complete-async-coverage** | 60% | 15/25 | Commit from_iter.test.tml, write missing tests |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
