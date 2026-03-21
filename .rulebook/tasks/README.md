@@ -1,7 +1,7 @@
 # Tasks — Priority Table
 
 **Updated**: 2026-03-21
-**Active**: 18 tasks | **Archived**: 10
+**Active**: 17 tasks | **Archived**: 11
 **Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
 **Version**: 0.2.1
 
@@ -21,7 +21,7 @@
 |---|------|--------|----------|-----------|
 | 4 | **http-production-server** | 97% | 69/71 | Remaining: 8.3 work-stealing, 10.1 SIMD (both deferred to specialized tasks) |
 | 5 | ~~http-production-framework~~ | **ARCHIVED** | 46/46 | Archived 2026-03-21 |
-| 6 | **complete-async-coverage** | 72% | 18/25 | 2.1b Poll tests, 2.2 Waker FFI, 4.1-4.2 validation |
+| 6 | ~~complete-async-coverage~~ | **ARCHIVED** | 25/25 | Archived 2026-03-21 |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
 | 8 | **zig-cc-compiler-integration** | 45% | 8/18 | 3.1 zig cc detection in compiler_setup.cpp |
 
@@ -89,6 +89,7 @@ implement-reflection (33/70)
 
 | Task | Date | Reason |
 |------|------|--------|
+| complete-async-coverage | 2026-03-21 | 25/25: Pin, Future, Poll, AsyncIter, networking all verified |
 | http-production-framework | 2026-03-21 | 46/46: hooks, content-type parser, IOCP, arena, all phases complete |
 | tml-language-gaps | 2026-03-21 | 6/6 gaps + 2 dyn fixes: Bool/i1, dyn, async, templates, nullable, pattern |
 | codegen-structural-fixes | 2026-03-21 | 40/40: Pin dispatch, cross-module field resolution, future_poll |
