@@ -19,12 +19,12 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 ## Phase 2: Proper HTTP/1.1 Compliance
 
 - [x] 2.1 Proper request body accumulation — recv loop until Content-Length bytes received
-- [ ] 2.2 Chunked transfer-encoding decoding for request bodies
-- [ ] 2.3 `Expect: 100-continue` handling
-- [ ] 2.4 `Date:` header in all responses (RFC 7231 §7.1.1.2)
+- [x] 2.2 Chunked transfer-encoding decoding — decode_chunked + recv_chunked_body + worker integration
+- [x] 2.3 `Expect: 100-continue` — sends 100 Continue before body reading
+- [ ] 2.4 `Date:` header in all responses (RFC 7231 §7.1.1.2) — needs datetime formatting
 - [x] 2.5 400 Bad Request for malformed requests / oversized headers
-- [ ] 2.6 405 Method Not Allowed with `Allow:` header
-- [ ] 2.7 501 Not Implemented for unknown methods
+- [x] 2.6 405 Method Not Allowed with `Allow:` header — probes all 7 method trees
+- [x] 2.7 501 Not Implemented for unknown methods
 - [ ] 2.8 URL percent-decoding before routing
 - [ ] 2.9 Idle timeout enforcement between keep-alive requests
 - [x] 2.10 Connection: close handling per HTTP/1.1 spec

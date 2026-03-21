@@ -1,0 +1,103 @@
+// Tests for URL percent-decoding via url_decode() from body_parser.
+// Verifies that %XX sequences and '+' are correctly decoded.
+use test::{assert_eq}
+use std::http::body_parser::url_decode
+
+@test
+func test_basic_space() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("%20"), " ", "percent-20 decodes to space")
+    Ok(())
+}
+
+@test
+func test_multiple_encodings() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("hello%20world%21"), "hello world!", "multiple percent sequences")
+    Ok(())
+}
+
+@test
+func test_no_encoding() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("hello"), "hello", "plain string unchanged")
+    Ok(())
+}
+
+@test
+func test_uppercase_hex() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("%2F"), "/", "uppercase hex %2F decodes to slash")
+    Ok(())
+}
+
+@test
+func test_lowercase_hex() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("%2f"), "/", "lowercase hex %2f decodes to slash")
+    Ok(())
+}
+
+@test
+func test_plus_as_space() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("hello+world"), "hello world", "plus sign decodes to space")
+    Ok(())
+}
+
+@test
+func test_mixed_path_with_query() -> Outcome[Unit, Str] {
+    // Only testing the url_decode function — query string separator is not split here,
+    // the full path+query string is decoded as one unit.
+    assert_eq(url_decode("/api/users/John%20Doe"), "/api/users/John Doe", "path segment with encoded space")
+    Ok(())
+}
+
+@test
+func test_empty_string() -> Outcome[Unit, Str] {
+    assert_eq(url_decode(""), "", "empty string returns empty")
+    Ok(())
+}
+
+@test
+func test_percent_sign_in_value() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("100%25"), "100%", "encoded percent sign")
+    Ok(())
+}
+
+@test
+func test_mixed_plus_and_percent() -> Outcome[Unit, Str] {
+    // Simulates a query string value like q=hello+world where + is also used
+    assert_eq(url_decode("q=hello+world"), "q=hello world", "mixed plus and plain chars")
+    Ok(())
+}
+
+@test
+func test_path_with_mixed_encodings() -> Outcome[Unit, Str] {
+    // /api/users/John%20Doe?q=hello+world — test the path portion
+    let path: Str = "/api/users/John%20Doe"
+    let query: Str = "q=hello+world"
+    let decoded_path: Str = url_decode(path)
+    let decoded_query: Str = url_decode(query)
+    assert_eq(decoded_path, "/api/users/John Doe", "path decoded correctly")
+    assert_eq(decoded_query, "q=hello world", "query decoded correctly")
+    Ok(())
+}
+
+@test
+func test_consecutive_percent_sequences() -> Outcome[Unit, Str] {
+    // %41%42%43 = "ABC"
+    assert_eq(url_decode("%41%42%43"), "ABC", "consecutive percent sequences")
+    Ok(())
+}
+
+@test
+func test_no_change_for_regular_chars() -> Outcome[Unit, Str] {
+    assert_eq(url_decode("abc-def_ghi~jkl"), "abc-def_ghi~jkl", "unreserved chars unchanged")
+    Ok(())
+}
+
+@test
+func test_uppercase_and_lowercase_hex_equivalence() -> Outcome[Unit, Str] {
+    // Both %2F and %2f should decode to '/'
+    let upper: Str = url_decode("%2F")
+    let lower: Str = url_decode("%2f")
+    assert_eq(upper, "/", "uppercase %2F")
+    assert_eq(lower, "/", "lowercase %2f")
+    assert_eq(upper, lower, "case-insensitive hex equivalence")
+    Ok(())
+}
