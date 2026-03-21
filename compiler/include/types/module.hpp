@@ -252,6 +252,11 @@ private:
     std::unordered_map<std::string, Module> modules_;             ///< Registered modules.
     std::unordered_map<std::string, std::string> file_to_module_; ///< File to module mapping.
 
+    /// Internal helper for lookup_struct that follows re-exports.
+    auto lookup_struct_impl(const std::string& module_path, const std::string& symbol_name,
+                            std::unordered_set<std::string>& visited) const
+        -> std::optional<StructDef>;
+
     /// Internal helper for lookup_enum that follows re-exports.
     auto lookup_enum_impl(const std::string& module_path, const std::string& symbol_name,
                           std::unordered_set<std::string>& visited) const -> std::optional<EnumDef>;

@@ -96,14 +96,57 @@ auto ModuleRegistry::lookup_function(const std::string& module_path,
 auto ModuleRegistry::lookup_struct(const std::string& module_path,
                                    const std::string& symbol_name) const
     -> std::optional<StructDef> {
+    // Track visited modules to prevent infinite recursion
+    std::unordered_set<std::string> visited;
+    return lookup_struct_impl(module_path, symbol_name, visited);
+}
+
+auto ModuleRegistry::lookup_struct_impl(const std::string& module_path,
+                                        const std::string& symbol_name,
+                                        std::unordered_set<std::string>& visited) const
+    -> std::optional<StructDef> {
+    // Prevent infinite recursion
+    if (visited.count(module_path) > 0) {
+        return std::nullopt;
+    }
+    visited.insert(module_path);
+
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
 
+    // First, try to find the struct directly in this module
     auto it = module->structs.find(symbol_name);
     if (it != module->structs.end()) {
         return it->second;
     }
+
+    // Not found directly - check re-exports
+    for (const auto& re_export : module->re_exports) {
+        bool should_follow = false;
+
+        if (re_export.is_glob) {
+            // Glob import - try to find the symbol in the source module
+            should_follow = true;
+        } else {
+            // Check if this specific symbol is in the re-export list
+            for (const auto& sym : re_export.symbols) {
+                if (sym == symbol_name) {
+                    should_follow = true;
+                    break;
+                }
+            }
+        }
+
+        if (should_follow) {
+            // Recursively look up in the source module
+            auto result = lookup_struct_impl(re_export.source_path, symbol_name, visited);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
