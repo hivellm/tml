@@ -9,7 +9,8 @@
 - [x] Verify: Array PartialEq, Hash, Display, Debug, Duplicate — all work (tested via standalone + test file)
 - [x] Verify: Range::size_hint TYPE CHECKS correctly (was () before, now (I64, Maybe[I64]))
 - [x] Run test suite — 52/52 iter, 2/2 range, 10/10 lang, 50/50 num, 7/7 types — no regressions
-- [ ] Remaining: Range method CODEGEN dispatch (AST codegen needs Range struct registration for r.size_hint() to compile+run)
+- [x] Fix: MIR codegen emits struct type declarations for library structs used in StructInitInst (e.g., Range[T] from core/ops). Added used_struct_types_ collection in pre-scan + emission in emit_type_defs (mir_codegen.cpp, mir_codegen.hpp)
+- [ ] Remaining: Range method CODEGEN dispatch — standalone files can't resolve Iterator methods (count/size_hint) because module registry is empty. Requires import support or built-in Range method handling
 - [ ] Remaining: Pool::acquire, Poll::eq (separate codegen issues, not type checker)
 - [ ] Remaining: F32/F64 sum/product (Sum/Product behavior dispatch, separate from Range fix)
 - [ ] Write/uncomment tests for newly unblocked functions

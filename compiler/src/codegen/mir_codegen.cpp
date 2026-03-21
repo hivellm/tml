@@ -77,6 +77,7 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     string_constants_.clear();
     value_string_contents_.clear();
     used_enum_types_.clear();
+    used_struct_types_.clear();
     vtables_.clear();
     behavior_method_order_.clear();
     emitted_vtables_.clear();
@@ -141,6 +142,14 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
                 // Collect enum types from EnumInitInst (for imported enums)
                 if (auto* enum_inst = std::get_if<mir::EnumInitInst>(&inst.inst)) {
                     used_enum_types_.insert(enum_inst->enum_name);
+                }
+                // Collect struct types from StructInitInst (for imported/library structs
+                // like Range[T] that aren't in module.structs)
+                if (auto* struct_inst = std::get_if<mir::StructInitInst>(&inst.inst)) {
+                    if (used_struct_types_.find(struct_inst->struct_name) ==
+                        used_struct_types_.end()) {
+                        used_struct_types_[struct_inst->struct_name] = struct_inst->field_types;
+                    }
                 }
                 // Collect generic enum types from instruction result types
                 if (inst.type) {
@@ -256,6 +265,7 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     string_constants_.clear();
     value_string_contents_.clear();
     used_enum_types_.clear();
+    used_struct_types_.clear();
 
     // Build index set for O(1) lookup
     std::unordered_set<size_t> included(function_indices.begin(), function_indices.end());
@@ -318,6 +328,13 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
                 }
                 if (auto* enum_inst = std::get_if<mir::EnumInitInst>(&inst.inst)) {
                     used_enum_types_.insert(enum_inst->enum_name);
+                }
+                // Collect struct types from StructInitInst (for imported/library structs)
+                if (auto* struct_inst = std::get_if<mir::StructInitInst>(&inst.inst)) {
+                    if (used_struct_types_.find(struct_inst->struct_name) ==
+                        used_struct_types_.end()) {
+                        used_struct_types_[struct_inst->struct_name] = struct_inst->field_types;
+                    }
                 }
                 if (inst.type) {
                     collect_enum_types_from_type(inst.type);
@@ -825,6 +842,27 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
         emit_struct_def(s);
     }
 
+    // Emit struct definitions for imported/library structs used in StructInitInst
+    // (e.g., Range[T] from core/ops — not in module.structs but used via range expressions)
+    for (const auto& [struct_name, field_types] : used_struct_types_) {
+        std::string type_name = "%struct." + struct_name;
+        if (!emitted_types_.count(type_name)) {
+            emitted_types_.insert(type_name);
+            emit(type_name + " = type { ");
+            std::vector<std::string> llvm_field_types;
+            for (size_t i = 0; i < field_types.size(); ++i) {
+                if (i > 0) {
+                    emit(", ");
+                }
+                std::string ft = field_types[i] ? mir_type_to_llvm(field_types[i]) : "i64";
+                emit(ft);
+                llvm_field_types.push_back(ft);
+            }
+            emitln(" }");
+            struct_field_types_[struct_name] = std::move(llvm_field_types);
+        }
+    }
+
     // Emit enum definitions (local enums)
     for (const auto& e : module.enums) {
         emit_enum_def(e);
@@ -858,7 +896,7 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
     }
 
     if (!module.structs.empty() || !module.enums.empty() || !used_enum_types_.empty() ||
-        !generic_enum_defs_.empty()) {
+        !generic_enum_defs_.empty() || !used_struct_types_.empty()) {
         emitln();
     }
 

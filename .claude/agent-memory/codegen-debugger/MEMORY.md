@@ -25,6 +25,13 @@
 
 ## Recent Fixes (2026-03-20)
 
+### Library Struct Type Declaration in MIR Codegen -- FIXED
+- Bug: `%struct.Range undef` caused "invalid type for undef constant" because library structs (Range, etc.) used in StructInitInst were never declared in LLVM IR
+- Root cause: `emit_type_defs()` only emitted structs from `module.structs`. Library structs (Range[T] from core/ops) are NOT in `module.structs` when compiling standalone files.
+- Fix: Added `used_struct_types_` map (struct_name -> field_types) in mir_codegen.hpp. Pre-scan collects StructInit references, `emit_type_defs` emits `%struct.Name = type { ... }` for any not already in module.structs.
+- Files: `compiler/include/codegen/mir_codegen.hpp` (new field), `compiler/src/codegen/mir_codegen.cpp` (pre-scan + emit in emit_type_defs, both generate() and generate_cgu())
+- Note: Method dispatch on Range (e.g., `r.count()`) remains broken for standalone files because Iterator methods aren't resolved without imports. This is a separate method resolution issue.
+
 ### Function Pointer Call Integer Literal Coercion -- FIXED
 - Bug: `f(42)` where `f: func(I64) -> I64` generated `call i64 %fn(i32 42)` — i32/i64 mismatch corrupted stack
 - Root cause: AST codegen `call.cpp` function pointer call paths used `gen_expr` + `last_expr_type_` for arg types. Integer literals default to i32 but the declared param type is i64. No coercion was applied.

@@ -125,6 +125,10 @@ private:
     // Enum types used (collected from EnumInitInst, for imported enums)
     std::set<std::string> used_enum_types_;
 
+    // Struct types used in StructInitInst but not defined in module.structs
+    // Maps struct_name -> field types (MirTypePtr vector)
+    std::unordered_map<std::string, std::vector<mir::MirTypePtr>> used_struct_types_;
+
     // Generic enum type definitions needed (mangled_name -> max payload size in bytes)
     // Collected from function signatures and instructions referencing generic enums
     std::unordered_map<std::string, size_t> generic_enum_defs_;
