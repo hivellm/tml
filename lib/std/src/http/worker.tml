@@ -220,9 +220,18 @@ pub func app_worker(arg: *Unit) {
     var stat_latency_min_us: I64 = 999999999
     var stat_latency_max_us: I64 = 0
 
+    let idle_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_IDLE_TIMEOUT) as *I64) }
+
     loop (true) {
         let fd: I64 = queue_pop(shared)
         if fd < 0 { break }
+
+        // Set idle timeout for keep-alive connections (SO_RCVTIMEO)
+        // This makes recv() return 0/-1 if no data arrives within the timeout,
+        // preventing connections from lingering indefinitely.
+        if idle_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, idle_timeout as I32)
+        }
 
         // Keep-alive loop — process requests on this connection
         loop (true) {
