@@ -1,7 +1,7 @@
 # Tasks — Priority Table
 
 **Updated**: 2026-03-21
-**Active**: 16 tasks | **Archived**: 12
+**Active**: 15 tasks | **Archived**: 13
 **Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
 **Version**: 0.2.1
 
@@ -23,7 +23,7 @@
 | 5 | ~~http-production-framework~~ | **ARCHIVED** | 46/46 | 2026-03-21 |
 | 6 | ~~complete-async-coverage~~ | **ARCHIVED** | 25/25 | 2026-03-21 |
 | 7 | **developer-tooling** | 58% | 45/78 | Phase 1: doc comment preservation (C++ lexer/parser) |
-| 8 | **zig-cc-compiler-integration** | 57% | 8/14 | 3.1 zig cc detection in compiler_setup.cpp |
+| 8 | ~~zig-cc-compiler-integration~~ | **ARCHIVED** | 14/14 | Archived 2026-03-21 |
 
 ## Tier 3: Low Priority (incremental improvements)
 
@@ -91,6 +91,7 @@ implement-reflection (37/90) ─────────────────
 
 | Task | Date | Reason |
 |------|------|--------|
+| zig-cc-compiler-integration | 2026-03-21 | 14/14: toolchain, cmake, auto-detect, PATH fallback |
 | http-production-server | 2026-03-21 | 71/71: 10 phases, compliance, IOCP, client, hooks, arena, work-stealing |
 | complete-async-coverage | 2026-03-21 | 25/25: Pin, Future, Poll, AsyncIter, networking |
 | http-production-framework | 2026-03-21 | 46/46: hooks, content-type parser, IOCP, arena |
