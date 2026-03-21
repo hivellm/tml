@@ -689,6 +689,12 @@ void MirCodegen::emit_preamble() {
     emitln("declare void @print(ptr)");
     emitln("declare void @println(ptr)");
     emitln("declare void @abort() noreturn");
+    // Exception handling personality function
+#ifdef _WIN32
+    emitln("declare i32 @__CxxFrameHandler3(...)");
+#else
+    emitln("declare i32 @__gxx_personality_v0(...)");
+#endif
     // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
     emitln("declare ptr @mem_alloc(i64)"); // Memory allocation for char-to-string
     emitln("declare void @mem_free(ptr)"); // Memory deallocation for intrinsics
@@ -1140,7 +1146,14 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
     }
 
-    emitln(")" + inline_attr + " {");
+    // Add personality for exception handling (cleanup destructors on panic)
+    std::string personality;
+#ifdef _WIN32
+    personality = " personality ptr @__CxxFrameHandler3";
+#else
+    personality = " personality ptr @__gxx_personality_v0";
+#endif
+    emitln(")" + inline_attr + personality + " {");
 
     // Emit basic blocks
     for (const auto& block : func.blocks) {
