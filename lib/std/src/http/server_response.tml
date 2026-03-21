@@ -90,9 +90,9 @@ pub type ServerResponse {
     resp_headers_ptr: I64,
     body_chunks: List[Str],
     body_total_len: I64,
-    headers_sent: Bool,
-    finished: Bool,
-    send_date: Bool,
+    headers_sent: I64,    // 0=false, 1=true (Bool i1 layout workaround)
+    finished: I64,        // 0=false, 1=true
+    send_date: I64,       // 0=false, 1=true
     socket_fd: I64,
     req_method: Str,
 }
@@ -109,9 +109,9 @@ impl ServerResponse {
             resp_headers_ptr: hdrs_ptr,
             body_chunks: List[Str]::new(8),
             body_total_len: 0,
-            headers_sent: false,
-            finished: false,
-            send_date: true,
+            headers_sent: 0,
+            finished: 0,
+            send_date: 1,
             socket_fd: -1 as I64,
             req_method: "",
         }
@@ -128,9 +128,9 @@ impl ServerResponse {
             resp_headers_ptr: hdrs_ptr,
             body_chunks: List[Str]::new(8),
             body_total_len: 0,
-            headers_sent: false,
-            finished: false,
-            send_date: true,
+            headers_sent: 0,
+            finished: 0,
+            send_date: 1,
             socket_fd: fd,
             req_method: method,
         }
@@ -163,8 +163,8 @@ impl ServerResponse {
         return headers_has_raw(this.resp_headers_ptr, name)
     }
 
-    pub func is_headers_sent(this) -> Bool { this.headers_sent }
-    pub func set_send_date(mut this, send: Bool) { this.send_date = send }
+    pub func is_headers_sent(this) -> Bool { this.headers_sent == 1 }
+    pub func set_send_date(mut this, send: Bool) { this.send_date = if send { 1 } else { 0 } }
 
     // ── Write Head ───────────────────────────────────────────────
 
@@ -173,12 +173,12 @@ impl ServerResponse {
         if str::len(message) > 0 {
             this.resp_status_message = message
         }
-        this.headers_sent = true
+        this.headers_sent = 1
     }
 
     pub func write_head_simple(mut this, code: I64) {
         this.resp_status_code = code
-        this.headers_sent = true
+        this.headers_sent = 1
     }
 
     // ── Body Writing ─────────────────────────────────────────────
@@ -190,21 +190,21 @@ impl ServerResponse {
         this.body_chunks.push(chunk)
         this.body_total_len = this.body_total_len + chunk_len
 
-        if not this.headers_sent { this.headers_sent = true }
+        if this.headers_sent == 0 { this.headers_sent = 1 }
     }
 
     pub func end(mut this, data: Str) {
         if str::len(data) > 0 { this.write(data) }
-        this.finished = true
-        if not this.headers_sent { this.headers_sent = true }
+        this.finished = 1
+        if this.headers_sent == 0 { this.headers_sent = 1 }
     }
 
     pub func end_empty(mut this) {
-        this.finished = true
-        if not this.headers_sent { this.headers_sent = true }
+        this.finished = 1
+        if this.headers_sent == 0 { this.headers_sent = 1 }
     }
 
-    pub func is_finished(this) -> Bool { this.finished }
+    pub func is_finished(this) -> Bool { this.finished == 1 }
 
     // ── Special Response Methods ─────────────────────────────────
 
@@ -215,7 +215,7 @@ impl ServerResponse {
         return "HTTP/1.1 103 Early Hints\r\nLink: {link}\r\n\r\n"
     }
 
-    pub func flush_headers(mut this) { this.headers_sent = true }
+    pub func flush_headers(mut this) { this.headers_sent = 1 }
 
     // ── Convenience Methods (cmmv-server / Express style) ────────
 
@@ -260,8 +260,8 @@ impl ServerResponse {
         this.resp_status_code = 302
         this.set_header("location", url)
         this.set_header("content-length", "0")
-        this.finished = true
-        if not this.headers_sent { this.headers_sent = true }
+        this.finished = 1
+        if this.headers_sent == 0 { this.headers_sent = 1 }
     }
 
     /// Send a redirect response with a specific status code (301, 302, 307, 308).
@@ -269,8 +269,8 @@ impl ServerResponse {
         this.resp_status_code = status
         this.set_header("location", url)
         this.set_header("content-length", "0")
-        this.finished = true
-        if not this.headers_sent { this.headers_sent = true }
+        this.finished = 1
+        if this.headers_sent == 0 { this.headers_sent = 1 }
     }
 
     /// Set the Content-Type header.
