@@ -1,0 +1,13 @@
+{
+  "id": "2026-03-15T15-08-42-tml-llvm-type-mapping-for-key-types",
+  "title": "TML LLVM type mapping for key types",
+  "content": "LLVM type mapping: Maybe[T] → { i1, T } (tag + value, compact), Outcome[T,E] → { i8, max(sizeof(T), sizeof(E)) }, Str → raw C string pointer (*U8, null-terminated), ref T / mut ref T → T*, Bool → i1, Char → i32, Unit → void, Generic Pair[I32] → %struct.Pair__I32 (double-underscore mangling). Closures are fat pointers { func_ptr, env_ptr }. Key: the Maybe[I32] optimization from 16 bytes to 8 bytes was achieved by using { i32, i32 } instead of { i32, [1 x i64] }.",
+  "source": "manual",
+  "tags": [
+    "codegen",
+    "llvm",
+    "types",
+    "mapping"
+  ],
+  "createdAt": "2026-03-15T15:08:42.646Z"
+}

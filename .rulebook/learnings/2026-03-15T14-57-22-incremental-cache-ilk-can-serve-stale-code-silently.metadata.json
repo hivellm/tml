@@ -1,0 +1,13 @@
+{
+  "id": "2026-03-15T14-57-22-incremental-cache-ilk-can-serve-stale-code-silently",
+  "title": "Incremental cache (.ilk) can serve stale code silently",
+  "content": "When MSVC incremental linker reuses old code despite new .obj files, strings from new code don't appear in the DLL. Diagnostic: Python binary search finds strings in .lib but not DLL = incremental link using old cache. Fix: delete .ilk file, touch tml_codegen.lib, then rebuild. This is a recurring issue when iterating on codegen — always suspect stale .ilk when new code seems to have no effect.",
+  "source": "manual",
+  "tags": [
+    "build",
+    "msvc",
+    "incremental-link",
+    "gotcha"
+  ],
+  "createdAt": "2026-03-15T14:57:22.905Z"
+}

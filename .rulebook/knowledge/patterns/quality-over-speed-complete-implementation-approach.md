@@ -1,0 +1,16 @@
+# Quality over speed — complete implementation approach
+
+**Category**: code
+**Tags**: policy, quality, mandatory, implementation, best-practice
+
+## Description
+
+When given a task, the correct approach is: (1) Research the correct way to implement it — read existing code, understand patterns, find the right solution. (2) Implement completely — the full functionality as requested, with all edge cases. (3) Take as long as needed — there is no time pressure, only quality pressure. (4) Ask for clarification if the task is ambiguous, rather than guessing. (5) Fix root causes — never patch symptoms to make things "appear to work".
+
+## Example
+
+Task: "Implement str::split that handles multi-char delimiters"\n\n✅ CORRECT:\n1. Read existing str module to understand patterns\n2. Implement full split with: empty string, delimiter at start/end, consecutive delimiters, multi-char delimiter, no match found\n3. Write tests for all edge cases\n4. Verify with existing test suite\n\n❌ WRONG:\n1. Write a quick version that only handles single-char delimiters\n2. Add TODO for multi-char support\n3. Skip edge cases
+
+## When to Use
+
+Every implementation task, bug fix, feature, refactoring — always prioritize correctness and completeness over delivery speed.

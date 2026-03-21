@@ -1,0 +1,5 @@
+# Complete stdlib module inventory and migration status — 2026-03-15
+**Source**: manual
+**Date**: 2026-03-15
+**Tags**: stdlib, migration, inventory, c-runtime
+Full inventory of lib/core/ (45+ modules) and lib/std/ (30+ modules). Key findings: All collections (List, HashMap, Buffer, BTreeMap, Deque) are ALREADY pure TML — the compiler/runtime/collections/ C code is a separate older system. core::str uses only 3 libc functions (strlen, memcmp, memchr) — main migration target in core. core::sync has 9 @extern atomic declarations that are foundation for ALL atomic types. JSON builder is pure TML, only parser uses C FFI. sha256_impl.tml exists as pure TML draft for crypto migration. BTreeMap limited to I64 keys due to nested generics limitation. search/ modules (bm25, hnsw) have ~29 @extern calls to native C engine.

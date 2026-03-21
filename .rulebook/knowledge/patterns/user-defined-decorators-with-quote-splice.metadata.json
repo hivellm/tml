@@ -1,0 +1,15 @@
+{
+  "id": "user-defined-decorators-with-quote-splice",
+  "type": "pattern",
+  "title": "User-Defined Decorators with Quote/Splice",
+  "category": "language",
+  "description": "TML replaces Rust-style macros with decorators. User-defined decorators use the 'decorator' keyword, take DecoratorTarget (Func, Type, Field, etc.), return DecoratorResult (Unchanged, Modified, AddItem, Remove, Error). Quote/splice syntax: 'quote { ... }' creates code templates, '${expr}' splices expressions. Composition: top-to-bottom applied, inside-out execution. Can run at compile-time (default) or @runtime.",
+  "whenToUse": "When implementing metaprogramming features or code generation in TML. Decorators are the primary abstraction for compile-time code transformation.",
+  "createdAt": "2026-03-15T15:08:42.658Z",
+  "tags": [
+    "language",
+    "decorators",
+    "metaprogramming"
+  ],
+  "source": "manual"
+}

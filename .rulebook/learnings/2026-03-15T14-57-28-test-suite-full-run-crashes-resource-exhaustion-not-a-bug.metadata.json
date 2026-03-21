@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-15T14-57-28-test-suite-full-run-crashes-resource-exhaustion-not-a-bug",
+  "title": "Test suite full run crashes — resource exhaustion, not a bug",
+  "content": "Running ALL 1452 tests at once causes segfault (exit code -1073741819). Individual suites all pass. This is resource exhaustion from concurrent compilation of 200+ suites, not a logic bug. The LLVM global state accumulation from compiling many suites in one process eventually corrupts memory. Mitigations in place: ThreadBudget limits concurrency, forced subprocess LLD, SEH wrapping. Full suite run should use sharding or sequential suite-by-suite execution.",
+  "source": "manual",
+  "relatedTask": "rewrite-test-system",
+  "tags": [
+    "testing",
+    "crash",
+    "resource-exhaustion",
+    "llvm"
+  ],
+  "createdAt": "2026-03-15T14:57:28.793Z"
+}

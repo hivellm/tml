@@ -1,0 +1,12 @@
+{
+  "id": "2026-03-15T14-59-28-hardcoded-llvm-ar-paths-are-a-portability-defect",
+  "title": "Hardcoded llvm-ar paths are a portability defect",
+  "content": "build_runtime_archive() in testing_compile.cpp (lines 244-250) includes hardcoded developer-specific absolute paths like F:/LLVM/bin/llvm-ar.exe for the archiver search. This breaks portability for other developers. Should use PATH-based discovery or the Zig CC bundled archiver instead.",
+  "source": "manual",
+  "tags": [
+    "build",
+    "portability",
+    "tech-debt"
+  ],
+  "createdAt": "2026-03-15T14:59:28.322Z"
+}

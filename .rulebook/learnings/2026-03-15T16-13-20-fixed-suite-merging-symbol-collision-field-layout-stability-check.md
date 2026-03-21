@@ -1,0 +1,6 @@
+# FIXED: Suite merging symbol collision — field layout stability check
+**Source**: manual
+**Date**: 2026-03-15
+**Related Task**: fix-suite-codegen-bug
+**Tags**: fix, suite-merging, codegen, linking, generics
+Fixed in llvm_struct_decl.cpp: added secondary field-level check when base_is_generic_struct detection has gaps. When mangled != base_name (type args exist) and base_is_generic_struct is still false, examine base type's field LLVM types. If any field references %struct.*, %union.*, or %enum.*, the layout depends on generic parameters — bypass alias shortcut, use full instantiation. Alias shortcut remains for layout-stable types (all primitive fields like ptr, i64, i1). Root cause: base_is_generic_struct only checked module registry type_params and pending_generic_structs_, missing structs registered without generics or pre-instantiated. Verified: Repeat__I32 = { i32 } (correct), List__I32 = { ptr } (alias works), Take__TakeCounter = { %struct.TakeCounter, i64 } (full instantiation). 299 tests passing across 11 suites.

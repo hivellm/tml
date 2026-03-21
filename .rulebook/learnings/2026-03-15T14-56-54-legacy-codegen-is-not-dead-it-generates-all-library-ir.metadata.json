@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-15T14-56-54-legacy-codegen-is-not-dead-it-generates-all-library-ir",
+  "title": "Legacy codegen is NOT dead — it generates all library IR",
+  "content": "The \"legacy\" LLVMIRGen path (~49K lines) is misleadingly named. It generates ALL standard library function implementations in every build. The MIR path (~3K lines) handles only user code. True elimination of the legacy path requires MIR to also handle: library IR generation, debug info, coverage instrumentation, and async codegen. Any investment in \"fixing legacy\" should be weighed against closing MIR gaps instead.",
+  "source": "manual",
+  "relatedTask": "codegen-structural-fixes",
+  "tags": [
+    "codegen",
+    "architecture",
+    "mir",
+    "legacy"
+  ],
+  "createdAt": "2026-03-15T14:56:54.630Z"
+}

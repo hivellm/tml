@@ -227,6 +227,76 @@ func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
     return app_dispatch(shared, method, path, body, fd, params_buf)
 }
 
+/// Accept-per-worker: each thread calls accept() directly on the listener.
+/// No shared queue, no mutex contention. Kernel distributes connections.
+pub func app_accept_worker(arg: *Unit) {
+    let shared: I64 = arg as I64
+    let listener: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
+    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
+    let read_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_READ_TIMEOUT) as *I64) }
+    let write_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_WRITE_TIMEOUT) as *I64) }
+    let idle_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_IDLE_TIMEOUT) as *I64) }
+
+    let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
+    let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
+    let hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+    let hdrs_buf: I64 = lowlevel { mem_alloc(hdrs_buf_size) } as I64
+    let resp_buf: I64 = lowlevel { mem_alloc(RESP_BUF_SIZE) } as I64
+
+    loop (true) {
+        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        if shutdown != 0 { break }
+
+        // Accept directly — kernel distributes among N threads
+        let fd: I64 = sys_accept(listener)
+        if fd < 0 { continue }
+
+        // Set socket options
+        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+        if idle_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, idle_timeout as I32)
+        }
+
+        // Keep-alive loop
+        loop (true) {
+            let n: I64 = tml_sys_recv(fd, buf as *Unit, BUF_SIZE - 1)
+            if n <= 0 { break }
+            var total: I64 = n
+
+            if not app_has_header_end(buf, total) {
+                loop (total < BUF_SIZE - 1) {
+                    let n2: I64 = tml_sys_recv(fd, (buf + total) as *Unit, BUF_SIZE - total - 1)
+                    if n2 <= 0 { break }
+                    total = total + n2
+                    if app_has_header_end(buf, total) { break }
+                }
+                if not app_has_header_end(buf, total) {
+                    if total >= BUF_SIZE - 1 {
+                        tml_sys_send(fd, RESPONSE_400 as *Unit, str::len(RESPONSE_400))
+                    }
+                    break
+                }
+            }
+
+            let response: Str = dispatch_single(shared, buf, 0, total, fd, params_buf, body_limit)
+            let resp_len: I64 = str::len(response)
+            tml_sys_send(fd, response as *Unit, resp_len)
+
+            // Check Connection: close
+            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+            if app_has_connection_close(buf, total) { break }
+            if not app_is_http11(buf, total) { break }
+        }
+
+        sys_close(fd)
+    }
+
+    lowlevel { mem_free(buf as *Unit) }
+    lowlevel { mem_free(params_buf as *Unit) }
+    lowlevel { mem_free(hdrs_buf as *Unit) }
+    lowlevel { mem_free(resp_buf as *Unit) }
+}
+
 pub func app_worker(arg: *Unit) {
     let shared: I64 = arg as I64
     let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
@@ -560,39 +630,29 @@ pub func app_listen(
     tml_mutex_init(mutex_ptr as *Unit)
     tml_condvar_init(condvar_ptr as *Unit)
 
-    // Spawn worker threads
+    // Store listener in shared state so workers can accept directly
+    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_BUF) as *I64, listener) }
+    // Store timeouts for workers to apply on accepted connections
+    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
+    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
+
+    // Spawn worker threads — each does its own accept() (no shared queue)
+    // This is the Go/Nginx pattern: multiple threads accept on same socket,
+    // kernel distributes connections. Eliminates mutex contention.
     var w: I64 = 0
     loop (w < num_workers) {
-        let h: U64 = raw_thread_spawn(app_worker as *Unit, shared as *Unit, 0 as U64)
+        let h: U64 = raw_thread_spawn(app_accept_worker as *Unit, shared as *Unit, 0 as U64)
         if h != 0 as U64 {
             raw_thread_detach(h)
         }
         w = w + 1
     }
 
-    // Accept loop — set socket options here then push to workers
+    // Main thread just waits for shutdown
     loop (true) {
         let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
         if shutdown != 0 { break }
-
-        let fd: I64 = sys_accept(listener)
-        if fd < 0 { continue }
-
-        // Set socket options in accept thread — saves syscalls in worker hot path
-        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
-        if read_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, read_timeout as I32)
-        }
-        if write_timeout > 0 {
-            tml_sys_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, write_timeout as I32)
-        }
-
-        let ok: Bool = queue_push(shared, fd)
-        if not ok {
-            let reject: Str = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            tml_sys_send(fd, reject as *Unit, str::len(reject))
-            sys_close(fd)
-        }
+        thread_sleep_ms(100 as U64)
     }
 
     sys_close(listener)

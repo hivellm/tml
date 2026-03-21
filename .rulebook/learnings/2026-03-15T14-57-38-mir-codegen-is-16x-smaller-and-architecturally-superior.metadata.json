@@ -1,0 +1,15 @@
+{
+  "id": "2026-03-15T14-57-38-mir-codegen-is-16x-smaller-and-architecturally-superior",
+  "title": "MIR codegen is 16x smaller and architecturally superior",
+  "content": "MIR codegen: ~3,000 lines, operates on SSA-form MIR, carries TypePtr through pipeline. Legacy codegen: ~49,000 lines, operates on AST, encodes types as strings. MIR has mem2reg + load_store_opt passes built-in. The quality gap is clear: MIR avoids the god-class problem, string-based type encoding, and state leakage bugs by design. Investment should prioritize closing MIR gaps (library IR, debug info, coverage, async) over improving legacy. Every legacy fix is throwaway work once MIR reaches parity.",
+  "source": "manual",
+  "relatedTask": "optimize-codegen-like-rust",
+  "tags": [
+    "codegen",
+    "mir",
+    "legacy",
+    "architecture",
+    "investment"
+  ],
+  "createdAt": "2026-03-15T14:57:38.600Z"
+}

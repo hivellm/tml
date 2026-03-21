@@ -1,0 +1,16 @@
+{
+  "id": "swiss-table-style-control-bytes-in-hashmap",
+  "type": "pattern",
+  "title": "Swiss Table-style Control Bytes in HashMap",
+  "category": "stdlib",
+  "description": "HashMap[K, V] uses open-addressing with Swiss Table-inspired control bytes for probe metadata. FNV-1a hashing. Implemented in pure TML using lowlevel memory intrinsics. The control byte array enables fast SIMD-friendly probing (though actual SIMD probing is not yet used).",
+  "whenToUse": "When working with or extending the HashMap implementation. Understanding the control byte layout is essential for debugging hash collisions or performance issues.",
+  "createdAt": "2026-03-15T15:05:33.822Z",
+  "tags": [
+    "stdlib",
+    "collections",
+    "hashmap",
+    "performance"
+  ],
+  "source": "manual"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "2026-03-15T16-59-47-fixed-mir-closure-stub-full-implementation-across-8-files",
+  "title": "FIXED: MIR closure stub — full implementation across 8 files",
+  "content": "Implemented ThirMirBuilder::build_closure() (was const_unit() stub) across 8 files: (1) ast_exprs.hpp — added inferred_param_types/inferred_return_type to ClosureExpr. (2) types_checker.cpp — check_closure() stores resolved types in AST. (3) expr.cpp — ClosureExpr handler for expected FuncType param unification. (4) expr_call.cpp — post-check TypeVar→concrete unification for closure args. (5) hir_builder_expr.cpp — lower_closure() uses inferred types, lower_call() resolves FuncType returns. (6) thir_mir_builder.cpp — convert_type() handles ClosureType and TypeVar. (7) thir_mir_builder_expr.cpp — PRIMARY: build_closure creates closure function, emits body, handles context save/restore with index-based pointer safety, emits ClosureInitInst. (8) dead_function_elimination.cpp — ClosureInitInst added to call graph builder. This was the #1 blocking bug preventing all higher-order stdlib APIs.",
+  "source": "manual",
+  "relatedTask": "stdlib-essentials",
+  "tags": [
+    "fix",
+    "closure",
+    "mir",
+    "critical",
+    "8-files"
+  ],
+  "createdAt": "2026-03-15T16:59:47.696Z"
+}

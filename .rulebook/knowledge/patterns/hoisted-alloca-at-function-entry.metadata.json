@@ -1,0 +1,16 @@
+{
+  "id": "hoisted-alloca-at-function-entry",
+  "type": "pattern",
+  "title": "Hoisted Alloca at Function Entry",
+  "category": "codegen",
+  "description": "All alloca instructions are emitted at function entry block via emit_hoisted_alloca(). This is critical for LLVM optimization: allocas in the entry block are guaranteed to be promoted by mem2reg. Allocas in other blocks create phi-node complications and may prevent optimization.",
+  "whenToUse": "Always when creating stack allocations in LLVM IR generation. Never emit alloca in non-entry blocks.",
+  "createdAt": "2026-03-15T14:56:10.659Z",
+  "tags": [
+    "codegen",
+    "llvm-ir",
+    "optimization",
+    "alloca"
+  ],
+  "source": "manual"
+}

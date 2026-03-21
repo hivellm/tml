@@ -1,0 +1,16 @@
+{
+  "id": "vtable-deduplication-via-vtable-content-to-name",
+  "type": "pattern",
+  "title": "VTable Deduplication via vtable_content_to_name_",
+  "category": "codegen",
+  "description": "Identical vtables (same method set, same implementations) are deduplicated using vtable_content_to_name_ map. This prevents bloat from multiple types implementing the same behavior with identical method bodies. The content hash includes method signatures and implementations.",
+  "whenToUse": "When generating vtables for dynamic dispatch (dyn Behavior). The deduplication is automatic in the legacy codegen path.",
+  "createdAt": "2026-03-15T14:59:44.103Z",
+  "tags": [
+    "codegen",
+    "vtable",
+    "optimization",
+    "dedup"
+  ],
+  "source": "manual"
+}

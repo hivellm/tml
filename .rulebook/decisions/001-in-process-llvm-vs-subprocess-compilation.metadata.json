@@ -1,0 +1,9 @@
+{
+  "id": 1,
+  "slug": "in-process-llvm-vs-subprocess-compilation",
+  "title": "In-process LLVM vs Subprocess Compilation",
+  "status": "proposed",
+  "date": "2026-03-15",
+  "relatedTasks": [],
+  "supersededBy": null
+}

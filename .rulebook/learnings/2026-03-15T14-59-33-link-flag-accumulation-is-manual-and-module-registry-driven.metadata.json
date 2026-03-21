@@ -1,0 +1,13 @@
+{
+  "id": "2026-03-15T14-59-33-link-flag-accumulation-is-manual-and-module-registry-driven",
+  "title": "Link flag accumulation is manual and module-registry-driven",
+  "content": "compile_suite() in testing_compile.cpp manually checks registry->has_module(\"std::net\"), registry->has_module(\"std::sqlite\"), etc. to decide which vcpkg libraries to link. This grows linearly with each new stdlib module and is not centralized. The same logic must be duplicated between test compilation and regular build paths. Should be refactored into a centralized module→link-flags mapping.",
+  "source": "manual",
+  "tags": [
+    "build",
+    "testing",
+    "tech-debt",
+    "linking"
+  ],
+  "createdAt": "2026-03-15T14:59:33.243Z"
+}

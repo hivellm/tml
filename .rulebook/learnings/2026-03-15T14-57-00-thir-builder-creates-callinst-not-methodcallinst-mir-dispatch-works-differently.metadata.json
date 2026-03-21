@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-15T14-57-00-thir-builder-creates-callinst-not-methodcallinst-mir-dispatch-works-differently",
+  "title": "THIR builder creates CallInst, not MethodCallInst — MIR dispatch works differently",
+  "content": "The THIR MIR builder (thir_mir_builder.cpp:791) creates CallInst directly for method calls, NOT MethodCallInst. The devirtualization pass can also convert MethodCallInst → CallInst. This means emit_method_call_inst in instructions_method.cpp is RARELY reached. All method dispatch fixes for the MIR path must go in emit_call_inst in instructions.cpp. The value_types_ map tracks LLVM types per MIR value ID across instructions. This is the most common gotcha when debugging MIR codegen — looking in the wrong dispatch function.",
+  "source": "manual",
+  "relatedTask": "codegen-structural-fixes",
+  "tags": [
+    "codegen",
+    "mir",
+    "method-dispatch",
+    "gotcha"
+  ],
+  "createdAt": "2026-03-15T14:57:00.012Z"
+}

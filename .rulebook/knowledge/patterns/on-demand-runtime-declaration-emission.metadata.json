@@ -1,0 +1,16 @@
+{
+  "id": "on-demand-runtime-declaration-emission",
+  "type": "pattern",
+  "title": "On-Demand Runtime Declaration Emission",
+  "category": "codegen",
+  "description": "Instead of emitting all 500+ runtime function declarations unconditionally, use emit_line() to auto-detect runtime symbol references and emit declarations on-demand. Catalog system tracks which declarations have been emitted. Reduces IR bloat significantly.",
+  "whenToUse": "When generating LLVM IR that references external runtime functions. The pattern ensures only actually-used declarations appear in the output IR.",
+  "createdAt": "2026-03-15T14:56:09.998Z",
+  "tags": [
+    "codegen",
+    "llvm-ir",
+    "optimization",
+    "dead-code"
+  ],
+  "source": "manual"
+}

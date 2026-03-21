@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-15T14-56-54-state-leakage-is-the-1-codegen-bug-category",
+  "title": "State leakage is the #1 codegen bug category",
+  "content": "LLVMIRGen has 50+ mutable fields with no scope discipline. The bee67287 fix (last_semantic_type_ leaking across function boundaries) is a symptom, not a cure. Root cause: fields like last_expr_type_, last_semantic_type_, expected_enum_type_ are set by one codegen function and read by another with no guarantee the reader is in the same scope. The correct fix is decomposing LLVMIRGen into scoped context objects passed explicitly as function parameters. Until then, every new codegen feature risks introducing another state-leak bug.",
+  "source": "manual",
+  "relatedTask": "codegen-structural-fixes",
+  "tags": [
+    "codegen",
+    "bugs",
+    "state-leakage",
+    "legacy"
+  ],
+  "createdAt": "2026-03-15T14:56:54.639Z"
+}

@@ -1,0 +1,11 @@
+{
+  "id": 7,
+  "slug": "zig-cc-as-preferred-compiler-toolchain",
+  "title": "Zig CC as Preferred Compiler Toolchain",
+  "status": "proposed",
+  "date": "2026-03-15",
+  "relatedTasks": [
+    "zig-cc-compiler-integration"
+  ],
+  "supersededBy": null
+}

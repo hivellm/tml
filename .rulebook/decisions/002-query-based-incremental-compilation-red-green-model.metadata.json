@@ -1,0 +1,9 @@
+{
+  "id": 2,
+  "slug": "query-based-incremental-compilation-red-green-model",
+  "title": "Query-based Incremental Compilation (Red-Green Model)",
+  "status": "proposed",
+  "date": "2026-03-15",
+  "relatedTasks": [],
+  "supersededBy": null
+}

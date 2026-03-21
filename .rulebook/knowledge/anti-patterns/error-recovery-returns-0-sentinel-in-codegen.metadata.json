@@ -1,0 +1,15 @@
+{
+  "id": "error-recovery-returns-0-sentinel-in-codegen",
+  "type": "anti-pattern",
+  "title": "Error Recovery Returns \"0\" Sentinel in Codegen",
+  "category": "codegen",
+  "description": "On codegen failure, report_error() is called and the function returns \"0\" (a valid LLVM integer constant). IR generation continues after errors, potentially producing invalid IR that LLVM rejects with confusing messages. Found in 9 places in call.cpp, 5 in method.cpp.",
+  "whenNotToUse": "Never continue IR generation after a fatal codegen error. Either abort the current function's codegen or use a proper error-propagation mechanism (Result type, exception) to halt gracefully.",
+  "createdAt": "2026-03-15T14:56:32.683Z",
+  "tags": [
+    "codegen",
+    "error-handling",
+    "tech-debt"
+  ],
+  "source": "manual"
+}

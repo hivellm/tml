@@ -1,0 +1,6 @@
+# Associated type equality constraints: 3 distinct root causes identified
+**Source**: manual
+**Date**: 2026-03-15
+**Related Task**: codegen-structural-fixes
+**Tags**: associated-types, type-checker, codegen, root-cause
+Root cause 1: Type checker (core.cpp:1186) processes only where_clause->constraints, IGNORES type_equalities entirely. For 'where I::Item = ref T', no substitution of I::Item→ref T is made. Root cause 2: Codegen generic.cpp:392 reads segments.back() which gives 'Item' not 'I' — lookup in type_subs fails because only 'I' is mapped. Needs to resolve param→concrete type first, then look up associated type. Root cause 3: Peekable uses Maybe[Maybe[I::Item]] nested field which breaks at codegen type resolution — different bug from equality constraints. Fix sites: (1) core.cpp check_impl ~line 1186, (2) generic.cpp:376-421 resolve_where_clause_type_equalities. Files affected: cloned.tml, copied.tml (I::Item = ref T), flatten.tml (IntoIterator[IntoIter = U]), peekable.tml (nested Maybe), intersperse.tml (I::Item as field type).

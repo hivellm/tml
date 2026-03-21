@@ -1,0 +1,17 @@
+{
+  "id": "llvmirgen-god-class-with-50-mutable-state-fields",
+  "type": "anti-pattern",
+  "title": "LLVMIRGen God Class with 50+ Mutable State Fields",
+  "category": "architecture",
+  "description": "LLVMIRGen header is 1,804 lines with 475 declarations and 50+ mutable fields (last_expr_type_, last_semantic_type_, expected_enum_type_, current_impl_type_, current_type_subs_, etc.). State leaks between function codegen passes — root cause of commit bee67287 bug and likely future bugs. Fields have no enforced scope discipline.",
+  "whenNotToUse": "Never add new mutable state fields to LLVMIRGen. Instead, decompose into scoped context objects passed explicitly. The MIR path avoids this by design (3K lines vs 49K lines).",
+  "createdAt": "2026-03-15T14:56:28.010Z",
+  "tags": [
+    "codegen",
+    "legacy",
+    "god-class",
+    "state-leakage",
+    "tech-debt"
+  ],
+  "source": "manual"
+}

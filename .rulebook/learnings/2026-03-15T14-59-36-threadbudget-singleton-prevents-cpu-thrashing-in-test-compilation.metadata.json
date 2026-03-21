@@ -1,0 +1,13 @@
+{
+  "id": "2026-03-15T14-59-36-threadbudget-singleton-prevents-cpu-thrashing-in-test-compilation",
+  "title": "ThreadBudget singleton prevents CPU thrashing in test compilation",
+  "content": "The test system uses a ThreadBudget singleton that limits total concurrent threads to hardware_concurrency / 2. This prevents CPU thrashing from the outer (suite parallelism) × inner (per-file compilation) thread product. Without this, 8 parallel suites × 8 LLVM threads = 64 threads on an 8-core machine, causing severe thrashing. Single-threaded per-file compilation (num_compile_threads = 1) is also enforced because LLVM global state is not thread-safe across all configurations.",
+  "source": "manual",
+  "tags": [
+    "testing",
+    "performance",
+    "threading",
+    "llvm"
+  ],
+  "createdAt": "2026-03-15T14:59:36.216Z"
+}

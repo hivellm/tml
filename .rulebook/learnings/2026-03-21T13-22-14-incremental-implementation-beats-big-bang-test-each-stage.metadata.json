@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-21T13-22-14-incremental-implementation-beats-big-bang-test-each-stage",
+  "title": "Incremental implementation beats big-bang — test each stage",
+  "content": "When implementing features (especially across multiple files), NEVER implement everything at once. Break into small testable stages, verify each one before moving to the next.\n\nEvidence: Chunked encoding implementation. First attempt via single agent writing 6 files at once → crashed with Bool/i1 layout bug, missing trailers reference, cross-module struct field resolution returning (). Spent hours patching cascading errors. Second attempt: implement core type → test → decoder function → test → integration → test → all passed first try.\n\nRule: If 2-3 fix attempts fail on the same error, STOP. Delete broken code, re-analyze, choose a different approach. \"The line between persistence and stupidity is very thin.\"",
+  "source": "manual",
+  "tags": [
+    "implementation",
+    "methodology",
+    "testing",
+    "anti-pattern",
+    "critical"
+  ],
+  "createdAt": "2026-03-21T13:22:14.201Z"
+}
