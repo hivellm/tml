@@ -106,14 +106,36 @@ const ENTRY_SIZE: I64 = 24
 
 /// Signal a running server to shut down gracefully.
 /// Takes the shared state pointer (from listen setup).
-/// Wakes all worker threads blocked on condvar_wait so they can exit.
+/// Phase 1: Stop accepting (set DRAINING flag).
+/// Phase 2: Wait for in-flight requests to drain (drain_timeout_ms).
+/// Phase 3: Force shutdown remaining connections.
 pub func app_shutdown(shared: I64) {
-    if shared != 0 {
-        lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 1 as I64) }
-        // Wake all workers so they check the shutdown flag and exit
-        let condvar_ptr: I64 = shared + OFF_CONDVAR
-        tml_condvar_notify_all(condvar_ptr as *Unit)
+    app_shutdown_with_timeout(shared, 5000)
+}
+
+/// Graceful shutdown with configurable drain timeout (milliseconds).
+/// 0 = immediate shutdown (no draining).
+pub func app_shutdown_with_timeout(shared: I64, drain_timeout_ms: I64) {
+    if shared == 0 { return }
+
+    // Phase 1: Set shutdown flag — workers stop accepting new work
+    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 1 as I64) }
+
+    // Phase 2: Drain — wait for in-flight requests to complete
+    if drain_timeout_ms > 0 {
+        let start: I64 = time_ns()
+        let deadline_ns: I64 = start + drain_timeout_ms * 1000000
+        loop (time_ns() < deadline_ns) {
+            let queue_len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+            if queue_len == 0 { break }
+            // Brief sleep to avoid busy-wait (1ms)
+            thread_sleep_ms(1 as U64)
+        }
     }
+
+    // Phase 3: Wake all blocked workers to exit
+    let condvar_ptr: I64 = shared + OFF_CONDVAR
+    tml_condvar_notify_all(condvar_ptr as *Unit)
 }
 
 // ════════════════════════════════════════════════════════════════════
