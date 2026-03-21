@@ -1,0 +1,13 @@
+// Test: Ready[I32] creation and value access
+use test::{assert_eq}
+use core::future::{ready, Ready}
+
+@test
+func test_ready_creation() -> I32 {
+    let f: Ready[I32] = ready[I32](42)
+    when f.value {
+        Just(v) => assert_eq(v, 42, "Ready should contain 42"),
+        Nothing => assert_eq(0, 1, "should not be Nothing"),
+    }
+    return 0
+}
