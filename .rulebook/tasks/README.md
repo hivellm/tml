@@ -11,7 +11,7 @@
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
 | 1 | ~~fix-struct-codegen-blockers~~ | **ARCHIVED** | 18/18 | Archived 2026-03-20 |
-| 2 | **codegen-structural-fixes** | 95% | 39/40 | 6.1 run full coverage to confirm final numbers |
+| 2 | **codegen-structural-fixes** | **COMPLETE** | 40/40 | Ready to archive |
 | 3 | **fix-codegen-coverage-blockers** | 95% | 42/44 | Only Range standalone method dispatch + full coverage run |
 
 ## Tier 2: Medium Priority (product features)

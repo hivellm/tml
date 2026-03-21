@@ -14,7 +14,7 @@
 - [x] 2.1-2.3 CRASH-ALLOC: FIXED — current_ret_type_ override in let-stmt (commit cc2ad6a9)
 - [x] 2.4-2.5 CRASH-ONCE: once_lock_get_or_init — pre-existing coverage ABI fragility, @no_coverage candidate
 - [x] 2.6 CRASH-CAPTURE: subsumed by CRASH-ALLOC fix
-- [ ] 2.7-2.8 CRASH-FUTURE: Pin dispatch FIXED (4 bugs in type checker + codegen). Blocked by cross-module generic struct field type resolution (Ready[I32].value → () instead of Maybe[I32]). Same root cause as ChunkedResult field access bug.
+- [x] 2.7-2.8 CRASH-FUTURE: FIXED — Pin dispatch (4 bugs) + cross-module generic field resolution (lookup_struct re-exports + pub use). future_ready_value test passes.
 - [x] 2.9 BUG-NESTED-GENERIC: Poll[Outcome[I64, MyError]] lost inner type — FIXED: expected_enum_type_ propagation in call.cpp for single-type-param outer enums
 
 ## Phase 3: Link/Infrastructure (~52 functions) — COMPLETE
