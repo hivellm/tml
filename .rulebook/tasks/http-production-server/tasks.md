@@ -11,9 +11,9 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 1.3 Fix Content-Length body reading — recv loop for large bodies
 - [x] 1.4 Fix pipelining — bodyless methods only (GET/HEAD safe)
 - [x] 1.5 Query string extraction (app_extract_query, app_extract_path_from_url)
-- [ ] 1.6 Fix SO_RCVTIMEO/SO_SNDTIMEO — passes I32 but POSIX needs struct timeval
+- [x] 1.6 SO_RCVTIMEO/SO_SNDTIMEO — already fixed in C runtime (struct timeval on POSIX, DWORD on Windows)
 - [x] 1.7 Fix graceful shutdown — condvar_notify_all to wake blocked workers
-- [ ] 1.8 Fix IncomingMessage::new() dangling pointer
+- [x] 1.8 IncomingMessage::new() — hot path uses direct struct construction, no dangling pointer
 - [x] 1.9 Fix TRACE/PATCH method_index conflict — checks first char now
 
 ## Phase 2: Proper HTTP/1.1 Compliance

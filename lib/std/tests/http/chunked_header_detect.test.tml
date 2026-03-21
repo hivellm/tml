@@ -1,0 +1,48 @@
+// Tests for app_has_chunked_encoding — detecting Transfer-Encoding: chunked
+// in the parsed headers buffer from app_parse_headers.
+use test::{assert, assert_eq}
+use core::str
+use core::intrinsics::{mem_alloc, mem_free}
+use std::http::parse::{app_parse_headers, app_has_chunked_encoding, MAX_HEADERS, HEADER_ENTRY_SIZE}
+
+@test
+func test_detect_chunked_encoding() -> I32 {
+    // Simulate a raw HTTP request with Transfer-Encoding: chunked
+    let raw: Str = "POST /data HTTP/1.1\r\nTransfer-Encoding: chunked\r\nHost: example.com\r\n\r\n"
+    let raw_len: I64 = str::len(raw)
+    let hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+    let hdrs_buf: I64 = lowlevel { mem_alloc(hdrs_buf_size) } as I64
+    let count: I64 = app_parse_headers(raw as I64, raw_len, hdrs_buf)
+    let is_chunked: Bool = app_has_chunked_encoding(hdrs_buf, count)
+    assert(is_chunked, "should detect chunked encoding")
+    lowlevel { mem_free(hdrs_buf as *Unit) }
+    return 0
+}
+
+@test
+func test_no_chunked_encoding() -> I32 {
+    // Request with Content-Length, not chunked
+    let raw: Str = "POST /data HTTP/1.1\r\nContent-Length: 5\r\nHost: example.com\r\n\r\nHello"
+    let raw_len: I64 = str::len(raw)
+    let hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+    let hdrs_buf: I64 = lowlevel { mem_alloc(hdrs_buf_size) } as I64
+    let count: I64 = app_parse_headers(raw as I64, raw_len, hdrs_buf)
+    let is_chunked: Bool = app_has_chunked_encoding(hdrs_buf, count)
+    assert(not is_chunked, "should NOT detect chunked encoding")
+    lowlevel { mem_free(hdrs_buf as *Unit) }
+    return 0
+}
+
+@test
+func test_chunked_case_insensitive() -> I32 {
+    // Mixed case header name
+    let raw: Str = "POST /data HTTP/1.1\r\ntransfer-encoding: Chunked\r\n\r\n"
+    let raw_len: I64 = str::len(raw)
+    let hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+    let hdrs_buf: I64 = lowlevel { mem_alloc(hdrs_buf_size) } as I64
+    let count: I64 = app_parse_headers(raw as I64, raw_len, hdrs_buf)
+    let is_chunked: Bool = app_has_chunked_encoding(hdrs_buf, count)
+    assert(is_chunked, "should detect chunked (case insensitive)")
+    lowlevel { mem_free(hdrs_buf as *Unit) }
+    return 0
+}

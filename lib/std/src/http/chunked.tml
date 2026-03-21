@@ -138,10 +138,15 @@ pub func encode_body_multi_chunk(body: Str, chunk_size: I64) -> Str {
 
 /// Result of decoding a chunked body.
 pub type ChunkedResult {
-    body: Str,
-    trailers: Headers,
-    complete: Bool,
+    complete: I64,       // 1=complete, 0=incomplete
     bytes_consumed: I64,
+    body: Str,
+}
+
+impl ChunkedResult {
+    pub func is_complete(this) -> I64 { this.complete }
+    pub func get_body(this) -> Str { this.body }
+    pub func get_bytes_consumed(this) -> I64 { this.bytes_consumed }
 }
 
 /// Decodes a chunked transfer-encoded body.
@@ -153,7 +158,6 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
     var pos: I64 = 0
 
     var buf: Buffer = Buffer::new(4096)
-    let trailers: Headers = Headers::new()
 
     loop (pos < data_len) {
         // Find end of chunk size line (\r\n)
@@ -167,10 +171,9 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
         if line_end >= data_len - 1 {
             // Incomplete chunk header
             return ChunkedResult {
-                body: buf.to_string(),
-                trailers: trailers,
-                complete: false,
+                complete: 0,
                 bytes_consumed: pos,
+                body: buf.to_string(),
             }
         }
 
@@ -191,24 +194,22 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
         if chunk_size < 0 {
             // Invalid chunk size
             return ChunkedResult {
-                body: buf.to_string(),
-                trailers: trailers,
-                complete: false,
+                complete: 0,
                 bytes_consumed: pos,
+                body: buf.to_string(),
             }
         }
 
         pos = line_end + 2  // skip \r\n after size line
 
         if chunk_size == 0 {
-            // Final chunk — parse trailers if any
+            // Final chunk — skip any trailer headers
             loop (pos < data_len - 1) {
-                // Check for empty line (end of trailers)
                 if str::char_at(data, pos) == 13 and str::char_at(data, pos + 1) == 10 {
                     pos = pos + 2
                     break
                 }
-                // Parse trailer header line
+                // Skip trailer line
                 var tline_end: I64 = pos
                 loop (tline_end < data_len - 1) {
                     if str::char_at(data, tline_end) == 13 and str::char_at(data, tline_end + 1) == 10 {
@@ -216,27 +217,13 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
                     }
                     tline_end = tline_end + 1
                 }
-                var colon: I64 = pos
-                loop (colon < tline_end and str::char_at(data, colon) != 58) {
-                    colon = colon + 1
-                }
-                if colon < tline_end {
-                    let key: Str = str::substring(data, pos, colon)
-                    var val_start: I64 = colon + 1
-                    loop (val_start < tline_end and str::char_at(data, val_start) == 32) {
-                        val_start = val_start + 1
-                    }
-                    let val: Str = str::substring(data, val_start, tline_end)
-                    trailers.set(key, val)
-                }
                 pos = tline_end + 2
             }
 
             return ChunkedResult {
-                body: buf.to_string(),
-                trailers: trailers,
-                complete: true,
+                complete: 1,
                 bytes_consumed: pos,
+                body: buf.to_string(),
             }
         }
 
@@ -244,10 +231,9 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
         if pos + chunk_size > data_len {
             // Not enough data yet
             return ChunkedResult {
-                body: buf.to_string(),
-                trailers: trailers,
-                complete: false,
+                complete: 0,
                 bytes_consumed: pos,
+                body: buf.to_string(),
             }
         }
 
@@ -263,9 +249,83 @@ pub func decode_chunked(data: Str) -> ChunkedResult {
 
     // Ran out of data without final chunk
     return ChunkedResult {
-        body: buf.to_string(),
-        trailers: trailers,
-        complete: false,
+        complete: 0,
         bytes_consumed: pos,
+        body: buf.to_string(),
     }
+}
+
+// ============================================================================
+// Socket-based Chunked Decoding
+// ============================================================================
+
+@extern("c") func tml_sys_recv(handle: I64, buf: *Unit, len: I64) -> I64
+
+/// Maximum size for a single chunked transfer body (8 MB).
+const MAX_CHUNKED_BODY: I64 = 8388608
+
+/// Reads a chunked transfer-encoded body from a socket.
+///
+/// `fd` is the socket file descriptor. `initial_data` is any leftover data
+/// after the \r\n\r\n header terminator that was already read from the socket.
+/// `body_limit` is the maximum allowed body size (0 means use MAX_CHUNKED_BODY).
+///
+/// Returns the decoded body as Str, or "" if decoding fails or body exceeds limit.
+///
+/// This function handles the case where chunk boundaries may span multiple
+/// recv() calls, accumulating raw data in a Buffer and periodically attempting
+/// to decode the accumulated chunked stream.
+pub func recv_chunked_body(fd: I64, initial_data: Str, body_limit: I64) -> Str {
+    let limit: I64 = if body_limit > 0 { body_limit } else { MAX_CHUNKED_BODY }
+
+    // Accumulate raw chunked data in a buffer
+    var raw_buf: Buffer = Buffer::new(4096)
+
+    // Write initial leftover data from the header read
+    let initial_len: I64 = str::len(initial_data)
+    if initial_len > 0 {
+        raw_buf.write_from_ptr(initial_data as I64, initial_len)
+    }
+
+    // Try decoding what we have so far — the entire body may already be buffered
+    let raw_str: Str = raw_buf.to_string()
+    let first_try: ChunkedResult = decode_chunked(raw_str)
+    if first_try.complete {
+        let body_len: I64 = str::len(first_try.body)
+        if body_len > limit { return "" }
+        return first_try.body
+    }
+
+    // Need to read more data from the socket
+    let recv_size: I64 = 8192
+    let recv_buf: I64 = lowlevel { mem_alloc(recv_size) } as I64
+
+    loop (true) {
+        let n: I64 = tml_sys_recv(fd, recv_buf as *Unit, recv_size)
+        if n <= 0 { break }
+
+        raw_buf.write_from_ptr(recv_buf, n)
+
+        // Check total accumulated size against limit
+        let total_raw: I64 = raw_buf.len()
+        if total_raw > limit * 2 {
+            // Raw data exceeds reasonable bounds — bail out
+            lowlevel { mem_free(recv_buf as *Unit) }
+            return ""
+        }
+
+        // Try to decode the accumulated chunked stream
+        let attempt_str: Str = raw_buf.to_string()
+        let result: ChunkedResult = decode_chunked(attempt_str)
+        if result.complete {
+            lowlevel { mem_free(recv_buf as *Unit) }
+            let body_len: I64 = str::len(result.body)
+            if body_len > limit { return "" }
+            return result.body
+        }
+    }
+
+    // Connection closed before receiving final chunk
+    lowlevel { mem_free(recv_buf as *Unit) }
+    return ""
 }

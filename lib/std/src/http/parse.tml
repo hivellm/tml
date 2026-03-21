@@ -480,6 +480,14 @@ pub func app_get_content_length(headers_buf: I64, header_count: I64) -> I64 {
     return result
 }
 
+/// Check if Transfer-Encoding header contains "chunked" (case-insensitive).
+/// Uses the headers_buf parsed by app_parse_headers.
+pub func app_has_chunked_encoding(headers_buf: I64, header_count: I64) -> Bool {
+    let te_str: Str = app_get_header(headers_buf, header_count, "transfer-encoding")
+    if str::len(te_str) == 0 { return false }
+    return str::contains(str::to_lowercase(te_str), "chunked")
+}
+
 /// Extract query string from a URL. Returns everything after '?' or "" if no query.
 /// Does NOT modify the input — returns a new allocated string.
 pub func app_extract_query(url: Str) -> Str {

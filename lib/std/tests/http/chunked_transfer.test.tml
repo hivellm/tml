@@ -1,0 +1,76 @@
+// Tests for chunked transfer-encoding decoding (RFC 7230 §4.1)
+use test::{assert, assert_eq}
+use core::str
+use std::http::chunked::{decode_chunked, encode_chunk, encode_final_chunk, encode_body_multi_chunk}
+
+@test
+func test_decode_single_chunk() -> I32 {
+    let data: Str = "5\r\nHello\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "Hello", "single chunk body")
+    return 0
+}
+
+@test
+func test_decode_multiple_chunks() -> I32 {
+    let data: Str = "5\r\nHello\r\n1\r\n \r\n5\r\nWorld\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "Hello World", "multi-chunk body")
+    return 0
+}
+
+@test
+func test_decode_empty_body() -> I32 {
+    let data: Str = "0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "", "empty body")
+    return 0
+}
+
+@test
+func test_decode_hex_sizes() -> I32 {
+    let data: Str = "a\r\n0123456789\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "0123456789", "hex a = 10 bytes")
+    return 0
+}
+
+@test
+func test_decode_uppercase_hex() -> I32 {
+    let data: Str = "A\r\n0123456789\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "0123456789", "hex A = 10 bytes")
+    return 0
+}
+
+@test
+func test_decode_incomplete() -> I32 {
+    let data: Str = "5\r\nHello\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 0, "should NOT be complete")
+    return 0
+}
+
+@test
+func test_decode_with_chunk_extension() -> I32 {
+    let data: Str = "5;ext=val\r\nHello\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert(result.is_complete() == 1, "should be complete")
+    assert_eq(result.get_body(), "Hello", "ignores chunk extension")
+    return 0
+}
+
+@test
+func test_roundtrip_encode_decode() -> I32 {
+    let original: Str = "Hello, World! This is a test body."
+    let encoded: Str = encode_body_multi_chunk(original, 10)
+    let decoded = decode_chunked(encoded)
+    assert(decoded.is_complete() == 1, "roundtrip should be complete")
+    assert_eq(decoded.get_body(), original, "roundtrip preserves body")
+    return 0
+}

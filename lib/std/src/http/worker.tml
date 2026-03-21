@@ -16,7 +16,9 @@ use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_is_bodyless_method, app_find_header_end_in_str,
                        app_count_requests, app_request_offset,
                        app_parse_headers, app_get_content_length,
+                       app_has_chunked_encoding,
                        MAX_HEADERS, HEADER_ENTRY_SIZE}
+use std::http::chunked::{recv_chunked_body, decode_chunked}
 use std::net::eventloop::{NetEventLoop, Interest, Event}
 
 // ── FFI ─────────────────────────────────────────────────────────
@@ -327,48 +329,62 @@ pub func app_worker(arg: *Unit) {
             let path: Str = app_zerocopy_path(buf, total)
             let method_len: I64 = str::len(method)
 
-            // ── 5. Read body based on Content-Length ────────────────
+            // ── 5. Read body (chunked or Content-Length) ─────────────
             var body: Str = ""
             if method_len != 3 and not app_is_bodyless_method(method) {
-                let content_length: I64 = app_get_content_length(hdrs_buf, hdr_count)
+                let is_chunked: Bool = app_has_chunked_encoding(hdrs_buf, hdr_count)
 
-                if content_length > 0 {
-                    // Check body limit
-                    if body_limit > 0 and content_length > body_limit {
+                if is_chunked {
+                    // Chunked transfer encoding — read chunks from socket
+                    let initial_data: Str = app_extract_body(buf, total)
+                    body = recv_chunked_body(fd, initial_data, body_limit)
+                    let decoded_len: I64 = str::len(body)
+                    if body_limit > 0 and decoded_len > body_limit {
                         tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
                         break
                     }
-
-                    // Find where body starts in current buffer
-                    let body_in_buf: Str = app_extract_body(buf, total)
-                    let body_have: I64 = str::len(body_in_buf)
-
-                    if body_have >= content_length {
-                        // All body already in buffer — common case for small POST
-                        body = body_in_buf
-                    } else {
-                        // Need to read more body data
-                        let body_buf: I64 = lowlevel { mem_alloc(content_length + 1) } as I64
-                        // Copy what we have
-                        if body_have > 0 {
-                            lowlevel { copy_nonoverlapping(body_in_buf as *Unit, body_buf as *Unit, body_have) }
-                        }
-                        var body_read: I64 = body_have
-                        // Read remaining body
-                        loop (body_read < content_length) {
-                            let remaining: I64 = content_length - body_read
-                            let nr: I64 = tml_sys_recv(fd, (body_buf + body_read) as *Unit, remaining)
-                            if nr <= 0 { break }
-                            body_read = body_read + nr
-                        }
-                        lowlevel { ptr_write[U8]((body_buf + body_read) as *U8, 0 as U8) }
-                        body = body_buf as Str
-                    }
-                } else if content_length == 0 {
-                    body = ""
                 } else {
-                    // No Content-Length — take whatever body is in the buffer
-                    body = app_extract_body(buf, total)
+                    // Content-Length based body reading
+                    let content_length: I64 = app_get_content_length(hdrs_buf, hdr_count)
+
+                    if content_length > 0 {
+                        // Check body limit
+                        if body_limit > 0 and content_length > body_limit {
+                            tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
+                            break
+                        }
+
+                        // Find where body starts in current buffer
+                        let body_in_buf: Str = app_extract_body(buf, total)
+                        let body_have: I64 = str::len(body_in_buf)
+
+                        if body_have >= content_length {
+                            // All body already in buffer — common case for small POST
+                            body = body_in_buf
+                        } else {
+                            // Need to read more body data
+                            let body_buf: I64 = lowlevel { mem_alloc(content_length + 1) } as I64
+                            // Copy what we have
+                            if body_have > 0 {
+                                lowlevel { copy_nonoverlapping(body_in_buf as *Unit, body_buf as *Unit, body_have) }
+                            }
+                            var body_read: I64 = body_have
+                            // Read remaining body
+                            loop (body_read < content_length) {
+                                let remaining: I64 = content_length - body_read
+                                let nr: I64 = tml_sys_recv(fd, (body_buf + body_read) as *Unit, remaining)
+                                if nr <= 0 { break }
+                                body_read = body_read + nr
+                            }
+                            lowlevel { ptr_write[U8]((body_buf + body_read) as *U8, 0 as U8) }
+                            body = body_buf as Str
+                        }
+                    } else if content_length == 0 {
+                        body = ""
+                    } else {
+                        // No Content-Length — take whatever body is in the buffer
+                        body = app_extract_body(buf, total)
+                    }
                 }
             }
 
@@ -646,7 +662,27 @@ pub func app_evloop_worker(arg: *Unit) {
 
                         var body: Str = ""
                         if not app_is_bodyless_method(method) {
-                            body = app_extract_body(buf, new_used)
+                            // Parse headers to check for chunked encoding
+                            let ev_hdrs_buf_size: I64 = MAX_HEADERS * HEADER_ENTRY_SIZE
+                            let ev_hdrs_buf: I64 = lowlevel { mem_alloc(ev_hdrs_buf_size) } as I64
+                            let ev_hdr_count: I64 = app_parse_headers(buf, new_used, ev_hdrs_buf)
+                            let ev_is_chunked: Bool = app_has_chunked_encoding(ev_hdrs_buf, ev_hdr_count)
+                            lowlevel { mem_free(ev_hdrs_buf as *Unit) }
+
+                            if ev_is_chunked {
+                                // Decode chunked body from what's already buffered
+                                let raw_body: Str = app_extract_body(buf, new_used)
+                                let chunked_result = decode_chunked(raw_body)
+                                if chunked_result.complete {
+                                    body = chunked_result.body
+                                } else {
+                                    // Incomplete chunked data — use raw for now
+                                    // (event loop will accumulate more on next read)
+                                    body = raw_body
+                                }
+                            } else {
+                                body = app_extract_body(buf, new_used)
+                            }
                         }
 
                         let body_len: I64 = str::len(body)
