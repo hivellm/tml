@@ -9,6 +9,7 @@ use std::http::status::Status
 use std::http::headers::Headers
 use std::http::version::HttpVersion
 use std::http::error::{HttpError, HttpErrorKind}
+use std::http::chunked::decode_chunked
 
 /// An HTTP response.
 pub type Response {
@@ -170,8 +171,21 @@ impl Response {
         }
 
         // Body is everything after headers.
-        // Escape @allocates: body is stored in Response struct.
-        let body_i64: I64 = str::substring(raw, pos, raw_len) as I64
+        let raw_body: Str = str::substring(raw, pos, raw_len)
+
+        // Decode chunked transfer-encoding if present
+        let te: Str = headers.get("transfer-encoding")
+        var body_i64: I64 = 0
+        if str::len(te) > 0 and str::contains(str::to_lowercase(te), "chunked") {
+            let decoded = decode_chunked(raw_body)
+            if decoded.is_complete() == 1 {
+                body_i64 = decoded.get_body() as I64
+            } else {
+                body_i64 = raw_body as I64
+            }
+        } else {
+            body_i64 = raw_body as I64
+        }
 
         return Ok(Response {
             status_code: status,
