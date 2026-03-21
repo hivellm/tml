@@ -1,0 +1,62 @@
+// Comprehensive bootstrap file for test stdlib pre-compilation.
+// Imports ALL library modules so the cached library state includes
+// declarations for every function in the standard library.
+// This file is NOT a real test — it's used by build_stdlib_object()
+// to populate the module registry with all available modules.
+
+// Core modules
+use core::str
+use core::fmt
+use core::ops
+use core::iter
+use core::cell
+use core::mem
+use core::ptr
+use core::num
+use core::char
+use core::clone
+use core::convert
+use core::cmp
+use core::hash
+use core::marker
+use core::pin
+use core::alloc
+use core::error
+use core::any
+use core::future
+use core::task
+use core::async_iter
+use core::reflect
+use core::slice
+use core::array
+use core::tuple
+use core::encoding
+use core::ringbuf
+
+// Std modules
+use std::collections
+use std::text
+use std::file
+use std::json
+use std::net
+use std::sync
+use std::thread
+use std::os
+use std::datetime
+use std::random
+use std::math
+use std::glob
+use std::http
+use std::stream
+use std::crypto
+use std::zlib
+use std::regex
+use std::search
+use std::sqlite
+
+// Test framework
+use test
+
+func main() -> I32 {
+    return 0
+}

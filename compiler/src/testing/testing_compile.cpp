@@ -412,24 +412,32 @@ static std::string build_stdlib_object(const CompileConfig& config) {
     qopts.generate_exe_main = false;
     qopts.incremental = false; // Don't pollute incremental cache
 
-    // Find a representative test file to bootstrap the TypeEnv with all library modules.
-    // Any test file that imports core modules will work — the library_ir_only mode
-    // processes ALL registered library modules regardless of what the test imports.
+    // Find bootstrap file for stdlib pre-compilation.
+    // Prefer comprehensive bootstrap that imports ALL library modules.
     std::string bootstrap_file;
-    // Use std test files first (they import more modules including std::http, std::json, etc.)
-    // Fallback to core tests if no std tests available.
-    for (const auto& dir : {"lib/std/tests/http", "lib/std/tests/json", "lib/std/tests/collections",
-                            "lib/core/tests/str", "lib/core/tests/option", "lib/core/tests/fmt"}) {
-        if (!fs::exists(dir))
-            continue;
-        for (const auto& entry : fs::directory_iterator(dir)) {
-            if (entry.path().extension() == ".tml") {
-                bootstrap_file = entry.path().string();
-                break;
-            }
-        }
-        if (!bootstrap_file.empty())
+    // 1. Check for comprehensive bootstrap file (imports all modules)
+    for (const auto& path :
+         {"compiler/runtime/test_bootstrap.tml", "../compiler/runtime/test_bootstrap.tml"}) {
+        if (fs::exists(path)) {
+            bootstrap_file = path;
             break;
+        }
+    }
+    // 2. Fallback to any test file
+    if (bootstrap_file.empty()) {
+        for (const auto& dir : {"lib/std/tests/http", "lib/std/tests/json", "lib/core/tests/str",
+                                "lib/core/tests/option"}) {
+            if (!fs::exists(dir))
+                continue;
+            for (const auto& entry : fs::directory_iterator(dir)) {
+                if (entry.path().extension() == ".tml") {
+                    bootstrap_file = entry.path().string();
+                    break;
+                }
+            }
+            if (!bootstrap_file.empty())
+                break;
+        }
     }
 
     if (bootstrap_file.empty()) {
