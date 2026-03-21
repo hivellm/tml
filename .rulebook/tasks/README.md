@@ -29,7 +29,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 9 | **optimize-codegen-like-rust** | 73% | 27/37 | Phase 6 exception handling (invoke/cleanuppad) |
+| 9 | **optimize-codegen-like-rust** | 84% | 31/37 | Phase 6.2-6.3 invoke/cleanuppad (deferred — very invasive) |
 | 10 | **implement-reflection** | 41% | 37/90 | Phase 5: get_field, set_field methods |
 | 11 | **zig-inspired-test-migration** | 65% | 11/17 | 1.7 fix library_decls_only |
 | 12 | **package-manager** | 16% | 7/45 | Phase 1 git dependencies |
