@@ -34,7 +34,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 3.1 Fix Bool/i1 struct field codegen bug — IncomingMessage + ServerResponse Bool→I64
 - [x] 3.2 Re-enable onRequest, preHandler, onResponse hooks — wired into app_dispatch
 - [x] 3.3 Re-enable middleware pipeline — hooks called at correct lifecycle points
-- [ ] 3.4 Custom error handler support — app_run_error_hooks exists but not wired
+- [x] 3.4 Custom error handler + onError hooks — wired into 404 path in app_dispatch
 
 ## Phase 4: Event Loop Mode
 
@@ -58,10 +58,10 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [ ] 4b.11 Fix IOCP pipeline stall with >100 connections (accept pool exhaustion)
 - [ ] 4b.12 Fix IOCP scaling >500 connections (slot allocation race)
 
-## Phase 5: HTTP Client
+## Phase 5: HTTP Client — ALREADY IMPLEMENTED
 
-- [ ] 5.1 HTTP client request building
-- [ ] 5.2 HTTP client response parsing
+- [x] 5.1 HTTP client request building — HttpClient with get/post/put/delete/head
+- [x] 5.2 HTTP client response parsing — Response::parse, read_all with Buffer
 - [ ] 5.3 Connection pooling
 - [ ] 5.4 Chunked transfer-encoding for client responses
 - [ ] 5.5 Redirect following
@@ -71,7 +71,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 
 - [ ] 6.1 SO_REUSEPORT for zero-downtime restarts
 - [ ] 6.2 Multi-value header support (Set-Cookie, Vary)
-- [ ] 6.3 Connection: upgrade / WebSocket frame parser
+- [x] 6.3 WebSocket frame parser — 821 lines in websocket.tml (already implemented)
 - [ ] 6.4 X-Request-Id generation
 - [ ] 6.5 Access logging (method, path, status, latency)
 

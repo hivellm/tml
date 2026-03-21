@@ -18,7 +18,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 4 | **http-production-server** | 70% | 39/55 | 3.4 error handler, Phase 4/5/6 remaining |
+| 4 | **http-production-server** | 78% | 43/55 | Phase 4 event loop, Phase 5.3-5.6, Phase 6-10 |
 | 5 | **http-production-framework** | 75% | 35/46 | 1.2 Hook.add/validate, 1.5 content-type parser |
 | 6 | **complete-async-coverage** | 60% | 15/25 | Commit from_iter.test.tml, write missing tests |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
