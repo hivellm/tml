@@ -248,6 +248,36 @@ void TypeEnv::init_builtin_mem() {
                 false,
                 builtin_span});
 
+    // ============ Copy / Fill Operations ============
+
+    // copy_nonoverlapping(src: *Unit, dst: *Unit, size: I64) -> Unit
+    functions_["copy_nonoverlapping"].push_back(
+        FuncSig{"copy_nonoverlapping",
+                {make_ptr(make_unit()), make_ptr(make_unit()), make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // copy(src: *Unit, dst: *Unit, size: I64) -> Unit (overlapping OK)
+    functions_["copy"].push_back(
+        FuncSig{"copy",
+                {make_ptr(make_unit()), make_ptr(make_unit()), make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // write_bytes(ptr: *Unit, value: I32, size: I64) -> Unit
+    functions_["write_bytes"].push_back(
+        FuncSig{"write_bytes",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32),
+                 make_primitive(PrimitiveKind::I64)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
     // ============ Size/Alignment ============
 
     // size_of[T]() -> I64 - Get size of type (generic, resolved at compile time)
