@@ -144,7 +144,7 @@ MSVCInfo find_msvc() {
 
 std::string find_clang() {
 #ifdef _WIN32
-    // 1. Check for zig cc wrapper (fastest builds, Clang 20)
+    // 1. Check for zig cc wrapper scripts (fastest builds, Clang 20)
     std::vector<std::string> zig_cc_paths = {
         "scripts/zig-cc.bat",
         "../scripts/zig-cc.bat",
@@ -153,6 +153,14 @@ std::string find_clang() {
     for (const auto& p : zig_cc_paths) {
         if (fs::exists(p)) {
             return to_forward_slashes(fs::absolute(p).string());
+        }
+    }
+
+    // 1b. Auto-detect zig in PATH — use "zig cc" directly
+    {
+        int ret = std::system("zig version >nul 2>nul");
+        if (ret == 0) {
+            return "zig cc";
         }
     }
 
