@@ -12,7 +12,7 @@
 |---|------|--------|----------|-----------|
 | 1 | ~~fix-struct-codegen-blockers~~ | **ARCHIVED** | 18/18 | Archived 2026-03-20 |
 | 2 | **codegen-structural-fixes** | 95% | 39/40 | 6.1 run full coverage to confirm final numbers |
-| 3 | **fix-codegen-coverage-blockers** | 80% | 36/44 | Phase 1 remaining (Pool, Poll, Sum), Phase 2 volatile/unaligned |
+| 3 | **fix-codegen-coverage-blockers** | 95% | 42/44 | Only Range standalone method dispatch + full coverage run |
 
 ## Tier 2: Medium Priority (product features)
 
