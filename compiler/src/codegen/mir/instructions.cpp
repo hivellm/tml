@@ -112,7 +112,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 if (is_array_alloc) {
                     emitln("    " + result_reg + " = alloca " + type_str + ", align 16");
                 } else {
-                    emitln("    " + result_reg + " = alloca " + type_str);
+                    emitln("    " + result_reg + " = alloca " + type_str + ", align 8");
                 }
                 // If zero_init is set, emit a zeroinitializer store immediately after the
                 // alloca. This avoids a separate large aggregate SSA store instruction
@@ -177,7 +177,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 if (needs_spill) {
                     std::string spill_reg = "%arr_spill" + std::to_string(temp_counter_++);
-                    emitln("    " + spill_reg + " = alloca " + spill_type);
+                    emitln("    " + spill_reg + " = alloca " + spill_type + ", align 8");
                     emitln("    store " + spill_type + " " + base + ", ptr " + spill_reg);
                     // Track the spill so later reads of this value ID (e.g., in
                     // TupleInit) reload from the alloca and pick up any mutations.
@@ -397,7 +397,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 // Spill the Poll value to memory, GEP to field 1, load inner value
                 std::string spill = "%await_spill" + std::to_string(temp_counter_++);
-                emitln("    " + spill + " = alloca " + poll_type);
+                emitln("    " + spill + " = alloca " + poll_type + ", align 8");
                 emitln("    store " + poll_type + " " + poll_val + ", ptr " + spill);
                 std::string field_ptr = "%await_fld" + std::to_string(temp_counter_++);
                 emitln("    " + field_ptr + " = getelementptr inbounds " + poll_type + ", ptr " +
@@ -530,11 +530,11 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
 
         // Spill both tuple values to allocas so we can GEP into elements
         std::string left_alloca = new_temp();
-        emitln("    " + left_alloca + " = alloca " + type_str);
+        emitln("    " + left_alloca + " = alloca " + type_str + ", align 8");
         emitln("    store " + type_str + " " + left + ", ptr " + left_alloca);
 
         std::string right_alloca = new_temp();
-        emitln("    " + right_alloca + " = alloca " + type_str);
+        emitln("    " + right_alloca + " = alloca " + type_str + ", align 8");
         emitln("    store " + type_str + " " + right + ", ptr " + right_alloca);
 
         // Compare each element, ANDing results together
@@ -839,7 +839,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                 if (method_name == "hash" && !result_reg.empty()) {
                     std::string id = std::to_string(temp_counter_++);
                     std::string arr_ptr = "%arr_spill." + id;
-                    emitln("    " + arr_ptr + " = alloca " + recv_vt);
+                    emitln("    " + arr_ptr + " = alloca " + recv_vt + ", align 8");
                     emitln("    store " + recv_vt + " " + receiver + ", ptr " + arr_ptr);
                     // FNV-1a hash
                     std::string hash_reg = "%hash_init." + id;
@@ -881,9 +881,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                     std::string other = get_value_reg(i.args[1]);
                     std::string a_ptr = "%eq_a." + id;
                     std::string b_ptr = "%eq_b." + id;
-                    emitln("    " + a_ptr + " = alloca " + recv_vt);
+                    emitln("    " + a_ptr + " = alloca " + recv_vt + ", align 8");
                     emitln("    store " + recv_vt + " " + receiver + ", ptr " + a_ptr);
-                    emitln("    " + b_ptr + " = alloca " + recv_vt);
+                    emitln("    " + b_ptr + " = alloca " + recv_vt + ", align 8");
                     emitln("    %eq_bval." + id + " = load " + recv_vt + ", ptr " + other);
                     emitln("    store " + recv_vt + " %eq_bval." + id + ", ptr " + b_ptr);
                     std::string acc = "%eq_init." + id;

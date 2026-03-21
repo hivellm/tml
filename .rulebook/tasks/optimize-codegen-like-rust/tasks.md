@@ -45,10 +45,10 @@
 
 ## Phase 6: Exception Handling Foundation
 
-- [ ] 6.1 Research Windows SEH vs DWARF unwinding requirements for TML
-- [ ] 6.2 Add `invoke` + `cleanuppad` for calls in functions with destructors (Drop behavior)
-- [ ] 6.3 Implement cleanup landing pads that call `drop()` for stack-allocated values
-- [ ] 6.4 Add `personality` function declaration (`__CxxFrameHandler3` on Windows, `__gxx_personality_v0` on Linux)
+- [x] 6.1 Research: Windows uses SEH (__CxxFrameHandler3), Linux uses DWARF (__gxx_personality_v0)
+- [ ] 6.2 Add `invoke` + `cleanuppad` for calls in functions with destructors — deferred (requires refactoring all call emission sites, very invasive)
+- [ ] 6.3 Implement cleanup landing pads — deferred (depends on 6.2)
+- [x] 6.4 Add `personality` function declaration — emitted on every function definition
 - [ ] 6.5 Compare panic propagation IR with Rust's unwind tables
 
 ## Phase 7: Naming and Metadata
