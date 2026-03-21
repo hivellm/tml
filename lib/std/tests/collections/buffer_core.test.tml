@@ -1,0 +1,63 @@
+// Tests for Buffer core operations
+use test::{assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_new_len() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+    assert_eq(buf.len(), 0 as I64, "new buffer should have len 0")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_byte_len() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_byte(65 as I32)
+    buf.write_byte(66 as I32)
+    buf.write_byte(67 as I32)
+    assert_eq(buf.len(), 3 as I64, "len after 3 writes")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_clear() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_byte(1 as I32)
+    buf.write_byte(2 as I32)
+    buf.write_byte(3 as I32)
+    assert_eq(buf.len(), 3 as I64, "len before clear")
+    buf.clear()
+    assert_eq(buf.len(), 0 as I64, "len after clear")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_reset_read() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_byte(10 as I32)
+    buf.write_byte(20 as I32)
+    let first: I32 = buf.read_byte()
+    assert_eq(first, 10 as I32, "first read")
+    buf.reset_read()
+    let again: I32 = buf.read_byte()
+    assert_eq(again, 10 as I32, "after reset reads from start")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_str() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+    buf.write_str("Hello")
+    assert_eq(buf.len(), 5 as I64, "len after write_str")
+    buf.reset_read()
+    let a: I32 = buf.read_byte()
+    let b: I32 = buf.read_byte()
+    assert_eq(a, 72 as I32, "H = 72")
+    assert_eq(b, 101 as I32, "e = 101")
+    buf.destroy()
+    return 0
+}
