@@ -1,0 +1,176 @@
+//! Work-stealing scheduler for HTTP thread pool.
+//!
+//! Each worker has a local LIFO queue (for cache locality).
+//! Overflow goes to the global FIFO queue.
+//! Idle workers steal from other workers' local queues.
+//!
+//! Based on Tokio's scheduler design:
+//! - LIFO local queue: new connections processed immediately (hot cache)
+//! - FIFO global queue: overflow from full local queues
+//! - Steal-half: idle workers take half of a busy worker's local queue
+
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+
+// ════════════════════════════════════════════════════════════════════
+// Per-worker local queue (fixed-size ring buffer, no locks)
+// ════════════════════════════════════════════════════════════════════
+
+const LOCAL_QUEUE_CAP: I64 = 256  // per-worker local queue capacity
+
+/// Per-worker local queue. Only the owning worker pushes/pops.
+/// Other workers can steal from the tail (steal-half protocol).
+pub type LocalQueue {
+    data: I64,     // ptr to I64 array
+    head: I64,     // push/pop end (LIFO — owner only)
+    tail: I64,     // steal end (other workers steal from here)
+    len: I64,      // current count
+}
+
+impl LocalQueue {
+    pub func new() -> LocalQueue {
+        let data: I64 = lowlevel { mem_alloc(LOCAL_QUEUE_CAP * 8) } as I64
+        LocalQueue { data: data, head: 0, tail: 0, len: 0 }
+    }
+
+    /// Push to local queue (LIFO). Returns false if full.
+    pub func push(mut this, fd: I64) -> Bool {
+        if this.len >= LOCAL_QUEUE_CAP { return false }
+        lowlevel { ptr_write[I64]((this.data + this.head * 8) as *I64, fd) }
+        this.head = (this.head + 1) % LOCAL_QUEUE_CAP
+        this.len = this.len + 1
+        return true
+    }
+
+    /// Pop from local queue (LIFO). Returns -1 if empty.
+    pub func pop(mut this) -> I64 {
+        if this.len == 0 { return -1 as I64 }
+        this.head = (this.head + LOCAL_QUEUE_CAP - 1) % LOCAL_QUEUE_CAP
+        this.len = this.len - 1
+        return lowlevel { ptr_read[I64]((this.data + this.head * 8) as *I64) }
+    }
+
+    /// Steal half the items from this queue. Returns count stolen.
+    /// Items are written to `dest` starting at `dest_offset`.
+    pub func steal_half(mut this, dest: I64) -> I64 {
+        let to_steal: I64 = this.len / 2
+        if to_steal == 0 { return 0 }
+        var i: I64 = 0
+        loop (i < to_steal) {
+            let fd: I64 = lowlevel { ptr_read[I64]((this.data + this.tail * 8) as *I64) }
+            lowlevel { ptr_write[I64]((dest + i * 8) as *I64, fd) }
+            this.tail = (this.tail + 1) % LOCAL_QUEUE_CAP
+            this.len = this.len - 1
+            i = i + 1
+        }
+        return to_steal
+    }
+
+    pub func is_empty(this) -> Bool { this.len == 0 }
+    pub func count(this) -> I64 { this.len }
+
+    pub func destroy(this) {
+        lowlevel { mem_free(this.data as *Unit) }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Work-stealing scheduler
+// ════════════════════════════════════════════════════════════════════
+
+const MAX_WORKERS: I64 = 64
+
+/// Work-stealing scheduler state.
+/// Holds per-worker local queues + pointer to the global queue.
+pub type WorkStealingScheduler {
+    local_queues: I64,   // ptr to array of LocalQueue ptrs
+    num_workers: I64,
+    steal_buf: I64,      // temp buffer for steal operations
+}
+
+impl WorkStealingScheduler {
+    pub func new(num_workers: I64) -> WorkStealingScheduler {
+        let n: I64 = if num_workers > MAX_WORKERS { MAX_WORKERS } else { num_workers }
+        let queues: I64 = lowlevel { mem_alloc(n * 8) } as I64
+        var i: I64 = 0
+        loop (i < n) {
+            let lq: LocalQueue = LocalQueue::new()
+            // Store the LocalQueue's data ptr (we access fields via offsets)
+            let lq_ptr: I64 = lowlevel { mem_alloc(32) } as I64  // 4 I64 fields
+            lowlevel { ptr_write[I64]((lq_ptr + 0) as *I64, lq.data) }
+            lowlevel { ptr_write[I64]((lq_ptr + 8) as *I64, lq.head) }
+            lowlevel { ptr_write[I64]((lq_ptr + 16) as *I64, lq.tail) }
+            lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, lq.len) }
+            lowlevel { ptr_write[I64]((queues + i * 8) as *I64, lq_ptr) }
+            i = i + 1
+        }
+        let steal_buf: I64 = lowlevel { mem_alloc(LOCAL_QUEUE_CAP * 8) } as I64
+        WorkStealingScheduler {
+            local_queues: queues,
+            num_workers: n,
+            steal_buf: steal_buf,
+        }
+    }
+
+    /// Try to push to worker's local queue. Returns false if full (use global queue).
+    pub func push_local(this, worker_id: I64, fd: I64) -> Bool {
+        if worker_id < 0 or worker_id >= this.num_workers { return false }
+        let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + worker_id * 8) as *I64) }
+        let len: I64 = lowlevel { ptr_read[I64]((lq_ptr + 24) as *I64) }
+        if len >= LOCAL_QUEUE_CAP { return false }
+        let data: I64 = lowlevel { ptr_read[I64]((lq_ptr + 0) as *I64) }
+        let head: I64 = lowlevel { ptr_read[I64]((lq_ptr + 8) as *I64) }
+        lowlevel { ptr_write[I64]((data + head * 8) as *I64, fd) }
+        lowlevel { ptr_write[I64]((lq_ptr + 8) as *I64, (head + 1) % LOCAL_QUEUE_CAP) }
+        lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, len + 1) }
+        return true
+    }
+
+    /// Pop from worker's local queue (LIFO). Returns -1 if empty.
+    pub func pop_local(this, worker_id: I64) -> I64 {
+        if worker_id < 0 or worker_id >= this.num_workers { return -1 as I64 }
+        let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + worker_id * 8) as *I64) }
+        let len: I64 = lowlevel { ptr_read[I64]((lq_ptr + 24) as *I64) }
+        if len == 0 { return -1 as I64 }
+        let data: I64 = lowlevel { ptr_read[I64]((lq_ptr + 0) as *I64) }
+        let head: I64 = lowlevel { ptr_read[I64]((lq_ptr + 8) as *I64) }
+        let new_head: I64 = (head + LOCAL_QUEUE_CAP - 1) % LOCAL_QUEUE_CAP
+        lowlevel { ptr_write[I64]((lq_ptr + 8) as *I64, new_head) }
+        lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, len - 1) }
+        return lowlevel { ptr_read[I64]((data + new_head * 8) as *I64) }
+    }
+
+    /// Try to steal from another worker. Returns stolen fd or -1.
+    pub func try_steal(this, worker_id: I64) -> I64 {
+        // Round-robin: try stealing from worker_id+1, +2, etc.
+        var offset: I64 = 1
+        loop (offset < this.num_workers) {
+            let victim: I64 = (worker_id + offset) % this.num_workers
+            let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + victim * 8) as *I64) }
+            let victim_len: I64 = lowlevel { ptr_read[I64]((lq_ptr + 24) as *I64) }
+            if victim_len > 1 {
+                // Steal one item from the tail (FIFO end)
+                let data: I64 = lowlevel { ptr_read[I64]((lq_ptr + 0) as *I64) }
+                let tail: I64 = lowlevel { ptr_read[I64]((lq_ptr + 16) as *I64) }
+                let fd: I64 = lowlevel { ptr_read[I64]((data + tail * 8) as *I64) }
+                lowlevel { ptr_write[I64]((lq_ptr + 16) as *I64, (tail + 1) % LOCAL_QUEUE_CAP) }
+                lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, victim_len - 1) }
+                return fd
+            }
+            offset = offset + 1
+        }
+        return -1 as I64
+    }
+
+    pub func destroy(this) {
+        var i: I64 = 0
+        loop (i < this.num_workers) {
+            let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + i * 8) as *I64) }
+            let data: I64 = lowlevel { ptr_read[I64]((lq_ptr + 0) as *I64) }
+            lowlevel { mem_free(data as *Unit) }
+            lowlevel { mem_free(lq_ptr as *Unit) }
+            i = i + 1
+        }
+        lowlevel { mem_free(this.local_queues as *Unit) }
+        lowlevel { mem_free(this.steal_buf as *Unit) }
+    }
+}

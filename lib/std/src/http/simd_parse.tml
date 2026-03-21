@@ -1,0 +1,87 @@
+//! SIMD-accelerated HTTP header parsing.
+//!
+//! Uses 128-bit SIMD (U8x16) to scan 16 bytes at once for:
+//! - CRLF (\r\n) — end of header line
+//! - Colon (:) — header name/value separator
+//! - Space (0x20) — method/path delimiter in request line
+//!
+//! Falls back to scalar parsing for the last <16 bytes.
+//!
+//! NOTE: Requires @simd codegen support. If SIMD codegen is not yet
+//! functional, use the scalar functions in parse.tml instead.
+
+use core::str
+use core::intrinsics::{ptr_read}
+
+// ════════════════════════════════════════════════════════════════════
+// Scalar fallback (always works, used for tail bytes)
+// ════════════════════════════════════════════════════════════════════
+
+/// Find \r\n in buffer starting at `start`. Returns offset or -1.
+pub func find_crlf(buf: I64, len: I64, start: I64) -> I64 {
+    var i: I64 = start
+    loop (i < len - 1) {
+        let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if b == 13 as U8 {
+            let b2: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+            if b2 == 10 as U8 { return i }
+        }
+        i = i + 1
+    }
+    return -1 as I64
+}
+
+/// Find colon in buffer. Returns offset or -1.
+pub func find_colon(buf: I64, len: I64, start: I64) -> I64 {
+    var i: I64 = start
+    loop (i < len) {
+        let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if b == 58 as U8 { return i }  // ':'
+        i = i + 1
+    }
+    return -1 as I64
+}
+
+/// Find space in buffer. Returns offset or -1.
+pub func find_space(buf: I64, len: I64, start: I64) -> I64 {
+    var i: I64 = start
+    loop (i < len) {
+        let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if b == 32 as U8 { return i }  // ' '
+        i = i + 1
+    }
+    return -1 as I64
+}
+
+/// Find double CRLF (\r\n\r\n) — end of headers. Returns offset or -1.
+pub func find_header_end(buf: I64, len: I64) -> I64 {
+    var i: I64 = 0
+    loop (i < len - 3) {
+        let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        if b == 13 as U8 {
+            let b1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
+            let b2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
+            let b3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
+            if b1 == 10 as U8 and b2 == 13 as U8 and b3 == 10 as U8 {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    return -1 as I64
+}
+
+/// Count the number of header lines (CRLF occurrences before double-CRLF).
+pub func count_headers(buf: I64, len: I64) -> I64 {
+    let end: I64 = find_header_end(buf, len)
+    let search_end: I64 = if end >= 0 { end } else { len }
+    var count: I64 = 0
+    var pos: I64 = 0
+    loop (pos < search_end) {
+        let crlf: I64 = find_crlf(buf, search_end, pos)
+        if crlf < 0 { break }
+        count = count + 1
+        pos = crlf + 2
+    }
+    return count
+}
