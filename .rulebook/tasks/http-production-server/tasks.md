@@ -21,12 +21,12 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 2.1 Proper request body accumulation — recv loop until Content-Length bytes received
 - [x] 2.2 Chunked transfer-encoding decoding — decode_chunked + recv_chunked_body + worker integration
 - [x] 2.3 `Expect: 100-continue` — sends 100 Continue before body reading
-- [ ] 2.4 `Date:` header in all responses (RFC 7231 §7.1.1.2) — needs datetime formatting
+- [x] 2.4 `Date:` header — app_build_response includes Date, 404/501 now use it in app_dispatch
 - [x] 2.5 400 Bad Request for malformed requests / oversized headers
 - [x] 2.6 405 Method Not Allowed with `Allow:` header — probes all 7 method trees
 - [x] 2.7 501 Not Implemented for unknown methods
 - [x] 2.8 URL percent-decoding — already implemented in body_parser.tml + parse.tml, 14 tests added
-- [ ] 2.9 Idle timeout enforcement between keep-alive requests
+- [x] 2.9 Idle timeout enforcement — SO_RCVTIMEO set on accepted connections from shared state
 - [x] 2.10 Connection: close handling per HTTP/1.1 spec
 
 ## Phase 3: Enable Middleware & Hooks
