@@ -64,8 +64,8 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 5.2 HTTP client response parsing — Response::parse, read_all with Buffer
 - [ ] 5.3 Connection pooling
 - [ ] 5.4 Chunked transfer-encoding for client responses
-- [ ] 5.5 Redirect following
-- [ ] 5.6 Timeout support
+- [x] 5.5 Redirect following — recursive follow_redirects, 301/302/303/307/308, max_redirects config
+- [x] 5.6 Timeout support — timeout_ms field, builder API
 
 ## Phase 6: Production Hardening
 
