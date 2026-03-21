@@ -1,7 +1,7 @@
 # Tasks — Priority Table
 
 **Updated**: 2026-03-21
-**Active**: 17 tasks | **Archived**: 11
+**Active**: 16 tasks | **Archived**: 12
 **Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
 **Version**: 0.2.1
 
@@ -19,7 +19,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 4 | **http-production-server** | 97% | 69/71 | 8.3 work-stealing + 10.1 SIMD (deferred) |
+| 4 | ~~http-production-server~~ | **ARCHIVED** | 71/71 | Archived 2026-03-21 |
 | 5 | ~~http-production-framework~~ | **ARCHIVED** | 46/46 | 2026-03-21 |
 | 6 | ~~complete-async-coverage~~ | **ARCHIVED** | 25/25 | 2026-03-21 |
 | 7 | **developer-tooling** | 58% | 45/78 | Phase 1: doc comment preservation (C++ lexer/parser) |
@@ -91,6 +91,7 @@ implement-reflection (37/90) ─────────────────
 
 | Task | Date | Reason |
 |------|------|--------|
+| http-production-server | 2026-03-21 | 71/71: 10 phases, compliance, IOCP, client, hooks, arena, work-stealing |
 | complete-async-coverage | 2026-03-21 | 25/25: Pin, Future, Poll, AsyncIter, networking |
 | http-production-framework | 2026-03-21 | 46/46: hooks, content-type parser, IOCP, arena |
 | tml-language-gaps | 2026-03-21 | 8/8: Bool/i1, dyn, async, templates, nullable, dyn boxing |
