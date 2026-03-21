@@ -1,3 +1,5 @@
+# ARCHIVED — See .rulebook/tasks/archive/2026-03-21-fix-codegen-coverage-blockers/
+
 # Tasks
 
 ## Phase 1: Generic Trait Dispatch → () — MOSTLY COMPLETE
