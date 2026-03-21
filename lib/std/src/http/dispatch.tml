@@ -3,9 +3,9 @@
 //! Implements the route dispatch pipeline:
 //!   route match → handler(req) -> Str → return HTTP response string
 //!
-//! Hooks and middleware are defined but not called from app_dispatch due to a
-//! codegen bug: ServerResponse (12 fields with Bool/i1) causes LLVM IR errors
-//! when passed through fn ptrs. They will be re-enabled when the bug is fixed.
+//! Hooks are wired into app_dispatch: onRequest (before routing), preHandler
+//! (after routing, before handler), onResponse (after handler, for logging).
+//! ServerResponse Bool fields changed to I64 to fix i1 layout bug.
 //!
 //! Includes inline radix-tree lookup (avoids cross-module List dependency).
 
@@ -517,6 +517,19 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
     let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
 
+    // ── Read hook tables from shared state ──
+    let on_request_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64) }
+    let on_request_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64) }
+    let pre_handler_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64) }
+    let pre_handler_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64) }
+    let on_send_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_TABLE) as *I64) }
+    let on_send_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_COUNT) as *I64) }
+    let on_response_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64) }
+    let on_response_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64) }
+    let on_error_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_TABLE) as *I64) }
+    let on_error_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_COUNT) as *I64) }
+    let error_handler: I64 = lowlevel { ptr_read[I64]((shared + OFF_ERROR_HANDLER) as *I64) }
+
     var fn_ptr: I64 = 0
     var param_count: I64 = 0
 
@@ -547,6 +560,16 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
 
     // ── Construct IncomingMessage ─────────────────────────────────
     let req: IncomingMessage = app_make_request(method, path, body, fd, params_buf, param_count)
+
+    // ── onRequest hooks (before routing, can short-circuit) ──────
+    if on_request_count > 0 {
+        let res: ServerResponse = ServerResponse::for_request(fd, method)
+        let should_continue: Bool = app_run_hooks(on_request_table, on_request_count, req, res)
+        if not should_continue {
+            // Hook short-circuited — return the response it built
+            return res.serialize()
+        }
+    }
 
     // ── Route not found ──────────────────────────────────────────
     if fn_ptr == 0 {
@@ -623,9 +646,26 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
         return RESPONSE_404
     }
 
+    // ── preHandler hooks (after routing, before handler) ─────────
+    if pre_handler_count > 0 {
+        let res: ServerResponse = ServerResponse::for_request(fd, method)
+        let should_continue: Bool = app_run_hooks(pre_handler_table, pre_handler_count, req, res)
+        if not should_continue {
+            return res.serialize()
+        }
+    }
+
     // ── Route handler ────────────────────────────────────────────
     let handler: func(IncomingMessage) -> Str = fn_ptr as func(IncomingMessage) -> Str
-    return handler(req)
+    let response: Str = handler(req)
+
+    // ── onResponse hooks (after handler, for logging/metrics) ────
+    if on_response_count > 0 {
+        let res: ServerResponse = ServerResponse::for_request(fd, method)
+        app_run_hooks(on_response_table, on_response_count, req, res)
+    }
+
+    return response
 }
 
 // ════════════════════════════════════════════════════════════════════
