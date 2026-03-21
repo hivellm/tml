@@ -813,32 +813,68 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                         if (!param_inner || !param_inner->is<types::NamedType>())
                             continue;
                         const auto& param_named = param_inner->as<types::NamedType>();
-                        if (param_named.type_args.empty())
-                            continue;
 
-                        // Get arg type and unwrap RefType
-                        auto arg_type = infer_expr_type(*call.args[i]);
-                        if (!arg_type)
+                        // Case 1: ref NamedType[T] params (e.g., ManuallyDrop::take(mut ref md))
+                        if (!param_named.type_args.empty()) {
+                            // Get arg type and unwrap RefType
+                            auto arg_type = infer_expr_type(*call.args[i]);
+                            if (!arg_type)
+                                continue;
+                            types::TypePtr arg_inner = arg_type;
+                            if (arg_type->is<types::RefType>()) {
+                                arg_inner = arg_type->as<types::RefType>().inner;
+                            }
+                            if (!arg_inner || !arg_inner->is<types::NamedType>())
+                                continue;
+                            const auto& arg_named = arg_inner->as<types::NamedType>();
+
+                            if (arg_named.name == param_named.name &&
+                                !arg_named.type_args.empty() &&
+                                arg_named.type_args.size() == param_named.type_args.size()) {
+                                for (size_t j = 0;
+                                     j < generic_names.size() && j < arg_named.type_args.size();
+                                     ++j) {
+                                    type_subs[generic_names[j]] = arg_named.type_args[j];
+                                }
+                                if (!type_subs.empty()) {
+                                    mangled_type_name =
+                                        type_name + "__" + mangle_type(arg_named.type_args[0]);
+                                }
+                                break;
+                            }
                             continue;
-                        types::TypePtr arg_inner = arg_type;
-                        if (arg_type->is<types::RefType>()) {
-                            arg_inner = arg_type->as<types::RefType>().inner;
                         }
-                        if (!arg_inner || !arg_inner->is<types::NamedType>())
-                            continue;
-                        const auto& arg_named = arg_inner->as<types::NamedType>();
 
-                        if (arg_named.name == param_named.name && !arg_named.type_args.empty() &&
-                            arg_named.type_args.size() == param_named.type_args.size()) {
-                            for (size_t j = 0;
-                                 j < generic_names.size() && j < arg_named.type_args.size(); ++j) {
-                                type_subs[generic_names[j]] = arg_named.type_args[j];
+                        // Case 2: ref T or mut ref T where T is a bare generic param
+                        // (e.g., Pin::new(pointer: mut ref T) -> Pin[mut ref T])
+                        // Use func_sig->type_params for matching since the param names
+                        // may differ from struct-level generic_names (T vs P).
+                        if (param_type->is<types::RefType>() && func_sig) {
+                            std::string matched_param;
+                            for (const auto& tp : func_sig->type_params) {
+                                if (param_named.name == tp) {
+                                    matched_param = tp;
+                                    break;
+                                }
                             }
-                            if (!type_subs.empty()) {
-                                mangled_type_name =
-                                    type_name + "__" + mangle_type(arg_named.type_args[0]);
+                            if (!matched_param.empty() &&
+                                type_subs.find(matched_param) == type_subs.end()) {
+                                auto arg_type = infer_expr_type(*call.args[i]);
+                                if (!arg_type)
+                                    continue;
+                                types::TypePtr arg_inner = arg_type;
+                                if (arg_type->is<types::RefType>()) {
+                                    arg_inner = arg_type->as<types::RefType>().inner;
+                                }
+                                if (arg_inner) {
+                                    type_subs[matched_param] = arg_inner;
+                                    mangled_type_name += "__" + mangle_type(arg_inner);
+                                    TML_DEBUG_LN("[STATIC_METHOD] Inferred "
+                                                 << matched_param << " = " << mangle_type(arg_inner)
+                                                 << " from ref-wrapped argument " << i);
+                                    break;
+                                }
                             }
-                            break;
                         }
                     }
                 }
@@ -984,6 +1020,9 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     return_type = types::substitute_type(return_type, type_subs);
                 }
                 std::string ret_type = llvm_type_from_semantic(return_type);
+                // Store semantic return type for correct downstream type resolution
+                // (e.g., let pinned = Pin::new(mut ref f) needs Pin[mut ref Ready[I32]])
+                last_semantic_type_ = return_type;
 
                 std::string args_str;
                 for (size_t i = 0; i < typed_args.size(); ++i) {

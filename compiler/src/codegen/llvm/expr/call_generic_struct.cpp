@@ -837,6 +837,9 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                     const auto& arg_named = arg_inner->as<types::NamedType>();
                                     const auto& param_named =
                                         param_ref.inner->as<types::NamedType>();
+
+                                    // Case 4a: Same-name generic struct (ManuallyDrop[T] vs
+                                    // ManuallyDrop[I32])
                                     if (arg_named.name == param_named.name &&
                                         !arg_named.type_args.empty() &&
                                         arg_named.type_args.size() ==
@@ -845,6 +848,38 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                                                            j < arg_named.type_args.size();
                                              ++j) {
                                             type_subs[generic_names[j]] = arg_named.type_args[j];
+                                        }
+                                    }
+
+                                    // Case 4b: Bare generic param in ref (mut ref T where T is a
+                                    // generic param). Pin::new(pointer: mut ref T) with arg
+                                    // Ready[I32]. Use func_sig->type_params to match since
+                                    // generic_names may come from the struct definition (P) not the
+                                    // impl (T).
+                                    if (type_subs.empty() && param_named.type_args.empty() &&
+                                        func_sig) {
+                                        for (const auto& tp : func_sig->type_params) {
+                                            if (param_named.name == tp &&
+                                                type_subs.find(tp) == type_subs.end()) {
+                                                type_subs[tp] = arg_inner;
+                                                // Also map the struct-level generic param.
+                                                // For impl[T] Pin[mut ref T], the struct param is P
+                                                // and the impl param is T. The relationship is
+                                                // P = mut ref T, so when T = Ready[I32],
+                                                // P = mut ref Ready[I32].
+                                                if (!generic_names.empty() &&
+                                                    type_subs.find(generic_names[0]) ==
+                                                        type_subs.end()) {
+                                                    // Reconstruct the ref-wrapped type for the
+                                                    // struct param
+                                                    auto wrapped = std::make_shared<types::Type>();
+                                                    wrapped->kind = types::RefType{
+                                                        param_type->as<types::RefType>().is_mut,
+                                                        arg_inner};
+                                                    type_subs[generic_names[0]] = wrapped;
+                                                }
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -1027,6 +1062,8 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             auto return_type =
                                 types::substitute_type(func_sig->return_type, type_subs);
                             ret_type = llvm_type_from_semantic(return_type);
+                            // Store semantic return type for downstream type resolution
+                            last_semantic_type_ = return_type;
                             // Fix: when func_sig comes from a wrong overload (e.g.,
                             // Pin[mut ref T]::new overwrites Pin[ref T]::new in the
                             // functions map), the substitution may leave unresolved

@@ -2,6 +2,37 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ MANDATORY: Implement Incrementally — Test Each Stage ⛔
+
+**NEVER implement everything at once then fight cascading errors. The line between persistence and stupidity is very thin.**
+
+This is a HARD REQUIREMENT learned from painful experience. Implementing 300 lines across 6 files in one shot leads to hours of patching cascading failures. Step-by-step with testing produces excellent results consistently.
+
+**Rules:**
+
+1. **Break every task into small, testable stages** (1-3 files max per stage)
+2. **Implement stage 1 → compile → test → fix → ONLY THEN move to stage 2**
+3. **Never delegate a large implementation to a single agent without incremental checkpoints**
+4. **If 2-3 fix attempts fail on the same error, STOP** — delete the broken code, re-analyze from scratch, choose a DIFFERENT approach
+5. **Feed learnings into memory as you go**
+
+**WRONG (spent a full day fixing cascading errors):**
+```
+Write 6 files at once → compile errors → fix → runtime crashes → fix →
+logic errors → fix → new crashes → spend 4 hours patching symptoms...
+```
+
+**CORRECT (excellent results, first try):**
+```
+Write core type → test it compiles ✓
+Write function → test 1 simple case ✓
+Add edge cases → test each one ✓
+Integrate into system → test integration ✓
+Full test suite → all pass ✓
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Consult Language Reference Before Implementing ⛔
 
 **Before writing ANY new TML code, you MUST read [docs/readme.md](docs/readme.md).**

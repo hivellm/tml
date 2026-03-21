@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [pin-dispatch-future-poll-fix.md](pin-dispatch-future-poll-fix.md) - Pin[mut ref T].poll() dispatch + ref-wrapped generic inference + type checker associated type (2026-03-21, PARTIAL)
 - [range-type-checker-fix.md](range-type-checker-fix.md) - check_range() returned Slice[I64] instead of Range[T], causing method return types to resolve as () (2026-03-20, FIXED)
 - [generic-method-fold-fix.md](generic-method-fold-fix.md) - Iterator::fold[B] method-level generic monomorphization: 3-bug chain (2026-03-20, FIXED)
 - [fnptr-literal-coercion-fix.md](fnptr-literal-coercion-fix.md) - Function pointer call integer literal i32→i64 coercion (2026-03-20, FIXED)

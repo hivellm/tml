@@ -1610,6 +1610,157 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
+    // Pin-dispatch: when the receiver is Pin[ref T] or Pin[mut ref T] and no method
+    // was found on Pin itself, unwrap the Pin to get the inner type T and look up
+    // T::method. This handles behavior methods with Pin[mut ref This] receiver types,
+    // such as Future::poll(mut this: Pin[mut ref This], ...) -> Poll[This::Output].
+    {
+        TypePtr pin_receiver = receiver_type;
+        if (pin_receiver->is<RefType>()) {
+            pin_receiver = pin_receiver->as<RefType>().inner;
+        }
+        if (pin_receiver->is<NamedType>()) {
+            const auto& pin_named = pin_receiver->as<NamedType>();
+            if (pin_named.name == "Pin" && !pin_named.type_args.empty()) {
+                // Pin[ref T] or Pin[mut ref T] — extract T
+                TypePtr inner = pin_named.type_args[0];
+                if (inner->is<RefType>()) {
+                    inner = inner->as<RefType>().inner;
+                }
+                if (inner->is<NamedType>()) {
+                    const auto& inner_named = inner->as<NamedType>();
+                    std::string inner_qualified = inner_named.name + "::" + call.method;
+
+                    // Helper: try to resolve the method on the inner type using a FuncSig
+                    auto try_resolve_inner_method =
+                        [&](const FuncSig& func_sig) -> std::optional<TypePtr> {
+                        if (call.type_args.empty() && !func_sig.type_params.empty()) {
+                            std::unordered_map<std::string, TypePtr> subs;
+                            // Map type params from inner type args
+                            // E.g., Ready[I32] with impl type_params=[T] -> {T -> I32}
+                            if (!func_sig.impl_self_type_args.empty()) {
+                                for (size_t i = 0; i < func_sig.impl_self_type_args.size() &&
+                                                   i < inner_named.type_args.size();
+                                     ++i) {
+                                    extract_type_params(func_sig.impl_self_type_args[i],
+                                                        inner_named.type_args[i],
+                                                        func_sig.type_params, subs);
+                                }
+                            } else {
+                                for (size_t i = 0; i < func_sig.type_params.size() &&
+                                                   i < inner_named.type_args.size();
+                                     ++i) {
+                                    subs[func_sig.type_params[i]] = inner_named.type_args[i];
+                                }
+                            }
+                            // Also infer from function arguments
+                            for (size_t i = 0;
+                                 i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
+                                TypePtr arg_type = check_expr(*call.args[i]);
+                                TypePtr param_type = func_sig.params[i + 1];
+                                extract_type_params(param_type, arg_type, func_sig.type_params,
+                                                    subs);
+                            }
+                            return substitute_type(func_sig.return_type, subs);
+                        }
+                        if (!call.type_args.empty() && !func_sig.type_params.empty()) {
+                            std::unordered_map<std::string, TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < func_sig.type_params.size() && i < call.type_args.size();
+                                 ++i) {
+                                subs[func_sig.type_params[i]] = resolve_type(*call.type_args[i]);
+                            }
+                            return substitute_type(func_sig.return_type, subs);
+                        }
+                        return func_sig.return_type;
+                    };
+
+                    // Try local function environment
+                    auto func = env_.lookup_func(inner_qualified);
+                    if (func) {
+                        auto result = try_resolve_inner_method(*func);
+                        if (result)
+                            return *result;
+                    }
+
+                    // Try all loaded modules
+                    for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+                        auto func_it = mod.functions.find(inner_qualified);
+                        if (func_it != mod.functions.end()) {
+                            auto result = try_resolve_inner_method(func_it->second);
+                            if (result)
+                                return *result;
+                        }
+                    }
+
+                    // Try global module cache
+                    for (const auto& [mod_path, mod] : GlobalModuleCache::instance().get_all()) {
+                        auto func_it = mod.functions.find(inner_qualified);
+                        if (func_it != mod.functions.end()) {
+                            auto result = try_resolve_inner_method(func_it->second);
+                            if (result)
+                                return *result;
+                        }
+                    }
+
+                    // Also try behavior method lookup on the inner type
+                    auto inner_behaviors = env_.get_behavior_impls(inner_named.name);
+                    if (inner_behaviors.empty()) {
+                        for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+                            auto bi_it = mod.behavior_impls.find(inner_named.name);
+                            if (bi_it != mod.behavior_impls.end()) {
+                                inner_behaviors = bi_it->second;
+                                break;
+                            }
+                        }
+                    }
+                    if (inner_behaviors.empty()) {
+                        for (const auto& [mod_path, mod] :
+                             GlobalModuleCache::instance().get_all()) {
+                            auto bi_it = mod.behavior_impls.find(inner_named.name);
+                            if (bi_it != mod.behavior_impls.end()) {
+                                inner_behaviors = bi_it->second;
+                                break;
+                            }
+                        }
+                    }
+                    for (const auto& behavior_name : inner_behaviors) {
+                        auto behavior_def = env_.lookup_behavior(behavior_name);
+                        if (!behavior_def)
+                            continue;
+                        for (const auto& bmethod : behavior_def->methods) {
+                            if (bmethod.name != call.method)
+                                continue;
+                            std::unordered_map<std::string, TypePtr> subs;
+                            auto self_type = std::make_shared<Type>();
+                            self_type->kind =
+                                NamedType{inner_named.name, "", inner_named.type_args};
+                            subs["Self"] = self_type;
+                            subs["This"] = self_type;
+                            if (!behavior_def->type_params.empty() &&
+                                !inner_named.type_args.empty()) {
+                                for (size_t i = 0; i < behavior_def->type_params.size() &&
+                                                   i < inner_named.type_args.size();
+                                     ++i) {
+                                    subs[behavior_def->type_params[i]] = inner_named.type_args[i];
+                                }
+                            }
+                            // Resolve associated types from the impl
+                            for (const auto& assoc : behavior_def->associated_types) {
+                                std::string assoc_key = "This::" + assoc.name;
+                                if (!inner_named.type_args.empty()) {
+                                    subs[assoc_key] = inner_named.type_args[0];
+                                    subs[assoc.name] = inner_named.type_args[0];
+                                }
+                            }
+                            return substitute_type(bmethod.return_type, subs);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     return make_unit();
 }
 

@@ -112,6 +112,10 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     -> std::optional<std::string> {
     const std::string& method = call.method;
 
+    TML_DEBUG_LN("[IMPL_METHOD] try_gen_impl_method_call: method="
+                 << method << " receiver_type="
+                 << (receiver_type ? types::type_to_string(receiver_type) : "null"));
+
     // Convert TupleType to a synthetic NamedType for dispatch.
     // Tuple impls are registered under "Tuple2", "Tuple3", etc. in pending_generic_impls_.
     types::TypePtr effective_receiver = receiver_type;
@@ -141,6 +145,37 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     // Only handle NamedType receivers (including synthesized tuple types)
     if (!effective_receiver || !effective_receiver->is<types::NamedType>()) {
         return std::nullopt;
+    }
+
+    // Pin-dispatch: when the receiver is Pin[ref T] or Pin[mut ref T], behavior methods
+    // like Future::poll are registered under the inner type (e.g., Ready::poll), not Pin::poll.
+    // Unwrap Pin to get the inner type for method lookup, while keeping the Pin value as receiver.
+    {
+        const auto& outer_named = effective_receiver->as<types::NamedType>();
+        if (outer_named.name == "Pin" && !outer_named.type_args.empty()) {
+            types::TypePtr inner = outer_named.type_args[0];
+            if (inner->is<types::RefType>()) {
+                inner = inner->as<types::RefType>().inner;
+            }
+            if (inner->is<types::NamedType>()) {
+                // Check if Pin::method exists first — only unwrap if it doesn't
+                std::string pin_qualified = "Pin::" + method;
+                auto pin_func = env_.lookup_func(pin_qualified);
+                if (!pin_func && env_.module_registry()) {
+                    for (const auto& [mod_name, mod] : env_.module_registry()->get_all_modules()) {
+                        auto func_it = mod.functions.find(pin_qualified);
+                        if (func_it != mod.functions.end()) {
+                            pin_func = func_it->second;
+                            break;
+                        }
+                    }
+                }
+                if (!pin_func) {
+                    // Pin::method not found — use the inner type for dispatch
+                    effective_receiver = inner;
+                }
+            }
+        }
     }
 
     const auto& named = effective_receiver->as<types::NamedType>();
