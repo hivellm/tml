@@ -56,6 +56,19 @@ impl Headers {
         hdr_forget_map((ref map) as I64)
     }
 
+    /// Appends a value to a header, joining with ", " if the key already exists.
+    /// Per RFC 7230 §3.2.2, multiple header values can be combined with commas.
+    /// Use set() instead if you want to replace the existing value.
+    pub func append(this, key: Str, value: Str) {
+        let lk: Str = str::to_lowercase(key)
+        let existing: Str = this.get(lk)
+        if str::len(existing) > 0 {
+            this.set(lk, existing + ", " + value)
+        } else {
+            this.set(lk, value)
+        }
+    }
+
     /// Gets the value for a header key, or "" if not present.
     pub func get(this, key: Str) -> Str {
         var map: HashMap[Str, Str] = HashMap[Str, Str] { handle: this.handle }

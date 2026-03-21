@@ -53,6 +53,9 @@ const AF_INET: I32 = 2
 const SOCK_STREAM: I32 = 1
 const SOL_SOCKET: I32 = 65535
 const SO_REUSEADDR: I32 = 4
+#if LINUX
+const SO_REUSEPORT: I32 = 15
+#endif
 const SO_RCVTIMEO: I32 = 4102
 const SO_SNDTIMEO: I32 = 4101
 const IPPROTO_TCP: I32 = 6
@@ -895,6 +898,9 @@ pub func app_bind_listener(port: I64) -> I64 {
     let sock: I64 = tml_sys_socket(AF_INET, SOCK_STREAM, 0)
     if sock < 0 { return -1 }
     tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 1)
+    #if LINUX
+    tml_sys_setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, 1)
+    #endif
     if tml_sys_bind_v4(sock, 0, port as I32) < 0 { sys_close(sock); return -1 }
     if tml_sys_listen(sock, 8192) < 0 { sys_close(sock); return -1 }
     return sock
