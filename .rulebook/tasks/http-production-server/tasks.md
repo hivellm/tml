@@ -25,7 +25,7 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 2.5 400 Bad Request for malformed requests / oversized headers
 - [x] 2.6 405 Method Not Allowed with `Allow:` header — probes all 7 method trees
 - [x] 2.7 501 Not Implemented for unknown methods
-- [ ] 2.8 URL percent-decoding before routing
+- [x] 2.8 URL percent-decoding — already implemented in body_parser.tml + parse.tml, 14 tests added
 - [ ] 2.9 Idle timeout enforcement between keep-alive requests
 - [x] 2.10 Connection: close handling per HTTP/1.1 spec
 

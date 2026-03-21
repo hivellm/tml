@@ -18,7 +18,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 4 | **http-production-server** | 50% | 28/55 | 1.6 SO_RCVTIMEO fix, 2.2 chunked encoding |
+| 4 | **http-production-server** | 65% | 36/55 | 2.4 Date header, 2.9 idle timeout, Phase 3 middleware |
 | 5 | **http-production-framework** | 75% | 35/46 | 1.2 Hook.add/validate, 1.5 content-type parser |
 | 6 | **complete-async-coverage** | 60% | 15/25 | Commit from_iter.test.tml, write missing tests |
 | 7 | **developer-tooling** | 75% | 52/70 | Phase 1 doc comment preservation in lexer/parser |
