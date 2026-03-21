@@ -63,14 +63,14 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 - [x] 5.1 HTTP client request building — HttpClient with get/post/put/delete/head
 - [x] 5.2 HTTP client response parsing — Response::parse, read_all with Buffer
 - [ ] 5.3 Connection pooling
-- [ ] 5.4 Chunked transfer-encoding for client responses
+- [x] 5.4 Chunked transfer-encoding for client — Response::parse decodes chunked bodies
 - [x] 5.5 Redirect following — recursive follow_redirects, 301/302/303/307/308, max_redirects config
 - [x] 5.6 Timeout support — timeout_ms field, builder API
 
 ## Phase 6: Production Hardening
 
-- [ ] 6.1 SO_REUSEPORT for zero-downtime restarts
-- [ ] 6.2 Multi-value header support (Set-Cookie, Vary)
+- [x] 6.1 SO_REUSEPORT — enabled on Linux via conditional compilation
+- [x] 6.2 Multi-value headers — Headers::append() joins with ", " per RFC 7230
 - [x] 6.3 WebSocket frame parser — 821 lines in websocket.tml (already implemented)
 - [x] 6.4 X-Request-Id — generate_request_id() with hex(timestamp)-hex(counter)
 - [x] 6.5 Access logging — app_log_request(method, path, status, latency_us)
