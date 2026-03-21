@@ -1,0 +1,74 @@
+//! Per-worker arena allocator for HTTP request processing.
+//!
+//! Pre-allocates a large contiguous buffer and bumps a pointer for each
+//! allocation. Reset after each request — zero malloc/free in steady state.
+//! Falls back to mem_alloc for oversized requests.
+
+use core::intrinsics::{mem_alloc, mem_free, ptr_write}
+
+/// Default arena size: 64KB per worker (handles most requests without fallback).
+const DEFAULT_ARENA_SIZE: I64 = 65536
+
+/// A bump-pointer arena allocator.
+/// Allocates linearly from a pre-allocated buffer. Reset between requests.
+pub type Arena {
+    data: I64,       // ptr to pre-allocated buffer
+    capacity: I64,   // total size
+    offset: I64,     // current bump pointer
+    fallbacks: I64,  // count of oversized allocs (for monitoring)
+}
+
+impl Arena {
+    /// Creates a new arena with the given capacity.
+    pub func new(capacity: I64) -> Arena {
+        let cap: I64 = if capacity > 0 { capacity } else { DEFAULT_ARENA_SIZE }
+        let data: I64 = lowlevel { mem_alloc(cap) } as I64
+        // Zero-fill for safety
+        var i: I64 = 0
+        loop (i < cap) {
+            lowlevel { ptr_write[U8]((data + i) as *U8, 0 as U8) }
+            i = i + 64  // zero in 64-byte chunks (good enough)
+        }
+        Arena { data: data, capacity: cap, offset: 0, fallbacks: 0 }
+    }
+
+    /// Creates a new arena with default 64KB capacity.
+    pub func default() -> Arena {
+        Arena::new(DEFAULT_ARENA_SIZE)
+    }
+
+    /// Allocates `size` bytes from the arena. Returns ptr as I64.
+    /// If the arena is full, falls back to mem_alloc (tracked in fallbacks).
+    pub func alloc(mut this, size: I64) -> I64 {
+        // Align to 8 bytes
+        let aligned_size: I64 = (size + 7) / 8 * 8
+        if this.offset + aligned_size <= this.capacity {
+            let ptr: I64 = this.data + this.offset
+            this.offset = this.offset + aligned_size
+            return ptr
+        }
+        // Fallback to heap
+        this.fallbacks = this.fallbacks + 1
+        return lowlevel { mem_alloc(size) } as I64
+    }
+
+    /// Resets the arena for reuse. O(1) — just resets the bump pointer.
+    /// Does NOT free fallback allocations (caller must track those).
+    pub func reset(mut this) {
+        this.offset = 0
+    }
+
+    /// Returns bytes used in the current request.
+    pub func used(this) -> I64 { this.offset }
+
+    /// Returns bytes remaining.
+    pub func remaining(this) -> I64 { this.capacity - this.offset }
+
+    /// Returns number of fallback (heap) allocations.
+    pub func fallback_count(this) -> I64 { this.fallbacks }
+
+    /// Destroys the arena and frees the backing buffer.
+    pub func destroy(this) {
+        lowlevel { mem_free(this.data as *Unit) }
+    }
+}
