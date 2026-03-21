@@ -1,6 +1,6 @@
 # Tasks: Optimize TML Codegen Using Rust as Reference
 
-**Status**: In Progress (75%)
+**Status**: In Progress (73%, 27/37) — Phase 1-5 done, Phase 6 (exception handling) + Phase 7.3 (alignment) deferred
 
 > **NOTE**: This task is a living document. It gets incrementally updated as we discover codegen issues during other work (iterators, closures, generics, etc.). Dedicated execution of these phases will happen later when the compiler is stable. For now, findings from IR comparisons are recorded here for future reference.
 

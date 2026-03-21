@@ -1,3 +1,5 @@
+# ARCHIVED — See .rulebook/tasks/archive/2026-03-21-codegen-structural-fixes/
+
 ## Phase 0: Diagnostic Hygiene
 - [x] 0.1 Mark NeverError::to_string, NeverError::debug_string with @no_coverage (commit ebaa006b)
 - [x] 0.2 Fix coverage key collision for From impls (uses "I32::from" qualified keys, convert at 100%)

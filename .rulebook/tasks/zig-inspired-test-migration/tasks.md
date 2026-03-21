@@ -1,6 +1,6 @@
 # Tasks: Zig-Inspired Test Migration
 
-**Status**: In Progress (Phase 1-2 infrastructure complete, blocked on codegen bottleneck)
+**Status**: In Progress (Phase 1-2 infrastructure complete, blocked on library_decls_only codegen)
 
 ## Key Findings (2026-03-16)
 
