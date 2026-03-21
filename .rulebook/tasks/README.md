@@ -1,7 +1,7 @@
 # Tasks — Priority Table
 
 **Updated**: 2026-03-21
-**Active**: 15 tasks | **Archived**: 13
+**Active**: 14 tasks | **Archived**: 14
 **Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
 **Version**: 0.2.1
 
@@ -29,7 +29,7 @@
 
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
-| 9 | **optimize-codegen-like-rust** | 84% | 31/37 | Phase 6.2-6.3 invoke/cleanuppad (deferred — very invasive) |
+| 9 | ~~optimize-codegen-like-rust~~ | **ARCHIVED** | 37/37 | Archived 2026-03-21 |
 | 10 | **implement-reflection** | 41% | 37/90 | Phase 5: get_field, set_field methods |
 | 11 | **zig-inspired-test-migration** | 65% | 11/17 | 1.7 fix library_decls_only |
 | 12 | **package-manager** | 16% | 7/45 | Phase 1 git dependencies |
@@ -91,6 +91,7 @@ implement-reflection (37/90) ─────────────────
 
 | Task | Date | Reason |
 |------|------|--------|
+| optimize-codegen-like-rust | 2026-03-21 | 37/37: enum layout, SSA, dead decl, checked math, personality |
 | zig-cc-compiler-integration | 2026-03-21 | 14/14: toolchain, cmake, auto-detect, PATH fallback |
 | http-production-server | 2026-03-21 | 71/71: 10 phases, compliance, IOCP, client, hooks, arena, work-stealing |
 | complete-async-coverage | 2026-03-21 | 25/25: Pin, Future, Poll, AsyncIter, networking |
