@@ -300,6 +300,10 @@ struct CodegenLibraryState {
     std::vector<std::string> loop_metadata;
     int loop_metadata_counter = 1000;
 
+    // Module paths processed during the bootstrap codegen pass.
+    // Used to detect when a test imports a module not covered by the cached state.
+    std::unordered_set<std::string> processed_module_paths;
+
     bool valid = false; ///< True if state has been captured
 };
 
@@ -370,6 +374,10 @@ private:
     std::string cached_imported_func_code_;
     std::string cached_imported_type_defs_;
     std::string cached_preamble_headers_; ///< Preamble IR (for filtering declarations)
+
+    // Module paths processed during emit_module_pure_tml_functions().
+    // Used by capture_library_state() to record which modules are covered by the cached state.
+    std::unordered_set<std::string> processed_module_paths_;
 
     // ======== Dead Declaration Elimination (Phase 3) ========
     // Runtime declarations are registered in a catalog during init, then only
@@ -1528,8 +1536,10 @@ private:
     void finalize_runtime_decls(); ///< Emit only needed decls into deferred buffer
     void scan_for_runtime_refs(const std::string& text); ///< Scan text block for @symbol refs
     void emit_module_lowlevel_decls();
-    void
-    emit_module_pure_tml_functions(); // Generate code for pure TML functions from imported modules
+    /// Generate code for pure TML functions from imported modules.
+    /// @param skip_modules If non-empty, skip modules whose path is in this set.
+    ///                     Used for supplemental processing after cached state restoration.
+    void emit_module_pure_tml_functions(const std::unordered_set<std::string>& skip_modules = {});
     void emit_string_constants();
 
     // Declaration generation

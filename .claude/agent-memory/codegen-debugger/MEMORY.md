@@ -1,6 +1,8 @@
 # Codegen Debugger Memory
 
 ## Index
+- [cached-library-state-issues.md](cached-library-state-issues.md) - Cached library state for test suite speedup: obj_cache hash fix, blockers for full enablement (2026-03-21, PARTIAL)
+- [crossmod-struct-field-fix.md](crossmod-struct-field-fix.md) - Cross-module generic struct field access: lookup_struct re-export following + pub use (2026-03-21, FIXED)
 - [pin-dispatch-future-poll-fix.md](pin-dispatch-future-poll-fix.md) - Pin[mut ref T].poll() dispatch + ref-wrapped generic inference + type checker associated type (2026-03-21, PARTIAL)
 - [range-type-checker-fix.md](range-type-checker-fix.md) - check_range() returned Slice[I64] instead of Range[T], causing method return types to resolve as () (2026-03-20, FIXED)
 - [generic-method-fold-fix.md](generic-method-fold-fix.md) - Iterator::fold[B] method-level generic monomorphization: 3-bug chain (2026-03-20, FIXED)

@@ -331,7 +331,8 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
     emit_line("");
 }
 
-void LLVMIRGen::emit_module_pure_tml_functions() {
+void LLVMIRGen::emit_module_pure_tml_functions(
+    const std::unordered_set<std::string>& skip_modules) {
     // Emit LLVM IR for pure TML functions from imported modules
     if (!env_.module_registry()) {
         return;
@@ -668,6 +669,13 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             continue;
         }
 
+        // Skip modules already processed by the cached library state.
+        // This is used in supplemental mode: only process modules that were
+        // NOT covered by the bootstrap's cached state.
+        if (!skip_modules.empty() && skip_modules.count(module_name) > 0) {
+            continue;
+        }
+
         // Early skip: Only process modules that were actually imported from
         // This avoids expensive re-parsing of modules we don't need
         if (!imported_module_paths.empty()) {
@@ -812,6 +820,11 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
         eligible_modules.push_back(
             {module_name, mod_name, sanitized_prefix, &module, parsed_module_ptr});
+    }
+
+    // Record which modules are being processed (for capture_library_state())
+    for (const auto& info : eligible_modules) {
+        processed_module_paths_.insert(info.module_name);
     }
 
     // ========================================================================

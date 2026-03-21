@@ -652,11 +652,16 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     state->loop_metadata = loop_metadata_;
     state->loop_metadata_counter = loop_metadata_counter_;
 
+    // Capture which modules were processed during emit_module_pure_tml_functions().
+    // Workers use this to detect when they need supplemental module processing.
+    state->processed_module_paths = processed_module_paths_;
+
     state->valid = true;
 
     TML_DEBUG_LN("[CODEGEN] Captured library state: "
                  << state->struct_types.size() << " struct types, " << state->functions.size()
-                 << " functions, " << state->enum_variants.size() << " enum variants");
+                 << " functions, " << state->enum_variants.size() << " enum variants"
+                 << ", " << state->processed_module_paths.size() << " modules");
 
     return state;
 }

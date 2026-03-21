@@ -457,11 +457,6 @@ static std::string build_stdlib_object(const CompileConfig& config) {
         return "";
     }
 
-    // NOTE: We only use the bootstrap file's imports for the cached_library_state.
-    // This captures the core library modules (str, fmt, option, result, iter, etc.)
-    // which is sufficient for the fast path. Per-file codegen adds missing modules
-    // on-demand via emit_module_pure_tml_functions() (which is fast with cached state).
-
     // Generate library IR using the AST codegen path with library_ir_only=true.
     codegen::LLVMGenOptions lib_opts;
     lib_opts.coverage_enabled = config.coverage;
@@ -688,8 +683,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 auto obj_cache_dir = cache_dir / "obj_cache";
                 auto ir_fp = query::fingerprint_bytes(codegen_result.llvm_ir.data(),
                                                       codegen_result.llvm_ir.size());
-                auto cached_obj =
-                    obj_cache_dir / (ir_fp.to_hex().substr(0, 16) + cli::get_object_extension());
+                // Use full 32-char hex hash to avoid collisions. CRC32C-based fingerprint
+                // with 16-char truncation collides when cached library state makes the first
+                // half of IR identical across test files in the same suite.
+                auto cached_obj = obj_cache_dir / (ir_fp.to_hex() + cli::get_object_extension());
                 bool used_cache = false;
                 bool obj_exists = fs::exists(cached_obj);
                 if (obj_exists) {
@@ -1192,8 +1189,12 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     // Pre-build stdlib codegen state once (skips emit_module_pure_tml_functions per file).
     // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
-    // TEMPORARILY DISABLED: cached state doesn't include all modules when new modules
-    // are added to the stdlib (e.g., std::http::incoming). Need to fix module discovery.
+    // DISABLED: cached state causes codegen issues:
+    //   - I32::duplicate redefinition (local impls conflict with cached library impls)
+    //   - i64/i32 type mismatches in range iterators
+    //   Needs: supplemental module processing that properly deduplicates against cached state.
+    //   The obj_cache hash has been fixed (full 32-char hash, no truncation).
+    //   The processed_module_paths tracking is in place for future supplemental pass.
     // if (!g_stdlib_codegen_state && !config.coverage) {
     //     build_stdlib_object(config);
     // }
@@ -1404,8 +1405,10 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
                 auto obj_cache_dir = cache_dir / "obj_cache";
                 auto ir_fp = query::fingerprint_bytes(codegen_result.llvm_ir.data(),
                                                       codegen_result.llvm_ir.size());
-                auto cached_obj =
-                    obj_cache_dir / (ir_fp.to_hex().substr(0, 16) + cli::get_object_extension());
+                // Use full 32-char hex hash to avoid collisions. CRC32C-based fingerprint
+                // with 16-char truncation collides when cached library state makes the first
+                // half of IR identical across test files in the same suite.
+                auto cached_obj = obj_cache_dir / (ir_fp.to_hex() + cli::get_object_extension());
                 bool used_cache = false;
                 if (fs::exists(cached_obj)) {
                     std::error_code ec;
