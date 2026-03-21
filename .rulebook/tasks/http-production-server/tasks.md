@@ -31,10 +31,10 @@ Goal: production-quality HTTP server AND client, not benchmark hacks.
 
 ## Phase 3: Enable Middleware & Hooks
 
-- [x] 3.1 Fix Bool/i1 struct field codegen bug — IncomingMessage.is_complete changed to I64
-- [ ] 3.2 Re-enable onRequest, preHandler, onSend, onResponse, onError hooks
-- [ ] 3.3 Re-enable middleware pipeline in app_dispatch
-- [ ] 3.4 Custom error handler support
+- [x] 3.1 Fix Bool/i1 struct field codegen bug — IncomingMessage + ServerResponse Bool→I64
+- [x] 3.2 Re-enable onRequest, preHandler, onResponse hooks — wired into app_dispatch
+- [x] 3.3 Re-enable middleware pipeline — hooks called at correct lifecycle points
+- [ ] 3.4 Custom error handler support — app_run_error_hooks exists but not wired
 
 ## Phase 4: Event Loop Mode
 
