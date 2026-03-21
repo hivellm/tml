@@ -684,6 +684,12 @@ impl[T] Maybe[T] {
     pub func iter(this) -> MaybeIter[T] {
         return MaybeIter { value: this }
     }
+
+    /// Takes the value out of the option, consuming self.
+    /// Returns the contained value wrapped in Maybe.
+    pub func take(this) -> Maybe[T] {
+        return this
+    }
 }
 
 /// An iterator over the item contained in a [`Maybe`].

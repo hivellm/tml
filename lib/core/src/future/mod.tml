@@ -266,7 +266,7 @@ impl[T] Future for Ready[T] {
     ///
     /// Returns `Poll::Ready(value)` on first poll, panics on subsequent polls.
     func poll(mut this: Pin[mut ref This], _cx: mut ref Context[Unit]) -> Poll[T] {
-        when this.value.take() {
+        when this.value {
             Just(v) => return Poll::Ready(v),
             Nothing => panic("Ready future polled after completion")
         }
