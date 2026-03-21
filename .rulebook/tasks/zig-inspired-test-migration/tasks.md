@@ -1,6 +1,6 @@
 # Tasks: Zig-Inspired Test Migration
 
-**Status**: In Progress (Phase 1-2 infrastructure complete, blocked on library_decls_only codegen)
+**Status**: In Progress — obj_cache hash fix + processed_module_paths tracking added. Cached state optimization blocked on impl dedup + range type mismatch.
 
 ## Key Findings (2026-03-16)
 
