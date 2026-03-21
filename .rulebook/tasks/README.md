@@ -11,7 +11,7 @@
 | # | Task | Status | Progress | Next step |
 |---|------|--------|----------|-----------|
 | 1 | ~~fix-struct-codegen-blockers~~ | **ARCHIVED** | 18/18 | Archived 2026-03-20 |
-| 2 | **codegen-structural-fixes** | **COMPLETE** | 40/40 | Ready to archive |
+| 2 | ~~codegen-structural-fixes~~ | **ARCHIVED** | 40/40 | Archived 2026-03-21 |
 | 3 | **fix-codegen-coverage-blockers** | 95% | 42/44 | Only Range standalone method dispatch + full coverage run |
 
 ## Tier 2: Medium Priority (product features)
@@ -74,6 +74,7 @@ implement-reflection (Phase 3 completion)
 
 | Task | Reason |
 |------|--------|
+| codegen-structural-fixes | 40/40: Pin dispatch, cross-module field resolution, iter adapters, coverage |
 | fix-struct-codegen-blockers | 6 bugs fixed: ptr_read/write, field mutation, fnptr coercion, fold[B] |
 | async-network-stack | 44/44 items complete |
 | refactor-async-use-existing-apis | 38 files refactored, blocked items -> fix-struct-codegen-blockers |

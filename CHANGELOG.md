@@ -19,6 +19,50 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.1] — 2026-03-21
+
+Codegen quality release: 12 compiler bugs fixed, HTTP server compliance, cross-module generic field resolution.
+
+### Fixed (Compiler — Codegen)
+
+- **Pin-through trait method dispatch** — 4 interconnected bugs: type checker unwraps Pin[ref T] to find trait methods on T, generic inference handles ref-wrapped bare generics, method_impl unwraps Pin receivers, static dispatch infers bare generics in ref params
+- **Cross-module generic struct field resolution** — `lookup_struct` now follows re-export chains (matching `lookup_enum`). Fixes `Ready[I32].value` resolving as `()` instead of `Maybe[I32]`
+- **Range struct type declaration** — MIR codegen emits struct types for library structs used in StructInitInst (e.g., Range[T])
+- **ptr_read/ptr_write multi-field structs** — 4 fixes across pipeline: type_params registration, HIR generic substitution, MIR type_args propagation, codegen type resolution
+- **Struct field mutation** — mutable struct alloca was dead code in thir_mir_builder (array fast-path returned before struct check)
+- **Integer literal coercion in fnptr calls** — `f(42)` where `f: func(I64)` now emits sext from i32 to i64
+- **Iterator::fold[B] monomorphization** — method-level generic dispatch, type param inference, GenericType handling
+- **memcpy/memmove/memset MIR handlers** — added codegen handlers + LLVM intrinsic declarations
+- **copy_nonoverlapping/copy/write_bytes** — registered in type checker (had handlers but no type registration)
+
+### Fixed (HTTP Server)
+
+- **ServerResponse Bool fields → I64** — fixes i1 layout corruption when passed through fn ptrs, unblocking middleware hooks
+
+### Added (HTTP Server — Phase 2+3 Complete)
+
+- **Chunked transfer-encoding** (RFC 7230 §4.1) — decode_chunked, encode_chunk, recv_chunked_body, worker integration
+- **Expect: 100-continue** — sends `HTTP/1.1 100 Continue` before body reading
+- **405 Method Not Allowed + Allow header** — probes all 7 method radix trees
+- **501 Not Implemented** — for unrecognized HTTP methods
+- **URL percent-decoding** — verified already implemented, 14 tests added
+- **Date header** — 404/501 responses now include RFC 7231 Date via app_build_response
+- **Idle timeout enforcement** — SO_RCVTIMEO on keep-alive connections
+- **Middleware hooks re-enabled** — onRequest, preHandler, onResponse wired into app_dispatch
+- **Custom error handler** — onError hooks called on 404 before default response
+
+### Added (Core Library)
+
+- **Maybe::take()** — consumes self, returns the option (like Rust's Option::take)
+- **pub use in core::future** — Context, Poll, Ready, Pending now publicly re-exported
+
+### Tests
+
+- 13 new Buffer tests (core ops, slice/str, endian roundtrips) — collections suite 73/73
+- 14 URL percent-decoding tests
+- 10 chunked transfer-encoding tests (8 decoder + 3 header detection)
+- future_ready_value test now passes
+
 ## [0.2.0] — 2026-03-19
 
 Major release with query-based incremental compilation, embedded LLVM/LLD, 35+ new standard library modules, and comprehensive test coverage reaching 99%.
