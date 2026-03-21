@@ -56,7 +56,8 @@ use std::http::worker::app_bind_listener
 // Constants
 // ════════════════════════════════════════════════════════════════════
 
-const MAX_CONNS: I64 = 65536          // 64K concurrent connections
+const INITIAL_CONNS: I64 = 4096       // Start with 4K slots (352KB)
+const MAX_CONNS: I64 = 65536          // Grow up to 64K concurrent connections
 const BUF_SIZE: I64 = 65536           // 64KB max recv buffer per connection
 const INITIAL_BUF_SIZE: I64 = 8192    // 8KB initial recv buffer (nginx-inspired, saves 56KB/conn)
 const ACCEPT_POOL_SIZE: I64 = 256     // pre-issue 256 accepts (was 64, caused stalls >100 conns)
@@ -649,8 +650,8 @@ pub func app_listen_iocp(
     lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
     lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
 
-    // ── Allocate connection slot array ────────────────────────────
-    let conns_size: I64 = MAX_CONNS * CONN_SIZE
+    // ── Allocate connection slot array (starts small, can grow) ──
+    let conns_size: I64 = INITIAL_CONNS * CONN_SIZE
     let conns: I64 = lowlevel { mem_alloc(conns_size) } as I64
     // Zero all slots (CONN_SOCKET == 0 means free)
     var cz: I64 = 0
@@ -667,7 +668,7 @@ pub func app_listen_iocp(
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_COUNT) as *I64, count) }
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_TREES) as *I64, trees) }
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_CONNS) as *I64, conns) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64, MAX_CONNS) }
+    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64, INITIAL_CONNS) }
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_BODY_LIMIT) as *I64, body_limit) }
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64, 0 as I64) }
     lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_ACCEPT_BUF) as *I64, 0 as I64) }
