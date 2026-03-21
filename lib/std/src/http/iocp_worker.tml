@@ -59,7 +59,7 @@ use std::http::worker::app_bind_listener
 const MAX_CONNS: I64 = 65536          // 64K concurrent connections
 const BUF_SIZE: I64 = 65536           // 64KB max recv buffer per connection
 const INITIAL_BUF_SIZE: I64 = 8192    // 8KB initial recv buffer (nginx-inspired, saves 56KB/conn)
-const ACCEPT_POOL_SIZE: I64 = 64      // pre-issue 64 accepts
+const ACCEPT_POOL_SIZE: I64 = 256     // pre-issue 256 accepts (was 64, caused stalls >100 conns)
 const ACCEPT_BUF_SIZE: I64 = 128      // AcceptEx buffer (addresses only, no data)
 const IPPROTO_TCP: I32 = 6
 const TCP_NODELAY: I32 = 1
@@ -145,11 +145,23 @@ func iocp_conn_set(conns: I64, idx: I64, field: I64, val: I64) {
 
 /// Find a free connection slot (CONN_SOCKET == 0 means free).
 /// Returns slot index, or -1 if no slots available.
+/// Global hint for next free slot — reduces O(n) scan to O(1) amortized.
+/// Multiple workers may race on this but that's OK — worst case is
+/// a brief linear scan from the hint position, not from 0.
+var g_slot_hint: I64 = 0
+
 func find_free_slot(conns: I64, max_conns: I64) -> I64 {
-    var i: I64 = 0
-    loop (i < max_conns) {
-        if iocp_conn_get(conns, i, CONN_SOCKET) == 0 { return i }
+    // Start search from hint (last known free region)
+    var i: I64 = g_slot_hint
+    var checked: I64 = 0
+    loop (checked < max_conns) {
+        if i >= max_conns { i = 0 }
+        if iocp_conn_get(conns, i, CONN_SOCKET) == 0 {
+            g_slot_hint = i + 1
+            return i
+        }
         i = i + 1
+        checked = checked + 1
     }
     return -1
 }
