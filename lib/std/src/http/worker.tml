@@ -101,6 +101,20 @@ const SHARED_SIZE: I64 = 336
 const ENTRY_SIZE: I64 = 24
 
 // ════════════════════════════════════════════════════════════════════
+// Shared state accessors (encapsulate raw ptr_read/ptr_write)
+// ════════════════════════════════════════════════════════════════════
+
+/// Read an I64 field from the shared state block at the given offset.
+func shared_get(shared: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((shared + offset) as *I64) }
+}
+
+/// Write an I64 field to the shared state block at the given offset.
+func shared_set(shared: I64, offset: I64, value: I64) {
+    lowlevel { ptr_write[I64]((shared + offset) as *I64, value) }
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Shutdown
 // ════════════════════════════════════════════════════════════════════
 
@@ -119,14 +133,14 @@ pub func app_shutdown_with_timeout(shared: I64, drain_timeout_ms: I64) {
     if shared == 0 { return }
 
     // Phase 1: Set shutdown flag — workers stop accepting new work
-    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 1 as I64) }
+    shared_set(shared, OFF_SHUTDOWN, 1)
 
     // Phase 2: Drain — wait for in-flight requests to complete
     if drain_timeout_ms > 0 {
         let start: I64 = time_ns()
         let deadline_ns: I64 = start + drain_timeout_ms * 1000000
         loop (time_ns() < deadline_ns) {
-            let queue_len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+            let queue_len: I64 = shared_get(shared, OFF_QUEUE_LEN)
             if queue_len == 0 { break }
             // Brief sleep to avoid busy-wait (1ms)
             thread_sleep_ms(1 as U64)
@@ -147,20 +161,20 @@ func queue_push(shared: I64, fd: I64) -> Bool {
     let mutex_ptr: I64 = shared + OFF_MUTEX
     tml_mutex_lock(mutex_ptr as *Unit)
 
-    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
-    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
-    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+    let buf: I64 = shared_get(shared, OFF_QUEUE_BUF)
+    let cap: I64 = shared_get(shared, OFF_QUEUE_CAP)
+    let len: I64 = shared_get(shared, OFF_QUEUE_LEN)
 
     if len >= cap {
         tml_mutex_unlock(mutex_ptr as *Unit)
         return false
     }
 
-    let tail: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_TAIL) as *I64) }
+    let tail: I64 = shared_get(shared, OFF_QUEUE_TAIL)
     lowlevel { ptr_write[I64]((buf + tail * 8) as *I64, fd) }
     let new_tail: I64 = (tail + 1) % cap
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_TAIL) as *I64, new_tail) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len + 1) }
+    shared_set(shared, OFF_QUEUE_TAIL, new_tail)
+    shared_set(shared, OFF_QUEUE_LEN, len + 1)
 
     let condvar_ptr: I64 = shared + OFF_CONDVAR
     tml_condvar_notify_one(condvar_ptr as *Unit)
@@ -176,25 +190,23 @@ func queue_pop(shared: I64) -> I64 {
     tml_mutex_lock(mutex_ptr as *Unit)
 
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
-        if shutdown != 0 {
+        if shared_get(shared, OFF_SHUTDOWN) != 0 {
             tml_mutex_unlock(mutex_ptr as *Unit)
             return -1
         }
-        let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
-        if len > 0 { break }
+        if shared_get(shared, OFF_QUEUE_LEN) > 0 { break }
         tml_condvar_wait(condvar_ptr as *Unit, mutex_ptr as *Unit)
     }
 
-    let buf: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
-    let cap: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_CAP) as *I64) }
-    let head: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_HEAD) as *I64) }
-    let len: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_LEN) as *I64) }
+    let buf: I64 = shared_get(shared, OFF_QUEUE_BUF)
+    let cap: I64 = shared_get(shared, OFF_QUEUE_CAP)
+    let head: I64 = shared_get(shared, OFF_QUEUE_HEAD)
+    let len: I64 = shared_get(shared, OFF_QUEUE_LEN)
 
     let fd: I64 = lowlevel { ptr_read[I64]((buf + head * 8) as *I64) }
     let new_head: I64 = (head + 1) % cap
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_HEAD) as *I64, new_head) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_LEN) as *I64, len - 1) }
+    shared_set(shared, OFF_QUEUE_HEAD, new_head)
+    shared_set(shared, OFF_QUEUE_LEN, len - 1)
 
     tml_mutex_unlock(mutex_ptr as *Unit)
     return fd
@@ -231,11 +243,11 @@ func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
 /// No shared queue, no mutex contention. Kernel distributes connections.
 pub func app_accept_worker(arg: *Unit) {
     let shared: I64 = arg as I64
-    let listener: I64 = lowlevel { ptr_read[I64]((shared + OFF_QUEUE_BUF) as *I64) }
-    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
-    let read_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_READ_TIMEOUT) as *I64) }
-    let write_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_WRITE_TIMEOUT) as *I64) }
-    let idle_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_IDLE_TIMEOUT) as *I64) }
+    let listener: I64 = shared_get(shared, OFF_QUEUE_BUF)
+    let body_limit: I64 = shared_get(shared, OFF_BODY_LIMIT)
+    let read_timeout: I64 = shared_get(shared, OFF_READ_TIMEOUT)
+    let write_timeout: I64 = shared_get(shared, OFF_WRITE_TIMEOUT)
+    let idle_timeout: I64 = shared_get(shared, OFF_IDLE_TIMEOUT)
 
     let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64

@@ -1,0 +1,71 @@
+//! Typed shared state for HTTP server workers.
+//!
+//! Replaces the raw memory block with named offset constants.
+//! All fields are I64 to match the existing ABI (pointers stored as I64).
+
+/// Configuration shared between all HTTP worker threads.
+/// Passed to app_dispatch and worker functions.
+pub type SharedConfig {
+    // Route table
+    table: I64,              // ptr to handler table (method, path, fn_ptr entries)
+    count: I64,              // number of registered routes
+    router: I64,             // ptr to radix tree roots array
+
+    // Middleware
+    mw_table: I64,           // ptr to middleware fn_ptr array
+    mw_count: I64,           // number of middleware
+
+    // Server control
+    shutdown: I64,           // 1 = shutting down
+    read_timeout: I64,       // ms
+    write_timeout: I64,      // ms
+    idle_timeout: I64,       // ms
+    body_limit: I64,         // max body bytes
+
+    // Lifecycle hooks
+    on_request_table: I64,
+    on_request_count: I64,
+    pre_handler_table: I64,
+    pre_handler_count: I64,
+    on_send_table: I64,
+    on_send_count: I64,
+    on_response_table: I64,
+    on_response_count: I64,
+    on_error_table: I64,
+    on_error_count: I64,
+    error_handler: I64,
+
+    // Thread pool queue (accept-per-worker stores listener fd here)
+    queue_buf: I64,          // ptr to queue ring buffer OR listener fd
+    queue_head: I64,
+    queue_tail: I64,
+    queue_cap: I64,
+    queue_len: I64,
+
+    // Sync primitives (64 bytes each on Windows — CRITICAL_SECTION + CONDITION_VARIABLE)
+    // These must be initialized via tml_mutex_init/tml_condvar_init, not struct literal.
+    // Represented as 8 I64 fields each to fill the 64 bytes.
+    mutex_0: I64, mutex_1: I64, mutex_2: I64, mutex_3: I64,
+    mutex_4: I64, mutex_5: I64, mutex_6: I64, mutex_7: I64,
+    condvar_0: I64, condvar_1: I64, condvar_2: I64, condvar_3: I64,
+    condvar_4: I64, condvar_5: I64, condvar_6: I64, condvar_7: I64,
+}
+
+impl SharedConfig {
+    /// Check if server is shutting down.
+    pub func is_shutdown(this) -> Bool { this.shutdown != 0 }
+
+    /// Signal shutdown.
+    pub func set_shutdown(mut this) { this.shutdown = 1 }
+
+    /// Get pointer to mutex (for tml_mutex_lock/unlock).
+    pub func mutex_ptr(this) -> I64 {
+        // mutex_0 is at byte offset 208 (26 I64 fields × 8 bytes)
+        (ref this as I64) + 208
+    }
+
+    /// Get pointer to condvar (for tml_condvar_wait/notify).
+    pub func condvar_ptr(this) -> I64 {
+        (ref this as I64) + 272
+    }
+}
