@@ -1,0 +1,38 @@
+//! Vectored I/O — send multiple buffers in a single syscall.
+//!
+//! Wraps writev (Linux) / WSASend with multiple WSABUF (Windows).
+//! Avoids copying header + body into a single buffer before sending.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+
+// FFI to C runtime
+@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
+
+/// Sends two buffers as a single logical write.
+/// Currently concatenates then sends (since writev FFI is not available).
+/// When writev/WSASend FFI is added, this will use scatter-gather I/O.
+pub func send_two(fd: I64, buf1: Str, buf2: Str) -> I64 {
+    let len1: I64 = str::len(buf1)
+    let len2: I64 = str::len(buf2)
+    if len1 == 0 and len2 == 0 { return 0 }
+    if len2 == 0 { return tml_sys_send(fd, buf1 as *Unit, len1) }
+    if len1 == 0 { return tml_sys_send(fd, buf2 as *Unit, len2) }
+
+    // Concatenate and send (fallback until writev FFI exists)
+    let total: I64 = len1 + len2
+    let buf: I64 = lowlevel { mem_alloc(total) } as I64
+    lowlevel {
+        copy_nonoverlapping(buf1 as *Unit, buf as *Unit, len1)
+        copy_nonoverlapping(buf2 as *Unit, (buf + len1) as *Unit, len2)
+    }
+    let sent: I64 = tml_sys_send(fd, buf as *Unit, total)
+    lowlevel { mem_free(buf as *Unit) }
+    return sent
+}
+
+/// Sends header + body as two logical buffers.
+/// Optimized path for HTTP responses where header and body are separate.
+pub func send_response_parts(fd: I64, header: Str, body: Str) -> I64 {
+    return send_two(fd, header, body)
+}

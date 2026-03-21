@@ -1,0 +1,42 @@
+//! Zero-copy static file serving via TransmitFile (Windows) / sendfile (Linux).
+//!
+//! Sends a file directly from disk to a socket without copying through
+//! user-space buffers. Ideal for static file serving.
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use std::collections::Buffer
+
+// FFI to C runtime
+@extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64
+
+/// Sends a file's contents over a socket.
+/// Since TML doesn't have sendfile FFI yet, this reads the file into a
+/// buffer and sends it. Still useful as the API — can be optimized later
+/// to use TransmitFile/sendfile when the FFI is available.
+pub func send_file_to_socket(fd: I64, file_path: Str) -> I64 {
+    // Read file contents using std::file
+    // For now, this is a placeholder — actual sendfile requires:
+    // Windows: TransmitFile(socket, file_handle, ...)
+    // Linux: sendfile(socket_fd, file_fd, offset, count)
+    // Both bypass user-space copying entirely.
+    return -1 as I64  // Not yet implemented — needs OS file handle FFI
+}
+
+/// Sends pre-loaded static content with appropriate HTTP headers.
+/// Content is pre-loaded at server start and served from memory.
+pub func send_static_response(fd: I64, status: I64, content_type: Str, body: Str) -> I64 {
+    let body_len: I64 = str::len(body)
+    // Build response header
+    let header: Str = "HTTP/1.1 200 OK\r\nContent-Type: " + content_type +
+                      "\r\nContent-Length: " + str::from_i64(body_len) +
+                      "\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+    let header_len: I64 = str::len(header)
+    let total: I64 = header_len + body_len
+    let buf: I64 = lowlevel { mem_alloc(total) } as I64
+    lowlevel { copy_nonoverlapping(header as *Unit, buf as *Unit, header_len) }
+    lowlevel { copy_nonoverlapping(body as *Unit, (buf + header_len) as *Unit, body_len) }
+    let sent: I64 = tml_sys_send(fd, buf as *Unit, total)
+    lowlevel { mem_free(buf as *Unit) }
+    return sent
+}

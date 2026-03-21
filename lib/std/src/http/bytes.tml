@@ -1,0 +1,119 @@
+//! Bytes — ref-counted immutable byte buffer for zero-copy sharing.
+//!
+//! Like Tokio's Bytes: a reference-counted view into a shared byte buffer.
+//! Multiple Bytes instances can share the same underlying allocation.
+//! Cheap to clone (just increments refcount + adjusts offset/len).
+
+use core::str
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+
+/// A reference-counted immutable byte buffer.
+/// Layout of backing allocation: [refcount: I64 | data...]
+pub type Bytes {
+    ptr: I64,      // pointer to backing allocation (refcount header + data)
+    offset: I64,   // offset into data (after refcount header)
+    length: I64,   // number of bytes in this view
+}
+
+const REFCOUNT_SIZE: I64 = 8  // I64 refcount at start of allocation
+
+impl Bytes {
+    /// Creates a new Bytes from a string (copies the data).
+    pub func from_str(s: Str) -> Bytes {
+        let s_len: I64 = str::len(s)
+        let alloc_size: I64 = REFCOUNT_SIZE + s_len
+        let ptr: I64 = lowlevel { mem_alloc(alloc_size) } as I64
+        // Set refcount to 1
+        lowlevel { ptr_write[I64](ptr as *I64, 1 as I64) }
+        // Copy data after refcount header
+        if s_len > 0 {
+            lowlevel { copy_nonoverlapping(s as *Unit, (ptr + REFCOUNT_SIZE) as *Unit, s_len) }
+        }
+        Bytes { ptr: ptr, offset: 0, length: s_len }
+    }
+
+    /// Creates a new Bytes by copying raw memory.
+    pub func from_raw(data: I64, len: I64) -> Bytes {
+        let alloc_size: I64 = REFCOUNT_SIZE + len
+        let ptr: I64 = lowlevel { mem_alloc(alloc_size) } as I64
+        lowlevel { ptr_write[I64](ptr as *I64, 1 as I64) }
+        if len > 0 {
+            lowlevel { copy_nonoverlapping(data as *Unit, (ptr + REFCOUNT_SIZE) as *Unit, len) }
+        }
+        Bytes { ptr: ptr, offset: 0, length: len }
+    }
+
+    /// Creates an empty Bytes.
+    pub func empty() -> Bytes {
+        Bytes { ptr: 0, offset: 0, length: 0 }
+    }
+
+    /// Returns the length of this byte slice.
+    pub func len(this) -> I64 { this.length }
+
+    /// Returns true if empty.
+    pub func is_empty(this) -> Bool { this.length == 0 }
+
+    /// Returns a byte at the given index.
+    pub func get(this, index: I64) -> I32 {
+        if index < 0 or index >= this.length { return -1 as I32 }
+        let data_ptr: I64 = this.ptr + REFCOUNT_SIZE + this.offset + index
+        let byte: U8 = lowlevel { ptr_read[U8](data_ptr as *U8) }
+        return byte as I32
+    }
+
+    /// Returns a sub-slice as a new Bytes sharing the same backing allocation.
+    /// Increments the refcount — no data copy.
+    pub func slice(this, start: I64, end: I64) -> Bytes {
+        let actual_start: I64 = if start < 0 { 0 } else { start }
+        let actual_end: I64 = if end > this.length { this.length } else { end }
+        if actual_start >= actual_end {
+            return Bytes::empty()
+        }
+        // Increment refcount
+        if this.ptr != 0 {
+            let rc: I64 = lowlevel { ptr_read[I64](this.ptr as *I64) }
+            lowlevel { ptr_write[I64](this.ptr as *I64, rc + 1) }
+        }
+        Bytes {
+            ptr: this.ptr,
+            offset: this.offset + actual_start,
+            length: actual_end - actual_start,
+        }
+    }
+
+    /// Converts to a string (copies data out).
+    pub func to_str(this) -> Str {
+        if this.length == 0 { return "" }
+        let buf: I64 = lowlevel { mem_alloc(this.length + 1) } as I64
+        let data_ptr: I64 = this.ptr + REFCOUNT_SIZE + this.offset
+        lowlevel { copy_nonoverlapping(data_ptr as *Unit, buf as *Unit, this.length) }
+        lowlevel { ptr_write[U8]((buf + this.length) as *U8, 0 as U8) }
+        return buf as Str
+    }
+
+    /// Returns a pointer to the data (for FFI).
+    pub func as_ptr(this) -> I64 {
+        this.ptr + REFCOUNT_SIZE + this.offset
+    }
+
+    /// Clone — increments refcount, shares backing allocation.
+    pub func clone(this) -> Bytes {
+        if this.ptr != 0 {
+            let rc: I64 = lowlevel { ptr_read[I64](this.ptr as *I64) }
+            lowlevel { ptr_write[I64](this.ptr as *I64, rc + 1) }
+        }
+        Bytes { ptr: this.ptr, offset: this.offset, length: this.length }
+    }
+
+    /// Release — decrements refcount, frees if last reference.
+    pub func release(this) {
+        if this.ptr == 0 { return }
+        let rc: I64 = lowlevel { ptr_read[I64](this.ptr as *I64) }
+        if rc <= 1 {
+            lowlevel { mem_free(this.ptr as *Unit) }
+        } else {
+            lowlevel { ptr_write[I64](this.ptr as *I64, rc - 1) }
+        }
+    }
+}
