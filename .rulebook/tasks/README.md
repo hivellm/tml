@@ -22,7 +22,7 @@
 | 4 | ~~http-production-server~~ | **ARCHIVED** | 71/71 | Archived 2026-03-21 |
 | 5 | ~~http-production-framework~~ | **ARCHIVED** | 46/46 | 2026-03-21 |
 | 6 | ~~complete-async-coverage~~ | **ARCHIVED** | 25/25 | 2026-03-21 |
-| 7 | **developer-tooling** | 58% | 45/78 | Phase 1: doc comment preservation (C++ lexer/parser) |
+| 7 | **developer-tooling** | 83% | 65/78 | Remaining: LSP references/rename, doc server, Neovim, templates |
 | 8 | ~~zig-cc-compiler-integration~~ | **ARCHIVED** | 14/14 | Archived 2026-03-21 |
 
 ## Tier 3: Low Priority (incremental improvements)
