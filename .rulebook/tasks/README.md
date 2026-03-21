@@ -34,6 +34,8 @@
 | 11 | **zig-inspired-test-migration** | 71% | 12/17 | 1.8 stdlib .obj hang, 2.6-2.8 mega-binary |
 | 12 | **package-manager** | 16% | 7/45 | Phase 1 git dependencies |
 | 13 | **language-completeness-roadmap** | 36% | 60/169 | Tracking doc — update with recent progress |
+| 14 | **migrate-lowlevel-to-typed** | 0% | 0/38 | Replace 702 lowlevel blocks with typed APIs (HTTP, streams, runtime) |
+| 15 | **http-production-benchmark** | 10% | 3/24 | TML vs Go vs Node benchmark + gap fixes |
 
 ## Tier 4: Future (not started, planning)
 
