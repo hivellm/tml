@@ -223,7 +223,7 @@ func queue_pop(shared: I64) -> I64 {
 func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
                      fd: I64, params_buf: I64, body_limit: I64) -> Str {
     let req_buf: I64 = buf + offset
-    lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
+    // No null-termination — method/path extraction now copies bytes (safe for pipelining)
     let method: Str = app_zerocopy_method(req_buf, req_len)
     let path: Str = app_zerocopy_path(req_buf, req_len)
 
@@ -444,8 +444,7 @@ pub func app_worker(arg: *Unit) {
             // ── 3b. Parse headers (zero-copy into recv buffer) ─────
             let hdr_count: I64 = app_parse_headers(buf, total, hdrs_buf)
 
-            // ── 4. Zero-copy parse method + path ───────────────────
-            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+            // ── 4. Parse method + path (non-destructive copy) ─────
             let method: Str = app_zerocopy_method(buf, total)
             let path: Str = app_zerocopy_path(buf, total)
             let method_len: I64 = str::len(method)
