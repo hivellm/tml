@@ -132,6 +132,20 @@ const WC_OFF_ID: I64 = 8
 const WORKER_CTX_SIZE: I64 = 16
 
 // ============================================================================
+// Raw memory accessors for I64 fields
+// ============================================================================
+
+/// Reads an I64 value from `base + offset`.
+func tq_get(base: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((base + offset) as *I64) }
+}
+
+/// Writes an I64 value to `base + offset`.
+func tq_set(base: I64, offset: I64, value: I64) {
+    lowlevel { ptr_write[I64]((base + offset) as *I64, value) }
+}
+
+// ============================================================================
 // TaskQueue operations (via raw pointer)
 // ============================================================================
 
@@ -144,30 +158,22 @@ func tq_init(tq_ptr: I64, initial_cap: I64) {
     }
 
     // Write fields: items_ptr, len, cap
-    lowlevel {
-        ptr_write[I64](tq_ptr as *I64, items)
-        ptr_write[I64]((tq_ptr + 8) as *I64, 0 as I64)
-        ptr_write[I64]((tq_ptr + 16) as *I64, initial_cap)
-    }
+    tq_set(tq_ptr, 0, items)
+    tq_set(tq_ptr, 8, 0)
+    tq_set(tq_ptr, 16, initial_cap)
 
     // Initialize the mutex (at offset 24 in the struct)
     // RawMutex is 64 bytes of zeroes, then we call init
     let mutex_ptr: I64 = tq_ptr + 24
-    // Zero out the mutex area
-    let zero_i: I64 = 0
-    lowlevel {
-        let end: I64 = mutex_ptr + 64
-        let p: I64 = mutex_ptr
-        // Zero 64 bytes (8 iterations of 8 bytes)
-        ptr_write[I64](p as *I64, 0 as I64)
-        ptr_write[I64]((p + 8) as *I64, 0 as I64)
-        ptr_write[I64]((p + 16) as *I64, 0 as I64)
-        ptr_write[I64]((p + 24) as *I64, 0 as I64)
-        ptr_write[I64]((p + 32) as *I64, 0 as I64)
-        ptr_write[I64]((p + 40) as *I64, 0 as I64)
-        ptr_write[I64]((p + 48) as *I64, 0 as I64)
-        ptr_write[I64]((p + 56) as *I64, 0 as I64)
-    }
+    // Zero 64 bytes (8 iterations of 8 bytes)
+    tq_set(tq_ptr, 24, 0)
+    tq_set(tq_ptr, 32, 0)
+    tq_set(tq_ptr, 40, 0)
+    tq_set(tq_ptr, 48, 0)
+    tq_set(tq_ptr, 56, 0)
+    tq_set(tq_ptr, 64, 0)
+    tq_set(tq_ptr, 72, 0)
+    tq_set(tq_ptr, 80, 0)
     // Call init via pointer cast
     ffi_mutex_init(mutex_ptr as *Unit)
 }
@@ -177,9 +183,9 @@ func tq_push(tq_ptr: I64, fn_ptr: I64, user_data: I64, task_id: I64) {
     let mutex_ptr: I64 = tq_ptr + 24
     ffi_mutex_lock(mutex_ptr as *Unit)
 
-    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
-    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
-    let cap: I64 = lowlevel { ptr_read[I64]((tq_ptr + 16) as *I64) }
+    let items: I64 = tq_get(tq_ptr, 0)
+    let len: I64 = tq_get(tq_ptr, 8)
+    let cap: I64 = tq_get(tq_ptr, 16)
 
     // Grow if needed
     let current_items: I64 = items
@@ -193,24 +199,20 @@ func tq_push(tq_ptr: I64, fn_ptr: I64, user_data: I64, task_id: I64) {
             panic("TaskQueue: grow allocation failed")
         }
         let old_size: I64 = len * TASK_SIZE
-        lowlevel {
-            copy_nonoverlapping(current_items as *Unit, new_items as *Unit, old_size as U64)
-            mem_free(current_items as *Unit)
-            ptr_write[I64](tq_ptr as *I64, new_items)
-            ptr_write[I64]((tq_ptr + 16) as *I64, new_cap)
-        }
+        lowlevel { copy_nonoverlapping(current_items as *Unit, new_items as *Unit, old_size as U64) }
+        lowlevel { mem_free(current_items as *Unit) }
+        tq_set(tq_ptr, 0, new_items)
+        tq_set(tq_ptr, 16, new_cap)
     }
 
     // Re-read items_ptr in case we grew
-    let final_items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    let final_items: I64 = tq_get(tq_ptr, 0)
     let task_off: I64 = len * TASK_SIZE
     let slot_addr: I64 = final_items + task_off
-    lowlevel {
-        ptr_write[I64]((slot_addr + TASK_OFF_FN) as *I64, fn_ptr)
-        ptr_write[I64]((slot_addr + TASK_OFF_DATA) as *I64, user_data)
-        ptr_write[I64]((slot_addr + TASK_OFF_ID) as *I64, task_id)
-        ptr_write[I64]((tq_ptr + 8) as *I64, len + 1)
-    }
+    tq_set(slot_addr, TASK_OFF_FN, fn_ptr)
+    tq_set(slot_addr, TASK_OFF_DATA, user_data)
+    tq_set(slot_addr, TASK_OFF_ID, task_id)
+    tq_set(tq_ptr, 8, len + 1)
 
     ffi_mutex_unlock(mutex_ptr as *Unit)
 }
@@ -222,18 +224,18 @@ func tq_pop(tq_ptr: I64, out_fn: I64, out_data: I64, out_id: I64) -> I64 {
     let mutex_ptr: I64 = tq_ptr + 24
     ffi_mutex_lock(mutex_ptr as *Unit)
 
-    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
+    let len: I64 = tq_get(tq_ptr, 8)
     if len == 0 {
         ffi_mutex_unlock(mutex_ptr as *Unit)
         return 0
     }
 
-    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    let items: I64 = tq_get(tq_ptr, 0)
 
     // Read task at index 0
-    let fn_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_FN) as *I64) }
-    let data_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_DATA) as *I64) }
-    let id_val: I64 = lowlevel { ptr_read[I64]((items + TASK_OFF_ID) as *I64) }
+    let fn_val: I64 = tq_get(items, TASK_OFF_FN)
+    let data_val: I64 = tq_get(items, TASK_OFF_DATA)
+    let id_val: I64 = tq_get(items, TASK_OFF_ID)
 
     // Shift remaining tasks forward
     let new_len: I64 = len - 1
@@ -242,16 +244,14 @@ func tq_pop(tq_ptr: I64, out_fn: I64, out_data: I64, out_id: I64) -> I64 {
         let copy_size: I64 = new_len * TASK_SIZE
         lowlevel { copy_nonoverlapping(src as *Unit, items as *Unit, copy_size as U64) }
     }
-    lowlevel { ptr_write[I64]((tq_ptr + 8) as *I64, new_len) }
+    tq_set(tq_ptr, 8, new_len)
 
     ffi_mutex_unlock(mutex_ptr as *Unit)
 
     // Write outputs
-    lowlevel {
-        ptr_write[I64](out_fn as *I64, fn_val)
-        ptr_write[I64](out_data as *I64, data_val)
-        ptr_write[I64](out_id as *I64, id_val)
-    }
+    tq_set(out_fn, 0, fn_val)
+    tq_set(out_data, 0, data_val)
+    tq_set(out_id, 0, id_val)
     return 1
 }
 
@@ -259,14 +259,14 @@ func tq_pop(tq_ptr: I64, out_fn: I64, out_data: I64, out_id: I64) -> I64 {
 func tq_len(tq_ptr: I64) -> I64 {
     let mutex_ptr: I64 = tq_ptr + 24
     ffi_mutex_lock(mutex_ptr as *Unit)
-    let len: I64 = lowlevel { ptr_read[I64]((tq_ptr + 8) as *I64) }
+    let len: I64 = tq_get(tq_ptr, 8)
     ffi_mutex_unlock(mutex_ptr as *Unit)
     return len
 }
 
 /// Destroy a TaskQueue and free its memory.
 func tq_destroy(tq_ptr: I64) {
-    let items: I64 = lowlevel { ptr_read[I64](tq_ptr as *I64) }
+    let items: I64 = tq_get(tq_ptr, 0)
     if items != 0 {
         lowlevel { mem_free(items as *Unit) }
     }
@@ -281,13 +281,13 @@ func tq_destroy(tq_ptr: I64) {
 /// Worker thread entry point. Called by the OS with arg = pointer to WorkerContext.
 func worker_entry(arg: *Unit) {
     let ctx: I64 = arg as I64
-    let state_ptr: I64 = lowlevel { ptr_read[I64]((ctx + WC_OFF_STATE) as *I64) }
-    let _worker_id: I64 = lowlevel { ptr_read[I64]((ctx + WC_OFF_ID) as *I64) }
+    let state_ptr: I64 = tq_get(ctx, WC_OFF_STATE)
+    let _worker_id: I64 = tq_get(ctx, WC_OFF_ID)
 
     // Free the worker context — we've read everything we need
     lowlevel { mem_free(ctx as *Unit) }
 
-    let queue_ptr: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_QUEUE) as *I64) }
+    let queue_ptr: I64 = tq_get(state_ptr, SS_OFF_QUEUE)
 
     // Allocate scratch space for popped task fields (3 x I64)
     let scratch: I64 = lowlevel { mem_alloc(24 as U64) } as I64
@@ -295,7 +295,7 @@ func worker_entry(arg: *Unit) {
     // Worker loop
     loop (true) {
         // Check shutdown flag
-        let shutdown: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = tq_get(state_ptr, SS_OFF_SHUTDOWN)
         if shutdown != 0 {
             // Drain remaining tasks before exiting
             loop (true) {
@@ -303,16 +303,12 @@ func worker_entry(arg: *Unit) {
                 if got == 0 {
                     break
                 }
-                let fn_val: I64 = lowlevel { ptr_read[I64](scratch as *I64) }
-                let data_val: I64 = lowlevel { ptr_read[I64]((scratch + 8) as *I64) }
+                let fn_val: I64 = tq_get(scratch, 0)
+                let data_val: I64 = tq_get(scratch, 8)
                 run_task(fn_val, data_val)
                 // Update counters
-                lowlevel {
-                    let c: I64 = ptr_read[I64]((state_ptr + SS_OFF_COMPLETED) as *I64)
-                    ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, c + 1)
-                    let a: I64 = ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64)
-                    ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, a - 1)
-                }
+                tq_set(state_ptr, SS_OFF_COMPLETED, tq_get(state_ptr, SS_OFF_COMPLETED) + 1)
+                tq_set(state_ptr, SS_OFF_ACTIVE, tq_get(state_ptr, SS_OFF_ACTIVE) - 1)
             }
             lowlevel { mem_free(scratch as *Unit) }
             return
@@ -321,16 +317,12 @@ func worker_entry(arg: *Unit) {
         // Try to get a task
         let got: I64 = tq_pop(queue_ptr, scratch, scratch + 8, scratch + 16)
         if got != 0 {
-            let fn_val: I64 = lowlevel { ptr_read[I64](scratch as *I64) }
-            let data_val: I64 = lowlevel { ptr_read[I64]((scratch + 8) as *I64) }
+            let fn_val: I64 = tq_get(scratch, 0)
+            let data_val: I64 = tq_get(scratch, 8)
             run_task(fn_val, data_val)
             // Update counters
-            lowlevel {
-                let c: I64 = ptr_read[I64]((state_ptr + SS_OFF_COMPLETED) as *I64)
-                ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, c + 1)
-                let a: I64 = ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64)
-                ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, a - 1)
-            }
+            tq_set(state_ptr, SS_OFF_COMPLETED, tq_get(state_ptr, SS_OFF_COMPLETED) + 1)
+            tq_set(state_ptr, SS_OFF_ACTIVE, tq_get(state_ptr, SS_OFF_ACTIVE) - 1)
         } else {
             // No tasks — brief sleep to avoid busy spin
             ffi_thread_sleep_ms(1 as U64)
@@ -409,13 +401,11 @@ impl MultiExecutor {
         tq_init(queue_ptr, INITIAL_QUEUE_CAP)
 
         // Initialize shared state
-        lowlevel {
-            ptr_write[I64]((state_ptr + SS_OFF_QUEUE) as *I64, queue_ptr)
-            ptr_write[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64, 0 as I64)
-            ptr_write[I64]((state_ptr + SS_OFF_NEXT_ID) as *I64, 1 as I64)
-            ptr_write[I64]((state_ptr + SS_OFF_ACTIVE) as *I64, 0 as I64)
-            ptr_write[I64]((state_ptr + SS_OFF_COMPLETED) as *I64, 0 as I64)
-        }
+        tq_set(state_ptr, SS_OFF_QUEUE, queue_ptr)
+        tq_set(state_ptr, SS_OFF_SHUTDOWN, 0)
+        tq_set(state_ptr, SS_OFF_NEXT_ID, 1)
+        tq_set(state_ptr, SS_OFF_ACTIVE, 0)
+        tq_set(state_ptr, SS_OFF_COMPLETED, 0)
 
         // Allocate handles array (one U64 per worker)
         let handles_size: I64 = workers * 8
@@ -453,12 +443,12 @@ impl MultiExecutor {
     /// Returns the unique task ID assigned to this task.
     pub func submit(this, task_fn: func(I64), user_data: I64) -> I64 {
         // Allocate next task ID (not atomic — submit must be called from one thread)
-        let task_id: I64 = lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_NEXT_ID) as *I64) }
-        lowlevel { ptr_write[I64]((this.state_ptr + SS_OFF_NEXT_ID) as *I64, task_id + 1) }
+        let task_id: I64 = tq_get(this.state_ptr, SS_OFF_NEXT_ID)
+        tq_set(this.state_ptr, SS_OFF_NEXT_ID, task_id + 1)
 
         // Increment active count
-        let active: I64 = lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64) }
-        lowlevel { ptr_write[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64, active + 1) }
+        let active: I64 = tq_get(this.state_ptr, SS_OFF_ACTIVE)
+        tq_set(this.state_ptr, SS_OFF_ACTIVE, active + 1)
 
         tq_push(this.queue_ptr, task_fn as I64, user_data, task_id)
 
@@ -476,12 +466,12 @@ impl MultiExecutor {
 
     /// Returns the number of tasks that have been completed.
     pub func completed_count(this) -> I64 {
-        return lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_COMPLETED) as *I64) }
+        return tq_get(this.state_ptr, SS_OFF_COMPLETED)
     }
 
     /// Returns the number of tasks still pending (submitted but not completed).
     pub func active_count(this) -> I64 {
-        return lowlevel { ptr_read[I64]((this.state_ptr + SS_OFF_ACTIVE) as *I64) }
+        return tq_get(this.state_ptr, SS_OFF_ACTIVE)
     }
 
     /// Destroys the executor and frees all resources.
@@ -520,10 +510,8 @@ func start_workers(state_ptr: I64, queue_ptr: I64, count: I64, handles_ptr: I64)
         if ctx == 0 {
             panic("MultiExecutor: worker context allocation failed")
         }
-        lowlevel {
-            ptr_write[I64]((ctx + WC_OFF_STATE) as *I64, state_ptr)
-            ptr_write[I64]((ctx + WC_OFF_ID) as *I64, i)
-        }
+        tq_set(ctx, WC_OFF_STATE, state_ptr)
+        tq_set(ctx, WC_OFF_ID, i)
 
         // Spawn the worker thread
         let handle: U64 = ffi_thread_spawn(
@@ -545,7 +533,7 @@ func start_workers(state_ptr: I64, queue_ptr: I64, count: I64, handles_ptr: I64)
 /// Wait until all active tasks have been completed.
 func wait_for_all(state_ptr: I64) {
     loop (true) {
-        let active: I64 = lowlevel { ptr_read[I64]((state_ptr + SS_OFF_ACTIVE) as *I64) }
+        let active: I64 = tq_get(state_ptr, SS_OFF_ACTIVE)
         if active <= 0 {
             return
         }
@@ -555,7 +543,7 @@ func wait_for_all(state_ptr: I64) {
 
 /// Signal all workers to shut down.
 func signal_shutdown(state_ptr: I64) {
-    lowlevel { ptr_write[I64]((state_ptr + SS_OFF_SHUTDOWN) as *I64, 1 as I64) }
+    tq_set(state_ptr, SS_OFF_SHUTDOWN, 1)
 }
 
 /// Join all worker threads.

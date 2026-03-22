@@ -10,6 +10,28 @@
 use core::mem::{mem_alloc, mem_free}
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 
+// ── Raw memory accessors ─────────────────────────────────────────────────
+
+/// Reads an I64 field from a timer entry at the given byte offset.
+func timer_get(entry: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((entry + offset) as *I64) }
+}
+
+/// Writes an I64 field to a timer entry at the given byte offset.
+func timer_set(entry: I64, offset: I64, value: I64) {
+    lowlevel { ptr_write[I64]((entry + offset) as *I64, value) }
+}
+
+/// Reads the head index stored in a slot array at the given slot index.
+func slot_get(slots: I64, index: I64) -> I64 {
+    lowlevel { ptr_read[I64]((slots + index * 8) as *I64) }
+}
+
+/// Writes the head index to a slot array at the given slot index.
+func slot_set(slots: I64, index: I64, value: I64) {
+    lowlevel { ptr_write[I64]((slots + index * 8) as *I64, value) }
+}
+
 // ── Timer ID ────────────────────────────────────────────────────────────
 
 /// Opaque handle to a scheduled timer.
@@ -94,11 +116,8 @@ impl TimerWheel {
         // Initialize all slots to -1 (empty)
         var i: I64 = 0
         loop (i < SLOTS) {
-            let offset: I64 = i * 8
-            let l0_ptr: *I64 = (l0 + offset) as *I64
-            let l1_ptr: *I64 = (l1 + offset) as *I64
-            lowlevel { ptr_write[I64](l0_ptr, EMPTY) }
-            lowlevel { ptr_write[I64](l1_ptr, EMPTY) }
+            slot_set(l0, i, EMPTY)
+            slot_set(l1, i, EMPTY)
             i = i + 1
         }
 
@@ -110,8 +129,7 @@ impl TimerWheel {
         var j: I64 = 0
         loop (j < INIT_CAPACITY) {
             let next_val: I64 = if j + 1 < INIT_CAPACITY { j + 1 } else { -1 }
-            let next_ptr: *I64 = (entries + j * ENTRY_SIZE + 24) as *I64
-            lowlevel { ptr_write[I64](next_ptr, next_val) }
+            timer_set(entries + j * ENTRY_SIZE, 24, next_val)
             j = j + 1
         }
 
@@ -139,16 +157,12 @@ impl TimerWheel {
         let entry_addr: I64 = this.entries + idx * ENTRY_SIZE
 
         // Write entry fields: deadline, callback, user_data, next=-1
-        let deadline_ptr: *I64 = entry_addr as *I64
-        let callback_ptr: *I64 = (entry_addr + 8) as *I64
-        let userdata_ptr: *I64 = (entry_addr + 16) as *I64
-        let next_ptr: *I64 = (entry_addr + 24) as *I64
-        lowlevel { ptr_write[I64](deadline_ptr, deadline) }
+        timer_set(entry_addr, 0, deadline)
         // If callback is 0 (no callback), store 1 as marker (not 0, which means free)
         let cb_to_store: I64 = if callback != 0 { callback } else { 1 }
-        lowlevel { ptr_write[I64](callback_ptr, cb_to_store) }
-        lowlevel { ptr_write[I64](userdata_ptr, user_data) }
-        lowlevel { ptr_write[I64](next_ptr, EMPTY) }
+        timer_set(entry_addr, 8, cb_to_store)
+        timer_set(entry_addr, 16, user_data)
+        timer_set(entry_addr, 24, EMPTY)
 
         // Insert into appropriate slot
         this.insert_entry(idx, deadline)
@@ -165,11 +179,11 @@ impl TimerWheel {
         if idx < 0 or idx >= this.capacity { return }
 
         // Check if entry is active (callback != 0, where 0 means free)
-        let callback_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 8) as *I64
-        let cb: I64 = lowlevel { ptr_read[I64](callback_ptr) }
+        let entry_addr: I64 = this.entries + idx * ENTRY_SIZE
+        let cb: I64 = timer_get(entry_addr, 8)
         if cb != 0 {
             // Entry is still active, mark it as cancelled
-            lowlevel { ptr_write[I64](callback_ptr, 0) }
+            timer_set(entry_addr, 8, 0)
             this.active_count = this.active_count - 1
         }
         // Note: If cb == 0, entry was already fired or freed, so no-op
@@ -214,16 +228,15 @@ impl TimerWheel {
         // Scan level 0
         var i: I64 = 0
         loop (i < SLOTS) {
-            let head_ptr: *I64 = (this.level0 + i * 8) as *I64
-            var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            var idx: I64 = slot_get(this.level0, i)
             loop (idx >= 0) {
                 let ea: I64 = this.entries + idx * ENTRY_SIZE
-                let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-                let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+                let deadline: I64 = timer_get(ea, 0)
+                let cb: I64 = timer_get(ea, 8)
                 if cb != 0 and deadline < min_deadline {
                     min_deadline = deadline
                 }
-                idx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+                idx = timer_get(ea, 24)
             }
             i = i + 1
         }
@@ -231,16 +244,15 @@ impl TimerWheel {
         // Scan level 1
         i = 0
         loop (i < SLOTS) {
-            let head_ptr: *I64 = (this.level1 + i * 8) as *I64
-            var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+            var idx: I64 = slot_get(this.level1, i)
             loop (idx >= 0) {
                 let ea: I64 = this.entries + idx * ENTRY_SIZE
-                let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-                let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+                let deadline: I64 = timer_get(ea, 0)
+                let cb: I64 = timer_get(ea, 8)
                 if cb != 0 and deadline < min_deadline {
                     min_deadline = deadline
                 }
-                idx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+                idx = timer_get(ea, 24)
             }
             i = i + 1
         }
@@ -249,12 +261,12 @@ impl TimerWheel {
         var oidx: I64 = this.overflow_head
         loop (oidx >= 0) {
             let ea: I64 = this.entries + oidx * ENTRY_SIZE
-            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-            let cb: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+            let deadline: I64 = timer_get(ea, 0)
+            let cb: I64 = timer_get(ea, 8)
             if cb != 0 and deadline < min_deadline {
                 min_deadline = deadline
             }
-            oidx = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
+            oidx = timer_get(ea, 24)
         }
 
         if min_deadline == 9223372036854775807 {
@@ -286,18 +298,16 @@ impl TimerWheel {
             this.grow_entries()
         }
         let idx: I64 = this.free_head
-        let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
-        this.free_head = lowlevel { ptr_read[I64](next_ptr) }
+        this.free_head = timer_get(this.entries + idx * ENTRY_SIZE, 24)
         return idx
     }
 
     /// Returns an entry to the free list.
     pub func free_entry(this, idx: I64) {
-        let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
-        lowlevel { ptr_write[I64](next_ptr, this.free_head) }
+        let entry_addr: I64 = this.entries + idx * ENTRY_SIZE
+        timer_set(entry_addr, 24, this.free_head)
         // Zero out callback to mark as free
-        let cb_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 8) as *I64
-        lowlevel { ptr_write[I64](cb_ptr, 0) }
+        timer_set(entry_addr, 8, 0)
         this.free_head = idx
     }
 
@@ -317,8 +327,7 @@ impl TimerWheel {
         var i: I64 = this.capacity
         loop (i < new_cap) {
             let next_val: I64 = if i + 1 < new_cap { i + 1 } else { -1 }
-            let next_ptr: *I64 = (new_entries + i * ENTRY_SIZE + 24) as *I64
-            lowlevel { ptr_write[I64](next_ptr, next_val) }
+            timer_set(new_entries + i * ENTRY_SIZE, 24, next_val)
             i = i + 1
         }
 
@@ -332,26 +341,22 @@ impl TimerWheel {
     pub func insert_entry(this, idx: I64, deadline: I64) {
         let delay: I64 = deadline - this.current_ms
 
+        let entry_addr: I64 = this.entries + idx * ENTRY_SIZE
         if delay < SLOTS {
             // Level 0
             let slot: I64 = deadline % SLOTS
-            let head_ptr: *I64 = (this.level0 + slot * 8) as *I64
-            let old_head: I64 = lowlevel { ptr_read[I64](head_ptr) }
-            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
-            lowlevel { ptr_write[I64](next_ptr, old_head) }
-            lowlevel { ptr_write[I64](head_ptr, idx) }
+            let old_head: I64 = slot_get(this.level0, slot)
+            timer_set(entry_addr, 24, old_head)
+            slot_set(this.level0, slot, idx)
         } else if delay < MAX_L1_MS {
             // Level 1
             let slot: I64 = (deadline / L1_TICK_MS) % SLOTS
-            let head_ptr: *I64 = (this.level1 + slot * 8) as *I64
-            let old_head: I64 = lowlevel { ptr_read[I64](head_ptr) }
-            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
-            lowlevel { ptr_write[I64](next_ptr, old_head) }
-            lowlevel { ptr_write[I64](head_ptr, idx) }
+            let old_head: I64 = slot_get(this.level1, slot)
+            timer_set(entry_addr, 24, old_head)
+            slot_set(this.level1, slot, idx)
         } else {
             // Overflow
-            let next_ptr: *I64 = (this.entries + idx * ENTRY_SIZE + 24) as *I64
-            lowlevel { ptr_write[I64](next_ptr, this.overflow_head) }
+            timer_set(entry_addr, 24, this.overflow_head)
             this.overflow_head = idx
         }
     }
@@ -359,18 +364,17 @@ impl TimerWheel {
     /// Fires all expired timers in a level-0 slot.
     pub func fire_slot_level0(this, slot: I64, now_ms: I64) -> I64 {
         var fired: I64 = 0
-        let head_ptr: *I64 = (this.level0 + slot * 8) as *I64
-        var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+        var idx: I64 = slot_get(this.level0, slot)
 
         // Clear the slot head
-        lowlevel { ptr_write[I64](head_ptr, EMPTY) }
+        slot_set(this.level0, slot, EMPTY)
 
         loop (idx >= 0) {
             let ea: I64 = this.entries + idx * ENTRY_SIZE
-            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
-            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
-            let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
+            let next: I64 = timer_get(ea, 24)
+            let deadline: I64 = timer_get(ea, 0)
+            let callback: I64 = timer_get(ea, 8)
+            let user_data: I64 = timer_get(ea, 16)
 
             if callback == 0 {
                 // Already freed/cancelled, just free it
@@ -397,17 +401,16 @@ impl TimerWheel {
 
     /// Cascades a level-1 slot down to level 0.
     pub func cascade_level1(this, slot: I64) {
-        let head_ptr: *I64 = (this.level1 + slot * 8) as *I64
-        var idx: I64 = lowlevel { ptr_read[I64](head_ptr) }
+        var idx: I64 = slot_get(this.level1, slot)
 
         // Clear the L1 slot
-        lowlevel { ptr_write[I64](head_ptr, EMPTY) }
+        slot_set(this.level1, slot, EMPTY)
 
         loop (idx >= 0) {
             let ea: I64 = this.entries + idx * ENTRY_SIZE
-            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
-            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+            let next: I64 = timer_get(ea, 24)
+            let deadline: I64 = timer_get(ea, 0)
+            let callback: I64 = timer_get(ea, 8)
 
             if callback != 0 {
                 // Re-insert into level 0 (now within 64ms range)
@@ -429,9 +432,9 @@ impl TimerWheel {
 
         loop (idx >= 0) {
             let ea: I64 = this.entries + idx * ENTRY_SIZE
-            let next: I64 = lowlevel { ptr_read[I64]((ea + 24) as *I64) }
-            let deadline: I64 = lowlevel { ptr_read[I64](ea as *I64) }
-            let callback: I64 = lowlevel { ptr_read[I64]((ea + 8) as *I64) }
+            let next: I64 = timer_get(ea, 24)
+            let deadline: I64 = timer_get(ea, 0)
+            let callback: I64 = timer_get(ea, 8)
 
             if callback == 0 {
                 // Already freed/cancelled, just free it
@@ -439,7 +442,7 @@ impl TimerWheel {
             } else if deadline <= this.current_ms {
                 // Already expired — fire it (if callback is not the marker)
                 if callback != 1 {
-                    let user_data: I64 = lowlevel { ptr_read[I64]((ea + 16) as *I64) }
+                    let user_data: I64 = timer_get(ea, 16)
                     let f: func(I64) = callback as func(I64)
                     f(user_data)
                 }
