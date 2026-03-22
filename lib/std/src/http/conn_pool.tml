@@ -5,7 +5,7 @@
 //! DNS + TCP + TLS handshake on repeated requests to the same server.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}  // ptr_read/ptr_write used by pool_get/pool_set
 
 /// Maximum idle connections per host.
 const MAX_IDLE_PER_HOST: I64 = 4
@@ -31,6 +31,20 @@ pub type ConnectionPool {
 
 const ENTRY_SIZE: I64 = 32  // key_ptr(8) + fd(8) + ssl_ptr(8) + is_tls(8)
 
+// Field offsets within a pool entry.
+const FIELD_KEY: I64 = 0
+const FIELD_FD: I64 = 8
+const FIELD_SSL: I64 = 16
+const FIELD_TLS: I64 = 24
+
+func pool_get(data: I64, index: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((data + index * ENTRY_SIZE + field) as *I64) }
+}
+
+func pool_set(data: I64, index: I64, field: I64, value: I64) {
+    lowlevel { ptr_write[I64]((data + index * ENTRY_SIZE + field) as *I64, value) }
+}
+
 impl ConnectionPool {
     /// Creates a new connection pool.
     pub func new() -> ConnectionPool {
@@ -44,20 +58,19 @@ impl ConnectionPool {
     pub func take(this, key: Str) -> PoolEntry {
         var i: I64 = 0
         loop (i < this.count) {
-            let offset: I64 = i * ENTRY_SIZE
-            let stored_key: Str = lowlevel { ptr_read[I64]((this.data + offset) as *I64) } as Str
+            let stored_key: Str = pool_get(this.data, i, FIELD_KEY) as Str
             if stored_key == key {
                 // Found — extract entry
-                let fd: I64 = lowlevel { ptr_read[I64]((this.data + offset + 8) as *I64) }
-                let ssl: I64 = lowlevel { ptr_read[I64]((this.data + offset + 16) as *I64) }
-                let tls: I64 = lowlevel { ptr_read[I64]((this.data + offset + 24) as *I64) }
+                let fd: I64 = pool_get(this.data, i, FIELD_FD)
+                let ssl: I64 = pool_get(this.data, i, FIELD_SSL)
+                let tls: I64 = pool_get(this.data, i, FIELD_TLS)
                 // Remove by swapping with last entry
-                let last: I64 = (this.count - 1) * ENTRY_SIZE
-                if i < this.count - 1 {
-                    lowlevel { ptr_write[I64]((this.data + offset) as *I64, ptr_read[I64]((this.data + last) as *I64)) }
-                    lowlevel { ptr_write[I64]((this.data + offset + 8) as *I64, ptr_read[I64]((this.data + last + 8) as *I64)) }
-                    lowlevel { ptr_write[I64]((this.data + offset + 16) as *I64, ptr_read[I64]((this.data + last + 16) as *I64)) }
-                    lowlevel { ptr_write[I64]((this.data + offset + 24) as *I64, ptr_read[I64]((this.data + last + 24) as *I64)) }
+                let last: I64 = this.count - 1
+                if i < last {
+                    pool_set(this.data, i, FIELD_KEY, pool_get(this.data, last, FIELD_KEY))
+                    pool_set(this.data, i, FIELD_FD,  pool_get(this.data, last, FIELD_FD))
+                    pool_set(this.data, i, FIELD_SSL, pool_get(this.data, last, FIELD_SSL))
+                    pool_set(this.data, i, FIELD_TLS, pool_get(this.data, last, FIELD_TLS))
                 }
                 this.count = this.count - 1
                 return PoolEntry { fd: fd, ssl_ptr: ssl, is_tls: tls }
@@ -72,11 +85,10 @@ impl ConnectionPool {
         if this.count >= this.capacity {
             return  // Pool full — connection will be closed by caller
         }
-        let offset: I64 = this.count * ENTRY_SIZE
-        lowlevel { ptr_write[I64]((this.data + offset) as *I64, key as I64) }
-        lowlevel { ptr_write[I64]((this.data + offset + 8) as *I64, fd) }
-        lowlevel { ptr_write[I64]((this.data + offset + 16) as *I64, ssl_ptr) }
-        lowlevel { ptr_write[I64]((this.data + offset + 24) as *I64, is_tls) }
+        pool_set(this.data, this.count, FIELD_KEY, key as I64)
+        pool_set(this.data, this.count, FIELD_FD,  fd)
+        pool_set(this.data, this.count, FIELD_SSL, ssl_ptr)
+        pool_set(this.data, this.count, FIELD_TLS, is_tls)
         this.count = this.count + 1
     }
 

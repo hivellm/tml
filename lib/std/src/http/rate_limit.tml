@@ -70,6 +70,19 @@ pub type RateLimiter {
 
 const ENTRY_STRIDE: I64 = 24  // 3 × I64
 
+// Field offsets within a rate limiter entry.
+const RL_FIELD_KEY: I64 = 0
+const RL_FIELD_COUNT: I64 = 8
+const RL_FIELD_START: I64 = 16
+
+func entry_get(entries: I64, index: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((entries + index * ENTRY_STRIDE + field) as *I64) }
+}
+
+func entry_set(entries: I64, index: I64, field: I64, value: I64) {
+    lowlevel { ptr_write[I64]((entries + index * ENTRY_STRIDE + field) as *I64, value) }
+}
+
 impl RateLimiter {
     pub func new(opts: RateLimitOptions) -> RateLimiter {
         let cap: I64 = 64
@@ -88,16 +101,15 @@ impl RateLimiter {
         // Search for existing entry
         var i: I64 = 0
         loop (i < this.entry_count) {
-            let off: I64 = i * ENTRY_STRIDE
-            let entry_key: Str = lowlevel { ptr_read[I64]((this.entries + off) as *I64) } as Str
+            let entry_key: Str = entry_get(this.entries, i, RL_FIELD_KEY) as Str
             if entry_key == key {
-                let entry_count: I64 = lowlevel { ptr_read[I64]((this.entries + off + 8) as *I64) }
-                let entry_start: I64 = lowlevel { ptr_read[I64]((this.entries + off + 16) as *I64) }
+                let entry_count: I64 = entry_get(this.entries, i, RL_FIELD_COUNT)
+                let entry_start: I64 = entry_get(this.entries, i, RL_FIELD_START)
 
                 if now_ms - entry_start >= this.window_ms {
                     // Reset window
-                    lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, 1) }
-                    lowlevel { ptr_write[I64]((this.entries + off + 16) as *I64, now_ms) }
+                    entry_set(this.entries, i, RL_FIELD_COUNT, 1)
+                    entry_set(this.entries, i, RL_FIELD_START, now_ms)
                     return RateLimitResult {
                         allowed: true, remaining: max_req - 1,
                         limit: max_req, reset_at: now_ms + this.window_ms,
@@ -105,7 +117,7 @@ impl RateLimiter {
                 }
 
                 let new_count: I64 = entry_count + 1
-                lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, new_count) }
+                entry_set(this.entries, i, RL_FIELD_COUNT, new_count)
 
                 if new_count > max_req {
                     return RateLimitResult {
@@ -122,10 +134,10 @@ impl RateLimiter {
         }
 
         // New entry
-        let off: I64 = this.entry_count * ENTRY_STRIDE
-        lowlevel { ptr_write[I64]((this.entries + off) as *I64, key as I64) }
-        lowlevel { ptr_write[I64]((this.entries + off + 8) as *I64, 1) }
-        lowlevel { ptr_write[I64]((this.entries + off + 16) as *I64, now_ms) }
+        let new_index: I64 = this.entry_count
+        entry_set(this.entries, new_index, RL_FIELD_KEY,   key as I64)
+        entry_set(this.entries, new_index, RL_FIELD_COUNT, 1)
+        entry_set(this.entries, new_index, RL_FIELD_START, now_ms)
         this.entry_count = this.entry_count + 1
 
         return RateLimitResult {
@@ -137,12 +149,12 @@ impl RateLimiter {
     pub func reset(mut this, key: Str) {
         var i: I64 = 0
         loop (i < this.entry_count) {
-            let off: I64 = i * ENTRY_STRIDE
-            let entry_key: Str = lowlevel { ptr_read[I64]((this.entries + off) as *I64) } as Str
+            let entry_key: Str = entry_get(this.entries, i, RL_FIELD_KEY) as Str
             if entry_key == key {
                 let last: I64 = this.entry_count - 1
                 if i != last {
                     let loff: I64 = last * ENTRY_STRIDE
+                    let off: I64 = i * ENTRY_STRIDE
                     lowlevel { copy_nonoverlapping((this.entries + loff) as *Unit, (this.entries + off) as *Unit, ENTRY_STRIDE) }
                 }
                 this.entry_count = last

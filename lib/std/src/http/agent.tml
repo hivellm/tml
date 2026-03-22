@@ -121,6 +121,18 @@ pub type Agent {
 
 const POOL_ENTRY_SIZE: I64 = 16  // 2 × I64
 
+// Field offsets within an agent pool entry.
+const AGENT_FIELD_NAME: I64 = 0
+const AGENT_FIELD_FD: I64 = 8
+
+func agent_get(pool: I64, index: I64, field: I64) -> I64 {
+    lowlevel { ptr_read[I64]((pool + index * POOL_ENTRY_SIZE + field) as *I64) }
+}
+
+func agent_set(pool: I64, index: I64, field: I64, value: I64) {
+    lowlevel { ptr_write[I64]((pool + index * POOL_ENTRY_SIZE + field) as *I64, value) }
+}
+
 impl Agent {
     /// Creates a new Agent with the given options.
     pub func new(opts: AgentOptions) -> Agent {
@@ -196,9 +208,8 @@ impl Agent {
             this.pool_cap = new_cap
         }
 
-        let offset: I64 = this.pool_count * POOL_ENTRY_SIZE
-        lowlevel { ptr_write[I64]((this.pool_entries + offset) as *I64, name as I64) }
-        lowlevel { ptr_write[I64]((this.pool_entries + offset + 8) as *I64, fd) }
+        agent_set(this.pool_entries, this.pool_count, AGENT_FIELD_NAME, name as I64)
+        agent_set(this.pool_entries, this.pool_count, AGENT_FIELD_FD,   fd)
         this.pool_count = this.pool_count + 1
     }
 
@@ -206,14 +217,14 @@ impl Agent {
     pub func get_from_pool(mut this, name: Str) -> I64 {
         var i: I64 = this.pool_count - 1
         loop (i >= 0) {
-            let offset: I64 = i * POOL_ENTRY_SIZE
-            let entry_name: Str = lowlevel { ptr_read[I64]((this.pool_entries + offset) as *I64) } as Str
+            let entry_name: Str = agent_get(this.pool_entries, i, AGENT_FIELD_NAME) as Str
             if entry_name == name {
-                let fd: I64 = lowlevel { ptr_read[I64]((this.pool_entries + offset + 8) as *I64) }
+                let fd: I64 = agent_get(this.pool_entries, i, AGENT_FIELD_FD)
                 // Remove by swapping with last
                 let last: I64 = this.pool_count - 1
                 if i != last {
                     let loff: I64 = last * POOL_ENTRY_SIZE
+                    let offset: I64 = i * POOL_ENTRY_SIZE
                     lowlevel { copy_nonoverlapping((this.pool_entries + loff) as *Unit, (this.pool_entries + offset) as *Unit, POOL_ENTRY_SIZE) }
                 }
                 this.pool_count = this.pool_count - 1
