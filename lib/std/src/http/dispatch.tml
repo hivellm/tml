@@ -54,6 +54,11 @@ const OFF_ERROR_HANDLER: I64 = 160
 
 const ENTRY_SIZE: I64 = 24
 
+/// Read I64 from shared state at offset.
+func shared_get(shared: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((shared + offset) as *I64) }
+}
+
 // ════════════════════════════════════════════════════════════════════
 // Method index — O(1) method → radix tree lookup
 // ════════════════════════════════════════════════════════════════════
@@ -506,22 +511,22 @@ func app_pattern_match_extract(pattern: Str, path: Str, params_buf: I64) -> I64 
 }
 
 pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, params_buf: I64) -> Str {
-    let table: I64 = lowlevel { ptr_read[I64]((shared + OFF_TABLE) as *I64) }
-    let count: I64 = lowlevel { ptr_read[I64]((shared + OFF_COUNT) as *I64) }
-    let trees: I64 = lowlevel { ptr_read[I64]((shared + OFF_ROUTER) as *I64) }
+    let table: I64 = shared_get(shared, OFF_TABLE)
+    let count: I64 = shared_get(shared, OFF_COUNT)
+    let trees: I64 = shared_get(shared, OFF_ROUTER)
 
     // ── Read hook tables from shared state ──
-    let on_request_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64) }
-    let on_request_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64) }
-    let pre_handler_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64) }
-    let pre_handler_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64) }
-    let on_send_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_TABLE) as *I64) }
-    let on_send_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_SEND_COUNT) as *I64) }
-    let on_response_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64) }
-    let on_response_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64) }
-    let on_error_table: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_TABLE) as *I64) }
-    let on_error_count: I64 = lowlevel { ptr_read[I64]((shared + OFF_ON_ERROR_COUNT) as *I64) }
-    let error_handler: I64 = lowlevel { ptr_read[I64]((shared + OFF_ERROR_HANDLER) as *I64) }
+    let on_request_table: I64 = shared_get(shared, OFF_ON_REQUEST_TABLE)
+    let on_request_count: I64 = shared_get(shared, OFF_ON_REQUEST_COUNT)
+    let pre_handler_table: I64 = shared_get(shared, OFF_PRE_HANDLER_TABLE)
+    let pre_handler_count: I64 = shared_get(shared, OFF_PRE_HANDLER_COUNT)
+    let on_send_table: I64 = shared_get(shared, OFF_ON_SEND_TABLE)
+    let on_send_count: I64 = shared_get(shared, OFF_ON_SEND_COUNT)
+    let on_response_table: I64 = shared_get(shared, OFF_ON_RESPONSE_TABLE)
+    let on_response_count: I64 = shared_get(shared, OFF_ON_RESPONSE_COUNT)
+    let on_error_table: I64 = shared_get(shared, OFF_ON_ERROR_TABLE)
+    let on_error_count: I64 = shared_get(shared, OFF_ON_ERROR_COUNT)
+    let error_handler: I64 = shared_get(shared, OFF_ERROR_HANDLER)
 
     var fn_ptr: I64 = 0
     var param_count: I64 = 0
