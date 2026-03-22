@@ -40,7 +40,8 @@
 
 - [x] 4.1 FFI bindings: begin/end/message/plot/frame_mark in `lib/core/src/profiler.tml`
 - [x] 4.2 C shim in `essential.c`: zone stack, Tracy C API calls, stubs when not profiling
-- [ ] 4.3 `@inline` Zone guard with `drop` — deferred (needs Drop codegen for reliable cleanup)
+- [ ] 4.3 `@inline` Zone guard with `drop` — deferred (needs Drop codegen)
+- [x] 4.4 HTTP worker instrumented: http::connection + http::request zones
 - [ ] 4.4 Create `#ifdef PROFILE` conditional compilation support so TML instrumentation compiles out
 - [ ] 4.5 Instrument `core/alloc` — `mem_alloc`/`mem_free` report to Tracy memory profiler
 - [ ] 4.6 Instrument `core/str` — zone on `Str::from`, `Str::concat`, `Str::split`, `Str::replace`
