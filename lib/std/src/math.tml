@@ -39,6 +39,7 @@
 //! `sin_f32`, `cos_f32`, `sqrt_f32`, `mul_add_f32`, etc.
 
 use core::intrinsics
+use core::profiler
 
 // ============================================================================
 // Constants
@@ -163,12 +164,18 @@ func ffi_hypotf(x: F32, y: F32) -> F32
 
 /// Sine of `x` (in radians).
 pub func sin(x: F64) -> F64 {
-    return intrinsics::sin[F64](x)
+    let z = profiler::begin("math::sin")
+    let r = intrinsics::sin[F64](x)
+    profiler::end(z)
+    return r
 }
 
 /// Cosine of `x` (in radians).
 pub func cos(x: F64) -> F64 {
-    return intrinsics::cos[F64](x)
+    let z = profiler::begin("math::cos")
+    let r = intrinsics::cos[F64](x)
+    profiler::end(z)
+    return r
 }
 
 /// Tangent of `x` (in radians).
@@ -299,7 +306,10 @@ pub func log10(x: F64) -> F64 {
 
 /// Power function (x^y).
 pub func pow(x: F64, y: F64) -> F64 {
-    return intrinsics::pow[F64](x, y)
+    let z = profiler::begin("math::pow")
+    let r = intrinsics::pow[F64](x, y)
+    profiler::end(z)
+    return r
 }
 
 // ============================================================================
@@ -390,7 +400,10 @@ pub func abs(x: F64) -> F64 {
 
 /// Square root.
 pub func sqrt(x: F64) -> F64 {
-    return intrinsics::sqrt[F64](x)
+    let z = profiler::begin("math::sqrt")
+    let r = intrinsics::sqrt[F64](x)
+    profiler::end(z)
+    return r
 }
 
 /// Cube root.

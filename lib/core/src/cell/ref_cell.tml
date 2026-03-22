@@ -4,6 +4,7 @@
 
 use core::option::*
 use core::cell::unsafe_cell::UnsafeCell
+use core::profiler
 
 // ============================================================================
 // Borrow State
@@ -40,16 +41,20 @@ impl[T] RefCell[T] {
 
     /// Immutably borrows the wrapped value.
     pub func borrow(mut this) -> Ref[T] {
+        let z = profiler::begin("RefCell::borrow")
         when this.borrow_state {
             BorrowState::Unused => {
                 this.borrow_state = BorrowState::Reading(1)
+                profiler::end(z)
                 return Ref { cell: ref this }
             },
             BorrowState::Reading(count) => {
                 this.borrow_state = BorrowState::Reading(count + 1)
+                profiler::end(z)
                 return Ref { cell: ref this }
             },
             BorrowState::Writing => {
+                profiler::end(z)
                 panic("RefCell already mutably borrowed")
             }
         }
@@ -57,15 +62,19 @@ impl[T] RefCell[T] {
 
     /// Mutably borrows the wrapped value.
     pub func borrow_mut(mut this) -> RefMut[T] {
+        let z = profiler::begin("RefCell::borrow_mut")
         when this.borrow_state {
             BorrowState::Unused => {
                 this.borrow_state = BorrowState::Writing
+                profiler::end(z)
                 return RefMut { cell: mut ref this }
             },
             BorrowState::Reading(_) => {
+                profiler::end(z)
                 panic("RefCell already immutably borrowed")
             },
             BorrowState::Writing => {
+                profiler::end(z)
                 panic("RefCell already mutably borrowed")
             }
         }

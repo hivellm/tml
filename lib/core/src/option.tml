@@ -72,6 +72,7 @@
 use core::iter::*
 // PartialEq is a builtin behavior - no import needed
 use core::default::Default
+use core::profiler
 
 // ============================================================================
 // Maybe[T] Type (defined in std::types, enhanced here)
@@ -167,9 +168,16 @@ impl[T] Maybe[T] {
     /// x.unwrap()  // Panics!
     /// ```
     pub func unwrap(this) -> T {
+        let z = profiler::begin("Maybe::unwrap")
         when this {
-            Just(val) => return val,
-            Nothing => panic("called unwrap() on Nothing")
+            Just(val) => {
+                profiler::end(z)
+                return val
+            },
+            Nothing => {
+                profiler::end(z)
+                panic("called unwrap() on Nothing")
+            }
         }
     }
 
@@ -260,9 +268,16 @@ impl[T] Maybe[T] {
     /// assert(maybe_len == Just(5))
     /// ```
     pub func map[U](this, f: func(T) -> U) -> Maybe[U] {
+        let z = profiler::begin("Maybe::map")
         when this {
-            Just(val) => return Just(f(val)),
-            Nothing => return Nothing
+            Just(val) => {
+                profiler::end(z)
+                return Just(f(val))
+            },
+            Nothing => {
+                profiler::end(z)
+                return Nothing
+            }
         }
     }
 
@@ -350,9 +365,16 @@ impl[T] Maybe[T] {
     /// assert(Nothing.and_then(square_if_positive) == Nothing)
     /// ```
     pub func and_then[U](this, f: func(T) -> Maybe[U]) -> Maybe[U] {
+        let z = profiler::begin("Maybe::and_then")
         when this {
-            Just(val) => return f(val),
-            Nothing => return Nothing
+            Just(val) => {
+                profiler::end(z)
+                return f(val)
+            },
+            Nothing => {
+                profiler::end(z)
+                return Nothing
+            }
         }
     }
 
