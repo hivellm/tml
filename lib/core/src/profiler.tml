@@ -57,37 +57,3 @@ pub func frame_mark()
 #else
 pub func frame_mark() {}
 #endif
-
-// ============================================================================
-// CPU Profile — Always-on ring buffer + Chrome Trace export
-// ============================================================================
-
-/// Start recording CPU profile events.
-@extern("tml_cpuprofile_start")
-pub func cpu_start()
-
-/// Stop recording CPU profile events.
-@extern("tml_cpuprofile_stop")
-pub func cpu_stop()
-
-/// Begin a CPU profile zone. Returns zone_id.
-@extern("tml_cpuprofile_begin")
-pub func cpu_begin(name: Str) -> I64
-
-/// End a CPU profile zone.
-@extern("tml_cpuprofile_end")
-pub func cpu_end(zone_id: I64)
-
-/// Record a message in the CPU profile.
-@extern("tml_cpuprofile_message")
-pub func cpu_message(text: Str)
-
-/// Export CPU profile to Chrome Trace JSON format.
-/// Open the file in chrome://tracing to visualize.
-/// Returns number of events exported, or -1 on error.
-@extern("tml_cpuprofile_export")
-pub func cpu_export(filename: Str) -> I64
-
-/// Get number of recorded CPU profile events.
-@extern("tml_cpuprofile_count")
-pub func cpu_count() -> I64
