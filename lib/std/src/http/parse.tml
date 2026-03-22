@@ -9,6 +9,16 @@
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
 
+/// Read a byte at buf + offset.
+func rd(buf: I64, offset: I64) -> I32 {
+    lowlevel { ptr_read[U8]((buf + offset) as *U8) } as I32
+}
+
+/// Write a byte at buf + offset.
+func wr(buf: I64, offset: I64, value: I32) {
+    lowlevel { ptr_write[U8]((buf + offset) as *U8, value as U8) }
+}
+
 /// Maximum number of path parameters extracted per request.
 pub const MAX_PARAMS: I64 = 8
 
@@ -25,9 +35,9 @@ pub const MAX_PARAMS: I64 = 8
 pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len and i < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c == 32 as U8 {
-            lowlevel { ptr_write[U8]((buf + i) as *U8, 0 as U8) }
+        let c: I32 = rd(buf, i)
+        if c == 32 {
+            wr(buf, i, 0)
             return buf as Str
         }
         i = i + 1
@@ -43,7 +53,7 @@ pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
     // Find start: skip past the null-terminated method + the null byte
     var start: I64 = 0
     loop (start < len and start < 10) {
-        if lowlevel { ptr_read[U8]((buf + start) as *U8) } == 0 as U8 {
+        if rd(buf, start) == 0 {
             start = start + 1
             break
         }
@@ -52,12 +62,12 @@ pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
     let path_start: I64 = start
     var end: I64 = start
     loop (end < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
-        if c == 32 as U8 or c == 63 as U8 { break }
+        let c: I32 = rd(buf, end)
+        if c == 32 or c == 63 { break }
         end = end + 1
     }
     if end <= path_start { return "/" }
-    lowlevel { ptr_write[U8]((buf + end) as *U8, 0 as U8) }
+    wr(buf, end, 0)
     // Percent-decode path in-place (e.g., %20 → space)
     let path_len: I64 = end - path_start
     app_percent_decode(buf + path_start, path_len)
@@ -81,31 +91,30 @@ pub func app_percent_decode(buf: I64, len: I64) -> I64 {
     var read: I64 = 0
     var write: I64 = 0
     loop (read < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + read) as *U8) }
-        if c == 37 as U8 and read + 2 < len {
+        let c: I32 = rd(buf, read)
+        if c == 37 and read + 2 < len {
             // '%' followed by two hex chars
-            let h1: U8 = lowlevel { ptr_read[U8]((buf + read + 1) as *U8) }
-            let h2: U8 = lowlevel { ptr_read[U8]((buf + read + 2) as *U8) }
+            let h1: U8 = rd(buf, read + 1) as U8
+            let h2: U8 = rd(buf, read + 2) as U8
             let v1: I64 = hex_val(h1)
             let v2: I64 = hex_val(h2)
             if v1 >= 0 and v2 >= 0 {
-                let decoded: U8 = (v1 * 16 + v2) as U8
-                lowlevel { ptr_write[U8]((buf + write) as *U8, decoded) }
+                wr(buf, write, (v1 * 16 + v2) as I32)
                 write = write + 1
                 read = read + 3
                 continue
             }
         }
-        if c == 43 as U8 {
+        if c == 43 {
             // '+' → space (common in query strings, also valid in paths)
-            lowlevel { ptr_write[U8]((buf + write) as *U8, 32 as U8) }
+            wr(buf, write, 32)
         } else if read != write {
-            lowlevel { ptr_write[U8]((buf + write) as *U8, c) }
+            wr(buf, write, c)
         }
         write = write + 1
         read = read + 1
     }
-    lowlevel { ptr_write[U8]((buf + write) as *U8, 0 as U8) }
+    wr(buf, write, 0)
     return write
 }
 
@@ -116,17 +125,17 @@ pub func app_is_http11(buf: I64, len: I64) -> Bool {
     // Find first \r (end of request line)
     var cr: I64 = 0
     loop (cr < len and cr < 2048) {
-        if lowlevel { ptr_read[U8]((buf + cr) as *U8) } == 13 as U8 { break }
+        if rd(buf, cr) == 13 { break }
         cr = cr + 1
     }
     // "HTTP/1.0" is 8 chars before \r
     if cr >= 8 {
         let h: I64 = cr - 8
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + h) as *U8) }      // 'H'
-        let c4: U8 = lowlevel { ptr_read[U8]((buf + h + 4) as *U8) }  // '/'
-        let c7: U8 = lowlevel { ptr_read[U8]((buf + h + 7) as *U8) }  // '0' or '1'
-        if c0 == 72 as U8 and c4 == 47 as U8 {
-            if c7 == 48 as U8 { return false }  // '0' → HTTP/1.0
+        let c0: I32 = rd(buf, h)      // 'H'
+        let c4: I32 = rd(buf, h + 4)  // '/'
+        let c7: I32 = rd(buf, h + 7)  // '0' or '1'
+        if c0 == 72 and c4 == 47 {
+            if c7 == 48 { return false }  // '0' → HTTP/1.0
         }
     }
     return true  // default HTTP/1.1
@@ -160,11 +169,11 @@ pub func app_is_bodyless_method(method: Str) -> Bool {
 pub func app_extract_method(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len and i < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        if c == 32 as U8 {
+        let c: I32 = rd(buf, i)
+        if c == 32 {
             let p: I64 = lowlevel { mem_alloc(i + 1) } as I64
             lowlevel { copy_nonoverlapping(buf as *Unit, p as *Unit, i) }
-            lowlevel { ptr_write[U8]((p + i) as *U8, 0 as U8) }
+            wr(p, i, 0)
             return p as Str
         }
         i = i + 1
@@ -175,38 +184,38 @@ pub func app_extract_method(buf: I64, len: I64) -> Str {
 pub func app_extract_path(buf: I64, len: I64) -> Str {
     var start: I64 = 0
     loop (start < len and start < 10) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + start) as *U8) }
-        if c == 32 as U8 { start = start + 1; break }
+        let c: I32 = rd(buf, start)
+        if c == 32 { start = start + 1; break }
         start = start + 1
     }
     var end: I64 = start
     loop (end < len) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + end) as *U8) }
-        if c == 32 as U8 or c == 63 as U8 { break }
+        let c: I32 = rd(buf, end)
+        if c == 32 or c == 63 { break }
         end = end + 1
     }
     let path_len: I64 = end - start
     if path_len <= 0 { return "/" }
     let p: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
     lowlevel { copy_nonoverlapping((buf + start) as *Unit, p as *Unit, path_len) }
-    lowlevel { ptr_write[U8]((p + path_len) as *U8, 0 as U8) }
+    wr(p, path_len, 0)
     return p as Str
 }
 
 pub func app_extract_body(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len - 3) {
-        let c0: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
-        let c1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
-        let c2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
-        if c0 == 13 as U8 and c1 == 10 as U8 and c2 == 13 as U8 and c3 == 10 as U8 {
+        let c0: I32 = rd(buf, i)
+        let c1: I32 = rd(buf, i + 1)
+        let c2: I32 = rd(buf, i + 2)
+        let c3: I32 = rd(buf, i + 3)
+        if c0 == 13 and c1 == 10 and c2 == 13 and c3 == 10 {
             let body_start: I64 = i + 4
             let body_len: I64 = len - body_start
             if body_len <= 0 { return "" }
             let p: I64 = lowlevel { mem_alloc(body_len + 1) } as I64
             lowlevel { copy_nonoverlapping((buf + body_start) as *Unit, p as *Unit, body_len) }
-            lowlevel { ptr_write[U8]((p + body_len) as *U8, 0 as U8) }
+            wr(p, body_len, 0)
             return p as Str
         }
         i = i + 1
@@ -221,15 +230,15 @@ pub func app_has_header_end(buf: I64, len: I64) -> Bool {
     // instead of scanning the entire buffer from the start.
     var i: I64 = len - 1
     loop (i >= 3) {
-        let c3: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        let c3: I32 = rd(buf, i)
         // Quick filter: most bytes aren't \n (0x0A), skip immediately
-        if c3 == 10 as U8 {
-            let c2: U8 = lowlevel { ptr_read[U8]((buf + i - 1) as *U8) }
-            if c2 == 13 as U8 {
-                let c1: U8 = lowlevel { ptr_read[U8]((buf + i - 2) as *U8) }
-                if c1 == 10 as U8 {
-                    let c0: U8 = lowlevel { ptr_read[U8]((buf + i - 3) as *U8) }
-                    if c0 == 13 as U8 { return true }
+        if c3 == 10 {
+            let c2: I32 = rd(buf, i - 1)
+            if c2 == 13 {
+                let c1: I32 = rd(buf, i - 2)
+                if c1 == 10 {
+                    let c0: I32 = rd(buf, i - 3)
+                    if c0 == 13 { return true }
                 }
             }
         }
@@ -244,33 +253,33 @@ pub func app_has_connection_close(buf: I64, len: I64) -> Bool {
     // Simple scan for "onnection: close" (skip first char for case insensitivity)
     var i: I64 = 0
     loop (i < len - 16) {
-        let c: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
+        let c: I32 = rd(buf, i)
         // Check for 'o' or 'O' followed by "nnection: close"
-        if (c == 111 as U8 or c == 79 as U8) {
-            let n1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
-            let n2: U8 = lowlevel { ptr_read[U8]((buf + i + 2) as *U8) }
-            if (n1 == 110 as U8 or n1 == 78 as U8) and (n2 == 110 as U8 or n2 == 78 as U8) {
+        if (c == 111 or c == 79) {
+            let n1: I32 = rd(buf, i + 1)
+            let n2: I32 = rd(buf, i + 2)
+            if (n1 == 110 or n1 == 78) and (n2 == 110 or n2 == 78) {
                 // Check "ection: close" at i+3
-                let e: U8 = lowlevel { ptr_read[U8]((buf + i + 3) as *U8) }
-                if e == 101 as U8 or e == 69 as U8 {
+                let e: I32 = rd(buf, i + 3)
+                if e == 101 or e == 69 {
                     // Check ": close" or ":close" after "onnection"
                     var j: I64 = i + 10  // skip past "onnection"
                     // Find ':'
                     loop (j < i + 14 and j < len) {
-                        if lowlevel { ptr_read[U8]((buf + j) as *U8) } == 58 as U8 { break }
+                        if rd(buf, j) == 58 { break }
                         j = j + 1
                     }
                     if j < len {
                         j = j + 1
                         // Skip spaces
-                        loop (j < len and lowlevel { ptr_read[U8]((buf + j) as *U8) } == 32 as U8) {
+                        loop (j < len and rd(buf, j) == 32) {
                             j = j + 1
                         }
                         // Check "close"
                         if j + 5 <= len {
-                            let c1: U8 = lowlevel { ptr_read[U8]((buf + j) as *U8) }
-                            let c2: U8 = lowlevel { ptr_read[U8]((buf + j + 1) as *U8) }
-                            if (c1 == 99 as U8 or c1 == 67 as U8) and (c2 == 108 as U8 or c2 == 76 as U8) {
+                            let c1: I32 = rd(buf, j)
+                            let c2: I32 = rd(buf, j + 1)
+                            if (c1 == 99 or c1 == 67) and (c2 == 108 or c2 == 76) {
                                 return true
                             }
                         }
@@ -289,10 +298,10 @@ pub func app_find_header_end_in_str(s: Str) -> I64 {
     let buf: I64 = s as I64
     var i: I64 = 3
     loop (i < len) {
-        if lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8 {
+        if rd(buf, i - 3) == 13
+           and rd(buf, i - 2) == 10
+           and rd(buf, i - 1) == 13
+           and rd(buf, i) == 10 {
             return i + 1
         }
         i = i + 1
@@ -312,10 +321,10 @@ pub func app_count_requests(buf: I64, len: I64) -> I64 {
     var count: I64 = 0
     var i: I64 = 3
     loop (i < len) {
-        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8 {
+        if rd(buf, i) == 10
+           and rd(buf, i - 1) == 13
+           and rd(buf, i - 2) == 10
+           and rd(buf, i - 3) == 13 {
             count = count + 1
         }
         i = i + 1
@@ -331,10 +340,10 @@ pub func app_request_offset(buf: I64, len: I64, n: I64) -> I64 {
     var count: I64 = 0
     var i: I64 = 3
     loop (i < len) {
-        if lowlevel { ptr_read[U8]((buf + i) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 1) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 2) as *U8) } == 10 as U8
-           and lowlevel { ptr_read[U8]((buf + i - 3) as *U8) } == 13 as U8 {
+        if rd(buf, i) == 10
+           and rd(buf, i - 1) == 13
+           and rd(buf, i - 2) == 10
+           and rd(buf, i - 3) == 13 {
             count = count + 1
             if count == n { return i + 1 }
         }
@@ -362,8 +371,7 @@ pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
     // Find end of request line (first \r\n)
     var pos: I64 = 0
     loop (pos < len - 1) {
-        if lowlevel { ptr_read[U8]((buf + pos) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + pos + 1) as *U8) } == 10 as U8 {
+        if rd(buf, pos) == 13 and rd(buf, pos + 1) == 10 {
             pos = pos + 2
             break
         }
@@ -374,8 +382,7 @@ pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
     // Parse each header line: "Name: Value\r\n"
     loop (pos < len - 1 and count < MAX_HEADERS) {
         // Check for empty line (\r\n) = end of headers
-        if lowlevel { ptr_read[U8]((buf + pos) as *U8) } == 13 as U8
-           and lowlevel { ptr_read[U8]((buf + pos + 1) as *U8) } == 10 as U8 {
+        if rd(buf, pos) == 13 and rd(buf, pos + 1) == 10 {
             break
         }
 
@@ -383,7 +390,7 @@ pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
         let name_start: I64 = pos
         var colon: I64 = pos
         loop (colon < len) {
-            if lowlevel { ptr_read[U8]((buf + colon) as *U8) } == 58 as U8 { break }
+            if rd(buf, colon) == 58 { break }
             colon = colon + 1
         }
         if colon >= len { break }
@@ -392,15 +399,14 @@ pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
 
         // Skip ": " (colon + optional spaces)
         var val_start: I64 = colon + 1
-        loop (val_start < len and lowlevel { ptr_read[U8]((buf + val_start) as *U8) } == 32 as U8) {
+        loop (val_start < len and rd(buf, val_start) == 32) {
             val_start = val_start + 1
         }
 
         // Find end of value (\r\n)
         var val_end: I64 = val_start
         loop (val_end < len - 1) {
-            if lowlevel { ptr_read[U8]((buf + val_end) as *U8) } == 13 as U8
-               and lowlevel { ptr_read[U8]((buf + val_end + 1) as *U8) } == 10 as U8 {
+            if rd(buf, val_end) == 13 and rd(buf, val_end + 1) == 10 {
                 break
             }
             val_end = val_end + 1
@@ -441,11 +447,11 @@ pub func app_get_header(headers_buf: I64, header_count: I64, name: Str) -> Str {
             var match: Bool = true
             var j: I64 = 0
             loop (j < name_len) {
-                var a: U8 = lowlevel { ptr_read[U8]((h_name_ptr + j) as *U8) }
-                var b: U8 = lowlevel { ptr_read[U8]((name as I64 + j) as *U8) }
+                var a: I32 = rd(h_name_ptr, j)
+                var b: I32 = rd(name as I64, j)
                 // Lowercase: if A-Z (65-90), add 32
-                if a >= 65 as U8 and a <= 90 as U8 { a = (a as I64 + 32) as U8 }
-                if b >= 65 as U8 and b <= 90 as U8 { b = (b as I64 + 32) as U8 }
+                if a >= 65 and a <= 90 { a = a + 32 }
+                if b >= 65 and b <= 90 { b = b + 32 }
                 if a != b { match = false; break }
                 j = j + 1
             }
@@ -453,7 +459,7 @@ pub func app_get_header(headers_buf: I64, header_count: I64, name: Str) -> Str {
                 // Return a null-terminated copy of the value
                 let vbuf: I64 = lowlevel { mem_alloc(h_val_len + 1) } as I64
                 lowlevel { copy_nonoverlapping(h_val_ptr as *Unit, vbuf as *Unit, h_val_len) }
-                lowlevel { ptr_write[U8]((vbuf + h_val_len) as *U8, 0 as U8) }
+                wr(vbuf, h_val_len, 0)
                 return vbuf as Str
             }
         }
