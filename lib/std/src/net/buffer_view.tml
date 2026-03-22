@@ -22,7 +22,17 @@
 //! let byte = view.get(0)            // First byte
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
+
+/// Reads a single byte from a raw memory address.
+func rd_byte(addr: I64) -> U8 {
+    lowlevel { ptr_read[U8](addr as *U8) }
+}
+
+/// Writes a single byte to a raw memory address.
+func wr_byte(addr: I64, val: U8) {
+    lowlevel { ptr_write[U8](addr as *U8, val) }
+}
 
 /// A zero-copy, non-owning view into a contiguous byte region.
 ///
@@ -103,9 +113,7 @@ impl BufferView {
             return Nothing
         }
         let addr: I64 = this.data as I64 + this.offset + index
-        let p: *U8 = addr as *U8
-        let byte: U8 = lowlevel { ptr_read[U8](p) }
-        return Just(byte)
+        return Just(rd_byte(addr))
     }
 
     /// Returns the byte at the given index without bounds checking.
@@ -115,8 +123,7 @@ impl BufferView {
     /// The caller must ensure that `0 <= index < length`.
     pub func get_unchecked(this, index: I64) -> U8 {
         let addr: I64 = this.data as I64 + this.offset + index
-        let p: *U8 = addr as *U8
-        lowlevel { ptr_read[U8](p) }
+        rd_byte(addr)
     }
 
     /// Creates a sub-view of this view from `start` to `end` (exclusive).
@@ -177,9 +184,7 @@ impl BufferView {
         var i: I64 = 0
         loop (i < this.length) {
             let addr: I64 = this.data as I64 + this.offset + i
-            let p: *U8 = addr as *U8
-            let b: U8 = lowlevel { ptr_read[U8](p) }
-            if b == needle {
+            if rd_byte(addr) == needle {
                 return i
             }
             i = i + 1
@@ -196,9 +201,7 @@ impl BufferView {
         var i: I64 = 0
         loop (i < prefix_len) {
             let addr: I64 = this.data as I64 + this.offset + i
-            let p: *U8 = addr as *U8
-            let b: U8 = lowlevel { ptr_read[U8](p) }
-            if b != prefix[i] {
+            if rd_byte(addr) != prefix[i] {
                 return false
             }
             i = i + 1
@@ -231,9 +234,7 @@ impl BufferView {
         let buf: *Unit = lowlevel { mem_alloc(this.length + 1) }
         let src: I64 = this.data as I64 + this.offset
         lowlevel { copy_nonoverlapping(src as *Unit, buf, this.length as U64) }
-        // Null-terminate
-        let term_ptr: *U8 = (buf as I64 + this.length) as *U8
-        lowlevel { ptr_write[U8](term_ptr, 0 as U8) }
+        wr_byte(buf as I64 + this.length, 0 as U8)
         return buf as Str
     }
 
@@ -246,9 +247,7 @@ impl BufferView {
         loop (i < this.length) {
             let a_addr: I64 = this.data as I64 + this.offset + i
             let b_addr: I64 = other.data as I64 + other.offset + i
-            let a: U8 = lowlevel { ptr_read[U8](a_addr as *U8) }
-            let b: U8 = lowlevel { ptr_read[U8](b_addr as *U8) }
-            if a != b {
+            if rd_byte(a_addr) != rd_byte(b_addr) {
                 return false
             }
             i = i + 1

@@ -72,6 +72,11 @@ func wr(addr: I64, val: I64) {
     lowlevel { ptr_write[I64](addr as *I64, val) }
 }
 
+/// Read a single I8 value from memory address.
+func rd_i8(addr: I64) -> I8 {
+    lowlevel { ptr_read[I8](addr as *I8) }
+}
+
 // ── la_* helpers for low-level listener arrays ────────────────────────────
 //!
 //! Listener arrays store pairs: (callback_fn_ptr: I64, is_once: I64)
@@ -393,8 +398,7 @@ impl EventEmitter {
         let cap: I64 = rd(hdr + 24)
         var i: I64 = 0
         loop (i < cap) {
-            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
-            if c >= (0 as I8) {
+            if rd_i8(ctrl_addr + i) >= (0 as I8) {
                 // Occupied slot — key is at offset 0, value is at offset 8
                 let key: I64 = rd(entries_addr + i * 16)
                 let val: I64 = rd(entries_addr + i * 16 + 8)
@@ -521,8 +525,7 @@ impl EventEmitter {
             let cap: I64 = rd(hdr + 24)
             var i: I64 = 0
             loop (i < cap) {
-                let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
-                if c >= (0 as I8) {
+                if rd_i8(ctrl_addr + i) >= (0 as I8) {
                     // Occupied slot — value is a la_* array handle
                     let val: I64 = rd(entries_addr + i * 16 + 8)
                     la_destroy(val)

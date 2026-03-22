@@ -5,7 +5,7 @@
 //! and sends the complete HTTP/1.1 response.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc}
+use core::intrinsics::{ptr_write, copy_nonoverlapping, mem_alloc}
 use std::http::headers::Headers
 use std::http::error::{HttpError, HttpErrorKind}
 use std::http::cookie::Cookie
@@ -101,8 +101,7 @@ impl ServerResponse {
     /// Creates a new ServerResponse with default 200 OK status.
     pub func new() -> ServerResponse {
         let hdrs: Headers = Headers::new()
-        let hdrs_addr: I64 = (ref hdrs) as I64
-        let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+        let hdrs_ptr: I64 = hdrs.to_handle()
         ServerResponse {
             resp_status_code: 200,
             resp_status_message: "",
@@ -120,8 +119,7 @@ impl ServerResponse {
     /// Creates a ServerResponse tied to a socket and request method.
     pub func for_request(fd: I64, method: Str) -> ServerResponse {
         let hdrs: Headers = Headers::new()
-        let hdrs_addr: I64 = (ref hdrs) as I64
-        let hdrs_ptr: I64 = lowlevel { ptr_read[I64](hdrs_addr as *I64) }
+        let hdrs_ptr: I64 = hdrs.to_handle()
         ServerResponse {
             resp_status_code: 200,
             resp_status_message: "",
