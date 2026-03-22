@@ -222,7 +222,6 @@ func queue_pop(shared: I64) -> I64 {
 /// Returns the response string (from app_dispatch or error handler).
 func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
                      fd: I64, params_buf: I64, body_limit: I64) -> Str {
-    let z_req: I64 = profiler::begin("http::request")
     let req_buf: I64 = buf + offset
     lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
     let method: Str = app_zerocopy_method(req_buf, req_len)
@@ -238,9 +237,7 @@ func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
         }
     }
 
-    let result: Str = app_dispatch(shared, method, path, body, fd, params_buf)
-    profiler::end(z_req)
-    return result
+    return app_dispatch(shared, method, path, body, fd, params_buf)
 }
 
 /// Accept-per-worker: each thread calls accept() directly on the listener.
@@ -387,8 +384,8 @@ pub func app_worker(arg: *Unit) {
                     if lowlevel { ptr_read[U8]((buf + fs) as *U8) } == 32 as U8 { break }
                     fs = fs + 1
                 }
-                // GET=3, HEAD=4, OPTIONS=7, TRACE=5
-                if fs == 3 or fs == 4 or fs == 7 { first_is_bodyless = true }
+                // GET=3, HEAD=4, TRACE=5, OPTIONS=7
+                if fs == 3 or fs == 4 or fs == 5 or fs == 7 { first_is_bodyless = true }
 
                 if first_is_bodyless {
                     // Batch dispatch: process each pipelined request, batch responses
@@ -404,7 +401,11 @@ pub func app_worker(arg: *Unit) {
                         }
                         let req_len: I64 = req_end - req_start
 
+                        // Save byte at end of request before null-termination (dispatch corrupts it)
+                        let saved_byte: U8 = lowlevel { ptr_read[U8]((buf + req_end) as *U8) }
                         let response: Str = dispatch_single(shared, buf, req_start, req_len, fd, params_buf, body_limit)
+                        // Restore byte (so next request's first char isn't null)
+                        lowlevel { ptr_write[U8]((buf + req_end) as *U8, saved_byte) }
                         let resp_len: I64 = str::len(response)
 
                         if batch_pos + resp_len <= RESP_BUF_SIZE {
