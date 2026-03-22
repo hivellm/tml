@@ -803,6 +803,69 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
     }
 
     // ========================================================================
+    // Profiler intrinsics — zero-cost when TML_PROFILE is not defined.
+    // When profiling is enabled, emit Tracy C API calls directly.
+    // When disabled, profiler::begin returns 0, profiler::end is a no-op.
+    // ========================================================================
+    if (i.func_name.find("profiler") != std::string::npos) {
+        // Profiler intrinsic detection — matches both:
+        //   Unmangled: "core::profiler::begin"
+        //   Mangled:   "tml_N4core8profiler5beginE_S"
+        const auto& fn = i.func_name;
+        auto sep = fn.rfind("::");
+        std::string base = (sep != std::string::npos) ? fn.substr(sep + 2) : "";
+
+        bool is_begin = (base == "begin") || fn.find("5beginE") != std::string::npos;
+        bool is_end = (base == "end") || fn.find("3endE") != std::string::npos;
+        bool is_message = (base == "message") || fn.find("7messageE") != std::string::npos;
+        bool is_plot = (base == "plot") || fn.find("4plotE") != std::string::npos;
+        bool is_frame_mark =
+            (base == "frame_mark") || fn.find("10frame_markE") != std::string::npos;
+
+        if (is_begin) {
+#ifdef TML_PROFILE
+            // Emit Tracy zone begin: call i64 @tml_tracy_zone_begin(ptr %name)
+            std::string name_reg = get_value_reg(i.args[0]);
+            emitln("    " + result_reg + " = call i64 @tml_tracy_zone_begin(ptr " + name_reg + ")");
+            value_types_[inst.result] = "i64";
+#else
+            // No profiling: return 0 (zero cost — no function call emitted)
+            emitln("    " + result_reg + " = add i64 0, 0");
+            value_types_[inst.result] = "i64";
+#endif
+            return;
+        }
+        if (is_end) {
+#ifdef TML_PROFILE
+            std::string id_reg = get_value_reg(i.args[0]);
+            emitln("    call void @tml_tracy_zone_end(i64 " + id_reg + ")");
+#endif
+            return;
+        }
+        if (is_message) {
+#ifdef TML_PROFILE
+            std::string text_reg = get_value_reg(i.args[0]);
+            emitln("    call void @tml_tracy_message(ptr " + text_reg + ")");
+#endif
+            return;
+        }
+        if (is_plot) {
+#ifdef TML_PROFILE
+            std::string name_reg = get_value_reg(i.args[0]);
+            std::string val_reg = get_value_reg(i.args[1]);
+            emitln("    call void @tml_tracy_plot(ptr " + name_reg + ", i64 " + val_reg + ")");
+#endif
+            return;
+        }
+        if (is_frame_mark) {
+#ifdef TML_PROFILE
+            emitln("    call void @tml_tracy_frame_mark()");
+#endif
+            return;
+        }
+    }
+
+    // ========================================================================
     // Inline array methods (devirtualized from MethodCallInst)
     // When devirtualization converts array.len() to call "len"(array),
     // the first arg is the array value. Detect array type from value_types_.

@@ -10,6 +10,7 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::profiler
 use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
 use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
@@ -221,6 +222,7 @@ func queue_pop(shared: I64) -> I64 {
 /// Returns the response string (from app_dispatch or error handler).
 func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
                      fd: I64, params_buf: I64, body_limit: I64) -> Str {
+    let z_req: I64 = profiler::begin("http::request")
     let req_buf: I64 = buf + offset
     lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
     let method: Str = app_zerocopy_method(req_buf, req_len)
@@ -236,7 +238,9 @@ func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
         }
     }
 
-    return app_dispatch(shared, method, path, body, fd, params_buf)
+    let result: Str = app_dispatch(shared, method, path, body, fd, params_buf)
+    profiler::end(z_req)
+    return result
 }
 
 /// Accept-per-worker: each thread calls accept() directly on the listener.
