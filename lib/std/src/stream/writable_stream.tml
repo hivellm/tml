@@ -41,6 +41,7 @@
 
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::events::EventEmitter
+use core::profiler
 
 // ============================================================================
 // Memory helpers
@@ -463,9 +464,16 @@ impl WritableStream {
     ///
     /// Flushes any corked data, then emits `"finish"` and `"close"`.
     pub func end(mut this) {
-        if this.is_destroyed_internal() { return }
+        let z = profiler::begin("WritableStream::end")
+        if this.is_destroyed_internal() {
+            profiler::end(z)
+            return
+        }
         let state: I64 = this.get_state()
-        if state != WS_WRITABLE { return }
+        if state != WS_WRITABLE {
+            profiler::end(z)
+            return
+        }
         this.set_state(WS_ENDING)
 
         // Flush any corked data
@@ -474,6 +482,7 @@ impl WritableStream {
 
         this.set_state(WS_FINISHED)
         this.emitter.emit("finish", 0)
+        profiler::end(z)
     }
 
     /// Write final data and end.

@@ -44,6 +44,7 @@ use std::crypto::error::CryptoError
 use std::collections::Buffer
 use std::collections::buffer::{buf_get_data, buf_get_len, buf_read_byte_at, buf_mem_alloc, buf_write_byte_at, hex_digit_to_char}
 use core::str
+use core::profiler
 
 // ============================================================================
 // Direct OpenSSL EVP — zero-allocation one-shot hash
@@ -311,9 +312,11 @@ impl Hash {
     ///
     /// After calling this method, the hash object cannot be used for further updates.
     pub func digest(mut this) -> Digest {
+        let z = profiler::begin("Hash::digest")
         this.finalized = true
         let result_handle: *Unit = ffi_crypto_hash_digest(this.handle)
         let buffer: Buffer = Buffer { handle: result_handle }
+        profiler::end(z)
         return Digest { data: buffer }
     }
 
@@ -377,9 +380,11 @@ pub func sha1_bytes(data: ref Buffer) -> Digest {
 ///
 /// This is the recommended hash function for most applications.
 pub func sha256(data: Str) -> Digest {
+    let z = profiler::begin("sha256")
     let data_len: I64 = str::len(data)
     let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha256_md(), 32)
     let buffer: Buffer = Buffer { handle: handle }
+    profiler::end(z)
     return Digest { data: buffer }
 }
 
@@ -407,9 +412,11 @@ pub func sha384_bytes(data: ref Buffer) -> Digest {
 
 /// Computes the SHA-512 hash of the input string.
 pub func sha512(data: Str) -> Digest {
+    let z = profiler::begin("sha512")
     let data_len: I64 = str::len(data)
     let handle: *Unit = make_evp_digest(data as *Unit, data_len, evp_sha512_md(), 64)
     let buffer: Buffer = Buffer { handle: handle }
+    profiler::end(z)
     return Digest { data: buffer }
 }
 

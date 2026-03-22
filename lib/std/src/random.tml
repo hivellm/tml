@@ -16,6 +16,7 @@
 
 use std::collections::List
 use std::time::time_ns
+use core::profiler
 
 /// A pseudo-random number generator using xoshiro256**.
 ///
@@ -169,14 +170,20 @@ impl Rng {
 
 /// Returns a random I64 using a fresh Rng seeded from the clock.
 pub func random_i64() -> I64 {
+    let z = profiler::begin("random_i64")
     var rng: Rng = Rng::new()
-    return rng.next_i64()
+    let result = rng.next_i64()
+    profiler::end(z)
+    return result
 }
 
 /// Returns a random F64 in [0.0, 1.0) using a fresh Rng.
 pub func random_f64() -> F64 {
+    let z = profiler::begin("random_f64")
     var rng: Rng = Rng::new()
-    return rng.next_f64()
+    let result = rng.next_f64()
+    profiler::end(z)
+    return result
 }
 
 /// Returns a random Bool using a fresh Rng.

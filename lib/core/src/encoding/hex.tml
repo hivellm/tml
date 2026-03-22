@@ -13,6 +13,7 @@
 //! ```
 
 use core::str
+use core::profiler
 
 /// Maps a nibble value (0-15) to a lowercase hex ASCII character code.
 pub func nibble_to_lower(n: I32) -> U8 {
@@ -57,8 +58,10 @@ pub func char_to_nibble(c: I32) -> I32 {
 /// ```
 @allocates
 pub func encode(input: Str) -> Str {
+    let z = profiler::begin("hex::encode")
     let in_len: I64 = str::len(input)
     if in_len == 0 {
+        profiler::end(z)
         return ""
     }
     let hex_table: Str = "0123456789abcdef"
@@ -76,6 +79,7 @@ pub func encode(input: Str) -> Str {
         dp = dp + 2
     }
     lowlevel { ptr_write[U8](dp as *U8, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -88,8 +92,10 @@ pub func encode(input: Str) -> Str {
 /// ```
 @allocates
 pub func encode_upper(input: Str) -> Str {
+    let z = profiler::begin("hex::encode_upper")
     let in_len: I64 = str::len(input)
     if in_len == 0 {
+        profiler::end(z)
         return ""
     }
     let hex_table: Str = "0123456789ABCDEF"
@@ -107,6 +113,7 @@ pub func encode_upper(input: Str) -> Str {
         dp = dp + 2
     }
     lowlevel { ptr_write[U8](dp as *U8, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -123,11 +130,14 @@ pub func encode_upper(input: Str) -> Str {
 /// ```
 @allocates
 pub func decode(hex_str: Str) -> Outcome[Str, Str] {
+    let z = profiler::begin("hex::decode")
     let in_len: I64 = str::len(hex_str)
     if in_len == 0 {
+        profiler::end(z)
         return Ok("")
     }
     if in_len % 2 != 0 {
+        profiler::end(z)
         return Err("hex: odd length input")
     }
     let out_len: I64 = in_len / 2
@@ -141,6 +151,7 @@ pub func decode(hex_str: Str) -> Outcome[Str, Str] {
         let lo: I32 = char_to_nibble(lo_byte as I32)
         if hi == -1 or lo == -1 {
             lowlevel { mem_free(buf) }
+            profiler::end(z)
             return Err("hex: invalid character")
         }
         let byte: U8 = ((hi << 4) | lo) as U8
@@ -148,5 +159,6 @@ pub func decode(hex_str: Str) -> Outcome[Str, Str] {
         i = i + 1
     }
     lowlevel { ptr_write[U8]((buf as I64 + out_len) as *U8, 0 as U8) }
+    profiler::end(z)
     return Ok(buf as Str)
 }

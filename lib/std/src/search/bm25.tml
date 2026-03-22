@@ -29,6 +29,8 @@
 //! let results = idx.search("split string", 5)
 //! ```
 
+use core::profiler
+
 // ============================================================================
 // FFI Declarations
 // ============================================================================
@@ -185,8 +187,10 @@ impl Bm25Index {
     /// Computes IDF values and average field lengths. Must be called
     /// before `search()`.
     pub func build(mut this) {
+        let z = profiler::begin("Bm25Index::build")
         ffi_bm25_build(this.handle)
         this.built = true
+        profiler::end(z)
     }
 
     /// Searches the index and returns ranked results.
@@ -195,6 +199,7 @@ impl Bm25Index {
     /// @param limit Maximum number of results to return
     /// @returns List of results sorted by BM25 score (descending)
     pub func search(this, query: Str, limit: I32) -> List[Bm25Result] {
+        let z = profiler::begin("Bm25Index::search")
         var doc_ids: [U32; 1024] = [0; 1024]
         var scores: [F32; 1024] = [0.0; 1024]
         let actual_limit: I32 = if limit > 1024 { 1024 } else { limit }
@@ -207,6 +212,7 @@ impl Bm25Index {
             results.push(Bm25Result { doc_id: doc_ids[i], score: scores[i] })
             i = i + 1
         }
+        profiler::end(z)
         return results
     }
 

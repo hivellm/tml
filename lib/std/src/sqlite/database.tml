@@ -11,6 +11,7 @@ use std::sqlite::constants::{
     SQLITE_OPEN_MEMORY, SQLITE_OPEN_URI
 }
 use std::sqlite::statement::Statement
+use core::profiler
 
 /// A connection to an SQLite database.
 ///
@@ -34,6 +35,7 @@ impl Database {
     /// Opens a database file in read-write mode.
     /// Creates the file if it does not exist.
     pub func open(path: Str) -> Outcome[Database, Str] {
+        let z = profiler::begin("Database::open")
         var db_ptr: *Unit = 0 as *Unit
         let rc: I32 = ffi::sqlite3_open(path, (&db_ptr) as *(*Unit))
         if rc != SQLITE_OK {
@@ -44,8 +46,10 @@ impl Database {
             } else {
                 "Failed to allocate database handle"
             }
+            profiler::end(z)
             return Err(msg)
         }
+        profiler::end(z)
         return Ok(Database { handle: db_ptr, is_open: true })
     }
 
@@ -88,6 +92,7 @@ impl Database {
     /// This is the equivalent of Node.js `db.exec(sql)`.
     /// Returns the number of rows changed by the last statement.
     pub func exec(this, sql: Str) -> Outcome[I32, Str] {
+        let z = profiler::begin("Database::exec")
         var errmsg_ptr: *Unit = 0 as *Unit
         let rc: I32 = ffi::sqlite3_exec(this.handle, sql, 0 as *Unit, 0 as *Unit, (&errmsg_ptr) as *(*Unit))
         if rc != SQLITE_OK {
@@ -98,8 +103,10 @@ impl Database {
             } else {
                 "SQL execution failed"
             }
+            profiler::end(z)
             return Err(msg)
         }
+        profiler::end(z)
         return Ok(ffi::sqlite3_changes(this.handle))
     }
 
@@ -108,13 +115,16 @@ impl Database {
     /// This is the equivalent of Node.js `db.prepare(sql)`.
     /// Returns a compiled [`Statement`] that can be executed multiple times.
     pub func prepare(this, sql: Str) -> Outcome[Statement, Str] {
+        let z = profiler::begin("Database::prepare")
         var stmt_ptr: *Unit = 0 as *Unit
         let rc: I32 = ffi::sqlite3_prepare_v2(this.handle, sql, -1, (&stmt_ptr) as *(*Unit), 0 as *(*Unit))
         if rc != SQLITE_OK {
             let msg: Str = ffi::sqlite3_errmsg(this.handle)
+            profiler::end(z)
             return Err(msg)
         }
         let col_count: I32 = ffi::sqlite3_column_count(stmt_ptr)
+        profiler::end(z)
         return Ok(Statement {
             handle: stmt_ptr,
             db: this.handle,

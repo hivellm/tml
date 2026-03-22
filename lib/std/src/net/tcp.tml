@@ -42,6 +42,7 @@ use std::net::{SocketAddr, SocketAddrV4, IpAddr, Ipv4Addr}
 use std::net::error::{NetError, NetErrorKind}
 use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily, ShutdownMode}
 use core::time::Duration
+use core::profiler
 
 // ============================================================================
 // TcpListener
@@ -162,10 +163,12 @@ pub type TcpStream {
 impl TcpStream {
     /// Opens a TCP connection to a remote host.
     pub func connect(addr: SocketAddr) -> Outcome[TcpStream, NetError] {
+        let z = profiler::begin("TcpStream::connect")
         let family: AddressFamily = AddressFamily::from_addr(ref addr)
         let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
         socket.connect(ref addr)!
         let stream: TcpStream = TcpStream { socket: socket }
+        profiler::end(z)
         Ok(stream)
     }
 
@@ -306,14 +309,20 @@ impl TcpStream {
     ///
     /// Returns the number of bytes read. Returns 0 if the connection was closed.
     pub func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
-        this.socket.recv(buf)
+        let z = profiler::begin("TcpStream::read")
+        let result = this.socket.recv(buf)
+        profiler::end(z)
+        return result
     }
 
     /// Writes data to the socket.
     ///
     /// Returns the number of bytes written.
     pub func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
-        this.socket.send(buf)
+        let z = profiler::begin("TcpStream::write")
+        let result = this.socket.send(buf)
+        profiler::end(z)
+        return result
     }
 
     /// Writes exactly `n` bytes from the buffer to the socket.

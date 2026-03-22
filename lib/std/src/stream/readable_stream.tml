@@ -37,6 +37,7 @@
 
 use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::events::EventEmitter
+use core::profiler
 
 // ============================================================================
 // Memory helpers
@@ -484,7 +485,11 @@ impl ReadableStream {
     /// When the buffer is drained and EOF was signaled, emits `"end"`.
     @allocates
     pub func read(mut this, size: I64) -> Str {
-        if this.is_destroyed_internal() { return "" }
+        let z = profiler::begin("ReadableStream::read")
+        if this.is_destroyed_internal() {
+            profiler::end(z)
+            return ""
+        }
 
         let buf: I64 = this.get_buf()
         let buf_len: I64 = rbuf_len(buf)
@@ -493,6 +498,7 @@ impl ReadableStream {
             if this.is_ended() {
                 this.emitter_emit("end", 0)
             }
+            profiler::end(z)
             return ""
         }
 
@@ -512,6 +518,7 @@ impl ReadableStream {
             f(this.get_hwm() - remaining, this.handle as I64)
         }
 
+        profiler::end(z)
         result
     }
 
@@ -611,7 +618,11 @@ impl ReadableStream {
     /// Backpressure is handled: if dest returns false from write(),
     /// this stream pauses until dest emits "drain".
     pub func pipe(mut this, dest: mut ref WritableStream) {
-        if this.is_destroyed_internal() { return }
+        let z = profiler::begin("ReadableStream::pipe")
+        if this.is_destroyed_internal() {
+            profiler::end(z)
+            return
+        }
 
         // Store pipe destination — dest is already mut ref, use `dest as I64`
         // (NOT `(mut ref dest) as I64` which gives the parameter slot address)
@@ -624,6 +635,7 @@ impl ReadableStream {
         if this.get_state() != RS_STATE_FLOWING {
             this.resume()
         }
+        profiler::end(z)
     }
 
     /// Remove the pipe to a writable destination.

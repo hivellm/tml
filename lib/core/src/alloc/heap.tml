@@ -31,6 +31,7 @@ use core::ops::{Deref, DerefMut}
 use core::clone::Duplicate
 use core::fmt::{Display, Debug}
 use core::default::Default
+use core::profiler
 
 /// A unique pointer to heap-allocated data.
 ///
@@ -72,10 +73,12 @@ impl[T] Heap[T] {
     /// assert_eq(boxed.get(), 42)
     /// ```
     pub func new(value: T) -> Heap[T] {
+        let z = profiler::begin("Heap::new")
         let size: I64 = size_of[T]()
         let ptr: *Unit = mem_alloc(size)
 
         if ptr == null {
+            profiler::end(z)
             panic("Heap::new: allocation failed")
         }
 
@@ -84,6 +87,7 @@ impl[T] Heap[T] {
         // Store value on heap
         lowlevel { *typed_ptr = value }
 
+        profiler::end(z)
         return Heap { ptr: typed_ptr }
     }
 
@@ -143,7 +147,9 @@ impl[T] Heap[T] {
     /// assert_eq(value, 42)
     /// ```
     pub func into_inner(mut this) -> T {
+        let z = profiler::begin("Heap::into_inner")
         if this.ptr == null {
+            profiler::end(z)
             panic("Heap::into_inner: null pointer")
         }
 
@@ -152,6 +158,7 @@ impl[T] Heap[T] {
 
         // Null the pointer so drop() is a no-op (prevents double-free)
         this.ptr = null
+        profiler::end(z)
         return value
     }
 

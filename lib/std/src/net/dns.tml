@@ -17,6 +17,7 @@
 //! ```
 
 use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+use core::profiler
 
 // ============================================================================
 // DNS Error Types
@@ -291,11 +292,14 @@ func ipv6_from_halves(hi: I64, lo: I64) -> Ipv6Addr {
 /// assert(addr.is_ok())
 /// ```
 pub func lookup(hostname: Str) -> Outcome[Ipv4Addr, DnsError] {
+    let z = profiler::begin("dns::lookup")
     let result: I64 = sys_dns_lookup4(hostname)
     if result < 0 {
         let eai: I32 = sys_dns_get_last_error()
+        profiler::end(z)
         return Err(DnsError::from_eai(eai))
     }
+    profiler::end(z)
     Ok(Ipv4Addr::from_bits(result as U32))
 }
 
@@ -303,12 +307,15 @@ pub func lookup(hostname: Str) -> Outcome[Ipv4Addr, DnsError] {
 ///
 /// This is equivalent to Node.js `dns.lookup(hostname, { family: 6 })`.
 pub func lookup6(hostname: Str) -> Outcome[Ipv6Addr, DnsError] {
+    let z = profiler::begin("dns::lookup6")
     let hi: I64 = sys_dns_lookup6_hi(hostname)
     if hi < 0 {
         let eai: I32 = sys_dns_get_last_error()
+        profiler::end(z)
         return Err(DnsError::from_eai(eai))
     }
     let lo: I64 = sys_dns_lookup6_lo()
+    profiler::end(z)
     Ok(ipv6_from_halves(hi, lo))
 }
 

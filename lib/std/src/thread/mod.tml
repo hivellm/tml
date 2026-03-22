@@ -100,6 +100,7 @@
 use std::sync::atomic::{AtomicBool, Ordering}
 use core::clone::Duplicate
 use core::marker::Send
+use core::profiler
 
 // ============================================================================
 // Platform-specific thread handle
@@ -321,18 +322,27 @@ impl[T] JoinHandle[T] {
     /// }
     /// ```
     pub func join(mut this) -> Outcome[T, JoinError] {
+        let z = profiler::begin("JoinHandle::join")
         if this.joined.swap(true, Ordering::AcqRel) {
+            profiler::end(z)
             return Err(JoinError::AlreadyJoined)
         }
 
         let status: I32 = raw_thread_join(this.raw)
         if status != 0 {
+            profiler::end(z)
             return Err(JoinError::OsError(status))
         }
 
         when this.result {
-            Just(value) => return Ok(value),
-            Nothing => return Err(JoinError::NoResult)
+            Just(value) => {
+                profiler::end(z)
+                return Ok(value)
+            },
+            Nothing => {
+                profiler::end(z)
+                return Err(JoinError::NoResult)
+            }
         }
     }
 
@@ -560,9 +570,16 @@ pub enum SpawnError {
 /// assert_eq(result, 42)
 /// ```
 pub func spawn[T: Send](f: func() -> T) -> JoinHandle[T] {
+    let z = profiler::begin("thread::spawn")
     when Builder::new().spawn(f) {
-        Ok(handle) => return handle,
-        Err(e) => panic("failed to spawn thread")
+        Ok(handle) => {
+            profiler::end(z)
+            return handle
+        },
+        Err(e) => {
+            profiler::end(z)
+            panic("failed to spawn thread")
+        }
     }
 }
 
