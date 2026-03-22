@@ -358,6 +358,7 @@ std::optional<CodegenUnitResult> QueryContext::try_mark_green_codegen(const Quer
     }
 
     TML_LOG_INFO("incr", "GREEN: reusing cached codegen result (incremental)");
+    TML_MESSAGE_L("cache:GREEN");
     return result;
 }
 

@@ -37,6 +37,7 @@ TML_MODULE("compiler")
 
 #include "log/log.hpp"
 #include "mir/passes_all.hpp"
+#include "profiler.hpp"
 #include "types/env.hpp"
 
 #include <filesystem>
@@ -142,6 +143,7 @@ static void write_pipeline_file(const std::string& path, const std::string& cont
 }
 
 auto PassManager::run(Module& module) -> int {
+    TML_ZONE("mir::pass_manager::run");
     int changes = 0;
     bool debug_mir = false; // Set to true to debug MIR passes
 
@@ -164,6 +166,8 @@ auto PassManager::run(Module& module) -> int {
 
     int pass_index = 0;
     for (auto& pass : passes_) {
+        TML_ZONE("mir::pass");
+        TML_MESSAGE(pass->name().c_str());
         bool changed = pass->run(module);
         if (changed) {
             ++changes;
