@@ -13,19 +13,44 @@
 //! ```
 
 use core::error::{IoError, IoErrorKind}
-use core::intrinsics::{ptr_read, ptr_write}
+use std::collections::buffer::{
+    buf_get_data,
+    buf_set_data,
+    buf_get_len,
+    buf_set_len,
+    buf_get_cap,
+    buf_set_cap,
+    buf_get_read_pos,
+    buf_set_read_pos,
+    buf_mem_realloc,
+    buf_read_byte_at,
+    buf_write_byte_at,
+}
 use std::stream::byte_stream::ByteStream
 
-// Internal: read byte from raw pointer at offset
-func pipe_read_byte(data: *Unit, index: I64) -> U8 {
-    let p: *U8 = (data as I64 + index) as *U8
-    lowlevel { ptr_read[U8](p) }
+// Internal: copy `count` bytes from `src_data` at `src_offset` into `dst_data` at `dst_offset`.
+func copy_bytes_raw(src_data: *Unit, src_offset: I64, dst_data: *Unit, dst_offset: I64, count: I64) {
+    var i: I64 = 0
+    loop (i < count) {
+        buf_write_byte_at(dst_data, dst_offset + i, buf_read_byte_at(src_data, src_offset + i))
+        i = i + 1
+    }
 }
 
-// Internal: write byte to raw pointer at offset
-func pipe_write_byte(data: *Unit, index: I64, val: U8) {
-    let p: *U8 = (data as I64 + index) as *U8
-    lowlevel { ptr_write[U8](p, val) }
+// Internal: ensure a ByteStream handle has at least `needed` additional bytes of capacity.
+func pipe_ensure_capacity(h: I64, needed: I64) {
+    let dst_len: I64 = buf_get_len(h)
+    let dst_cap: I64 = buf_get_cap(h)
+    if dst_len + needed > dst_cap {
+        var new_cap: I64 = dst_cap * 2
+        loop (new_cap < dst_len + needed) {
+            new_cap = new_cap * 2
+        }
+        let old_data: *Unit = buf_get_data(h)
+        let new_data: *Unit = buf_mem_realloc(old_data, new_cap)
+        buf_set_data(h, new_data)
+        buf_set_cap(h, new_cap)
+    }
 }
 
 /// Copies all remaining bytes from `source` to `dest`.
@@ -33,49 +58,27 @@ func pipe_write_byte(data: *Unit, index: I64, val: U8) {
 /// Reads directly from source's internal data and writes to dest
 /// using write_string. Returns the total number of bytes transferred.
 pub func pipe(source: mut ref ByteStream, dest: mut ref ByteStream) -> Outcome[I64, IoError] {
-    // Access source internals directly
     let h_src: I64 = source.handle as I64
-    let src_rp: I64 = lowlevel { ptr_read[I64]((h_src + 24) as *I64) }
-    let src_len: I64 = lowlevel { ptr_read[I64]((h_src + 8) as *I64) }
+    let src_rp: I64 = buf_get_read_pos(h_src)
+    let src_len: I64 = buf_get_len(h_src)
     let remaining: I64 = src_len - src_rp
 
     if remaining <= 0 {
         return Ok(0 as I64)
     }
 
-    let src_data: *Unit = lowlevel { ptr_read[I64](h_src as *I64) } as *Unit
+    let src_data: *Unit = buf_get_data(h_src)
 
-    // Access dest internals directly
     let h_dst: I64 = dest.handle as I64
+    let dst_len: I64 = buf_get_len(h_dst)
 
-    // Ensure dest has capacity
-    let dst_len: I64 = lowlevel { ptr_read[I64]((h_dst + 8) as *I64) }
-    let dst_cap: I64 = lowlevel { ptr_read[I64]((h_dst + 16) as *I64) }
-    if dst_len + remaining > dst_cap {
-        var new_cap: I64 = dst_cap * 2
-        loop (new_cap < dst_len + remaining) {
-            new_cap = new_cap * 2
-        }
-        let old_dst_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
-        let new_dst_data: *Unit = lowlevel { mem_realloc(old_dst_data, new_cap) }
-        lowlevel { ptr_write[I64](h_dst as *I64, new_dst_data as I64) }
-        lowlevel { ptr_write[I64]((h_dst + 16) as *I64, new_cap) }
-    }
+    pipe_ensure_capacity(h_dst, remaining)
 
-    let dst_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
+    let dst_data: *Unit = buf_get_data(h_dst)
+    copy_bytes_raw(src_data, src_rp, dst_data, dst_len, remaining)
 
-    // Copy bytes from source to dest
-    var i: I64 = 0
-    loop (i < remaining) {
-        let byte_val: U8 = pipe_read_byte(src_data, src_rp + i)
-        pipe_write_byte(dst_data, dst_len + i, byte_val)
-        i = i + 1
-    }
-
-    // Update source read position
-    lowlevel { ptr_write[I64]((h_src + 24) as *I64, src_rp + remaining) }
-    // Update dest length
-    lowlevel { ptr_write[I64]((h_dst + 8) as *I64, dst_len + remaining) }
+    buf_set_read_pos(h_src, src_rp + remaining)
+    buf_set_len(h_dst, dst_len + remaining)
 
     Ok(remaining)
 }
@@ -90,8 +93,8 @@ pub func copy_bytes(source: mut ref ByteStream, dest: mut ref ByteStream, limit:
     }
 
     let h_src: I64 = source.handle as I64
-    let src_rp: I64 = lowlevel { ptr_read[I64]((h_src + 24) as *I64) }
-    let src_len: I64 = lowlevel { ptr_read[I64]((h_src + 8) as *I64) }
+    let src_rp: I64 = buf_get_read_pos(h_src)
+    let src_len: I64 = buf_get_len(h_src)
     let remaining: I64 = src_len - src_rp
 
     var to_copy: I64 = remaining
@@ -102,36 +105,18 @@ pub func copy_bytes(source: mut ref ByteStream, dest: mut ref ByteStream, limit:
         return Ok(0 as I64)
     }
 
-    let src_data: *Unit = lowlevel { ptr_read[I64](h_src as *I64) } as *Unit
+    let src_data: *Unit = buf_get_data(h_src)
 
-    // Ensure dest has capacity
     let h_dst: I64 = dest.handle as I64
-    let dst_len: I64 = lowlevel { ptr_read[I64]((h_dst + 8) as *I64) }
-    let dst_cap: I64 = lowlevel { ptr_read[I64]((h_dst + 16) as *I64) }
-    if dst_len + to_copy > dst_cap {
-        var new_cap: I64 = dst_cap * 2
-        loop (new_cap < dst_len + to_copy) {
-            new_cap = new_cap * 2
-        }
-        let old_dst_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
-        let new_dst_data: *Unit = lowlevel { mem_realloc(old_dst_data, new_cap) }
-        lowlevel { ptr_write[I64](h_dst as *I64, new_dst_data as I64) }
-        lowlevel { ptr_write[I64]((h_dst + 16) as *I64, new_cap) }
-    }
+    let dst_len: I64 = buf_get_len(h_dst)
 
-    let dst_data: *Unit = lowlevel { ptr_read[I64](h_dst as *I64) } as *Unit
+    pipe_ensure_capacity(h_dst, to_copy)
 
-    // Copy bytes
-    var i: I64 = 0
-    loop (i < to_copy) {
-        let byte_val: U8 = pipe_read_byte(src_data, src_rp + i)
-        pipe_write_byte(dst_data, dst_len + i, byte_val)
-        i = i + 1
-    }
+    let dst_data: *Unit = buf_get_data(h_dst)
+    copy_bytes_raw(src_data, src_rp, dst_data, dst_len, to_copy)
 
-    // Update positions
-    lowlevel { ptr_write[I64]((h_src + 24) as *I64, src_rp + to_copy) }
-    lowlevel { ptr_write[I64]((h_dst + 8) as *I64, dst_len + to_copy) }
+    buf_set_read_pos(h_src, src_rp + to_copy)
+    buf_set_len(h_dst, dst_len + to_copy)
 
     Ok(to_copy)
 }
