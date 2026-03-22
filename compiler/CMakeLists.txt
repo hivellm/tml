@@ -124,9 +124,9 @@ if(TML_PROFILE)
     endif()
 endif()
 
-# Tracy include path (available to all targets when TML_PROFILE is ON)
+# Tracy include path (SYSTEM to suppress warnings from Tracy headers)
 if(TML_PROFILE)
-    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public")
+    include_directories(SYSTEM "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public")
 endif()
 
 # Compiler flags
@@ -350,6 +350,13 @@ else()
     endif()
 endif()
 
+# Tracy for runtime (when profiling enabled — link tml_tracy for symbols)
+if(TML_PROFILE)
+    target_include_directories(tml_runtime SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public")
+    target_compile_definitions(tml_runtime PRIVATE TML_PROFILE TRACY_ENABLE)
+    target_link_libraries(tml_runtime PUBLIC tml_tracy)
+endif()
+
 # Put runtime library in output directory (alongside tml.exe)
 set_target_properties(tml_runtime PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
@@ -450,6 +457,8 @@ if(TML_PROFILE)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public"
     )
     target_compile_definitions(tml_tracy PUBLIC TRACY_ENABLE)
+    # Tracy code has sign-compare and other warnings — suppress for this target
+    target_compile_options(tml_tracy PRIVATE -Wno-error -Wno-sign-compare -Wno-unused-parameter)
     if(WIN32)
         target_link_libraries(tml_tracy PUBLIC ws2_32 dbghelp)
     else()

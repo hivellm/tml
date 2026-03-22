@@ -27,7 +27,7 @@ TML_MODULE("compiler")
 namespace tml::lexer {
 
 auto Lexer::tokenize() -> std::vector<Token> {
-    TML_ZONE_TEXT(source_.file_path().c_str());
+    TML_ZONE("lexer::tokenize");
     std::vector<Token> tokens;
 
     while (true) {
