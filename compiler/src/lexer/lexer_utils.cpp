@@ -20,12 +20,14 @@ TML_MODULE("compiler")
 //! - Combining diacritical marks
 
 #include "lexer/lexer.hpp"
+#include "profiler.hpp"
 
 #include <algorithm>
 
 namespace tml::lexer {
 
 auto Lexer::tokenize() -> std::vector<Token> {
+    TML_ZONE("lexer::tokenize");
     std::vector<Token> tokens;
 
     while (true) {

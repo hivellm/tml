@@ -40,6 +40,7 @@ TML_MODULE("compiler")
 //! - Call (., [], ())
 
 #include "parser/parser.hpp"
+#include "profiler.hpp"
 
 namespace tml::parser {
 
@@ -310,6 +311,7 @@ auto Parser::make_deletion_fix(const SourceSpan& span, const std::string& desc) 
 // ============================================================================
 
 auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector<ParseError>> {
+    TML_ZONE("parser::parse");
     std::vector<DeclPtr> decls;
     std::vector<std::string> module_docs;
     auto start_span = peek().span;
