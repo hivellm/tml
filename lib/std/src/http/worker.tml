@@ -12,7 +12,8 @@ use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use core::profiler
 use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
-use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
+use std::http::parse::{app_zerocopy_method, app_zerocopy_path,
+                       app_copy_method, app_copy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
                        app_is_bodyless_method, app_find_header_end_in_str,
                        app_count_requests, app_request_offset,
@@ -223,9 +224,9 @@ func queue_pop(shared: I64) -> I64 {
 func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
                      fd: I64, params_buf: I64, body_limit: I64) -> Str {
     let req_buf: I64 = buf + offset
-    // No null-termination — method/path extraction now copies bytes (safe for pipelining)
-    let method: Str = app_zerocopy_method(req_buf, req_len)
-    let path: Str = app_zerocopy_path(req_buf, req_len)
+    // Copy-based parsing — safe for pipelined requests (doesn't corrupt buffer)
+    let method: Str = app_copy_method(req_buf, req_len)
+    let path: Str = app_copy_path(req_buf, req_len)
 
     let method_len: I64 = str::len(method)
     var body: Str = ""
@@ -291,7 +292,21 @@ pub func app_accept_worker(arg: *Unit) {
                 }
             }
 
-            let response: Str = dispatch_single(shared, buf, 0, total, fd, params_buf, body_limit)
+            // Single-request fast path — zero-copy destructive parsing (no alloc)
+            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
+            let sr_method: Str = app_zerocopy_method(buf, total)
+            let sr_path: Str = app_zerocopy_path(buf, total)
+            var sr_body: Str = ""
+            let sr_mlen: I64 = str::len(sr_method)
+            if sr_mlen != 3 and not app_is_bodyless_method(sr_method) {
+                sr_body = app_extract_body(buf, total)
+                let sr_blen: I64 = str::len(sr_body)
+                if body_limit > 0 and sr_blen > body_limit {
+                    tml_sys_send(fd, RESPONSE_413 as *Unit, str::len(RESPONSE_413))
+                    break
+                }
+            }
+            let response: Str = app_dispatch(shared, sr_method, sr_path, sr_body, fd, params_buf)
             let resp_len: I64 = str::len(response)
             tml_sys_send(fd, response as *Unit, resp_len)
 
@@ -397,7 +412,8 @@ pub func app_worker(arg: *Unit) {
             // ── 3b. Parse headers (zero-copy into recv buffer) ─────
             let hdr_count: I64 = app_parse_headers(buf, total, hdrs_buf)
 
-            // ── 4. Parse method + path (non-destructive copy) ─────
+            // ── 4. Zero-copy parse method + path (destructive but fast) ───
+            lowlevel { ptr_write[U8]((buf + total) as *U8, 0 as U8) }
             let method: Str = app_zerocopy_method(buf, total)
             let path: Str = app_zerocopy_path(buf, total)
             let method_len: I64 = str::len(method)
