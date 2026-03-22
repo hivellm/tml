@@ -133,6 +133,18 @@ const SHARED_SIZE: I64 = 336
 const ENTRY_SIZE: I64 = 24
 
 // ════════════════════════════════════════════════════════════════════
+// IOCP shared state helpers
+// ════════════════════════════════════════════════════════════════════
+
+func iocp_shared_get(shared: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((shared + offset) as *I64) }
+}
+
+func iocp_shared_set(shared: I64, offset: I64, value: I64) {
+    lowlevel { ptr_write[I64]((shared + offset) as *I64, value) }
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Connection slot helpers
 // ════════════════════════════════════════════════════════════════════
 
@@ -258,14 +270,14 @@ func iocp_dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
 pub func app_iocp_worker(arg: *Unit) {
     let iocp_shared: I64 = arg as I64
 
-    let iocp: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_HANDLE) as *I64) }
-    let listen_socket: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_LISTEN) as *I64) }
-    let conns: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_CONNS) as *I64) }
-    let max_conns: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64) }
-    let body_limit: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_BODY_LIMIT) as *I64) }
+    let iocp: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_HANDLE)
+    let listen_socket: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_LISTEN)
+    let conns: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_CONNS)
+    let max_conns: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_MAX_CONNS)
+    let body_limit: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_BODY_LIMIT)
 
     // Build a dispatch-compatible shared state pointer from iocp_shared fields
-    let shared: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_TABLE) as *I64) }
+    let shared: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_TABLE)
     // shared is actually the dispatch shared state block (allocated in app_listen_iocp)
 
     // Per-worker allocations
@@ -279,7 +291,7 @@ pub func app_iocp_worker(arg: *Unit) {
 
     loop (true) {
         // Check shutdown flag
-        let shutdown: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_SHUTDOWN)
         if shutdown != 0 { break }
 
         // Block until a completion arrives (-1 = infinite timeout)
@@ -650,16 +662,16 @@ pub func app_listen_iocp(
 
     // ── Build IOCP shared state block ────────────────────────────
     let iocp_shared: I64 = lowlevel { mem_alloc(IOCP_SHARED_SIZE) } as I64
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_HANDLE) as *I64, iocp) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_LISTEN) as *I64, listener) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_TABLE) as *I64, shared) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_TREES) as *I64, trees) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_CONNS) as *I64, conns) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_MAX_CONNS) as *I64, INITIAL_CONNS) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_BODY_LIMIT) as *I64, body_limit) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((iocp_shared + IOCP_OFF_ACCEPT_BUF) as *I64, 0 as I64) }
+    iocp_shared_set(iocp_shared, IOCP_OFF_HANDLE, iocp)
+    iocp_shared_set(iocp_shared, IOCP_OFF_LISTEN, listener)
+    iocp_shared_set(iocp_shared, IOCP_OFF_TABLE, shared)
+    iocp_shared_set(iocp_shared, IOCP_OFF_COUNT, count)
+    iocp_shared_set(iocp_shared, IOCP_OFF_TREES, trees)
+    iocp_shared_set(iocp_shared, IOCP_OFF_CONNS, conns)
+    iocp_shared_set(iocp_shared, IOCP_OFF_MAX_CONNS, INITIAL_CONNS)
+    iocp_shared_set(iocp_shared, IOCP_OFF_BODY_LIMIT, body_limit)
+    iocp_shared_set(iocp_shared, IOCP_OFF_SHUTDOWN, 0)
+    iocp_shared_set(iocp_shared, IOCP_OFF_ACCEPT_BUF, 0)
 
     // ── Pre-issue accept pool ────────────────────────────────────
     fill_accept_pool(iocp, listener, ACCEPT_POOL_SIZE)
@@ -679,7 +691,7 @@ pub func app_listen_iocp(
     // All accept/recv/send is handled by the IOCP completion port.
     // Block until shutdown signal.
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((iocp_shared + IOCP_OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = iocp_shared_get(iocp_shared, IOCP_OFF_SHUTDOWN)
         if shutdown != 0 { break }
         // Sleep to avoid busy-wait (1 second poll)
         thread_sleep_ms(1000 as U64)
