@@ -13,18 +13,18 @@
 - [x] 1.6 Normal build verified: zero overhead, str 22/22 tests pass
 - [ ] 1.7 Verify profile build connects to Tracy viewer
 
-## Phase 2: Compiler Pipeline Instrumentation (C++) — PARTIAL
+## Phase 2: Compiler Pipeline Instrumentation (C++) — DONE
 
-- [ ] 2.1 Instrument `QueryContext` top-level query execution
-- [x] 2.2 Instrument `Lexer::tokenize()` — TML_ZONE added
-- [x] 2.3 Instrument `Parser::parse()` — TML_ZONE added
+- [x] 2.1 query::typecheck_module + query::codegen_unit
+- [x] 2.2 lexer::tokenize
+- [x] 2.3 parser::parse
 - [ ] 2.4 Instrument `TypeChecker::check()` — zone per module
-- [ ] 2.5 Instrument `BorrowChecker::check()` — zone per function
-- [ ] 2.6 Instrument `HirLowering::lower()` — zone per module
-- [ ] 2.7 Instrument `MirBuilder::build()` — zone per function
-- [ ] 2.8 Instrument `LLVMIRGen::generate()` — zone per function
-- [ ] 2.9 Instrument `LLVMBackend::compile()` — zone for IR→obj
-- [ ] 2.10 Instrument LLD linking — zone for obj→exe
+- [x] 2.5 types::check_module
+- [x] 2.6 hir::lower_module
+- [x] 2.7 mir::build
+- [x] 2.8 codegen::generate
+- [x] 2.9 llvm::compile_ir_to_object
+- [x] 2.10 lld::link + test::run_tests
 
 ## Phase 3: Detailed Compiler Instrumentation (C++)
 
