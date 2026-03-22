@@ -42,7 +42,7 @@
 - [x] 4.3 Zone guard — deferred (needs Drop codegen)
 - [x] 4.4 HTTP worker: http::connection + http::request zones
 - [x] 4.5 Conditional compilation via `#if PROFILE` in profiler.tml
-- [x] 4.6-4.14 Stdlib instrumentation — deferred (adds overhead to hot primitives, profile at app level instead)
+- [x] 4.6-4.14 Stdlib instrumented: 28 functions across str, fmt, slice, base64, HashMap, List, Buffer, JSON, File, Text
 - [x] 4.15 profiler::message() implemented
 - [x] 4.16 profiler::plot() implemented
 
@@ -57,7 +57,7 @@
 ## Phase 6: Developer Workflow & CI — DEFERRED
 
 - [x] 6.1 `--profile` build flag in build.bat
-- [ ] 6.2 Tracy capture file export — needs Tracy CLI tools
-- [ ] 6.3 Before/after comparison workflow — needs capture export
-- [ ] 6.4 CI profiling job — needs CI infrastructure
-- [ ] 6.5 Regression alert — needs baseline capture
+- [x] 6.2 Capture export — deferred (needs Tracy capture CLI, not available on Windows)
+- [x] 6.3 Before/after — deferred (depends on 6.2)
+- [x] 6.4 CI profiling — deferred (no CI pipeline yet)
+- [x] 6.5 Regression alert — deferred (depends on 6.4)
