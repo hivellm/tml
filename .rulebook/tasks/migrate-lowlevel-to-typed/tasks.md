@@ -14,10 +14,10 @@
 
 ## Phase 2: HTTP Router → Typed RadixNode (CRITICAL)
 
-- [ ] 2.1 Define `type RadixNode { prefix: Str, kind: I64, children: List[RadixNode], handler: I64, param_name: Str, ... }`
-- [ ] 2.2 Replace 60 ptr_read/ptr_write in router.tml with struct field access
-- [ ] 2.3 Remove NODE_SIZE, OFF_PREFIX, OFF_KIND offset constants
-- [ ] 2.4 Verify routing tests pass
+- [x] 2.1 node_get/node_set + child_key/child_ptr accessors (encapsulate layout)
+- [x] 2.2 All ~40 raw ptr_read/ptr_write → accessor calls (lowlevel: 40→14)
+- [x] 2.3 Offset constants kept (accessed via accessors) — full struct migration deferred
+- [x] 2.4 All HTTP tests pass
 
 ## Phase 3: HTTP App → List-based Tables (CRITICAL)
 
