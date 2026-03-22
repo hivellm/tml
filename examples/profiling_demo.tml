@@ -1,0 +1,49 @@
+// Tracy Profiling Demo
+//
+// Build the compiler with profiling: scripts\build.bat --profile
+// Then run: build\debug\bin\tml.exe run examples\profiling_demo.tml
+// Connect Tracy viewer to see the timeline.
+
+use core::profiler
+use core::fmt::helpers::i64_to_str
+
+func fibonacci(n: I64) -> I64 {
+    if n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+func compute_heavy() -> I64 {
+    let z = profiler::begin("compute_heavy")
+    let result = fibonacci(30)
+    profiler::end(z)
+    return result
+}
+
+func process_items() {
+    let z = profiler::begin("process_items")
+    var i: I64 = 0
+    loop (i < 100) {
+        let z2 = profiler::begin("process_item")
+        let _ = fibonacci(15)
+        profiler::end(z2)
+        i = i + 1
+    }
+    profiler::plot("items_processed", i)
+    profiler::end(z)
+}
+
+func main() {
+    profiler::message("demo started")
+
+    let z = profiler::begin("main")
+
+    let result = compute_heavy()
+    println("fibonacci(30) = " + i64_to_str(result))
+
+    process_items()
+    println("processed 100 items")
+
+    profiler::end(z)
+    profiler::frame_mark()
+    profiler::message("demo complete")
+}
