@@ -7,3 +7,6 @@
 	path = src/gcc
 	url = https://github.com/gcc-mirror/gcc.git
 	shallow = true
+[submodule "src/tracy"]
+	path = src/tracy
+	url = https://github.com/wolfpld/tracy.git

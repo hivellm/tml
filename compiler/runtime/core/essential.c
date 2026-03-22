@@ -1434,3 +1434,68 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     return TRUE;
 }
 #endif
+
+// ============================================================================
+// Tracy Profiler Integration (TML FFI bindings)
+// ============================================================================
+
+#ifdef TML_PROFILE
+#include "tracy/TracyC.h"
+
+// Zone stack for TML — maps zone IDs to TracyCZoneCtx
+#define MAX_TML_ZONES 256
+static TracyCZoneCtx tml_zone_stack[MAX_TML_ZONES];
+static int tml_zone_top = 0;
+
+int64_t tml_tracy_zone_begin(const char* name) {
+    if (tml_zone_top >= MAX_TML_ZONES)
+        return -1;
+    // Create a source location
+    static const struct ___tracy_source_location_data loc = {
+        .name = NULL, .function = "tml", .file = "tml", .line = 0, .color = 0};
+    TracyCZoneCtx ctx = ___tracy_emit_zone_begin(&loc, 1);
+    ___tracy_emit_zone_name(ctx, name, strlen(name));
+    int id = tml_zone_top;
+    tml_zone_stack[tml_zone_top++] = ctx;
+    return (int64_t)id;
+}
+
+void tml_tracy_zone_end(int64_t zone_id) {
+    if (zone_id < 0 || zone_id >= tml_zone_top)
+        return;
+    ___tracy_emit_zone_end(tml_zone_stack[zone_id]);
+    if (zone_id == tml_zone_top - 1)
+        tml_zone_top--;
+}
+
+void tml_tracy_message(const char* text) {
+    ___tracy_emit_message(text, strlen(text), 0);
+}
+
+void tml_tracy_plot(const char* name, int64_t value) {
+    ___tracy_emit_plot_int(name, value);
+}
+
+void tml_tracy_frame_mark(void) {
+    ___tracy_emit_frame_mark(NULL);
+}
+
+#else // No profiling — stubs
+
+int64_t tml_tracy_zone_begin(const char* name) {
+    (void)name;
+    return 0;
+}
+void tml_tracy_zone_end(int64_t zone_id) {
+    (void)zone_id;
+}
+void tml_tracy_message(const char* text) {
+    (void)text;
+}
+void tml_tracy_plot(const char* name, int64_t value) {
+    (void)name;
+    (void)value;
+}
+void tml_tracy_frame_mark(void) {}
+
+#endif // TML_PROFILE

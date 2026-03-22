@@ -1,0 +1,59 @@
+//! Tracy Profiler Integration for TML
+//!
+//! Provides zone-based profiling for TML programs.
+//! When compiled with `#ifdef PROFILE`, zones appear in Tracy viewer.
+//! When compiled without, all calls are no-ops (zero overhead).
+//!
+//! # Usage
+//!
+//! ```tml
+//! use core::profiler
+//!
+//! func handle_request(req: IncomingMessage) -> Str {
+//!     let zone = profiler::begin("handle_request")
+//!     // ... do work ...
+//!     profiler::end(zone)
+//!     return response
+//! }
+//! ```
+
+/// Begin a named profiling zone. Returns a zone ID for pairing with end().
+/// When PROFILE is not defined, returns 0 (no-op).
+#if PROFILE
+@extern("tml_tracy_zone_begin")
+pub func begin(name: Str) -> I64
+#else
+pub func begin(name: Str) -> I64 { 0 }
+#endif
+
+/// End a profiling zone started by begin().
+#if PROFILE
+@extern("tml_tracy_zone_end")
+pub func end(zone_id: I64)
+#else
+pub func end(zone_id: I64) {}
+#endif
+
+/// Log a message to the Tracy timeline.
+#if PROFILE
+@extern("tml_tracy_message")
+pub func message(text: Str)
+#else
+pub func message(text: Str) {}
+#endif
+
+/// Plot a named value (appears as time-series graph in Tracy).
+#if PROFILE
+@extern("tml_tracy_plot")
+pub func plot(name: Str, value: I64)
+#else
+pub func plot(name: Str, value: I64) {}
+#endif
+
+/// Mark a frame boundary (for per-frame analysis).
+#if PROFILE
+@extern("tml_tracy_frame_mark")
+pub func frame_mark()
+#else
+pub func frame_mark() {}
+#endif

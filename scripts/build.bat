@@ -26,6 +26,7 @@ set "BUILD_TARGET="
 set "BUMP_MAJOR=0"
 set "BUMP_MINOR=0"
 set "ENABLE_MODULAR=ON"
+set "ENABLE_PROFILE=OFF"
 set "ENABLE_PACK=0"
 set "USE_ZIG_CC=auto"
 set "USE_CLANG=0"
@@ -44,6 +45,7 @@ if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift &
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
 if /i "%~1"=="--monolithic" set "ENABLE_MODULAR=OFF" & shift & goto :parse_args
+if /i "%~1"=="--profile" set "ENABLE_PROFILE=ON" & shift & goto :parse_args
 if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
 if /i "%~1"=="--zig" set "USE_ZIG_CC=1" & shift & goto :parse_args
 if /i "%~1"=="--msvc" set "USE_ZIG_CC=0" & shift & goto :parse_args
@@ -303,6 +305,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
     -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
     -DTML_BUILD_MODULAR=%ENABLE_MODULAR% ^
+    -DTML_PROFILE=%ENABLE_PROFILE% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^
     -DTML_VERSION_MAJOR=!VER_MAJOR! ^

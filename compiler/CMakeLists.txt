@@ -111,6 +111,23 @@ option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(TML_ENABLE_LSAN "Enable LeakSanitizer (Linux/macOS only)" OFF)
 option(TML_ENABLE_MSAN "Enable MemorySanitizer (Linux Clang only)" OFF)
 option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" ON)
+option(TML_PROFILE "Enable Tracy profiler integration" OFF)
+
+# Tracy profiler setup
+if(TML_PROFILE)
+    add_compile_definitions(TML_PROFILE TRACY_ENABLE)
+    set(TRACY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy")
+    if(EXISTS "${TRACY_DIR}/public/tracy/Tracy.hpp")
+        message(STATUS "Tracy profiler ENABLED (${TRACY_DIR})")
+    else()
+        message(FATAL_ERROR "Tracy not found at ${TRACY_DIR}. Run: git submodule update --init src/tracy")
+    endif()
+endif()
+
+# Tracy include path (available to all targets when TML_PROFILE is ON)
+if(TML_PROFILE)
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public")
+endif()
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -422,6 +439,22 @@ endif()
 if(NOT TML_OPENSSL_FOUND)
     message(FATAL_ERROR "OpenSSL not found. OpenSSL is required for TML crypto runtime. "
         "Install OpenSSL via vcpkg (vcpkg install openssl:x64-windows) or system package manager.")
+endif()
+
+# Tracy profiler client library (only built when TML_PROFILE=ON)
+if(TML_PROFILE)
+    add_library(tml_tracy STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public/TracyClient.cpp"
+    )
+    target_include_directories(tml_tracy PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/tracy/public"
+    )
+    target_compile_definitions(tml_tracy PUBLIC TRACY_ENABLE)
+    if(WIN32)
+        target_link_libraries(tml_tracy PUBLIC ws2_32 dbghelp)
+    else()
+        target_link_libraries(tml_tracy PUBLIC pthread dl)
+    endif()
 endif()
 
 # Common utilities library
