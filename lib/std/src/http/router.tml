@@ -75,95 +75,115 @@ pub type Router {
 // ============================================================================
 
 func node_get_prefix(node: I64) -> Str {
-    let p: *I64 = (node + OFF_PREFIX) as *I64
-    let val: I64 = lowlevel { ptr_read[I64](p) }
-    val as Str
+    node_get(node, OFF_PREFIX) as Str
 }
 
 func node_set_prefix(node: I64, prefix: Str) {
-    let p: *I64 = (node + OFF_PREFIX) as *I64
-    lowlevel { ptr_write[I64](p, prefix as I64) }
+    node_set(node, OFF_PREFIX, prefix as I64)
 }
 
 func node_get_children_ptr(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_CHILDREN_PTR) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_CHILDREN_PTR)
 }
 
 func node_set_children_ptr(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_CHILDREN_PTR) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_CHILDREN_PTR, val)
 }
 
 func node_get_children_count(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_CHILDREN_COUNT) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_CHILDREN_COUNT)
 }
 
 func node_set_children_count(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_CHILDREN_COUNT) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_CHILDREN_COUNT, val)
 }
 
 func node_get_children_cap(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_CHILDREN_CAP) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_CHILDREN_CAP)
 }
 
 func node_set_children_cap(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_CHILDREN_CAP) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_CHILDREN_CAP, val)
 }
 
 func node_get_param_child(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_PARAM_CHILD) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_PARAM_CHILD)
 }
 
 func node_set_param_child(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_PARAM_CHILD) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_PARAM_CHILD, val)
 }
 
 func node_get_wildcard_child(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_WILDCARD_CHILD) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_WILDCARD_CHILD)
 }
 
 func node_set_wildcard_child(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_WILDCARD_CHILD) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_WILDCARD_CHILD, val)
 }
 
 func node_get_handler(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_HANDLER) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_HANDLER)
 }
 
 func node_set_handler(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_HANDLER) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_HANDLER, val)
 }
 
 func node_get_param_name(node: I64) -> Str {
-    let p: *I64 = (node + OFF_PARAM_NAME) as *I64
-    let val: I64 = lowlevel { ptr_read[I64](p) }
-    val as Str
+    node_get(node, OFF_PARAM_NAME) as Str
 }
 
 func node_set_param_name(node: I64, name: Str) {
-    let p: *I64 = (node + OFF_PARAM_NAME) as *I64
-    lowlevel { ptr_write[I64](p, name as I64) }
+    node_set(node, OFF_PARAM_NAME, name as I64)
 }
 
 func node_get_kind(node: I64) -> I64 {
-    let p: *I64 = (node + OFF_KIND) as *I64
-    lowlevel { ptr_read[I64](p) }
+    node_get(node, OFF_KIND)
 }
 
 func node_set_kind(node: I64, val: I64) {
-    let p: *I64 = (node + OFF_KIND) as *I64
-    lowlevel { ptr_write[I64](p, val) }
+    node_set(node, OFF_KIND, val)
+}
+
+// ============================================================================
+// Generic Node/Child Field Accessors
+// ============================================================================
+
+/// Read an I64 value from a node at the given byte offset.
+func node_get(node: I64, offset: I64) -> I64 {
+    let p: *I64 = (node + offset) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Write an I64 value to a node at the given byte offset.
+func node_set(node: I64, offset: I64, value: I64) {
+    let p: *I64 = (node + offset) as *I64
+    lowlevel { ptr_write[I64](p, value) }
+}
+
+/// Read the key byte from a child entry at the given index.
+func child_key(children: I64, index: I64) -> I64 {
+    let p: *I64 = (children + index * CHILD_ENTRY_SIZE) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Read the node pointer from a child entry at the given index.
+func child_ptr(children: I64, index: I64) -> I64 {
+    let p: *I64 = (children + index * CHILD_ENTRY_SIZE + 8) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Write the key byte to a child entry at the given index.
+func child_set_key(children: I64, index: I64, key: I64) {
+    let p: *I64 = (children + index * CHILD_ENTRY_SIZE) as *I64
+    lowlevel { ptr_write[I64](p, key) }
+}
+
+/// Write the node pointer to a child entry at the given index.
+func child_set_ptr(children: I64, index: I64, ptr: I64) {
+    let p: *I64 = (children + index * CHILD_ENTRY_SIZE + 8) as *I64
+    lowlevel { ptr_write[I64](p, ptr) }
 }
 
 // ============================================================================
@@ -189,15 +209,15 @@ pub func node_new(prefix: Str, kind: I64) -> I64 {
     let addr: I64 = mem as I64
     zero_memory(addr, NODE_SIZE)
     // Write prefix from saved value, not from potentially-clobbered parameter register
-    lowlevel { ptr_write[I64]((addr + OFF_PREFIX) as *I64, prefix_val) }
-    lowlevel { ptr_write[I64]((addr + OFF_KIND) as *I64, kind_val) }
+    node_set(addr, OFF_PREFIX, prefix_val)
+    node_set(addr, OFF_KIND, kind_val)
     // Allocate children array (not for wildcard — it's always a leaf)
     if kind_val != NODE_WILDCARD {
         let arr_size: I64 = INITIAL_CHILDREN_CAP * CHILD_ENTRY_SIZE
         let arr: *Unit = lowlevel { mem_alloc(arr_size) }
         zero_memory(arr as I64, arr_size)
-        lowlevel { ptr_write[I64]((addr + OFF_CHILDREN_PTR) as *I64, arr as I64) }
-        lowlevel { ptr_write[I64]((addr + OFF_CHILDREN_CAP) as *I64, INITIAL_CHILDREN_CAP) }
+        node_set(addr, OFF_CHILDREN_PTR, arr as I64)
+        node_set(addr, OFF_CHILDREN_CAP, INITIAL_CHILDREN_CAP)
     }
     addr
 }
@@ -212,12 +232,8 @@ func children_find(node: I64, byte_key: I32) -> I64 {
     let key_i64: I64 = byte_key as I64
     var i: I64 = 0
     loop (i < count) {
-        let entry_base: I64 = arr + i * CHILD_ENTRY_SIZE
-        let k_ptr: *I64 = entry_base as *I64
-        let k: I64 = lowlevel { ptr_read[I64](k_ptr) }
-        if k == key_i64 {
-            let v_ptr: *I64 = (entry_base + 8) as *I64
-            return lowlevel { ptr_read[I64](v_ptr) }
+        if child_key(arr, i) == key_i64 {
+            return child_ptr(arr, i)
         }
         i = i + 1
     }
@@ -234,12 +250,8 @@ func children_set(node: I64, byte_key: I32, child_addr: I64) {
     // Check if key already exists — replace
     var i: I64 = 0
     loop (i < count) {
-        let entry_base: I64 = arr + i * CHILD_ENTRY_SIZE
-        let k_ptr: *I64 = entry_base as *I64
-        let k: I64 = lowlevel { ptr_read[I64](k_ptr) }
-        if k == key_i64 {
-            let v_ptr: *I64 = (entry_base + 8) as *I64
-            lowlevel { ptr_write[I64](v_ptr, child_addr) }
+        if child_key(arr, i) == key_i64 {
+            child_set_ptr(arr, i, child_addr)
             return
         }
         i = i + 1
@@ -257,11 +269,8 @@ func children_set(node: I64, byte_key: I32, child_addr: I64) {
     }
 
     // Append new entry
-    let entry_base: I64 = arr + count * CHILD_ENTRY_SIZE
-    let k_ptr: *I64 = entry_base as *I64
-    lowlevel { ptr_write[I64](k_ptr, key_i64) }
-    let v_ptr: *I64 = (entry_base + 8) as *I64
-    lowlevel { ptr_write[I64](v_ptr, child_addr) }
+    child_set_key(arr, count, key_i64)
+    child_set_ptr(arr, count, child_addr)
     node_set_children_count(node, count + 1)
 }
 
@@ -274,10 +283,7 @@ func node_destroy(addr: I64) {
     let count: I64 = node_get_children_count(addr)
     var i: I64 = 0
     loop (i < count) {
-        let entry_base: I64 = arr + i * CHILD_ENTRY_SIZE
-        let v_ptr: *I64 = (entry_base + 8) as *I64
-        let child: I64 = lowlevel { ptr_read[I64](v_ptr) }
-        node_destroy(child)
+        node_destroy(child_ptr(arr, i))
         i = i + 1
     }
     if arr != 0 {
@@ -355,8 +361,8 @@ func alloc_raw_node(prefix_i64: I64, kind: I64) -> I64 {
     let mem: *Unit = lowlevel { mem_alloc(NODE_SIZE) }
     let addr: I64 = mem as I64
     zero_memory(addr, NODE_SIZE)
-    lowlevel { ptr_write[I64]((addr + OFF_PREFIX) as *I64, pval) }
-    lowlevel { ptr_write[I64]((addr + OFF_KIND) as *I64, kval) }
+    node_set(addr, OFF_PREFIX, pval)
+    node_set(addr, OFF_KIND, kval)
     addr
 }
 
@@ -375,34 +381,33 @@ func alloc_children_array() -> I64 {
 func node_copy_state(target: I64, children_ptr: I64, children_count: I64, children_cap: I64,
                      param_child: I64, wildcard_child: I64, handler: I64,
                      param_name_i64: I64, kind: I64) {
-    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_PTR) as *I64, children_ptr) }
-    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_COUNT) as *I64, children_count) }
-    lowlevel { ptr_write[I64]((target + OFF_CHILDREN_CAP) as *I64, children_cap) }
-    lowlevel { ptr_write[I64]((target + OFF_PARAM_CHILD) as *I64, param_child) }
-    lowlevel { ptr_write[I64]((target + OFF_WILDCARD_CHILD) as *I64, wildcard_child) }
-    lowlevel { ptr_write[I64]((target + OFF_HANDLER) as *I64, handler) }
-    lowlevel { ptr_write[I64]((target + OFF_PARAM_NAME) as *I64, param_name_i64) }
-    lowlevel { ptr_write[I64]((target + OFF_KIND) as *I64, kind) }
+    node_set(target, OFF_CHILDREN_PTR, children_ptr)
+    node_set(target, OFF_CHILDREN_COUNT, children_count)
+    node_set(target, OFF_CHILDREN_CAP, children_cap)
+    node_set(target, OFF_PARAM_CHILD, param_child)
+    node_set(target, OFF_WILDCARD_CHILD, wildcard_child)
+    node_set(target, OFF_HANDLER, handler)
+    node_set(target, OFF_PARAM_NAME, param_name_i64)
+    node_set(target, OFF_KIND, kind)
 }
 
 /// Write a child entry (key byte + node pointer) into a children array at a given index.
 func write_child_entry(arr: I64, index: I64, key_byte: I64, node_ptr: I64) {
-    let entry_base: I64 = arr + index * CHILD_ENTRY_SIZE
-    lowlevel { ptr_write[I64](entry_base as *I64, key_byte) }
-    lowlevel { ptr_write[I64]((entry_base + 8) as *I64, node_ptr) }
+    child_set_key(arr, index, key_byte)
+    child_set_ptr(arr, index, node_ptr)
 }
 
 /// Reset a node to be a split point: set prefix, children, and clear handler/param/wildcard.
 func node_make_split_point(node: I64, prefix_i64: I64, children_arr: I64, children_count: I64) {
-    lowlevel { ptr_write[I64]((node + OFF_PREFIX) as *I64, prefix_i64) }
-    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_PTR) as *I64, children_arr) }
-    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_COUNT) as *I64, children_count) }
-    lowlevel { ptr_write[I64]((node + OFF_CHILDREN_CAP) as *I64, INITIAL_CHILDREN_CAP as I64) }
-    lowlevel { ptr_write[I64]((node + OFF_HANDLER) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((node + OFF_PARAM_CHILD) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((node + OFF_WILDCARD_CHILD) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((node + OFF_PARAM_NAME) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((node + OFF_KIND) as *I64, NODE_STATIC as I64) }
+    node_set(node, OFF_PREFIX, prefix_i64)
+    node_set(node, OFF_CHILDREN_PTR, children_arr)
+    node_set(node, OFF_CHILDREN_COUNT, children_count)
+    node_set(node, OFF_CHILDREN_CAP, INITIAL_CHILDREN_CAP)
+    node_set(node, OFF_HANDLER, 0)
+    node_set(node, OFF_PARAM_CHILD, 0)
+    node_set(node, OFF_WILDCARD_CHILD, 0)
+    node_set(node, OFF_PARAM_NAME, 0)
+    node_set(node, OFF_KIND, NODE_STATIC)
 }
 
 /// Perform the radix tree split. Called when `common < child_len`.
@@ -452,8 +457,8 @@ func split_node(existing: I64,
     // Case 2c: create new node for the text suffix.
     let new_addr: I64 = alloc_raw_node(text_suffix_i64, NODE_STATIC)
     let new_children: I64 = alloc_children_array()
-    lowlevel { ptr_write[I64]((new_addr + OFF_CHILDREN_PTR) as *I64, new_children) }
-    lowlevel { ptr_write[I64]((new_addr + OFF_CHILDREN_CAP) as *I64, INITIAL_CHILDREN_CAP as I64) }
+    node_set(new_addr, OFF_CHILDREN_PTR, new_children)
+    node_set(new_addr, OFF_CHILDREN_CAP, INITIAL_CHILDREN_CAP)
 
     // Create children array for the split node (2 children).
     let split_arr: I64 = alloc_children_array()
