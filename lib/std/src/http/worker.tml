@@ -10,7 +10,6 @@
 
 use core::str
 use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use core::profiler
 use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
 use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
@@ -222,7 +221,6 @@ func queue_pop(shared: I64) -> I64 {
 /// Returns the response string (from app_dispatch or error handler).
 func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
                      fd: I64, params_buf: I64, body_limit: I64) -> Str {
-    let z_req: I64 = profiler::begin("http::request")
     let req_buf: I64 = buf + offset
     lowlevel { ptr_write[U8]((req_buf + req_len) as *U8, 0 as U8) }
     let method: Str = app_zerocopy_method(req_buf, req_len)
@@ -234,14 +232,11 @@ func dispatch_single(shared: I64, buf: I64, offset: I64, req_len: I64,
         body = app_extract_body(req_buf, req_len)
         let body_len: I64 = str::len(body)
         if body_limit > 0 and body_len > body_limit {
-            profiler::end(z_req)
             return RESPONSE_413
         }
     }
 
-    let result: Str = app_dispatch(shared, method, path, body, fd, params_buf)
-    profiler::end(z_req)
-    return result
+    return app_dispatch(shared, method, path, body, fd, params_buf)
 }
 
 /// Accept-per-worker: each thread calls accept() directly on the listener.
@@ -267,7 +262,6 @@ pub func app_accept_worker(arg: *Unit) {
         // Accept directly — kernel distributes among N threads
         let fd: I64 = sys_accept(listener)
         if fd < 0 { continue }
-        let z_conn: I64 = profiler::begin("http::connection")
 
         // Set socket options
         tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
@@ -306,7 +300,6 @@ pub func app_accept_worker(arg: *Unit) {
             if not app_is_http11(buf, total) { break }
         }
 
-        profiler::end(z_conn)
         sys_close(fd)
     }
 
@@ -649,29 +642,34 @@ pub func app_listen(
     tml_mutex_init(mutex_ptr as *Unit)
     tml_condvar_init(condvar_ptr as *Unit)
 
-    // Store listener in shared state so workers can accept directly
-    shared_set(shared, OFF_QUEUE_BUF, listener)
-    // Store timeouts for workers to apply on accepted connections
-    shared_set(shared, OFF_READ_TIMEOUT, read_timeout)
-    shared_set(shared, OFF_WRITE_TIMEOUT, write_timeout)
-
-    // Spawn worker threads — each does its own accept() (no shared queue)
-    // This is the Go/Nginx pattern: multiple threads accept on same socket,
-    // kernel distributes connections. Eliminates mutex contention.
+    // Spawn worker threads (pull from shared queue)
     var w: I64 = 0
     loop (w < num_workers) {
-        let h: U64 = raw_thread_spawn(app_accept_worker as *Unit, shared as *Unit, 0 as U64)
+        let h: U64 = raw_thread_spawn(app_worker as *Unit, shared as *Unit, 0 as U64)
         if h != 0 as U64 {
             raw_thread_detach(h)
         }
         w = w + 1
     }
 
-    // Main thread just waits for shutdown
+    // Accept loop — main thread accepts and pushes to queue
     loop (true) {
         let shutdown: I64 = shared_get(shared, OFF_SHUTDOWN)
         if shutdown != 0 { break }
-        thread_sleep_ms(100 as U64)
+
+        let fd: I64 = sys_accept(listener)
+        if fd < 0 { continue }
+
+        // Set socket options in accept thread (saves syscalls in worker)
+        tml_sys_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, 1)
+        if idle_timeout > 0 {
+            tml_sys_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, idle_timeout as I32)
+        }
+
+        let ok: Bool = queue_push(shared, fd)
+        if not ok {
+            sys_close(fd)
+        }
     }
 
     sys_close(listener)
