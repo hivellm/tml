@@ -371,75 +371,28 @@ pub func app_worker(arg: *Unit) {
                 should_close = app_has_connection_close(buf, total)
             }
 
-            // ── 3. Pipelining fast path for bodyless methods ───────
-            // For GET/HEAD/OPTIONS, \r\n\r\n reliably marks request boundaries
-            // (no body to contain false \r\n\r\n). Batch process + batch send.
+            // ── 3. Pipelining: process all requests in buffer sequentially ──
             let num_pipelined: I64 = app_count_requests(buf, total)
             if num_pipelined > 1 {
-                // Check first method is bodyless (peek without mutating)
-                var first_is_bodyless: Bool = false
-                let first_space: I64 = 0
-                var fs: I64 = 0
-                loop (fs < total and fs < 10) {
-                    if lowlevel { ptr_read[U8]((buf + fs) as *U8) } == 32 as U8 { break }
-                    fs = fs + 1
-                }
-                // GET=3, HEAD=4, TRACE=5, OPTIONS=7
-                if fs == 3 or fs == 4 or fs == 5 or fs == 7 { first_is_bodyless = true }
-
-                if first_is_bodyless {
-                    // Batch dispatch: process each pipelined request, batch responses
-                    var batch_pos: I64 = 0
-                    var req_idx: I64 = 0
-                    loop (req_idx < num_pipelined) {
-                        let req_start: I64 = app_request_offset(buf, total, req_idx)
-                        if req_start < 0 { break }
-                        var req_end: I64 = total
-                        if req_idx + 1 < num_pipelined {
-                            let next: I64 = app_request_offset(buf, total, req_idx + 1)
-                            if next > 0 { req_end = next }
-                        }
-                        let req_len: I64 = req_end - req_start
-
-                        // Save byte at end of request before null-termination (dispatch corrupts it)
-                        let saved_byte: U8 = lowlevel { ptr_read[U8]((buf + req_end) as *U8) }
-                        let response: Str = dispatch_single(shared, buf, req_start, req_len, fd, params_buf, body_limit)
-                        // Restore byte (so next request's first char isn't null)
-                        lowlevel { ptr_write[U8]((buf + req_end) as *U8, saved_byte) }
-                        let resp_len: I64 = str::len(response)
-
-                        if batch_pos + resp_len <= RESP_BUF_SIZE {
-                            lowlevel { copy_nonoverlapping(response as *Unit, (resp_buf + batch_pos) as *Unit, resp_len) }
-                            batch_pos = batch_pos + resp_len
-                        } else {
-                            // Flush batch, send directly
-                            if batch_pos > 0 {
-                                var sent: I64 = 0
-                                loop (sent < batch_pos) {
-                                    let w: I64 = tml_sys_send(fd, (resp_buf + sent) as *Unit, batch_pos - sent)
-                                    if w <= 0 { break }
-                                    sent = sent + w
-                                }
-                                batch_pos = 0
-                            }
-                            tml_sys_send(fd, response as *Unit, resp_len)
-                        }
-                        req_idx = req_idx + 1
+                // Process each request, send response immediately
+                var req_idx: I64 = 0
+                loop (req_idx < num_pipelined) {
+                    let req_start: I64 = app_request_offset(buf, total, req_idx)
+                    if req_start < 0 { break }
+                    var req_end: I64 = total
+                    if req_idx + 1 < num_pipelined {
+                        let next: I64 = app_request_offset(buf, total, req_idx + 1)
+                        if next > 0 { req_end = next }
                     }
-                    // Send batched responses
-                    if batch_pos > 0 {
-                        var sent: I64 = 0
-                        loop (sent < batch_pos) {
-                            let w: I64 = tml_sys_send(fd, (resp_buf + sent) as *Unit, batch_pos - sent)
-                            if w <= 0 { break }
-                            sent = sent + w
-                        }
-                    }
-                    if should_close { break }
-                    continue  // Back to recv for more requests
+                    let req_len: I64 = req_end - req_start
+                    let response: Str = dispatch_single(shared, buf, req_start, req_len, fd, params_buf, body_limit)
+                    tml_sys_send(fd, response as *Unit, str::len(response))
+                    req_idx = req_idx + 1
                 }
-                // else: first request has body — fall through to single-request path
+                if should_close { break }
+                continue
             }
+            // (old batch path removed — sequential pipeline above handles all cases)
 
             // ── 3b. Parse headers (zero-copy into recv buffer) ─────
             let hdr_count: I64 = app_parse_headers(buf, total, hdrs_buf)
