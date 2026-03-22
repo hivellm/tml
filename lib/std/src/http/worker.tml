@@ -256,7 +256,7 @@ pub func app_accept_worker(arg: *Unit) {
     let resp_buf: I64 = lowlevel { mem_alloc(RESP_BUF_SIZE) } as I64
 
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = shared_get(shared, OFF_SHUTDOWN)
         if shutdown != 0 { break }
 
         // Accept directly — kernel distributes among N threads
@@ -311,7 +311,7 @@ pub func app_accept_worker(arg: *Unit) {
 
 pub func app_worker(arg: *Unit) {
     let shared: I64 = arg as I64
-    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
+    let body_limit: I64 = shared_get(shared, OFF_BODY_LIMIT)
 
     let buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
@@ -327,7 +327,7 @@ pub func app_worker(arg: *Unit) {
     var stat_latency_min_us: I64 = 999999999
     var stat_latency_max_us: I64 = 0
 
-    let idle_timeout: I64 = lowlevel { ptr_read[I64]((shared + OFF_IDLE_TIMEOUT) as *I64) }
+    let idle_timeout: I64 = shared_get(shared, OFF_IDLE_TIMEOUT)
 
     loop (true) {
         let fd: I64 = queue_pop(shared)
@@ -609,32 +609,32 @@ pub func app_listen(
     }
 
     // Write shared state fields
-    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
-    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_BODY_LIMIT) as *I64, body_limit) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64, on_request_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64, on_request_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64, pre_handler_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64, pre_handler_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_TABLE) as *I64, on_send_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_COUNT) as *I64, on_send_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64, on_response_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64, on_response_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_TABLE) as *I64, on_error_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
+    shared_set(shared, OFF_TABLE, table)
+    shared_set(shared, OFF_COUNT, count)
+    shared_set(shared, OFF_ROUTER, trees)
+    shared_set(shared, OFF_MW_TABLE, mw_table)
+    shared_set(shared, OFF_MW_COUNT, mw_count)
+    shared_set(shared, OFF_SHUTDOWN, 0)
+    shared_set(shared, OFF_READ_TIMEOUT, read_timeout)
+    shared_set(shared, OFF_WRITE_TIMEOUT, write_timeout)
+    shared_set(shared, OFF_IDLE_TIMEOUT, idle_timeout)
+    shared_set(shared, OFF_BODY_LIMIT, body_limit)
+    shared_set(shared, OFF_ON_REQUEST_TABLE, on_request_table)
+    shared_set(shared, OFF_ON_REQUEST_COUNT, on_request_count)
+    shared_set(shared, OFF_PRE_HANDLER_TABLE, pre_handler_table)
+    shared_set(shared, OFF_PRE_HANDLER_COUNT, pre_handler_count)
+    shared_set(shared, OFF_ON_SEND_TABLE, on_send_table)
+    shared_set(shared, OFF_ON_SEND_COUNT, on_send_count)
+    shared_set(shared, OFF_ON_RESPONSE_TABLE, on_response_table)
+    shared_set(shared, OFF_ON_RESPONSE_COUNT, on_response_count)
+    shared_set(shared, OFF_ON_ERROR_TABLE, on_error_table)
+    shared_set(shared, OFF_ON_ERROR_COUNT, on_error_count)
+    shared_set(shared, OFF_ERROR_HANDLER, error_handler)
 
     // Init thread pool queue
     let queue_buf: I64 = lowlevel { mem_alloc(QUEUE_CAP * 8) } as I64
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_BUF) as *I64, queue_buf) }
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_CAP) as *I64, QUEUE_CAP) }
+    shared_set(shared, OFF_QUEUE_BUF, queue_buf)
+    shared_set(shared, OFF_QUEUE_CAP, QUEUE_CAP)
 
     // Init mutex and condvar
     let mutex_ptr: I64 = shared + OFF_MUTEX
@@ -643,10 +643,10 @@ pub func app_listen(
     tml_condvar_init(condvar_ptr as *Unit)
 
     // Store listener in shared state so workers can accept directly
-    lowlevel { ptr_write[I64]((shared + OFF_QUEUE_BUF) as *I64, listener) }
+    shared_set(shared, OFF_QUEUE_BUF, listener)
     // Store timeouts for workers to apply on accepted connections
-    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
+    shared_set(shared, OFF_READ_TIMEOUT, read_timeout)
+    shared_set(shared, OFF_WRITE_TIMEOUT, write_timeout)
 
     // Spawn worker threads — each does its own accept() (no shared queue)
     // This is the Go/Nginx pattern: multiple threads accept on same socket,
@@ -662,7 +662,7 @@ pub func app_listen(
 
     // Main thread just waits for shutdown
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = shared_get(shared, OFF_SHUTDOWN)
         if shutdown != 0 { break }
         thread_sleep_ms(100 as U64)
     }
@@ -704,7 +704,7 @@ pub func app_evloop_worker(arg: *Unit) {
     let ws: I64 = arg as I64
     let shared: I64 = lowlevel { ptr_read[I64]((ws + WS_SHARED) as *I64) }
     let mutex_ptr: I64 = lowlevel { ptr_read[I64]((ws + WS_MUTEX) as *I64) }
-    let body_limit: I64 = lowlevel { ptr_read[I64]((shared + OFF_BODY_LIMIT) as *I64) }
+    let body_limit: I64 = shared_get(shared, OFF_BODY_LIMIT)
     let params_buf: I64 = lowlevel { mem_alloc(128) } as I64
 
     var ev: NetEventLoop = NetEventLoop::new(256)
@@ -713,7 +713,7 @@ pub func app_evloop_worker(arg: *Unit) {
     var conn_count: I64 = 0
 
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = shared_get(shared, OFF_SHUTDOWN)
         if shutdown != 0 { break }
 
         // Drain new connections from accept thread
@@ -913,27 +913,27 @@ pub func app_listen_evloop(
     var z: I64 = 0
     loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
 
-    lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
-    lowlevel { ptr_write[I64]((shared + OFF_COUNT) as *I64, count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ROUTER) as *I64, trees) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_TABLE) as *I64, mw_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_MW_COUNT) as *I64, mw_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_SHUTDOWN) as *I64, 0 as I64) }
-    lowlevel { ptr_write[I64]((shared + OFF_READ_TIMEOUT) as *I64, read_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_WRITE_TIMEOUT) as *I64, write_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_IDLE_TIMEOUT) as *I64, idle_timeout) }
-    lowlevel { ptr_write[I64]((shared + OFF_BODY_LIMIT) as *I64, body_limit) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_TABLE) as *I64, on_request_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_REQUEST_COUNT) as *I64, on_request_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_TABLE) as *I64, pre_handler_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_PRE_HANDLER_COUNT) as *I64, pre_handler_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_TABLE) as *I64, on_send_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_SEND_COUNT) as *I64, on_send_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_TABLE) as *I64, on_response_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_RESPONSE_COUNT) as *I64, on_response_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_TABLE) as *I64, on_error_table) }
-    lowlevel { ptr_write[I64]((shared + OFF_ON_ERROR_COUNT) as *I64, on_error_count) }
-    lowlevel { ptr_write[I64]((shared + OFF_ERROR_HANDLER) as *I64, error_handler) }
+    shared_set(shared, OFF_TABLE, table)
+    shared_set(shared, OFF_COUNT, count)
+    shared_set(shared, OFF_ROUTER, trees)
+    shared_set(shared, OFF_MW_TABLE, mw_table)
+    shared_set(shared, OFF_MW_COUNT, mw_count)
+    shared_set(shared, OFF_SHUTDOWN, 0)
+    shared_set(shared, OFF_READ_TIMEOUT, read_timeout)
+    shared_set(shared, OFF_WRITE_TIMEOUT, write_timeout)
+    shared_set(shared, OFF_IDLE_TIMEOUT, idle_timeout)
+    shared_set(shared, OFF_BODY_LIMIT, body_limit)
+    shared_set(shared, OFF_ON_REQUEST_TABLE, on_request_table)
+    shared_set(shared, OFF_ON_REQUEST_COUNT, on_request_count)
+    shared_set(shared, OFF_PRE_HANDLER_TABLE, pre_handler_table)
+    shared_set(shared, OFF_PRE_HANDLER_COUNT, pre_handler_count)
+    shared_set(shared, OFF_ON_SEND_TABLE, on_send_table)
+    shared_set(shared, OFF_ON_SEND_COUNT, on_send_count)
+    shared_set(shared, OFF_ON_RESPONSE_TABLE, on_response_table)
+    shared_set(shared, OFF_ON_RESPONSE_COUNT, on_response_count)
+    shared_set(shared, OFF_ON_ERROR_TABLE, on_error_table)
+    shared_set(shared, OFF_ON_ERROR_COUNT, on_error_count)
+    shared_set(shared, OFF_ERROR_HANDLER, error_handler)
 
     // Create per-worker state
     let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
@@ -960,7 +960,7 @@ pub func app_listen_evloop(
     // Accept loop — round-robin distribute to workers
     var rr: I64 = 0
     loop (true) {
-        let shutdown: I64 = lowlevel { ptr_read[I64]((shared + OFF_SHUTDOWN) as *I64) }
+        let shutdown: I64 = shared_get(shared, OFF_SHUTDOWN)
         if shutdown != 0 { break }
         let fd: I64 = sys_accept(listener)
         if fd < 0 { continue }
