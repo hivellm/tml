@@ -1,23 +1,23 @@
 # Tasks: Tracy Profiler Integration
 
-**Status**: Proposed
-**Priority**: Medium
+**Status**: In Progress (Phase 1 + Phase 4 foundation done)
+**Priority**: High (needed for HTTP benchmark optimization)
 
-## Phase 1: Setup & Build Integration
+## Phase 1: Setup & Build Integration — DONE
 
-- [ ] 1.1 Add Tracy as git submodule in `src/tracy/`
-- [ ] 1.2 Create `compiler/include/profiler.hpp` with compile-out macros
-- [ ] 1.3 Add `TML_PROFILE` CMake option (OFF by default)
-- [ ] 1.4 Add `TracyClient.cpp` to build when `TML_PROFILE=ON`
-- [ ] 1.5 Add `--profile` flag to `scripts/build.bat`
-- [ ] 1.6 Verify normal build has zero overhead (no Tracy symbols)
+- [x] 1.1 Tracy as git submodule in `src/tracy/`
+- [x] 1.2 `compiler/include/profiler.hpp` with compile-out macros
+- [x] 1.3 `TML_PROFILE` CMake option (OFF by default)
+- [x] 1.4 `tml_tracy` static library with TracyClient.cpp
+- [x] 1.5 `--profile` flag in `scripts/build.bat`
+- [x] 1.6 Normal build verified: zero overhead, str 22/22 tests pass
 - [ ] 1.7 Verify profile build connects to Tracy viewer
 
-## Phase 2: Compiler Pipeline Instrumentation (C++)
+## Phase 2: Compiler Pipeline Instrumentation (C++) — PARTIAL
 
 - [ ] 2.1 Instrument `QueryContext` top-level query execution
-- [ ] 2.2 Instrument `Lexer::tokenize()` — zone per file
-- [ ] 2.3 Instrument `Parser::parse()` — zone per file
+- [x] 2.2 Instrument `Lexer::tokenize()` — TML_ZONE added
+- [x] 2.3 Instrument `Parser::parse()` — TML_ZONE added
 - [ ] 2.4 Instrument `TypeChecker::check()` — zone per module
 - [ ] 2.5 Instrument `BorrowChecker::check()` — zone per function
 - [ ] 2.6 Instrument `HirLowering::lower()` — zone per module
@@ -38,9 +38,9 @@
 
 ## Phase 4: TML Runtime & Standard Library Profiling
 
-- [ ] 4.1 Add `@extern("c") func tracy_zone_begin(name: Str) -> U64` and `tracy_zone_end(id: U64)` FFI bindings in `lib/core/src/profiler.tml`
-- [ ] 4.2 Implement C shim in `compiler/runtime/core/essential.c` that calls Tracy C API (`TracyCZoneBegin`/`TracyCZoneEnd`) when `TML_PROFILE` defined, no-ops otherwise
-- [ ] 4.3 Create `@inline` TML wrappers: `profiler::zone(name)` → returns `Zone` guard with `drop` that calls `tracy_zone_end`
+- [x] 4.1 FFI bindings: begin/end/message/plot/frame_mark in `lib/core/src/profiler.tml`
+- [x] 4.2 C shim in `essential.c`: zone stack, Tracy C API calls, stubs when not profiling
+- [ ] 4.3 `@inline` Zone guard with `drop` — deferred (needs Drop codegen for reliable cleanup)
 - [ ] 4.4 Create `#ifdef PROFILE` conditional compilation support so TML instrumentation compiles out
 - [ ] 4.5 Instrument `core/alloc` — `mem_alloc`/`mem_free` report to Tracy memory profiler
 - [ ] 4.6 Instrument `core/str` — zone on `Str::from`, `Str::concat`, `Str::split`, `Str::replace`
