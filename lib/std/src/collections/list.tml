@@ -19,6 +19,7 @@
 
 use core::intrinsics::{ptr_read, ptr_write, mem_free}
 use core::mem::size_of
+use core::profiler
 
 /// A dynamic array that grows automatically.
 ///
@@ -90,6 +91,7 @@ impl[T] List[T] {
 
     /// Appends an element to the back of the list.
     pub func push(this, value: T) {
+        let z = profiler::begin("List::push")
         let hdr: I64 = this.handle as I64
 
         // Read current len, capacity and stride
@@ -128,6 +130,7 @@ impl[T] List[T] {
 
         // Increment len
         lowlevel { ptr_write[I64](p_len, cur_len + 1) }
+        profiler::end(z)
     }
 
     /// Removes the last element from the list and returns it.

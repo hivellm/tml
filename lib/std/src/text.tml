@@ -36,6 +36,8 @@
 //! println(upper.as_str())  // "HELLO, WORLD!"
 //! ```
 
+use core::profiler
+
 // ============================================================================
 // Text Type Definition
 // ============================================================================
@@ -407,18 +409,22 @@ impl Text {
     /// Get the string data as a Str (returns a fresh heap copy).
     @allocates
     pub func as_str(this) -> Str {
+        let z = profiler::begin("Text::as_str")
         let data: *U8 = text_get_data(this.handle)
         let addr: I64 = data as I64
         if addr == 0 {
+            profiler::end(z)
             return ""
         }
         let slen: I64 = text_get_len(this.handle)
         if slen == 0 {
+            profiler::end(z)
             return ""
         }
         let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
         lowlevel { copy_nonoverlapping(data, buf, slen) }
         lowlevel { ptr_write[U8]((buf as I64 + slen) as *U8, 0 as U8) }
+        profiler::end(z)
         return buf as Str
     }
 
@@ -524,7 +530,9 @@ impl Text {
 
     /// Append a string
     pub func push_str(this, s: Str) {
+        let z = profiler::begin("Text::push_str")
         text_push_str_raw(this.handle, s)
+        profiler::end(z)
     }
 
     /// Append an integer directly

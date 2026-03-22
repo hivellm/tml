@@ -12,6 +12,7 @@
 //! ```
 
 use core::str
+use core::profiler
 
 /// Maps a 6-bit value (0-63) to the standard Base64 alphabet character code.
 /// Uses a lookup table for branch-free O(1) access.
@@ -50,7 +51,10 @@ func decode_char(c: I32) -> I32 {
 /// ```
 @allocates
 pub func encode(input: Str) -> Str {
-    return encode_with(input, false)
+    let z = profiler::begin("base64::encode")
+    let result = encode_with(input, false)
+    profiler::end(z)
+    return result
 }
 
 /// Encode using URL-safe alphabet (- and _ instead of + and /).
@@ -142,7 +146,10 @@ func encode_with(input: Str, url_safe: Bool) -> Str {
 /// ```
 @allocates
 pub func decode(b64: Str) -> Outcome[Str, Str] {
-    return decode_impl(b64)
+    let z = profiler::begin("base64::decode")
+    let result = decode_impl(b64)
+    profiler::end(z)
+    return result
 }
 
 /// Decode URL-safe Base64 (same decoder handles both alphabets).

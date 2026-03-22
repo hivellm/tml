@@ -70,6 +70,8 @@
 //! assert(to_uppercase("hello") == "HELLO")
 //! ```
 
+use core::profiler
+
 // ============================================================================
 // FFI declarations for optimized C library string functions
 // ============================================================================
@@ -196,10 +198,12 @@ pub func last_char(s: Str) -> Maybe[I32] {
 /// ```
 @allocates
 pub func substring(s: Str, start: I64, end: I64) -> Str {
+    let z = profiler::begin("str::substring")
     let s_len: I64 = len(s)
     let st: I64 = start
     var en: I64 = end
     if st < 0 or st >= s_len or en <= st {
+        profiler::end(z)
         return ""
     }
     if en > s_len {
@@ -209,6 +213,7 @@ pub func substring(s: Str, start: I64, end: I64) -> Str {
     let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
     lowlevel { copy_nonoverlapping((s as I64 + st) as *U8, buf as *U8, sub_len) }
     lowlevel { ptr_write[U8]((buf as I64 + sub_len) as *U8, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -359,8 +364,10 @@ pub func trim_end(s: Str) -> Str {
 /// ```
 @allocates
 pub func to_uppercase(s: Str) -> Str {
+    let z = profiler::begin("str::to_uppercase")
     let s_len: I64 = len(s)
     if s_len == 0 {
+        profiler::end(z)
         return ""
     }
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
@@ -381,6 +388,7 @@ pub func to_uppercase(s: Str) -> Str {
     }
     let null_p: *U8 = (dst + s_len) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -394,8 +402,10 @@ pub func to_uppercase(s: Str) -> Str {
 /// ```
 @allocates
 pub func to_lowercase(s: Str) -> Str {
+    let z = profiler::begin("str::to_lowercase")
     let s_len: I64 = len(s)
     if s_len == 0 {
+        profiler::end(z)
         return ""
     }
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
@@ -416,6 +426,7 @@ pub func to_lowercase(s: Str) -> Str {
     }
     let null_p: *U8 = (dst + s_len) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -577,15 +588,18 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
 /// assert(parts2.len() == 2)
 /// ```
 pub func split(s: Str, delimiter: Str) -> List[Str] {
+    let z = profiler::begin("str::split")
     let result: List[Str] = List[Str]::new(8)
     let s_len: I64 = len(s)
     let d_len: I64 = len(delimiter)
     if s_len == 0 {
         result.push("")
+        profiler::end(z)
         return result
     }
     if d_len == 0 {
         result.push(s)
+        profiler::end(z)
         return result
     }
     let s_base: I64 = s as I64
@@ -603,6 +617,7 @@ pub func split(s: Str, delimiter: Str) -> List[Str] {
     }
     // Push remainder
     result.push(substring(s, start, s_len))
+    profiler::end(z)
     return result
 }
 
@@ -717,10 +732,12 @@ pub func lines(s: Str) -> List[Str] {
 /// ```
 @allocates
 pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
+    let z = profiler::begin("str::replace")
     let s_len: I64 = len(s)
     let p_len: I64 = len(pattern)
     let r_len: I64 = len(replacement)
     if p_len == 0 or s_len == 0 {
+        profiler::end(z)
         return s
     }
     let s_base: I64 = s as I64
@@ -737,6 +754,7 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
         }
     }
     if count == 0 {
+        profiler::end(z)
         return s
     }
     // Allocate result
@@ -770,6 +788,7 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
     }
     let null_p: *U8 = (dst + di) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    profiler::end(z)
     return buf as Str
 }
 
@@ -1265,7 +1284,10 @@ pub func join(parts: List[Str], separator: Str) -> Str {
 /// ```
 @allocates
 pub func concat(a: Str, b: Str) -> Str {
-    return a + b
+    let z = profiler::begin("str::concat")
+    let result = a + b
+    profiler::end(z)
+    return result
 }
 
 /// Concatenates multiple strings without a separator.
