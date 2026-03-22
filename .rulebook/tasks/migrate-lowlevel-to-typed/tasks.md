@@ -1,16 +1,16 @@
 # Tasks: Migrate lowlevel to Typed APIs
 
-**Status**: Not Started
+**Status**: In Progress (Phase 1 started)
 **Scope**: ~702 lowlevel blocks across 25 files (474 CRITICAL + 228 SHOULD MIGRATE)
 **Legitimate**: ~1,137 blocks in core primitives, FFI, encodings — NO ACTION needed
 
 ## Phase 1: HTTP Shared State → Typed Structs (CRITICAL, highest impact)
 
-- [ ] 1.1 Define `type SharedWorkerState` with all 15+ fields (shutdown, queue, table, count, router, timeouts, hooks, etc.)
-- [ ] 1.2 Replace 100 ptr_read/ptr_write in worker.tml with struct field access
-- [ ] 1.3 Replace 67 ptr_read/ptr_write in dispatch.tml with struct field access
-- [ ] 1.4 Replace 46 ptr_read/ptr_write in iocp_worker.tml with struct field access
-- [ ] 1.5 Verify all HTTP tests pass after shared state migration
+- [x] 1.1 SharedConfig struct + shared_get/shared_set accessors (shared_state.tml + worker.tml)
+- [x] 1.2 worker.tml: all ~55 shared ptr_read/ptr_write → shared_get/shared_set
+- [x] 1.3 dispatch.tml: 11 shared ptr_read → shared_get
+- [x] 1.4 iocp_worker.tml: 18 shared ptr_read/ptr_write → iocp_shared_get/iocp_shared_set
+- [x] 1.5 All HTTP tests pass (chunked_transfer, chunked_header_detect, url_decode)
 
 ## Phase 2: HTTP Router → Typed RadixNode (CRITICAL)
 
