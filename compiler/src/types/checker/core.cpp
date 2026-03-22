@@ -29,6 +29,7 @@ TML_MODULE("compiler")
 //! `List`, `Eq`, `Ord`, etc.
 
 #include "lexer/token.hpp"
+#include "profiler.hpp"
 #include "types/builtins_cache.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
@@ -196,6 +197,7 @@ TypeChecker::TypeChecker() : env_(BuiltinsSnapshot::instance().create_env()) {}
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
+    TML_ZONE("types::check_module");
     TML_DEBUG_LN("[DEBUG] check_module called");
 
     // Ensure module registry exists for FFI namespace support

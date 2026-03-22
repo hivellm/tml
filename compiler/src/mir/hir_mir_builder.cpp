@@ -15,6 +15,8 @@ TML_MODULE("compiler")
 
 #include "mir/hir_mir_builder.hpp"
 
+#include "profiler.hpp"
+
 #include <stdexcept>
 
 namespace tml::mir {
@@ -30,6 +32,7 @@ HirMirBuilder::HirMirBuilder(const types::TypeEnv& env) : env_(env), module_{}, 
 // ============================================================================
 
 auto HirMirBuilder::build(const hir::HirModule& hir_module) -> Module {
+    TML_ZONE("mir::build");
     module_.name = hir_module.name;
 
     // Build all declarations

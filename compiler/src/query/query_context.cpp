@@ -3,6 +3,7 @@ TML_MODULE("compiler")
 #include "query/query_context.hpp"
 
 #include "log/log.hpp"
+#include "profiler.hpp"
 
 #include <filesystem>
 
@@ -119,6 +120,7 @@ ParseModuleResult QueryContext::parse_module(const std::string& file_path,
 
 TypecheckResult QueryContext::typecheck_module(const std::string& file_path,
                                                const std::string& module_name) {
+    TML_ZONE("query::typecheck_module");
     return force<TypecheckResult>(TypecheckModuleKey{file_path, module_name});
 }
 
@@ -144,6 +146,7 @@ MirBuildResult QueryContext::mir_build(const std::string& file_path,
 
 CodegenUnitResult QueryContext::codegen_unit(const std::string& file_path,
                                              const std::string& module_name) {
+    TML_ZONE("query::codegen_unit");
     return force<CodegenUnitResult>(
         CodegenUnitKey{file_path, module_name, options_.optimization_level, options_.debug_info,
                        options_.test_entry_index, options_.library_decls_only,

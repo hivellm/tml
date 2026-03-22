@@ -14,6 +14,7 @@ TML_MODULE("codegen_x86")
 #include "backend/lld_linker.hpp"
 
 #include "log/log.hpp"
+#include "profiler.hpp"
 
 #include <algorithm>
 #include <array>
@@ -486,6 +487,7 @@ auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDL
 
 auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& output_path,
                      const LLDLinkOptions& options) -> LLDLinkResult {
+    TML_ZONE("lld::link");
     LLDLinkResult result;
     result.success = false;
 

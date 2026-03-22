@@ -15,6 +15,7 @@ TML_MODULE("test")
 
 #include "common.hpp"
 #include "log/log.hpp"
+#include "profiler.hpp"
 #include "testing/testing_compile.hpp"
 #include "testing/testing_coverage.hpp"
 #include "testing/testing_discovery.hpp"
@@ -560,6 +561,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 // ============================================================================
 
 TestRunResult run_tests(const TestConfig& config) {
+    TML_ZONE("test::run_tests");
     TestRunResult result;
     auto total_start = Clock::now();
     // Redirect LLVM profraw from the main process to build/coverage/profraw/

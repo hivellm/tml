@@ -54,6 +54,7 @@ TML_MODULE("compiler")
 #include "hir/hir_builder.hpp"
 
 #include "lexer/token.hpp"
+#include "profiler.hpp"
 
 namespace tml::hir {
 
@@ -150,6 +151,7 @@ HirBuilder::HirBuilder(types::TypeEnv& type_env) : type_env_(type_env) {}
 // are resolved to ensure all generic instantiations are available.
 
 auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
+    TML_ZONE("hir::lower_module");
     HirModule module;
     module.name = ast_module.name;
     // source_path is not available in parser::Module - use span start file if available

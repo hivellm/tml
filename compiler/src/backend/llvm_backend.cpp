@@ -7,6 +7,7 @@ TML_MODULE("codegen_x86")
 #include "backend/llvm_backend.hpp"
 
 #include "log/log.hpp"
+#include "profiler.hpp"
 #include "version_generated.hpp"
 
 #include <chrono>
@@ -127,6 +128,7 @@ auto LLVMBackend::get_default_target_triple() const -> std::string {
 
 auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::path& output_path,
                                        const LLVMCompileOptions& options) -> LLVMCompileResult {
+    TML_ZONE("llvm::compile_ir_to_object");
     LLVMCompileResult result;
     result.success = false;
 

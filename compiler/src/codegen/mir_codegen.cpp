@@ -37,6 +37,7 @@ TML_MODULE("compiler")
 #include "codegen/mir_codegen.hpp"
 
 #include "codegen/target.hpp"
+#include "profiler.hpp"
 #include "version_generated.hpp"
 
 #include <sstream>
@@ -64,6 +65,7 @@ auto MirCodegen::new_temp() -> std::string {
 }
 
 auto MirCodegen::generate(const mir::Module& module) -> std::string {
+    TML_ZONE("codegen::generate");
     output_.str("");
     output_.clear();
     temp_counter_ = 0;
