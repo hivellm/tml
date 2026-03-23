@@ -30,12 +30,13 @@ pub const MAX_PARAMS: I64 = 8
 // The caller's buffer is modified but that's fine — we only read method/path
 // once per request before overwriting with the next recv.
 
-/// Zero-copy method extraction. Null-terminates buffer at first space.
-/// FAST (zero alloc) but DESTRUCTIVE — only safe for single-request path.
+/// Zero-copy method extraction. Overwrites the space after method with \0.
+/// Returns Str pointing into buf. "GET /path HTTP/1.1\r\n" → "GET"
 pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
     var i: I64 = 0
     loop (i < len and i < 10) {
-        if rd(buf, i) == 32 {
+        let c: I32 = rd(buf, i)
+        if c == 32 {
             wr(buf, i, 0)
             return buf as Str
         }
@@ -44,24 +45,12 @@ pub func app_zerocopy_method(buf: I64, len: I64) -> Str {
     return ""
 }
 
-/// Method extraction by copying. Non-destructive — safe for pipelining.
-pub func app_copy_method(buf: I64, len: I64) -> Str {
-    var i: I64 = 0
-    loop (i < len and i < 10) {
-        if rd(buf, i) == 32 {
-            let s: I64 = lowlevel { mem_alloc(i + 1) } as I64
-            lowlevel { copy_nonoverlapping(buf as *Unit, s as *Unit, i) }
-            wr(s, i, 0)
-            return s as Str
-        }
-        i = i + 1
-    }
-    return ""
-}
-
-/// Zero-copy path extraction. Null-terminates buffer after path.
-/// FAST but DESTRUCTIVE — requires method already null-terminated.
+/// Zero-copy path extraction. Overwrites the space/? after path with \0.
+/// Returns Str pointing into buf. Assumes method was already null-terminated.
+/// Scans from start of buf to find the first null byte (end of method), then
+/// the path starts at the next byte.
 pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
+    // Find start: skip past the null-terminated method + the null byte
     var start: I64 = 0
     loop (start < len and start < 10) {
         if rd(buf, start) == 0 {
@@ -79,35 +68,10 @@ pub func app_zerocopy_path(buf: I64, len: I64) -> Str {
     }
     if end <= path_start { return "/" }
     wr(buf, end, 0)
+    // Percent-decode path in-place (e.g., %20 → space)
     let path_len: I64 = end - path_start
     app_percent_decode(buf + path_start, path_len)
     return (buf + path_start) as Str
-}
-
-/// Path extraction by copying. Non-destructive — safe for pipelining.
-pub func app_copy_path(buf: I64, len: I64) -> Str {
-    var start: I64 = 0
-    loop (start < len and start < 10) {
-        if rd(buf, start) == 32 {
-            start = start + 1
-            break
-        }
-        start = start + 1
-    }
-    let path_start: I64 = start
-    var end: I64 = start
-    loop (end < len) {
-        let c: I32 = rd(buf, end)
-        if c == 32 or c == 63 { break }
-        end = end + 1
-    }
-    if end <= path_start { return "/" }
-    let path_len: I64 = end - path_start
-    let s: I64 = lowlevel { mem_alloc(path_len + 1) } as I64
-    lowlevel { copy_nonoverlapping((buf + path_start) as *Unit, s as *Unit, path_len) }
-    wr(s, path_len, 0)
-    app_percent_decode(s, path_len)
-    return s as Str
 }
 
 /// Decode a hex character (0-9, A-F, a-f) to its value (0-15).
