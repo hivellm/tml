@@ -661,12 +661,25 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         dbg_attr = " !dbg !" + std::to_string(func_scope_id);
     }
 
+    // Inline hint for small functions (like Rust's #[inline] at O0)
+    // Functions with <= 5 statements get alwaysinline to avoid function call overhead
+    std::string inline_attr;
+    if (func.body.has_value()) {
+        size_t stmt_count = func.body->stmts.size();
+        bool is_drop = func.name.rfind("drop", 0) == 0;
+        if (is_drop || stmt_count <= 3) {
+            inline_attr = " alwaysinline";
+        } else if (stmt_count <= 8) {
+            inline_attr = " inlinehint";
+        }
+    }
+
     // Emit TML source name comment for IR readability
     if (!current_module_name_.empty()) {
         emit_line("; " + current_module_name_ + "::" + func.name);
     }
     emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params +
-              ")" + attrs + dbg_attr + " {");
+              ")" + inline_attr + attrs + dbg_attr + " {");
     emit_line("entry:");
 
     // Register function parameters in locals_ by creating allocas

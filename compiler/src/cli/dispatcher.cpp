@@ -401,7 +401,9 @@ int tml_main(int argc, char* argv[]) {
                 }
             }
             if (!explicit_checked_math) {
-                tml::CompilerOptions::checked_math = (opt_level == 0);
+                // Disabled by default — checked math at O0 causes 6x IR bloat
+                // that degrades performance severely. Enable with --checked-math.
+                tml::CompilerOptions::checked_math = false;
             }
         }
 
@@ -546,7 +548,7 @@ int tml_main(int argc, char* argv[]) {
                 }
             }
             if (!explicit_checked_math) {
-                CompilerOptions::checked_math = (CompilerOptions::optimization_level == 0);
+                CompilerOptions::checked_math = false;
             }
         }
 
