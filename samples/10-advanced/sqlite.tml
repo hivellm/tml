@@ -1,0 +1,145 @@
+// TML Sample: SQLite
+// Demonstrates embedded SQLite database from std::sqlite.
+//
+// Run: tml run samples/10-advanced/sqlite.tml
+
+mod sqlite_sample
+
+use core::str
+use core::fmt::impls
+use std::sqlite::{Database, Statement}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== SQLite ===")
+
+    // ── Open in-memory database ──────────────────────
+    println("--- Open Database ---")
+
+    let db_result: Outcome[Database, Str] = Database::open_in_memory()
+    when db_result {
+        Ok(db) => {
+            println("opened in-memory database")
+            run_demo(db)
+        },
+        Err(e) => show("failed to open: ", e),
+    }
+
+    println("=== done ===")
+}
+
+func run_demo(db: Database) {
+    // ── Create table ─────────────────────────────────
+    println("--- Create Table ---")
+
+    let create_result: Outcome[I32, Str] = db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
+    when create_result {
+        Ok(n) => println("table created"),
+        Err(e) => show("create error: ", e),
+    }
+
+    // ── Insert rows ──────────────────────────────────
+    println("--- Insert Data ---")
+
+    db.exec("INSERT INTO users (name, age) VALUES ('Alice', 30)")
+    db.exec("INSERT INTO users (name, age) VALUES ('Bob', 25)")
+    db.exec("INSERT INTO users (name, age) VALUES ('Charlie', 35)")
+    db.exec("INSERT INTO users (name, age) VALUES ('Diana', 28)")
+    println("inserted 4 rows")
+
+    // ── Query with prepared statement ────────────────
+    println("--- Query ---")
+
+    let stmt_result: Outcome[Statement, Str] = db.prepare("SELECT id, name, age FROM users ORDER BY age")
+    when stmt_result {
+        Ok(mut stmt) => {
+            loop (stmt.step()) {
+                let id: I64 = stmt.column_i64(0)
+                let name: Str = stmt.column_str(1)
+                let age: I64 = stmt.column_i64(2)
+                let id_str: Str = id.to_string()
+                let age_str: Str = age.to_string()
+                println("  id=" + id_str + " name=" + name + " age=" + age_str)
+            }
+            stmt.finalize()
+        },
+        Err(e) => show("query error: ", e),
+    }
+
+    // ── Parameterized query ──────────────────────────
+    println("--- Parameterized Insert ---")
+
+    let ins_result: Outcome[Statement, Str] = db.prepare("INSERT INTO users (name, age) VALUES (?, ?)")
+    when ins_result {
+        Ok(mut ins) => {
+            ins.bind_str(1, "Eve")
+            ins.bind_i64(2, 22)
+            ins.step()
+            ins.finalize()
+            println("inserted Eve (age 22)")
+        },
+        Err(e) => show("insert error: ", e),
+    }
+
+    // ── Count rows ───────────────────────────────────
+    println("--- Count ---")
+
+    let count_result: Outcome[Statement, Str] = db.prepare("SELECT COUNT(*) FROM users")
+    when count_result {
+        Ok(mut count_stmt) => {
+            if count_stmt.step() {
+                let count: I64 = count_stmt.column_i64(0)
+                show("total users = ", count.to_string())
+            }
+            count_stmt.finalize()
+        },
+        Err(e) => show("count error: ", e),
+    }
+
+    // ── Transactions ─────────────────────────────────
+    println("--- Transactions ---")
+
+    db.begin()
+    db.exec("INSERT INTO users (name, age) VALUES ('Frank', 40)")
+    db.exec("INSERT INTO users (name, age) VALUES ('Grace', 33)")
+    db.commit()
+    println("committed transaction with 2 inserts")
+
+    let final_result: Outcome[Statement, Str] = db.prepare("SELECT COUNT(*) FROM users")
+    when final_result {
+        Ok(mut fs) => {
+            if fs.step() {
+                let total: I64 = fs.column_i64(0)
+                show("total after transaction = ", total.to_string())
+            }
+            fs.finalize()
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── Aggregate query ──────────────────────────────
+    println("--- Aggregates ---")
+
+    let avg_result: Outcome[Statement, Str] = db.prepare("SELECT AVG(age), MIN(age), MAX(age) FROM users")
+    when avg_result {
+        Ok(mut avg_stmt) => {
+            if avg_stmt.step() {
+                let avg: F64 = avg_stmt.column_f64(0)
+                let min_age: I64 = avg_stmt.column_i64(1)
+                let max_age: I64 = avg_stmt.column_i64(2)
+                show("avg age = ", avg.to_string())
+                show("min age = ", min_age.to_string())
+                show("max age = ", max_age.to_string())
+            }
+            avg_stmt.finalize()
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── Close database ───────────────────────────────
+    db.close()
+    println("database closed")
+}

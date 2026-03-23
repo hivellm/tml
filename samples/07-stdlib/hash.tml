@@ -1,0 +1,99 @@
+// TML Sample: Hash
+// Demonstrates non-cryptographic hash functions from std::hash.
+//
+// Run: tml run samples/07-stdlib/hash.tml
+
+mod hash_sample
+
+use core::str
+use core::fmt::impls
+use std::hash::{fnv1a32, fnv1a64, murmur2_32, murmur2_64, Hash32, Hash64}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Hash Functions ===")
+
+    // ── FNV-1a 32-bit ────────────────────────────────
+    println("--- FNV-1a 32-bit ---")
+
+    let h1: Hash32 = fnv1a32("hello")
+    let h1_hex: Str = h1.to_hex()
+    show("fnv1a32('hello') = ", h1_hex)
+
+    let h2: Hash32 = fnv1a32("world")
+    let h2_hex: Str = h2.to_hex()
+    show("fnv1a32('world') = ", h2_hex)
+
+    let h3: Hash32 = fnv1a32("")
+    let h3_hex: Str = h3.to_hex()
+    show("fnv1a32('') = ", h3_hex)
+
+    // Different inputs should produce different hashes
+    if h1_hex != h2_hex {
+        println("different inputs -> different hashes: correct")
+    }
+
+    // ── FNV-1a 64-bit ────────────────────────────────
+    println("--- FNV-1a 64-bit ---")
+
+    let h4: Hash64 = fnv1a64("hello")
+    let h4_hex: Str = h4.to_hex()
+    show("fnv1a64('hello') = ", h4_hex)
+
+    let h5: Hash64 = fnv1a64("world")
+    let h5_hex: Str = h5.to_hex()
+    show("fnv1a64('world') = ", h5_hex)
+
+    let h6: Hash64 = fnv1a64("Hello, World!")
+    let h6_hex: Str = h6.to_hex()
+    show("fnv1a64('Hello, World!') = ", h6_hex)
+
+    // ── Murmur2 32-bit ───────────────────────────────
+    println("--- Murmur2 32-bit ---")
+
+    let m1: Hash32 = murmur2_32("hello", 0 as U32)
+    let m1_hex: Str = m1.to_hex()
+    show("murmur2_32('hello', seed=0) = ", m1_hex)
+
+    let m2: Hash32 = murmur2_32("hello", 42 as U32)
+    let m2_hex: Str = m2.to_hex()
+    show("murmur2_32('hello', seed=42) = ", m2_hex)
+
+    // Different seeds produce different hashes
+    if m1_hex != m2_hex {
+        println("different seeds -> different hashes: correct")
+    }
+
+    // ── Murmur2 64-bit ───────────────────────────────
+    println("--- Murmur2 64-bit ---")
+
+    let m3: Hash64 = murmur2_64("hello", 0 as U64)
+    let m3_hex: Str = m3.to_hex()
+    show("murmur2_64('hello', seed=0) = ", m3_hex)
+
+    let m4: Hash64 = murmur2_64("The quick brown fox", 0 as U64)
+    let m4_hex: Str = m4.to_hex()
+    show("murmur2_64('The quick brown fox', seed=0) = ", m4_hex)
+
+    // ── Raw values ───────────────────────────────────
+    println("--- Raw Values ---")
+
+    let raw32: U32 = fnv1a32("test").raw()
+    show("fnv1a32('test').raw() = ", raw32.to_string())
+
+    let raw64: U64 = fnv1a64("test").raw()
+    show("fnv1a64('test').raw() = ", raw64.to_string())
+
+    // ── ETag example ─────────────────────────────────
+    println("--- ETag Example ---")
+
+    let content: Str = "<!DOCTYPE html><html><body>Hello</body></html>"
+    let etag: Hash64 = fnv1a64(content)
+    let etag_hex: Str = etag.to_hex()
+    show("ETag: \"", etag_hex + "\"")
+
+    println("=== done ===")
+}

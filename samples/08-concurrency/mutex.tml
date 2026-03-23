@@ -1,0 +1,64 @@
+// TML Sample: Mutex
+// Demonstrates mutual exclusion from std::sync.
+//
+// Run: tml run samples/08-concurrency/mutex.tml
+
+mod mutex_sample
+
+use core::str
+use core::fmt::impls
+use std::sync::mutex::{Mutex}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Mutex ===")
+
+    // ── Mutex creation ───────────────────────────────
+    println("--- Mutex Creation ---")
+
+    var m: Mutex[I32] = Mutex::new(42)
+    show("created mutex with value 42", "")
+    show("is_locked = ", m.is_locked().to_string())
+
+    // ── Lock and unlock ──────────────────────────────
+    println("--- Lock/Unlock ---")
+
+    // Lock the mutex (acquires exclusive access)
+    m.lock()
+    show("after lock, is_locked = ", m.is_locked().to_string())
+
+    // In a real program, the MutexGuard returned by lock() provides
+    // .get() for read access and .get_mut() for write access.
+    // The guard auto-unlocks when it goes out of scope.
+
+    // ── Multiple mutexes ─────────────────────────────
+    println("--- Multiple Mutexes ---")
+
+    var m2: Mutex[I64] = Mutex::new(100 as I64)
+    show("mutex m2 created with I64 value", "")
+    show("m2 is_locked = ", m2.is_locked().to_string())
+
+    // ── API reference ────────────────────────────────
+    println("--- API Reference ---")
+    println("  Mutex::new(value)  -> create a mutex guarding a value")
+    println("  mutex.lock()       -> acquire lock, returns MutexGuard[T]")
+    println("  mutex.try_lock()   -> non-blocking lock attempt -> Maybe[MutexGuard[T]]")
+    println("  mutex.is_locked()  -> check if currently locked")
+    println("  guard.get()        -> ref T (read access)")
+    println("  guard.get_mut()    -> mut ref T (write access)")
+    println("  // guard auto-unlocks when dropped")
+
+    println("")
+    println("--- Thread Safety Pattern ---")
+    println("  // Share between threads with Arc:")
+    println("  let shared = Arc::new(Mutex::new(0))")
+    println("  thread::spawn(do() {")
+    println("      let guard = shared.lock()")
+    println("      // exclusive access here")
+    println("  })")
+
+    println("=== done ===")
+}

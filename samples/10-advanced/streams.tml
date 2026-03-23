@@ -1,0 +1,68 @@
+// TML Sample: Streams
+// Demonstrates byte stream operations from std::stream.
+//
+// Run: tml run samples/10-advanced/streams.tml
+
+mod streams_sample
+
+use core::str
+use core::fmt::impls
+use std::stream::byte_stream::ByteStream
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Streams ===")
+
+    // ── ByteStream from string ───────────────────────
+    println("--- ByteStream from String ---")
+
+    var s1: ByteStream = ByteStream::from_string("Hello, Streams!")
+    show("length = ", s1.len().to_string())
+
+    // Read content back as string
+    let content: Str = s1.to_string()
+    show("content = ", content)
+
+    s1.destroy()
+
+    // ── Empty stream ─────────────────────────────────
+    println("--- Empty Stream ---")
+
+    var s2: ByteStream = ByteStream::new()
+    show("empty length = ", s2.len().to_string())
+    let empty_str: Str = s2.to_string()
+    show("empty content = '", empty_str + "'")
+    s2.destroy()
+
+    // ── Larger content ───────────────────────────────
+    println("--- Larger Content ---")
+
+    var data: Str = "line 1: The quick brown fox\nline 2: jumps over the lazy dog\nline 3: TML streams are great!\n"
+    var s3: ByteStream = ByteStream::from_string(data)
+    show("multi-line length = ", s3.len().to_string())
+
+    let readback: Str = s3.to_string()
+    show("read back:\n", readback)
+
+    s3.destroy()
+
+    // ── Stream capabilities ──────────────────────────
+    println("--- Stream Capabilities ---")
+    println("ByteStream implements both Readable and Writable behaviors:")
+    println("  Readable: read(buf) -> Outcome[I64, IoError]")
+    println("  Writable: write(buf) -> Outcome[I64, IoError], flush()")
+    println("")
+    println("Additional stream types:")
+    println("  BufferedReader  -> line-by-line reading from any Readable")
+    println("  BufferedWriter  -> batched writing to any Writable")
+    println("  ReadableStream  -> push-based event-driven reading")
+    println("  WritableStream  -> writable with backpressure")
+    println("  DuplexStream    -> bidirectional (read + write)")
+    println("  TransformStream -> transform data through a callback")
+    println("  pipe(src, dst)  -> copy bytes between streams")
+
+    println("=== done ===")
+}

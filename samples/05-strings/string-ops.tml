@@ -1,0 +1,97 @@
+// TML Sample: String Operations
+// Demonstrates core::str functions for text manipulation.
+//
+// Run: tml run samples/05-strings/string-ops.tml
+
+mod string_ops
+
+use core::str
+use core::fmt::impls
+use std::collections::List
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== String Operations ===")
+
+    let text: Str = "  Hello, TML World!  "
+
+    // ── Length ──────────────────────────────────────
+    show("original: '", text + "'")
+    show("length = ", str::len(text).to_string())
+
+    // ── Trim whitespace ────────────────────────────
+    let trimmed: Str = str::trim(text)
+    show("trimmed: '", trimmed + "'")
+
+    let trim_start: Str = str::trim_start(text)
+    show("trim_start: '", trim_start + "'")
+
+    let trim_end: Str = str::trim_end(text)
+    show("trim_end: '", trim_end + "'")
+
+    // ── Case conversion ────────────────────────────
+    let upper: Str = str::to_uppercase(trimmed)
+    show("uppercase: ", upper)
+
+    let lower: Str = str::to_lowercase(trimmed)
+    show("lowercase: ", lower)
+
+    // ── Search operations ──────────────────────────
+    let s: Str = "the quick brown fox jumps over the lazy dog"
+
+    let has_fox: Bool = str::contains(s, "fox")
+    show("contains 'fox': ", has_fox.to_string())
+
+    let has_cat: Bool = str::contains(s, "cat")
+    show("contains 'cat': ", has_cat.to_string())
+
+    let starts: Bool = str::starts_with(s, "the")
+    show("starts_with 'the': ", starts.to_string())
+
+    let ends: Bool = str::ends_with(s, "dog")
+    show("ends_with 'dog': ", ends.to_string())
+
+    // ── Find ───────────────────────────────────────
+    let pos: Maybe[I64] = str::find(s, "fox")
+    when pos {
+        Just(idx) => show("find 'fox' at index: ", idx.to_string()),
+        Nothing => println("'fox' not found"),
+    }
+
+    // ── Substring ──────────────────────────────────
+    let sub: Str = str::substring(s, 4, 9)
+    show("substring(4,9): ", sub)
+
+    // ── Replace ────────────────────────────────────
+    let replaced: Str = str::replace(s, "fox", "cat")
+    show("replace fox->cat: ", replaced)
+
+    // ── Split ──────────────────────────────────────
+    let csv: Str = "apple,banana,cherry,date"
+    let parts: List[Str] = str::split(csv, ",")
+    show("split count: ", parts.len().to_string())
+
+    println("split items:")
+    for i in 0 to parts.len() {
+        show("  ", parts.get(i))
+    }
+
+    // ── Join ───────────────────────────────────────
+    let joined: Str = str::join(parts, " | ")
+    show("joined: ", joined)
+
+    parts.destroy()
+
+    // ── Repeat ─────────────────────────────────────
+    let stars: Str = str::repeat("*", 10)
+    show("repeat('*', 10): ", stars)
+
+    // ── Concat ─────────────────────────────────────
+    let full: Str = "Hello" + ", " + "World" + "!"
+    show("concat: ", full)
+
+    println("=== done ===")
+}

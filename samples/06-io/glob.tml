@@ -1,0 +1,65 @@
+// TML Sample: Glob
+// Demonstrates glob pattern matching from std::glob.
+//
+// Run: tml run samples/06-io/glob.tml
+
+mod glob_sample
+
+use core::str
+use core::fmt::impls
+use std::glob
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Glob ===")
+
+    // ── Pattern matching (no filesystem) ─────────────
+    // glob::matches tests a pattern against a string without
+    // touching the filesystem — useful for routing, filtering, etc.
+
+    println("--- Wildcard (*) ---")
+    show("*.tml matches main.tml: ", glob::matches("*.tml", "main.tml").to_string())
+    show("*.tml matches main.rs: ", glob::matches("*.tml", "main.rs").to_string())
+    show("*.tml matches test.tml: ", glob::matches("*.tml", "test.tml").to_string())
+    show("*.txt matches notes.txt: ", glob::matches("*.txt", "notes.txt").to_string())
+
+    println("--- Single char (?) ---")
+    show("file?.txt matches file1.txt: ", glob::matches("file?.txt", "file1.txt").to_string())
+    show("file?.txt matches file12.txt: ", glob::matches("file?.txt", "file12.txt").to_string())
+    show("test?.tml matches testA.tml: ", glob::matches("test?.tml", "testA.tml").to_string())
+
+    println("--- Character classes ---")
+    show("[abc].txt matches a.txt: ", glob::matches("[abc].txt", "a.txt").to_string())
+    show("[abc].txt matches d.txt: ", glob::matches("[abc].txt", "d.txt").to_string())
+    show("[0-9].log matches 5.log: ", glob::matches("[0-9].log", "5.log").to_string())
+
+    println("--- Exact match ---")
+    show("hello.tml matches hello.tml: ", glob::matches("hello.tml", "hello.tml").to_string())
+    show("hello.tml matches world.tml: ", glob::matches("hello.tml", "world.tml").to_string())
+
+    println("--- Star matches anything ---")
+    show("* matches anything: ", glob::matches("*", "literally_anything").to_string())
+
+    // ── Practical examples ───────────────────────────
+    println("--- Practical Examples ---")
+
+    // Simulating file filtering
+    let files_to_check: Str = "main.tml"
+    let pattern: Str = "*.tml"
+    if glob::matches(pattern, files_to_check) {
+        show("  accepted: ", files_to_check)
+    }
+
+    let files_to_reject: Str = "readme.md"
+    if not glob::matches(pattern, files_to_reject) {
+        show("  rejected: ", files_to_reject)
+    }
+
+    // Note: Glob::find() for filesystem globbing is available but
+    // requires a valid base directory. See std::glob for details.
+
+    println("=== done ===")
+}

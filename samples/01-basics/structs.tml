@@ -1,0 +1,62 @@
+// TML Sample: Structs and Methods
+// Demonstrates struct definition, fields, methods, and impl blocks.
+//
+// Run: tml run samples/01-basics/structs.tml
+
+mod structs
+
+use core::str
+use core::fmt::impls
+
+// ── Struct definition ────────────────────────────────
+type Point {
+    x: I32,
+    y: I32,
+}
+
+impl Point {
+    func new(x: I32, y: I32) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    func manhattan(this) -> I32 {
+        return this.x + this.y
+    }
+}
+
+type Color {
+    r: I32,
+    g: I32,
+    b: I32,
+}
+
+pub func main() {
+    println("=== Structs ===")
+
+    // Create via static method
+    let p: Point = Point::new(3, 4)
+
+    // Field access
+    let px: Str = p.x.to_string()
+    println("p.x = " + px)
+
+    let py: Str = p.y.to_string()
+    println("p.y = " + py)
+
+    // Method call
+    let m: I32 = p.manhattan()
+    let ms: Str = m.to_string()
+    println("manhattan = " + ms)
+
+    // Direct construction
+    let q: Point = Point { x: 10, y: 20 }
+    let qx: Str = q.x.to_string()
+    println("q.x = " + qx)
+
+    // Multi-field struct
+    let c: Color = Color { r: 255, g: 128, b: 0 }
+    let rs: Str = c.r.to_string()
+    println("color.r = " + rs)
+
+    println("=== done ===")
+}

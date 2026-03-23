@@ -1,0 +1,99 @@
+// TML Sample: UUID
+// Demonstrates UUID generation and parsing from std::uuid.
+//
+// Run: tml run samples/07-stdlib/uuid.tml
+
+mod uuid_sample
+
+use core::str
+use core::fmt::impls
+use std::uuid::Uuid
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== UUID ===")
+
+    // ── UUID v4 (random) ─────────────────────────────
+    println("--- UUID v4 (Random) ---")
+
+    let id1: Uuid = Uuid::v4()
+    let s1: Str = id1.to_string()
+    show("uuid v4 #1 = ", s1)
+
+    let id2: Uuid = Uuid::v4()
+    let s2: Str = id2.to_string()
+    show("uuid v4 #2 = ", s2)
+
+    // Each v4 UUID should be unique
+    if s1 != s2 {
+        println("unique: two v4 UUIDs are different")
+    }
+
+    // ── UUID v7 (timestamp-based) ────────────────────
+    println("--- UUID v7 (Timestamp) ---")
+
+    let id3: Uuid = Uuid::v7()
+    let s3: Str = id3.to_string()
+    show("uuid v7 #1 = ", s3)
+
+    let id4: Uuid = Uuid::v7()
+    let s4: Str = id4.to_string()
+    show("uuid v7 #2 = ", s4)
+
+    // v7 UUIDs are chronologically sortable
+    println("(v7 UUIDs are time-sorted: earlier < later)")
+
+    // ── UUID parsing ─────────────────────────────────
+    println("--- UUID Parsing ---")
+
+    let parse_result: Outcome[Uuid, Str] = Uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    when parse_result {
+        Ok(parsed) => {
+            let ps: Str = parsed.to_string()
+            show("parsed = ", ps)
+        },
+        Err(e) => show("parse error: ", e),
+    }
+
+    // Invalid UUID
+    let bad_result: Outcome[Uuid, Str] = Uuid::parse("not-a-uuid")
+    when bad_result {
+        Ok(parsed) => println("unexpected success"),
+        Err(e) => show("expected error: ", e),
+    }
+
+    // ── UUID string format ───────────────────────────
+    println("--- UUID Format ---")
+
+    let id5: Uuid = Uuid::v4()
+    let s5: Str = id5.to_string()
+    let uuid_len: I64 = str::len(s5)
+    show("uuid string length = ", uuid_len.to_string())
+    // Standard UUID format: 8-4-4-4-12 = 36 characters
+    if uuid_len == 36 {
+        println("format: 8-4-4-4-12 (correct)")
+    }
+
+    // Check dash positions
+    let dash1: I32 = str::char_at(s5, 8)
+    let dash2: I32 = str::char_at(s5, 13)
+    let dash3: I32 = str::char_at(s5, 18)
+    let dash4: I32 = str::char_at(s5, 23)
+    if dash1 == 45 and dash2 == 45 and dash3 == 45 and dash4 == 45 {
+        println("dashes at positions 8,13,18,23: correct")
+    }
+
+    // ── Generate several v4 UUIDs ────────────────────
+    println("--- Batch Generation ---")
+
+    for i in 0 to 5 {
+        let uid: Uuid = Uuid::v4()
+        let us: Str = uid.to_string()
+        show("  ", us)
+    }
+
+    println("=== done ===")
+}

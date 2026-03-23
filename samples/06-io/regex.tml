@@ -1,0 +1,100 @@
+// TML Sample: Regex
+// Demonstrates regular expression pattern matching from std::regex.
+//
+// Run: tml run samples/06-io/regex.tml
+
+mod regex_sample
+
+use core::str
+use core::fmt::impls
+use std::regex::{Regex}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Regex ===")
+
+    // ── Basic matching ───────────────────────────────
+    println("--- Basic Matching ---")
+
+    let re: Regex = Regex::new("[0-9]+")
+    let matched: Bool = re.is_match("hello 42 world")
+    show("'[0-9]+' matches 'hello 42 world': ", matched.to_string())
+
+    let no_match: Bool = re.is_match("no digits here")
+    show("'[0-9]+' matches 'no digits here': ", no_match.to_string())
+    re.destroy()
+
+    // ── Character classes ────────────────────────────
+    println("--- Character Classes ---")
+
+    let digit_re: Regex = Regex::new("\\d+")
+    show("'\\d+' matches '99 bottles': ", digit_re.is_match("99 bottles").to_string())
+    digit_re.destroy()
+
+    let word_re: Regex = Regex::new("\\w+")
+    show("'\\w+' matches 'hello_world': ", word_re.is_match("hello_world").to_string())
+    word_re.destroy()
+
+    let space_re: Regex = Regex::new("\\s+")
+    show("'\\s+' matches 'a b': ", space_re.is_match("a b").to_string())
+    space_re.destroy()
+
+    // ── Alternation ──────────────────────────────────
+    println("--- Alternation ---")
+
+    let alt_re: Regex = Regex::new("cat|dog")
+    show("'cat|dog' matches 'I have a cat': ", alt_re.is_match("I have a cat").to_string())
+    show("'cat|dog' matches 'I have a dog': ", alt_re.is_match("I have a dog").to_string())
+    show("'cat|dog' matches 'I have a fish': ", alt_re.is_match("I have a fish").to_string())
+    alt_re.destroy()
+
+    // ── Quantifiers ──────────────────────────────────
+    println("--- Quantifiers ---")
+
+    let star_re: Regex = Regex::new("ab*c")
+    show("'ab*c' matches 'ac': ", star_re.is_match("ac").to_string())
+    show("'ab*c' matches 'abc': ", star_re.is_match("abc").to_string())
+    show("'ab*c' matches 'abbc': ", star_re.is_match("abbc").to_string())
+    star_re.destroy()
+
+    let plus_re: Regex = Regex::new("ab+c")
+    show("'ab+c' matches 'ac': ", plus_re.is_match("ac").to_string())
+    show("'ab+c' matches 'abc': ", plus_re.is_match("abc").to_string())
+    plus_re.destroy()
+
+    let quest_re: Regex = Regex::new("colou?r")
+    show("'colou?r' matches 'color': ", quest_re.is_match("color").to_string())
+    show("'colou?r' matches 'colour': ", quest_re.is_match("colour").to_string())
+    quest_re.destroy()
+
+    // ── Replace ──────────────────────────────────────
+    println("--- Replace ---")
+
+    let rep_re: Regex = Regex::new("[0-9]+")
+    let replaced: Str = rep_re.replace("order 42 confirmed", "XX")
+    show("replace digits: ", replaced)
+    rep_re.destroy()
+
+    let rep2_re: Regex = Regex::new("[aeiou]")
+    let replaced_all: Str = rep2_re.replace_all("hello world", "*")
+    show("replace_all vowels: ", replaced_all)
+    rep2_re.destroy()
+
+    // ── Anchors ──────────────────────────────────────
+    println("--- Anchors ---")
+
+    let start_re: Regex = Regex::new("^hello")
+    show("'^hello' matches 'hello world': ", start_re.is_match("hello world").to_string())
+    show("'^hello' matches 'say hello': ", start_re.is_match("say hello").to_string())
+    start_re.destroy()
+
+    let end_re: Regex = Regex::new("world$")
+    show("'world$' matches 'hello world': ", end_re.is_match("hello world").to_string())
+    show("'world$' matches 'world tour': ", end_re.is_match("world tour").to_string())
+    end_re.destroy()
+
+    println("=== done ===")
+}

@@ -1,0 +1,98 @@
+// TML Sample: Error Handling
+// Demonstrates Maybe[T], Outcome[T,E], and pattern matching for error recovery.
+//
+// Run: tml run samples/02-types/error-handling.tml
+
+mod error_handling
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Maybe[T] — optional values ─────────────────────
+// Just(value) = has a value, Nothing = absent
+func find_index(haystack: Str, needle: Str) -> Maybe[I64] {
+    return str::find(haystack, needle)
+}
+
+// ── Outcome[T, E] — success or error ──────────────
+// Ok(value) = success, Err(error) = failure
+func parse_positive(s: Str) -> Outcome[I32, Str] {
+    let maybe_n: Maybe[I64] = str::parse_i64(s)
+    when maybe_n {
+        Nothing => return Err("not a number: " + s),
+        Just(n) => {
+            if n <= 0 {
+                return Err("not positive: " + s)
+            }
+            return Ok(n as I32)
+        },
+    }
+}
+
+func divide(a: I32, b: I32) -> Outcome[I32, Str] {
+    if b == 0 {
+        return Err("division by zero")
+    }
+    return Ok(a / b)
+}
+
+pub func main() {
+    println("=== Error Handling ===")
+
+    // ── Maybe[T] ────────────────────────────────────
+    println("--- Maybe[T] ---")
+
+    let found: Maybe[I64] = find_index("hello world", "world")
+    when found {
+        Just(idx) => show("found 'world' at index ", idx.to_string()),
+        Nothing => println("'world' not found"),
+    }
+
+    let missing: Maybe[I64] = find_index("hello world", "xyz")
+    when missing {
+        Just(idx) => show("found 'xyz' at index ", idx.to_string()),
+        Nothing => println("'xyz' not found"),
+    }
+
+    // ── Outcome[T, E] ──────────────────────────────
+    println("--- Outcome[T, E] ---")
+
+    let ok_result: Outcome[I32, Str] = parse_positive("42")
+    when ok_result {
+        Ok(n) => show("parsed: ", n.to_string()),
+        Err(e) => show("error: ", e),
+    }
+
+    let bad_result: Outcome[I32, Str] = parse_positive("abc")
+    when bad_result {
+        Ok(n) => show("parsed: ", n.to_string()),
+        Err(e) => show("error: ", e),
+    }
+
+    // Chaining Outcome operations
+    let div_ok: Outcome[I32, Str] = divide(100, 4)
+    when div_ok {
+        Ok(v) => show("100 / 4 = ", v.to_string()),
+        Err(e) => show("error: ", e),
+    }
+
+    let div_err: Outcome[I32, Str] = divide(100, 0)
+    when div_err {
+        Ok(v) => show("100 / 0 = ", v.to_string()),
+        Err(e) => show("error: ", e),
+    }
+
+    // ── is_ok / is_err checks ──────────────────────
+    println("--- Checking results ---")
+    let r1: Outcome[I32, Str] = Ok(10)
+    let r2: Outcome[I32, Str] = Err("oops")
+
+    if r1.is_ok() { println("r1 is Ok") }
+    if r2.is_err() { println("r2 is Err") }
+
+    println("=== done ===")
+}

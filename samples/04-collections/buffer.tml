@@ -1,0 +1,76 @@
+// TML Sample: Buffer
+// Demonstrates byte buffer operations from std::collections.
+//
+// Run: tml run samples/04-collections/buffer.tml
+
+mod buffer_sample
+
+use core::str
+use core::fmt::impls
+use std::collections::{Buffer}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Buffer ===")
+
+    // ── Create and write ─────────────────────────────
+    println("--- Create and Write ---")
+
+    let buf: Buffer = Buffer::new(64)
+
+    // Write individual bytes
+    buf.write_u8(72, 0)   // 'H'
+    buf.write_u8(105, 1)  // 'i'
+    buf.write_u8(33, 2)   // '!'
+
+    show("capacity = ", buf.capacity().to_string())
+
+    // Write integers
+    buf.write_i32(42)
+    buf.write_i32(100)
+    show("length after writes = ", buf.len().to_string())
+
+    // ── Read back ────────────────────────────────────
+    println("--- Read Back ---")
+
+    let b0: I32 = buf.read_u8(0)
+    let b1: I32 = buf.read_u8(1)
+    let b2: I32 = buf.read_u8(2)
+    show("byte 0 = ", b0.to_string())
+    show("byte 1 = ", b1.to_string())
+    show("byte 2 = ", b2.to_string())
+
+    // ── Write and read strings ───────────────────────
+    println("--- String Operations ---")
+
+    let buf2: Buffer = Buffer::from_string("Hello, Buffer!")
+    show("from_string length = ", buf2.len().to_string())
+    let as_str: Str = buf2.to_string()
+    show("to_string = ", as_str)
+    buf2.destroy()
+
+    // ── Clear ────────────────────────────────────────
+    println("--- Clear ---")
+
+    show("length before clear = ", buf.len().to_string())
+    buf.clear()
+    show("length after clear = ", buf.len().to_string())
+
+    // ── Slice ────────────────────────────────────────
+    println("--- Slice ---")
+
+    let buf3: Buffer = Buffer::from_string("abcdefghij")
+    let sliced: Buffer = buf3.slice(2, 6)
+    let slice_str: Str = sliced.to_string()
+    show("slice(2, 6) of 'abcdefghij' = ", slice_str)
+    sliced.destroy()
+    buf3.destroy()
+
+    // ── Cleanup ──────────────────────────────────────
+    buf.destroy()
+
+    println("=== done ===")
+}

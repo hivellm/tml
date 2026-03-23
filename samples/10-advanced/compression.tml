@@ -1,0 +1,105 @@
+// TML Sample: Compression
+// Demonstrates zlib/gzip compression from std::zlib.
+//
+// Run: tml run samples/10-advanced/compression.tml
+
+mod compression_sample
+
+use core::str
+use core::fmt::impls
+use std::zlib::deflate::{deflate, inflate}
+use std::zlib::gzip::{gzip, gunzip}
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Compression ===")
+
+    // ── Deflate/Inflate ──────────────────────────────
+    println("--- Deflate ---")
+
+    let original: Str = "Hello, World! This is a test of TML compression. Hello, World! Repeated data compresses well."
+    show("original length = ", str::len(original).to_string())
+
+    let compressed: Outcome[Buffer, ZlibError] = deflate(original)
+    when compressed {
+        Ok(buf) => {
+            let comp_len: I64 = buf.len()
+            show("compressed length = ", comp_len.to_string())
+
+            // Decompress
+            let decompressed: Outcome[Str, ZlibError] = inflate(ref buf)
+            when decompressed {
+                Ok(text) => {
+                    show("decompressed length = ", str::len(text).to_string())
+                    if text == original {
+                        println("deflate round-trip: verified!")
+                    } else {
+                        println("deflate round-trip: mismatch!")
+                    }
+                },
+                Err(e) => show("inflate error: ", e.message),
+            }
+            buf.destroy()
+        },
+        Err(e) => show("deflate error: ", e.message),
+    }
+
+    // ── Gzip ─────────────────────────────────────────
+    println("--- Gzip ---")
+
+    let text2: Str = "Gzip adds a header and CRC32 checksum for integrity. This is the standard format for HTTP Content-Encoding."
+    show("original length = ", str::len(text2).to_string())
+
+    let gz: Outcome[Buffer, ZlibError] = gzip(text2)
+    when gz {
+        Ok(buf) => {
+            let gz_len: I64 = buf.len()
+            show("gzip length = ", gz_len.to_string())
+
+            // Decompress
+            let ungz: Outcome[Str, ZlibError] = gunzip(ref buf)
+            when ungz {
+                Ok(text) => {
+                    show("decompressed length = ", str::len(text).to_string())
+                    if text == text2 {
+                        println("gzip round-trip: verified!")
+                    } else {
+                        println("gzip round-trip: mismatch!")
+                    }
+                },
+                Err(e) => show("gunzip error: ", e.message),
+            }
+            buf.destroy()
+        },
+        Err(e) => show("gzip error: ", e.message),
+    }
+
+    // ── Compression ratio ────────────────────────────
+    println("--- Compression Ratio ---")
+
+    // Highly compressible data (repeated pattern)
+    var repeated: Str = ""
+    for i in 0 to 20 {
+        repeated = repeated + "ABCDEFGHIJ"
+    }
+    show("repeated data length = ", str::len(repeated).to_string())
+
+    let comp_rep: Outcome[Buffer, ZlibError] = deflate(repeated)
+    when comp_rep {
+        Ok(buf) => {
+            let comp_len: I64 = buf.len()
+            show("compressed length = ", comp_len.to_string())
+            let ratio: I64 = (str::len(repeated) * 100) / comp_len
+            show("ratio (original/compressed * 100) = ", ratio.to_string())
+            buf.destroy()
+        },
+        Err(e) => show("error: ", e.message),
+    }
+
+    println("=== done ===")
+}

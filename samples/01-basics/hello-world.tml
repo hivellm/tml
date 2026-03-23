@@ -1,0 +1,12 @@
+// TML Sample 01: Hello World
+// The simplest possible TML program.
+//
+// Run: tml run samples/01-hello-world.tml
+
+mod hello_world
+
+pub func main() {
+    println("Hello, TML!")
+    println("Welcome to the TML programming language.")
+    println("This is sample 01 — the beginning of your journey.")
+}

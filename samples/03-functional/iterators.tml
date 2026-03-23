@@ -1,0 +1,101 @@
+// TML Sample: Iterators and Ranges
+// Demonstrates for-in loops, exclusive/inclusive ranges, and loop patterns.
+//
+// Run: tml run samples/03-functional/iterators.tml
+
+mod iterators
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Sum using for-in range ─────────────────────────
+func sum_to(n: I64) -> I64 {
+    var total: I64 = 0
+    for i in 1 through n {
+        total = total + i
+    }
+    return total
+}
+
+// ── Factorial using for-in range ───────────────────
+func factorial(n: I64) -> I64 {
+    var result: I64 = 1
+    for i in 2 through n {
+        result = result * i
+    }
+    return result
+}
+
+// ── Count items matching a condition ───────────────
+func count_divisible(limit: I64, divisor: I64) -> I64 {
+    var count: I64 = 0
+    for i in 1 to limit {
+        if i % divisor == 0 {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+pub func main() {
+    println("=== Iterators and Ranges ===")
+
+    // ── Exclusive range: 0 to N (excludes N) ───────
+    println("0 to 5 (exclusive):")
+    for i in 0 to 5 {
+        show("  ", i.to_string())
+    }
+
+    // ── Inclusive range: 1 through N (includes N) ──
+    println("1 through 5 (inclusive):")
+    for i in 1 through 5 {
+        show("  ", i.to_string())
+    }
+
+    // ── Sum using range ────────────────────────────
+    show("sum 1..100 = ", sum_to(100).to_string())
+
+    // ── Factorial ──────────────────────────────────
+    show("5! = ", factorial(5).to_string())
+    show("10! = ", factorial(10).to_string())
+
+    // ── Nested loops ───────────────────────────────
+    println("multiplication table (1-4):")
+    for i in 1 through 4 {
+        var row: Str = "  "
+        for j in 1 through 4 {
+            let product: I64 = i * j
+            row = row + product.to_string() + " "
+        }
+        println(row)
+    }
+
+    // ── Loop with condition (while-style) ──────────
+    println("powers of 2:")
+    var power: I64 = 1
+    loop (power <= 1024) {
+        show("  ", power.to_string())
+        power = power * 2
+    }
+
+    // ── Counting with a condition ──────────────────
+    let divby3: I64 = count_divisible(100, 3)
+    show("numbers 1..99 divisible by 3: ", divby3.to_string())
+
+    // ── break and continue ─────────────────────────
+    println("first 5 odd numbers:")
+    var count: I64 = 0
+    var n: I64 = 0
+    loop (count < 5) {
+        n = n + 1
+        if n % 2 == 0 { continue }
+        show("  ", n.to_string())
+        count = count + 1
+    }
+
+    println("=== done ===")
+}

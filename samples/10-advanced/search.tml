@@ -1,0 +1,105 @@
+// TML Sample: BM25 Search
+// Demonstrates full-text search from std::search::bm25.
+//
+// Run: tml run samples/10-advanced/search.tml
+
+mod search_sample
+
+use core::str
+use core::fmt::impls
+use std::search::bm25::{Bm25Index, Bm25Result}
+use std::collections::List
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== BM25 Search ===")
+
+    // ── Create and populate index ────────────────────
+    println("--- Build Index ---")
+
+    var idx: Bm25Index = Bm25Index::create()
+
+    idx.add_text(0 as U32, "the quick brown fox jumps over the lazy dog")
+    idx.add_text(1 as U32, "hello world program example for beginners")
+    idx.add_text(2 as U32, "fox hunting in the wild forest near the river")
+    idx.add_text(3 as U32, "the lazy cat sleeps all day on the couch")
+    idx.add_text(4 as U32, "a quick tutorial on programming in TML")
+    idx.add_text(5 as U32, "world news and current events today")
+
+    idx.build()
+
+    let doc_count: I32 = idx.size()
+    show("indexed documents = ", doc_count.to_string())
+    show("index built = ", idx.is_built().to_string())
+
+    // ── Search for "fox" ─────────────────────────────
+    println("--- Search: 'fox' ---")
+
+    let results1: List[Bm25Result] = idx.search("fox", 5)
+    show("results for 'fox' = ", results1.len().to_string())
+
+    for i in 0 to results1.len() {
+        let r: Bm25Result = results1.get(i)
+        let did: U32 = r.doc_id
+        let sc: F32 = r.score
+        let did_str: Str = did.to_string()
+        let sc_str: Str = sc.to_string()
+        println("  doc " + did_str + " score=" + sc_str)
+    }
+    results1.destroy()
+
+    // ── Search for "lazy" ────────────────────────────
+    println("--- Search: 'lazy' ---")
+
+    let results2: List[Bm25Result] = idx.search("lazy", 5)
+    show("results for 'lazy' = ", results2.len().to_string())
+
+    for i in 0 to results2.len() {
+        let r: Bm25Result = results2.get(i)
+        let did: U32 = r.doc_id
+        let sc: F32 = r.score
+        let did_str: Str = did.to_string()
+        let sc_str: Str = sc.to_string()
+        println("  doc " + did_str + " score=" + sc_str)
+    }
+    results2.destroy()
+
+    // ── Search for "world" ───────────────────────────
+    println("--- Search: 'world' ---")
+
+    let results3: List[Bm25Result] = idx.search("world", 5)
+    show("results for 'world' = ", results3.len().to_string())
+
+    for i in 0 to results3.len() {
+        let r: Bm25Result = results3.get(i)
+        let did: U32 = r.doc_id
+        let sc: F32 = r.score
+        let did_str: Str = did.to_string()
+        let sc_str: Str = sc.to_string()
+        println("  doc " + did_str + " score=" + sc_str)
+    }
+    results3.destroy()
+
+    // ── IDF values ───────────────────────────────────
+    println("--- IDF Values ---")
+
+    let idf_fox: F32 = idx.idf("fox")
+    show("idf('fox') = ", idf_fox.to_string())
+
+    let idf_the: F32 = idx.idf("the")
+    show("idf('the') = ", idf_the.to_string())
+
+    let idf_tml: F32 = idx.idf("tml")
+    show("idf('tml') = ", idf_tml.to_string())
+
+    // Higher IDF means the term is rarer and more discriminative
+    println("(higher IDF = rarer, more discriminative)")
+
+    // ── Cleanup ──────────────────────────────────────
+    idx.destroy()
+
+    println("=== done ===")
+}

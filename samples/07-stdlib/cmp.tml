@@ -1,0 +1,138 @@
+// TML Sample: Comparison
+// Demonstrates comparison operations and ordering.
+//
+// Run: tml run samples/07-stdlib/cmp.tml
+
+mod cmp_sample
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Comparison ===")
+
+    // ── Basic comparison operators ───────────────────
+    println("--- Comparison Operators ---")
+
+    let a: I32 = 10
+    let b: I32 = 20
+
+    show("10 == 20: ", (a == b).to_string())
+    show("10 != 20: ", (a != b).to_string())
+    show("10 < 20: ", (a < b).to_string())
+    show("10 > 20: ", (a > b).to_string())
+    show("10 <= 20: ", (a <= b).to_string())
+    show("10 >= 20: ", (a >= b).to_string())
+
+    // ── String comparison ────────────────────────────
+    println("--- String Comparison ---")
+
+    let s1: Str = "apple"
+    let s2: Str = "banana"
+    let s3: Str = "apple"
+
+    show("'apple' == 'banana': ", (s1 == s2).to_string())
+    show("'apple' == 'apple': ", (s1 == s3).to_string())
+    show("'apple' != 'banana': ", (s1 != s2).to_string())
+
+    // ── Min and max by comparison ────────────────────
+    println("--- Min/Max ---")
+
+    let vals: [I32; 5] = [34, 12, 78, 5, 91]
+    var min_val: I32 = vals[0]
+    var max_val: I32 = vals[0]
+    for j in 1 to 5 {
+        if vals[j] < min_val {
+            min_val = vals[j]
+        }
+        if vals[j] > max_val {
+            max_val = vals[j]
+        }
+    }
+    show("min of [34,12,78,5,91] = ", min_val.to_string())
+    show("max of [34,12,78,5,91] = ", max_val.to_string())
+
+    // ── Clamp pattern ────────────────────────────────
+    println("--- Clamp ---")
+
+    let value: I32 = 150
+    let low: I32 = 0
+    let high: I32 = 100
+
+    // Manual clamp
+    var clamped: I32 = value
+    if clamped < low {
+        clamped = low
+    }
+    if clamped > high {
+        clamped = high
+    }
+    show("clamp(150, 0, 100) = ", clamped.to_string())
+
+    let value2: I32 = -50
+    var clamped2: I32 = value2
+    if clamped2 < low {
+        clamped2 = low
+    }
+    if clamped2 > high {
+        clamped2 = high
+    }
+    show("clamp(-50, 0, 100) = ", clamped2.to_string())
+
+    let value3: I32 = 50
+    var clamped3: I32 = value3
+    if clamped3 < low {
+        clamped3 = low
+    }
+    if clamped3 > high {
+        clamped3 = high
+    }
+    show("clamp(50, 0, 100) = ", clamped3.to_string())
+
+    // ── Float comparison ─────────────────────────────
+    println("--- Float Comparison ---")
+
+    let f1: F64 = 3.14
+    let f2: F64 = 2.71
+
+    show("3.14 > 2.71: ", (f1 > f2).to_string())
+    show("3.14 == 3.14: ", (f1 == f1).to_string())
+
+    // ── Sorting with comparison ──────────────────────
+    println("--- Simple Sort ---")
+
+    // Bubble sort using comparison operators
+    var arr: [I32; 6] = [64, 34, 25, 12, 22, 11]
+    for outer in 0 to 5 {
+        for inner in 0 to (5 - outer) {
+            if arr[inner] > arr[inner + 1] {
+                let tmp: I32 = arr[inner]
+                arr[inner] = arr[inner + 1]
+                arr[inner + 1] = tmp
+            }
+        }
+    }
+
+    var sorted_str: Str = ""
+    for idx in 0 to 6 {
+        if idx > 0 {
+            sorted_str = sorted_str + ", "
+        }
+        sorted_str = sorted_str + arr[idx].to_string()
+    }
+    show("sorted: [", sorted_str + "]")
+
+    // ── Ordering type reference ──────────────────────
+    println("--- Ordering ---")
+    println("  core::cmp::Ordering has three variants:")
+    println("    Less    -> a < b")
+    println("    Equal   -> a == b")
+    println("    Greater -> a > b")
+    println("  Used with: a.cmp(ref b) -> Ordering")
+
+    println("=== done ===")
+}

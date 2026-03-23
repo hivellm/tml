@@ -1,0 +1,74 @@
+// TML Sample: Cell and RefCell
+// Demonstrates interior mutability from core::cell.
+//
+// Run: tml run samples/02-types/cell.tml
+
+mod cell_sample
+
+use core::str
+use core::fmt::impls
+use core::cell::cell::Cell
+use core::cell::ref_cell::RefCell
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Cell and RefCell ===")
+
+    // ── Cell[T] — copy-based interior mutability ─────
+    println("--- Cell ---")
+
+    // Cell allows mutating a value without declaring the container as mutable.
+    // It works by copying the value in and out (T must be Copy).
+    let c: Cell[I32] = Cell::new(10)
+    show("initial = ", c.get().to_string())
+
+    c.set(42)
+    show("after set(42) = ", c.get().to_string())
+
+    // Replace returns the old value
+    let old: I32 = c.replace(99)
+    show("replace returned old = ", old.to_string())
+    show("after replace = ", c.get().to_string())
+
+    // ── Cell counter pattern ─────────────────────────
+    println("--- Counter Pattern ---")
+
+    // Cell is useful for counters that need to be incremented
+    // through shared references
+    let counter: Cell[I32] = Cell::new(0)
+    for i in 0 to 5 {
+        let current: I32 = counter.get()
+        counter.set(current + 1)
+    }
+    show("counted to = ", counter.get().to_string())
+
+    // ── RefCell[T] — borrow-based interior mutability
+    println("--- RefCell ---")
+
+    // RefCell provides runtime-checked borrow rules instead of
+    // compile-time checks. Useful when the borrow checker can't
+    // prove safety statically.
+    //
+    // .borrow()     -> Ref[T]     (shared read access)
+    // .borrow_mut() -> RefMut[T]  (exclusive write access)
+    //
+    // Note: RefCell's borrow()/borrow_mut() return Ref[T]/RefMut[T]
+    // guard types that enforce borrow rules at runtime.
+
+    println("RefCell provides runtime borrow checking:")
+    println("  RefCell::new(value)  -> create")
+    println("  cell.borrow()        -> Ref[T] (shared)")
+    println("  cell.borrow_mut()    -> RefMut[T] (exclusive)")
+    println("  // panics if borrow rules violated at runtime")
+
+    // ── When to use which ────────────────────────────
+    println("--- Choosing Cell vs RefCell ---")
+    println("  Cell[T]:    T must be Copy, zero-cost, no runtime checks")
+    println("  RefCell[T]: any T, runtime borrow checking, slight overhead")
+    println("  Mutex[T]:   thread-safe, OS-level locking, use for concurrency")
+
+    println("=== done ===")
+}

@@ -1,0 +1,65 @@
+// TML Sample: Cryptography
+// Demonstrates hash functions from std::crypto.
+//
+// Run: tml run samples/10-advanced/crypto.tml
+
+mod crypto_sample
+
+use core::str
+use core::fmt::impls
+use std::crypto::hash::{sha256, sha512, sha1, md5, Digest}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Cryptography ===")
+
+    // ── SHA-256 ────────────────────────────────────
+    println("--- SHA-256 ---")
+    let mut d1: Digest = sha256("hello world")
+    let hex1: Str = d1.to_hex()
+    show("sha256('hello world') = ", hex1)
+    d1.destroy()
+
+    let mut d2: Digest = sha256("")
+    let hex2: Str = d2.to_hex()
+    show("sha256('') = ", hex2)
+    d2.destroy()
+
+    // ── SHA-512 ────────────────────────────────────
+    println("--- SHA-512 ---")
+    let mut d3: Digest = sha512("hello")
+    let hex3: Str = d3.to_hex()
+    show("sha512('hello') = ", hex3)
+    d3.destroy()
+
+    // ── SHA-1 ──────────────────────────────────────
+    println("--- SHA-1 ---")
+    let mut d4: Digest = sha1("hello world")
+    let hex4: Str = d4.to_hex()
+    show("sha1('hello world') = ", hex4)
+    d4.destroy()
+
+    // ── MD5 (legacy, not for security) ─────────────
+    println("--- MD5 ---")
+    let mut d5: Digest = md5("hello world")
+    let hex5: Str = d5.to_hex()
+    show("md5('hello world') = ", hex5)
+    d5.destroy()
+
+    // ── Hash comparison ────────────────────────────
+    println("--- Verification ---")
+    let mut check: Digest = sha256("hello world")
+    let check_hex: Str = check.to_hex()
+    let expected: Str = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    if check_hex == expected {
+        println("SHA-256 hash verified correctly!")
+    } else {
+        println("hash mismatch!")
+    }
+    check.destroy()
+
+    println("=== done ===")
+}

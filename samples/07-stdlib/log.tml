@@ -1,0 +1,100 @@
+// TML Sample: Logging
+// Demonstrates structured logging from std::log.
+//
+// Run: tml run samples/07-stdlib/log.tml
+
+mod log_sample
+
+use core::str
+use core::fmt::impls
+use std::log
+
+// Log level constants (matching std::log)
+const TRACE: I32 = 0
+const DEBUG: I32 = 1
+const INFO: I32 = 2
+const WARN: I32 = 3
+const ERROR: I32 = 4
+
+// Format constants
+const FORMAT_TEXT: I32 = 0
+const FORMAT_JSON: I32 = 1
+const FORMAT_COMPACT: I32 = 2
+
+pub func main() {
+    println("=== Structured Logging ===")
+
+    // ── Basic log levels ─────────────────────────────
+    println("--- Log Levels ---")
+
+    // Set level to TRACE to see all messages
+    log::set_level(TRACE)
+
+    log::trace("app", "Fine-grained tracing info")
+    log::debug("app", "Debugging information")
+    log::info("app", "Server started on port 8080")
+    log::warn("app", "Connection pool is 80% full")
+    log::error("db", "Failed to connect to replica")
+
+    // ── Level filtering ──────────────────────────────
+    println("")
+    println("--- Level Filtering (WARN and above) ---")
+
+    log::set_level(WARN)
+
+    log::debug("app", "this should be hidden")
+    log::info("app", "this should be hidden too")
+    log::warn("app", "this warning is visible")
+    log::error("app", "this error is visible")
+
+    // ── Structured logging with fields ───────────────
+    println("")
+    println("--- Structured Logging ---")
+
+    log::set_level(INFO)
+
+    log::structured(INFO, "http", "Request handled", "method=GET;status=200;ms=42")
+    log::structured(INFO, "http", "Request handled", "method=POST;status=201;ms=156")
+    log::structured(WARN, "http", "Slow request", "method=GET;status=200;ms=3500")
+
+    // ── Module filtering ─────────────────────────────
+    println("")
+    println("--- Module Filtering ---")
+
+    log::set_level(TRACE)
+    log::set_filter("server=info,db=warn,*=error")
+
+    log::debug("server", "hidden: server below info")
+    log::info("server", "visible: server at info")
+    log::info("db", "hidden: db below warn")
+    log::warn("db", "visible: db at warn")
+    log::info("cache", "hidden: catch-all is error")
+    log::error("cache", "visible: cache at error")
+
+    // ── Compact format ───────────────────────────────
+    println("")
+    println("--- Compact Format ---")
+
+    log::set_filter("")
+    log::set_level(INFO)
+    log::set_format(FORMAT_COMPACT)
+
+    log::info("app", "Compact format message")
+    log::warn("net", "Connection timeout")
+    log::error("db", "Query failed")
+
+    // ── JSON format ──────────────────────────────────
+    println("")
+    println("--- JSON Format ---")
+
+    log::set_format(FORMAT_JSON)
+
+    log::info("app", "JSON format message")
+    log::warn("net", "Retrying connection")
+
+    // Reset to text format
+    log::set_format(FORMAT_TEXT)
+
+    println("")
+    println("=== done ===")
+}

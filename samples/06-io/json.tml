@@ -1,0 +1,117 @@
+// TML Sample: JSON
+// Demonstrates parsing, accessing, and constructing JSON with std::json.
+//
+// Note: TML strings support interpolation with {}, so literal braces
+// in JSON strings must be escaped as \{ and \}.
+//
+// Run: tml run samples/06-io/json.tml
+
+mod json_sample
+
+use core::str
+use core::fmt::impls
+use std::json::types::{Json, parse, parse_or_panic}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== JSON ===")
+
+    // ── Parse a JSON object ────────────────────────
+    // Note: \{ and \} escape literal braces in TML strings
+    println("--- Parsing ---")
+
+    let data: Json = parse_or_panic("\{\"name\":\"Alice\",\"age\":30\}")
+
+    if data.is_object() {
+        println("parsed an object")
+    }
+
+    // Access string field via Json methods
+    let name_maybe: Maybe[Str] = data.get_string("name")
+    when name_maybe {
+        Just(name) => show("name = ", name),
+        Nothing => println("name not found"),
+    }
+
+    // Access integer field
+    let age_maybe: Maybe[I64] = data.get_i64("age")
+    when age_maybe {
+        Just(age) => show("age = ", age.to_string()),
+        Nothing => println("age not found"),
+    }
+
+    // Check if key exists
+    if data.has("name") {
+        println("'name' field exists")
+    }
+
+    show("field count = ", data.len().to_string())
+
+    // ── Serialize back to string ───────────────────
+    println("--- Serialization ---")
+    let json_str: Str = data.to_string()
+    show("serialized: ", json_str)
+    data.drop()
+
+    // ── Parse JSON array ───────────────────────────
+    println("--- Arrays ---")
+
+    let arr: Json = parse_or_panic("[10, 20, 30, 40, 50]")
+    show("array length = ", arr.len().to_string())
+
+    // Access elements by index
+    for i in 0 to arr.len() {
+        let elem: Maybe[Json] = arr.at(i)
+        when elem {
+            Just(j) => show("  item = ", j.unwrap_i64().to_string()),
+            Nothing => println("  null"),
+        }
+    }
+
+    arr.drop()
+
+    // ── Construct JSON values ──────────────────────
+    println("--- Constructors ---")
+
+    let j_int: Json = Json::int(42)
+    show("int: ", j_int.to_string())
+    j_int.drop()
+
+    let j_str: Json = Json::string("hello")
+    show("string: ", j_str.to_string())
+    j_str.drop()
+
+    let j_bool: Json = Json::new_bool(true)
+    show("bool: ", j_bool.to_string())
+    j_bool.drop()
+
+    let j_null: Json = Json::new_null()
+    show("null: ", j_null.to_string())
+    j_null.drop()
+
+    // ── Parse with error handling ──────────────────
+    println("--- Error handling ---")
+
+    let good: Maybe[Json] = parse("\{\"valid\": true\}")
+    when good {
+        Just(j) => {
+            show("parsed ok: ", j.to_string())
+            j.drop()
+        },
+        Nothing => println("parse failed"),
+    }
+
+    let bad: Maybe[Json] = parse("not valid json")
+    when bad {
+        Just(j) => {
+            println("unexpected success")
+            j.drop()
+        },
+        Nothing => println("parse failed (expected)"),
+    }
+
+    println("=== done ===")
+}

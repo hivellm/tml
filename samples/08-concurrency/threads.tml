@@ -1,0 +1,58 @@
+// TML Sample: Concurrency
+// Demonstrates thread basics: current thread info, sleep, and yield.
+//
+// Run: tml run samples/08-concurrency/threads.tml
+
+mod threads
+
+use core::str
+use core::fmt::impls
+use std::thread
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Concurrency ===")
+
+    // ── Current thread info ────────────────────────
+    println("--- Current Thread ---")
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw_id: U64 = id.as_u64()
+    show("thread id = ", raw_id.to_string())
+
+    // ── Sleep ──────────────────────────────────────
+    println("--- Sleep ---")
+    println("sleeping 50ms...")
+    thread::sleep_ms(50 as U64)
+    println("awake!")
+
+    println("sleeping 100ms...")
+    thread::sleep_ms(100 as U64)
+    println("awake again!")
+
+    // ── Yield ──────────────────────────────────────
+    println("--- Yield ---")
+    thread::yield_now()
+    println("yielded to OS scheduler and returned")
+
+    // ── Available parallelism ──────────────────────
+    println("--- System Info ---")
+    let cpus: U64 = thread::available_parallelism()
+    show("available CPUs = ", cpus.to_string())
+
+    // ── Computing in parallel (single-thread demo) ─
+    // Full multi-threading with spawn requires the test system's
+    // monomorphized trampolines. In standalone programs, you can
+    // use the HTTP server's built-in thread pool (see 09-networking).
+    println("--- Computation ---")
+    var total: I64 = 0
+    for i in 1 through 100 {
+        total = total + i * i
+    }
+    show("sum of squares 1..100 = ", total.to_string())
+
+    println("=== done ===")
+}

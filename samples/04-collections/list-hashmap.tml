@@ -1,0 +1,107 @@
+// TML Sample: List and HashMap
+// Demonstrates the core collection types from std::collections.
+//
+// Run: tml run samples/04-collections/list-hashmap.tml
+
+mod list_hashmap
+
+use core::str
+use core::fmt::impls
+use std::collections::{List, HashMap}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== List and HashMap ===")
+
+    // ── List[T] — dynamic array ────────────────────
+    println("--- List ---")
+
+    let nums: List[I32] = List[I32].new(8)
+
+    nums.push(10)
+    nums.push(20)
+    nums.push(30)
+    nums.push(40)
+
+    show("length = ", nums.len().to_string())
+    show("nums[0] = ", nums.get(0).to_string())
+    show("nums[1] = ", nums.get(1).to_string())
+    show("nums[2] = ", nums.get(2).to_string())
+    show("nums[3] = ", nums.get(3).to_string())
+
+    // Modify an element
+    nums.set(1, 99)
+    show("after set(1, 99): nums[1] = ", nums.get(1).to_string())
+
+    // Pop the last element
+    let last: I32 = nums.pop()
+    show("popped = ", last.to_string())
+    show("length after pop = ", nums.len().to_string())
+
+    nums.destroy()
+
+    // ── List of strings ────────────────────────────
+    println("--- List of Strings ---")
+
+    let names: List[Str] = List[Str].new(4)
+    names.push("Alice")
+    names.push("Bob")
+    names.push("Charlie")
+
+    for i in 0 to names.len() {
+        show("  name: ", names.get(i))
+    }
+
+    names.destroy()
+
+    // ── HashMap[K, V] — key-value store ────────────
+    println("--- HashMap ---")
+
+    let scores: HashMap[Str, I32] = HashMap[Str, I32].new(16)
+
+    scores.set("Alice", 95)
+    scores.set("Bob", 87)
+    scores.set("Charlie", 92)
+
+    show("entries = ", scores.len().to_string())
+    show("Alice = ", scores.get("Alice").to_string())
+    show("Bob = ", scores.get("Bob").to_string())
+
+    // Check existence
+    if scores.has("Alice") {
+        println("Alice is in the map")
+    }
+    if not scores.has("Dave") {
+        println("Dave is not in the map")
+    }
+
+    // Update a value
+    scores.set("Bob", 91)
+    show("Bob updated = ", scores.get("Bob").to_string())
+
+    // Remove an entry
+    let removed: Bool = scores.remove("Charlie")
+    show("removed Charlie: ", removed.to_string())
+    show("entries after remove = ", scores.len().to_string())
+
+    scores.destroy()
+
+    // ── HashMap[I32, Str] — integer keys ───────────
+    println("--- HashMap with integer keys ---")
+
+    let labels: HashMap[I32, Str] = HashMap[I32, Str].new(8)
+    labels.set(1, "one")
+    labels.set(2, "two")
+    labels.set(3, "three")
+
+    show("key 1 = ", labels.get(1))
+    show("key 2 = ", labels.get(2))
+    show("key 3 = ", labels.get(3))
+
+    labels.destroy()
+
+    println("=== done ===")
+}

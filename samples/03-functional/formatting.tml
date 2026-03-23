@@ -1,0 +1,132 @@
+// TML Sample: Formatting
+// Demonstrates Display and string formatting.
+//
+// Run: tml run samples/03-functional/formatting.tml
+
+mod formatting_sample
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Formatting ===")
+
+    // ── Basic to_string ──────────────────────────────
+    println("--- to_string ---")
+
+    let int_val: I32 = 42
+    let int_str: Str = int_val.to_string()
+    show("I32: ", int_str)
+
+    let long_val: I64 = 1234567890
+    let long_str: Str = long_val.to_string()
+    show("I64: ", long_str)
+
+    let float_val: F64 = 3.14159
+    let float_str: Str = float_val.to_string()
+    show("F64: ", float_str)
+
+    let bool_val: Bool = true
+    let bool_str: Str = bool_val.to_string()
+    show("Bool: ", bool_str)
+
+    // ── String concatenation ─────────────────────────
+    println("--- String Building ---")
+
+    let name: Str = "TML"
+    let version: Str = "0.2"
+    let greeting: Str = "Welcome to " + name + " v" + version + "!"
+    show("", greeting)
+
+    // Building multi-part strings
+    var parts: Str = ""
+    for j in 1 through 5 {
+        let j_str: Str = j.to_string()
+        if str::len(parts) > 0 {
+            parts = parts + ", "
+        }
+        parts = parts + j_str
+    }
+    show("numbers: [", parts + "]")
+
+    // ── Negative numbers ─────────────────────────────
+    println("--- Negative Numbers ---")
+
+    let neg: I32 = -42
+    let neg_str: Str = neg.to_string()
+    show("-42 = ", neg_str)
+
+    let neg64: I64 = -9876543210
+    let neg64_str: Str = neg64.to_string()
+    show("-9876543210 = ", neg64_str)
+
+    // ── Float formatting ─────────────────────────────
+    println("--- Float Formatting ---")
+
+    let pi: F64 = 3.14159265358979
+    show("pi = ", pi.to_string())
+
+    let tiny: F64 = 0.001
+    show("0.001 = ", tiny.to_string())
+
+    let large: F64 = 1234567.89
+    show("1234567.89 = ", large.to_string())
+
+    let zero_f: F64 = 0.0
+    show("0.0 = ", zero_f.to_string())
+
+    // ── Unsigned types ───────────────────────────────
+    println("--- Unsigned Types ---")
+
+    let u8_val: U8 = 255 as U8
+    show("U8 max = ", u8_val.to_string())
+
+    let u32_val: U32 = 4294967295 as U32
+    show("U32 max = ", u32_val.to_string())
+
+    let u64_val: U64 = 18446744073709551615 as U64
+    show("U64 max = ", u64_val.to_string())
+
+    // ── Practical: table formatting ──────────────────
+    println("--- Simple Table ---")
+
+    println("  Name       | Age | Score")
+    println("  -----------|-----|------")
+
+    let names: [Str; 3] = ["Alice", "Bob", "Charlie"]
+    let ages: [I32; 3] = [30, 25, 35]
+    let scores: [I32; 3] = [95, 87, 92]
+
+    for k in 0 to 3 {
+        let name_val: Str = names[k]
+        let age_str: Str = ages[k].to_string()
+        let score_str: Str = scores[k].to_string()
+        // Simple padding
+        var padded_name: Str = name_val
+        loop (str::len(padded_name) < 10) {
+            padded_name = padded_name + " "
+        }
+        println("  " + padded_name + " | " + age_str + "  | " + score_str)
+    }
+
+    // ── String to number ─────────────────────────────
+    println("--- Parsing ---")
+
+    let parsed: Maybe[I64] = str::parse_i64("12345")
+    when parsed {
+        Just(n) => show("parse_i64('12345') = ", n.to_string()),
+        Nothing => println("parse failed"),
+    }
+
+    let parsed_bad: Maybe[I64] = str::parse_i64("not_a_number")
+    when parsed_bad {
+        Just(n) => println("unexpected success"),
+        Nothing => println("parse_i64('not_a_number') = Nothing (expected)"),
+    }
+
+    println("=== done ===")
+}

@@ -1,0 +1,78 @@
+// TML Sample: Math
+// Demonstrates math functions and constants from std::math.
+//
+// Run: tml run samples/07-stdlib/math.tml
+
+mod math_sample
+
+use core::str
+use core::fmt::impls
+use std::math
+use std::math::{PI, E, TAU, SQRT_2}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Math ===")
+
+    // ── Constants ──────────────────────────────────
+    println("--- Constants ---")
+    let pi_val: F64 = PI
+    let e_val: F64 = E
+    let tau_val: F64 = TAU
+    let sqrt2_val: F64 = SQRT_2
+    show("PI = ", pi_val.to_string())
+    show("E  = ", e_val.to_string())
+    show("TAU = ", tau_val.to_string())
+    show("SQRT_2 = ", sqrt2_val.to_string())
+
+    // ── Basic operations ───────────────────────────
+    println("--- Basic ---")
+    show("abs(-42.0) = ", math::abs(-42.0).to_string())
+    show("sqrt(144.0) = ", math::sqrt(144.0).to_string())
+    show("pow(2.0, 10.0) = ", math::pow(2.0, 10.0).to_string())
+
+    // ── Rounding ───────────────────────────────────
+    println("--- Rounding ---")
+    show("floor(3.7) = ", math::floor(3.7).to_string())
+    show("ceil(3.2) = ", math::ceil(3.2).to_string())
+    show("floor(-2.3) = ", math::floor(-2.3).to_string())
+    show("ceil(-2.8) = ", math::ceil(-2.8).to_string())
+
+    // ── Trigonometry ───────────────────────────────
+    println("--- Trigonometry ---")
+    show("sin(0) = ", math::sin(0.0).to_string())
+    show("cos(0) = ", math::cos(0.0).to_string())
+    let half_pi: F64 = PI / 2.0
+    show("sin(PI/2) = ", math::sin(half_pi).to_string())
+    show("cos(PI) = ", math::cos(PI).to_string())
+
+    // ── Min / Max ──────────────────────────────────
+    println("--- Min/Max ---")
+    show("min(3.0, 7.0) = ", math::min(3.0, 7.0).to_string())
+    show("max(3.0, 7.0) = ", math::max(3.0, 7.0).to_string())
+    show("min(-1.0, 1.0) = ", math::min(-1.0, 1.0).to_string())
+
+    // ── Distance formula ───────────────────────────
+    println("--- Distance formula ---")
+    let x1: F64 = 1.0
+    let y1: F64 = 2.0
+    let x2: F64 = 4.0
+    let y2: F64 = 6.0
+    let dx: F64 = x2 - x1
+    let dy: F64 = y2 - y1
+    let dist: F64 = math::sqrt(dx * dx + dy * dy)
+    show("distance (1,2)-(4,6) = ", dist.to_string())
+
+    // ── Compound interest ──────────────────────────
+    println("--- Compound interest ---")
+    let principal: F64 = 1000.0
+    let rate: F64 = 0.05
+    let years: F64 = 10.0
+    let amount: F64 = principal * math::pow(1.0 + rate, years)
+    show("$1000 at 5% for 10 years = $", amount.to_string())
+
+    println("=== done ===")
+}

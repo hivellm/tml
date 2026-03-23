@@ -1,0 +1,85 @@
+// TML Sample: Enums and Pattern Matching
+// Demonstrates enum definition, variants with data, and `when` pattern matching.
+//
+// Run: tml run samples/02-types/enums.tml
+
+mod enums
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Simple enum (no data) ──────────────────────────
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+func direction_name(d: Direction) -> Str {
+    when d {
+        Direction::North => "North",
+        Direction::South => "South",
+        Direction::East => "East",
+        Direction::West => "West",
+    }
+}
+
+// ── Enum with data payloads ────────────────────────
+enum Shape {
+    Circle(I32),
+    Rectangle(I32, I32),
+    Point,
+}
+
+func describe_shape(s: Shape) -> Str {
+    when s {
+        Shape::Circle(r) => "circle with radius " + r.to_string(),
+        Shape::Rectangle(w, h) => "rectangle " + w.to_string() + "x" + h.to_string(),
+        Shape::Point => "a point",
+    }
+}
+
+// ── Maybe[T] — TML's built-in optional type ───────
+func safe_divide(a: I32, b: I32) -> Maybe[I32] {
+    if b == 0 {
+        return Nothing
+    }
+    return Just(a / b)
+}
+
+pub func main() {
+    println("=== Enums and Pattern Matching ===")
+
+    // Simple enum
+    let dir: Direction = Direction::North
+    show("direction = ", direction_name(dir))
+
+    // Enum with data
+    let c: Shape = Shape::Circle(5)
+    let r: Shape = Shape::Rectangle(4, 6)
+    let p: Shape = Shape::Point
+
+    show("circle = ", describe_shape(c))
+    show("rectangle = ", describe_shape(r))
+    show("point = ", describe_shape(p))
+
+    // Maybe[T] — pattern matching on optionals
+    let result: Maybe[I32] = safe_divide(10, 3)
+    when result {
+        Just(val) => show("10 / 3 = ", val.to_string()),
+        Nothing => println("division by zero!"),
+    }
+
+    let bad: Maybe[I32] = safe_divide(10, 0)
+    when bad {
+        Just(val) => show("10 / 0 = ", val.to_string()),
+        Nothing => println("10 / 0 = division by zero!"),
+    }
+
+    println("=== done ===")
+}

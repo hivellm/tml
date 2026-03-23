@@ -1,0 +1,85 @@
+// TML Sample: Time and Duration
+// Demonstrates time measurement with std::time and core::time.
+//
+// Run: tml run samples/07-stdlib/datetime.tml
+
+mod datetime_sample
+
+use core::str
+use core::fmt::impls
+use core::time::Duration
+use std::time::Instant
+use std::thread
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Time and Duration ===")
+
+    // ── Duration creation ────────────────────────────
+    println("--- Duration ---")
+
+    let d1: Duration = Duration::from_secs(5)
+    show("5 seconds in millis = ", d1.as_millis().to_string())
+    show("5 seconds in nanos = ", d1.as_nanos().to_string())
+
+    let d2: Duration = Duration::from_millis(1500)
+    show("1500ms in secs = ", d2.as_secs().to_string())
+    show("1500ms in nanos = ", d2.as_nanos().to_string())
+
+    let d3: Duration = Duration::from_micros(2500)
+    show("2500us in millis = ", d3.as_millis().to_string())
+
+    let d4: Duration = Duration::from_nanos(999999999)
+    show("999999999ns in secs = ", d4.as_secs().to_string())
+    show("999999999ns in millis = ", d4.as_millis().to_string())
+
+    // ── Duration with seconds and nanos ──────────────
+    println("--- Custom Duration ---")
+
+    let d5: Duration = Duration::new(2, 500000000)
+    show("2.5 seconds in millis = ", d5.as_millis().to_string())
+    show("2.5 seconds in nanos = ", d5.as_nanos().to_string())
+
+    // ── Zero and checks ──────────────────────────────
+    println("--- Zero Duration ---")
+
+    let zero: Duration = Duration::from_secs(0)
+    show("zero.is_zero() = ", zero.is_zero().to_string())
+    show("d1.is_zero() = ", d1.is_zero().to_string())
+
+    // ── Measuring elapsed time ───────────────────────
+    println("--- Elapsed Time ---")
+
+    let start: Instant = Instant::now()
+
+    // Do some work
+    var sum: I64 = 0
+    for i in 0 to 100000 {
+        sum = sum + i
+    }
+
+    let elapsed: Duration = start.elapsed()
+    let elapsed_ns: I64 = elapsed.as_nanos()
+    show("sum of 0..100000 = ", sum.to_string())
+    show("elapsed (ns) = ", elapsed_ns.to_string())
+
+    // ── Timing a sleep ───────────────────────────────
+    println("--- Sleep Timing ---")
+
+    let before: Instant = Instant::now()
+    // Sleep for 50ms
+    let sleep_dur: Duration = Duration::from_millis(50)
+    let sleep_ms: I64 = sleep_dur.as_millis()
+    show("sleeping for (ms) = ", sleep_ms.to_string())
+
+    thread::sleep_ms(50 as U64)
+
+    let after_sleep: Duration = before.elapsed()
+    let slept_ms: I64 = after_sleep.as_millis()
+    show("actually slept (ms) >= ", slept_ms.to_string())
+
+    println("=== done ===")
+}

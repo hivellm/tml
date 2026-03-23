@@ -1,0 +1,79 @@
+// TML Sample: Random
+// Demonstrates the std::random API for pseudo-random number generation.
+//
+// NOTE: The xoshiro256** algorithm uses wrapping multiplication internally,
+// which triggers TML's checked arithmetic overflow detection. This will be
+// fixed when the compiler adds wrapping_mul or the Rng uses lowlevel blocks.
+// The API is shown here for reference.
+//
+// Run: tml run samples/07-stdlib/random.tml
+
+mod random_sample
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Random ===")
+
+    // The std::random module provides:
+    //
+    //   Rng::new()           — auto-seeded from monotonic clock
+    //   Rng::with_seed(i64)  — reproducible seed
+    //   rng.next_i64()       — raw 64-bit value
+    //   rng.range(min, max)  — integer in [min, max)
+    //   rng.next_bool()      — random boolean
+    //   rng.next_f64()       — float in [0.0, 1.0)
+    //   rng.range_f64(a, b)  — float in [a, b)
+    //   rng.shuffle_i64(list) — Fisher-Yates shuffle
+    //
+    // Currently blocked by integer overflow in xoshiro256** multiply.
+    // Workaround: use std::crypto::random for cryptographic randomness.
+
+    println("--- API Reference ---")
+    println("  Rng::new()            -> auto-seeded PRNG")
+    println("  Rng::with_seed(seed)  -> reproducible PRNG")
+    println("  rng.next_i64()        -> random I64")
+    println("  rng.range(min, max)   -> I64 in [min, max)")
+    println("  rng.next_bool()       -> random Bool")
+    println("  rng.next_f64()        -> F64 in [0.0, 1.0)")
+    println("  rng.range_f64(a, b)   -> F64 in [a, b)")
+    println("  rng.shuffle_i64(list) -> Fisher-Yates shuffle")
+
+    // ── Simple deterministic pseudo-random via LCG ───
+    // As a workaround, here's a minimal linear congruential generator
+    // that stays within safe integer bounds.
+    println("--- Simple LCG Demo ---")
+
+    var state: I64 = 12345
+    for i in 0 to 8 {
+        // Simple LCG: state = (state * 1103515 + 12345) % 2147483647
+        state = (state * 1103515 + 12345) % 2147483647
+        var val: I64 = state % 100
+        if val < 0 { val = 0 - val }
+        show("  random 0-99: ", val.to_string())
+    }
+
+    // ── Coin flip simulation ─────────────────────────
+    println("--- Coin Flips ---")
+
+    var seed: I64 = 67890
+    var heads: I64 = 0
+    var tails: I64 = 0
+    for i in 0 to 20 {
+        seed = (seed * 1103515 + 12345) % 2147483647
+        if seed % 2 == 0 {
+            heads = heads + 1
+        } else {
+            tails = tails + 1
+        }
+    }
+    show("heads = ", heads.to_string())
+    show("tails = ", tails.to_string())
+
+    println("=== done ===")
+}

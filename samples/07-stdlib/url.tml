@@ -1,0 +1,113 @@
+// TML Sample: URL
+// Demonstrates URL parsing from std::url.
+//
+// Run: tml run samples/07-stdlib/url.tml
+
+mod url_sample
+
+use core::str
+use core::fmt::impls
+use std::url::Url
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== URL Parsing ===")
+
+    // ── Basic URL ────────────────────────────────────
+    println("--- Basic URL ---")
+
+    let result: Outcome[Url, Str] = Url::parse("https://example.com:8080/path/to/page?q=search&lang=en#section")
+    when result {
+        Ok(url) => {
+            show("scheme = ", url.scheme)
+            show("host = ", url.host)
+            show("port = ", url.port.to_string())
+            show("path = ", url.path)
+            show("query = ", url.raw_query)
+            show("fragment = ", url.fragment)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── Simple URL ───────────────────────────────────
+    println("--- Simple URL ---")
+
+    let r2: Outcome[Url, Str] = Url::parse("http://www.example.com")
+    when r2 {
+        Ok(url) => {
+            show("scheme = ", url.scheme)
+            show("host = ", url.host)
+            show("port = ", url.port.to_string())
+            show("path = ", url.path)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── URL with userinfo ────────────────────────────
+    println("--- URL with Userinfo ---")
+
+    let r3: Outcome[Url, Str] = Url::parse("ftp://user:pass@files.example.com/data")
+    when r3 {
+        Ok(url) => {
+            show("scheme = ", url.scheme)
+            show("userinfo = ", url.userinfo)
+            show("host = ", url.host)
+            show("path = ", url.path)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── HTTPS default port ───────────────────────────
+    println("--- Default Port ---")
+
+    let r4: Outcome[Url, Str] = Url::parse("https://secure.example.com/api/v1")
+    when r4 {
+        Ok(url) => {
+            show("scheme = ", url.scheme)
+            show("host = ", url.host)
+            show("port = ", url.port.to_string())
+            show("path = ", url.path)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── URL with query only ──────────────────────────
+    println("--- Query Only ---")
+
+    let r5: Outcome[Url, Str] = Url::parse("https://api.example.com/search?q=tml+language&limit=10")
+    when r5 {
+        Ok(url) => {
+            show("host = ", url.host)
+            show("path = ", url.path)
+            show("query = ", url.raw_query)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    // ── Invalid URL ──────────────────────────────────
+    println("--- Invalid URL ---")
+
+    let r6: Outcome[Url, Str] = Url::parse("not a url")
+    when r6 {
+        Ok(url) => println("unexpected success"),
+        Err(e) => show("expected error: ", e),
+    }
+
+    // ── Localhost ─────────────────────────────────────
+    println("--- Localhost ---")
+
+    let r7: Outcome[Url, Str] = Url::parse("http://localhost:3000/dashboard")
+    when r7 {
+        Ok(url) => {
+            show("host = ", url.host)
+            show("port = ", url.port.to_string())
+            show("path = ", url.path)
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    println("=== done ===")
+}

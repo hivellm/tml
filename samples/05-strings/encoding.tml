@@ -1,0 +1,126 @@
+// TML Sample: Encoding
+// Demonstrates Base64 and hex encoding from core::encoding.
+//
+// Run: tml run samples/05-strings/encoding.tml
+
+mod encoding_sample
+
+use core::str
+use core::fmt::impls
+use core::encoding::base64
+use core::encoding::hex
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Encoding ===")
+
+    // ── Base64 encoding ──────────────────────────────
+    println("--- Base64 Encode ---")
+
+    let enc1: Str = base64::encode("Hello, World!")
+    show("base64('Hello, World!') = ", enc1)
+
+    let enc2: Str = base64::encode("f")
+    show("base64('f') = ", enc2)
+
+    let enc3: Str = base64::encode("fo")
+    show("base64('fo') = ", enc3)
+
+    let enc4: Str = base64::encode("foo")
+    show("base64('foo') = ", enc4)
+
+    let enc5: Str = base64::encode("foobar")
+    show("base64('foobar') = ", enc5)
+
+    let enc_empty: Str = base64::encode("")
+    show("base64('') = ", enc_empty)
+
+    // ── Base64 decoding ──────────────────────────────
+    println("--- Base64 Decode ---")
+
+    let dec1: Outcome[Str, Str] = base64::decode("SGVsbG8sIFdvcmxkIQ==")
+    when dec1 {
+        Ok(s) => show("decode('SGVsbG8sIFdvcmxkIQ==') = ", s),
+        Err(e) => show("error: ", e),
+    }
+
+    let dec2: Outcome[Str, Str] = base64::decode("Zm9vYmFy")
+    when dec2 {
+        Ok(s) => show("decode('Zm9vYmFy') = ", s),
+        Err(e) => show("error: ", e),
+    }
+
+    // ── URL-safe Base64 ──────────────────────────────
+    println("--- URL-safe Base64 ---")
+
+    let url_enc: Str = base64::encode_url("Hello+World/Test")
+    show("encode_url('Hello+World/Test') = ", url_enc)
+
+    // ── Hex encoding ─────────────────────────────────
+    println("--- Hex Encode ---")
+
+    let hex1: Str = hex::encode("Hello")
+    show("hex('Hello') = ", hex1)
+
+    let hex2: Str = hex::encode("ABC")
+    show("hex('ABC') = ", hex2)
+
+    let hex_empty: Str = hex::encode("")
+    show("hex('') = ", hex_empty)
+
+    // ── Hex decoding ─────────────────────────────────
+    println("--- Hex Decode ---")
+
+    let hdec1: Outcome[Str, Str] = hex::decode("48656c6c6f")
+    when hdec1 {
+        Ok(s) => show("decode('48656c6c6f') = ", s),
+        Err(e) => show("error: ", e),
+    }
+
+    let hdec2: Outcome[Str, Str] = hex::decode("414243")
+    when hdec2 {
+        Ok(s) => show("decode('414243') = ", s),
+        Err(e) => show("error: ", e),
+    }
+
+    // ── Hex uppercase ────────────────────────────────
+    println("--- Hex Uppercase ---")
+
+    let hex_upper: Str = hex::encode_upper("Hello")
+    show("hex_upper('Hello') = ", hex_upper)
+
+    // ── Round-trip verification ──────────────────────
+    println("--- Verification ---")
+
+    let original: Str = "TML is great!"
+    let encoded: Str = base64::encode(original)
+    let decoded: Outcome[Str, Str] = base64::decode(encoded)
+    when decoded {
+        Ok(s) => {
+            if s == original {
+                println("Base64 round-trip: verified!")
+            } else {
+                println("Base64 round-trip: mismatch!")
+            }
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    let hex_encoded: Str = hex::encode(original)
+    let hex_decoded: Outcome[Str, Str] = hex::decode(hex_encoded)
+    when hex_decoded {
+        Ok(s) => {
+            if s == original {
+                println("Hex round-trip: verified!")
+            } else {
+                println("Hex round-trip: mismatch!")
+            }
+        },
+        Err(e) => show("error: ", e),
+    }
+
+    println("=== done ===")
+}

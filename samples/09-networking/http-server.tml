@@ -1,0 +1,79 @@
+// TML HTTP Server — cmmv-server style framework demo
+//
+// Build:  tml build samples/http-server/server.tml
+// Run:    build/debug/server.exe
+// Test:   curl http://localhost:3000/
+//         curl http://localhost:3000/users/42
+//         curl -X POST http://localhost:3000/api/echo -d '{"hello":"world"}'
+//         curl http://localhost:3000/old-page
+// Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
+//
+// Handler signature: func(req: IncomingMessage) -> Str
+//   Use app_build_response(status, content_type, body) to build responses.
+//   Middleware and hooks are disabled pending a codegen fix for ServerResponse fn ptrs.
+
+mod http_server
+
+use core::str
+use std::http::app::App
+use std::http::dispatch::{app_get_param, app_build_response}
+use std::http::incoming::IncomingMessage
+
+// ── Handlers ───────────────────────────────────────────────────
+
+func handle_root(req: IncomingMessage) -> Str {
+    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
+}
+
+func handle_health(req: IncomingMessage) -> Str {
+    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\"}")
+}
+
+func handle_user(req: IncomingMessage) -> Str {
+    let id: Str = app_get_param(req, "id")
+    app_build_response(200, "application/json; charset=utf-8", "{\"user_id\":\"" + id + "\"}")
+}
+
+func handle_echo(req: IncomingMessage) -> Str {
+    let body: Str = req.body()
+    if str::len(body) == 0 {
+        return app_build_response(200, "application/json; charset=utf-8", "{}")
+    }
+    app_build_response(200, "application/json; charset=utf-8", body)
+}
+
+func handle_redirect(req: IncomingMessage) -> Str {
+    "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+}
+
+func handle_html(req: IncomingMessage) -> Str {
+    app_build_response(200, "text/html; charset=utf-8", "<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>")
+}
+
+func handle_text(req: IncomingMessage) -> Str {
+    app_build_response(200, "text/plain; charset=utf-8", "Hello, plain text world!")
+}
+
+// ── Main ───────────────────────────────────────────────────────
+
+pub func main() -> I32 {
+    var app: App = App::new()
+
+    // Settings
+    app.set_body_limit(2097152)     // 2MB body limit
+    app.set_read_timeout(60000)     // 60s read timeout
+    app.set_idle_timeout(120000)    // 120s idle timeout
+
+    // Routes
+    app.get("/", handle_root as I64)
+    app.get("/health", handle_health as I64)
+    app.get("/users/:id", handle_user as I64)
+    app.post("/api/echo", handle_echo as I64)
+    app.get("/old-page", handle_redirect as I64)
+    app.get("/page", handle_html as I64)
+    app.get("/text", handle_text as I64)
+
+    // app.listen_iocp(3000)   // IOCP mode (Windows, async I/O — 60K req/s)
+    app.listen(3000)            // Thread pool mode (default — 169K req/s with pipelining)
+    return 0
+}

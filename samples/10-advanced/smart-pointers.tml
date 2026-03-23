@@ -1,0 +1,62 @@
+// TML Sample: Smart Pointers
+// Demonstrates Heap[T] (Box) from core::alloc.
+//
+// Run: tml run samples/10-advanced/smart-pointers.tml
+
+mod smart_pointers
+
+use core::str
+use core::fmt::impls
+use core::alloc::heap::Heap
+use core::alloc::shared::Shared
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Smart Pointers ===")
+
+    // ── Heap[T] — unique ownership on the heap ─────
+    // Like Rust's Box<T>
+    println("--- Heap[T] (Box) ---")
+
+    let boxed: Heap[I32] = Heap::new(42)
+    show("boxed value = ", boxed.get().to_string())
+
+    // Modify the boxed value
+    boxed.set(100)
+    show("after set(100) = ", boxed.get().to_string())
+
+    // Default value
+    let zero: Heap[I32] = Heap::new_default()
+    show("default I32 = ", zero.get().to_string())
+
+    // into_raw and from_raw — low-level interop
+    var h: Heap[I32] = Heap::new(77)
+    let raw: *I32 = h.into_raw()
+    let restored: Heap[I32] = Heap::from_raw(raw)
+    show("restored from raw = ", restored.get().to_string())
+
+    // ── Shared[T] — reference-counted shared ownership ─
+    // Like Rust's Rc<T>
+    println("--- Shared[T] (Rc) ---")
+
+    let s1: Shared[I32] = Shared::new(10)
+    let v: I32 = s1.get()
+    show("value = ", v.to_string())
+    let cnt: I32 = s1.strong_count()
+    show("strong count = ", cnt.to_string())
+
+    // is_unique — true when only one reference exists
+    if s1.is_unique() {
+        println("s1 is unique (count == 1)")
+    }
+
+    // Shared with a different type
+    let s_str: Shared[I64] = Shared::new(999)
+    show("shared I64 = ", s_str.get().to_string())
+    show("  count = ", s_str.strong_count().to_string())
+
+    println("=== done ===")
+}

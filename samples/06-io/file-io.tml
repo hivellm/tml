@@ -1,0 +1,81 @@
+// TML Sample: File I/O
+// Demonstrates reading and writing files with std::file.
+//
+// Run: tml run samples/06-io/file-io.tml
+
+mod file_io
+
+use core::str
+use core::fmt::impls
+use std::file::{File, Path}
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== File I/O ===")
+
+    let path: Str = ".sandbox/sample_output.txt"
+
+    // ── Write to a file ────────────────────────────
+    println("--- Writing ---")
+
+    let ok: Bool = File::write_all(path, "Hello from TML!\nThis is line 2.\nLine 3 here.")
+    show("write_all success: ", ok.to_string())
+
+    // ── Check file exists ──────────────────────────
+    let exists: Bool = Path::exists(path)
+    show("file exists: ", exists.to_string())
+
+    // ── Read entire file ───────────────────────────
+    println("--- Reading ---")
+
+    let content: Str = File::read_all(path)
+    show("content:\n", content)
+    show("content length: ", str::len(content).to_string())
+
+    // ── Read line by line ──────────────────────────
+    println("--- Line by line ---")
+
+    let f: File = File::open_read(path)
+    if f.is_open() {
+        println("file opened successfully")
+
+        var line_num: I32 = 1
+        var line: Str = f.read_line()
+        loop (str::len(line) > 0) {
+            show("  line " + line_num.to_string() + ": ", line)
+            line_num += 1
+            line = f.read_line()
+        }
+
+        f.close()
+    }
+
+    // ── Append to file ─────────────────────────────
+    println("--- Appending ---")
+
+    let appended: Bool = File::append_all(path, "\nAppended line!")
+    show("append success: ", appended.to_string())
+
+    let updated: Str = File::read_all(path)
+    show("updated content:\n", updated)
+
+    // ── Write using File handle ────────────────────
+    println("--- Write handle ---")
+
+    let path2: Str = ".sandbox/sample_output2.txt"
+    let w: File = File::open_write(path2)
+    if w.is_open() {
+        w.write_str("Written via file handle.\n")
+        w.write_str("Second line via handle.\n")
+        w.flush()
+        w.close()
+
+        let result: Str = File::read_all(path2)
+        show("handle-written content:\n", result)
+    }
+
+    println("=== done ===")
+}

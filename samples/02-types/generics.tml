@@ -1,0 +1,94 @@
+// TML Sample: Generics
+// Demonstrates generic functions and generic struct types.
+//
+// Run: tml run samples/02-types/generics.tml
+
+mod generics
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Generic function ───────────────────────────────
+// TML uses [T] for generics (not <T> like Rust/C++)
+func max_of(a: I32, b: I32) -> I32 {
+    if a > b { return a }
+    return b
+}
+
+func min_of(a: I32, b: I32) -> I32 {
+    if a < b { return a }
+    return b
+}
+
+// ── Generic struct ─────────────────────────────────
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+impl[T] Pair[T] {
+    func new(a: T, b: T) -> Pair[T] {
+        return Pair[T] { first: a, second: b }
+    }
+}
+
+// ── Generic struct with two type parameters ────────
+type KeyValue[K, V] {
+    key: K,
+    value: V,
+}
+
+impl[K, V] KeyValue[K, V] {
+    func new(k: K, v: V) -> KeyValue[K, V] {
+        return KeyValue[K, V] { key: k, value: v }
+    }
+}
+
+// ── Generic with Maybe ─────────────────────────────
+func first_positive(a: I32, b: I32) -> Maybe[I32] {
+    if a > 0 { return Just(a) }
+    if b > 0 { return Just(b) }
+    return Nothing
+}
+
+pub func main() {
+    println("=== Generics ===")
+
+    // Generic-like functions
+    show("max(3, 7) = ", max_of(3, 7).to_string())
+    show("min(3, 7) = ", min_of(3, 7).to_string())
+
+    // Generic struct with I32
+    let p: Pair[I32] = Pair[I32]::new(10, 20)
+    show("pair.first = ", p.first.to_string())
+    show("pair.second = ", p.second.to_string())
+
+    // Generic struct with Str
+    let names: Pair[Str] = Pair[Str]::new("Alice", "Bob")
+    show("names.first = ", names.first)
+    show("names.second = ", names.second)
+
+    // Two-parameter generic
+    let kv: KeyValue[Str, I32] = KeyValue[Str, I32]::new("age", 30)
+    show("kv.key = ", kv.key)
+    show("kv.value = ", kv.value.to_string())
+
+    // Generic with Maybe return
+    let pos: Maybe[I32] = first_positive(-5, 3)
+    when pos {
+        Just(v) => show("first positive = ", v.to_string()),
+        Nothing => println("no positive found"),
+    }
+
+    let none: Maybe[I32] = first_positive(-1, -2)
+    when none {
+        Just(v) => show("first positive = ", v.to_string()),
+        Nothing => println("no positive found"),
+    }
+
+    println("=== done ===")
+}

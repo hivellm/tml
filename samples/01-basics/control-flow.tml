@@ -1,0 +1,88 @@
+// TML Sample: Control Flow
+// Demonstrates if/else, when (pattern matching), loop, for-in ranges.
+//
+// Run: tml run samples/01-basics/control-flow.tml
+
+mod control_flow
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Control Flow ===")
+
+    // ── if / else ────────────────────────────────────
+    let x: I32 = 10
+
+    if x > 0 { println("x is positive") }
+
+    if x > 100 {
+        println("big")
+    } else {
+        println("not big")
+    }
+
+    // chained else if
+    if x < 0 {
+        println("negative")
+    } else if x == 0 {
+        println("zero")
+    } else if x < 10 {
+        println("small")
+    } else {
+        println("large")
+    }
+
+    // ── when (pattern matching) ──────────────────────
+    let value: I32 = 42
+
+    when value {
+        0 => println("zero"),
+        1 => println("one"),
+        42 => println("the answer to everything"),
+        _ => println("something else"),
+    }
+
+    // when with Maybe
+    let opt: Maybe[I32] = Just(100)
+    when opt {
+        Just(n) => show("got: ", n.to_string()),
+        Nothing => println("nothing"),
+    }
+
+    // ── for ... in ... (range iteration) ─────────────
+
+    // exclusive range: 0, 1, 2, 3, 4
+    println("counting 0 to 4:")
+    for i in 0 to 5 {
+        show("  ", i.to_string())
+    }
+
+    // inclusive range: 1, 2, 3, 4, 5
+    println("counting 1 through 5:")
+    for i in 1 through 5 {
+        show("  ", i.to_string())
+    }
+
+    // ── loop (condition) — while-style ───────────────
+    var count: I32 = 0
+    loop (count < 5) {
+        count += 1
+    }
+    show("counted to ", count.to_string())
+
+    // break and continue
+    println("odd numbers under 10:")
+    var n: I32 = 0
+    loop (n < 10) {
+        n += 1
+        if n % 2 == 0 { continue }
+        show("  ", n.to_string())
+    }
+
+    println("=== done ===")
+}

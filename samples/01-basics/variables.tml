@@ -1,0 +1,63 @@
+// TML Sample: Variables and Types
+// Demonstrates let, var, const, type annotations, and all numeric types.
+//
+// Run: tml run samples/01-basics/variables.tml
+
+mod variables
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Variables and Types ===")
+
+    // ── Immutable variables (let) — type annotation required ──
+    let x: I32 = 42
+    let name: Str = "Alice"
+    let pi: F64 = 3.14159
+
+    show("x = ", x.to_string())
+    show("name = ", name)
+    show("pi = ", pi.to_string())
+
+    // ── Mutable variables (var) ──────────────────────────────
+    var counter: I32 = 0
+    counter = counter + 1
+    counter += 1
+    show("counter = ", counter.to_string())
+
+    // ── Compile-time constants ───────────────────────────────
+    const MAX_SIZE: I32 = 1024
+    const APP_NAME: Str = "MyApp"
+    show("MAX_SIZE = ", MAX_SIZE.to_string())
+    show("APP_NAME = ", APP_NAME)
+
+    // ── Integer types (I8, I16, I32, I64, U8, U16, U32, U64) ─
+    let byte_val: U8 = 255
+    let short_val: I16 = -1000
+    let long_val: I64 = 9000000000
+    show("byte (U8) = ", byte_val.to_string())
+    show("short (I16) = ", short_val.to_string())
+    show("long (I64) = ", long_val.to_string())
+
+    // ── Float types ──────────────────────────────────────────
+    let f32_val: F32 = 2.5
+    let f64_val: F64 = 3.141592653589793
+    show("f32 = ", f32_val.to_string())
+    show("f64 = ", f64_val.to_string())
+
+    // ── Boolean with logical operators ───────────────────────
+    // TML uses keywords: and, or, not (instead of &&, ||, !)
+    if true and not false then println("true and not false = true")
+    if true or false then println("true or false = true")
+
+    // ── String concat ────────────────────────────────────────
+    let greeting: Str = "Hello, " + name + "!"
+    println(greeting)
+
+    println("=== done ===")
+}

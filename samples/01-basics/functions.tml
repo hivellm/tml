@@ -1,0 +1,95 @@
+// TML Sample: Functions
+// Demonstrates function definition, parameters, return types, and recursion.
+//
+// Run: tml run samples/01-basics/functions.tml
+
+mod functions
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Simple function with return type ─────────────────
+func greet(name: Str) -> Str {
+    return "Hello, " + name + "!"
+}
+
+// ── Multiple parameters ──────────────────────────────
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// ── Function with loop ───────────────────────────────
+func power(b: I32, exp: I32) -> I32 {
+    var result: I32 = 1
+    var i: I32 = 0
+    loop (i < exp) {
+        result = result * b
+        i += 1
+    }
+    return result
+}
+
+// ── Recursive function ───────────────────────────────
+func factorial(n: I32) -> I32 {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+
+// ── Fibonacci ────────────────────────────────────────
+func fibonacci(n: I32) -> I32 {
+    if n <= 0 { return 0 }
+    if n == 1 { return 1 }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+// ── Boolean-returning functions ──────────────────────
+func is_even(n: I32) -> Bool {
+    return n % 2 == 0
+}
+
+func is_prime(n: I32) -> Bool {
+    if n < 2 { return false }
+    var i: I32 = 2
+    loop (i * i <= n) {
+        if n % i == 0 { return false }
+        i += 1
+    }
+    return true
+}
+
+// ── Entry point ──────────────────────────────────────
+pub func main() {
+    println("=== Functions ===")
+
+    println(greet("World"))
+    show("10 + 20 = ", add(10, 20).to_string())
+    show("2^10 = ", power(2, 10).to_string())
+    show("5! = ", factorial(5).to_string())
+    show("10! = ", factorial(10).to_string())
+
+    // Fibonacci
+    println("Fibonacci:")
+    var i: I32 = 0
+    loop (i < 10) {
+        show("  fib = ", fibonacci(i).to_string())
+        i += 1
+    }
+
+    // Boolean functions
+    if is_even(42) { println("42 is even") } else { println("42 is odd") }
+    if is_even(7) { println("7 is even") } else { println("7 is odd") }
+
+    // Primes
+    println("Primes up to 30:")
+    var n: I32 = 2
+    loop (n < 31) {
+        if is_prime(n) { show("  ", n.to_string()) }
+        n += 1
+    }
+
+    println("=== done ===")
+}

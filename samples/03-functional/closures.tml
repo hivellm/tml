@@ -1,0 +1,66 @@
+// TML Sample: Closures
+// Demonstrates `do(x) expr` syntax, closures as arguments, and captures.
+//
+// Run: tml run samples/03-functional/closures.tml
+
+mod closures
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+// ── Higher-order functions ─────────────────────────
+// Functions that accept closures as parameters
+
+func apply(x: I64, f: func(I64) -> I64) -> I64 {
+    return f(x)
+}
+
+func apply_twice(x: I64, f: func(I64) -> I64) -> I64 {
+    return f(f(x))
+}
+
+func apply_to_str(s: Str, f: func(Str) -> Str) -> Str {
+    return f(s)
+}
+
+pub func main() {
+    println("=== Closures ===")
+
+    // ── Basic closure: do(params) expression ───────
+    // TML uses `do(x) expr` instead of Rust's |x| expr
+    let doubled: I64 = apply(5, do(x: I64) -> I64 { x * 2 })
+    show("apply(5, double) = ", doubled.to_string())
+
+    let squared: I64 = apply(4, do(x: I64) -> I64 { x * x })
+    show("apply(4, square) = ", squared.to_string())
+
+    // ── Closure passed to apply_twice ──────────────
+    let result: I64 = apply_twice(3, do(x: I64) -> I64 { x + 10 })
+    show("apply_twice(3, +10) = ", result.to_string())
+
+    // ── String closure ─────────────────────────────
+    let upper: Str = apply_to_str("hello", do(s: Str) -> Str { str::to_uppercase(s) })
+    show("uppercase = ", upper)
+
+    // ── Closures with captures ─────────────────────
+    let multiplier: I64 = 7
+    let product: I64 = apply(6, do(x: I64) -> I64 { x * multiplier })
+    show("6 * 7 = ", product.to_string())
+
+    let prefix: Str = ">>> "
+    let decorated: Str = apply_to_str("message", do(s: Str) -> Str { prefix + s })
+    show("decorated = ", decorated)
+
+    // ── Building closures in a loop ────────────────
+    println("squares from 1 to 5:")
+    for i in 1 through 5 {
+        let sq: I64 = apply(i, do(x: I64) -> I64 { x * x })
+        show("  ", sq.to_string())
+    }
+
+    println("=== done ===")
+}

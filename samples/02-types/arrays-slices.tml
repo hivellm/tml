@@ -1,0 +1,96 @@
+// TML Sample: Arrays and Slices
+// Demonstrates fixed-size arrays and basic operations.
+//
+// Run: tml run samples/02-types/arrays-slices.tml
+
+mod arrays_slices_sample
+
+use core::str
+use core::fmt::impls
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== Arrays and Slices ===")
+
+    // ── Fixed-size arrays ────────────────────────────
+    println("--- Fixed Arrays ---")
+
+    let nums: [I32; 5] = [10, 20, 30, 40, 50]
+
+    show("nums[0] = ", nums[0].to_string())
+    show("nums[1] = ", nums[1].to_string())
+    show("nums[2] = ", nums[2].to_string())
+    show("nums[3] = ", nums[3].to_string())
+    show("nums[4] = ", nums[4].to_string())
+
+    // ── Array iteration ──────────────────────────────
+    println("--- Iteration ---")
+
+    let values: [I32; 4] = [1, 2, 3, 4]
+    var sum: I32 = 0
+    for i in 0 to 4 {
+        sum = sum + values[i]
+    }
+    show("sum of [1,2,3,4] = ", sum.to_string())
+
+    // ── Array of booleans ────────────────────────────
+    println("--- Bool Array ---")
+
+    let flags: [Bool; 3] = [true, false, true]
+    show("flags[0] = ", flags[0].to_string())
+    show("flags[1] = ", flags[1].to_string())
+    show("flags[2] = ", flags[2].to_string())
+
+    // ── Mutable array ────────────────────────────────
+    println("--- Mutable Array ---")
+
+    var data: [I32; 3] = [0, 0, 0]
+    data[0] = 100
+    data[1] = 200
+    data[2] = 300
+    show("data[0] = ", data[0].to_string())
+    show("data[1] = ", data[1].to_string())
+    show("data[2] = ", data[2].to_string())
+
+    // ── Array fill with repeated value ───────────────
+    println("--- Fill ---")
+
+    let zeros: [I32; 4] = [0; 4]
+    show("zeros = [", zeros[0].to_string() + ", " + zeros[1].to_string() + ", " + zeros[2].to_string() + ", " + zeros[3].to_string() + "]")
+
+    let sevens: [I64; 3] = [7; 3]
+    show("sevens = [", sevens[0].to_string() + ", " + sevens[1].to_string() + ", " + sevens[2].to_string() + "]")
+
+    // ── Finding min/max in an array ──────────────────
+    println("--- Min/Max ---")
+
+    let arr: [I32; 6] = [34, 12, 78, 5, 91, 23]
+    var min_val: I32 = arr[0]
+    var max_val: I32 = arr[0]
+    for i in 1 to 6 {
+        if arr[i] < min_val {
+            min_val = arr[i]
+        }
+        if arr[i] > max_val {
+            max_val = arr[i]
+        }
+    }
+    show("min = ", min_val.to_string())
+    show("max = ", max_val.to_string())
+
+    // ── F64 array ────────────────────────────────────
+    println("--- F64 Array ---")
+
+    let temps: [F64; 4] = [36.6, 37.2, 38.1, 36.9]
+    var total: F64 = 0.0
+    for i in 0 to 4 {
+        total = total + temps[i]
+    }
+    let avg: F64 = total / 4.0
+    show("avg temperature = ", avg.to_string())
+
+    println("=== done ===")
+}

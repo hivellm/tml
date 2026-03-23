@@ -1,0 +1,117 @@
+// TML Sample: OS
+// Demonstrates operating system info and environment from std::os.
+//
+// Run: tml run samples/07-stdlib/os.tml
+
+mod os_sample
+
+use core::str
+use core::fmt::impls
+use std::os
+
+func show(label: Str, val: Str) {
+    println(label + val)
+}
+
+pub func main() {
+    println("=== OS ===")
+
+    // ── System information ───────────────────────────
+    println("--- System Info ---")
+
+    let arch_val: Str = os::arch()
+    show("arch = ", arch_val)
+
+    let plat: Str = os::platform()
+    show("platform = ", plat)
+
+    let os_name: Str = os::os_type()
+    show("os type = ", os_name)
+
+    let mach: Str = os::machine()
+    show("machine = ", mach)
+
+    let rel: Str = os::release()
+    show("release = ", rel)
+
+    let ver: Str = os::version()
+    show("version = ", ver)
+
+    let host: Str = os::hostname()
+    show("hostname = ", host)
+
+    // ── Memory ───────────────────────────────────────
+    println("--- Memory ---")
+
+    let total: U64 = os::totalmem()
+    let free: U64 = os::freemem()
+    let total_mb: U64 = total / (1048576 as U64)
+    let free_mb: U64 = free / (1048576 as U64)
+    show("total memory (MB) = ", total_mb.to_string())
+    show("free memory (MB) = ", free_mb.to_string())
+
+    // ── CPU ──────────────────────────────────────────
+    println("--- CPU ---")
+
+    let cpus: I32 = os::cpu_count()
+    show("cpu count = ", cpus.to_string())
+
+    let model: Str = os::cpu_model(0)
+    show("cpu model = ", model)
+
+    let speed: I64 = os::cpu_speed(0)
+    show("cpu speed (MHz) = ", speed.to_string())
+
+    let endian: Str = os::endianness()
+    show("endianness = ", endian)
+
+    // ── User info ────────────────────────────────────
+    println("--- User ---")
+
+    let user: Str = os::username()
+    show("username = ", user)
+
+    let home: Str = os::homedir()
+    show("homedir = ", home)
+
+    let tmp: Str = os::tmpdir()
+    show("tmpdir = ", tmp)
+
+    let pid: I32 = os::pid()
+    show("pid = ", pid.to_string())
+
+    let shell_val: Str = os::shell()
+    show("shell = ", shell_val)
+
+    // ── Uptime ───────────────────────────────────────
+    println("--- Uptime ---")
+
+    let up: I64 = os::uptime()
+    let hours: I64 = up / 3600
+    let mins: I64 = (up % 3600) / 60
+    show("uptime (seconds) = ", up.to_string())
+    show("uptime (hours) = ", hours.to_string())
+    show("uptime (minutes remainder) = ", mins.to_string())
+
+    // ── Current directory ────────────────────────────
+    println("--- Working Directory ---")
+
+    let cwd: Str = os::current_dir()
+    show("cwd = ", cwd)
+
+    // ── Command-line args ────────────────────────────
+    println("--- Args ---")
+
+    let argc: I32 = os::args_count()
+    show("args count = ", argc.to_string())
+    for i in 0 to (argc as I64) {
+        let arg: Str = os::args_get(i as I32)
+        show("  arg: ", arg)
+    }
+
+    // Note: env_get returns Maybe[Str] which currently has a codegen
+    // limitation with cross-module calls. Use env_get in test suites
+    // where it works correctly.
+
+    println("=== done ===")
+}
