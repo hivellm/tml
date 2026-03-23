@@ -41,7 +41,6 @@ pub const PRIORITY_ABOVE_NORMAL: I32 = -7
 pub const PRIORITY_HIGH: I32 = -14
 pub const PRIORITY_HIGHEST: I32 = -20
 
-use core::profiler
 
 // ============================================================================
 // FFI declarations (private)
@@ -302,12 +301,9 @@ pub func pid() -> I32 {
 /// Gets the value of an environment variable.
 /// Returns `Just(value)` if the variable exists, `Nothing` otherwise.
 pub func env_get(name: Str) -> Maybe[Str] {
-    let z = profiler::begin("os::env_get")
     if ffi_env_has(name) == 0 {
-        profiler::end(z)
         return Nothing
     }
-    profiler::end(z)
     return Just(ffi_env_get(name))
 }
 

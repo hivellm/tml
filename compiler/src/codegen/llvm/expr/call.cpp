@@ -236,57 +236,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
-    // ====================================================================
-    // Profiler intrinsics — zero-cost when TML_PROFILE is not defined.
-    // Intercept profiler::begin/end/message/plot/frame_mark calls and
-    // emit nothing (or Tracy calls when profiling is enabled).
-    // ====================================================================
-    if (fn_name.find("profiler") != std::string::npos) {
-        std::string base = fn_name;
-        auto sep = base.rfind("::");
-        if (sep != std::string::npos)
-            base = base.substr(sep + 2);
-
-        if (base == "begin") {
-#ifdef TML_PROFILE
-            std::string name_val = gen_expr(*call.args[0]);
-            std::string reg = "%t" + std::to_string(temp_counter_++);
-            emit_line("  " + reg + " = call i64 @tml_tracy_zone_begin(ptr " + name_val + ")");
-            last_expr_type_ = "i64";
-            return reg;
-#else
-            for (auto& arg : call.args)
-                gen_expr(*arg);
-            std::string reg = "%t" + std::to_string(temp_counter_++);
-            emit_line("  " + reg + " = add i64 0, 0");
-            last_expr_type_ = "i64";
-            return reg;
-#endif
-        }
-        if (base == "end" || base == "message" || base == "plot" || base == "frame_mark") {
-#ifdef TML_PROFILE
-            if (base == "end") {
-                std::string id = gen_expr(*call.args[0]);
-                emit_line("  call void @tml_tracy_zone_end(i64 " + id + ")");
-            } else if (base == "message") {
-                std::string text = gen_expr(*call.args[0]);
-                emit_line("  call void @tml_tracy_message(ptr " + text + ")");
-            } else if (base == "plot") {
-                std::string n = gen_expr(*call.args[0]);
-                std::string v = gen_expr(*call.args[1]);
-                emit_line("  call void @tml_tracy_plot(ptr " + n + ", i64 " + v + ")");
-            } else {
-                emit_line("  call void @tml_tracy_frame_mark()");
-            }
-#else
-            for (auto& arg : call.args)
-                gen_expr(*arg);
-#endif
-            last_expr_type_ = "void";
-            return "";
-        }
-    }
-
     if (call.callee->is<parser::FieldExpr>()) {
         // Handle calling function pointers stored in struct fields: cb.action(21)
         // Function pointer fields are stored as fat pointers { fn_ptr, env_ptr }

@@ -36,7 +36,6 @@
 //! // vectorize + insert for each document
 //! ```
 
-use core::profiler
 
 // ============================================================================
 // HNSW FFI Declarations
@@ -161,9 +160,7 @@ impl HnswIndex {
     /// @param doc_id Unique document identifier
     /// @param embedding Pointer to F32 array of size `dims`
     pub func insert(mut this, doc_id: U32, embedding: *F32) {
-        let z = profiler::begin("HnswIndex::insert")
         ffi_hnsw_insert(this.handle, doc_id, embedding)
-        profiler::end(z)
     }
 
     /// Searches for the k nearest neighbors to the query vector.
@@ -172,7 +169,6 @@ impl HnswIndex {
     /// @param k Number of nearest neighbors to return
     /// @returns List of results sorted by distance (ascending)
     pub func search(this, query: *F32, k: I32) -> List[HnswResult] {
-        let z = profiler::begin("HnswIndex::search")
         var doc_ids: [U32; 1024] = [0; 1024]
         var distances: [F32; 1024] = [0.0; 1024]
         let actual_k: I32 = if k > 1024 { 1024 } else { k }
@@ -185,7 +181,6 @@ impl HnswIndex {
             results.push(HnswResult { doc_id: doc_ids[i], distance: distances[i] })
             i = i + 1
         }
-        profiler::end(z)
         return results
     }
 

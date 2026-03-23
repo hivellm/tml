@@ -37,7 +37,6 @@ use core::ops::Deref
 use core::clone::Duplicate
 use core::fmt::{Display, Debug}
 use core::default::Default
-use core::profiler
 
 /// Inner structure holding the value and reference count.
 type SharedInner[T] {
@@ -92,12 +91,10 @@ impl[T] Shared[T] {
     /// assert_eq(shared.strong_count(), 1)
     /// ```
     pub func new(value: T) -> Shared[T] {
-        let z = profiler::begin("Shared::new")
         let size: I64 = size_of[SharedInner[T]]()
         let ptr: *Unit = mem_alloc(size)
 
         if ptr == null {
-            profiler::end(z)
             panic("Shared::new: allocation failed")
         }
 
@@ -109,7 +106,6 @@ impl[T] Shared[T] {
             strong_count: 1,
         }
 
-        profiler::end(z)
         return Shared { ptr: typed_ptr }
     }
 
@@ -272,9 +268,7 @@ impl[T] Duplicate for Shared[T] {
     /// assert_eq(original.strong_count(), 2)
     /// ```
     pub func duplicate(this) -> Shared[T] {
-        let z = profiler::begin("Shared::duplicate")
         this.increment_count()
-        profiler::end(z)
         return Shared { ptr: this.ptr }
     }
 }

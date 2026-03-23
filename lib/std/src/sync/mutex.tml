@@ -69,7 +69,6 @@
 //! ```
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering}
-use core::profiler
 
 // ============================================================================
 // Platform-specific raw mutex (opaque handle)
@@ -180,12 +179,10 @@ impl[T] Mutex[T] {
     /// *guard = 1
     /// ```
     pub func lock(mut this) -> MutexGuard[T] {
-        let z = profiler::begin("Mutex::lock")
         // Always use platform mutex for proper Condvar integration
         // (SleepConditionVariableSRW requires the SRWLOCK to be held)
         raw_mutex_lock(ref this.raw)
         this.state.store(1, Ordering::Relaxed)
-        profiler::end(z)
         return MutexGuard { mutex: ref this }
     }
 

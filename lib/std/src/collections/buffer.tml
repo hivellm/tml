@@ -27,7 +27,6 @@
 
 use core::intrinsics::{ptr_read, ptr_write}
 use core::str
-use core::profiler
 
 // ============================================================================
 // Memory helpers (using lowlevel intrinsics, same pattern as list.tml)
@@ -235,14 +234,12 @@ impl Buffer {
 
     /// Writes a single byte to the buffer at the current write position.
     pub func write_byte(this, byte: I32) {
-        let z = profiler::begin("Buffer::write_byte")
         let h: I64 = this.handle as I64
         buf_ensure_capacity(h, 1)
         let len: I64 = buf_get_len(h)
         let data: *Unit = buf_get_data(h)
         buf_write_byte_at(data, len, byte)
         buf_set_len(h, len + 1)
-        profiler::end(z)
     }
 
     /// Writes a 32-bit signed integer to the buffer (little-endian).
@@ -985,13 +982,11 @@ impl Buffer {
     /// Converts the buffer to a UTF-8 string.
     @allocates
     pub func to_string(this) -> Str {
-        let z = profiler::begin("Buffer::to_string")
         let h: I64 = this.handle as I64
         let len: I64 = buf_get_len(h)
         if len == 0 {
             let empty: *Unit = buf_mem_alloc(1)
             buf_write_byte_at(empty, 0, 0)
-            profiler::end(z)
             return empty as Str
         }
         let data: *Unit = buf_get_data(h)
@@ -1002,7 +997,6 @@ impl Buffer {
             i = i + 1
         }
         buf_write_byte_at(str_buf, len, 0)  // null terminator
-        profiler::end(z)
         str_buf as Str
     }
 
@@ -1045,10 +1039,8 @@ impl Buffer {
 
     /// Creates a buffer from a UTF-8 string.
     pub func from_string(str: Str) -> Buffer {
-        let z = profiler::begin("Buffer::from_string")
         let str_len: I64 = buf_str_len(str)
         if str_len == 0 {
-            profiler::end(z)
             return Buffer.new(1)
         }
         let str_ptr: *Unit = str as *Unit
@@ -1061,7 +1053,6 @@ impl Buffer {
             i = i + 1
         }
         buf_set_len(rh, str_len)
-        profiler::end(z)
         result
     }
 }

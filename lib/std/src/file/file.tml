@@ -11,7 +11,6 @@
 //! File::write_all("output.txt", "Hello, World!")
 //! ```
 
-use core::profiler
 
 // FFI declarations for C runtime file operations
 @extern("file_open_read")
@@ -121,17 +120,13 @@ impl File {
 
     /// Read entire file contents as a string
     pub func read_all(path: Str) -> Str {
-        let z = profiler::begin("File::read_all")
         let result = ffi_file_read_all(path)
-        profiler::end(z)
         return result
     }
 
     /// Write content to a file (overwrites if exists)
     pub func write_all(path: Str, content: Str) -> Bool {
-        let z = profiler::begin("File::write_all")
         let result = ffi_file_write_all(path, content)
-        profiler::end(z)
         return result
     }
 

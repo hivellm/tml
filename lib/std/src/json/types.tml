@@ -116,7 +116,6 @@ func json_to_string(h: I64) -> Str
 func json_free(h: I64)
 
 use core::str
-use core::profiler
 
 // String helper functions for path navigation (pure TML via core::str)
 func path_char_at(s: Str, index: I32) -> I32 {
@@ -897,9 +896,7 @@ impl Json {
     /// Serialize this JSON value to a string
     @allocates
     pub func to_string(this) -> Str {
-        let z = profiler::begin("json::stringify")
         let result = json_to_string(this.handle)
-        profiler::end(z)
         return result
     }
 
@@ -922,14 +919,11 @@ impl Json {
 
 /// Parse a JSON string into a Json value
 pub func parse(json_str: Str) -> Maybe[Json] {
-    let z = profiler::begin("json::parse")
     let h: I64 = json_parse_fast(json_str)
     if h < 0 {
-        profiler::end(z)
         return Nothing
     }
     let result = Just(Json::from_handle(h))
-    profiler::end(z)
     return result
 }
 

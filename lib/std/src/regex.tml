@@ -20,7 +20,6 @@
 //! ```
 
 use std::collections::List
-use core::profiler
 
 // NFA state kinds
 const STATE_MATCH: I64 = 0
@@ -133,29 +132,22 @@ pub type Regex {
 impl Regex {
     /// Compiles a regular expression pattern.
     pub func new(pattern: Str) -> Regex {
-        let z = profiler::begin("Regex::new")
         let result = compile_pattern(pattern)
-        profiler::end(z)
         return result
     }
 
     /// Returns true if the pattern matches anywhere in the string.
     pub func is_match(this, s: Str) -> Bool {
-        let z = profiler::begin("Regex::is_match")
         if not this._valid {
-            profiler::end(z)
             return false
         }
         let m: Match = this.find(s)
-        profiler::end(z)
         return m._matched
     }
 
     /// Finds the first match in the string.
     pub func find(this, s: Str) -> Match {
-        let z = profiler::begin("Regex::find")
         if not this._valid {
-            profiler::end(z)
             return Match { _start: -1, _end: -1, _matched: false }
         }
         let slen: I64 = s.len()
@@ -163,12 +155,10 @@ impl Regex {
         loop (sp <= slen) {
             let ep: I64 = nfa_exec(this, s, slen, sp)
             if ep >= 0 {
-                profiler::end(z)
                 return Match { _start: sp, _end: ep, _matched: true }
             }
             sp = sp + 1
         }
-        profiler::end(z)
         return Match { _start: -1, _end: -1, _matched: false }
     }
 

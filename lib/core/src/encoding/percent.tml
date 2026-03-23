@@ -14,7 +14,6 @@
 
 use core::str
 use core::encoding::hex
-use core::profiler
 
 /// Returns true if the byte is an unreserved character per RFC 3986.
 /// Unreserved: A-Z, a-z, 0-9, '-', '.', '_', '~'
@@ -41,10 +40,8 @@ func is_unreserved(b: I32) -> Bool {
 /// ```
 @allocates
 pub func encode(input: Str) -> Str {
-    let z = profiler::begin("percent::encode")
     let in_len: I64 = str::len(input)
     if in_len == 0 {
-        profiler::end(z)
         return ""
     }
     // Worst case: every byte needs %XX encoding -> 3x length
@@ -71,7 +68,6 @@ pub func encode(input: Str) -> Str {
     }
 
     lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
-    profiler::end(z)
     return buf as Str
 }
 
@@ -123,10 +119,8 @@ pub func encode_form(input: Str) -> Str {
 /// ```
 @allocates
 pub func decode(input: Str) -> Outcome[Str, Str] {
-    let z = profiler::begin("percent::decode")
     let in_len: I64 = str::len(input)
     if in_len == 0 {
-        profiler::end(z)
         return Ok("")
     }
     // Output is at most in_len bytes
@@ -143,7 +137,6 @@ pub func decode(input: Str) -> Outcome[Str, Str] {
             // '%' — next two chars are hex
             if si + 2 >= in_len {
                 lowlevel { mem_free(buf) }
-                profiler::end(z)
                 return Err("percent: incomplete escape sequence")
             }
             let hi_byte: U8 = lowlevel { ptr_read[U8]((src + si + 1) as *U8) }
@@ -152,7 +145,6 @@ pub func decode(input: Str) -> Outcome[Str, Str] {
             let lo: I32 = hex::char_to_nibble(lo_byte as I32)
             if hi == -1 or lo == -1 {
                 lowlevel { mem_free(buf) }
-                profiler::end(z)
                 return Err("percent: invalid hex digit in escape")
             }
             let decoded: U8 = (hi * 16 + lo) as U8
@@ -167,7 +159,6 @@ pub func decode(input: Str) -> Outcome[Str, Str] {
     }
 
     lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
-    profiler::end(z)
     return Ok(buf as Str)
 }
 

@@ -35,7 +35,6 @@
 //! ```
 
 use core::fmt::traits::{Display, Debug}
-use core::profiler
 
 // ============================================================================
 // Float Formatting Options
@@ -177,21 +176,16 @@ pub func is_finite_f64(value: F64) -> Bool {
 /// Formats a float with the given options.
 @allocates
 pub func format_float(value: F64) -> Str {
-    let z = profiler::begin("fmt::format_float")
     if is_nan_f64(value) {
-        profiler::end(z)
         return "NaN"
     }
     if is_infinite_f64(value) {
         if value < 0.0 {
-            profiler::end(z)
             return "-inf"
         }
-        profiler::end(z)
         return "inf"
     }
     let result = format_f64(value)
-    profiler::end(z)
     return result
 }
 

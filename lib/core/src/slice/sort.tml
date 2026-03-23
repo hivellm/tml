@@ -46,7 +46,6 @@
 //! ```
 
 use core::slice::{MutSlice}
-use core::profiler
 // Ordering, Ord are builtins - no import needed
 
 // ============================================================================
@@ -96,13 +95,10 @@ impl[T: Ord] MutSlice[T] {
     ///
     /// This sort is **unstable**: equal elements may be reordered.
     pub func sort(mut this) {
-        let z = profiler::begin("slice::sort")
         if this.len <= 1 {
-            profiler::end(z)
             return
         }
         this.quicksort(0, this.len - 1)
-        profiler::end(z)
     }
 
     /// Internal quicksort implementation.

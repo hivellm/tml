@@ -29,7 +29,6 @@ use std::collections::Buffer
 use std::zlib::error::{ZlibError, ZlibErrorKind}
 use std::zlib::options::ZlibOptions
 use std::zlib::constants::*
-use core::profiler
 
 // ============================================================================
 // FFI Function Declarations
@@ -119,7 +118,6 @@ pub func gzip(data: Str) -> Outcome[Buffer, ZlibError] {
 ///
 /// Compressed data as a Buffer.
 pub func gzip_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
-    let z = profiler::begin("gzip")
     // Ensure gzip format window bits
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
@@ -134,16 +132,13 @@ pub func gzip_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, Z
         opts.strategy
     )
     if handle == null {
-        profiler::end(z)
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
     let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
         ffi_buffer_destroy(handle)
-        profiler::end(z)
         return Err(ZlibError::from_code(code))
     }
-    profiler::end(z)
     return Ok(Buffer { handle: handle })
 }
 
@@ -242,7 +237,6 @@ pub func gunzip(data: ref Buffer) -> Outcome[Str, ZlibError] {
 ///
 /// Decompressed data as a string.
 pub func gunzip_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
-    let z = profiler::begin("gunzip")
     // Ensure gzip format window bits
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
@@ -252,10 +246,8 @@ pub func gunzip_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[
     let result: Str = ffi_zlib_inflate(data.handle, opts.window_bits)
     let code: I32 = ffi_zlib_last_error_code()
     if code != Z_OK and code != Z_STREAM_END {
-        profiler::end(z)
         return Err(ZlibError::from_code(code))
     }
-    profiler::end(z)
     return Ok(result)
 }
 

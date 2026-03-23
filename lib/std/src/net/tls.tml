@@ -39,7 +39,6 @@
 //! ```
 
 use std::net::error::{NetError, NetErrorKind}
-use core::profiler
 
 // ============================================================================
 // FFI declarations for tls.c
@@ -224,14 +223,11 @@ impl TlsContext {
     /// - System CA certificates loaded
     /// - Peer certificate verification enabled
     pub func client() -> Outcome[TlsContext, NetError] {
-        let z = profiler::begin("TlsContext::client")
         ffi_tls_init()
         let handle: *Unit = ffi_tls_context_client_new()
         if handle == null {
-            profiler::end(z)
             return Err(NetError::new(NetErrorKind::Other()))
         }
-        profiler::end(z)
         Ok(TlsContext { handle: handle })
     }
 
@@ -342,11 +338,9 @@ impl TlsStream {
     ///
     /// Get the socket fd from `tcp_stream.as_raw_socket().handle`.
     pub func connect(ctx: TlsContext, socket_fd: I64, hostname: Str) -> Outcome[TlsStream, NetError] {
-        let z = profiler::begin("TlsStream::connect")
         // Create SSL object
         let ssl: *Unit = ffi_tls_stream_new(ctx.handle, socket_fd)
         if ssl == null {
-            profiler::end(z)
             return Err(NetError::new(NetErrorKind::Other()))
         }
 
@@ -354,7 +348,6 @@ impl TlsStream {
         let sni_result: I32 = ffi_tls_stream_set_hostname(ssl, hostname)
         if sni_result != 0 {
             ffi_tls_stream_free(ssl)
-            profiler::end(z)
             return Err(NetError::new(NetErrorKind::InvalidInput()))
         }
 
@@ -362,11 +355,9 @@ impl TlsStream {
         let connect_result: I32 = ffi_tls_stream_connect(ssl)
         if connect_result != 0 {
             ffi_tls_stream_free(ssl)
-            profiler::end(z)
             return Err(NetError::new(NetErrorKind::ConnectionRefused()))
         }
 
-        profiler::end(z)
         Ok(TlsStream { ssl_handle: ssl, socket_fd: socket_fd })
     }
 

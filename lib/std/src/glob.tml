@@ -35,7 +35,6 @@
 //! assert(not matches("*.tml", "main.rs"))
 //! ```
 
-use core::profiler
 
 // FFI declarations for C runtime glob operations (glob.c)
 @extern("glob_match")
@@ -140,9 +139,7 @@ impl Glob {
 /// assert(not matches("*.rs", "main.tml"))
 /// ```
 pub func matches(pattern: Str, text: Str) -> Bool {
-    let z = profiler::begin("glob::matches")
     let r: Bool = ffi_glob_pattern_matches(pattern, text)
-    profiler::end(z)
     return r
 }
 
@@ -159,7 +156,6 @@ pub func matches(pattern: Str, text: Str) -> Bool {
 /// print(paths)
 /// ```
 pub func find_all(base_dir: Str, pattern: Str) -> Str {
-    let z = profiler::begin("glob::find_all")
     var g: Glob = Glob::find(base_dir, pattern)
     let n: I64 = g.count()
     var result: Str = ""
@@ -175,6 +171,5 @@ pub func find_all(base_dir: Str, pattern: Str) -> Str {
         i = i + 1
     }
     g.free()
-    profiler::end(z)
     return result
 }
