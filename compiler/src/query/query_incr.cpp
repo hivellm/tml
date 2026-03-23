@@ -2,6 +2,7 @@ TML_MODULE("compiler")
 
 #include "query/query_incr.hpp"
 
+#include "common.hpp"
 #include "common/crc32c.hpp"
 #include "log/log.hpp"
 
@@ -558,7 +559,7 @@ uint32_t compute_options_hash(int opt_level, bool debug_info, const std::string&
                               const std::vector<std::string>& defines, bool coverage) {
     std::ostringstream oss;
     oss << "O" << opt_level << "|D" << (debug_info ? 1 : 0) << "|T" << target_triple << "|C"
-        << (coverage ? 1 : 0);
+        << (coverage ? 1 : 0) << "|M" << (CompilerOptions::checked_math ? 1 : 0);
     for (const auto& def : defines) {
         oss << "|" << def;
     }
