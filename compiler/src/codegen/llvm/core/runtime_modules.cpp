@@ -333,14 +333,8 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
 
 void LLVMIRGen::emit_module_pure_tml_functions(
     const std::unordered_set<std::string>& skip_modules) {
-    // Library functions are compiled without checked math (like Rust's std).
-    // This avoids 6x instruction bloat from overflow checks in I64::add, str::len, etc.
-    bool saved_checked = CompilerOptions::checked_math;
-    CompilerOptions::checked_math = false;
-
     // Emit LLVM IR for pure TML functions from imported modules
     if (!env_.module_registry()) {
-        CompilerOptions::checked_math = saved_checked;
         return;
     }
 
@@ -1209,9 +1203,6 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     }
 
     emit_line("");
-
-    // Restore checked math state
-    CompilerOptions::checked_math = saved_checked;
 }
 
 void LLVMIRGen::emit_string_constants() {

@@ -656,10 +656,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
 }
 
 auto LLVMIRGen::gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string {
-    // Lowlevel blocks: disable checked math (like Rust's unsafe blocks)
-    bool saved_checked_math = CompilerOptions::checked_math;
-    CompilerOptions::checked_math = false;
-
+    // Lowlevel blocks are generated like regular blocks
+    // but without borrow checking (which is handled at type check level)
     std::string result = "void";
 
     // Generate each statement
@@ -672,8 +670,6 @@ auto LLVMIRGen::gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::strin
         result = gen_expr(**lowlevel.expr);
     }
 
-    // Restore checked math state
-    CompilerOptions::checked_math = saved_checked_math;
     return result;
 }
 
