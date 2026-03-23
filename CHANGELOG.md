@@ -19,6 +19,37 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.2] — 2026-03-22
+
+Performance, profiling, and code quality release: Tracy profiler integration, HTTP at 183K req/s, and 700+ lowlevel blocks migrated to typed accessors.
+
+### Added (Tracy Profiler Integration)
+
+- **Tracy profiler** — Real-time frame profiling with 70+ instrumented zones across compiler pipeline and standard library
+- **Profiler intrinsics** — Zero-cost `profiler::begin`/`profiler::end` in both AST and MIR codegen paths. No runtime overhead when `--profile` is not enabled
+- **Instrumented zones** — Lexer, parser, type checker, HIR/MIR lowering, LLVM backend, MIR pass manager, query cache hits, HTTP hot paths, collections, I/O, option, cell, os, glob, math
+- **`--profile` build flag** — `scripts\build.bat --profile` builds with Tracy support
+
+### Added (HTTP Performance)
+
+- **183K req/s** — Beats Node.js cluster mode by 32%, syscall-bound at 2 syscalls/request
+- **Accept-per-worker architecture** — Each worker thread accepts its own connections
+- **HTTP pipelining groundwork** — Non-destructive method/path parsing for future pipelining support
+- **Pipelining fix** — Save/restore byte at request boundary
+
+### Changed (Code Quality — lowlevel Migration)
+
+- **702 lowlevel blocks migrated** across 25 files to typed accessor functions
+- **HTTP module** — `shared_get`/`shared_set`, `node_get`/`node_set`, `table_read`/`table_write`, `rd()`/`wr()` byte accessors, `buf_hdr_get`/`buf_hdr_set`
+- **Stream module** — `buffered.tml`, `pipe.tml` migrated to Buffer accessors
+- **Runtime** — `multi_executor.tml`, `timer_wheel.tml` migrated to typed accessors
+- **HTTP dispatch/router/parse/conn_pool/rate_limit/agent** — All migrated to structured accessors
+
+### Stats
+- **Tests**: 11,000+ across 1,400+ files
+- **Coverage**: 15,528/15,628 functions (99%)
+- **HTTP performance**: 183K req/s (single machine, Windows)
+
 ## [0.2.1] — 2026-03-21
 
 Codegen quality release: 12 compiler bugs fixed, HTTP server compliance, cross-module generic field resolution.

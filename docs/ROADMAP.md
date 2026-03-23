@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-25
-**Current state**: Compiler functional, 10,400+ tests passing, HTTP client + SQLite + Stream modules + Async I/O event loop, O0 optimization pipeline complete
+**Last updated**: 2026-03-22
+**Current state**: Compiler functional, 11,000+ tests passing, HTTP server at 183K req/s, Tracy profiler integrated, 99% library coverage, async network stack complete
 
 ---
 
@@ -12,7 +12,7 @@ Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE]       Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
 Phase 4  [DONE]       Migrate C runtime → pure TML + eliminate hardcoded codegen (0 migration candidates, 5 inline IR remaining, O0 pipeline complete)
-Phase 5  [IN PROGRESS] Networking + async I/O (sync net✓, async runtime✓, HTTP module✓, HTTP client✓, stream module✓, SQLite✓, async I/O event loop✓; high-level TCP/UDP APIs pending)
+Phase 5  [IN PROGRESS] Networking + async I/O (sync net✓, async runtime✓, HTTP server 183K req/s✓, HTTP client✓, stream module✓, SQLite✓, async I/O✓, WebSocket✓, HTTP/2+HPACK✓, Tracy profiler✓; high-level TCP/UDP APIs pending)
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
 
@@ -31,7 +31,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 
 | Metric | Value |
 |--------|-------|
-| Tests passing | 10,400+ across 900+ files |
+| Tests passing | 11,000+ across 1,400+ files |
+| Library coverage | 99% (15,528/15,628 functions) |
 | C++ compiler size | ~240,000 lines |
 | C runtime compiled | 15 files (15 essential FFI, 0 migration candidates) |
 | C runtime to migrate | 0 lines |
@@ -39,10 +40,13 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Inline IR in runtime.cpp | 5 functions (~90 lines) — 3 black_box must stay, 2 string utils embedded in codegen |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original) |
 | TML standard library | ~150,000+ lines |
-| New modules (Phase 5) | HTTP (14 files), Stream (9 files incl. duplex/passthrough/pipeline/transform), Async I/O (3 files), SQLite (7 files), URL parser |
-| Async I/O (Phase 5 sub-milestone) | Poller (epoll/WSAPoll FFI), TimerWheel (2-level hashed wheel), EventLoop (single-threaded orchestration) — 28 tests, 100% passing |
+| New modules (Phase 5) | HTTP (52 files, 183K req/s), Stream (9 files), Async I/O (3 files), SQLite (7 files), WebSocket, HTTP/2+HPACK |
+| Async network stack | Multi-threaded executor, work-stealing, AsyncRead/Write, Promise[T], Observable[T] |
+| HTTP performance | 183K req/s — beats Node.js cluster by 32%, syscall-bound |
+| Tracy profiler | 70+ instrumented zones across compiler + stdlib, zero-cost when disabled |
 | O0 optimization pipeline | Complete — SROA, Mem2Reg, EarlyCSE, Inlining, DSE, DestinationProp, strength reduction |
 | Codegen quality | insertvalue/extractvalue for structs, inbounds GEP, nullable Maybe optimization |
+| lowlevel migration | 702 blocks migrated to typed accessors across 25 files |
 
 ---
 

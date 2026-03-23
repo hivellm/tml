@@ -5,6 +5,45 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-03-22
+
+### Changed
+
+- **HTTP performance** — 183K req/s, beating Node.js cluster by 32%
+- **Accept-per-worker architecture** — Each worker thread accepts its own connections
+- **HTTP pipelining** — Non-destructive method/path parsing, save/restore byte at boundary
+- **lowlevel migration** — 702 blocks across 25 files migrated to typed accessor functions
+  - HTTP: `shared_get`/`shared_set`, `node_get`/`node_set`, `table_read`/`table_write`, `rd()`/`wr()` byte accessors
+  - Stream: `buffered.tml`, `pipe.tml` → Buffer accessors
+  - Runtime: `multi_executor.tml`, `timer_wheel.tml` → typed accessors
+  - HTTP dispatch/router/parse/conn_pool/rate_limit/agent → structured accessors
+
+### Added
+
+- **Tracy profiler zones** — 70+ instrumented zones in HTTP hot paths, collections, I/O, option, cell, os, glob, math
+
+## [0.2.1] — 2026-03-21
+
+### Added
+
+- **Chunked transfer-encoding** (RFC 7230 §4.1) — decode_chunked, encode_chunk, recv_chunked_body
+- **Expect: 100-continue** — sends `HTTP/1.1 100 Continue` before body reading
+- **405 Method Not Allowed + Allow header** — probes all 7 method radix trees
+- **501 Not Implemented** — for unrecognized HTTP methods
+- **Date header** — RFC 7231 Date via app_build_response
+- **Idle timeout enforcement** — SO_RCVTIMEO on keep-alive connections
+- **Middleware hooks re-enabled** — onRequest, preHandler, onResponse wired into app_dispatch
+- **Custom error handler** — onError hooks called on 404 before default response
+
+### Fixed
+
+- **ServerResponse Bool fields → I64** — fixes i1 layout corruption when passed through fn ptrs
+
+### Tests
+
+- 14 URL percent-decoding tests
+- 10 chunked transfer-encoding tests (8 decoder + 3 header detection)
+
 ## [0.2.0] — 2026-03-19
 
 ### Added

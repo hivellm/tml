@@ -5,6 +5,34 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-03-22
+
+### Added
+
+- **Tracy Profiler Integration** — 70+ instrumented zones across the full compiler pipeline
+  - Lexer, parser, type checker, HIR/MIR lowering, LLVM backend, MIR pass manager, query cache
+  - `--profile` build flag for Tracy-enabled builds
+  - Profiler intrinsics (`profiler::begin`/`profiler::end`) in both AST and MIR codegen paths
+  - Zero-cost when profiling is disabled — no runtime overhead in production builds
+
+### Fixed
+
+- **Build system** — Tracy `--profile` build improvements, correct library linking
+
+## [0.2.1] — 2026-03-21
+
+### Fixed
+
+- **Pin-through trait method dispatch** — 4 interconnected bugs in type checker, generic inference, method_impl, static dispatch
+- **Cross-module generic struct field resolution** — `lookup_struct` follows re-export chains
+- **Range struct type declaration** — MIR codegen emits struct types for library structs
+- **ptr_read/ptr_write multi-field structs** — 4 fixes across type_params, HIR, MIR, codegen
+- **Struct field mutation** — mutable struct alloca dead code in thir_mir_builder
+- **Integer literal coercion in fnptr calls** — sext from i32 to i64
+- **Iterator::fold[B] monomorphization** — method-level generic dispatch
+- **memcpy/memmove/memset MIR handlers** — codegen + LLVM intrinsic declarations
+- **copy_nonoverlapping/copy/write_bytes** — type checker registration
+
 ## [0.2.0] — 2026-03-19
 
 ### Added

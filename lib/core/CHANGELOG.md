@@ -5,6 +5,23 @@ All notable changes to the TML core library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-03-22
+
+### Added
+
+- **Tracy profiler zones** — Instrumented option, cell, os, glob, math modules with profiler zones
+
+## [0.2.1] — 2026-03-21
+
+### Added
+
+- **Maybe::take()** — consumes self, returns the option (like Rust's Option::take)
+- **pub use in core::future** — Context, Poll, Ready, Pending now publicly re-exported
+
+### Tests
+
+- 13 new Buffer tests (core ops, slice/str, endian roundtrips) — collections suite 73/73
+
 ## [0.2.0] — 2026-03-19
 
 ### Added

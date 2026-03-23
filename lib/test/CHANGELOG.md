@@ -2,6 +2,12 @@
 
 All notable changes to the TML test framework will be documented in this file.
 
+## [0.7.1] — 2026-03-22
+
+### Changed
+- **Test count** — 11,000+ tests across 1,400+ files (up from 9,000+)
+- **Coverage** — 99% library coverage (15,528/15,628 functions)
+
 ## [0.7.0] — 2026-03-19
 
 ### Added

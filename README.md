@@ -3,9 +3,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 
-**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM+LLD backend, and self-documenting syntax designed for deterministic LLM code generation.
+**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM+LLD backend, Tracy profiler integration, and self-documenting syntax designed for deterministic LLM code generation.
 
-One binary. Zero external tools. Everything you need from code to production.
+One binary. Zero external tools. 11,000+ tests. 99% library coverage. Everything you need from code to production.
 
 ```tml
 use std::json::{Json}
@@ -275,6 +275,7 @@ Every syntax decision in TML eliminates ambiguity that confuses language models.
 | Inclusive range | `0..=10` | — | — | `0 through 10` | English-readable |
 | Error propagation | `expr?` | `if err != nil` | `throw` | `expr!` | Visible marker |
 | Ternary | `if c { a } else { b }` | — | `c ? a : b` | `cond ? a : b` | C-style, readable |
+| Pipe operator | — | — | — | `x \|> f` | Unix-style chaining |
 
 #### Generics & References
 
@@ -287,6 +288,7 @@ Every syntax decision in TML eliminates ambiguity that confuses language models.
 | Closures | `\|x\| x * 2` | `func(x) {}` | `[](x) {}` | `do(x) x * 2` | `\|` has no dual meaning |
 | Lifetimes | `'a`, `'static` | — | — | Always inferred | Zero syntax noise |
 | Directives | `#[test]` | `// +build` | `[[nodiscard]]` | `@test` | Clean, unambiguous |
+| Route decorators | `#[get("/")]` | — | — | `@Get("/")` | Framework-integrated |
 | Auto-derive | `#[derive(Debug)]` | — | — | `@auto(debug)` | Self-documenting |
 
 #### Type System
@@ -333,16 +335,17 @@ The result: LLMs generate TML code with significantly fewer syntax errors becaus
 
 ---
 
-### 7. DLL-Based Test Runner — 5,000+ Tests in 8 Seconds
+### 7. Subprocess-Based Test Runner — 11,000+ Tests in Under a Minute
 
-TML's test runner compiles tests to DLLs and loads them in-process — no process spawning per test file. The result is a test system fast enough to be used as a **real-time feedback loop for AI-driven development**:
+TML's test runner uses a **Go-inspired subprocess architecture**: each test suite compiles to a standalone executable that streams results via NDJSON protocol. Combined with hash-based caching, the result is a test system fast enough to be used as a **real-time feedback loop for AI-driven development**:
 
 | Metric | Value |
 |--------|-------|
-| **Total tests** | 9,000+ across 780+ files |
+| **Total tests** | 11,000+ across 1,400+ files |
 | **Full suite (no cache)** | ~43 seconds |
 | **Full suite (cached)** | ~8 seconds |
 | **Single file (filtered)** | Milliseconds |
+| **Library coverage** | 99% (15,528/15,628 functions) |
 
 ```bash
 # Full suite — 8 seconds with cache
@@ -356,6 +359,9 @@ tml test --suite=core/str --no-cache
 
 # Full rebuild + coverage + profiling
 tml test --no-cache --coverage --profile
+
+# Profile with Tracy integration
+tml test --profile
 ```
 
 This performance is not accidental — it's designed for **LLM-assisted debugging workflows**. An AI assistant can run a targeted test in milliseconds, read the result, fix the code, and re-run — all within a single conversation turn. The full suite at 8 seconds means the AI can validate that nothing else broke before committing.
@@ -387,9 +393,11 @@ func fuzz_parser(input: Slice[U8]) -> I32 {
 ```
 
 Under the hood:
-- **Hash-based caching**: Source file fingerprints determine what needs recompilation — unchanged tests are loaded from cached DLLs instantly
-- **Suite batching**: Tests in the same directory are grouped into a single DLL, reducing link overhead. `--suite=core/str` targets a specific module
-- **LLVM coverage**: Line, function, and branch coverage with HTML reports
+- **Subprocess isolation**: Each test suite compiles to a standalone EXE, runs as a subprocess. Crashes in one suite don't affect others
+- **NDJSON protocol**: Results stream from subprocess to coordinator as structured JSON events
+- **Hash-based caching**: Source file fingerprints determine what needs recompilation — unchanged suites skip compilation entirely
+- **Suite batching**: Tests in the same directory are grouped into a single executable. `--suite=core/str` targets a specific module
+- **Coverage tracking**: Function-level coverage via `TML_COVERAGE_FILE` env var — no LLVM profiling overhead, no hangs
 - **Benchmark baselines**: Save and compare performance across runs
 - **Crash capture**: Backtraces on test failures
 - **Filtered execution**: `--filter` narrows to specific files or test names for instant feedback
@@ -534,6 +542,105 @@ The channel implementation uses platform-native primitives (`CRITICAL_SECTION` +
 
 ---
 
+### 13. HTTP Server — 183K req/s (Beating Node.js by 32%)
+
+TML ships a full HTTP/1.1 server built entirely in TML (52 source files), achieving **183,000 requests/second** on a single machine — outperforming Node.js cluster mode by 32%:
+
+```tml
+use std::http::{HttpServer, Request, Response, Router}
+
+func main() -> I32 {
+    let router = Router::new()
+    router.get("/", do(req: Request) -> Response {
+        Response::ok("Hello, World!")
+    })
+    router.get("/users/:id", do(req: Request) -> Response {
+        let id = req.param("id")
+        Response::json(`{"id": {id}}`)
+    })
+
+    let server = HttpServer::new(router)
+    server.listen(8080)
+    return 0
+}
+```
+
+**Features:**
+- **Radix tree router** with parameterized routes (`:id`, `*wildcard`)
+- **HTTP/1.1 compliance**: chunked transfer-encoding (RFC 7230), Expect: 100-continue, keep-alive, idle timeouts
+- **Middleware pipeline**: `onRequest`, `preHandler`, `onResponse`, `onError` hooks
+- **Route decorators**: `@Get`, `@Post`, `@Put`, `@Delete`, `@Patch` with auto-registration
+- **Controller pattern** for structured route organization
+- **URL percent-decoding**, proper `405 Method Not Allowed` with `Allow` header, `501 Not Implemented`
+- **IOCP (Windows) and thread pool** worker models
+- **WebSocket** (RFC 6455) with frame codec, masking, and handshake
+- **HTTP/2** (RFC 7540) binary frame codec with HPACK header compression (RFC 7541)
+
+---
+
+### 14. Async Network Stack
+
+A complete async runtime inspired by Rust's Futures and Tokio:
+
+```tml
+use std::runtime::{Executor}
+use std::stream::{AsyncBufReader, AsyncBufWriter}
+
+// Multi-threaded work-stealing executor
+let executor = Executor::new(4)  // 4 worker threads
+executor.spawn(async_handler())
+executor.run()
+```
+
+| Component | Description | Inspiration |
+|-----------|-------------|-------------|
+| `Executor` | Multi-threaded work-stealing with graceful shutdown | Tokio |
+| `Future[T]` | Cooperative async with `Poll[T]` (`Ready`/`Pending`) | Rust |
+| `AsyncRead`/`AsyncWrite` | Async I/O behaviors with buffered variants | Tokio |
+| `select2` | Race two futures, return first to complete | Tokio `select!` |
+| `Promise[T]` | JavaScript-style resolve/reject/then/catch/all/race | JS Promises |
+| `Observable[T]` | Reactive streams with 8 operators + Subject variants | RxJS |
+| `Poller` | Platform I/O polling (epoll/WSAPoll) | mio |
+| `TimerWheel` | O(1) hashed 2-level timer wheel | Tokio |
+| `EventLoop` | Single-threaded event orchestration | Node.js/libuv |
+
+---
+
+### 15. Tracy Profiler Integration
+
+TML integrates the [Tracy](https://github.com/wolfpld/tracy) profiler for zero-cost performance analysis. 70+ instrumented zones across the compiler pipeline and standard library:
+
+```bash
+# Build with Tracy profiling
+scripts\build.bat --profile
+
+# Run with profiling — connect Tracy GUI to see real-time flamegraphs
+tml run app.tml --profile
+tml test --profile
+```
+
+Instrumented zones cover: lexer, parser, type checker, HIR/MIR lowering, LLVM backend, MIR passes, query cache, HTTP hot paths, collections, I/O, and more. Profiler intrinsics are zero-cost when `--profile` is not enabled — no runtime overhead in production builds.
+
+---
+
+### 16. Pipe Operator
+
+Left-associative pipe operator for readable data transformation chains:
+
+```tml
+// x |> f       → f(x)
+// x |> f(a)    → f(x, a)
+// x |> .method → x.method()
+
+let result = data
+    |> parse_json
+    |> .get("users")
+    |> filter_active
+    |> .len()
+```
+
+---
+
 ## Language at a Glance
 
 ```tml
@@ -577,6 +684,12 @@ type Message {
     Number(I32),
     Quit
 }
+
+// Template literals
+let greeting = `Hello, {name}! You have {count} messages.`
+
+// Pipe operator
+let result = input |> parse |> validate |> .to_string()
 ```
 
 ---
@@ -587,30 +700,46 @@ TML ships with a comprehensive standard library covering:
 
 | Module | Contents |
 |--------|----------|
+| **Core Library** | |
 | `core::array` | Fixed-size arrays with map, zip, get, first, last |
 | `core::iter` | Iterator adapters (map, filter, fold, chain, zip, enumerate, ...) |
 | `core::option` | Maybe[T] with combinators |
 | `core::result` | Outcome[T, E] with combinators |
-| `core::str` | String manipulation (split, trim, contains, replace, ...) |
+| `core::str` | 58 string functions (split, trim, contains, replace, parse, ...) |
 | `core::slice` | Slice[T] and MutSlice[T] fat pointers |
 | `core::fmt` | Display, Debug, binary/hex formatting |
 | `core::cmp` | Ordering, PartialEq, PartialOrd, min, max, clamp |
 | `core::hash` | Hash behavior for hash-based collections |
-| `core::cell` | Interior mutability (Cell, RefCell, OnceCell) |
-| `core::mem` | Memory operations (size_of, align_of, swap) |
-| `std::collections` | List, HashMap, HashSet, Queue, Stack, Buffer |
+| `core::cell` | Interior mutability (Cell, RefCell, OnceCell, LazyCell) |
+| `core::mem` | Memory operations (size_of, align_of, swap, replace) |
+| `core::alloc` | Heap[T], Shared[T], Sync[T], Arena, Pool[T] smart pointers |
+| `core::encoding` | base64, hex, percent, base32/36/58/62/85/91 (14 formats) |
+| `core::future` | Future behavior, Poll[T], Context, Waker, select2 |
+| `core::simd` | SSE2 intrinsics (I32x4, F32x4, U8x16) |
+| **Standard Library** | |
+| `std::collections` | List, HashMap, HashSet, Queue, Stack, Buffer, BTreeMap, Deque |
 | `std::file` | File I/O, Path operations, directory traversal |
-| `std::json` | JSON parsing, serialization, builder pattern |
-| `std::net` | TCP/UDP sockets, DNS, TLS |
+| `std::http` | HTTP server (183K req/s), client, router, middleware, WebSocket, HTTP/2 |
+| `std::json` | SIMD-optimized JSON parsing, serialization, builder pattern |
+| `std::net` | TCP/UDP sockets, DNS, TLS with ALPN |
 | `std::hash` | FNV-1a, MurmurHash2, ETag generation |
-| `std::crypto` | X.509, HMAC, key management (via OpenSSL) |
+| `std::crypto` | SHA, AES-GCM, ChaCha20, RSA, ECDSA, Ed25519, X.509, HMAC |
 | `std::zlib` | Deflate, gzip, brotli, zstd compression |
+| `std::sqlite` | SQLite3 FFI bindings (Database, Statement, Row, Value) |
+| `std::regex` | Thompson's NFA engine (no exponential backtracking) |
 | `std::sync` | Mutex, RwLock, Barrier, channels, atomics |
 | `std::thread` | Thread spawning, thread-local storage |
-| `std::os` | Environment variables, system info |
+| `std::stream` | Composable streams (Duplex, PassThrough, Pipeline, Transform) |
+| `std::aio` | Async I/O event loop (epoll/WSAPoll, timer wheel) |
+| `std::math` | Trig, exponential, rounding, constants (PI, E, TAU, ...) |
+| `std::datetime` | Date, Time, DateTime, SystemTime, Duration |
+| `std::random` | ThreadRng, Random trait, distributions |
+| `std::glob` | Pattern matching and directory walking (*, ?, **, [a-z], {a,b}) |
+| `std::os` | Environment variables, system info, CLI args |
 | `std::log` | Structured logging with levels and sinks |
 | `std::search` | BM25 text index, HNSW vector index, TF-IDF vectorizer, SIMD distance |
-| `std::text` | Regex, Unicode utilities |
+| `std::promise` | JavaScript-style Promise[T] with resolve/reject/then/catch/all/race |
+| `std::observable` | Reactive streams with 8 operators + Subject variants |
 
 ---
 
@@ -618,29 +747,30 @@ TML ships with a comprehensive standard library covering:
 
 ```
 tml/
-├── compiler/           # C++ compiler implementation
+├── compiler/           # C++ compiler (~240,000 lines)
 │   ├── src/
 │   │   ├── lexer/      # Tokenizer
 │   │   ├── parser/     # LL(1) parser
-│   │   ├── types/      # Type checker
+│   │   ├── types/      # Type checker (Hindley-Milner)
 │   │   ├── borrow/     # Borrow checker (NLL + Polonius)
 │   │   ├── hir/        # High-level IR
 │   │   ├── thir/       # Typed HIR (coercions, dispatch, exhaustiveness)
-│   │   ├── mir/        # Mid-level IR (SSA form)
+│   │   ├── mir/        # Mid-level IR (SSA, 30+ optimization passes)
 │   │   ├── codegen/    # LLVM IR generation
-│   │   ├── query/      # Demand-driven query system
+│   │   ├── query/      # Demand-driven query system (red-green incremental)
 │   │   ├── backend/    # Embedded LLVM + LLD
-│   │   ├── mcp/        # MCP server (JSON-RPC 2.0)
-│   │   ├── doc/        # Documentation generator
+│   │   ├── testing/    # Subprocess test coordinator (NDJSON protocol)
+│   │   ├── mcp/        # MCP server (JSON-RPC 2.0, 14 tools)
+│   │   ├── doc/        # Documentation generator + semantic search
 │   │   ├── format/     # Code formatter
-│   │   └── cli/        # CLI, test runner, linter, builder
+│   │   └── cli/        # CLI, builder, linter, profiler
 │   └── include/        # Headers
-├── lib/
-│   ├── core/           # Core library (array, iter, str, fmt, ...)
-│   ├── std/            # Standard library (collections, file, net, ...)
-│   └── test/           # Test framework
-├── docs/               # Language specification (14 chapters)
-└── scripts/            # Build scripts
+├── lib/                # ~150,000+ lines of TML
+│   ├── core/           # Core library (alloc, iter, str, fmt, cell, encoding, ...)
+│   ├── std/            # Standard library (http, crypto, sqlite, stream, aio, ...)
+│   └── test/           # Test framework (assert, bench, fuzz, coverage)
+├── docs/               # Specs (37 files), user guide (27 chapters), package docs (44 files)
+└── scripts/            # Build scripts (Zig CC, MSVC, Clang)
 ```
 
 ## License
@@ -654,4 +784,6 @@ tml/
 - **Go** - Channel-based concurrency, bounded MPMC channels, goroutine-inspired async runtime, thread-safe primitives design
 - **LLVM** - Code generation backend (embedded as static libraries)
 - **LLD** - In-process linker (COFF/ELF/MachO)
+- **Tracy** - Real-time frame profiler with 70+ instrumented zones
+- **Zig** - Default C/C++ compiler toolchain (Zig CC = Clang 20 + bundled libc + LLD)
 - **MCP (Anthropic)** - Model Context Protocol specification for AI-compiler integration
