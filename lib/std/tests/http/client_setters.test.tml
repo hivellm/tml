@@ -1,0 +1,44 @@
+// Tests for HttpClient::max_redirects and HttpClient::timeout (pure builder methods)
+use test::{assert_eq}
+use std::http::client::HttpClient
+
+@test
+func test_http_client_max_redirects() -> I32 {
+    let client: HttpClient = HttpClient::new()
+    let updated: HttpClient = client.max_redirects(5 as I64)
+    assert_eq(updated.max_redirects, 5 as I64, "max_redirects should be 5")
+    return 0
+}
+
+@test
+func test_http_client_max_redirects_zero() -> I32 {
+    let client: HttpClient = HttpClient::new()
+    let updated: HttpClient = client.max_redirects(0 as I64)
+    assert_eq(updated.max_redirects, 0 as I64, "max_redirects 0 disables redirects")
+    return 0
+}
+
+@test
+func test_http_client_timeout() -> I32 {
+    let client: HttpClient = HttpClient::new()
+    let updated: HttpClient = client.timeout(5000 as I64)
+    assert_eq(updated.timeout_ms, 5000 as I64, "timeout_ms should be 5000")
+    return 0
+}
+
+@test
+func test_http_client_timeout_preserves_user_agent() -> I32 {
+    let client: HttpClient = HttpClient::with_user_agent("MyApp/1.0")
+    let updated: HttpClient = client.timeout(1000 as I64)
+    assert_eq(updated.user_agent, "MyApp/1.0", "user_agent should be preserved after timeout")
+    return 0
+}
+
+@test
+func test_http_client_chained_builders() -> I32 {
+    let client: HttpClient = HttpClient::new()
+    let updated: HttpClient = client.max_redirects(3 as I64).timeout(10000 as I64)
+    assert_eq(updated.max_redirects, 3 as I64, "max_redirects chained")
+    assert_eq(updated.timeout_ms, 10000 as I64, "timeout chained")
+    return 0
+}

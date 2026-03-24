@@ -1,0 +1,39 @@
+// Tests for cache_control — covering short, public_max_age, private_max_age, with_stale_while_revalidate
+use test::{assert, assert_eq}
+use core::str
+use std::http::cache_control::{CacheOptions, cache_control_header}
+
+@test
+func test_cache_short() -> I32 {
+    let opts: CacheOptions = CacheOptions::short()
+    let header: Str = cache_control_header(ref opts)
+    assert(str::len(header) > 0, "short() should produce a non-empty header")
+    return 0
+}
+
+@test
+func test_cache_public_max_age() -> I32 {
+    let opts: CacheOptions = CacheOptions::public_max_age(3600 as I64)
+    let header: Str = cache_control_header(ref opts)
+    assert(str::contains(header, "public"), "public_max_age should contain 'public'")
+    assert(str::contains(header, "3600"), "public_max_age should contain the seconds")
+    return 0
+}
+
+@test
+func test_cache_private_max_age() -> I32 {
+    let opts: CacheOptions = CacheOptions::private_max_age(600 as I64)
+    let header: Str = cache_control_header(ref opts)
+    assert(str::contains(header, "private"), "private_max_age should contain 'private'")
+    assert(str::contains(header, "600"), "private_max_age should contain the seconds")
+    return 0
+}
+
+@test
+func test_cache_with_stale_while_revalidate() -> I32 {
+    let opts: CacheOptions = CacheOptions::public_max_age(300 as I64).with_stale_while_revalidate(60 as I64)
+    let header: Str = cache_control_header(ref opts)
+    assert(str::contains(header, "stale-while-revalidate"), "should contain stale-while-revalidate")
+    assert(str::contains(header, "60"), "should contain the revalidate seconds")
+    return 0
+}

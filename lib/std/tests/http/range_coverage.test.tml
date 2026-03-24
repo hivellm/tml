@@ -1,0 +1,33 @@
+// Tests covering http/range::is_range_satisfiable
+use test::{assert, assert_eq}
+use std::http::range::{ByteRange, is_range_satisfiable}
+
+@test
+func test_range_satisfiable_valid() -> I32 {
+    var range: ByteRange = ByteRange::new(0 as I64, 100 as I64)
+    assert(is_range_satisfiable(ref range, 500 as I64), "0-100 of 500 is satisfiable")
+    return 0
+}
+
+@test
+func test_range_satisfiable_exact_length() -> I32 {
+    var range: ByteRange = ByteRange::new(0 as I64, 99 as I64)
+    assert(is_range_satisfiable(ref range, 100 as I64), "0-99 of 100 is satisfiable")
+    return 0
+}
+
+@test
+func test_range_satisfiable_beyond_length() -> I32 {
+    // Start position beyond content length is not satisfiable
+    var range: ByteRange = ByteRange::new(600 as I64, 700 as I64)
+    assert(not is_range_satisfiable(ref range, 500 as I64), "600-700 of 500 is not satisfiable")
+    return 0
+}
+
+@test
+func test_range_satisfiable_from_start() -> I32 {
+    // Suffix range: start=0, end=-1 means from start to eof
+    var range: ByteRange = ByteRange::from_start(0 as I64)
+    assert(is_range_satisfiable(ref range, 100 as I64), "from-start range is satisfiable")
+    return 0
+}

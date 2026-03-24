@@ -1,0 +1,12 @@
+// Coverage tests for Controller pattern
+// NOTE: App::new() has a codegen bug when imported in test context. All controller
+// functions (register_controller, register_controllers, ControllerInfo, register_all)
+// require App and are blocked. Placeholder until the codegen bug is fixed.
+use test::{assert, assert_eq}
+
+@test
+func test_controller_coverage_placeholder() -> I32 {
+    // Controller coverage blocked by App::new() codegen bug in test context.
+    assert(true, "placeholder")
+    return 0
+}

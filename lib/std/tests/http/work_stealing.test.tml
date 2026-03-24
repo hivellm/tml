@@ -1,0 +1,169 @@
+// Tests for std::http::work_stealing — LocalQueue and WorkStealingScheduler
+use test
+use std::http::work_stealing::{LocalQueue, WorkStealingScheduler}
+
+// ── LocalQueue tests ──────────────────────────────────────────────────────
+
+@test
+func test_local_queue_new_and_destroy() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    assert(q.is_empty(), "new queue should be empty")
+    assert_eq(q.count(), 0 as I64)
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_push_and_pop() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    let ok: Bool = q.push(42 as I64)
+    assert(ok, "push should succeed on empty queue")
+    assert(not q.is_empty(), "queue should not be empty after push")
+    assert_eq(q.count(), 1 as I64)
+    let val: I64 = q.pop()
+    assert_eq(val, 42 as I64)
+    assert(q.is_empty(), "queue should be empty after pop")
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_lifo_order() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    q.push(1 as I64)
+    q.push(2 as I64)
+    q.push(3 as I64)
+    // LIFO: last in, first out
+    assert_eq(q.pop(), 3 as I64)
+    assert_eq(q.pop(), 2 as I64)
+    assert_eq(q.pop(), 1 as I64)
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_pop_empty_does_not_crash() -> I32 {
+    // pop() on empty queue — just verify it doesn't crash (sentinel value may vary by codegen)
+    let q: LocalQueue = LocalQueue::new()
+    q.pop()  // discard result — just testing it doesn't crash
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_count() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    assert_eq(q.count(), 0 as I64)
+    q.push(10 as I64)
+    assert_eq(q.count(), 1 as I64)
+    q.push(20 as I64)
+    assert_eq(q.count(), 2 as I64)
+    q.pop()
+    assert_eq(q.count(), 1 as I64)
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_steal_half() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    // Push 4 items
+    q.push(1 as I64)
+    q.push(2 as I64)
+    q.push(3 as I64)
+    q.push(4 as I64)
+    assert_eq(q.count(), 4 as I64)
+
+    // Allocate a destination buffer (4 * 8 = 32 bytes)
+    let dest: I64 = lowlevel { mem_alloc(32 as U64) } as I64
+
+    let stolen: I64 = q.steal_half(dest)
+    assert_eq(stolen, 2 as I64)
+    assert_eq(q.count(), 2 as I64)
+
+    lowlevel { mem_free(dest as *Unit) }
+    q.destroy()
+    return 0
+}
+
+@test
+func test_local_queue_steal_half_empty() -> I32 {
+    let q: LocalQueue = LocalQueue::new()
+    let dest: I64 = lowlevel { mem_alloc(32 as U64) } as I64
+    let stolen: I64 = q.steal_half(dest)
+    assert_eq(stolen, 0 as I64)
+    lowlevel { mem_free(dest as *Unit) }
+    q.destroy()
+    return 0
+}
+
+// ── WorkStealingScheduler tests ───────────────────────────────────────────
+
+@test
+func test_scheduler_new_and_destroy() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(4 as I64)
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_push_and_pop_local() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(2 as I64)
+    let ok: Bool = s.push_local(0 as I64, 99 as I64)
+    assert(ok, "push_local should succeed")
+    let val: I64 = s.pop_local(0 as I64)
+    assert_eq(val, 99 as I64)
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_pop_local_empty() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(2 as I64)
+    let val: I64 = s.pop_local(0 as I64)
+    assert(val < 0, "empty pop_local should return negative sentinel")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_push_invalid_worker() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(2 as I64)
+    let ok: Bool = s.push_local(99 as I64, 42 as I64)
+    assert(not ok, "push to invalid worker should return false")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_try_steal_from_other() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(2 as I64)
+    // Push 3 items to worker 1
+    s.push_local(1 as I64, 10 as I64)
+    s.push_local(1 as I64, 20 as I64)
+    s.push_local(1 as I64, 30 as I64)
+    // Worker 0 tries to steal from worker 1
+    let stolen: I64 = s.try_steal(0 as I64)
+    assert(stolen >= 0, "steal should succeed when victim has items")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_try_steal_empty_returns_minus_one() -> I32 {
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(2 as I64)
+    let stolen: I64 = s.try_steal(0 as I64)
+    assert(stolen < 0, "steal from empty queue should return negative")
+    s.destroy()
+    return 0
+}
+
+@test
+func test_scheduler_max_workers_capped() -> I32 {
+    // new() caps at MAX_WORKERS (64) — passing 100 should not crash
+    let s: WorkStealingScheduler = WorkStealingScheduler::new(100 as I64)
+    let ok: Bool = s.push_local(0 as I64, 77 as I64)
+    assert(ok, "push should succeed on capped scheduler")
+    s.destroy()
+    return 0
+}

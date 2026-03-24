@@ -1,0 +1,59 @@
+// Tests covering std::http::shared_state:
+// SharedConfig::is_shutdown, set_shutdown, mutex_ptr, condvar_ptr
+use test::{assert, assert_eq}
+use std::http::shared_state::SharedConfig
+
+// Helper: create a zeroed SharedConfig using local variables
+func make_config() -> SharedConfig {
+    return SharedConfig {
+        table: 0 as I64, count: 0 as I64, router: 0 as I64,
+        mw_table: 0 as I64, mw_count: 0 as I64,
+        shutdown: 0 as I64,
+        read_timeout: 0 as I64, write_timeout: 0 as I64,
+        idle_timeout: 0 as I64, body_limit: 0 as I64,
+        on_request_table: 0 as I64, on_request_count: 0 as I64,
+        pre_handler_table: 0 as I64, pre_handler_count: 0 as I64,
+        on_send_table: 0 as I64, on_send_count: 0 as I64,
+        on_response_table: 0 as I64, on_response_count: 0 as I64,
+        on_error_table: 0 as I64, on_error_count: 0 as I64,
+        error_handler: 0 as I64,
+        queue_buf: 0 as I64, queue_head: 0 as I64,
+        queue_tail: 0 as I64, queue_cap: 0 as I64, queue_len: 0 as I64,
+        mutex_0: 0 as I64, mutex_1: 0 as I64, mutex_2: 0 as I64, mutex_3: 0 as I64,
+        mutex_4: 0 as I64, mutex_5: 0 as I64, mutex_6: 0 as I64, mutex_7: 0 as I64,
+        condvar_0: 0 as I64, condvar_1: 0 as I64, condvar_2: 0 as I64, condvar_3: 0 as I64,
+        condvar_4: 0 as I64, condvar_5: 0 as I64, condvar_6: 0 as I64, condvar_7: 0 as I64,
+    }
+}
+
+@test
+func test_shared_config_not_shutdown_initially() -> I32 {
+    let cfg: SharedConfig = make_config()
+    assert(not cfg.is_shutdown(), "new config should not be shutdown")
+    return 0
+}
+
+@test
+func test_shared_config_set_shutdown() -> I32 {
+    var cfg: SharedConfig = make_config()
+    assert(not cfg.is_shutdown(), "not shutdown before set")
+    cfg.set_shutdown()
+    assert(cfg.is_shutdown(), "shutdown after set_shutdown()")
+    return 0
+}
+
+@test
+func test_shared_config_mutex_ptr_nonzero() -> I32 {
+    let cfg: SharedConfig = make_config()
+    let ptr: I64 = cfg.mutex_ptr()
+    assert(ptr != 0 as I64, "mutex_ptr should return non-zero address")
+    return 0
+}
+
+@test
+func test_shared_config_condvar_ptr_nonzero() -> I32 {
+    let cfg: SharedConfig = make_config()
+    let ptr: I64 = cfg.condvar_ptr()
+    assert(ptr != 0 as I64, "condvar_ptr should return non-zero address")
+    return 0
+}

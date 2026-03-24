@@ -1,0 +1,167 @@
+// Tests covering net/eventloop pure functions:
+// Interest::readable, writable, both, raw, to_string
+// Event::token, flags, is_readable, is_writable, is_error, is_hup, is_token,
+// to_string, debug_string
+// NetEventLoop methods that require syscalls (new, register, poll, etc.) are not tested here.
+use test::{assert, assert_eq}
+use std::net::eventloop::{Interest, Event}
+
+// ── Interest ──────────────────────────────────────────────────────
+
+@test
+func test_interest_readable_raw() -> I32 {
+    let i = Interest::readable()
+    assert_eq(i.raw() as I64, 1 as I64, "readable = 1")
+    return 0
+}
+
+@test
+func test_interest_writable_raw() -> I32 {
+    let i = Interest::writable()
+    assert_eq(i.raw() as I64, 2 as I64, "writable = 2")
+    return 0
+}
+
+@test
+func test_interest_both_raw() -> I32 {
+    let i = Interest::both()
+    assert_eq(i.raw() as I64, 3 as I64, "both = 3")
+    return 0
+}
+
+@test
+func test_interest_to_string_readable() -> I32 {
+    let i = Interest::readable()
+    assert_eq(i.to_string(), "Readable", "readable to_string")
+    return 0
+}
+
+@test
+func test_interest_to_string_writable() -> I32 {
+    let i = Interest::writable()
+    assert_eq(i.to_string(), "Writable", "writable to_string")
+    return 0
+}
+
+@test
+func test_interest_to_string_both() -> I32 {
+    let i = Interest::both()
+    assert_eq(i.to_string(), "ReadWrite", "both to_string")
+    return 0
+}
+
+// ── Event ─────────────────────────────────────────────────────────
+
+@test
+func test_event_token() -> I32 {
+    let e = Event { token_val: 42 as I64, flags_val: 1 as I64 }
+    assert_eq(e.token(), 42 as I64, "token = 42")
+    return 0
+}
+
+@test
+func test_event_flags() -> I32 {
+    let e = Event { token_val: 1 as I64, flags_val: 3 as I64 }
+    assert_eq(e.flags(), 3 as I64, "flags = 3")
+    return 0
+}
+
+@test
+func test_event_is_readable_flag1() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 1 as I64 }
+    assert(e.is_readable(), "flags=1 is readable")
+    return 0
+}
+
+@test
+func test_event_is_readable_flag3() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 3 as I64 }
+    assert(e.is_readable(), "flags=3 is readable")
+    return 0
+}
+
+@test
+func test_event_is_readable_false() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 2 as I64 }
+    assert(not e.is_readable(), "flags=2 is not readable")
+    return 0
+}
+
+@test
+func test_event_is_writable_flag2() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 2 as I64 }
+    assert(e.is_writable(), "flags=2 is writable")
+    return 0
+}
+
+@test
+func test_event_is_writable_flag3() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 3 as I64 }
+    assert(e.is_writable(), "flags=3 is writable")
+    return 0
+}
+
+@test
+func test_event_is_writable_false() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 1 as I64 }
+    assert(not e.is_writable(), "flags=1 is not writable")
+    return 0
+}
+
+@test
+func test_event_is_error() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 4 as I64 }
+    assert(e.is_error(), "flags=4 is error")
+    return 0
+}
+
+@test
+func test_event_is_error_false() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 1 as I64 }
+    assert(not e.is_error(), "flags=1 is not error")
+    return 0
+}
+
+@test
+func test_event_is_hup() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 8 as I64 }
+    assert(e.is_hup(), "flags=8 is hup")
+    return 0
+}
+
+@test
+func test_event_is_hup_false() -> I32 {
+    let e = Event { token_val: 0 as I64, flags_val: 1 as I64 }
+    assert(not e.is_hup(), "flags=1 is not hup")
+    return 0
+}
+
+@test
+func test_event_is_token_match() -> I32 {
+    let e = Event { token_val: 7 as I64, flags_val: 1 as I64 }
+    assert(e.is_token(7 as I64), "token matches")
+    return 0
+}
+
+@test
+func test_event_is_token_no_match() -> I32 {
+    let e = Event { token_val: 7 as I64, flags_val: 1 as I64 }
+    assert(not e.is_token(8 as I64), "token does not match")
+    return 0
+}
+
+@test
+func test_event_to_string() -> I32 {
+    let e = Event { token_val: 5 as I64, flags_val: 1 as I64 }
+    let s: Str = e.to_string()
+    assert(str::len(s) > 0 as I64, "to_string non-empty")
+    return 0
+}
+
+@test
+func test_event_debug_string() -> I32 {
+    let e = Event { token_val: 5 as I64, flags_val: 1 as I64 }
+    let s: Str = e.debug_string()
+    assert(str::len(s) > 0 as I64, "debug_string non-empty")
+    return 0
+}

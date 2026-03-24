@@ -1,0 +1,65 @@
+// Tests for promise_all_settled_i32
+use test::{assert, assert_eq}
+use core::alloc::Shared
+use std::promise::{Promise, PromiseState, promise_all_settled_i32}
+
+func resolved(v: I32) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Fulfilled(v)) }
+}
+
+func rejected(e: Str) -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Rejected(e)) }
+}
+
+func pending_i32() -> Promise[I32] {
+    return Promise { inner: Shared::new(PromiseState::Pending) }
+}
+
+@test
+func test_all_settled_all_fulfilled() -> I32 {
+    var promises: List[Promise[I32]] = List::new(3)
+    promises.push(resolved(1))
+    promises.push(resolved(2))
+    promises.push(resolved(3))
+    let result: Promise[List[PromiseState[I32]]] = promise_all_settled_i32(promises)
+    assert(result.is_fulfilled(), "all settled should always fulfill")
+    let states: List[PromiseState[I32]] = result.unwrap()
+    assert_eq(states.len(), 3, "should have 3 states")
+    return 0
+}
+
+@test
+func test_all_settled_mixed() -> I32 {
+    var promises: List[Promise[I32]] = List::new(3)
+    promises.push(resolved(42))
+    promises.push(rejected("error"))
+    promises.push(resolved(99))
+    let result: Promise[List[PromiseState[I32]]] = promise_all_settled_i32(promises)
+    // all_settled with no pending always fulfills
+    assert(result.is_fulfilled(), "all settled with mixed should fulfill")
+    let states: List[PromiseState[I32]] = result.unwrap()
+    assert_eq(states.len(), 3, "should have 3 states")
+    return 0
+}
+
+@test
+func test_all_settled_with_pending() -> I32 {
+    var promises: List[Promise[I32]] = List::new(3)
+    promises.push(resolved(1))
+    promises.push(pending_i32())
+    promises.push(rejected("e"))
+    let result: Promise[List[PromiseState[I32]]] = promise_all_settled_i32(promises)
+    // has_pending=true → returns Pending promise
+    assert(result.is_pending(), "all_settled with pending returns pending")
+    return 0
+}
+
+@test
+func test_all_settled_empty() -> I32 {
+    var promises: List[Promise[I32]] = List::new(0)
+    let result: Promise[List[PromiseState[I32]]] = promise_all_settled_i32(promises)
+    assert(result.is_fulfilled(), "empty all_settled fulfills immediately")
+    let states: List[PromiseState[I32]] = result.unwrap()
+    assert_eq(states.len(), 0, "empty result")
+    return 0
+}

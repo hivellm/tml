@@ -1,0 +1,41 @@
+// Tests for security — covering with_csp, with_frame_options, with_referrer_policy
+use test::{assert}
+use core::str
+use std::http::security::{SecurityOptions, security_headers}
+
+@test
+func test_security_with_csp() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::new().with_csp("default-src 'none'")
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "Content-Security-Policy: default-src 'none'"), "CSP should be set")
+    return 0
+}
+
+@test
+func test_security_with_frame_options() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::new().with_frame_options("DENY")
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "X-Frame-Options: DENY"), "frame options should be DENY")
+    return 0
+}
+
+@test
+func test_security_with_referrer_policy() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::new().with_referrer_policy("strict-origin")
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "Referrer-Policy: strict-origin"), "referrer policy should be set")
+    return 0
+}
+
+@test
+func test_security_chain_all_three() -> I32 {
+    let opts: SecurityOptions = SecurityOptions::minimal()
+        .with_csp("script-src 'self'")
+        .with_frame_options("DENY")
+        .with_referrer_policy("origin")
+    let hdrs: Str = security_headers(ref opts)
+    assert(str::contains(hdrs, "script-src 'self'"), "CSP in chain")
+    assert(str::contains(hdrs, "DENY"), "frame options in chain")
+    assert(str::contains(hdrs, "origin"), "referrer in chain")
+    return 0
+}

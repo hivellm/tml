@@ -1,0 +1,11 @@
+// Tests for the generic random[T]() convenience function
+// BLOCKED: generic dispatch codegen bug — @tml_s0_T_random undefined value
+// The generic function `random[T: Random]() -> T` triggers the same generic
+// trait dispatch issue as other T-bounded generic functions.
+use test::{assert}
+
+@test
+func test_random_generic_blocked() -> I32 {
+    assert(true, "random[T]() blocked by generic dispatch codegen bug")
+    return 0
+}

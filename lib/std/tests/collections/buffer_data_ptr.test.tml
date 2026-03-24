@@ -1,0 +1,50 @@
+// Tests for Buffer::data_ptr and Buffer::from_raw_ptr
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_data_ptr_nonzero() -> I32 {
+    let buf = Buffer::new(64)
+    buf.write_byte(42)
+    let ptr: I64 = buf.data_ptr()
+    assert(ptr != 0 as I64, "data_ptr should return non-null pointer")
+    return 0
+}
+
+@test
+func test_buffer_data_ptr_empty_buf() -> I32 {
+    let buf = Buffer::new(32)
+    let ptr: I64 = buf.data_ptr()
+    // Even empty buffer should have valid allocation
+    assert(ptr != 0 as I64, "data_ptr of empty buffer is non-null")
+    return 0
+}
+
+@test
+func test_buffer_from_raw_ptr_basic() -> I32 {
+    // Write some bytes into a source buffer, get its raw ptr, then copy into new buffer
+    let src = Buffer::new(4)
+    src.write_byte(10)
+    src.write_byte(20)
+    src.write_byte(30)
+    src.write_byte(40)
+    let ptr: I64 = src.data_ptr()
+    let dst: Buffer = Buffer::from_raw_ptr(ptr, 4 as I64)
+    assert_eq(dst.len(), 4 as I64, "dst should have len 4")
+    assert_eq(dst.get(0), 10, "byte 0 should be 10")
+    assert_eq(dst.get(1), 20, "byte 1 should be 20")
+    assert_eq(dst.get(2), 30, "byte 2 should be 30")
+    assert_eq(dst.get(3), 40, "byte 3 should be 40")
+    return 0
+}
+
+@test
+func test_buffer_from_raw_ptr_zero_len() -> I32 {
+    let src = Buffer::new(4)
+    src.write_byte(1)
+    let ptr: I64 = src.data_ptr()
+    let dst: Buffer = Buffer::from_raw_ptr(ptr, 0 as I64)
+    // len <= 0 returns empty buffer
+    assert_eq(dst.len(), 0 as I64, "zero-len from_raw_ptr returns empty buffer")
+    return 0
+}

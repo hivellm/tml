@@ -1,0 +1,253 @@
+// Tests covering uncovered WebSocket types and constructors
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::websocket::{
+    WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage,
+    ws_close_frame,
+}
+
+// ── WsOpcode::from_raw ────────────────────────────────────────────────────
+
+@test
+func test_ws_opcode_from_raw_text() -> I32 {
+    let maybe_op = WsOpcode::from_raw(1)
+    assert(maybe_op.is_just(), "opcode 1 should be valid")
+    let op = maybe_op.unwrap()
+    assert_eq(op.raw(), 1)
+    return 0
+}
+
+@test
+func test_ws_opcode_from_raw_binary() -> I32 {
+    let maybe_op = WsOpcode::from_raw(2)
+    assert(maybe_op.is_just(), "opcode 2 should be valid")
+    let op = maybe_op.unwrap()
+    assert_eq(op.raw(), 2)
+    return 0
+}
+
+@test
+func test_ws_opcode_from_raw_close() -> I32 {
+    let maybe_op = WsOpcode::from_raw(8)
+    assert(maybe_op.is_just(), "opcode 8 should be valid")
+    let op = maybe_op.unwrap()
+    assert(op.is_control(), "close is a control frame")
+    return 0
+}
+
+@test
+func test_ws_opcode_from_raw_invalid() -> I32 {
+    let maybe_op = WsOpcode::from_raw(99)
+    assert(maybe_op.is_nothing(), "opcode 99 should be invalid")
+    return 0
+}
+
+@test
+func test_ws_opcode_is_data() -> I32 {
+    let text = WsOpcode::Text()
+    let ping = WsOpcode::Ping()
+    assert(text.is_data(), "text is data frame")
+    assert(not ping.is_data(), "ping is not data frame")
+    return 0
+}
+
+@test
+func test_ws_opcode_name() -> I32 {
+    let text = WsOpcode::Text()
+    let name = text.name()
+    assert(name.len() > 0, "name should be non-empty")
+    return 0
+}
+
+// ── WsCloseCode::from_raw ─────────────────────────────────────────────────
+
+@test
+func test_ws_close_code_from_raw_normal() -> I32 {
+    let code = WsCloseCode::from_raw(1000)
+    assert_eq(code.raw(), 1000)
+    return 0
+}
+
+@test
+func test_ws_close_code_from_raw_unknown() -> I32 {
+    let code = WsCloseCode::from_raw(9999)
+    assert_eq(code.raw(), 9999)
+    return 0
+}
+
+@test
+func test_ws_close_code_name() -> I32 {
+    let code = WsCloseCode::Normal()
+    let name = code.name()
+    assert(name.len() > 0, "close code name should be non-empty")
+    return 0
+}
+
+@test
+func test_ws_close_code_variants() -> I32 {
+    assert_eq(WsCloseCode::GoingAway().raw(), 1001)
+    assert_eq(WsCloseCode::ProtocolError().raw(), 1002)
+    assert_eq(WsCloseCode::UnsupportedData().raw(), 1003)
+    assert_eq(WsCloseCode::InvalidPayload().raw(), 1007)
+    assert_eq(WsCloseCode::PolicyViolation().raw(), 1008)
+    assert_eq(WsCloseCode::MessageTooBig().raw(), 1009)
+    assert_eq(WsCloseCode::MissingExtension().raw(), 1010)
+    assert_eq(WsCloseCode::InternalError().raw(), 1011)
+    return 0
+}
+
+// ── WsError constructors ──────────────────────────────────────────────────
+
+@test
+func test_ws_error_invalid_upgrade() -> I32 {
+    let e: WsError = WsError::InvalidUpgrade("missing key")
+    assert(e.is_invalid_upgrade(), "should be invalid upgrade")
+    return 0
+}
+
+@test
+func test_ws_error_invalid_frame() -> I32 {
+    let e: WsError = WsError::InvalidFrame("bad opcode")
+    assert(e.is_invalid_frame(), "should be invalid frame")
+    return 0
+}
+
+@test
+func test_ws_error_payload_too_large() -> I32 {
+    let e: WsError = WsError::PayloadTooLarge()
+    assert(not e.is_incomplete(), "not incomplete")
+    return 0
+}
+
+@test
+func test_ws_error_protocol_error() -> I32 {
+    let e: WsError = WsError::ProtocolError("fragmentation error")
+    assert(e.is_protocol_error(), "should be protocol error")
+    return 0
+}
+
+@test
+func test_ws_error_connection_closed() -> I32 {
+    let e: WsError = WsError::ConnectionClosed()
+    assert(not e.is_protocol_error(), "not protocol error")
+    return 0
+}
+
+@test
+func test_ws_error_incomplete_frame() -> I32 {
+    let e: WsError = WsError::IncompleteFrame()
+    assert(e.is_incomplete(), "should be incomplete")
+    return 0
+}
+
+@test
+func test_ws_error_invalid_utf8() -> I32 {
+    let e: WsError = WsError::InvalidUtf8()
+    assert(not e.is_invalid_frame(), "not invalid frame")
+    return 0
+}
+
+// ── WsFrame constructors ──────────────────────────────────────────────────
+
+@test
+func test_ws_frame_new() -> I32 {
+    let payload = Buffer::new(4)
+    let frame: WsFrame = WsFrame::new(1 as I64, WsOpcode::Text(), payload)
+    // Verify frame construction doesn't crash (payload_len codegen issue documented)
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_text() -> I32 {
+    let frame: WsFrame = WsFrame::text("hello")
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_binary() -> I32 {
+    let data = Buffer::new(8)
+    let frame: WsFrame = WsFrame::binary(data)
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_ping() -> I32 {
+    let data = Buffer::new(0)
+    let frame: WsFrame = WsFrame::ping(data)
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_pong() -> I32 {
+    let data = Buffer::new(2)
+    let frame: WsFrame = WsFrame::pong(data)
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_close() -> I32 {
+    let frame: WsFrame = WsFrame::close(WsCloseCode::Normal(), "bye")
+    let _ = frame.payload_len()
+    return 0
+}
+
+@test
+func test_ws_frame_close_empty() -> I32 {
+    let frame: WsFrame = WsFrame::close_empty()
+    let _ = frame.payload_len()
+    return 0
+}
+
+// ── WsMessage constructors ────────────────────────────────────────────────
+
+@test
+func test_ws_message_text() -> I32 {
+    let msg: WsMessage = WsMessage::text("hello")
+    assert(msg.is_text(), "should be text message")
+    return 0
+}
+
+@test
+func test_ws_message_binary() -> I32 {
+    let data = Buffer::new(4)
+    let msg: WsMessage = WsMessage::binary(data)
+    assert(msg.is_binary(), "should be binary message")
+    return 0
+}
+
+@test
+func test_ws_message_close() -> I32 {
+    let msg: WsMessage = WsMessage::close(1000, "bye")
+    assert(msg.is_close(), "should be close message")
+    return 0
+}
+
+@test
+func test_ws_message_ping() -> I32 {
+    let data = Buffer::new(0)
+    let msg: WsMessage = WsMessage::ping(data)
+    assert(msg.is_ping(), "should be ping message")
+    return 0
+}
+
+@test
+func test_ws_message_pong() -> I32 {
+    let data = Buffer::new(0)
+    let msg: WsMessage = WsMessage::pong(data)
+    assert(msg.is_pong(), "should be pong message")
+    return 0
+}
+
+// ── ws_close_frame ────────────────────────────────────────────────────────
+
+@test
+func test_ws_close_frame_normal() -> I32 {
+    let frame: WsFrame = ws_close_frame(WsCloseCode::Normal(), "")
+    assert(frame.payload_len() >= 2 as I64, "close frame has code bytes")
+    return 0
+}

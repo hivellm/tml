@@ -1,0 +1,84 @@
+// Tests for std::http::conn_pool — ConnectionPool
+use test
+use std::http::conn_pool::{ConnectionPool, PoolEntry}
+
+@test
+func test_conn_pool_new_and_destroy() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    assert_eq(pool.len(), 0 as I64)
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_put_and_len() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    pool.put("host1:80", 5 as I64, 0 as I64, 0 as I64)
+    assert_eq(pool.len(), 1 as I64)
+    pool.put("host2:443", 6 as I64, 0 as I64, 1 as I64)
+    assert_eq(pool.len(), 2 as I64)
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_take_existing() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    pool.put("example.com:80", 42 as I64, 0 as I64, 0 as I64)
+    let entry = pool.take("example.com:80")
+    assert_eq(entry.fd, 42 as I64)
+    assert_eq(entry.is_tls, 0 as I64)
+    assert_eq(pool.len(), 0 as I64)
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_take_missing_returns_minus_one() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    let entry = pool.take("not-there:80")
+    assert(entry.fd < 0, "missing key should return fd < 0")
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_take_tls_entry() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    pool.put("secure.com:443", 10 as I64, 99 as I64, 1 as I64)
+    let entry = pool.take("secure.com:443")
+    assert_eq(entry.fd, 10 as I64)
+    assert_eq(entry.ssl_ptr, 99 as I64)
+    assert_eq(entry.is_tls, 1 as I64)
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_take_removes_entry() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    pool.put("host:80", 7 as I64, 0 as I64, 0 as I64)
+    // First take succeeds
+    let e1 = pool.take("host:80")
+    assert_eq(e1.fd, 7 as I64)
+    // Second take returns sentinel
+    let e2 = pool.take("host:80")
+    assert(e2.fd < 0, "second take of same key should fail")
+    pool.destroy()
+    return 0
+}
+
+@test
+func test_conn_pool_multiple_entries_swap_on_remove() -> I32 {
+    let pool: ConnectionPool = ConnectionPool::new()
+    pool.put("a:80", 1 as I64, 0 as I64, 0 as I64)
+    pool.put("b:80", 2 as I64, 0 as I64, 0 as I64)
+    pool.put("c:80", 3 as I64, 0 as I64, 0 as I64)
+    assert_eq(pool.len(), 3 as I64)
+    // Remove middle entry — exercises swap-with-last logic
+    let e = pool.take("b:80")
+    assert_eq(e.fd, 2 as I64)
+    assert_eq(pool.len(), 2 as I64)
+    pool.destroy()
+    return 0
+}

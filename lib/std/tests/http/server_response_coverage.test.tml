@@ -1,0 +1,174 @@
+// Tests covering uncovered ServerResponse methods
+use test::{assert, assert_eq}
+use std::http::server_response::ServerResponse
+
+// ── for_request ───────────────────────────────────────────────────────────
+
+@test
+func test_server_response_for_request() -> I32 {
+    let resp: ServerResponse = ServerResponse::for_request(5 as I64, "GET")
+    assert_eq(resp.status_code(), 200 as I64, "default status should be 200")
+    return 0
+}
+
+// ── get_header / set_header ───────────────────────────────────────────────
+
+@test
+func test_server_response_get_header() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.set_header("X-Custom", "value123")
+    let val: Str = resp.get_header("X-Custom")
+    assert_eq(val, "value123", "get_header should return set value")
+    return 0
+}
+
+@test
+func test_server_response_has_header() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.set_header("Content-Type", "text/plain")
+    assert(resp.has_header("Content-Type"), "should have Content-Type")
+    assert(not resp.has_header("X-Missing"), "should not have X-Missing")
+    return 0
+}
+
+// ── send ──────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_send() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.send("hello world")
+    assert(resp.is_finished(), "send should finish the response")
+    return 0
+}
+
+// ── json ──────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_json() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.json("{\"ok\": true}")
+    assert(resp.is_finished(), "json should finish the response")
+    assert(resp.has_header("Content-Type"), "json should set Content-Type")
+    return 0
+}
+
+// ── html ──────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_html() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.html("<html></html>")
+    assert(resp.is_finished(), "html should finish the response")
+    return 0
+}
+
+// ── text ──────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_text() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.text("plain text")
+    assert(resp.is_finished(), "text should finish the response")
+    return 0
+}
+
+// ── redirect ─────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_redirect() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.redirect("/new-path")
+    assert_eq(resp.status_code(), 302 as I64, "redirect should set 302")
+    return 0
+}
+
+// ── redirect_with ─────────────────────────────────────────────────────────
+
+@test
+func test_server_response_redirect_with() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.redirect_with(301 as I64, "/permanent")
+    assert_eq(resp.status_code(), 301 as I64, "redirect_with should set 301")
+    return 0
+}
+
+// ── type_set ──────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_type_set() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.type_set("application/json")
+    assert(resp.has_header("Content-Type"), "type_set should set Content-Type")
+    return 0
+}
+
+// ── vary ──────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_vary() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.vary("Accept-Encoding")
+    assert(resp.has_header("Vary"), "vary should set Vary header")
+    return 0
+}
+
+// ── status ────────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_status() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.status(418 as I64)
+    assert_eq(resp.status_code(), 418 as I64, "status() should set status code")
+    return 0
+}
+
+// ── write_continue / write_processing / write_early_hints ────────────────
+
+@test
+func test_server_response_write_continue() -> I32 {
+    let s: Str = ServerResponse::write_continue()
+    assert(s.len() > 0, "write_continue should return non-empty string")
+    return 0
+}
+
+@test
+func test_server_response_write_processing() -> I32 {
+    let s: Str = ServerResponse::write_processing()
+    assert(s.len() > 0, "write_processing should return non-empty string")
+    return 0
+}
+
+@test
+func test_server_response_write_early_hints() -> I32 {
+    let s: Str = ServerResponse::write_early_hints("</style.css>; rel=preload")
+    assert(s.len() > 0, "write_early_hints should return non-empty string")
+    return 0
+}
+
+// ── cookie / clear_cookie ─────────────────────────────────────────────────
+
+@test
+func test_server_response_cookie() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.cookie("session", "abc123")
+    assert(resp.has_header("Set-Cookie"), "cookie should set Set-Cookie header")
+    return 0
+}
+
+@test
+func test_server_response_clear_cookie() -> I32 {
+    let resp: ServerResponse = ServerResponse::new()
+    resp.clear_cookie("session")
+    assert(resp.has_header("Set-Cookie"), "clear_cookie should set Set-Cookie header")
+    return 0
+}
+
+// ── destroy ───────────────────────────────────────────────────────────────
+
+@test
+func test_server_response_destroy() -> I32 {
+    var resp: ServerResponse = ServerResponse::new()
+    resp.destroy()
+    // Just ensure no crash
+    return 0
+}

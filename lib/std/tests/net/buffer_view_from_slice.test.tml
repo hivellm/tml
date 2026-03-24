@@ -1,0 +1,39 @@
+// Tests for BufferView::from_slice // v2
+use test::{assert, assert_eq}
+use std::net::buffer_view::BufferView
+
+@test
+func test_buffer_view_from_slice_basic() -> I32 {
+    let arr: [U8; 4] = [10 as U8, 20 as U8, 30 as U8, 40 as U8]
+    let view: BufferView = BufferView::from_slice(ref arr)
+    assert_eq(view.len(), 4 as I64, "len should be 4")
+    when view.get(0 as I64) {
+        Just(b) => assert_eq(b as I32, 10, "byte 0 = 10"),
+        Nothing => assert(false, "get(0) should be Just")
+    }
+    when view.get(3 as I64) {
+        Just(b) => assert_eq(b as I32, 40, "byte 3 = 40"),
+        Nothing => assert(false, "get(3) should be Just")
+    }
+    return 0
+}
+
+@test
+func test_buffer_view_from_slice_single() -> I32 {
+    let arr: [U8; 1] = [255 as U8]
+    let view: BufferView = BufferView::from_slice(ref arr)
+    assert_eq(view.len(), 1 as I64, "single element slice")
+    when view.get(0 as I64) {
+        Just(b) => assert_eq(b as I32, 255, "byte is 255"),
+        Nothing => assert(false, "get(0) should be Just")
+    }
+    return 0
+}
+
+@test
+func test_buffer_view_from_slice_not_empty() -> I32 {
+    let arr: [U8; 3] = [1 as U8, 2 as U8, 3 as U8]
+    let view: BufferView = BufferView::from_slice(ref arr)
+    assert(not view.is_empty(), "non-empty slice produces non-empty view")
+    return 0
+}

@@ -1,0 +1,61 @@
+// Tests covering RateLimiter::check, reset, destroy, RateLimitResult::headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::rate_limit::{RateLimitOptions, RateLimiter, RateLimitResult}
+
+@test
+func test_rate_limiter_check_allowed() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new().with_max(10 as I64).with_window(60000 as I64)
+    var limiter: RateLimiter = RateLimiter::new(opts)
+    let result: RateLimitResult = limiter.check("user1", 1000 as I64)
+    assert(result.allowed, "first request should be allowed")
+    limiter.destroy()
+    return 0
+}
+
+@test
+func test_rate_limiter_check_blocked() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new().with_max(2 as I64).with_window(60000 as I64)
+    var limiter: RateLimiter = RateLimiter::new(opts)
+    // Make 3 requests, 3rd should be blocked
+    limiter.check("key", 1000 as I64)
+    limiter.check("key", 1001 as I64)
+    let result: RateLimitResult = limiter.check("key", 1002 as I64)
+    assert(not result.allowed, "third request should be blocked")
+    limiter.destroy()
+    return 0
+}
+
+@test
+func test_rate_limiter_reset() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new().with_max(1 as I64).with_window(60000 as I64)
+    var limiter: RateLimiter = RateLimiter::new(opts)
+    limiter.check("key", 1000 as I64)
+    let blocked: RateLimitResult = limiter.check("key", 1001 as I64)
+    assert(not blocked.allowed, "second request blocked before reset")
+    limiter.reset("key")
+    let after_reset: RateLimitResult = limiter.check("key", 1002 as I64)
+    assert(after_reset.allowed, "request should be allowed after reset")
+    limiter.destroy()
+    return 0
+}
+
+@test
+func test_rate_limit_result_headers_content() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new().with_max(100 as I64).with_window(60000 as I64)
+    var limiter: RateLimiter = RateLimiter::new(opts)
+    let result: RateLimitResult = limiter.check("user", 1000 as I64)
+    let hdrs: Str = result.headers()
+    assert(hdrs.len() > 0, "headers should be non-empty")
+    limiter.destroy()
+    return 0
+}
+
+@test
+func test_rate_limiter_destroy() -> I32 {
+    let opts: RateLimitOptions = RateLimitOptions::new()
+    var limiter: RateLimiter = RateLimiter::new(opts)
+    limiter.destroy()
+    // just ensure no crash
+    return 0
+}

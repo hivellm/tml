@@ -1,0 +1,48 @@
+// Tests for stream — covering SseEvent::with_id, with_retry, streaming_headers, ndjson_headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::stream::{SseEvent, streaming_headers, ndjson_headers}
+
+@test
+func test_sse_with_id() -> I32 {
+    let evt: SseEvent = SseEvent::data("hello").with_id("42")
+    let wire: Str = evt.serialize()
+    assert(str::contains(wire, "id: 42"), "with_id should include id field")
+    assert(str::contains(wire, "data: hello"), "data should still be present")
+    return 0
+}
+
+@test
+func test_sse_with_retry() -> I32 {
+    let evt: SseEvent = SseEvent::data("ping").with_retry(3000 as I64)
+    let wire: Str = evt.serialize()
+    assert(str::contains(wire, "retry: 3000"), "with_retry should include retry field")
+    assert(str::contains(wire, "data: ping"), "data should still be present")
+    return 0
+}
+
+@test
+func test_sse_with_id_and_retry() -> I32 {
+    let evt: SseEvent = SseEvent::named("update", "data").with_id("7").with_retry(1000 as I64)
+    let wire: Str = evt.serialize()
+    assert(str::contains(wire, "event: update"), "event type")
+    assert(str::contains(wire, "id: 7"), "id field")
+    assert(str::contains(wire, "retry: 1000"), "retry field")
+    return 0
+}
+
+@test
+func test_streaming_headers() -> I32 {
+    let hdrs: Str = streaming_headers("text/event-stream")
+    assert(str::contains(hdrs, "text/event-stream"), "content-type should be present")
+    assert(str::len(hdrs) > 0, "headers should be non-empty")
+    return 0
+}
+
+@test
+func test_ndjson_headers() -> I32 {
+    let hdrs: Str = ndjson_headers()
+    assert(str::contains(hdrs, "ndjson"), "ndjson content-type should be present")
+    assert(str::len(hdrs) > 0, "headers should be non-empty")
+    return 0
+}

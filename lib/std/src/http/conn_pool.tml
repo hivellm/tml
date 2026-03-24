@@ -14,7 +14,7 @@ const MAX_IDLE_PER_HOST: I64 = 4
 const MAX_IDLE_TOTAL: I64 = 32
 
 /// A pool entry: fd + is_tls + ssl_ptr for one idle connection.
-type PoolEntry {
+pub type PoolEntry {
     fd: I64,
     ssl_ptr: I64,
     is_tls: I64,    // 0=plain, 1=tls

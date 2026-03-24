@@ -1,0 +1,9 @@
+// Tests covering uncovered H2Error, H2Frame constructors, H2Frame flags, H2ErrorCode variants
+// NOTE: All substantive tests moved to h2_frame_min.test.tml to avoid suite-bundling crash.
+use test::{assert, assert_eq}
+
+@test
+func test_h2_frame_coverage_placeholder() -> I32 {
+    // All real tests are in h2_frame_min.test.tml
+    return 0
+}

@@ -21,7 +21,7 @@ pub type Arena {
 impl Arena {
     /// Creates a new arena with the given capacity.
     pub func new(capacity: I64) -> Arena {
-        let cap: I64 = if capacity > 0 { capacity } else { DEFAULT_ARENA_SIZE }
+        let cap: I64 = when capacity > 0 { true => capacity, false => DEFAULT_ARENA_SIZE }
         let data: I64 = lowlevel { mem_alloc(cap) } as I64
         // Zero-fill for safety
         var i: I64 = 0

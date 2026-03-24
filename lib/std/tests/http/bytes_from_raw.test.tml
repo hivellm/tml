@@ -1,0 +1,30 @@
+// Tests for Bytes::from_raw
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::bytes::Bytes
+
+@test
+func test_bytes_from_raw_basic() -> I32 {
+    // Use a Buffer to get a raw pointer to some data
+    let buf = Buffer::new(4)
+    buf.write_byte(0x48)  // 'H'
+    buf.write_byte(0x65)  // 'e'
+    buf.write_byte(0x6C)  // 'l'
+    buf.write_byte(0x6C)  // 'l'
+    let ptr: I64 = buf.data_ptr()
+    let bytes: Bytes = Bytes::from_raw(ptr, 4 as I64)
+    assert_eq(bytes.len(), 4 as I64, "from_raw should have len 4")
+    assert_eq(bytes.get(0), 0x48, "byte 0 should be 'H'")
+    assert_eq(bytes.get(1), 0x65, "byte 1 should be 'e'")
+    return 0
+}
+
+@test
+func test_bytes_from_raw_empty() -> I32 {
+    let buf = Buffer::new(4)
+    buf.write_byte(1)
+    let ptr: I64 = buf.data_ptr()
+    let bytes: Bytes = Bytes::from_raw(ptr, 0 as I64)
+    assert_eq(bytes.len(), 0 as I64, "from_raw with len=0 should be empty")
+    return 0
+}

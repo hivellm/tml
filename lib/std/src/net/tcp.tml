@@ -1,4 +1,4 @@
-//! TCP networking primitives.
+//! TCP networking primitives. // v2
 //!
 //! This module provides TCP socket types for reliable, ordered, connection-based
 //! byte stream communication.
@@ -215,16 +215,16 @@ impl TcpStream {
     /// Sets the read timeout to the given duration.
     pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
         when dur {
-            Just(d) => this.socket.set_recv_timeout(d.as_millis())
-            Nothing => this.socket.set_recv_timeout(0)
+            Just(d) => this.socket.set_recv_timeout(d.as_millis()),
+            Nothing => this.socket.set_recv_timeout(0),
         }
     }
 
     /// Sets the write timeout to the given duration.
     pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
         when dur {
-            Just(d) => this.socket.set_send_timeout(d.as_millis())
-            Nothing => this.socket.set_send_timeout(0)
+            Just(d) => this.socket.set_send_timeout(d.as_millis()),
+            Nothing => this.socket.set_send_timeout(0),
         }
     }
 

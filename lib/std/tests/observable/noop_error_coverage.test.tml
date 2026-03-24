@@ -1,0 +1,17 @@
+// Tests for observable::noop_error — a no-op error handler
+use test::{assert}
+use std::observable::noop_error
+
+@test
+func test_noop_error_does_not_crash() -> I32 {
+    noop_error("some error message")
+    assert(true, "noop_error should not crash")
+    return 0
+}
+
+@test
+func test_noop_error_empty_message() -> I32 {
+    noop_error("")
+    assert(true, "noop_error with empty message should not crash")
+    return 0
+}

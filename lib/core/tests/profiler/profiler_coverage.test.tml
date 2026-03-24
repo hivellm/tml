@@ -1,0 +1,35 @@
+// Tests covering core::profiler no-op functions (non-PROFILE build):
+// end, message, plot, frame_mark
+// In non-PROFILE mode all these are no-ops — just verify they compile and run.
+use test::{assert}
+use core::profiler
+
+@test
+func test_profiler_end_noop() -> I32 {
+    // begin returns 0 in non-PROFILE mode; end should accept it without crash
+    let zone: I64 = profiler::begin("test_zone")
+    profiler::end(zone)
+    assert(true, "end should not crash")
+    return 0
+}
+
+@test
+func test_profiler_message_noop() -> I32 {
+    profiler::message("hello from test")
+    assert(true, "message should not crash")
+    return 0
+}
+
+@test
+func test_profiler_plot_noop() -> I32 {
+    profiler::plot("my_counter", 42 as I64)
+    assert(true, "plot should not crash")
+    return 0
+}
+
+@test
+func test_profiler_frame_mark_noop() -> I32 {
+    profiler::frame_mark()
+    assert(true, "frame_mark should not crash")
+    return 0
+}

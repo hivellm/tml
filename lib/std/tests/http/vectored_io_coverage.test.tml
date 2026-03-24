@@ -1,0 +1,20 @@
+// Tests covering std::http::vectored_io:
+// send_two (empty-both path), send_response_parts (delegates to send_two)
+use test::{assert, assert_eq}
+use std::http::vectored_io::{send_two, send_response_parts}
+
+@test
+func test_send_two_both_empty_returns_zero() -> I32 {
+    // Both buffers empty — early return 0, no syscall needed
+    let result: I64 = send_two(-1 as I64, "", "")
+    assert_eq(result, 0 as I64, "both empty returns 0")
+    return 0
+}
+
+@test
+func test_send_response_parts_both_empty_returns_zero() -> I32 {
+    // send_response_parts delegates to send_two
+    let result: I64 = send_response_parts(-1 as I64, "", "")
+    assert_eq(result, 0 as I64, "both empty returns 0")
+    return 0
+}

@@ -1,0 +1,63 @@
+// Tests covering CorsOptions builder methods
+use test::{assert, assert_eq}
+use core::str
+use std::http::cors::{CorsOptions, cors_headers}
+
+@test
+func test_cors_with_origin() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_origin("https://example.com")
+    let hdrs: Str = cors_headers(ref opts, "https://example.com")
+    assert(str::contains(hdrs, "example.com"), "with_origin should set origin")
+    return 0
+}
+
+@test
+func test_cors_with_methods() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_methods("GET, POST, PUT")
+    let hdrs: Str = cors_headers(ref opts, "*")
+    assert(hdrs.len() > 0, "headers should be non-empty")
+    return 0
+}
+
+@test
+func test_cors_with_headers() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_headers("Content-Type, Authorization")
+    let hdrs: Str = cors_headers(ref opts, "*")
+    assert(hdrs.len() > 0, "headers should be non-empty")
+    return 0
+}
+
+@test
+func test_cors_with_expose_headers() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_expose_headers("X-Custom-Header")
+    let hdrs: Str = cors_headers(ref opts, "*")
+    assert(hdrs.len() > 0, "headers should be non-empty")
+    return 0
+}
+
+@test
+func test_cors_with_credentials() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_credentials()
+    let hdrs: Str = cors_headers(ref opts, "https://example.com")
+    assert(str::contains(hdrs, "true"), "with_credentials should set credentials=true")
+    return 0
+}
+
+@test
+func test_cors_with_max_age() -> I32 {
+    let opts: CorsOptions = CorsOptions::new().with_max_age(3600 as I64)
+    let hdrs: Str = cors_headers(ref opts, "*")
+    assert(hdrs.len() > 0, "headers should be non-empty")
+    return 0
+}
+
+@test
+func test_cors_chain() -> I32 {
+    let opts: CorsOptions = CorsOptions::new()
+        .with_origin("https://app.com")
+        .with_methods("GET, POST")
+        .with_credentials()
+    let hdrs: Str = cors_headers(ref opts, "https://app.com")
+    assert(hdrs.len() > 0, "chained options should produce headers")
+    return 0
+}

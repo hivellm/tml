@@ -1,0 +1,42 @@
+// Tests for StaticOptions::with_index, with_immutable, with_extensions
+use test::{assert, assert_eq}
+use std::http::static_server::StaticOptions
+
+@test
+func test_static_options_with_index() -> I32 {
+    let opts: StaticOptions = StaticOptions::new("/var/www")
+    let opts2: StaticOptions = opts.with_index("app.html")
+    assert_eq(opts2.index_file, "app.html", "with_index should set index file")
+    assert_eq(opts2.root, "/var/www", "root should be preserved")
+    return 0
+}
+
+@test
+func test_static_options_with_immutable() -> I32 {
+    let opts: StaticOptions = StaticOptions::new("/dist")
+    let opts2: StaticOptions = opts.with_immutable()
+    assert(opts2.immutable, "with_immutable should set immutable=true")
+    assert_eq(opts2.max_age, 31536000 as I64, "with_immutable sets max_age to 1 year")
+    return 0
+}
+
+@test
+func test_static_options_with_extensions() -> I32 {
+    let opts: StaticOptions = StaticOptions::new("/public")
+    let opts2: StaticOptions = opts.with_extensions("html,htm")
+    assert_eq(opts2.extensions, "html,htm", "with_extensions should set extensions")
+    assert_eq(opts2.root, "/public", "root should be preserved")
+    return 0
+}
+
+@test
+func test_static_options_chained() -> I32 {
+    let opts: StaticOptions = StaticOptions::new("/www")
+        .with_index("index.htm")
+        .with_extensions("html")
+        .with_immutable()
+    assert_eq(opts.index_file, "index.htm", "chained index")
+    assert_eq(opts.extensions, "html", "chained extensions")
+    assert(opts.immutable, "chained immutable")
+    return 0
+}

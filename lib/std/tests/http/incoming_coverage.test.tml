@@ -1,0 +1,329 @@
+// Tests covering uncovered IncomingMessage methods:
+// new, socket, cookie, hostname, ip, protocol, secure, xhr,
+// is_type, accepts, fresh, stale, destroy
+use test::{assert, assert_eq}
+use std::http::incoming::{IncomingMessage, parse_request}
+
+// ── IncomingMessage::new ──────────────────────────────────────────────────
+
+@test
+func test_incoming_new_method() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("POST", "/api/data", "HTTP/1.1")
+    assert_eq(msg.method(), "POST", "method from new")
+    return 0
+}
+
+@test
+func test_incoming_new_url() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/hello/world", "HTTP/1.1")
+    assert_eq(msg.url(), "/hello/world", "url from new")
+    return 0
+}
+
+@test
+func test_incoming_new_version() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("DELETE", "/item/1", "HTTP/1.0")
+    assert_eq(msg.http_version(), "HTTP/1.0", "version from new")
+    return 0
+}
+
+// ── IncomingMessage::socket ───────────────────────────────────────────────
+
+@test
+func test_incoming_socket_default() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert_eq(msg.socket(), -1 as I64, "default socket_fd is -1")
+    return 0
+}
+
+// ── IncomingMessage::cookie ───────────────────────────────────────────────
+
+@test
+func test_incoming_cookie_found() -> I32 {
+    let raw: Str = "GET /page HTTP/1.1\r\nHost: example.com\r\nCookie: session=abc123; user=john\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            let val: Str = msg.cookie("session")
+            assert_eq(val, "abc123", "cookie session value")
+        },
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_cookie_not_found() -> I32 {
+    let raw: Str = "GET /page HTTP/1.1\r\nHost: example.com\r\nCookie: session=abc123\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => {
+            let val: Str = msg.cookie("missing")
+            assert_eq(val, "", "missing cookie returns empty")
+        },
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_cookie_no_header() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    let val: Str = msg.cookie("any")
+    assert_eq(val, "", "no cookie header returns empty")
+    return 0
+}
+
+// ── IncomingMessage::hostname ─────────────────────────────────────────────
+
+@test
+func test_incoming_hostname_without_port() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert_eq(msg.hostname(), "example.com", "hostname without port"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_hostname_with_port() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: example.com:3000\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert_eq(msg.hostname(), "example.com", "hostname strips port"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_hostname_empty() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert_eq(msg.hostname(), "", "no host header returns empty")
+    return 0
+}
+
+// ── IncomingMessage::ip ───────────────────────────────────────────────────
+
+@test
+func test_incoming_ip_from_xff() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nX-Forwarded-For: 1.2.3.4, 5.6.7.8\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert_eq(msg.ip(), "1.2.3.4", "first IP from X-Forwarded-For"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_ip_single() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nX-Forwarded-For: 10.0.0.1\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert_eq(msg.ip(), "10.0.0.1", "single IP"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_ip_empty() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert_eq(msg.ip(), "", "no X-Forwarded-For returns empty")
+    return 0
+}
+
+// ── IncomingMessage::protocol ─────────────────────────────────────────────
+
+@test
+func test_incoming_protocol_default() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert_eq(msg.protocol(), "http", "default protocol is http")
+    return 0
+}
+
+@test
+func test_incoming_protocol_https() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nX-Forwarded-Proto: https\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert_eq(msg.protocol(), "https", "protocol from header"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+// ── IncomingMessage::secure ───────────────────────────────────────────────
+
+@test
+func test_incoming_secure_false() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(not msg.secure(), "no proto header = not secure")
+    return 0
+}
+
+@test
+func test_incoming_secure_true() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nX-Forwarded-Proto: https\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.secure(), "https = secure"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+// ── IncomingMessage::xhr ──────────────────────────────────────────────────
+
+@test
+func test_incoming_xhr_false() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(not msg.xhr(), "no X-Requested-With = not xhr")
+    return 0
+}
+
+@test
+func test_incoming_xhr_true() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nX-Requested-With: XMLHttpRequest\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.xhr(), "XMLHttpRequest header = xhr"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+// ── IncomingMessage::is_type ──────────────────────────────────────────────
+
+@test
+func test_incoming_is_type_json() -> I32 {
+    let raw: Str = "POST /api HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.is_type("json"), "application/json matches json"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_is_type_no_match() -> I32 {
+    let raw: Str = "POST /api HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(not msg.is_type("json"), "text/plain does not match json"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_is_type_no_header() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(not msg.is_type("json"), "no content-type = no match")
+    return 0
+}
+
+// ── IncomingMessage::accepts ──────────────────────────────────────────────
+
+@test
+func test_incoming_accepts_direct() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nAccept: application/json\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.accepts("application/json"), "direct accept match"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_accepts_wildcard() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nAccept: */*\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.accepts("text/html"), "wildcard accepts anything"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_accepts_shorthand() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nAccept: application/json\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.accepts("json"), "shorthand json matches application/json"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_accepts_empty() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(not msg.accepts("json"), "no accept header = false")
+    return 0
+}
+
+// ── IncomingMessage::fresh / stale ────────────────────────────────────────
+
+@test
+func test_incoming_fresh_if_none_match() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nIf-None-Match: \"etag123\"\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.fresh(), "If-None-Match = fresh"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_fresh_if_modified_since() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nIf-Modified-Since: Wed, 01 Jan 2020 00:00:00 GMT\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(msg.fresh(), "If-Modified-Since = fresh"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_incoming_fresh_false() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(not msg.fresh(), "no cache headers = not fresh")
+    return 0
+}
+
+@test
+func test_incoming_stale_true() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    assert(msg.stale(), "no cache headers = stale")
+    return 0
+}
+
+@test
+func test_incoming_stale_false() -> I32 {
+    let raw: Str = "GET / HTTP/1.1\r\nHost: x\r\nIf-None-Match: \"etag\"\r\n\r\n"
+    let result = parse_request(raw)
+    when result {
+        Ok(msg) => assert(not msg.stale(), "fresh request is not stale"),
+        Err(e) => assert(false, "parse should succeed"),
+    }
+    return 0
+}
+
+// ── IncomingMessage::destroy ──────────────────────────────────────────────
+
+@test
+func test_incoming_destroy() -> I32 {
+    let msg: IncomingMessage = IncomingMessage::new("GET", "/", "HTTP/1.1")
+    msg.destroy()
+    // No crash = success
+    return 0
+}

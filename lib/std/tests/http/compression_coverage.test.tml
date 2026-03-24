@@ -1,0 +1,33 @@
+// Tests for compression — covering with_min_size, with_level
+use test::{assert, assert_eq}
+use std::http::compression::{CompressionOptions, select_encoding, should_compress}
+
+@test
+func test_compression_with_min_size() -> I32 {
+    let opts: CompressionOptions = CompressionOptions::new().with_min_size(100 as I64)
+    // Body shorter than min_size should not be compressed
+    assert(not should_compress("text/plain", 50 as I64, ref opts), "small body should not compress")
+    // Body larger than min_size should be compressed
+    assert(should_compress("text/plain", 200 as I64, ref opts), "large body should compress")
+    return 0
+}
+
+@test
+func test_compression_with_level() -> I32 {
+    let opts: CompressionOptions = CompressionOptions::new().with_level(9 as I64)
+    // Encoding selection should still work after setting level
+    let enc: Str = select_encoding("gzip", ref opts)
+    assert_eq(enc, "gzip", "encoding selection should work after with_level")
+    return 0
+}
+
+@test
+func test_compression_chain_options() -> I32 {
+    let opts: CompressionOptions = CompressionOptions::new()
+        .with_min_size(512 as I64)
+        .with_level(6 as I64)
+    // Should compress at level 6 for large bodies
+    assert(should_compress("text/html", 1000 as I64, ref opts), "chain: large body should compress")
+    assert(not should_compress("text/html", 256 as I64, ref opts), "chain: small body should not compress")
+    return 0
+}

@@ -1,0 +1,22 @@
+// Tests for F64::random behavior method
+use test::{assert}
+use std::random::{Rng, Random}
+
+@test
+func test_f64_random_behavior() -> I32 {
+    var rng: Rng = Rng::with_seed(42)
+    let v: F64 = F64::random(mut ref rng)
+    assert(v >= 0.0 and v < 1.0, "F64::random should be in [0.0, 1.0)")
+    return 0
+}
+
+@test
+func test_f64_random_varies() -> I32 {
+    var rng1: Rng = Rng::with_seed(999)
+    var rng2: Rng = Rng::with_seed(1000)
+    let v1: F64 = F64::random(mut ref rng1)
+    let v2: F64 = F64::random(mut ref rng2)
+    assert(v1 >= 0.0 and v1 < 1.0, "v1 in range")
+    assert(v2 >= 0.0 and v2 < 1.0, "v2 in range")
+    return 0
+}

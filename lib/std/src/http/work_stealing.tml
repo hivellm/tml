@@ -89,7 +89,7 @@ pub type WorkStealingScheduler {
 
 impl WorkStealingScheduler {
     pub func new(num_workers: I64) -> WorkStealingScheduler {
-        let n: I64 = if num_workers > MAX_WORKERS { MAX_WORKERS } else { num_workers }
+        let n: I64 = when num_workers > MAX_WORKERS { true => MAX_WORKERS, false => num_workers }
         let queues: I64 = lowlevel { mem_alloc(n * 8) } as I64
         var i: I64 = 0
         loop (i < n) {

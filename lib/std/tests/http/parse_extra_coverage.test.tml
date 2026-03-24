@@ -1,0 +1,121 @@
+// Tests for app_extract_body, app_request_offset, app_get_content_length, app_has_expect_continue
+use test::{assert, assert_eq}
+use core::str
+use core::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
+use std::http::parse::{
+    app_extract_body, app_request_offset,
+    app_get_content_length, app_has_expect_continue,
+    app_parse_headers, MAX_HEADERS, HEADER_ENTRY_SIZE,
+}
+
+/// Copy string into a mutable buffer and return buf_ptr as I64.
+func str_to_buf(s: Str) -> I64 {
+    let len: I64 = str::len(s)
+    let buf: I64 = lowlevel { mem_alloc(len + 1) } as I64
+    lowlevel { copy_nonoverlapping(s as *Unit, buf as *Unit, len) }
+    lowlevel { ptr_write[U8]((buf + len) as *U8, 0 as U8) }
+    return buf
+}
+
+// ── app_extract_body ──────────────────────────────────────────────────
+
+@test
+func test_app_extract_body_present() -> I32 {
+    let req: Str = "POST /api HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"
+    let buf: I64 = req as I64
+    let body: Str = app_extract_body(buf, str::len(req) as I64)
+    assert_eq(body, "hello", "should extract body after \\r\\n\\r\\n")
+    return 0
+}
+
+@test
+func test_app_extract_body_absent() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    let buf: I64 = req as I64
+    let body: Str = app_extract_body(buf, str::len(req) as I64)
+    assert_eq(body, "", "no body returns empty string")
+    return 0
+}
+
+@test
+func test_app_extract_body_no_header_end() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\nHost: localhost"
+    let buf: I64 = req as I64
+    let body: Str = app_extract_body(buf, str::len(req) as I64)
+    assert_eq(body, "", "incomplete request returns empty body")
+    return 0
+}
+
+// ── app_request_offset ────────────────────────────────────────────────────
+
+@test
+func test_app_request_offset_zero() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\nHost: x\r\n\r\n"
+    let buf: I64 = req as I64
+    let offset: I64 = app_request_offset(buf, str::len(req) as I64, 0 as I64)
+    assert_eq(offset, 0 as I64, "request 0 always starts at 0")
+    return 0
+}
+
+@test
+func test_app_request_offset_second() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\n"
+    let buf: I64 = req as I64
+    let offset: I64 = app_request_offset(buf, str::len(req) as I64, 1 as I64)
+    assert(offset > 0 as I64, "second request should have positive offset")
+    return 0
+}
+
+@test
+func test_app_request_offset_not_found() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\nHost: x\r\n\r\n"
+    let buf: I64 = req as I64
+    let offset: I64 = app_request_offset(buf, str::len(req) as I64, 5 as I64)
+    assert_eq(offset, -1 as I64, "nonexistent request returns -1")
+    return 0
+}
+
+// ── app_get_content_length / app_has_expect_continue ─────────────────────
+
+@test
+func test_app_get_content_length_present() -> I32 {
+    // Build a mutable buffer with a real request to parse headers
+    let req: Str = "POST /api HTTP/1.1\r\nContent-Length: 42\r\nHost: localhost\r\n\r\n"
+    let buf: I64 = str_to_buf(req)
+    let headers_buf: I64 = lowlevel { mem_alloc(MAX_HEADERS * HEADER_ENTRY_SIZE + 8) } as I64
+    let count: I64 = app_parse_headers(buf, str::len(req) as I64, headers_buf)
+    let cl: I64 = app_get_content_length(headers_buf, count)
+    assert_eq(cl, 42 as I64, "content-length should be 42")
+    return 0
+}
+
+@test
+func test_app_get_content_length_absent() -> I32 {
+    let req: Str = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    let buf: I64 = str_to_buf(req)
+    let headers_buf: I64 = lowlevel { mem_alloc(MAX_HEADERS * HEADER_ENTRY_SIZE + 8) } as I64
+    let count: I64 = app_parse_headers(buf, str::len(req) as I64, headers_buf)
+    let cl: I64 = app_get_content_length(headers_buf, count)
+    assert_eq(cl, -1 as I64, "absent content-length returns -1")
+    return 0
+}
+
+@test
+func test_app_has_expect_continue_true() -> I32 {
+    let req: Str = "POST /upload HTTP/1.1\r\nExpect: 100-continue\r\nHost: localhost\r\n\r\n"
+    let buf: I64 = str_to_buf(req)
+    let headers_buf: I64 = lowlevel { mem_alloc(MAX_HEADERS * HEADER_ENTRY_SIZE + 8) } as I64
+    let count: I64 = app_parse_headers(buf, str::len(req) as I64, headers_buf)
+    assert(app_has_expect_continue(headers_buf, count), "should detect Expect: 100-continue")
+    return 0
+}
+
+@test
+func test_app_has_expect_continue_false() -> I32 {
+    let req: Str = "POST /api HTTP/1.1\r\nContent-Length: 5\r\n\r\n"
+    let buf: I64 = str_to_buf(req)
+    let headers_buf: I64 = lowlevel { mem_alloc(MAX_HEADERS * HEADER_ENTRY_SIZE + 8) } as I64
+    let count: I64 = app_parse_headers(buf, str::len(req) as I64, headers_buf)
+    assert(not app_has_expect_continue(headers_buf, count), "no Expect header means false")
+    return 0
+}

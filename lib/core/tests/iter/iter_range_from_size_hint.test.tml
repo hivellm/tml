@@ -1,0 +1,22 @@
+// Tests for RangeFrom::size_hint
+use test::{assert, assert_eq}
+use core::ops::range::RangeFrom
+
+@test
+func test_range_from_size_hint() -> I32 {
+    let r: RangeFrom[I32] = RangeFrom { start: 5 }
+    let hint: (I64, Maybe[I64]) = r.size_hint()
+    // RangeFrom is infinite — lower bound should be max I64, upper bound Nothing
+    assert(hint.0 > 0 as I64, "lower bound should be > 0")
+    assert(hint.1.is_nothing(), "upper bound should be Nothing (infinite)")
+    return 0
+}
+
+@test
+func test_range_from_size_hint_from_zero() -> I32 {
+    let r: RangeFrom[I32] = RangeFrom { start: 0 }
+    let hint: (I64, Maybe[I64]) = r.size_hint()
+    assert(hint.0 > 0 as I64, "lower bound should be positive")
+    assert(hint.1.is_nothing(), "upper bound Nothing for infinite range")
+    return 0
+}

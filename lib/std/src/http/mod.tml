@@ -45,6 +45,10 @@ pub mod parse
 pub mod dispatch
 pub mod worker
 pub mod iocp_worker
+pub mod work_stealing
+pub mod conn_pool
+pub mod bytes
+pub mod arena
 pub mod app
 pub mod controller
 

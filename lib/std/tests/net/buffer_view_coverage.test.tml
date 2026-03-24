@@ -1,0 +1,110 @@
+// Tests covering uncovered BufferView methods: from_slice, split_at, starts_with, to_owned_bytes
+use test::{assert, assert_eq}
+use std::net::buffer_view::BufferView
+
+// Helper using same pattern as existing buffer_view.test.tml
+func make_bytes_4() -> *U8 {
+    let buf: *Unit = lowlevel { mem_alloc(4 as I64) }
+    // bytes: 72, 84, 84, 80 = "HTTP"
+    lowlevel { ptr_write[U8]((buf as I64 + 0) as *U8, 72 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 1) as *U8, 84 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 2) as *U8, 84 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 3) as *U8, 80 as U8) }
+    buf as *U8
+}
+
+func make_bytes_5() -> *U8 {
+    let buf: *Unit = lowlevel { mem_alloc(5 as I64) }
+    lowlevel { ptr_write[U8]((buf as I64 + 0) as *U8, 1 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 1) as *U8, 2 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 2) as *U8, 3 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 3) as *U8, 4 as U8) }
+    lowlevel { ptr_write[U8]((buf as I64 + 4) as *U8, 5 as U8) }
+    buf as *U8
+}
+
+// ── BufferView::split_at ──────────────────────────────────────────────────
+
+@test
+func test_buffer_view_split_at_valid() -> I32 {
+    let ptr: *U8 = make_bytes_5()
+    let view: BufferView = BufferView::from_raw(ptr, 0, 5)
+    let maybe_pair = view.split_at(3 as I64)
+    assert(maybe_pair.is_just(), "split_at(3) should succeed")
+    let pair = maybe_pair.unwrap()
+    assert_eq(pair.0.len(), 3 as I64, "left half has 3 bytes")
+    assert_eq(pair.1.len(), 2 as I64, "right half has 2 bytes")
+    return 0
+}
+
+@test
+func test_buffer_view_split_at_zero() -> I32 {
+    let ptr: *U8 = make_bytes_5()
+    let view: BufferView = BufferView::from_raw(ptr, 0, 5)
+    let maybe_pair = view.split_at(0 as I64)
+    assert(maybe_pair.is_just(), "split_at(0) should succeed")
+    let pair = maybe_pair.unwrap()
+    assert_eq(pair.0.len(), 0 as I64, "left half has 0 bytes")
+    assert_eq(pair.1.len(), 5 as I64, "right half has 5 bytes")
+    return 0
+}
+
+@test
+func test_buffer_view_split_at_out_of_bounds() -> I32 {
+    let ptr: *U8 = make_bytes_4()
+    let view: BufferView = BufferView::from_raw(ptr, 0, 4)
+    let maybe_pair = view.split_at(10 as I64)
+    assert(maybe_pair.is_nothing(), "split_at beyond length should return Nothing")
+    return 0
+}
+
+// ── BufferView::starts_with ───────────────────────────────────────────────
+
+@test
+func test_buffer_view_starts_with_match() -> I32 {
+    // Build the view
+    let ptr: *U8 = make_bytes_4()  // bytes: 72, 84, 84, 80
+    let view: BufferView = BufferView::from_raw(ptr, 0, 4)
+    // Build prefix "HT" = [72, 84] as fixed-size array
+    let prefix: [U8; 2] = [72 as U8, 84 as U8]
+    assert(view.starts_with(ref prefix), "should start with [72, 84]")
+    return 0
+}
+
+@test
+func test_buffer_view_starts_with_no_match() -> I32 {
+    let ptr: *U8 = make_bytes_4()  // bytes: 72, 84, 84, 80
+    let view: BufferView = BufferView::from_raw(ptr, 0, 4)
+    let prefix: [U8; 2] = [80 as U8, 79 as U8]  // "PO"
+    assert(not view.starts_with(ref prefix), "should not start with [80, 79]")
+    return 0
+}
+
+@test
+func test_buffer_view_starts_with_empty_prefix() -> I32 {
+    let ptr: *U8 = make_bytes_4()
+    let view: BufferView = BufferView::from_raw(ptr, 0, 4)
+    let empty: [U8; 0] = []
+    assert(view.starts_with(ref empty), "empty prefix always matches")
+    return 0
+}
+
+// ── BufferView::to_owned_bytes ────────────────────────────────────────────
+
+@test
+func test_buffer_view_to_owned_bytes() -> I32 {
+    let ptr: *U8 = make_bytes_4()
+    let view: BufferView = BufferView::from_raw(ptr, 0, 4)
+    let owned: *U8 = view.to_owned_bytes()
+    assert(owned as I64 != 0, "to_owned_bytes should return non-null pointer")
+    return 0
+}
+
+@test
+func test_buffer_view_to_owned_bytes_empty() -> I32 {
+    let view: BufferView = BufferView::empty()
+    let owned: *U8 = view.to_owned_bytes()
+    // Empty view returns null
+    assert(owned as I64 == 0, "empty view to_owned_bytes returns null")
+    return 0
+}

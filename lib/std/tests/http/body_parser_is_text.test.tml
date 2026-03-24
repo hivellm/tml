@@ -1,0 +1,26 @@
+// Tests for ParsedBody::is_text
+use test::{assert, assert_eq}
+use std::http::body_parser::{ParsedBody, parse_body}
+
+@test
+func test_parse_body_text_plain() -> I32 {
+    let result = parse_body("text/plain", "hello world")
+    when result {
+        Ok(body) => {
+            assert(body.is_text(), "text/plain should be Text variant")
+            assert_eq(body.as_str(), "hello world", "text content preserved")
+        },
+        Err(_) => assert(false, "text/plain parse should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_is_text_returns_false_for_json() -> I32 {
+    let result = parse_body("application/json", "{\"a\":1}")
+    when result {
+        Ok(body) => assert(not body.is_text(), "json body is not text"),
+        Err(_) => assert(false, "json parse should succeed"),
+    }
+    return 0
+}

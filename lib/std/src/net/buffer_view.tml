@@ -74,10 +74,12 @@ impl BufferView {
     /// The view references the slice's underlying memory directly (zero-copy).
     pub func from_slice(slice: ref [U8]) -> BufferView {
         let len: I64 = slice.len() as I64
-        // Get the pointer to the slice data
+        // Extract the data pointer from the fat pointer (ref [U8] is {ptr, i64}).
+        // Casting `slice as *U8` gives the fat-pointer struct's address, not the
+        // data pointer inside it. We must read field 0 of the fat pointer explicitly.
         let data_ptr: *U8 = lowlevel {
-            let ptr: *U8 = slice as *U8
-            ptr
+            let fat_addr: I64 = slice as I64
+            ptr_read[*U8](fat_addr as *(*U8))
         }
         BufferView {
             data: data_ptr,

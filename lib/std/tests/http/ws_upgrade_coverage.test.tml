@@ -1,0 +1,75 @@
+// Tests covering WebSocket upgrade functions:
+// ws_accept_key, ws_upgrade_response, ws_validate_upgrade
+use test::{assert, assert_eq}
+use core::str
+use std::http::websocket::{ws_accept_key, ws_upgrade_response, ws_validate_upgrade, WsError}
+use std::http::headers::Headers
+
+// ── ws_accept_key ─────────────────────────────────────────────────
+
+@test
+func test_ws_accept_key_rfc_example() -> I32 {
+    // RFC 6455 test vector
+    let key: Str = "dGhlIHNhbXBsZSBub25jZQ=="
+    let accept: Str = ws_accept_key(key)
+    assert_eq(accept, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", "RFC 6455 accept key")
+    return 0
+}
+
+@test
+func test_ws_accept_key_nonempty() -> I32 {
+    let key: Str = "x3JJHMbDL1EzLkh9GBhXDw=="
+    let accept: Str = ws_accept_key(key)
+    assert(str::len(accept) > 0 as I64, "accept key should be non-empty")
+    return 0
+}
+
+// ── ws_upgrade_response ───────────────────────────────────────────
+
+@test
+func test_ws_upgrade_response_nonempty() -> I32 {
+    let key: Str = "dGhlIHNhbXBsZSBub25jZQ=="
+    let resp: Str = ws_upgrade_response(key)
+    assert(str::len(resp) > 0 as I64, "upgrade response should be non-empty")
+    return 0
+}
+
+@test
+func test_ws_upgrade_response_contains_101() -> I32 {
+    let key: Str = "dGhlIHNhbXBsZSBub25jZQ=="
+    let resp: Str = ws_upgrade_response(key)
+    // Response should start with HTTP/1.1 101
+    let len: I64 = str::len(resp)
+    assert(len >= 30 as I64, "upgrade response long enough to contain 101 header")
+    return 0
+}
+
+// ── ws_validate_upgrade ───────────────────────────────────────────
+
+@test
+func test_ws_validate_upgrade_ok() -> I32 {
+    let hdrs = Headers::new()
+    hdrs.set("Upgrade", "websocket")
+    hdrs.set("Connection", "Upgrade")
+    hdrs.set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+    let result = ws_validate_upgrade(ref hdrs)
+    when result {
+        Ok(key) => assert_eq(key, "dGhlIHNhbXBsZSBub25jZQ==", "extracted key"),
+        Err(_) => assert(false, "validate_upgrade should succeed"),
+    }
+    hdrs.destroy()
+    return 0
+}
+
+@test
+func test_ws_validate_upgrade_missing_upgrade_header() -> I32 {
+    let hdrs = Headers::new()
+    hdrs.set("Connection", "Upgrade")
+    let result = ws_validate_upgrade(ref hdrs)
+    when result {
+        Ok(_) => assert(false, "should fail without Upgrade header"),
+        Err(_) => assert(true, "missing Upgrade header = error"),
+    }
+    hdrs.destroy()
+    return 0
+}

@@ -39,6 +39,7 @@
 //! ```
 
 use std::net::error::{NetError, NetErrorKind}
+use core::intrinsics::{mem_alloc, mem_free, ptr_read, ptr_write, copy_nonoverlapping}
 
 // ============================================================================
 // FFI declarations for tls.c
@@ -494,4 +495,111 @@ pub func last_error() -> Str {
 /// Clears the OpenSSL error queue.
 pub func clear_errors() {
     ffi_tls_clear_errors()
+}
+
+// ============================================================================
+// ALPN Wire Format Encoding
+// ============================================================================
+
+/// A heap-allocated byte buffer containing ALPN protocol names in TLS wire format.
+///
+/// Each protocol name is encoded as a 1-byte length prefix followed by the
+/// UTF-8 protocol name bytes. This format is used by OpenSSL's `SSL_CTX_set_alpn_protos`.
+///
+/// Call `destroy()` when done to free the underlying memory.
+pub type AlpnWireData {
+    /// Pointer to the wire-format bytes.
+    data: *U8,
+    /// Total byte length of the encoded data.
+    length: I64,
+}
+
+impl AlpnWireData {
+    /// Returns whether the wire data is empty (no protocols encoded).
+    pub func is_empty(this) -> Bool {
+        this.length == 0
+    }
+
+    /// Returns the total byte length of the wire-format data.
+    pub func len(this) -> I64 {
+        this.length
+    }
+
+    /// Returns the byte at the given index.
+    ///
+    /// Panics if index is out of bounds.
+    pub func get(this, index: I64) -> U8 {
+        let addr: I64 = this.data as I64 + index
+        lowlevel { ptr_read[U8](addr as *U8) }
+    }
+
+    /// Returns a raw pointer to the wire-format data for FFI use.
+    pub func as_ptr(this) -> *U8 {
+        this.data
+    }
+
+    /// Frees the underlying memory.
+    pub func destroy(mut this) {
+        if this.length > 0 {
+            lowlevel { mem_free(this.data as *Unit) }
+            this.data = null as *U8
+            this.length = 0
+        }
+    }
+}
+
+/// Encodes a list of ALPN protocol names into TLS wire format.
+///
+/// Each protocol is encoded as a 1-byte length followed by the protocol name bytes.
+/// For example, `["h2", "http/1.1"]` becomes `[2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1']`.
+///
+/// Returns an error if any protocol name exceeds 255 bytes (TLS limit) or is empty.
+pub func encode_alpn_wire_format(protocols: ref [Str]) -> Outcome[AlpnWireData, Str] {
+    let count: I64 = protocols.len() as I64
+
+    // First pass: compute total wire format size and validate
+    var total: I64 = 0
+    var i: I64 = 0
+    loop (i < count) {
+        let proto: Str = protocols[i]
+        let plen: I64 = proto.len() as I64
+        if plen == 0 {
+            return Err("ALPN protocol name cannot be empty")
+        }
+        if plen > 255 {
+            return Err("ALPN protocol name exceeds 255 bytes")
+        }
+        total = total + 1 + plen
+        i = i + 1
+    }
+
+    if total == 0 {
+        return Ok(AlpnWireData { data: null as *U8, length: 0 })
+    }
+
+    // Allocate buffer
+    let buf: *Unit = lowlevel { mem_alloc(total) }
+    if (buf as I64) == 0 {
+        return Err("ALPN wire format: allocation failed")
+    }
+
+    // Second pass: write wire format
+    var offset: I64 = 0
+    var j: I64 = 0
+    loop (j < count) {
+        let proto: Str = protocols[j]
+        let plen: I64 = proto.len() as I64
+        // Write 1-byte length prefix
+        let len_addr: I64 = buf as I64 + offset
+        lowlevel { ptr_write[U8](len_addr as *U8, plen as U8) }
+        offset = offset + 1
+        // Write protocol name bytes
+        let dst_addr: I64 = buf as I64 + offset
+        let src_addr: I64 = proto as I64
+        lowlevel { copy_nonoverlapping(src_addr as *Unit, dst_addr as *Unit, plen as U64) }
+        offset = offset + plen
+        j = j + 1
+    }
+
+    Ok(AlpnWireData { data: buf as *U8, length: total })
 }

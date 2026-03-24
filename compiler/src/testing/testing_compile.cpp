@@ -869,7 +869,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             {"use std::zlib", "std::zlib"},     {"use std::json", "std::json"},
             {"use std::search", "std::search"}, {"use std::profiler", "std::profiler"},
             {"use std::crypto", "std::crypto"}, {"use std::file", "std::file"},
-            {"use std::glob", "std::glob"},
+            {"use std::glob", "std::glob"},     {"use std::net::tls", "std::net::tls"},
         };
         for (const auto& test : suite.tests) {
             try {
@@ -1550,11 +1550,17 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
     // Scan all test files for imports to build master registry (fallback)
     if (master_registry->get_all_modules().empty()) {
         static const std::pair<std::string, std::string> import_module_map[] = {
-            {"use std::zlib", "std::zlib"},     {"use std::json", "std::json"},
-            {"use std::search", "std::search"}, {"use std::profiler", "std::profiler"},
-            {"use std::crypto", "std::crypto"}, {"use std::file", "std::file"},
-            {"use std::glob", "std::glob"},     {"use std::net", "std::net"},
-            {"use std::os", "std::os"},         {"use std::sqlite", "std::sqlite"},
+            {"use std::zlib", "std::zlib"},
+            {"use std::json", "std::json"},
+            {"use std::search", "std::search"},
+            {"use std::profiler", "std::profiler"},
+            {"use std::crypto", "std::crypto"},
+            {"use std::file", "std::file"},
+            {"use std::glob", "std::glob"},
+            {"use std::net", "std::net"},
+            {"use std::os", "std::os"},
+            {"use std::sqlite", "std::sqlite"},
+            {"use std::net::tls", "std::net::tls"},
         };
         for (const auto& m : out_mapping) {
             try {

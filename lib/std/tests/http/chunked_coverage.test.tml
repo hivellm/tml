@@ -1,0 +1,52 @@
+// Tests for encode_final_chunk_with_trailers, ChunkedResult::get_bytes_consumed
+// recv_chunked_body requires a real socket fd — blocked for network tests
+use test::{assert, assert_eq}
+use core::str
+use std::http::chunked::{encode_final_chunk_with_trailers, decode_chunked}
+use std::http::headers::Headers
+
+@test
+func test_encode_final_chunk_with_trailers_empty_headers() -> I32 {
+    let hdrs = Headers::new()
+    let result: Str = encode_final_chunk_with_trailers(ref hdrs)
+    // Empty trailers: just "0\r\n\r\n"
+    assert(str::len(result) > 0 as I64, "result should be non-empty")
+    assert(str::contains(result, "0\r\n"), "should start with final chunk marker")
+    hdrs.destroy()
+    return 0
+}
+
+@test
+func test_encode_final_chunk_with_trailers_with_header() -> I32 {
+    let hdrs = Headers::new()
+    hdrs.set("X-Checksum", "abc123")
+    let result: Str = encode_final_chunk_with_trailers(ref hdrs)
+    assert(str::len(result) > 0 as I64, "result with trailers is non-empty")
+    assert(str::contains(result, "0\r\n"), "should contain final chunk marker")
+    hdrs.destroy()
+    return 0
+}
+
+@test
+func test_chunked_result_get_bytes_consumed() -> I32 {
+    // Decode a complete chunked body and check bytes_consumed
+    let data: Str = "5\r\nHello\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert_eq(result.is_complete(), 1 as I64, "should be complete")
+    assert_eq(result.get_body(), "Hello", "body should be Hello")
+    let consumed: I64 = result.get_bytes_consumed()
+    assert(consumed > 0 as I64, "bytes_consumed should be positive")
+    return 0
+}
+
+@test
+func test_chunked_result_get_bytes_consumed_multipart() -> I32 {
+    // Two chunks: "3\r\nfoo\r\n4\r\nbar!\r\n0\r\n\r\n"
+    let data: Str = "3\r\nfoo\r\n4\r\nbar!\r\n0\r\n\r\n"
+    let result = decode_chunked(data)
+    assert_eq(result.is_complete(), 1 as I64, "complete")
+    assert_eq(result.get_body(), "foobar!", "concatenated body")
+    let consumed: I64 = result.get_bytes_consumed()
+    assert(consumed > 0 as I64, "bytes consumed > 0")
+    return 0
+}

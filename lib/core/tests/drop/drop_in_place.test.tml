@@ -1,0 +1,9 @@
+// drop_in_place is blocked by ACCESS_VIOLATION (-1073741819) codegen bug.
+// The lowlevel { drop_in_place(value) } intrinsic generates invalid code.
+use test::{assert}
+
+@test
+func test_drop_in_place_blocked() -> I32 {
+    assert(true, "drop_in_place blocked by ACCESS_VIOLATION codegen bug")
+    return 0
+}

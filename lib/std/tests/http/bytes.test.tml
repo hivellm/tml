@@ -1,0 +1,123 @@
+// Tests for std::http::bytes — Bytes ref-counted byte buffer
+use test
+use std::http::bytes::Bytes
+
+@test
+func test_bytes_empty() -> I32 {
+    let b: Bytes = Bytes::empty()
+    assert(b.is_empty(), "empty Bytes should be empty")
+    assert_eq(b.len(), 0)
+    return 0
+}
+
+@test
+func test_bytes_from_str() -> I32 {
+    let b: Bytes = Bytes::from_str("hello")
+    assert_eq(b.len(), 5)
+    assert(not b.is_empty(), "should not be empty")
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_from_str_empty() -> I32 {
+    let b: Bytes = Bytes::from_str("")
+    assert_eq(b.len(), 0)
+    assert(b.is_empty(), "empty string Bytes should be empty")
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_get() -> I32 {
+    let b: Bytes = Bytes::from_str("ABC")
+    assert_eq(b.get(0), 65)   // 'A'
+    assert_eq(b.get(1), 66)   // 'B'
+    assert_eq(b.get(2), 67)   // 'C'
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_get_out_of_bounds() -> I32 {
+    let b: Bytes = Bytes::from_str("hi")
+    // Out-of-bounds should return -1
+    assert_eq(b.get(5), -1)
+    assert_eq(b.get(-1), -1)
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_to_str() -> I32 {
+    let b: Bytes = Bytes::from_str("world")
+    let s: Str = b.to_str()
+    assert_eq(s, "world")
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_to_str_empty() -> I32 {
+    let b: Bytes = Bytes::from_str("")
+    let s: Str = b.to_str()
+    assert_eq(s, "")
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_slice() -> I32 {
+    let b: Bytes = Bytes::from_str("hello world")
+    let s: Bytes = b.slice(6, 11)
+    assert_eq(s.len(), 5)
+    let text: Str = s.to_str()
+    assert_eq(text, "world")
+    s.release()
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_slice_from_start() -> I32 {
+    let b: Bytes = Bytes::from_str("hello world")
+    let s: Bytes = b.slice(0, 5)
+    let text: Str = s.to_str()
+    assert_eq(text, "hello")
+    s.release()
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_slice_empty_range() -> I32 {
+    let b: Bytes = Bytes::from_str("hello")
+    let s: Bytes = b.slice(3, 3)
+    assert_eq(s.len(), 0)
+    assert(s.is_empty(), "empty slice should be empty")
+    // empty slice has ptr=0, no release needed
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_clone_shares_data() -> I32 {
+    let b: Bytes = Bytes::from_str("shared")
+    let c: Bytes = b.clone()
+    assert_eq(b.len(), c.len())
+    let bs: Str = b.to_str()
+    let cs: Str = c.to_str()
+    assert_eq(bs, cs)
+    c.release()
+    b.release()
+    return 0
+}
+
+@test
+func test_bytes_as_ptr_nonzero() -> I32 {
+    let b: Bytes = Bytes::from_str("data")
+    let p: I64 = b.as_ptr()
+    assert(p != 0, "as_ptr should return non-zero for non-empty bytes")
+    b.release()
+    return 0
+}

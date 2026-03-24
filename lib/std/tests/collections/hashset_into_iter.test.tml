@@ -1,0 +1,34 @@
+// Tests for HashSet::into_iter (IntoIterator behavior)
+use test::{assert, assert_eq}
+use std::collections::class_collections::{HashSet, HashSetIter}
+
+@test
+func test_hashset_into_iter_basic() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    set.add(30)
+    // into_iter produces a HashSetIter that we can advance
+    let iter: HashSetIter[I64] = set.into_iter()
+    var count: I64 = 0
+    var sum: I64 = 0
+    var it: HashSetIter[I64] = iter
+    loop (it.has_next()) {
+        sum = sum + it.current()
+        it.advance()
+        count = count + 1
+    }
+    assert_eq(count, 3 as I64, "into_iter should yield 3 elements")
+    assert_eq(sum, 60 as I64, "sum should be 60")
+    set.destroy()
+    return 0
+}
+
+@test
+func test_hashset_into_iter_empty() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    let iter: HashSetIter[I64] = set.into_iter()
+    assert(not iter.has_next(), "empty set into_iter should be exhausted immediately")
+    set.destroy()
+    return 0
+}

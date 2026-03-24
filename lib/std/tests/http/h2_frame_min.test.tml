@@ -1,0 +1,281 @@
+// Minimal tests for H2Frame to narrow down crash
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::http::h2::frame::{H2Error, H2Frame, H2FrameType, H2Setting, H2SettingPair, H2ErrorCode, H2_FLAG_ACK, H2_FLAG_END_STREAM, H2_FLAG_END_HEADERS, h2_encode_frame}
+
+@test
+func test_h2error_invalid_frame_type() -> I32 {
+    let e: H2Error = H2Error::invalid_frame_type(99)
+    assert_eq(e.error_kind(), 2)
+    return 0
+}
+
+@test
+func test_h2error_invalid_setting_id() -> I32 {
+    let e: H2Error = H2Error::invalid_setting_id(0 as I64)
+    assert_eq(e.error_kind(), 3)
+    return 0
+}
+
+@test
+func test_h2error_invalid_stream_id() -> I32 {
+    let e: H2Error = H2Error::invalid_stream_id()
+    assert_eq(e.error_kind(), 4)
+    return 0
+}
+
+@test
+func test_h2frame_settings_ack() -> I32 {
+    let frame: H2Frame = H2Frame::settings_ack()
+    assert_eq(frame.flags, H2_FLAG_ACK)
+    assert_eq(frame.stream_id, 0 as I64)
+    return 0
+}
+
+@test
+func test_h2frame_new() -> I32 {
+    let payload = Buffer::new(0)
+    let ft: H2FrameType = H2FrameType::Settings()
+    let frame: H2Frame = H2Frame::new(ft, 0, 0 as I64, payload)
+    assert_eq(frame.length, 0 as I64)
+    assert_eq(frame.flags, 0)
+    return 0
+}
+
+@test
+func test_h2setting_eq() -> I32 {
+    let a: H2Setting = H2Setting::HeaderTableSize()
+    let b: H2Setting = H2Setting::HeaderTableSize()
+    let c: H2Setting = H2Setting::MaxConcurrentStreams()
+    assert(a.eq(b), "same settings should be equal")
+    assert(not a.eq(c), "different settings should not be equal")
+    return 0
+}
+
+@test
+func test_h2_setting_pair_new_and_setting() -> I32 {
+    let sp: H2SettingPair = H2SettingPair::new(4, 65535 as I64)
+    let maybe_setting = sp.setting()
+    when maybe_setting {
+        Just(s) => assert(s.eq(H2Setting::InitialWindowSize()), "setting should be InitialWindowSize"),
+        Nothing => assert(false, "setting() should return Just for valid id"),
+    }
+    return 0
+}
+
+@test
+func test_h2_error_code_settings_timeout() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::SettingsTimeout()
+    assert_eq(code.to_value(), 4 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_eq() -> I32 {
+    let a: H2ErrorCode = H2ErrorCode::FrameSizeError()
+    let b: H2ErrorCode = H2ErrorCode::FrameSizeError()
+    let c: H2ErrorCode = H2ErrorCode::RefusedStream()
+    assert(a.eq(b), "same error codes should be equal")
+    assert(not a.eq(c), "different error codes should not be equal")
+    return 0
+}
+
+@test
+func test_h2frame_settings() -> I32 {
+    let buf = Buffer::new(0)
+    let frame: H2Frame = H2Frame::settings(buf)
+    assert_eq(frame.stream_id, 0 as I64)
+    assert_eq(frame.flags, 0)
+    return 0
+}
+
+@test
+func test_h2frame_ping() -> I32 {
+    let data = Buffer::new(8)
+    let frame: H2Frame = H2Frame::ping(data)
+    assert_eq(frame.flags, 0)
+    assert_eq(frame.stream_id, 0 as I64)
+    return 0
+}
+
+@test
+func test_h2frame_goaway() -> I32 {
+    let frame: H2Frame = H2Frame::goaway(5 as I64, 0 as I64)
+    assert_eq(frame.stream_id, 0 as I64)
+    assert_eq(frame.length, 8 as I64)
+    return 0
+}
+
+@test
+func test_h2frame_data() -> I32 {
+    let payload = Buffer::new(10)
+    let frame: H2Frame = H2Frame::data(7 as I64, payload, false)
+    assert_eq(frame.stream_id, 7 as I64)
+    assert(not frame.is_end_stream(), "not end_stream")
+    return 0
+}
+
+@test
+func test_h2frame_headers() -> I32 {
+    let hdr_block = Buffer::new(20)
+    let frame: H2Frame = H2Frame::headers(1 as I64, hdr_block, true, true)
+    assert_eq(frame.stream_id, 1 as I64)
+    assert(frame.is_end_stream(), "end_stream set")
+    assert(frame.is_end_headers(), "end_headers set")
+    return 0
+}
+
+@test
+func test_h2frame_encode() -> I32 {
+    let frame: H2Frame = H2Frame::settings_ack()
+    let encoded: Buffer = frame.encode()
+    assert(encoded.len() >= 9 as I64, "encoded frame should be at least 9 bytes")
+    return 0
+}
+
+@test
+func test_h2frame_is_padded() -> I32 {
+    let buf = Buffer::new(4)
+    let frame: H2Frame = H2Frame::new(H2FrameType::Data(), 0x08, 1 as I64, buf)
+    assert(frame.is_padded(), "PADDED flag 0x08 set")
+    return 0
+}
+
+@test
+func test_h2frame_is_priority() -> I32 {
+    let buf = Buffer::new(5)
+    let frame: H2Frame = H2Frame::new(H2FrameType::Headers(), 0x20, 1 as I64, buf)
+    assert(frame.is_priority(), "PRIORITY flag 0x20 set")
+    return 0
+}
+
+@test
+func test_h2frame_ping_ack() -> I32 {
+    let data = Buffer::new(8)
+    let frame: H2Frame = H2Frame::ping_ack(data)
+    assert_eq(frame.flags, H2_FLAG_ACK)
+    return 0
+}
+
+@test
+func test_h2frame_window_update() -> I32 {
+    let frame: H2Frame = H2Frame::window_update(1 as I64, 65535 as I64)
+    assert_eq(frame.stream_id, 1 as I64)
+    assert_eq(frame.length, 4 as I64)
+    return 0
+}
+
+@test
+func test_h2frame_rst_stream() -> I32 {
+    let frame: H2Frame = H2Frame::rst_stream(3 as I64, 8 as I64)
+    assert_eq(frame.stream_id, 3 as I64)
+    assert_eq(frame.length, 4 as I64)
+    return 0
+}
+
+@test
+func test_h2frame_data_end_stream() -> I32 {
+    let payload = Buffer::new(5)
+    let frame: H2Frame = H2Frame::data(1 as I64, payload, true)
+    assert(frame.is_end_stream(), "end_stream flag set")
+    return 0
+}
+
+@test
+func test_h2frame_headers_no_flags() -> I32 {
+    let hdr_block = Buffer::new(10)
+    let frame: H2Frame = H2Frame::headers(3 as I64, hdr_block, false, false)
+    assert(not frame.is_end_stream(), "no end_stream")
+    assert(not frame.is_end_headers(), "no end_headers")
+    return 0
+}
+
+@test
+func test_h2frame_is_ack() -> I32 {
+    let frame: H2Frame = H2Frame::settings_ack()
+    assert(frame.is_ack(), "settings_ack should have ACK flag")
+    let ping_data = Buffer::new(8)
+    let non_ack: H2Frame = H2Frame::ping(ping_data)
+    assert(not non_ack.is_ack(), "regular ping should not have ACK flag")
+    return 0
+}
+
+@test
+func test_h2_error_code_stream_closed() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::StreamClosed()
+    assert_eq(code.to_value(), 5 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_frame_size_error() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::FrameSizeError()
+    assert_eq(code.to_value(), 6 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_refused_stream() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::RefusedStream()
+    assert_eq(code.to_value(), 7 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_compression_error() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::CompressionError()
+    assert_eq(code.to_value(), 9 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_connect_error() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::ConnectError()
+    assert_eq(code.to_value(), 10 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_enhance_your_calm() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::EnhanceYourCalm()
+    assert_eq(code.to_value(), 11 as I64)
+    return 0
+}
+
+@test
+func test_h2_error_code_inadequate_security() -> I32 {
+    let code: H2ErrorCode = H2ErrorCode::InadequateSecurity()
+    assert_eq(code.to_value(), 12 as I64)
+    return 0
+}
+
+@test
+func test_h2error_frame_too_large() -> I32 {
+    let e: H2Error = H2Error::frame_too_large()
+    assert_eq(e.error_kind(), 5)
+    return 0
+}
+
+@test
+func test_h2error_hpack_index_out_of_range() -> I32 {
+    let e: H2Error = H2Error::hpack_index_out_of_range(999 as I64)
+    assert_eq(e.error_kind(), 6)
+    return 0
+}
+
+@test
+func test_h2error_hpack_table_size_exceeded() -> I32 {
+    let e: H2Error = H2Error::hpack_table_size_exceeded()
+    assert_eq(e.error_kind(), 8)
+    return 0
+}
+
+@test
+func test_h2error_error_kind_and_message() -> I32 {
+    let e: H2Error = H2Error::invalid_stream_id()
+    let k: I32 = e.error_kind()
+    let m: Str = e.message()
+    assert(k > 0, "error_kind should be > 0")
+    assert(m.len() > 0, "message should be non-empty")
+    return 0
+}

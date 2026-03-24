@@ -50,7 +50,7 @@ struct TestConfig {
     int max_per_suite = 8;                  // Tests per suite (1 = individual mode)
     int compile_threads = 0;                // Parallel compile workers (0 = auto)
     int exec_concurrent = 0;                // Max concurrent subprocesses (0 = auto)
-    int timeout_seconds = 20;               // Per-suite subprocess timeout
+    int timeout_seconds = 10;               // Per-suite subprocess timeout
     bool no_cache = false;                  // Force recompile everything
     bool verbose = false;
     bool coverage = false;

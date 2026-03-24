@@ -1,0 +1,40 @@
+// Tests for HpackDynamicTable::max_table_size and set_max_size
+// hpack_decode_literal is a private function — covered transitively via hpack_decode
+use test::{assert, assert_eq}
+use std::http::h2::hpack::HpackDynamicTable
+
+@test
+func test_hpack_dynamic_table_max_table_size() -> I32 {
+    let t: HpackDynamicTable = HpackDynamicTable::new(4096 as I64)
+    assert_eq(t.max_table_size(), 4096 as I64, "max_table_size should be 4096")
+    return 0
+}
+
+@test
+func test_hpack_dynamic_table_max_table_size_custom() -> I32 {
+    let t: HpackDynamicTable = HpackDynamicTable::new(8192 as I64)
+    assert_eq(t.max_table_size(), 8192 as I64, "max_table_size should be 8192")
+    return 0
+}
+
+@test
+func test_hpack_dynamic_table_set_max_size_shrink() -> I32 {
+    var t: HpackDynamicTable = HpackDynamicTable::new(4096 as I64)
+    // Add an entry
+    t.add("content-type", "application/json")
+    assert_eq(t.len(), 1 as I64, "one entry added")
+    // Shrink to 0 — should evict all entries
+    t.set_max_size(0 as I64)
+    assert_eq(t.len(), 0 as I64, "all entries evicted after set_max_size(0)")
+    assert_eq(t.max_table_size(), 0 as I64, "max_table_size updated to 0")
+    return 0
+}
+
+@test
+func test_hpack_dynamic_table_set_max_size_grow() -> I32 {
+    var t: HpackDynamicTable = HpackDynamicTable::new(256 as I64)
+    assert_eq(t.max_table_size(), 256 as I64, "initial max")
+    t.set_max_size(1024 as I64)
+    assert_eq(t.max_table_size(), 1024 as I64, "max updated after set_max_size")
+    return 0
+}

@@ -1,0 +1,79 @@
+// Tests for std::http::arena — bump-pointer arena allocator
+use test
+use std::http::arena::Arena
+
+@test
+func test_arena_new_and_destroy() -> I32 {
+    let a: Arena = Arena::new(1024 as I64)
+    assert_eq(a.used(), 0 as I64)
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_default() -> I32 {
+    let a: Arena = Arena::default()
+    assert_eq(a.used(), 0 as I64)
+    assert(a.remaining() > 0 as I64, "default arena should have remaining space")
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_alloc() -> I32 {
+    let a: Arena = Arena::new(1024 as I64)
+    let ptr: I64 = a.alloc(64 as I64)
+    assert(ptr != 0, "alloc should return non-null pointer")
+    assert(a.used() > 0 as I64, "used should increase after alloc")
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_used_tracks_allocations() -> I32 {
+    let a: Arena = Arena::new(1024 as I64)
+    assert_eq(a.used(), 0 as I64)
+    a.alloc(32 as I64)
+    // Alloc aligns to 8 bytes: 32 is already aligned
+    assert(a.used() >= 32 as I64, "used should be at least 32 after alloc")
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_fallback_count() -> I32 {
+    // Small arena — oversized alloc triggers fallback
+    let a: Arena = Arena::new(64 as I64)
+    assert_eq(a.fallback_count(), 0 as I64)
+    // Allocate something that fits
+    a.alloc(32 as I64)
+    assert_eq(a.fallback_count(), 0 as I64)
+    // Allocate something that doesn't fit — triggers fallback
+    a.alloc(1024 as I64)
+    assert_eq(a.fallback_count(), 1 as I64)
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_reset() -> I32 {
+    let a: Arena = Arena::new(512 as I64)
+    a.alloc(128 as I64)
+    let before: I64 = a.used()
+    assert(before > 0 as I64, "used should be >0 before reset")
+    a.reset()
+    assert_eq(a.used(), 0 as I64)
+    a.destroy()
+    return 0
+}
+
+@test
+func test_arena_remaining() -> I32 {
+    let a: Arena = Arena::new(512 as I64)
+    let initial_remaining: I64 = a.remaining()
+    a.alloc(64 as I64)
+    let after_remaining: I64 = a.remaining()
+    assert(after_remaining < initial_remaining, "remaining should decrease after alloc")
+    a.destroy()
+    return 0
+}

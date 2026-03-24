@@ -1,0 +1,22 @@
+// Tests for h2_build_response and h2_buf_append (covered transitively)
+use test
+use std::http::h2::connection::H2Connection
+use std::http::h2::server::h2_build_response
+
+@test
+func test_h2_build_response_with_body() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let result = h2_build_response(conn, 1 as I64, 200 as I64, "application/json", "{\"ok\":true}")
+    // Should have at least HEADERS frame (9 header + encoded headers) + DATA frame (9 + body)
+    assert_true(result.len() > 18 as I64)
+    Ok(())
+}
+
+@test
+func test_h2_build_response_no_body() -> Outcome[Unit, Str] {
+    let conn = H2Connection::new()
+    let result = h2_build_response(conn, 1 as I64, 204 as I64, "", "")
+    // Empty body: only HEADERS frame with END_STREAM
+    assert_true(result.len() > 9 as I64)
+    Ok(())
+}

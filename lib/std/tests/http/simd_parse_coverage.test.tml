@@ -1,0 +1,137 @@
+// Tests covering std::http::simd_parse scalar functions:
+// find_crlf, find_colon, find_space, find_header_end, count_headers
+use test::{assert, assert_eq}
+use core::str
+use std::http::simd_parse::{find_crlf, find_colon, find_space, find_header_end, count_headers}
+
+// ── find_crlf ─────────────────────────────────────────────────────────────
+
+@test
+func test_find_crlf_found() -> I32 {
+    let s: Str = "GET / HTTP/1.1\r\nHost: x"
+    let buf: I64 = s as I64
+    let pos: I64 = find_crlf(buf, str::len(s) as I64, 0 as I64)
+    assert(pos >= 0 as I64, "should find CRLF")
+    assert_eq(pos, 14 as I64, "CRLF at position 14")
+    return 0
+}
+
+@test
+func test_find_crlf_not_found() -> I32 {
+    let s: Str = "GET / HTTP/1.1"
+    let buf: I64 = s as I64
+    let pos: I64 = find_crlf(buf, str::len(s) as I64, 0 as I64)
+    assert_eq(pos, -1 as I64, "no CRLF returns -1")
+    return 0
+}
+
+@test
+func test_find_crlf_start_offset() -> I32 {
+    let s: Str = "GET / HTTP/1.1\r\nHost: x\r\n"
+    let buf: I64 = s as I64
+    let len: I64 = str::len(s) as I64
+    // Find second CRLF starting after first
+    let first: I64 = find_crlf(buf, len, 0 as I64)
+    let second: I64 = find_crlf(buf, len, first + 2 as I64)
+    assert(second > first, "second CRLF after first")
+    return 0
+}
+
+// ── find_colon ────────────────────────────────────────────────────────────
+
+@test
+func test_find_colon_found() -> I32 {
+    let s: Str = "Host: example.com"
+    let buf: I64 = s as I64
+    let pos: I64 = find_colon(buf, str::len(s) as I64, 0 as I64)
+    assert_eq(pos, 4 as I64, "colon at position 4")
+    return 0
+}
+
+@test
+func test_find_colon_not_found() -> I32 {
+    let s: Str = "GET / HTTP/1.1"
+    let buf: I64 = s as I64
+    let pos: I64 = find_colon(buf, str::len(s) as I64, 0 as I64)
+    assert_eq(pos, -1 as I64, "no colon returns -1")
+    return 0
+}
+
+@test
+func test_find_colon_with_offset() -> I32 {
+    let s: Str = "Content-Type: text/plain"
+    let buf: I64 = s as I64
+    let pos: I64 = find_colon(buf, str::len(s) as I64, 5 as I64)
+    assert_eq(pos, 12 as I64, "colon found from offset 5")
+    return 0
+}
+
+// ── find_space ────────────────────────────────────────────────────────────
+
+@test
+func test_find_space_found() -> I32 {
+    let s: Str = "GET /path HTTP/1.1"
+    let buf: I64 = s as I64
+    let pos: I64 = find_space(buf, str::len(s) as I64, 0 as I64)
+    assert_eq(pos, 3 as I64, "space at position 3")
+    return 0
+}
+
+@test
+func test_find_space_not_found() -> I32 {
+    let s: Str = "GET"
+    let buf: I64 = s as I64
+    let pos: I64 = find_space(buf, str::len(s) as I64, 0 as I64)
+    assert_eq(pos, -1 as I64, "no space returns -1")
+    return 0
+}
+
+@test
+func test_find_space_with_offset() -> I32 {
+    let s: Str = "GET /path HTTP/1.1"
+    let buf: I64 = s as I64
+    let pos: I64 = find_space(buf, str::len(s) as I64, 4 as I64)
+    assert_eq(pos, 9 as I64, "second space from offset 4")
+    return 0
+}
+
+// ── find_header_end ───────────────────────────────────────────────────────
+
+@test
+func test_find_header_end_found() -> I32 {
+    let s: Str = "GET / HTTP/1.1\r\nHost: x\r\n\r\nbody"
+    let buf: I64 = s as I64
+    let pos: I64 = find_header_end(buf, str::len(s) as I64)
+    assert(pos >= 0 as I64, "should find header end")
+    return 0
+}
+
+@test
+func test_find_header_end_not_found() -> I32 {
+    let s: Str = "GET / HTTP/1.1\r\nHost: x\r\n"
+    let buf: I64 = s as I64
+    let pos: I64 = find_header_end(buf, str::len(s) as I64)
+    assert_eq(pos, -1 as I64, "incomplete headers return -1")
+    return 0
+}
+
+// ── count_headers ─────────────────────────────────────────────────────────
+
+@test
+func test_count_headers_two() -> I32 {
+    let s: Str = "GET / HTTP/1.1\r\nHost: example.com\r\nAccept: */*\r\n\r\n"
+    let buf: I64 = s as I64
+    let count: I64 = count_headers(buf, str::len(s) as I64)
+    // 3 CRLF before the double-CRLF: request line, Host, Accept
+    assert(count >= 2 as I64, "at least 2 headers found")
+    return 0
+}
+
+@test
+func test_count_headers_zero() -> I32 {
+    let s: Str = "GET / HTTP/1.1"
+    let buf: I64 = s as I64
+    let count: I64 = count_headers(buf, str::len(s) as I64)
+    assert_eq(count, 0 as I64, "no CRLF = 0 headers")
+    return 0
+}

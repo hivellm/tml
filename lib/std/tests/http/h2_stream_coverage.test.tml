@@ -1,0 +1,65 @@
+// Tests covering h2/stream missing functions:
+// H2StreamState::ReservedLocal, ReservedRemote,
+// H2Stream::send_rst_stream, adjust_send_window, adjust_recv_window
+use test
+use std::http::h2::stream::{H2Stream, H2StreamState}
+
+@test
+func test_h2_state_reserved_local() -> Outcome[Unit, Str] {
+    let state = H2StreamState::ReservedLocal()
+    assert_eq(state.to_string(), "reserved (local)")
+    Ok(())
+}
+
+@test
+func test_h2_state_reserved_remote() -> Outcome[Unit, Str] {
+    let state = H2StreamState::ReservedRemote()
+    assert_eq(state.to_string(), "reserved (remote)")
+    Ok(())
+}
+
+@test
+func test_h2_stream_send_rst_stream_ok() -> Outcome[Unit, Str] {
+    // RST_STREAM on an Open stream should succeed
+    var s = H2Stream::new(1, 65535, 65535)
+    // Transition to Open first by receiving headers
+    let _ = s.recv_headers(0 as I32)  // flags=0 (no END_STREAM)
+    let result = s.send_rst_stream()
+    when result {
+        Ok(_) => assert_true(s.get_state().eq(H2StreamState::Closed())),
+        Err(e) => assert(false, "send_rst_stream on open stream should succeed"),
+    }
+    Ok(())
+}
+
+@test
+func test_h2_stream_send_rst_stream_idle_err() -> Outcome[Unit, Str] {
+    // RST_STREAM on idle stream should return error
+    var s = H2Stream::new(3, 65535, 65535)
+    let result = s.send_rst_stream()
+    when result {
+        Ok(_) => assert(false, "RST_STREAM on idle should fail"),
+        Err(_) => assert_true(true),
+    }
+    Ok(())
+}
+
+@test
+func test_h2_stream_adjust_send_window() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(1, 65535, 65535)
+    s.adjust_send_window(1024 as I64)
+    assert_eq(s.get_send_window(), 66559 as I64)
+    s.adjust_send_window(-512 as I64)
+    assert_eq(s.get_send_window(), 66047 as I64)
+    Ok(())
+}
+
+@test
+func test_h2_stream_adjust_recv_window() -> Outcome[Unit, Str] {
+    var s = H2Stream::new(1, 65535, 65535)
+    s.adjust_recv_window(2048 as I64)
+    assert_eq(s.get_recv_window(), 67583 as I64)
+    s.adjust_recv_window(-1024 as I64)
+    assert_eq(s.get_recv_window(), 66559 as I64)
+    Ok(())
+}
