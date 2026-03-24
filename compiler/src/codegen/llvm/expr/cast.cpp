@@ -368,6 +368,34 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         }
     }
 
+    // Single-field struct to integer: extract the field
+    // e.g., %struct.RawPtr__Unit { i64 } → i64
+    if (src_type.find("%struct.") == 0 || src_type.find("%enum.") == 0) {
+        auto is_int = [](const std::string& t) {
+            return t.size() > 1 && t[0] == 'i' && std::isdigit(static_cast<unsigned char>(t[1]));
+        };
+        if (is_int(target_type) || target_type == "ptr") {
+            std::string extracted = fresh_reg();
+            emit_line("  " + extracted + " = extractvalue " + src_type + " " + src + ", 0");
+            last_expr_type_ = target_type;
+            return extracted;
+        }
+    }
+
+    // Integer to single-field struct: insertvalue to wrap
+    if (target_type.find("%struct.") == 0 || target_type.find("%enum.") == 0) {
+        auto is_int = [](const std::string& t) {
+            return t.size() > 1 && t[0] == 'i' && std::isdigit(static_cast<unsigned char>(t[1]));
+        };
+        if (is_int(src_type) || src_type == "ptr") {
+            std::string wrapped = fresh_reg();
+            emit_line("  " + wrapped + " = insertvalue " + target_type + " undef, " + src_type +
+                      " " + src + ", 0");
+            last_expr_type_ = target_type;
+            return wrapped;
+        }
+    }
+
     // Fallback: bitcast for same-size types
     emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
     last_expr_type_ = target_type;

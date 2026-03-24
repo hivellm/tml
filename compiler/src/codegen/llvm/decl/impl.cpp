@@ -249,6 +249,32 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             ret_type = llvm_type_ptr(*method.return_type);
         }
     }
+    // Fix: Unit type returns "{}" (empty struct), not "void".
+    // "void" causes call sites to discard the return value, but Unit is a real
+    // zero-sized value that must be storable in variables and passed to functions.
+    if (ret_type == "void" && method.return_type.has_value()) {
+        // Check if the return type is Unit — if so, use "{}" instead of "void".
+        const auto& rt = **method.return_type;
+        if (rt.is<parser::NamedType>()) {
+            const auto& named = rt.as<parser::NamedType>();
+            if (!named.path.segments.empty() && named.path.segments.back() == "Unit") {
+                ret_type = "{}";
+            }
+        }
+        // Also handle the case where the return type resolves to Unit through
+        // the semantic type system (e.g., when T=Unit in a generic impl).
+        if (ret_type == "void") {
+            std::string data_ret;
+            if (!current_type_subs_.empty()) {
+                auto resolved_ret =
+                    resolve_parser_type_with_subs(**method.return_type, current_type_subs_);
+                data_ret = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
+            }
+            if (data_ret == "{}") {
+                ret_type = "{}";
+            }
+        }
+    }
     current_ret_type_ = ret_type;
     func_ret_type_ = ret_type;
 

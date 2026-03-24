@@ -769,3 +769,21 @@ impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug, F: Debug] Debug for (A, B
                this.4.debug_string() + ", " + this.5.debug_string() + ")"
     }
 }
+
+// ============================================================================
+// Unit type Display/Debug
+// ============================================================================
+
+/// Display for `Unit` — prints as `()`.
+impl Display for Unit {
+    pub func to_string(this) -> Str {
+        return "()"
+    }
+}
+
+/// Debug for `Unit` — prints as `()`.
+impl Debug for Unit {
+    pub func debug_string(this) -> Str {
+        return "()"
+    }
+}

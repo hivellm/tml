@@ -1019,11 +1019,10 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
 
     // Call - handle void vs non-void return types
     std::string dbg_suffix = get_debug_loc_suffix();
-    // Unit type "{}" and void are equivalent for call instructions.
-    // Function definitions use "void" return, so calls must also use "void".
-    // Using "call {} @func()" when the function is "define void @func()" is invalid IR
-    // and causes stack corruption at runtime.
-    if (ret_type == "void" || ret_type == "{}") {
+    // Unit type "{}" returns an empty struct value (not void).
+    // We must use "call {} @func()" so the return value can be stored in variables.
+    // Only use "call void" when the function truly returns void (no value).
+    if (ret_type == "void") {
         emit("  call void " + mangled + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
             if (i > 0)
@@ -1033,6 +1032,19 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         emit_line(")" + dbg_suffix);
         last_expr_type_ = "void";
         return "0";
+    } else if (ret_type == "{}") {
+        // Unit type: call the function (side effects matter), return Unit value.
+        // LLVM allows "call {} @func()" — the result is a zero-sized aggregate.
+        std::string result = fresh_reg();
+        emit("  " + result + " = call {} " + mangled + "(");
+        for (size_t i = 0; i < arg_vals.size(); ++i) {
+            if (i > 0)
+                emit(", ");
+            emit(arg_vals[i].second + " " + arg_vals[i].first);
+        }
+        emit_line(")" + dbg_suffix);
+        last_expr_type_ = "{}";
+        return result;
     } else {
         std::string result = fresh_reg();
         emit("  " + result + " = call " + ret_type + " " + mangled + "(");

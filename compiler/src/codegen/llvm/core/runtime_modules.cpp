@@ -1216,12 +1216,19 @@ void LLVMIRGen::emit_string_constants() {
         for (char c : value) {
             if (c == '\n')
                 escaped += "\\0A";
+            else if (c == '\r')
+                escaped += "\\0D";
             else if (c == '\t')
                 escaped += "\\09";
+            else if (c == '\0')
+                escaped += "\\00";
             else if (c == '\\')
                 escaped += "\\5C";
             else if (c == '"')
                 escaped += "\\22";
+            else if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E)
+                escaped += "\\" + std::string(1, "0123456789ABCDEF"[(unsigned char)c >> 4]) +
+                           std::string(1, "0123456789ABCDEF"[(unsigned char)c & 0xF]);
             else
                 escaped += c;
         }
