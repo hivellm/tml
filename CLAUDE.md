@@ -85,28 +85,77 @@ Scratch space for temp files, IR dumps, experiments. Gitignored. Use freely, no 
 
 **YOU MUST USE MCP TOOLS AS YOUR PRIMARY INTERFACE FOR ALL TML OPERATIONS.**
 
-This is a HARD REQUIREMENT. The MCP server (`mcp__tml__*`) provides dedicated tools for:
+This is a HARD REQUIREMENT. The MCP server (`mcp__tml__*`) provides dedicated tools for every compiler operation. **Every MCP call is logged for research** — use tools intentionally.
 
-- **`mcp__tml__test`** — Running tests (use `path` for specific files, `filter` for name matching, `suite` for module-level filtering like `"core/str"` or `"std/json"`)
-- **`mcp__tml__run`** — Building and running TML source files
-- **`mcp__tml__build`** — Building TML source to executable
-- **`mcp__tml__compile`** — Compiling TML source files
-- **`mcp__tml__check`** — Type checking without compiling
-- **`mcp__tml__emit-ir`** — Emitting LLVM IR for debugging
-- **`mcp__tml__emit-mir`** — Emitting MIR for debugging
-- **`mcp__tml__format`** — Formatting TML source files
-- **`mcp__tml__lint`** — Linting TML source files
-- **`mcp__tml__docs_search`** — Searching TML documentation
-- **`mcp__tml__cache_invalidate`** — Invalidating stale caches
+### Complete Tool List
 
-**Rules:**
+**Compilation & Execution:**
+- **`mcp__tml__compile`** — Compile a .tml file (`file` required, `optimize`, `release`)
+- **`mcp__tml__build`** — Full build with options (`file` required, `optimize`, `release`, `crate_type`)
+- **`mcp__tml__run`** — Build and execute (`file` required, `args`, `release`)
+- **`mcp__tml__check`** — Type check only, no codegen (`file` required) — **fastest way to find type errors**
+
+**Testing:**
+- **`mcp__tml__test`** — Run tests with many options:
+  - `suite="core/str"` — run one module's tests
+  - `path="lib/core/tests/str/basic.test.tml"` — run single file
+  - `filter="split"` — name substring match
+  - `structured=true` — returns `{total, passed, failed, failures[]}` JSON
+  - `debug_layers=true` — **on failure, emits HIR + MIR + LLVM IR with diagnosis hints**
+  - `coverage=true` — run with coverage tracking
+  - `no_cache=true` — force recompile (after C++ changes)
+
+**Diagnostics (IR-Level Debugging):**
+- **`mcp__tml__emit-ir`** — Emit LLVM IR (`file` required, `function` to filter, `optimize` O0-O3)
+- **`mcp__tml__emit-mir`** — Emit MIR (SSA basic blocks, control flow)
+- **`mcp__tml__explain`** — Explain a compiler error code (`code` e.g. "T001")
+
+**Documentation:**
+- **`mcp__tml__docs_search`** — Search docs (`query` required, `kind`, `module`, `mode`)
+- **`mcp__tml__docs_get`** — Full docs for an item (`id` e.g. "core::str::split")
+- **`mcp__tml__docs_list`** — List module contents (`module` e.g. "std::sync")
+- **`mcp__tml__docs_resolve`** — Resolve short name to full path (`name` e.g. "HashMap")
+
+**Code Quality:**
+- **`mcp__tml__format`** — Format TML source (`file` required, `check`)
+- **`mcp__tml__lint`** — Lint TML source (`file` required, `fix`)
+- **`mcp__tml__cache_invalidate`** — Clear stale cache (`files` required)
+
+**Project:**
+- **`mcp__tml__project_build`** — Build compiler from C++ (`mode`, `target`, `clean`)
+- **`mcp__tml__project_coverage`** — Coverage stats (`module`, `sort`, `refresh`)
+- **`mcp__tml__project_structure`** — Module tree (`module`, `depth`, `show_files`)
+- **`mcp__tml__project_affected-tests`** — Tests affected by git changes (`base`, `run`)
+- **`mcp__tml__project_artifacts`** — Build output sizes (`config`, `kind`)
+- **`mcp__tml__project_slow-tests`** — Slowest tests analysis (`sort`, `limit`)
+
+### Debugging Decision Tree
+
+```
+Test failing?
+├─ Compilation error → use check (type errors) or emit-ir (codegen errors)
+├─ Assertion failure → use test with debug_layers=true
+│  ├─ HIR wrong → type checker or HIR builder bug
+│  ├─ MIR wrong → MIR builder or optimization pass bug
+│  ├─ LLVM IR wrong → MirCodegen bug (emit_call_inst, types, etc.)
+│  └─ All IR correct → C runtime or library logic bug
+├─ Crash → use test with debug_layers=true, check IR for ABI mismatches
+└─ Unknown error → use explain with the error code
+```
+
+### Rules
 
 1. **NEVER use Bash/PowerShell** to run `tml.exe test`, `tml.exe build`, `tml.exe run`, etc. when the equivalent MCP tool exists
 2. **NEVER use Bash** to grep test output — use the MCP tool's structured output instead
 3. The ONLY acceptable use of Bash for `tml.exe` is when you need to build the **compiler itself** (`scripts\build.bat`)
 4. MCP tools handle caching, path resolution, and output formatting automatically
+5. **Use `debug_layers=true`** when debugging test failures that need IR analysis — it emits all compilation layers in one call
+6. **Use `structured=true`** on test calls to get machine-readable results instead of parsing text
+7. **Use `check` before `emit-ir`** — it's faster and catches type errors without codegen
 
-**WHY:** MCP tools are purpose-built for this workflow. They strip ANSI codes, handle Windows path normalization, validate meta caches, and provide clean structured output. Using Bash/PowerShell bypasses all of this and wastes tokens on noisy output.
+**WHY:** MCP tools are purpose-built for this workflow. They strip ANSI codes, handle Windows path normalization, validate meta caches, and provide clean structured output. Using Bash/PowerShell bypasses all of this and wastes tokens on noisy output. Every call is also logged for LLM debugging research.
+
+**Full reference: `.claude/rules/mcp-tool-reference.md`**
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
