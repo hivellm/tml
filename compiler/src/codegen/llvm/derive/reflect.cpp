@@ -108,9 +108,15 @@ void LLVMIRGen::gen_derive_reflect_struct(const parser::StructDecl& s) {
     // and will be emitted by the normal struct codegen.
     // We just need to emit the static TypeInfo instance.
 
-    // We need to compute size and alignment at runtime using GEP trick
-    // For now, use placeholder values that will be filled in later
-    // TODO: Compute actual size/align
+    // Compute size using LLVM constant expression: ptrtoint(gep(%struct.T, null, 1))
+    // This is the standard way to compute sizeof at compile time in LLVM IR.
+    std::string size_expr =
+        "ptrtoint (ptr getelementptr (" + llvm_type + ", ptr null, i32 1) to i64)";
+
+    // Compute alignment: for structs, use the GEP-of-{i8, T} trick.
+    // offsetof(struct { i8; T }, T) == alignof(T) due to padding rules.
+    std::string align_expr =
+        "ptrtoint (ptr getelementptr ({ i8, " + llvm_type + " }, ptr null, i64 0, i32 1) to i64)";
 
     // Emit static TypeInfo as a global constant
     // TypeInfo layout: { i64, ptr, %struct.TypeKind, i64, i64, i64, i64 }
@@ -119,8 +125,8 @@ void LLVMIRGen::gen_derive_reflect_struct(const parser::StructDecl& s) {
     def += "i64 " + std::to_string(type_id) + ", ";                        // id
     def += "ptr " + name_const + ", ";                                     // name
     def += "%struct.TypeKind { i32 " + std::to_string(type_kind) + " }, "; // kind (Struct = 0)
-    def += "i64 0, ";                                                      // size (placeholder)
-    def += "i64 0, ";                                                      // align (placeholder)
+    def += "i64 " + size_expr + ", ";                                      // size (computed)
+    def += "i64 " + align_expr + ", ";                                     // align (computed)
     def += "i64 " + std::to_string(field_count) + ", ";                    // field_count
     def += "i64 0";                                                        // variant_count
     def += " }";
@@ -169,6 +175,13 @@ void LLVMIRGen::gen_derive_reflect_enum(const parser::EnumDecl& e) {
 
     // Note: %struct.TypeInfo is already defined in core::reflect.tml
 
+    // Compute size and alignment using LLVM constant expressions
+    std::string llvm_type = "%struct." + type_name;
+    std::string size_expr =
+        "ptrtoint (ptr getelementptr (" + llvm_type + ", ptr null, i32 1) to i64)";
+    std::string align_expr =
+        "ptrtoint (ptr getelementptr ({ i8, " + llvm_type + " }, ptr null, i64 0, i32 1) to i64)";
+
     // Emit static TypeInfo as a global constant
     // TypeInfo layout: { i64, ptr, %struct.TypeKind, i64, i64, i64, i64 }
     // TypeKind is a struct wrapper: { i32 }
@@ -176,8 +189,8 @@ void LLVMIRGen::gen_derive_reflect_enum(const parser::EnumDecl& e) {
     def += "i64 " + std::to_string(type_id) + ", ";                        // id
     def += "ptr " + name_const + ", ";                                     // name
     def += "%struct.TypeKind { i32 " + std::to_string(type_kind) + " }, "; // kind (Enum = 1)
-    def += "i64 0, ";                                                      // size (placeholder)
-    def += "i64 0, ";                                                      // align (placeholder)
+    def += "i64 " + size_expr + ", ";                                      // size (computed)
+    def += "i64 " + align_expr + ", ";                                     // align (computed)
     def += "i64 0, ";                                                      // field_count
     def += "i64 " + std::to_string(variant_count);                         // variant_count
     def += " }";
