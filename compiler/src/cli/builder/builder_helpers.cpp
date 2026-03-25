@@ -956,12 +956,37 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
     // Link std::json runtime if imported (pre-built C++ library)
     // Check for std::json or any submodule (std::json::types, std::json::builder, etc.)
-    auto uses_json_module = [&registry]() -> bool {
+    // Also check for @derive(Deserialize) which generates direct FFI calls to tml_json_*
+    auto uses_json_module = [&registry, &module]() -> bool {
         if (registry->has_module("std::json"))
             return true;
         for (const auto& [path, _] : registry->get_all_modules()) {
             if (path.find("std::json::") == 0 || path == "std::json") {
                 return true;
+            }
+        }
+        // Check if any struct/enum has @derive(Deserialize) — these generate
+        // direct calls to tml_json_parse/tml_json_free/etc. without importing std::json
+        auto has_derive_deserialize = [](const std::vector<parser::Decorator>& decorators) -> bool {
+            for (const auto& deco : decorators) {
+                if (deco.name == "derive") {
+                    for (const auto& arg : deco.args) {
+                        if (arg->is<parser::IdentExpr>() &&
+                            arg->as<parser::IdentExpr>().name == "Deserialize") {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+        for (const auto& decl : module.decls) {
+            if (decl->is<parser::StructDecl>()) {
+                if (has_derive_deserialize(decl->as<parser::StructDecl>().decorators))
+                    return true;
+            } else if (decl->is<parser::EnumDecl>()) {
+                if (has_derive_deserialize(decl->as<parser::EnumDecl>().decorators))
+                    return true;
             }
         }
         return false;

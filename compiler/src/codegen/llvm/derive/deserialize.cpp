@@ -119,12 +119,23 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     // Emit JSON runtime declarations once (guard with static flag)
     if (!json_runtime_declared_) {
         json_runtime_declared_ = true;
-        type_defs_buffer_ << "declare ptr @json_parse(ptr)\n";
-        type_defs_buffer_ << "declare void @json_free(ptr)\n";
-        type_defs_buffer_ << "declare i64 @json_get_i64(ptr, ptr)\n";
-        type_defs_buffer_ << "declare ptr @json_get_string(ptr, ptr)\n";
-        type_defs_buffer_ << "declare double @json_get_f64(ptr, ptr)\n";
-        type_defs_buffer_ << "declare ptr @json_get_object_str(ptr, ptr)\n";
+        // Handle-based JSON runtime API:
+        // tml_json_parse(ptr) -> i64 handle (-1 on error)
+        // tml_json_free(i64 handle) -> void
+        // tml_json_object_get_i64(i64 handle, ptr key) -> i64 value
+        // tml_json_object_get_f64(i64 handle, ptr key) -> double value
+        // tml_json_object_get_string(i64 handle, ptr key) -> ptr (static buffer)
+        // tml_json_object_get_bool(i64 handle, ptr key) -> i32 (1/0)
+        // tml_json_object_get(i64 handle, ptr key) -> i64 sub-handle
+        // tml_json_to_string(i64 handle) -> ptr (static buffer)
+        type_defs_buffer_ << "declare i64 @tml_json_parse(ptr)\n";
+        type_defs_buffer_ << "declare void @tml_json_free(i64)\n";
+        type_defs_buffer_ << "declare i64 @tml_json_object_get_i64(i64, ptr)\n";
+        type_defs_buffer_ << "declare ptr @tml_json_object_get_string(i64, ptr)\n";
+        type_defs_buffer_ << "declare double @tml_json_object_get_f64(i64, ptr)\n";
+        type_defs_buffer_ << "declare i32 @tml_json_object_get_bool(i64, ptr)\n";
+        type_defs_buffer_ << "declare i64 @tml_json_object_get(i64, ptr)\n";
+        type_defs_buffer_ << "declare ptr @tml_json_to_string(i64)\n";
         type_defs_buffer_ << "\n";
     }
 
@@ -139,14 +150,14 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
         return "%t" + std::to_string(temp_counter++);
     };
 
-    // Parse JSON using runtime function: json_parse(str) -> ptr (null on error)
-    std::string json_obj = fresh_temp();
-    type_defs_buffer_ << "  " << json_obj << " = call ptr @json_parse(ptr %json_str)\n";
+    // Parse JSON using runtime function: tml_json_parse(str) -> i64 handle (-1 on error)
+    std::string json_handle = fresh_temp();
+    type_defs_buffer_ << "  " << json_handle << " = call i64 @tml_json_parse(ptr %json_str)\n";
 
-    // Check if parse succeeded
-    std::string is_null = fresh_temp();
-    type_defs_buffer_ << "  " << is_null << " = icmp eq ptr " << json_obj << ", null\n";
-    type_defs_buffer_ << "  br i1 " << is_null << ", label %parse_error, label %parse_ok\n\n";
+    // Check if parse succeeded (handle == -1 means error)
+    std::string is_err = fresh_temp();
+    type_defs_buffer_ << "  " << is_err << " = icmp eq i64 " << json_handle << ", -1\n";
+    type_defs_buffer_ << "  br i1 " << is_err << ", label %parse_error, label %parse_ok\n\n";
 
     type_defs_buffer_ << "parse_error:\n";
     // Return Err("JSON parse failed")
@@ -186,38 +197,38 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
                           << ", ptr " << result_ptr << ", i32 0, i32 " << field.index << "\n";
 
         if (field.llvm_type == "ptr") {
-            // String field - json_get_string(obj, key) -> ptr
+            // String field - tml_json_object_get_string(handle, key) -> ptr
             std::string str_val = fresh_temp();
-            type_defs_buffer_ << "  " << str_val << " = call ptr @json_get_string(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << str_val << " = call ptr @tml_json_object_get_string(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             type_defs_buffer_ << "  store ptr " << str_val << ", ptr " << field_ptr << "\n";
         } else if (field.llvm_type == "i1") {
-            // Bool field - json_get_bool(obj, key) -> i32
+            // Bool field - tml_json_object_get_bool(handle, key) -> i32
             std::string bool_val = fresh_temp();
-            type_defs_buffer_ << "  " << bool_val << " = call i32 @json_get_bool(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << bool_val << " = call i32 @tml_json_object_get_bool(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             std::string bool_i1 = fresh_temp();
             type_defs_buffer_ << "  " << bool_i1 << " = trunc i32 " << bool_val << " to i1\n";
             type_defs_buffer_ << "  store i1 " << bool_i1 << ", ptr " << field_ptr << "\n";
         } else if (field.llvm_type == "i32") {
-            // I32 field - json_get_i64(obj, key) -> i64, then trunc
+            // I32 field - tml_json_object_get_i64(handle, key) -> i64, then trunc
             std::string i64_val = fresh_temp();
-            type_defs_buffer_ << "  " << i64_val << " = call i64 @json_get_i64(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << i64_val << " = call i64 @tml_json_object_get_i64(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             std::string i32_val = fresh_temp();
             type_defs_buffer_ << "  " << i32_val << " = trunc i64 " << i64_val << " to i32\n";
             type_defs_buffer_ << "  store i32 " << i32_val << ", ptr " << field_ptr << "\n";
         } else if (field.llvm_type == "i64") {
-            // I64 field - json_get_i64(obj, key) -> i64
+            // I64 field - tml_json_object_get_i64(handle, key) -> i64
             std::string i64_val = fresh_temp();
-            type_defs_buffer_ << "  " << i64_val << " = call i64 @json_get_i64(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << i64_val << " = call i64 @tml_json_object_get_i64(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             type_defs_buffer_ << "  store i64 " << i64_val << ", ptr " << field_ptr << "\n";
         } else if (field.llvm_type == "double" || field.llvm_type == "float") {
-            // Float field - json_get_f64(obj, key) -> double
+            // Float field - tml_json_object_get_f64(handle, key) -> double
             std::string f64_val = fresh_temp();
-            type_defs_buffer_ << "  " << f64_val << " = call double @json_get_f64(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << f64_val << " = call double @tml_json_object_get_f64(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             if (field.llvm_type == "float") {
                 std::string f32_val = fresh_temp();
                 type_defs_buffer_ << "  " << f32_val << " = fptrunc double " << f64_val
@@ -227,10 +238,10 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
                 type_defs_buffer_ << "  store double " << f64_val << ", ptr " << field_ptr << "\n";
             }
         } else if (field.llvm_type == "i8" || field.llvm_type == "i16") {
-            // Small int - json_get_i64 then trunc
+            // Small int - tml_json_object_get_i64 then trunc
             std::string i64_val = fresh_temp();
-            type_defs_buffer_ << "  " << i64_val << " = call i64 @json_get_i64(ptr " << json_obj
-                              << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << i64_val << " = call i64 @tml_json_object_get_i64(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             std::string small_val = fresh_temp();
             type_defs_buffer_ << "  " << small_val << " = trunc i64 " << i64_val << " to "
                               << field.llvm_type << "\n";
@@ -245,10 +256,15 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            // Get nested JSON string
+            // Get nested object as sub-handle, then serialize to string for from_json
+            std::string sub_handle = fresh_temp();
+            type_defs_buffer_ << "  " << sub_handle << " = call i64 @tml_json_object_get(i64 "
+                              << json_handle << ", ptr " << field_name_ptr << ")\n";
             std::string nested_json = fresh_temp();
-            type_defs_buffer_ << "  " << nested_json << " = call ptr @json_get_object_str(ptr "
-                              << json_obj << ", ptr " << field_name_ptr << ")\n";
+            type_defs_buffer_ << "  " << nested_json << " = call ptr @tml_json_to_string(i64 "
+                              << sub_handle << ")\n";
+            // Free the sub-handle (it was cloned by tml_json_object_get)
+            type_defs_buffer_ << "  call void @tml_json_free(i64 " << sub_handle << ")\n";
 
             // Call nested from_json recursively
             std::string nested_outcome_type;
@@ -291,7 +307,7 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
 
             // Error path — propagate the nested error
             type_defs_buffer_ << nested_err_label << ":\n";
-            type_defs_buffer_ << "  call void @json_free(ptr " << json_obj << ")\n";
+            type_defs_buffer_ << "  call void @tml_json_free(i64 " << json_handle << ")\n";
             // Build Err result with the nested error message
             std::string prop_err = fresh_temp();
             type_defs_buffer_ << "  " << prop_err << " = alloca " << outcome_type << "\n";
@@ -332,8 +348,8 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
         }
     }
 
-    // Free JSON object
-    type_defs_buffer_ << "  call void @json_free(ptr " << json_obj << ")\n";
+    // Free JSON handle
+    type_defs_buffer_ << "  call void @tml_json_free(i64 " << json_handle << ")\n";
 
     // Build Ok(result) and return
     std::string ok_result = fresh_temp();
@@ -430,14 +446,14 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
         return "%t" + std::to_string(temp_counter++);
     };
 
-    // Parse JSON
-    std::string json_obj = fresh_temp();
-    type_defs_buffer_ << "  " << json_obj << " = call ptr @json_parse(ptr %json_str)\n";
+    // Parse JSON using handle-based API
+    std::string json_handle = fresh_temp();
+    type_defs_buffer_ << "  " << json_handle << " = call i64 @tml_json_parse(ptr %json_str)\n";
 
-    // Check parse result
-    std::string is_null = fresh_temp();
-    type_defs_buffer_ << "  " << is_null << " = icmp eq ptr " << json_obj << ", null\n";
-    type_defs_buffer_ << "  br i1 " << is_null << ", label %parse_error, label %get_variant\n\n";
+    // Check parse result (handle == -1 means error)
+    std::string is_err = fresh_temp();
+    type_defs_buffer_ << "  " << is_err << " = icmp eq i64 " << json_handle << ", -1\n";
+    type_defs_buffer_ << "  br i1 " << is_err << ", label %parse_error, label %get_variant\n\n";
 
     type_defs_buffer_ << "parse_error:\n";
     std::string err_result = fresh_temp();
@@ -464,9 +480,9 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "  " << vkey_ptr << " = getelementptr inbounds [8 x i8], ptr "
                       << variant_key << ", i32 0, i32 0\n";
     std::string variant_str = fresh_temp();
-    type_defs_buffer_ << "  " << variant_str << " = call ptr @json_get_string(ptr " << json_obj
-                      << ", ptr " << vkey_ptr << ")\n";
-    type_defs_buffer_ << "  call void @json_free(ptr " << json_obj << ")\n";
+    type_defs_buffer_ << "  " << variant_str << " = call ptr @tml_json_object_get_string(i64 "
+                      << json_handle << ", ptr " << vkey_ptr << ")\n";
+    type_defs_buffer_ << "  call void @tml_json_free(i64 " << json_handle << ")\n";
 
     // Compare with each variant name
     int tag = 0;

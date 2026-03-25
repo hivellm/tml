@@ -51,7 +51,8 @@ constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 /// v5: Include behavior impl methods regardless of pub visibility + source hash check
 /// v6: Support tuple constants in module metadata (e.g., UNICODE_VERSION: (U8, U8, U8))
 /// v7: Add internal_enums section for private enum codegen (e.g., BorrowState)
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 7;
+/// v8: Fix has_pure_tml_functions to include non-pub behavior impl methods
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 8;
 constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================

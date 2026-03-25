@@ -47,6 +47,7 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 - [ ] 1.6.4 Fix Deserialize para nested structs — BLOCKED: deserialize.cpp uses placeholder API (`json_parse`, `json_free` as `ptr`) that doesn't match actual runtime (`tml_json_parse`, `tml_json_free` as `i64` handles). Needs full re-plumb of codegen to use handle-based API. String constant sizes also were wrong (fixed). Runtime declarations now emitted.
 - [x] 1.6.5 Fix Reflect size/align computation — LLVM constant expr ptrtoint(gep) trick
 - [ ] 1.6.6 Fix partial field drops
+- [x] 1.6.7 Fix cross-module behavior dispatch — `has_pure_tml_functions` required `pub` on impl methods but behavior impls omit `pub`. Fixed in `env_module_support.cpp`, meta version bumped v7→v8. Unblocks `std::json::serialize::ToJson` for primitives.
 
 **Gate M1**: ✅ Coverage ≥70%, collections working, env/path/datetime usable, regex done
 

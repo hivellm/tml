@@ -1,0 +1,47 @@
+// Tests for @derive(Deserialize) codegen with handle-based JSON runtime API
+use test::{assert, assert_eq}
+
+@derive(Serialize, Deserialize)
+type Point {
+    x: I64,
+    y: I64,
+}
+
+@test
+func test_deserialize_point() -> I32 {
+    let json = "{\"x\": 42, \"y\": 99}"
+    let result = Point::from_json(json)
+    when result {
+        Ok(p) => {
+            assert_eq(p.x, 42, "x should be 42")
+            assert_eq(p.y, 99, "y should be 99")
+        },
+        Err(e) => assert(false, "deserialization should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_deserialize_negative_values() -> I32 {
+    let json = "{\"x\": -10, \"y\": 0}"
+    let result = Point::from_json(json)
+    when result {
+        Ok(p) => {
+            assert_eq(p.x, -10, "x should be -10")
+            assert_eq(p.y, 0, "y should be 0")
+        },
+        Err(e) => assert(false, "deserialization should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_deserialize_invalid_json() -> I32 {
+    let json = "not valid json"
+    let result = Point::from_json(json)
+    when result {
+        Ok(p) => assert(false, "should fail on invalid JSON"),
+        Err(e) => assert(true, "correctly returned error"),
+    }
+    return 0
+}

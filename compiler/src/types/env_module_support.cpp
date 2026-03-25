@@ -1634,12 +1634,15 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     mod.has_pure_tml_functions = true;
                 }
             }
-            // Also check impl blocks for public methods with bodies
+            // Also check impl blocks for methods with bodies.
+            // Behavior impl methods (e.g., `impl ToJson for I64 { func to_json(this)... }`)
+            // may not have explicit `pub` keyword — they inherit the behavior's visibility.
+            // The codegen needs the source code for ALL impl methods, not just public ones,
+            // because method dispatch on primitive types always generates calls to these.
             else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl = decl->as<parser::ImplDecl>();
                 for (const auto& method : impl.methods) {
-                    if (method.vis == parser::Visibility::Public && !method.is_unsafe &&
-                        method.body.has_value()) {
+                    if (!method.is_unsafe && method.body.has_value()) {
                         mod.has_pure_tml_functions = true;
                         break;
                     }

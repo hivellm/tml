@@ -1,11 +1,44 @@
-// Tests for json/serialize — BLOCKED by cross-module behavior dispatch codegen bug
-// The ToJson/FromJson impls for primitive types (I64, Bool, Str, etc.) defined
-// in std::json::serialize cannot be called from test files because the codegen
-// mangles them as core::I64::to_json instead of std::json::serialize::I64_to_json.
+// Tests for json/serialize — ToJson behavior impls for primitive types
 use test::{assert}
+use std::json::serialize::ToJson
+use std::json::types::Json
 
 @test
-func test_serialize_blocked() -> I32 {
-    assert(true, "json/serialize behavior impls blocked by codegen mangling bug")
+func test_i64_to_json() -> I32 {
+    let val: I64 = 42
+    let j = val.to_json()
+    assert(j.is_number(), "I64.to_json() should produce a JSON number")
+    return 0
+}
+
+@test
+func test_i32_to_json() -> I32 {
+    let val: I32 = 99
+    let j = val.to_json()
+    assert(j.is_number(), "I32.to_json() should produce a JSON number")
+    return 0
+}
+
+@test
+func test_bool_to_json() -> I32 {
+    let val: Bool = true
+    let j = val.to_json()
+    assert(j.is_bool(), "Bool.to_json() should produce a JSON bool")
+    return 0
+}
+
+@test
+func test_str_to_json() -> I32 {
+    let val: Str = "hello"
+    let j = val.to_json()
+    assert(j.is_string(), "Str.to_json() should produce a JSON string")
+    return 0
+}
+
+@test
+func test_f64_to_json() -> I32 {
+    let val: F64 = 3.14
+    let j = val.to_json()
+    assert(j.is_number(), "F64.to_json() should produce a JSON number")
     return 0
 }
