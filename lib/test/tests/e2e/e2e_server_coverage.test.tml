@@ -1,0 +1,20 @@
+// Tests for TcpTestServer::port, accept_one, echo_one and UdpTestServer::port, echo_one
+use test::{assert, assert_eq}
+use test::e2e::server::{TcpTestServer, UdpTestServer}
+
+@test
+func test_tcp_server_port() -> I32 {
+    let server: TcpTestServer = TcpTestServer::new().unwrap()
+    let p: U16 = server.port()
+    // Port should be non-zero (OS assigned ephemeral port)
+    assert(p != 0 as U16, "server port should be non-zero")
+    0
+}
+
+@test
+func test_udp_server_port() -> I32 {
+    let server: UdpTestServer = UdpTestServer::new().unwrap()
+    let p: U16 = server.port()
+    assert(p != 0 as U16, "udp server port should be non-zero")
+    0
+}

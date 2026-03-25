@@ -135,14 +135,14 @@ const WORKER_CTX_SIZE: I64 = 16
 // Raw memory accessors for I64 fields
 // ============================================================================
 
-/// Reads an I64 value from `base + offset`.
-func tq_get(base: I64, offset: I64) -> I64 {
-    lowlevel { ptr_read[I64]((base + offset) as *I64) }
+/// Reads an I64 value from `ptr_base + offset`.
+func tq_get(ptr_base: I64, offset: I64) -> I64 {
+    lowlevel { ptr_read[I64]((ptr_base + offset) as *I64) }
 }
 
-/// Writes an I64 value to `base + offset`.
-func tq_set(base: I64, offset: I64, value: I64) {
-    lowlevel { ptr_write[I64]((base + offset) as *I64, value) }
+/// Writes an I64 value to `ptr_base + offset`.
+func tq_set(ptr_base: I64, offset: I64, value: I64) {
+    lowlevel { ptr_write[I64]((ptr_base + offset) as *I64, value) }
 }
 
 // ============================================================================

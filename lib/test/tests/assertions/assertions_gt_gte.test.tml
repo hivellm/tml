@@ -1,0 +1,23 @@
+// Tests for assert_str_len (non-generic)
+// NOTE: assert_gt, assert_gte, assert_in_range are generic [T] — blocked by
+// generic function dispatch returning {} codegen bug.
+use test
+use test::assertions
+
+@test
+func test_assert_str_len_basic() -> I32 {
+    assertions::assert_str_len("hello", 5, "hello has length 5")
+    return 0
+}
+
+@test
+func test_assert_str_len_empty() -> I32 {
+    assertions::assert_str_len("", 0, "empty string has length 0")
+    return 0
+}
+
+@test
+func test_assert_str_len_longer() -> I32 {
+    assertions::assert_str_len("hello world", 11, "hello world has length 11")
+    return 0
+}

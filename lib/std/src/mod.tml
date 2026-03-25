@@ -77,3 +77,4 @@ pub mod runtime    // Async runtime (executor, timer, yield, channel)
 pub mod aio        // Async I/O (poller, timer wheel, event loop)
 pub mod sqlite     // SQLite3 embedded database
 pub mod http       // HTTP router (radix tree), client, server
+pub mod ffi        // FFI types: CString (owned C string)

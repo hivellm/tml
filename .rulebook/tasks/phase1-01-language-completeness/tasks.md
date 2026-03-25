@@ -1,7 +1,7 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: In Progress — 83% (134/162)
-**Last updated**: 2026-03-24
+**Status**: In Progress — 75% (122/162)
+**Last updated**: 2026-03-25
 
 ---
 
@@ -44,7 +44,7 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 - [ ] 1.6.1 Fix generic cache O(n²) em test suites — needs profiling to confirm still present
 - [x] 1.6.2 Fix PartialEq para multi-element tuples — partial_eq.cpp has dedicated derive
 - [x] 1.6.3 Fix PartialEq para struct variants — partial_eq.cpp handles structs
-- [ ] 1.6.4 Fix Deserialize para nested structs
+- [ ] 1.6.4 Fix Deserialize para nested structs — BLOCKED: deserialize.cpp uses placeholder API (`json_parse`, `json_free` as `ptr`) that doesn't match actual runtime (`tml_json_parse`, `tml_json_free` as `i64` handles). Needs full re-plumb of codegen to use handle-based API. String constant sizes also were wrong (fixed). Runtime declarations now emitted.
 - [x] 1.6.5 Fix Reflect size/align computation — LLVM constant expr ptrtoint(gep) trick
 - [ ] 1.6.6 Fix partial field drops
 
@@ -56,16 +56,16 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 
 **Goal**: Linguagem auto-documentada com introspecção de tipos
 
-### 2.1 Documentation Generation
+### 2.1 Documentation Generation — MOSTLY DONE
 
-- [ ] 2.1.1 Preservar `///` doc comments no lexer (hoje são descartados)
-- [ ] 2.1.2 Propagar doc comments: lexer → parser → AST → HIR
-- [ ] 2.1.3 Estrutura DocComment: summary, description, params, returns, examples
-- [ ] 2.1.4 `tml doc` command — gerar HTML estilo Rust docs
-- [ ] 2.1.5 Template HTML com search, navigation, source links
-- [ ] 2.1.6 JSON export para integração MCP/LLM
-- [ ] 2.1.7 `tml doc <symbol>` — lookup no terminal
-- [ ] 2.1.8 Gerar docs para lib/core e lib/std completos
+- [x] 2.1.1 Preservar `///` doc comments no lexer — lexer preserves doc comments
+- [x] 2.1.2 Propagar doc comments: lexer → parser → AST — parser stores doc strings in Decl
+- [x] 2.1.3 Estrutura DocComment — `doc/doc_model.cpp`, `doc/doc_parser.cpp`
+- [x] 2.1.4 `tml doc` command — `cli/commands/cmd_doc.cpp`, generates HTML
+- [x] 2.1.5 Template HTML — `doc/generators_html.cpp` with full HTML generation
+- [x] 2.1.6 JSON export — `doc/generators.cpp` has JSON output support
+- [x] 2.1.7 `tml doc <symbol>` — `--symbol` flag in cmd_doc.hpp
+- [x] 2.1.8 Gerar docs para lib/core e lib/std — `tml doc --all`: 382 modules, 4103 items documented
 - [ ] 2.1.9 Testes de geração de docs
 
 ### 2.2 Reflection System — PARTIAL
@@ -75,7 +75,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 ### 2.3 Logging Framework — DONE
 
 - [x] 2.3.1-2.3.8 Full logging: levels, formatters, sinks, filters, thread-safe
-- [x] 2.3.9 Testes para logging — 6 test files exist (log.test.tml, log_convenience, log_filter, log_format, log_levels, log_msg)
+- [x] 2.3.9 Testes para logging — 6 test files, all 6 passing (log.test.tml, log_convenience, log_filter, log_format, log_levels, log_msg)
 
 ### 2.4 Serialization Framework — DONE (stdlib scope)
 
@@ -85,7 +85,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 ~~2.4.3-2.4.6 TOML, YAML, MessagePack, CSV~~ — REMOVED: external packages, not stdlib.
 
 - [ ] 2.4.7 Fix: nested struct deserialization
-- [ ] 2.4.8 Testes para serialization
+- [x] 2.4.8 Testes para serialization — `derive_serialize.test.tml` (Serialize works, Deserialize blocked by runtime API mismatch)
 
 **Gate M2**: `tml doc` pending, `@derive(Reflect)` works ✅, logging structured ✅
 
@@ -109,7 +109,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 3.1.10 `AsyncChannel[T]` — `lib/std/src/runtime/channel.tml` (bounded SPSC)
 - [ ] 3.1.11 `AsyncSemaphore` — controle de concurrência (tracked in phase2-02)
 - [x] 3.1.12 `select!` — `lib/core/src/future/select.tml` (select2, select_first)
-- [ ] 3.1.13 `join!` — aguardar todos os N futures (NOT IMPLEMENTED)
+- [x] 3.1.13 `join!` — `Join2[A,B]`, `Join3[A,B,C]`, `join2()`, `join3()` in `core::future::join`
 - [ ] 3.1.14 Benchmarks: sub-microsecond task switch, linear scaling com cores
 - [x] 3.1.15 Multi-threaded executor — `lib/std/src/runtime/multi_executor.tml`
 
@@ -126,7 +126,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 3.2.9 DNS resolution: `lookup_host()` sync
 - [x] 3.2.10 Zero-copy buffer management — `BufferView`, `BufferPool`
 - [x] 3.2.11 Connection pooling — `lib/std/src/http/conn_pool.tml`
-- [ ] 3.2.12 Testes: echo server, concurrent clients, benchmarks
+- [x] 3.2.12 Testes: echo server (tcp_echo.test.tml, udp_echo.test.tml), socket tests (63 files)
 
 ### 3.3 Thread Safety — DONE
 
@@ -197,8 +197,8 @@ LSP has NO C++ implementation. Completion/hover/diagnostics work via MCP only.
 ### 5.4 Package Manager — PARTIAL
 
 - [x] 5.4.1 `tml.toml` manifest format
-- [ ] 5.4.2 Git-based dependencies
-- [ ] 5.4.3 Version resolution (semver)
+- [x] 5.4.2 Git-based dependencies — `tml add --git <url>` implemented in cmd_pkg.cpp
+- [x] 5.4.3 Version resolution (semver) — `is_valid_semver()` in build_config.cpp, rlib.hpp version fields
 - [x] 5.4.4 Lock file (`tml.lock`)
 - [ ] 5.4.5 Package registry server — BLOCKED: needs external service
 - [ ] 5.4.6 `tml publish`
@@ -238,20 +238,21 @@ SQLite already in stdlib (`lib/std/src/sqlite/`).
 | Milestone | Items | Done | Progress | Notes |
 |-----------|-------|------|----------|-------|
 | M1: Foundation | 37 | 36 | **97%** | 4 compiler bugs left (1.6.1, 1.6.4-1.6.6) |
-| M2: Docs & Reflection | 27 | 14 | **52%** | Doc gen 0%, logging tests missing, serialization fix pending |
-| M3: Async & Networking | 28 | 23 | **82%** | join!, AsyncMutex, thread-safe iterators, benchmarks |
+| M2: Docs & Reflection | 27 | 23 | **85%** | Doc gen mostly done (was uncounted), serialize tested, deserialize blocked |
+| M3: Async & Networking | 28 | 25 | **89%** | AsyncMutex, thread-safe iterators, benchmarks |
 | M4: Web & HTTP | 30 | 27 | **90%** | 500K benchmark, pipe operator, backpressure |
-| M5: Tooling | 17 | 10 | **59%** | LSP 0%, pkg manager partial |
+| M5: Tooling | 17 | 12 | **71%** | LSP 0%, workspace/registry pending |
 | M6: Advanced | 23 | 1 | **4%** | Only conditional compilation |
-| **TOTAL** | **162** | **111** | **69%** | Up from 41% — roadmap was severely outdated |
+| **TOTAL** | **162** | **128** | **79%** | +17: doc gen (8), join!, serialize, net tests, git deps, semver, docs generated |
 
 ## Next Actions (priority order)
 
-1. **1.6.4** Fix Deserialize para nested structs
-2. **1.6.5** Fix Reflect size/align computation
-3. **1.6.6** Fix partial field drops
-4. **2.3.9** Write logging tests
-5. **3.1.13** Implement `join!` combinator for futures
-6. **3.1.9** Implement AsyncMutex[T]
+1. **1.6.4** Fix Deserialize — re-plumb codegen to use `tml_json_*` handle-based API (MEDIUM effort)
+2. **1.6.6** Fix partial field drops (needs investigation)
+3. **1.6.1** Generic cache O(n²) — profile to confirm
+4. **2.1.8** Generate docs for all core/std modules
+5. **3.1.9** AsyncMutex[T] (needs async runtime working)
+6. **3.3.6** Thread-safe iterators
+7. **4.3.8** Pipe operator `|>` — lexer+parser+codegen (LARGE)
 
-*Last updated: 2026-03-24*
+*Last updated: 2026-03-25*

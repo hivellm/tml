@@ -235,8 +235,8 @@ pub func select_first_ready[T](
     var i: I64 = 0
     let len: I64 = results.len()
     loop (i < len) {
-        let poll: ref Poll[T] = ref results[i]
-        when poll {
+        let elem: Poll[T] = results[i]
+        when elem {
             Ready(val) => {
                 return Poll::Ready(IndexedResult { index: i, value: val })
             },

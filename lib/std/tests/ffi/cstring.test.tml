@@ -1,0 +1,66 @@
+use test::{assert, assert_eq}
+use std::ffi::cstring::CString
+
+@test
+func test_cstring_new_ok() -> I32 {
+    let result = CString::new("hello")
+    when result {
+        Ok(cs) => {
+            assert_eq(cs.len(), 5, "len should be 5")
+            assert(not cs.is_empty(), "should not be empty")
+        },
+        Err(msg) => {
+            assert(false, "new should not fail for valid string")
+        },
+    }
+    return 0
+}
+
+@test
+func test_cstring_new_empty() -> I32 {
+    let result = CString::new("")
+    when result {
+        Ok(cs) => {
+            assert_eq(cs.len(), 0, "empty len should be 0")
+            assert(cs.is_empty(), "should be empty")
+        },
+        Err(msg) => {
+            assert(false, "new should not fail for empty string")
+        },
+    }
+    return 0
+}
+
+@test
+func test_cstring_as_ptr() -> I32 {
+    let cs = CString::new("test").unwrap()
+    let ptr = cs.as_ptr()
+    assert(ptr as I64 != 0, "ptr should be non-null")
+    return 0
+}
+
+@test
+func test_cstring_byte_at() -> I32 {
+    let cs = CString::new("ABC").unwrap()
+    assert_eq(cs.byte_at(0) as I64, 65, "A = 65")
+    assert_eq(cs.byte_at(1) as I64, 66, "B = 66")
+    assert_eq(cs.byte_at(2) as I64, 67, "C = 67")
+    return 0
+}
+
+@test
+func test_cstring_as_cstr() -> I32 {
+    let cs = CString::new("borrow me").unwrap()
+    let cstr = cs.as_cstr()
+    assert_eq(cstr.len(), 9, "CStr len should match")
+    return 0
+}
+
+@test
+func test_cstring_into_raw() -> I32 {
+    let cs = CString::new("raw ptr").unwrap()
+    let raw = cs.into_raw()
+    assert(raw as I64 != 0, "raw ptr should be non-null")
+    // Note: caller must free this — in a real app we'd call mem_free
+    return 0
+}

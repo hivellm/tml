@@ -147,6 +147,26 @@ struct FuncParam {
     SourceSpan span;    ///< Source location.
 };
 
+/// A function contract clause (pre/post condition).
+///
+/// Contracts are checked at runtime (debug builds) or compile-time (where possible).
+///
+/// # Examples
+///
+/// ```tml
+/// func sqrt(x: F64) -> F64
+/// pre: x >= 0.0
+/// post(result): result >= 0.0
+/// { ... }
+/// ```
+struct ContractClause {
+    ExprPtr condition; ///< The boolean condition expression.
+    std::optional<std::string>
+        result_binding; ///< Post-condition result binding name (e.g., "result").
+    bool is_pre;        ///< true = pre-condition, false = post-condition.
+    SourceSpan span;    ///< Source location.
+};
+
 /// Function declaration.
 ///
 /// Functions are the primary unit of code in TML. They can be:
@@ -177,6 +197,9 @@ struct FuncDecl {
     bool is_async;                           ///< True for `async func`.
     bool is_unsafe;                          ///< True for `lowlevel func`.
     SourceSpan span;                         ///< Source location.
+
+    // Contract clauses (pre/post conditions)
+    std::vector<ContractClause> contracts; ///< Pre/post condition contracts.
 
     // FFI support
     std::optional<std::string> extern_abi;  ///< ABI: "c", "c++", etc.

@@ -1,0 +1,17 @@
+/// Standard library FFI types — heap-owning string wrappers for C interop.
+///
+/// This module provides `CString` (owned, null-terminated C string) which
+/// complements `core::ffi::CStr` (borrowed C string).
+///
+/// ## Usage
+/// ```tml
+/// use std::ffi::CString
+/// use core::ffi::cstr::CStr
+///
+/// let cs = CString::new("hello").unwrap()
+/// some_c_function(cs.as_ptr())
+/// // cs is freed when it goes out of scope
+/// ```
+
+pub mod cstring
+pub mod os_str

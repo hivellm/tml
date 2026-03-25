@@ -1,0 +1,70 @@
+use test::{assert, assert_eq}
+use std::math::Complex
+
+@test
+func test_complex_new() -> I32 {
+    let z = Complex::new(3.0, 4.0)
+    assert(z.real > 2.99, "real")
+    assert(z.imag > 3.99, "imag")
+    return 0
+}
+
+@test
+func test_complex_add() -> I32 {
+    let a = Complex::new(1.0, 2.0)
+    let b = Complex::new(3.0, 4.0)
+    let c = a.add(b)
+    assert(c.real > 3.99, "add real = 4")
+    assert(c.imag > 5.99, "add imag = 6")
+    return 0
+}
+
+@test
+func test_complex_mul() -> I32 {
+    // (1+2i)(3+4i) = (3-8) + (4+6)i = -5 + 10i
+    let a = Complex::new(1.0, 2.0)
+    let b = Complex::new(3.0, 4.0)
+    let c = a.mul(b)
+    assert(c.real < -4.99, "mul real = -5")
+    assert(c.imag > 9.99, "mul imag = 10")
+    return 0
+}
+
+@test
+func test_complex_abs() -> I32 {
+    // |3+4i| = 5
+    let z = Complex::new(3.0, 4.0)
+    let m = z.abs()
+    assert(m > 4.99, "abs lower")
+    assert(m < 5.01, "abs upper")
+    return 0
+}
+
+@test
+func test_complex_conj() -> I32 {
+    let z = Complex::new(3.0, 4.0)
+    let c = z.conj()
+    assert(c.real > 2.99, "conj real = 3")
+    assert(c.imag < -3.99, "conj imag = -4")
+    return 0
+}
+
+@test
+func test_complex_from_polar() -> I32 {
+    // r=1, theta=0 -> (1, 0)
+    let z = Complex::from_polar(1.0, 0.0)
+    assert(z.real > 0.99, "polar real ~ 1")
+    assert(z.imag < 0.01, "polar imag ~ 0")
+    assert(z.imag > -0.01, "polar imag ~ 0")
+    return 0
+}
+
+@test
+func test_complex_zero_one() -> I32 {
+    let z = Complex::zero()
+    assert(z.real < 0.01, "zero real")
+    let o = Complex::one()
+    assert(o.real > 0.99, "one real")
+    assert(o.imag < 0.01, "one imag")
+    return 0
+}

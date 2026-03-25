@@ -1,0 +1,20 @@
+// Nested struct deserialization tests
+// BLOCKED: deserialize.cpp uses placeholder function names (json_parse, json_free)
+// that don't match actual C runtime (tml_json_parse, tml_json_free).
+// The codegen needs to be re-plumbed to use the handle-based API.
+use test::{assert, assert_eq}
+
+@derive(Serialize)
+type SimplePoint {
+    x: I64,
+    y: I64,
+}
+
+@test
+func test_serialize_simple() -> I32 {
+    let p = SimplePoint { x: 10, y: 20 }
+    let json = p.to_json()
+    // Verify it produces valid JSON with the fields
+    assert(json.len() > 0, "json should not be empty")
+    return 0
+}

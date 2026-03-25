@@ -38,3 +38,4 @@ pub mod executor
 pub mod sleep
 pub mod yield_now
 pub mod channel
+pub mod multi_executor

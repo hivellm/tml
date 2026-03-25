@@ -19,7 +19,13 @@ namespace tml::codegen {
 // For tuple patterns, returns a synthetic name like __tuple_param_0
 static std::string get_param_name(const parser::FuncParam& param, size_t param_index = 0) {
     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
-        return param.pattern->as<parser::IdentPattern>().name;
+        std::string name = param.pattern->as<parser::IdentPattern>().name;
+        // Avoid conflicts with LLVM basic block labels (entry, return, etc.)
+        if (name == "entry" || name == "return" || name == "then" || name == "else" ||
+            name == "end" || name == "loop" || name == "body" || name == "cleanup") {
+            return "p_" + name;
+        }
+        return name;
     } else if (param.pattern && param.pattern->is<parser::TuplePattern>()) {
         return "__tuple_param_" + std::to_string(param_index);
     }
@@ -678,6 +684,11 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             param_type = "{ ptr, ptr }";
         }
         std::string param_name = get_param_name(func.params[i], i);
+        // Get the original AST name (for locals_ lookup key)
+        std::string original_name = param_name;
+        if (func.params[i].pattern && func.params[i].pattern->is<parser::IdentPattern>()) {
+            original_name = func.params[i].pattern->as<parser::IdentPattern>().name;
+        }
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
 
@@ -690,13 +701,14 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                              !(options_.emit_debug_info && options_.debug_level >= 2);
 
         if (can_be_direct) {
-            locals_[param_name] = VarInfo{"%" + param_name, param_type, semantic_type,
-                                          std::nullopt,     false,      true /*is_direct_param*/};
+            locals_[original_name] =
+                VarInfo{"%" + param_name, param_type, semantic_type,
+                        std::nullopt,     false,      true /*is_direct_param*/};
         } else {
             std::string alloca_reg = fresh_reg();
             emit_line("  " + alloca_reg + " = alloca " + param_type);
             emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-            locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+            locals_[original_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
         }
 
         // Emit debug info for parameters (if enabled and debug level >= 2)

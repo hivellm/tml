@@ -558,3 +558,120 @@ pub func signum_f32(x: F32) -> F32 {
     }
     return 0.0
 }
+
+// ============================================================================
+// Complex Numbers
+// ============================================================================
+
+/// A complex number with F64 real and imaginary parts.
+///
+/// ## Examples
+/// ```tml
+/// let z = Complex::new(3.0, 4.0)  // 3 + 4i
+/// let mag = z.abs()                // 5.0
+/// let conj = z.conj()              // 3 - 4i
+/// ```
+pub type Complex {
+    real: F64,
+    imag: F64,
+}
+
+impl Complex {
+    /// Create a new complex number.
+    pub func new(real: F64, imag: F64) -> Complex {
+        return Complex { real: real, imag: imag }
+    }
+
+    /// Create a complex number from polar coordinates (r, theta).
+    pub func from_polar(r: F64, theta: F64) -> Complex {
+        return Complex {
+            real: r * cos(theta),
+            imag: r * sin(theta),
+        }
+    }
+
+    /// Complex zero (0 + 0i).
+    pub func zero() -> Complex {
+        return Complex { real: 0.0, imag: 0.0 }
+    }
+
+    /// Complex one (1 + 0i).
+    pub func one() -> Complex {
+        return Complex { real: 1.0, imag: 0.0 }
+    }
+
+    /// Imaginary unit (0 + 1i).
+    pub func i() -> Complex {
+        return Complex { real: 0.0, imag: 1.0 }
+    }
+
+    /// Add two complex numbers.
+    pub func add(this, other: Complex) -> Complex {
+        return Complex {
+            real: this.real + other.real,
+            imag: this.imag + other.imag,
+        }
+    }
+
+    /// Subtract two complex numbers.
+    pub func sub(this, other: Complex) -> Complex {
+        return Complex {
+            real: this.real - other.real,
+            imag: this.imag - other.imag,
+        }
+    }
+
+    /// Multiply two complex numbers: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+    pub func mul(this, other: Complex) -> Complex {
+        return Complex {
+            real: this.real * other.real - this.imag * other.imag,
+            imag: this.real * other.imag + this.imag * other.real,
+        }
+    }
+
+    /// Divide two complex numbers.
+    pub func div(this, other: Complex) -> Complex {
+        let denom = other.real * other.real + other.imag * other.imag
+        return Complex {
+            real: (this.real * other.real + this.imag * other.imag) / denom,
+            imag: (this.imag * other.real - this.real * other.imag) / denom,
+        }
+    }
+
+    /// Negate: -(a+bi) = (-a)+(-b)i
+    pub func neg(this) -> Complex {
+        return Complex { real: 0.0 - this.real, imag: 0.0 - this.imag }
+    }
+
+    /// Complex conjugate: conj(a+bi) = a-bi
+    pub func conj(this) -> Complex {
+        return Complex { real: this.real, imag: 0.0 - this.imag }
+    }
+
+    /// Magnitude (modulus): |z| = sqrt(real² + imag²)
+    pub func abs(this) -> F64 {
+        return sqrt(this.real * this.real + this.imag * this.imag)
+    }
+
+    /// Squared magnitude: |z|² = real² + imag²
+    pub func norm(this) -> F64 {
+        return this.real * this.real + this.imag * this.imag
+    }
+
+    /// Argument (angle): arg(z) = atan2(imag, real)
+    pub func arg(this) -> F64 {
+        return atan2(this.imag, this.real)
+    }
+
+    /// Scale by a real number.
+    pub func scale(this, factor: F64) -> Complex {
+        return Complex { real: this.real * factor, imag: this.imag * factor }
+    }
+
+    /// Check if approximately equal (within epsilon).
+    pub func approx_eq(this, other: Complex, epsilon: F64) -> Bool {
+        let dr = this.real - other.real
+        let di = this.imag - other.imag
+        return abs(dr) < epsilon and abs(di) < epsilon
+    }
+}

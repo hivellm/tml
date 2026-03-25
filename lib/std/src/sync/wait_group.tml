@@ -1,0 +1,62 @@
+/// WaitGroup — Wait for a dynamic number of tasks to complete.
+///
+/// Inspired by Go's `sync.WaitGroup`. Allows spawning N tasks and waiting
+/// for all of them to finish.
+///
+/// ## Usage
+/// ```tml
+/// use std::sync::wait_group::WaitGroup
+///
+/// var wg = WaitGroup::new()
+/// wg.add(3)           // 3 tasks will run
+/// // ... spawn 3 threads, each calls wg.done() when finished
+/// wg.wait()           // blocks until all 3 are done
+/// ```
+
+use std::sync::atomic::AtomicI64
+use std::sync::ordering::Ordering
+
+@extern("tml_thread_yield")
+func ffi_yield()
+
+/// A dynamic counter that allows waiting until it reaches zero.
+///
+/// Unlike `Barrier` (which has a fixed count set at creation), `WaitGroup`
+/// allows incrementing the count dynamically with `add()`.
+pub type WaitGroup {
+    counter: AtomicI64,
+}
+
+impl WaitGroup {
+    /// Create a new WaitGroup with count 0.
+    pub func new() -> WaitGroup {
+        return WaitGroup {
+            counter: AtomicI64::new(0),
+        }
+    }
+
+    /// Increment the counter by `delta`.
+    /// Call this BEFORE spawning a task.
+    pub func add(mut this, delta: I64) {
+        this.counter.fetch_add(delta, Ordering::SeqCst)
+    }
+
+    /// Decrement the counter by 1.
+    /// Call this when a task finishes. Equivalent to `add(-1)`.
+    pub func done(mut this) {
+        this.counter.fetch_add(-1, Ordering::SeqCst)
+    }
+
+    /// Block until the counter reaches 0.
+    /// Spins with thread yield.
+    pub func wait(mut this) {
+        loop (this.counter.load(Ordering::SeqCst) > 0) {
+            ffi_yield()
+        }
+    }
+
+    /// Get the current pending task count.
+    pub func count(this) -> I64 {
+        return this.counter.load(Ordering::SeqCst)
+    }
+}

@@ -105,8 +105,8 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     std::string field_err = "@.deser_" + suite_prefix + type_name + "_field_err";
 
     type_defs_buffer_ << "; @derive(Deserialize) string constants for " << type_name << "\n";
-    type_defs_buffer_ << parse_err << " = private constant [19 x i8] c\"JSON parse failed\\00\"\n";
-    type_defs_buffer_ << field_err << " = private constant [20 x i8] c\"Missing JSON field\\00\"\n";
+    type_defs_buffer_ << parse_err << " = private constant [18 x i8] c\"JSON parse failed\\00\"\n";
+    type_defs_buffer_ << field_err << " = private constant [19 x i8] c\"Missing JSON field\\00\"\n";
 
     // Field name constants for JSON parsing
     for (const auto& field : fields) {
@@ -115,6 +115,18 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
                           << " x i8] c\"" << field.name << "\\00\"\n";
     }
     type_defs_buffer_ << "\n";
+
+    // Emit JSON runtime declarations once (guard with static flag)
+    if (!json_runtime_declared_) {
+        json_runtime_declared_ = true;
+        type_defs_buffer_ << "declare ptr @json_parse(ptr)\n";
+        type_defs_buffer_ << "declare void @json_free(ptr)\n";
+        type_defs_buffer_ << "declare i64 @json_get_i64(ptr, ptr)\n";
+        type_defs_buffer_ << "declare ptr @json_get_string(ptr, ptr)\n";
+        type_defs_buffer_ << "declare double @json_get_f64(ptr, ptr)\n";
+        type_defs_buffer_ << "declare ptr @json_get_object_str(ptr, ptr)\n";
+        type_defs_buffer_ << "\n";
+    }
 
     // Emit function definition - static method returning Outcome[Self, Str]
     type_defs_buffer_ << "; @derive(Deserialize) for " << type_name << "\n";
@@ -238,11 +250,85 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
             type_defs_buffer_ << "  " << nested_json << " = call ptr @json_get_object_str(ptr "
                               << json_obj << ", ptr " << field_name_ptr << ")\n";
 
-            // Call nested from_json (note: this won't work for non-derive types)
-            // For now, just zero-initialize nested structs
-            type_defs_buffer_ << "  ; TODO: nested struct deserialization\n";
-            type_defs_buffer_ << "  call void @llvm.memset.p0.i64(ptr " << field_ptr
-                              << ", i8 0, i64 8, i1 false)\n";
+            // Call nested from_json recursively
+            std::string nested_outcome_type;
+            {
+                // Build Outcome[FieldType, Str] for the nested call return
+                auto nested_self_type = std::make_shared<types::Type>();
+                nested_self_type->kind = types::NamedType{field_type_name, "", {}};
+                auto nested_str_type = types::make_str();
+                std::vector<types::TypePtr> nested_args = {nested_self_type, nested_str_type};
+                std::string nested_mangled = require_enum_instantiation("Outcome", nested_args);
+                nested_outcome_type = "%struct." + nested_mangled;
+            }
+
+            std::string nested_func = "@" + mangle_impl_method(field_type_name, "from_json");
+            std::string nested_result = fresh_temp();
+            type_defs_buffer_ << "  " << nested_result << " = call " << nested_outcome_type << " "
+                              << nested_func << "(ptr " << nested_json << ")\n";
+
+            // Check if nested deserialization succeeded (tag == 0 means Ok)
+            std::string nested_alloca = fresh_temp();
+            type_defs_buffer_ << "  " << nested_alloca << " = alloca " << nested_outcome_type
+                              << "\n";
+            type_defs_buffer_ << "  store " << nested_outcome_type << " " << nested_result
+                              << ", ptr " << nested_alloca << "\n";
+            std::string nested_tag_ptr = fresh_temp();
+            type_defs_buffer_ << "  " << nested_tag_ptr << " = getelementptr inbounds "
+                              << nested_outcome_type << ", ptr " << nested_alloca
+                              << ", i32 0, i32 0\n";
+            std::string nested_tag = fresh_temp();
+            type_defs_buffer_ << "  " << nested_tag << " = load i32, ptr " << nested_tag_ptr
+                              << "\n";
+            std::string nested_is_err = fresh_temp();
+            type_defs_buffer_ << "  " << nested_is_err << " = icmp ne i32 " << nested_tag
+                              << ", 0\n";
+
+            std::string nested_ok_label = "nested_ok_" + field.name;
+            std::string nested_err_label = "nested_err_" + field.name;
+            type_defs_buffer_ << "  br i1 " << nested_is_err << ", label %" << nested_err_label
+                              << ", label %" << nested_ok_label << "\n\n";
+
+            // Error path — propagate the nested error
+            type_defs_buffer_ << nested_err_label << ":\n";
+            type_defs_buffer_ << "  call void @json_free(ptr " << json_obj << ")\n";
+            // Build Err result with the nested error message
+            std::string prop_err = fresh_temp();
+            type_defs_buffer_ << "  " << prop_err << " = alloca " << outcome_type << "\n";
+            std::string prop_tag = fresh_temp();
+            type_defs_buffer_ << "  " << prop_tag << " = getelementptr inbounds " << outcome_type
+                              << ", ptr " << prop_err << ", i32 0, i32 0\n";
+            type_defs_buffer_ << "  store i32 1, ptr " << prop_tag << " ; Err tag\n";
+            std::string prop_payload = fresh_temp();
+            type_defs_buffer_ << "  " << prop_payload << " = getelementptr inbounds "
+                              << outcome_type << ", ptr " << prop_err << ", i32 0, i32 1\n";
+            // Copy error payload from nested result
+            std::string nested_payload_ptr = fresh_temp();
+            type_defs_buffer_ << "  " << nested_payload_ptr << " = getelementptr inbounds "
+                              << nested_outcome_type << ", ptr " << nested_alloca
+                              << ", i32 0, i32 1\n";
+            std::string nested_err_val = fresh_temp();
+            type_defs_buffer_ << "  " << nested_err_val << " = load ptr, ptr " << nested_payload_ptr
+                              << "\n";
+            type_defs_buffer_ << "  store ptr " << nested_err_val << ", ptr " << prop_payload
+                              << "\n";
+            std::string prop_ret = fresh_temp();
+            type_defs_buffer_ << "  " << prop_ret << " = load " << outcome_type << ", ptr "
+                              << prop_err << "\n";
+            type_defs_buffer_ << "  ret " << outcome_type << " " << prop_ret << "\n\n";
+
+            // Ok path — extract value and store in field
+            type_defs_buffer_ << nested_ok_label << ":\n";
+            std::string nested_ok_payload = fresh_temp();
+            type_defs_buffer_ << "  " << nested_ok_payload << " = getelementptr inbounds "
+                              << nested_outcome_type << ", ptr " << nested_alloca
+                              << ", i32 0, i32 1\n";
+            // Copy the nested struct value to the field
+            type_defs_buffer_ << "  call void @llvm.memcpy.p0.p0.i64(ptr " << field_ptr << ", ptr "
+                              << nested_ok_payload << ", i64 "
+                              << "ptrtoint(ptr getelementptr(" << field.llvm_type
+                              << ", ptr null, i32 1) to i64)"
+                              << ", i1 false)\n";
         }
     }
 

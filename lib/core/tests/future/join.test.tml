@@ -1,0 +1,38 @@
+use test::{assert, assert_eq}
+use core::future::join::{Join2, Join3, join2, join3}
+
+@test
+func test_join2_new() -> I32 {
+    let j: Join2[I64, I64] = Join2::new(1, 2)
+    assert_eq(j.a, 1, "a should be 1")
+    assert_eq(j.b, 2, "b should be 2")
+    assert(not j.is_complete(), "should not be complete initially")
+    return 0
+}
+
+@test
+func test_join2_helper() -> I32 {
+    let j = join2(10, 20)
+    assert_eq(j.a, 10, "join2 a")
+    assert_eq(j.b, 20, "join2 b")
+    return 0
+}
+
+@test
+func test_join3_new() -> I32 {
+    let j: Join3[I64, I64, I64] = Join3::new(1, 2, 3)
+    assert_eq(j.a, 1, "a")
+    assert_eq(j.b, 2, "b")
+    assert_eq(j.c, 3, "c")
+    assert(not j.is_complete(), "not complete initially")
+    return 0
+}
+
+@test
+func test_join3_helper() -> I32 {
+    let j = join3(10, 20, 30)
+    assert_eq(j.a, 10, "join3 a")
+    assert_eq(j.b, 20, "join3 b")
+    assert_eq(j.c, 30, "join3 c")
+    return 0
+}

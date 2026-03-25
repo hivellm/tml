@@ -1,0 +1,26 @@
+// Tests for Select2::new and select_first_ready (future/select module)
+// select_first_ready: BLOCKED by List[Poll[T]] indexing — struct ptr vs value codegen bug
+//   "defined with type 'ptr' but expected '%struct.Poll__I32'"
+use test::{assert, assert_eq}
+use core::future::select::Select2
+
+// ============================================================================
+// Select2::new — Create stateful select combinator
+// ============================================================================
+
+@test
+func test_select2_new_creates_struct() -> Outcome[Unit, Str] {
+    // Select2::new just stores the two values in a struct
+    let sel: Select2[I32, I32] = Select2::new(42, 99)
+    assert_eq(sel.a, 42, "Select2::a should be 42")
+    assert_eq(sel.b, 99, "Select2::b should be 99")
+    Ok(())
+}
+
+@test
+func test_select2_new_different_types() -> Outcome[Unit, Str] {
+    let sel: Select2[Bool, I32] = Select2::new(true, 7)
+    assert(sel.a, "first field should be true")
+    assert_eq(sel.b, 7, "second field should be 7")
+    Ok(())
+}

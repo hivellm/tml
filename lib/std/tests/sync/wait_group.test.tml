@@ -1,0 +1,40 @@
+use test::{assert, assert_eq}
+use std::sync::wait_group::WaitGroup
+
+@test
+func test_waitgroup_new() -> I32 {
+    let wg = WaitGroup::new()
+    assert_eq(wg.count(), 0, "initial count should be 0")
+    return 0
+}
+
+@test
+func test_add_done() -> I32 {
+    var wg = WaitGroup::new()
+    wg.add(3)
+    assert_eq(wg.count(), 3, "count after add(3)")
+    wg.done()
+    assert_eq(wg.count(), 2, "count after done")
+    wg.done()
+    wg.done()
+    assert_eq(wg.count(), 0, "count after 3 dones")
+    return 0
+}
+
+@test
+func test_wait_already_zero() -> I32 {
+    var wg = WaitGroup::new()
+    wg.wait()  // should return immediately since count is 0
+    assert_eq(wg.count(), 0, "still 0 after wait")
+    return 0
+}
+
+@test
+func test_add_done_wait() -> I32 {
+    var wg = WaitGroup::new()
+    wg.add(1)
+    wg.done()
+    wg.wait()  // count is 0, should return immediately
+    assert_eq(wg.count(), 0, "0 after done+wait")
+    return 0
+}

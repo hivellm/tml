@@ -1,0 +1,27 @@
+// Tests for MultiExecutor::with_default_workers
+use test
+use std::runtime::multi_executor::MultiExecutor
+
+func noop(data: I64) {
+    // no-op
+}
+
+@test
+func test_with_default_workers() -> Outcome[Unit, Str] {
+    // with_default_workers creates an executor using the CPU core count
+    let exec: MultiExecutor = MultiExecutor::with_default_workers()
+    exec.submit(noop, 0)
+    exec.run()
+    assert_eq(exec.completed_count(), 1)
+    exec.destroy()
+    Ok(())
+}
+
+@test
+func test_with_default_workers_no_tasks() -> Outcome[Unit, Str] {
+    let exec: MultiExecutor = MultiExecutor::with_default_workers()
+    exec.run()
+    assert_eq(exec.completed_count(), 0)
+    exec.destroy()
+    Ok(())
+}

@@ -1203,6 +1203,9 @@ private:
     // Used when processing directory modules that may have same-named functions
     std::unordered_set<std::string> generated_functions_;
 
+    // Whether JSON runtime declarations have been emitted for @derive(Deserialize)
+    bool json_runtime_declared_ = false;
+
     // Generated TypeInfo globals for @derive(Reflect) types
     std::unordered_set<std::string> generated_typeinfo_;
 

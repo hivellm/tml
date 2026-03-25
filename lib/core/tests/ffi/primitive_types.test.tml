@@ -1,0 +1,124 @@
+use test::{assert, assert_eq}
+use core::ffi::c_int
+use core::ffi::c_uint
+use core::ffi::c_long
+use core::ffi::c_ulong
+use core::ffi::c_longlong
+use core::ffi::c_ulonglong
+use core::ffi::c_float
+use core::ffi::c_double
+use core::ffi::c_size_t
+use core::ffi::c_ssize_t
+use core::ffi::c_ptrdiff_t
+use core::ffi::c_intptr_t
+use core::ffi::c_uintptr_t
+use core::ffi::c_void
+
+@test
+func test_c_int() -> I32 {
+    let ci = c_int::from(42 as I32)
+    assert_eq(ci.as_i64(), 42, "c_int")
+    assert_eq(ci.val as I64, 42, "c_int.val")
+    return 0
+}
+
+@test
+func test_c_uint() -> I32 {
+    let cu = c_uint::from(100 as U32)
+    assert_eq(cu.as_i64(), 100, "c_uint")
+    return 0
+}
+
+@test
+func test_c_long() -> I32 {
+    let cl = c_long::from(2147483647)
+    assert_eq(cl.as_i64(), 2147483647, "c_long max i32")
+    assert_eq(cl.as_i32() as I64, 2147483647, "c_long.as_i32")
+    return 0
+}
+
+@test
+func test_c_ulong() -> I32 {
+    let ul = c_ulong::from(200 as U64)
+    assert_eq(ul.as_i64(), 200, "c_ulong")
+    assert_eq(ul.as_u32() as I64, 200, "c_ulong.as_u32")
+    return 0
+}
+
+@test
+func test_c_longlong() -> I32 {
+    let cll = c_longlong::from(9999999999)
+    assert_eq(cll.as_i64(), 9999999999, "c_longlong")
+    return 0
+}
+
+@test
+func test_c_ulonglong() -> I32 {
+    let ull = c_ulonglong::from(9999999999 as U64)
+    assert_eq(ull.as_i64(), 9999999999, "c_ulonglong")
+    return 0
+}
+
+@test
+func test_c_float() -> I32 {
+    let cf = c_float::from(3.14 as F32)
+    assert(cf.as_f64() > 3.13, "c_float lower")
+    assert(cf.as_f64() < 3.15, "c_float upper")
+    return 0
+}
+
+@test
+func test_c_double() -> I32 {
+    let cd = c_double::from(2.71828)
+    assert(cd.as_f64() > 2.718, "c_double lower")
+    assert(cd.as_f64() < 2.719, "c_double upper")
+    return 0
+}
+
+@test
+func test_c_size_t() -> I32 {
+    let sz = c_size_t::from(4096 as U64)
+    assert_eq(sz.as_i64(), 4096, "c_size_t")
+    assert_eq(sz.as_u64() as I64, 4096, "c_size_t.as_u64")
+    return 0
+}
+
+@test
+func test_c_ssize_t() -> I32 {
+    let ssz = c_ssize_t::from(-1)
+    assert_eq(ssz.as_i64(), -1, "c_ssize_t")
+    return 0
+}
+
+@test
+func test_c_ptrdiff_t() -> I32 {
+    let pt = c_ptrdiff_t::from(-100)
+    assert_eq(pt.as_i64(), -100, "c_ptrdiff_t")
+    return 0
+}
+
+@test
+func test_c_intptr_t() -> I32 {
+    let ip = c_intptr_t::from(999999)
+    assert_eq(ip.as_i64(), 999999, "c_intptr_t")
+    return 0
+}
+
+@test
+func test_c_uintptr_t() -> I32 {
+    let up = c_uintptr_t::from(999999 as U64)
+    assert_eq(up.as_u64() as I64, 999999, "c_uintptr_t.as_u64")
+    assert_eq(up.as_i64(), 999999, "c_uintptr_t.as_i64")
+    return 0
+}
+
+@test
+func test_c_void_pointer() -> I32 {
+    var val: I64 = 42
+    let ptr = &val as *I64
+    let void_ptr = ptr as *c_void
+    let back = void_ptr as *I64
+    let read_val = lowlevel { ptr_read[I64](back) }
+    assert_eq(read_val, 42, "round-trip *c_void")
+    return 0
+}

@@ -1,0 +1,44 @@
+use test::{assert, assert_eq}
+
+@derive(Serialize)
+type Point {
+    x: I64,
+    y: I64,
+}
+
+@derive(Serialize)
+type Person {
+    name: Str,
+    age: I64,
+}
+
+@derive(Serialize)
+type Config {
+    debug: Bool,
+    level: I64,
+    ratio: F64,
+}
+
+@test
+func test_serialize_i64_fields() -> I32 {
+    let p = Point { x: 10, y: 20 }
+    let json = p.to_json()
+    assert(json.len() > 0, "json should not be empty")
+    return 0
+}
+
+@test
+func test_serialize_str_field() -> I32 {
+    let p = Person { name: "Alice", age: 30 }
+    let json = p.to_json()
+    assert(json.len() > 0, "json should not be empty")
+    return 0
+}
+
+@test
+func test_serialize_mixed_types() -> I32 {
+    let c = Config { debug: true, level: 5, ratio: 3.14 }
+    let json = c.to_json()
+    assert(json.len() > 0, "json should not be empty")
+    return 0
+}

@@ -1,0 +1,70 @@
+use test::{assert, assert_eq}
+use std::ffi::os_str::{OsStr, OsString}
+
+@test
+func test_osstr_from_str() -> I32 {
+    let os = OsStr::from_str("hello")
+    assert_eq(os.len(), 5, "OsStr len")
+    assert(not os.is_empty(), "not empty")
+    return 0
+}
+
+@test
+func test_osstr_to_str() -> I32 {
+    let os = OsStr::from_str("world")
+    when os.to_str() {
+        Just(s) => assert_eq(s, "world", "to_str should return world"),
+        Nothing => assert(false, "to_str should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_osstr_byte_at() -> I32 {
+    let os = OsStr::from_str("AB")
+    assert_eq(os.byte_at(0) as I64, 65, "A")
+    assert_eq(os.byte_at(1) as I64, 66, "B")
+    return 0
+}
+
+@test
+func test_osstring_from() -> I32 {
+    let os = OsString::from("hello")
+    assert_eq(os.len(), 5, "OsString len")
+    assert(not os.is_empty(), "not empty")
+    return 0
+}
+
+@test
+func test_osstring_new_empty() -> I32 {
+    let os = OsString::new()
+    assert_eq(os.len(), 0, "empty len")
+    assert(os.is_empty(), "should be empty")
+    return 0
+}
+
+@test
+func test_osstring_push() -> I32 {
+    var os = OsString::from("hello")
+    os.push(" world")
+    assert_eq(os.len(), 11, "pushed len should be 11")
+    return 0
+}
+
+@test
+func test_osstring_to_str() -> I32 {
+    let os = OsString::from("test")
+    when os.to_str() {
+        Just(s) => assert_eq(s, "test", "to_str"),
+        Nothing => assert(false, "should succeed"),
+    }
+    return 0
+}
+
+@test
+func test_osstring_as_os_str() -> I32 {
+    let os = OsString::from("borrow")
+    let borrowed = os.as_os_str()
+    assert_eq(borrowed.len(), 6, "borrowed len")
+    return 0
+}

@@ -362,6 +362,55 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
         return unwrap_err(where_result);
     where_clause = std::move(unwrap(where_result));
 
+    // Contract clauses: pre/post conditions (contextual keywords, not reserved)
+    // Grammar:
+    //   PreCond  = 'pre'  ':' Expr
+    //   PostCond = 'post' ('(' Ident ')')? ':' Expr
+    std::vector<ContractClause> contracts;
+    skip_newlines();
+    while (check(lexer::TokenKind::Identifier) &&
+           (peek().lexeme == "pre" || peek().lexeme == "post")) {
+        auto contract_start = peek().span;
+        bool is_pre = (peek().lexeme == "pre");
+        advance(); // consume 'pre' or 'post'
+
+        // Post-condition may have an optional result binding: post(result)
+        std::optional<std::string> result_binding;
+        if (!is_pre && check(lexer::TokenKind::LParen)) {
+            advance(); // consume '('
+            auto binding_result =
+                expect(lexer::TokenKind::Identifier, "Expected result binding name after 'post('");
+            if (is_err(binding_result))
+                return unwrap_err(binding_result);
+            result_binding = std::string(unwrap(binding_result).lexeme);
+            auto rparen =
+                expect(lexer::TokenKind::RParen, "Expected ')' after result binding name");
+            if (is_err(rparen))
+                return unwrap_err(rparen);
+        }
+
+        // Expect ':'
+        auto colon = expect(lexer::TokenKind::Colon,
+                            is_pre ? "Expected ':' after 'pre'" : "Expected ':' after 'post'");
+        if (is_err(colon))
+            return unwrap_err(colon);
+
+        // Parse the condition expression
+        auto cond_result = parse_expr();
+        if (is_err(cond_result))
+            return unwrap_err(cond_result);
+
+        auto contract_end = previous().span;
+        contracts.push_back(ContractClause{
+            .condition = std::move(unwrap(cond_result)),
+            .result_binding = std::move(result_binding),
+            .is_pre = is_pre,
+            .span = SourceSpan::merge(contract_start, contract_end),
+        });
+
+        skip_newlines();
+    }
+
     // Body
     std::optional<BlockExpr> body;
     skip_newlines();
@@ -440,6 +489,7 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
                          .is_async = is_async,
                          .is_unsafe = is_unsafe,
                          .span = SourceSpan::merge(start_span, end_span),
+                         .contracts = std::move(contracts),
                          .extern_abi = std::move(extern_abi),
                          .extern_name = std::move(extern_name),
                          .link_libs = std::move(link_libs)};

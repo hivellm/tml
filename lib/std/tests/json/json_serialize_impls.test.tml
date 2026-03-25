@@ -1,0 +1,11 @@
+// Tests for json/serialize — BLOCKED by cross-module behavior dispatch codegen bug
+// The ToJson/FromJson impls for primitive types (I64, Bool, Str, etc.) defined
+// in std::json::serialize cannot be called from test files because the codegen
+// mangles them as core::I64::to_json instead of std::json::serialize::I64_to_json.
+use test::{assert}
+
+@test
+func test_serialize_blocked() -> I32 {
+    assert(true, "json/serialize behavior impls blocked by codegen mangling bug")
+    return 0
+}

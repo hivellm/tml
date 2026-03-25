@@ -1,0 +1,179 @@
+/// OsStr / OsString — Platform-native string types for OS interop.
+///
+/// On all platforms, these store raw bytes internally. On Windows, OS APIs
+/// use UTF-16, so conversion methods handle the encoding. On Unix, OS paths
+/// are raw bytes (usually UTF-8 but not guaranteed).
+///
+/// `OsStr` borrows existing bytes; `OsString` owns heap-allocated bytes.
+
+/// FFI: reinterpret a C string pointer as a TML Str (identity — Str is ptr)
+@extern("c")
+func tml_str_from_cstr(cstr: *U8) -> Str
+
+/// Borrowed platform-native string.
+///
+/// Wraps a raw byte pointer and length. Does not own the memory.
+pub type OsStr {
+    ptr: *U8,
+    len: I64,
+}
+
+impl OsStr {
+    /// Create an OsStr from a raw byte pointer and length.
+    pub func from_raw(ptr: *U8, len: I64) -> OsStr {
+        return OsStr { ptr: ptr, len: len }
+    }
+
+    /// Create an OsStr from a TML Str (borrows the same memory).
+    pub func from_str(s: Str) -> OsStr {
+        return OsStr { ptr: s as *U8, len: s.len() }
+    }
+
+    /// Get the byte length.
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Check if empty.
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Try to convert to a UTF-8 Str. Returns Just(str) if valid UTF-8.
+    /// On most systems, OS strings are already UTF-8.
+    pub func to_str(this) -> Maybe[Str] {
+        // For now, assume UTF-8 on all platforms (correct for Linux/macOS)
+        // Windows UTF-16 support would require conversion
+        if this.len == 0 {
+            return Just("")
+        }
+        // Copy bytes + null terminator, then reinterpret as Str
+        let dst: *U8 = lowlevel { mem_alloc((this.len + 1) as U64) as *U8 }
+        lowlevel { copy_nonoverlapping[U8](this.ptr, dst, this.len) }
+        lowlevel { ptr_write[U8](ptr_offset[U8](dst, this.len), 0 as U8) }
+        return Just(tml_str_from_cstr(dst))
+    }
+
+    /// Convert to a Str, replacing invalid UTF-8 with '?'.
+    pub func to_string_lossy(this) -> Str {
+        when this.to_str() {
+            Just(s) => return s,
+            Nothing => return "",
+        }
+    }
+
+    /// Get the raw byte pointer.
+    pub func as_ptr(this) -> *U8 {
+        return this.ptr
+    }
+
+    /// Get a byte at a given index.
+    pub func byte_at(this, index: I64) -> U8 {
+        return lowlevel { ptr_read[U8](ptr_offset[U8](this.ptr, index)) }
+    }
+}
+
+/// Owned platform-native string.
+///
+/// Owns a heap-allocated byte buffer. Can be mutated by appending.
+pub type OsString {
+    ptr: *U8,
+    len: I64,
+    cap: I64,
+}
+
+impl OsString {
+    /// Create an OsString from a TML Str (copies bytes to heap).
+    pub func from(s: Str) -> OsString {
+        let slen = s.len()
+        let new_cap = if slen < 16 { 16 } else { slen * 2 }
+        let buf: *U8 = lowlevel { mem_alloc(new_cap as U64) as *U8 }
+        if slen > 0 {
+            lowlevel { copy_nonoverlapping[U8](s as *U8, buf, slen) }
+        }
+        return OsString { ptr: buf, len: slen, cap: new_cap }
+    }
+
+    /// Create an empty OsString.
+    pub func new() -> OsString {
+        let buf: *U8 = lowlevel { mem_alloc(16 as U64) as *U8 }
+        return OsString { ptr: buf, len: 0, cap: 16 }
+    }
+
+    /// Append a Str to this OsString.
+    pub func push(mut this, s: Str) {
+        let slen = s.len()
+        if slen == 0 {
+            return
+        }
+        let needed = this.len + slen
+        if needed > this.cap {
+            let new_cap = needed * 2
+            let new_buf: *U8 = lowlevel { mem_alloc(new_cap as U64) as *U8 }
+            if this.len > 0 {
+                lowlevel { copy_nonoverlapping[U8](this.ptr, new_buf, this.len) }
+            }
+            lowlevel { mem_free(this.ptr as *Unit) }
+            this.ptr = new_buf
+            this.cap = new_cap
+        }
+        let dst = lowlevel { ptr_offset[U8](this.ptr, this.len) }
+        lowlevel { copy_nonoverlapping[U8](s as *U8, dst, slen) }
+        this.len = this.len + slen
+    }
+
+    /// Get the byte length.
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Check if empty.
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Borrow as OsStr.
+    pub func as_os_str(this) -> OsStr {
+        return OsStr { ptr: this.ptr, len: this.len }
+    }
+
+    /// Try to convert to a UTF-8 Str.
+    pub func to_str(this) -> Maybe[Str] {
+        return this.as_os_str().to_str()
+    }
+
+    /// Convert to Str (lossy).
+    pub func to_string_lossy(this) -> Str {
+        return this.as_os_str().to_string_lossy()
+    }
+
+    /// Get the raw byte pointer.
+    pub func as_ptr(this) -> *U8 {
+        return this.ptr
+    }
+}
+
+impl PartialEq for OsString {
+    pub func eq(this, other: ref OsString) -> Bool {
+        if this.len != other.len {
+            return false
+        }
+        var i: I64 = 0
+        var equal = true
+        loop (i < this.len and equal) {
+            let a = lowlevel { ptr_read[U8](ptr_offset[U8](this.ptr, i)) }
+            let b = lowlevel { ptr_read[U8](ptr_offset[U8](other.ptr, i)) }
+            if a != b {
+                equal = false
+            }
+            i = i + 1
+        }
+        return equal
+    }
+}
+
+impl Display for OsString {
+    pub func to_string(this) -> Str {
+        return this.to_string_lossy()
+    }
+}
