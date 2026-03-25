@@ -121,7 +121,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "volatile_write", "ptr_read_volatile", "ptr_write_volatile", "ptr_read_unaligned",
         "ptr_write_unaligned", "memcpy", "memmove", "memset", "atomic_load", "atomic_store",
         "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or",
-        "atomic_xor", "fence", "compiler_fence", "black_box",
+        "atomic_xor", "fence", "compiler_fence", "black_box", "spin_loop_hint",
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
         // Math intrinsics

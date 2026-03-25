@@ -90,6 +90,32 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
         return "0";
     }
 
+    // black_box[T](x: T) -> T
+    // Prevent the optimizer from constant-folding or eliminating the value.
+    // Uses inline asm with memory clobber to force the value through.
+    if (intrinsic_name == "black_box") {
+        if (!call.args.empty()) {
+            std::string val = gen_expr(*call.args[0]);
+            std::string ty = last_expr_type_;
+            // Use inline asm barrier: the value passes through unchanged
+            // but the optimizer treats it as opaque
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call " + ty +
+                      " asm sideeffect \"\", \"=r,0,~{memory}\"(" + ty + " " + val + ")");
+            last_expr_type_ = ty;
+            return result;
+        }
+        return "0";
+    }
+
+    // spin_loop_hint() -> Unit
+    // Emits x86 PAUSE instruction to reduce power consumption in busy-wait loops.
+    if (intrinsic_name == "spin_loop_hint") {
+        emit_line("  call void asm sideeffect \"pause\", \"~{memory}\"()");
+        last_expr_type_ = "void";
+        return "0";
+    }
+
     // drop[T](val: T) -> Unit
     // Explicitly drops a value, calling its destructor if it has one.
     // This intrinsic correctly handles generic type substitution.

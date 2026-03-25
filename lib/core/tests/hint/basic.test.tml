@@ -1,0 +1,70 @@
+use test::{assert, assert_eq}
+use core::hint::{likely, unlikely, black_box_i64, black_box_bool, black_box_f64, spin_loop_hint, assume}
+
+@test
+func test_likely_true() -> I32 {
+    assert(likely(true), "likely(true) should be true")
+    return 0
+}
+
+@test
+func test_likely_false() -> I32 {
+    assert(not likely(false), "likely(false) should be false")
+    return 0
+}
+
+@test
+func test_unlikely_true() -> I32 {
+    assert(unlikely(true), "unlikely(true) should be true")
+    return 0
+}
+
+@test
+func test_unlikely_false() -> I32 {
+    assert(not unlikely(false), "unlikely(false) should be false")
+    return 0
+}
+
+@test
+func test_black_box_i64() -> I32 {
+    let zero: I64 = 0
+    let fortytwo: I64 = 42
+    let neg: I64 = 0 - 1
+    assert_eq(black_box_i64(zero), zero, "black_box(0)")
+    assert_eq(black_box_i64(fortytwo), fortytwo, "black_box(42)")
+    assert_eq(black_box_i64(neg), neg, "black_box(-1)")
+    return 0
+}
+
+@test
+func test_black_box_bool() -> I32 {
+    assert(black_box_bool(true), "black_box(true)")
+    assert(not black_box_bool(false), "black_box(false)")
+    return 0
+}
+
+@test
+func test_black_box_f64() -> I32 {
+    let x: F64 = black_box_f64(3.14)
+    // Just check it doesn't crash and returns a value
+    assert(x > 3.0, "black_box(3.14) > 3.0")
+    return 0
+}
+
+@test
+func test_spin_loop_hint() -> I32 {
+    // Just verify it doesn't crash — no observable behavior
+    spin_loop_hint()
+    spin_loop_hint()
+    spin_loop_hint()
+    return 0
+}
+
+@test
+func test_assume() -> I32 {
+    // assume(true) should be a no-op
+    assume(true)
+    let x: I64 = 10
+    assume(x > 0)
+    return 0
+}

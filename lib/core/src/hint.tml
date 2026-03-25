@@ -1,0 +1,71 @@
+/// Compiler hints — optimization directives for the TML compiler
+///
+/// These functions provide hints to the optimizer without changing program
+/// semantics (except `unreachable_unchecked` which is UB if reached).
+///
+/// ## Usage
+/// ```tml
+/// use core::hint::{likely, unlikely, black_box, spin_loop_hint}
+///
+/// // Branch prediction
+/// if likely(x > 0) { fast_path() }
+/// if unlikely(err != 0) { error_path() }
+///
+/// // Benchmarking — prevent constant folding
+/// let result = black_box(expensive_computation())
+///
+/// // Busy-wait loop
+/// loop (not lock_acquired) { spin_loop_hint() }
+/// ```
+
+/// Informs the optimizer that this code path is unreachable.
+/// **Undefined behavior** if actually reached at runtime.
+/// Use only when you can prove the path is impossible.
+pub func unreachable_unchecked() -> Unit {
+    lowlevel { unreachable() }
+}
+
+/// Prevents the optimizer from constant-folding or eliminating a value.
+/// The value passes through unchanged, but the compiler treats it as opaque.
+/// Essential for benchmarks to prevent dead code elimination.
+pub func black_box_i64(x: I64) -> I64 {
+    return lowlevel { black_box(x) }
+}
+
+/// Prevents the optimizer from eliminating a boolean value.
+pub func black_box_bool(x: Bool) -> Bool {
+    return lowlevel { black_box(x) }
+}
+
+/// Prevents the optimizer from eliminating a float value.
+pub func black_box_f64(x: F64) -> F64 {
+    return lowlevel { black_box(x) }
+}
+
+/// Emits a CPU PAUSE instruction (x86 SSE2).
+/// Reduces power consumption and improves performance of busy-wait
+/// (spin) loops by hinting the CPU that we're waiting.
+pub func spin_loop_hint() -> Unit {
+    lowlevel { spin_loop_hint() }
+}
+
+/// Branch prediction hint: tell the optimizer this condition is likely true.
+/// Returns the same boolean value, but the generated code will assume
+/// the true branch is the hot path.
+pub func likely(cond: Bool) -> Bool {
+    return lowlevel { likely(cond) }
+}
+
+/// Branch prediction hint: tell the optimizer this condition is likely false.
+/// Returns the same boolean value, but the generated code will assume
+/// the false branch is the hot path.
+pub func unlikely(cond: Bool) -> Bool {
+    return lowlevel { unlikely(cond) }
+}
+
+/// Tell the optimizer to assume a condition is true.
+/// **Undefined behavior** if the condition is actually false.
+/// Use only when you can prove the condition always holds.
+pub func assume(cond: Bool) -> Unit {
+    lowlevel { assume(cond) }
+}
