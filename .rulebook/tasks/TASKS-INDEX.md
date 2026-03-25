@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-03-25
-**Total tasks**: 26 active (4 archived)
+**Total tasks**: 25 active (5 archived)
 
 ## Phase 1 — Foundation & Language
 
@@ -25,7 +25,7 @@ Collections, sync primitives, math types, and library gaps.
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
 | 2-01 | ~~BinaryHeap / PriorityQueue~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 2-02 | [Semaphore](phase2-02-semaphore/) | **NEW** | HIGH | 0% |
+| 2-02 | ~~Semaphore~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
 | 2-03 | [WaitGroup](phase2-03-wait-group/) | **NEW** | MEDIUM | 0% |
 | 2-04 | [Seek Behavior](phase2-04-seek-behavior/) | **NEW** | MEDIUM | 0% |
 | 2-05 | [BigInt](phase2-05-bigint/) | **NEW** | MEDIUM | 0% |
