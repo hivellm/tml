@@ -1015,6 +1015,36 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     typed_args.push_back({arg_type, val});
                 }
 
+                // Fill in default values for missing arguments.
+                // This handles cases like List[T]::new() where the TML source
+                // calls with 0 args but the definition has 1 param (initial_capacity).
+                // Without this, the LLVM IR has mismatched call/definition signatures
+                // which causes undefined behavior (rcx reuse on Win64).
+                if (func_sig && typed_args.size() < func_sig->params.size()) {
+                    for (size_t i = typed_args.size(); i < func_sig->params.size(); ++i) {
+                        auto param_type = func_sig->params[i];
+                        if (!type_subs.empty()) {
+                            param_type = types::substitute_type(param_type, type_subs);
+                        }
+                        std::string llvm_type = llvm_type_from_semantic(param_type);
+                        // Use zero/null as default for missing arguments
+                        if (llvm_type == "ptr") {
+                            typed_args.push_back({"ptr", "null"});
+                        } else if (llvm_type == "i64") {
+                            typed_args.push_back({"i64", "0"});
+                        } else if (llvm_type == "i32") {
+                            typed_args.push_back({"i32", "0"});
+                        } else if (llvm_type == "double") {
+                            typed_args.push_back({"double", "0.0"});
+                        } else if (llvm_type == "i1") {
+                            typed_args.push_back({"i1", "false"});
+                        } else {
+                            // For struct/enum types, use zeroinitializer
+                            typed_args.push_back({llvm_type, "zeroinitializer"});
+                        }
+                    }
+                }
+
                 auto return_type = func_sig->return_type;
                 if (!type_subs.empty()) {
                     return_type = types::substitute_type(return_type, type_subs);
