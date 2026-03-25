@@ -1814,6 +1814,56 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         // i64 stays as assert_eq (default)
     }
 
+    // Dispatch println/print to type-specific runtime functions.
+    // The type checker treats println/print as polymorphic builtins that accept any type,
+    // but the C runtime has separate functions: print_i32, print_i64, print_f64, etc.
+    // Without this dispatch, `println(42)` emits `call void @println(i32 42)` which
+    // passes an integer to a function expecting a pointer, causing a segfault.
+    if ((resolved_func_name == "println" || resolved_func_name == "print") &&
+        !processed_args.empty()) {
+        auto& arg = processed_args[0];
+        std::string type_specific_func;
+        bool needs_newline = (resolved_func_name == "println");
+
+        if (arg.find("i64 ") == 0) {
+            type_specific_func = "print_i64";
+        } else if (arg.find("i32 ") == 0) {
+            type_specific_func = "print_i32";
+        } else if (arg.find("i16 ") == 0 || arg.find("i8 ") == 0) {
+            // Extend to i32 for printing
+            type_specific_func = "print_i32";
+            std::string val = arg.substr(arg.find(' ') + 1);
+            std::string orig_type = arg.substr(0, arg.find(' '));
+            std::string ext_reg = new_temp();
+            emitln("    " + ext_reg + " = sext " + orig_type + " " + val + " to i32");
+            arg = "i32 " + ext_reg;
+        } else if (arg.find("double ") == 0) {
+            type_specific_func = "print_f64";
+        } else if (arg.find("float ") == 0) {
+            type_specific_func = "print_f64";
+            std::string val = arg.substr(6);
+            std::string ext_reg = new_temp();
+            emitln("    " + ext_reg + " = fpext float " + val + " to double");
+            arg = "double " + ext_reg;
+        } else if (arg.find("i1 ") == 0) {
+            type_specific_func = "print_bool";
+            std::string val = arg.substr(3);
+            std::string ext_reg = new_temp();
+            emitln("    " + ext_reg + " = zext i1 " + val + " to i32");
+            arg = "i32 " + ext_reg;
+        }
+
+        if (!type_specific_func.empty()) {
+            // Emit type-specific print call
+            emitln("    call void @" + type_specific_func + "(" + arg + ")");
+            if (needs_newline) {
+                emitln("    call void @println(ptr null)");
+            }
+            return;
+        }
+        // Fall through for ptr args (strings) — use println/print directly
+    }
+
     // Check if calling an sret function
     auto sret_it = sret_functions_.find(resolved_func_name);
     if (sret_it != sret_functions_.end()) {

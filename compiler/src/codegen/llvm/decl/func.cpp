@@ -431,8 +431,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         // Emit external declaration
         emit_line("");
         emit_line("; @extern(\"" + abi + "\") " + func.name);
-        emit_line("declare " + call_conv + abi_ret_type + " @" + symbol_name + "(" + param_types +
-                  ")");
+        emit_line("declare dso_local " + call_conv + abi_ret_type + " @" + symbol_name + "(" +
+                  param_types + ")");
 
         // Register function - map TML name to external symbol
         // Mark as extern for coverage tracking
@@ -466,7 +466,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             // External C function - emit declaration
             emit_line("");
             emit_line("; lowlevel func " + func.name + " (external C function)");
-            emit_line("declare " + abi_ret_type + " @" + func.name + "(" + param_types + ")");
+            emit_line("declare dso_local " + abi_ret_type + " @" + func.name + "(" + param_types +
+                      ")");
             declared_externals_.insert(func.name);
         }
 
@@ -645,7 +646,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             options_.cached_library_state &&
             options_.cached_library_state->generated_functions.count("@" + func_llvm_name);
         if (in_stdlib) {
-            emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+            emit_line("declare dso_local " + ret_type + " @" + func_llvm_name + "(" + param_types +
+                      ")");
             current_func_.clear();
             return;
         }

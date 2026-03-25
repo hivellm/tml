@@ -460,7 +460,9 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
         if (options_.generate_exe_main || !options_.test_entry_name.empty())
             decl_name = "tml_main";
     }
-    emit("declare " + ret_type + " @" + quote_func_name(decl_name) + "(");
+    // Use dso_local on extern declarations to prevent LLVM 23+ from merging
+    // function declarations with similar signatures during codegen.
+    emit("declare dso_local " + ret_type + " @" + quote_func_name(decl_name) + "(");
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {
@@ -686,11 +688,19 @@ void MirCodegen::emit_preamble() {
     emitln("@llvm.used = appending global [1 x ptr] [ptr @__tml_ident], section \"llvm.metadata\"");
     emitln();
 
-    // Declare printf, println, print, and abort for print builtins
-    emitln("declare i32 @printf(ptr, ...)");
-    emitln("declare void @print(ptr)");
-    emitln("declare void @println(ptr)");
-    emitln("declare void @abort() noreturn");
+    // Declare printf, println, print, and abort for print builtins.
+    // Type-specific print functions (print_i32, print_i64, etc.) are needed because
+    // println/print are polymorphic in TML but map to type-specific C runtime functions.
+    // All non-intrinsic declarations use dso_local to prevent LLVM 23+ from merging
+    // function declarations with similar signatures during codegen.
+    emitln("declare dso_local i32 @printf(ptr, ...)");
+    emitln("declare dso_local void @print(ptr)");
+    emitln("declare dso_local void @println(ptr)");
+    emitln("declare dso_local void @print_i32(i32)");
+    emitln("declare dso_local void @print_i64(i64)");
+    emitln("declare dso_local void @print_f64(double)");
+    emitln("declare dso_local void @print_bool(i32)");
+    emitln("declare dso_local void @abort() noreturn");
     // Exception handling personality function
 #ifdef _WIN32
     emitln("declare i32 @__CxxFrameHandler3(...)");
@@ -698,10 +708,10 @@ void MirCodegen::emit_preamble() {
     emitln("declare i32 @__gxx_personality_v0(...)");
 #endif
     // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
-    emitln("declare ptr @mem_alloc(i64)"); // Memory allocation for char-to-string
-    emitln("declare void @mem_free(ptr)"); // Memory deallocation for intrinsics
-    emitln("declare i64 @strlen(ptr)");
-    emitln("declare ptr @malloc(i64)");
+    emitln("declare dso_local ptr @mem_alloc(i64)");
+    emitln("declare dso_local void @mem_free(ptr)");
+    emitln("declare dso_local i64 @strlen(ptr)");
+    emitln("declare dso_local ptr @malloc(i64)");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");

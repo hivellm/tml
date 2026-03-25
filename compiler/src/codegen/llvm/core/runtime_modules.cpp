@@ -313,7 +313,8 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                 declared_externals_.insert(func_name);
 
                 // Emit declaration with tml_ prefix
-                emit_line("declare " + abi_ret_type + " @" + symbol + "(" + params_str + ")");
+                emit_line("declare dso_local " + abi_ret_type + " @" + symbol + "(" + params_str +
+                          ")");
 
                 // Register in functions_ so call sites find the correct symbol
                 std::vector<std::string> param_types_vec;
@@ -1629,7 +1630,7 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     TML_LOG_DEBUG(
                         "codegen",
                         "[LAZY_LIB] Auto-declaring unreferenced enum drop function: " << ref);
-                    deferred_runtime_decls_ += "declare void " + ref + "(ptr) #0\n";
+                    deferred_runtime_decls_ += "declare dso_local void " + ref + "(ptr) #0\n";
                     continue;
                 }
 
@@ -1834,7 +1835,7 @@ void LLVMIRGen::emit_referenced_library_declarations() {
         // llvm_func_type is "ret_type (param1, param2)" — extract "(param1, param2)"
         std::string params = fi.llvm_func_type.substr(paren_pos + 1);
         // params includes closing ")", e.g. "ptr, i32)"
-        out << "declare " << fi.ret_type << " " << fi.llvm_name << "(" << params << "\n";
+        out << "declare dso_local " << fi.ret_type << " " << fi.llvm_name << "(" << params << "\n";
         return true;
     };
 

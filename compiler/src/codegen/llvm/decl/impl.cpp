@@ -405,7 +405,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                          options_.cached_library_state->generated_functions.count(llvm_name);
         if (in_stdlib) {
             emit_line("");
-            emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+            emit_line("declare dso_local " + ret_type + " @" + func_llvm_name + "(" + param_types +
+                      ")");
             current_func_.clear();
             current_impl_type_.clear();
             return;

@@ -85,18 +85,22 @@ void LLVMIRGen::init_runtime_catalog() {
     };
 
     // --- C stdlib functions ---
-    add("printf", "declare i32 @printf(ptr, ...)");
-    add("puts", "declare i32 @puts(ptr)");
-    add("putchar", "declare i32 @putchar(i32)");
-    add("malloc", "declare ptr @malloc(i64)");
-    add("free", "declare void @free(ptr)");
-    add("tml_str_free", "declare void @tml_str_free(ptr)");
-    add("exit", "declare void @exit(i32) noreturn");
-    add("strlen", "declare i64 @strlen(ptr)");
-    add("strcmp", "declare i32 @strcmp(ptr, ptr)");
-    add("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
-    add("getenv", "declare ptr @getenv(ptr)");
-    add("tml_coverage_write_file", "declare void @tml_coverage_write_file(ptr)");
+    // NOTE: All non-intrinsic declarations use `dso_local` to prevent LLVM 23+
+    // from merging function declarations with similar signatures during codegen.
+    // Without this, LLVM's GlobalOpt can merge e.g. print_i32(i32) with println(ptr)
+    // because they are both `void(...)` at the opaque-pointer level, causing segfaults.
+    add("printf", "declare dso_local i32 @printf(ptr, ...)");
+    add("puts", "declare dso_local i32 @puts(ptr)");
+    add("putchar", "declare dso_local i32 @putchar(i32)");
+    add("malloc", "declare dso_local ptr @malloc(i64)");
+    add("free", "declare dso_local void @free(ptr)");
+    add("tml_str_free", "declare dso_local void @tml_str_free(ptr)");
+    add("exit", "declare dso_local void @exit(i32) noreturn");
+    add("strlen", "declare dso_local i64 @strlen(ptr)");
+    add("strcmp", "declare dso_local i32 @strcmp(ptr, ptr)");
+    add("memcmp", "declare dso_local i32 @memcmp(ptr, ptr, i64)");
+    add("getenv", "declare dso_local ptr @getenv(ptr)");
+    add("tml_coverage_write_file", "declare dso_local void @tml_coverage_write_file(ptr)");
 
     // --- LLVM intrinsics ---
     add("llvm.memcpy.p0.p0.i64", "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
@@ -105,18 +109,18 @@ void LLVMIRGen::init_runtime_catalog() {
     add("llvm.assume", "declare void @llvm.assume(i1) nounwind");
 
     // --- TML runtime ---
-    add("panic", "declare void @panic(ptr) noreturn");
-    add("assert_tml_loc", "declare void @assert_tml_loc(i32, ptr, ptr, i32) noreturn");
+    add("panic", "declare dso_local void @panic(ptr) noreturn");
+    add("assert_tml_loc", "declare dso_local void @assert_tml_loc(i32, ptr, ptr, i32) noreturn");
 
     // --- Panic catching ---
-    add("tml_run_should_panic", "declare i32 @tml_run_should_panic(ptr)");
-    add("tml_panic_message_contains", "declare i32 @tml_panic_message_contains(ptr)");
+    add("tml_run_should_panic", "declare dso_local i32 @tml_run_should_panic(ptr)");
+    add("tml_panic_message_contains", "declare dso_local i32 @tml_panic_message_contains(ptr)");
 
     // --- Backtrace ---
-    add("tml_enable_backtrace_on_panic", "declare void @tml_enable_backtrace_on_panic()");
+    add("tml_enable_backtrace_on_panic", "declare dso_local void @tml_enable_backtrace_on_panic()");
 
     // --- Coverage (conditional, but registered for completeness) ---
-    add("tml_cover_func", "declare void @tml_cover_func(ptr)");
+    add("tml_cover_func", "declare dso_local void @tml_cover_func(ptr)");
 
     // --- Debug intrinsics ---
     add("llvm.dbg.declare",
@@ -139,101 +143,103 @@ void LLVMIRGen::init_runtime_catalog() {
         "declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
 
     // --- I/O functions ---
-    add("print", "declare void @print(ptr)");
-    add("println", "declare void @println(ptr)");
-    add("print_i32", "declare void @print_i32(i32)");
-    add("print_i64", "declare void @print_i64(i64)");
-    add("print_f64", "declare void @print_f64(double)");
-    add("print_bool", "declare void @print_bool(i32)");
+    add("print", "declare dso_local void @print(ptr)");
+    add("println", "declare dso_local void @println(ptr)");
+    add("print_i32", "declare dso_local void @print_i32(i32)");
+    add("print_i64", "declare dso_local void @print_i64(i64)");
+    add("print_f64", "declare dso_local void @print_f64(double)");
+    add("print_bool", "declare dso_local void @print_bool(i32)");
 
     // --- Float formatting (C runtime) ---
-    add("f64_to_string", "declare ptr @f64_to_string(double)");
-    add("f32_to_string", "declare ptr @f32_to_string(float)");
-    add("f64_to_string_precision", "declare ptr @f64_to_string_precision(double, i64)");
-    add("f32_to_string_precision", "declare ptr @f32_to_string_precision(float, i64)");
-    add("f64_to_exp_string", "declare ptr @f64_to_exp_string(double, i32)");
-    add("f32_to_exp_string", "declare ptr @f32_to_exp_string(float, i32)");
+    add("f64_to_string", "declare dso_local ptr @f64_to_string(double)");
+    add("f32_to_string", "declare dso_local ptr @f32_to_string(float)");
+    add("f64_to_string_precision", "declare dso_local ptr @f64_to_string_precision(double, i64)");
+    add("f32_to_string_precision", "declare dso_local ptr @f32_to_string_precision(float, i64)");
+    add("f64_to_exp_string", "declare dso_local ptr @f64_to_exp_string(double, i32)");
+    add("f32_to_exp_string", "declare dso_local ptr @f32_to_exp_string(float, i32)");
 
     // --- Random seed ---
-    add("tml_random_seed", "declare i64 @tml_random_seed()");
+    add("tml_random_seed", "declare dso_local i64 @tml_random_seed()");
 
     // --- Memory functions ---
-    add("mem_alloc", "declare ptr @mem_alloc(i64)");
-    add("mem_alloc_zeroed", "declare ptr @mem_alloc_zeroed(i64)");
-    add("mem_realloc", "declare ptr @mem_realloc(ptr, i64)");
-    add("mem_free", "declare void @mem_free(ptr)");
-    add("mem_copy", "declare void @mem_copy(ptr, ptr, i64)");
-    add("mem_move", "declare void @mem_move(ptr, ptr, i64)");
-    add("mem_set", "declare void @mem_set(ptr, i32, i64)");
-    add("mem_zero", "declare void @mem_zero(ptr, i64)");
-    add("mem_compare", "declare i32 @mem_compare(ptr, ptr, i64)");
-    add("mem_eq", "declare i32 @mem_eq(ptr, ptr, i64)");
+    add("mem_alloc", "declare dso_local ptr @mem_alloc(i64)");
+    add("mem_alloc_zeroed", "declare dso_local ptr @mem_alloc_zeroed(i64)");
+    add("mem_realloc", "declare dso_local ptr @mem_realloc(ptr, i64)");
+    add("mem_free", "declare dso_local void @mem_free(ptr)");
+    add("mem_copy", "declare dso_local void @mem_copy(ptr, ptr, i64)");
+    add("mem_move", "declare dso_local void @mem_move(ptr, ptr, i64)");
+    add("mem_set", "declare dso_local void @mem_set(ptr, i32, i64)");
+    add("mem_zero", "declare dso_local void @mem_zero(ptr, i64)");
+    add("mem_compare", "declare dso_local i32 @mem_compare(ptr, ptr, i64)");
+    add("mem_eq", "declare dso_local i32 @mem_eq(ptr, ptr, i64)");
 
     // --- Object pool ---
-    add("pool_acquire", "declare ptr @pool_acquire(ptr, i64)");
-    add("pool_release", "declare void @pool_release(ptr, ptr)");
-    add("tls_pool_acquire", "declare ptr @tls_pool_acquire(ptr, i64)");
-    add("tls_pool_release", "declare void @tls_pool_release(ptr, ptr, i64)");
+    add("pool_acquire", "declare dso_local ptr @pool_acquire(ptr, i64)");
+    add("pool_release", "declare dso_local void @pool_release(ptr, ptr)");
+    add("tls_pool_acquire", "declare dso_local ptr @tls_pool_acquire(ptr, i64)");
+    add("tls_pool_release", "declare dso_local void @tls_pool_release(ptr, ptr, i64)");
 
     // --- Atomic operations ---
-    add("atomic_fetch_add_i32", "declare i32 @atomic_fetch_add_i32(ptr, i32)");
-    add("atomic_fetch_sub_i32", "declare i32 @atomic_fetch_sub_i32(ptr, i32)");
-    add("atomic_load_i32", "declare i32 @atomic_load_i32(ptr)");
-    add("atomic_store_i32", "declare void @atomic_store_i32(ptr, i32)");
-    add("atomic_compare_exchange_i32", "declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
-    add("atomic_swap_i32", "declare i32 @atomic_swap_i32(ptr, i32)");
-    add("atomic_fence", "declare void @atomic_fence()");
-    add("atomic_fence_acquire", "declare void @atomic_fence_acquire()");
-    add("atomic_fence_release", "declare void @atomic_fence_release()");
+    add("atomic_fetch_add_i32", "declare dso_local i32 @atomic_fetch_add_i32(ptr, i32)");
+    add("atomic_fetch_sub_i32", "declare dso_local i32 @atomic_fetch_sub_i32(ptr, i32)");
+    add("atomic_load_i32", "declare dso_local i32 @atomic_load_i32(ptr)");
+    add("atomic_store_i32", "declare dso_local void @atomic_store_i32(ptr, i32)");
+    add("atomic_compare_exchange_i32",
+        "declare dso_local i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
+    add("atomic_swap_i32", "declare dso_local i32 @atomic_swap_i32(ptr, i32)");
+    add("atomic_fence", "declare dso_local void @atomic_fence()");
+    add("atomic_fence_acquire", "declare dso_local void @atomic_fence_acquire()");
+    add("atomic_fence_release", "declare dso_local void @atomic_fence_release()");
 
     // --- Async runtime ---
-    add("tml_executor_new", "declare ptr @tml_executor_new()");
-    add("tml_executor_destroy", "declare void @tml_executor_destroy(ptr)");
-    add("tml_executor_spawn", "declare i64 @tml_executor_spawn(ptr, ptr, ptr, i64)");
-    add("tml_executor_run", "declare i32 @tml_executor_run(ptr)");
-    add("tml_executor_wake", "declare void @tml_executor_wake(ptr, i64)");
-    add("tml_block_on_rt", "declare { i32, i32, i64 } @tml_block_on(ptr, ptr, i64)");
-    add("tml_executor_poll_task", "declare i32 @tml_executor_poll_task(ptr, ptr)");
-    add("tml_waker_create", "declare { ptr, ptr, i64 } @tml_waker_create(ptr, i64)");
-    add("tml_waker_wake", "declare void @tml_waker_wake(ptr)");
-    add("tml_waker_clone", "declare { ptr, ptr, i64 } @tml_waker_clone(ptr)");
-    add("tml_waker_destroy", "declare void @tml_waker_destroy(ptr)");
-    add("tml_poll_ready_i64", "declare { i32, i32, i64 } @tml_poll_ready_i64(i64)");
-    add("tml_poll_ready_ptr", "declare { i32, i32, i64 } @tml_poll_ready_ptr(ptr)");
-    add("tml_poll_pending", "declare { i32, i32, i64 } @tml_poll_pending()");
-    add("tml_poll_is_ready", "declare i32 @tml_poll_is_ready(ptr)");
-    add("tml_poll_is_pending", "declare i32 @tml_poll_is_pending(ptr)");
-    add("tml_timer_new", "declare { i64, i64, i32 } @tml_timer_new(i64)");
-    add("tml_timer_new_ptr", "declare void @tml_timer_new_ptr(i64, ptr)");
-    add("tml_sleep_poll", "declare { i32, i32, i64 } @tml_sleep_poll(ptr, ptr)");
-    add("tml_sleep_poll_ptr", "declare void @tml_sleep_poll_ptr(ptr, ptr, ptr)");
-    add("tml_delay_poll", "declare { i32, i32, i64 } @tml_delay_poll(ptr, ptr)");
-    add("tml_delay_poll_ptr", "declare void @tml_delay_poll_ptr(ptr, ptr, ptr)");
-    add("tml_yield_poll", "declare { i32, i32, i64 } @tml_yield_poll(ptr, ptr)");
-    add("tml_yield_poll_ptr", "declare void @tml_yield_poll_ptr(ptr, ptr, ptr)");
-    add("tml_channel_new", "declare ptr @tml_channel_new(i64, i64)");
-    add("tml_channel_destroy", "declare void @tml_channel_destroy(ptr)");
-    add("tml_channel_try_send", "declare i32 @tml_channel_try_send(ptr, ptr)");
-    add("tml_channel_try_recv", "declare i32 @tml_channel_try_recv(ptr, ptr)");
-    add("tml_channel_close", "declare void @tml_channel_close(ptr)");
-    add("tml_channel_is_empty", "declare i32 @tml_channel_is_empty(ptr)");
-    add("tml_channel_is_full", "declare i32 @tml_channel_is_full(ptr)");
-    add("tml_spawn", "declare { i64, ptr, i32, { i32, i32, i64 } } @tml_spawn(ptr, ptr, ptr, i64)");
-    add("tml_join_poll", "declare { i32, i32, i64 } @tml_join_poll(ptr, ptr)");
+    add("tml_executor_new", "declare dso_local ptr @tml_executor_new()");
+    add("tml_executor_destroy", "declare dso_local void @tml_executor_destroy(ptr)");
+    add("tml_executor_spawn", "declare dso_local i64 @tml_executor_spawn(ptr, ptr, ptr, i64)");
+    add("tml_executor_run", "declare dso_local i32 @tml_executor_run(ptr)");
+    add("tml_executor_wake", "declare dso_local void @tml_executor_wake(ptr, i64)");
+    add("tml_block_on_rt", "declare dso_local { i32, i32, i64 } @tml_block_on(ptr, ptr, i64)");
+    add("tml_executor_poll_task", "declare dso_local i32 @tml_executor_poll_task(ptr, ptr)");
+    add("tml_waker_create", "declare dso_local { ptr, ptr, i64 } @tml_waker_create(ptr, i64)");
+    add("tml_waker_wake", "declare dso_local void @tml_waker_wake(ptr)");
+    add("tml_waker_clone", "declare dso_local { ptr, ptr, i64 } @tml_waker_clone(ptr)");
+    add("tml_waker_destroy", "declare dso_local void @tml_waker_destroy(ptr)");
+    add("tml_poll_ready_i64", "declare dso_local { i32, i32, i64 } @tml_poll_ready_i64(i64)");
+    add("tml_poll_ready_ptr", "declare dso_local { i32, i32, i64 } @tml_poll_ready_ptr(ptr)");
+    add("tml_poll_pending", "declare dso_local { i32, i32, i64 } @tml_poll_pending()");
+    add("tml_poll_is_ready", "declare dso_local i32 @tml_poll_is_ready(ptr)");
+    add("tml_poll_is_pending", "declare dso_local i32 @tml_poll_is_pending(ptr)");
+    add("tml_timer_new", "declare dso_local { i64, i64, i32 } @tml_timer_new(i64)");
+    add("tml_timer_new_ptr", "declare dso_local void @tml_timer_new_ptr(i64, ptr)");
+    add("tml_sleep_poll", "declare dso_local { i32, i32, i64 } @tml_sleep_poll(ptr, ptr)");
+    add("tml_sleep_poll_ptr", "declare dso_local void @tml_sleep_poll_ptr(ptr, ptr, ptr)");
+    add("tml_delay_poll", "declare dso_local { i32, i32, i64 } @tml_delay_poll(ptr, ptr)");
+    add("tml_delay_poll_ptr", "declare dso_local void @tml_delay_poll_ptr(ptr, ptr, ptr)");
+    add("tml_yield_poll", "declare dso_local { i32, i32, i64 } @tml_yield_poll(ptr, ptr)");
+    add("tml_yield_poll_ptr", "declare dso_local void @tml_yield_poll_ptr(ptr, ptr, ptr)");
+    add("tml_channel_new", "declare dso_local ptr @tml_channel_new(i64, i64)");
+    add("tml_channel_destroy", "declare dso_local void @tml_channel_destroy(ptr)");
+    add("tml_channel_try_send", "declare dso_local i32 @tml_channel_try_send(ptr, ptr)");
+    add("tml_channel_try_recv", "declare dso_local i32 @tml_channel_try_recv(ptr, ptr)");
+    add("tml_channel_close", "declare dso_local void @tml_channel_close(ptr)");
+    add("tml_channel_is_empty", "declare dso_local i32 @tml_channel_is_empty(ptr)");
+    add("tml_channel_is_full", "declare dso_local i32 @tml_channel_is_full(ptr)");
+    add("tml_spawn",
+        "declare dso_local { i64, ptr, i32, { i32, i32, i64 } } @tml_spawn(ptr, ptr, ptr, i64)");
+    add("tml_join_poll", "declare dso_local { i32, i32, i64 } @tml_join_poll(ptr, ptr)");
 
     // --- Log runtime ---
-    add("rt_log_msg", "declare void @rt_log_msg(i32, ptr, ptr)");
-    add("rt_log_set_level", "declare void @rt_log_set_level(i32)");
-    add("rt_log_get_level", "declare i32 @rt_log_get_level()");
-    add("rt_log_enabled", "declare i32 @rt_log_enabled(i32)");
-    add("rt_log_set_filter", "declare void @rt_log_set_filter(ptr)");
-    add("rt_log_module_enabled", "declare i32 @rt_log_module_enabled(i32, ptr)");
-    add("rt_log_structured", "declare void @rt_log_structured(i32, ptr, ptr, ptr)");
-    add("rt_log_set_format", "declare void @rt_log_set_format(i32)");
-    add("rt_log_get_format", "declare i32 @rt_log_get_format()");
-    add("rt_log_open_file", "declare i32 @rt_log_open_file(ptr)");
-    add("rt_log_close_file", "declare void @rt_log_close_file()");
-    add("rt_log_init_from_env", "declare i32 @rt_log_init_from_env()");
+    add("rt_log_msg", "declare dso_local void @rt_log_msg(i32, ptr, ptr)");
+    add("rt_log_set_level", "declare dso_local void @rt_log_set_level(i32)");
+    add("rt_log_get_level", "declare dso_local i32 @rt_log_get_level()");
+    add("rt_log_enabled", "declare dso_local i32 @rt_log_enabled(i32)");
+    add("rt_log_set_filter", "declare dso_local void @rt_log_set_filter(ptr)");
+    add("rt_log_module_enabled", "declare dso_local i32 @rt_log_module_enabled(i32, ptr)");
+    add("rt_log_structured", "declare dso_local void @rt_log_structured(i32, ptr, ptr, ptr)");
+    add("rt_log_set_format", "declare dso_local void @rt_log_set_format(i32)");
+    add("rt_log_get_format", "declare dso_local i32 @rt_log_get_format()");
+    add("rt_log_open_file", "declare dso_local i32 @rt_log_open_file(ptr)");
+    add("rt_log_close_file", "declare dso_local void @rt_log_close_file()");
+    add("rt_log_init_from_env", "declare dso_local i32 @rt_log_init_from_env()");
 
     // --- Inline IR definitions (multi-line, with dependencies) ---
 

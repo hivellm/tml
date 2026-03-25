@@ -167,7 +167,7 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         if (declared_externals_.find(symbol_name) == declared_externals_.end()) {
             declared_externals_.insert(symbol_name);
             std::string decl_text = "; @extern (late-emitted) " + func_sig->name + "\n" +
-                                    "declare " + ext_ret_type + " @" + symbol_name + "(" +
+                                    "declare dso_local " + ext_ret_type + " @" + symbol_name + "(" +
                                     param_types + ")";
             pending_late_extern_decls_[symbol_name] = std::move(decl_text);
         }
