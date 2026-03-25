@@ -12,7 +12,7 @@ Core language features, compiler infrastructure, and foundational gaps.
 | 1-01 | [Language Completeness Roadmap](phase1-01-language-completeness/) | In Progress | HIGH | 79% (128/162) |
 | 1-02 | [Function Contracts](phase1-02-function-contracts/) | Planning | MEDIUM | 0% |
 | 1-03 | ~~Core FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% (20/20) |
-| 1-04 | [Std FFI Types](phase1-04-std-ffi-types/) | **NEW** | HIGH | 0% |
+| 1-04 | ~~Std FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
 | 1-05 | ~~Panic Recovery~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
 | 1-06 | ~~Compiler Hints~~ | **ARCHIVED** 2026-03-25 | MEDIUM | 100% |
 | 1-07 | [Compiler C++ Unit Tests](phase1-07-compiler-unit-tests/) | Proposed | HIGHEST | 0% |
