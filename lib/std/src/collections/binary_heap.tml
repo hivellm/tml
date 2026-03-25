@@ -1,0 +1,323 @@
+/// BinaryHeap[T] — Max-heap priority queue.
+///
+/// A priority queue implemented with a binary max-heap. The largest element
+/// (according to `Ord`) is always at the top and is returned first by `pop()`.
+///
+/// ## Complexity
+/// - `push`: O(log n)
+/// - `pop`: O(log n)
+/// - `peek`: O(1)
+///
+/// ## Examples
+/// ```tml
+/// use std::collections::binary_heap::BinaryHeap
+///
+/// var heap = BinaryHeap[I64]::new()
+/// heap.push(3)
+/// heap.push(1)
+/// heap.push(5)
+/// assert_eq(heap.pop(), Just(5))  // max first
+/// assert_eq(heap.pop(), Just(3))
+/// assert_eq(heap.pop(), Just(1))
+/// ```
+
+use std::collections::List
+
+/// A max-heap backed by a dynamic array.
+///
+/// Elements must support comparison via `>` operator.
+/// The element with the greatest value is always at index 0.
+pub type BinaryHeap[T] {
+    data: List[T],
+    length: I64,
+}
+
+impl[T] BinaryHeap[T] {
+    /// Create an empty BinaryHeap.
+    pub func new() -> BinaryHeap[T] {
+        return BinaryHeap {
+            data: List[T].new(16),
+            length: 0,
+        }
+    }
+
+    /// Create a BinaryHeap with pre-allocated capacity.
+    pub func with_capacity(cap: I64) -> BinaryHeap[T] {
+        return BinaryHeap {
+            data: List[T].new(cap),
+            length: 0,
+        }
+    }
+
+    /// Number of elements in the heap.
+    pub func len(this) -> I64 {
+        return this.length
+    }
+
+    /// Returns true if the heap contains no elements.
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
+    }
+
+    /// View the maximum element without removing it.
+    pub func peek(this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        return Just(this.data.get(0))
+    }
+
+    /// Insert an element into the heap. O(log n).
+    pub func push(mut this, item: T) {
+        // Append at end
+        if this.length < this.data.len() {
+            this.data.set(this.length, item)
+        } else {
+            this.data.push(item)
+        }
+        this.length = this.length + 1
+        // Sift up
+        this.sift_up(this.length - 1)
+    }
+
+    /// Remove and return the maximum element. O(log n).
+    pub func pop(mut this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let max_val = this.data.get(0)
+        this.length = this.length - 1
+        if this.length > 0 {
+            // Move last element to root
+            let last = this.data.get(this.length)
+            this.data.set(0, last)
+            // Sift down
+            this.sift_down(0)
+        }
+        return Just(max_val)
+    }
+
+    /// Remove all elements.
+    pub func clear(mut this) {
+        this.length = 0
+    }
+
+    /// Restore heap property by moving element at `index` up.
+    func sift_up(mut this, index: I64) {
+        var i = index
+        loop (i > 0) {
+            let parent = (i - 1) / 2
+            let child_val = this.data.get(i)
+            let parent_val = this.data.get(parent)
+            if child_val > parent_val {
+                // Swap
+                this.data.set(i, parent_val)
+                this.data.set(parent, child_val)
+                i = parent
+            } else {
+                return
+            }
+        }
+    }
+
+    /// Build a heap from individual pushes. O(n log n).
+    /// Pass the items as a List and they'll be pushed one by one.
+    pub func from_items(items: ref List[T]) -> BinaryHeap[T] {
+        var heap = BinaryHeap[T]::new()
+        var i: I64 = 0
+        loop (i < items.len()) {
+            heap.push(items.get(i))
+            i = i + 1
+        }
+        return heap
+    }
+
+    /// Consume the heap and return elements sorted ascending. O(n log n).
+    pub func into_sorted(mut this) -> List[T] {
+        var result = List[T].new(this.length)
+        var count: I64 = this.length
+        // Pop all elements (max first) → collect in reverse order
+        var i: I64 = 0
+        loop (i < count) {
+            when this.pop() {
+                Just(val) => result.push(val),
+                Nothing => {},
+            }
+            i = i + 1
+        }
+        // Result is in descending order, reverse it
+        var lo: I64 = 0
+        var hi: I64 = result.len() - 1
+        loop (lo < hi) {
+            let tmp = result.get(lo)
+            result.set(lo, result.get(hi))
+            result.set(hi, tmp)
+            lo = lo + 1
+            hi = hi - 1
+        }
+        return result
+    }
+
+    /// Check if the heap contains a value. O(n) linear scan.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data.get(i) == item {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /// Push multiple elements from a list. Each push is O(log n).
+    pub func extend(mut this, items: ref List[T]) {
+        var i: I64 = 0
+        loop (i < items.len()) {
+            this.push(items.get(i))
+            i = i + 1
+        }
+    }
+
+    /// Restore heap property by moving element at `index` down.
+    func sift_down(mut this, index: I64) {
+        var i = index
+        loop (i < this.length) {
+            let left = 2 * i + 1
+            let right = 2 * i + 2
+            var largest = i
+
+            if left < this.length {
+                if this.data.get(left) > this.data.get(largest) {
+                    largest = left
+                }
+            }
+            if right < this.length {
+                if this.data.get(right) > this.data.get(largest) {
+                    largest = right
+                }
+            }
+
+            if largest == i {
+                return
+            }
+
+            // Swap
+            let tmp = this.data.get(i)
+            this.data.set(i, this.data.get(largest))
+            this.data.set(largest, tmp)
+            i = largest
+        }
+    }
+}
+
+// ─── MinHeap[T] — Min-heap variant ─────────────────────────────────
+
+/// A min-heap priority queue. The smallest element is always at the top.
+///
+/// ## Examples
+/// ```tml
+/// var heap = MinHeap[I64]::new()
+/// heap.push(5)
+/// heap.push(1)
+/// heap.push(3)
+/// assert_eq(heap.pop(), Just(1))  // min first
+/// ```
+pub type MinHeap[T] {
+    data: List[T],
+    length: I64,
+}
+
+impl[T] MinHeap[T] {
+    pub func new() -> MinHeap[T] {
+        return MinHeap { data: List[T].new(16), length: 0 }
+    }
+
+    pub func with_capacity(cap: I64) -> MinHeap[T] {
+        return MinHeap { data: List[T].new(cap), length: 0 }
+    }
+
+    pub func len(this) -> I64 { return this.length }
+    pub func is_empty(this) -> Bool { return this.length == 0 }
+
+    pub func peek(this) -> Maybe[T] {
+        if this.length == 0 { return Nothing }
+        return Just(this.data.get(0))
+    }
+
+    pub func push(mut this, item: T) {
+        if this.length < this.data.len() {
+            this.data.set(this.length, item)
+        } else {
+            this.data.push(item)
+        }
+        this.length = this.length + 1
+        this.sift_up(this.length - 1)
+    }
+
+    pub func pop(mut this) -> Maybe[T] {
+        if this.length == 0 { return Nothing }
+        let min_val = this.data.get(0)
+        this.length = this.length - 1
+        if this.length > 0 {
+            let last = this.data.get(this.length)
+            this.data.set(0, last)
+            this.sift_down(0)
+        }
+        return Just(min_val)
+    }
+
+    pub func clear(mut this) { this.length = 0 }
+
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data.get(i) == item { return true }
+            i = i + 1
+        }
+        return false
+    }
+
+    func sift_up(mut this, index: I64) {
+        var i = index
+        loop (i > 0) {
+            let parent = (i - 1) / 2
+            let child_val = this.data.get(i)
+            let parent_val = this.data.get(parent)
+            if child_val < parent_val {
+                this.data.set(i, parent_val)
+                this.data.set(parent, child_val)
+                i = parent
+            } else {
+                return
+            }
+        }
+    }
+
+    func sift_down(mut this, index: I64) {
+        var i = index
+        loop (i < this.length) {
+            let left = 2 * i + 1
+            let right = 2 * i + 2
+            var smallest = i
+
+            if left < this.length {
+                if this.data.get(left) < this.data.get(smallest) {
+                    smallest = left
+                }
+            }
+            if right < this.length {
+                if this.data.get(right) < this.data.get(smallest) {
+                    smallest = right
+                }
+            }
+
+            if smallest == i { return }
+
+            let tmp = this.data.get(i)
+            this.data.set(i, this.data.get(smallest))
+            this.data.set(smallest, tmp)
+            i = smallest
+        }
+    }
+}

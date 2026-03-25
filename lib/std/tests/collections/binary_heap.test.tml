@@ -1,0 +1,154 @@
+use test::{assert, assert_eq}
+use std::collections::binary_heap::{BinaryHeap, MinHeap}
+use std::collections::List
+
+@test
+func test_new_empty() -> I32 {
+    let heap = BinaryHeap[I64]::new()
+    assert(heap.is_empty(), "new heap should be empty")
+    assert_eq(heap.len(), 0, "len should be 0")
+    return 0
+}
+
+@test
+func test_push_and_peek() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(42)
+    assert_eq(heap.len(), 1, "len after push")
+    when heap.peek() {
+        Just(v) => assert_eq(v, 42, "peek should return 42"),
+        Nothing => assert(false, "peek should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_max_heap_ordering() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(3)
+    heap.push(1)
+    heap.push(5)
+    heap.push(2)
+    heap.push(4)
+
+    // Pop should return elements in descending order (max-heap)
+    assert_eq(heap.pop().unwrap(), 5, "first pop = 5")
+    assert_eq(heap.pop().unwrap(), 4, "second pop = 4")
+    assert_eq(heap.pop().unwrap(), 3, "third pop = 3")
+    assert_eq(heap.pop().unwrap(), 2, "fourth pop = 2")
+    assert_eq(heap.pop().unwrap(), 1, "fifth pop = 1")
+    assert(heap.is_empty(), "heap should be empty after all pops")
+    return 0
+}
+
+@test
+func test_pop_empty() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    when heap.pop() {
+        Just(v) => assert(false, "pop on empty should be Nothing"),
+        Nothing => assert(true, "correct"),
+    }
+    return 0
+}
+
+@test
+func test_clear() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(1)
+    heap.push(2)
+    heap.push(3)
+    assert_eq(heap.len(), 3, "len before clear")
+    heap.clear()
+    assert_eq(heap.len(), 0, "len after clear")
+    assert(heap.is_empty(), "should be empty after clear")
+    return 0
+}
+
+@test
+func test_duplicate_values() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(5)
+    heap.push(5)
+    heap.push(5)
+    assert_eq(heap.len(), 3, "3 elements")
+    assert_eq(heap.pop().unwrap(), 5, "pop 1")
+    assert_eq(heap.pop().unwrap(), 5, "pop 2")
+    assert_eq(heap.pop().unwrap(), 5, "pop 3")
+    return 0
+}
+
+@test
+func test_from_items() -> I32 {
+    var items = List[I64].new(4)
+    items.push(3)
+    items.push(1)
+    items.push(5)
+    items.push(2)
+    var heap = BinaryHeap[I64]::from_items(ref items)
+    assert_eq(heap.len(), 4, "from_items len")
+    assert_eq(heap.pop().unwrap(), 5, "from_items max = 5")
+    return 0
+}
+
+@test
+func test_into_sorted() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(3)
+    heap.push(1)
+    heap.push(5)
+    heap.push(2)
+    let sorted = heap.into_sorted()
+    assert_eq(sorted.len(), 4, "sorted len")
+    assert_eq(sorted.get(0), 1, "sorted[0] = 1")
+    assert_eq(sorted.get(1), 2, "sorted[1] = 2")
+    assert_eq(sorted.get(2), 3, "sorted[2] = 3")
+    assert_eq(sorted.get(3), 5, "sorted[3] = 5")
+    return 0
+}
+
+@test
+func test_contains() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(10)
+    heap.push(20)
+    heap.push(30)
+    assert(heap.contains(20), "should contain 20")
+    assert(not heap.contains(99), "should not contain 99")
+    return 0
+}
+
+@test
+func test_min_heap_basic() -> I32 {
+    var heap = MinHeap[I64]::new()
+    heap.push(5)
+    heap.push(1)
+    heap.push(3)
+    assert_eq(heap.len(), 3, "min heap len")
+    assert_eq(heap.pop().unwrap(), 1, "min first = 1")
+    assert_eq(heap.pop().unwrap(), 3, "min second = 3")
+    assert_eq(heap.pop().unwrap(), 5, "min third = 5")
+    return 0
+}
+
+@test
+func test_min_heap_peek() -> I32 {
+    var heap = MinHeap[I64]::new()
+    heap.push(10)
+    heap.push(5)
+    heap.push(20)
+    when heap.peek() {
+        Just(v) => assert_eq(v, 5, "min peek = 5"),
+        Nothing => assert(false, "peek should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_min_heap_contains() -> I32 {
+    var heap = MinHeap[I64]::new()
+    heap.push(7)
+    heap.push(3)
+    assert(heap.contains(3), "should contain 3")
+    assert(not heap.contains(99), "should not contain 99")
+    return 0
+}
