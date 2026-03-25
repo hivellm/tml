@@ -1,0 +1,94 @@
+use test::{assert, assert_eq}
+use core::ffi::cstr::CStr
+
+@test
+func test_cstr_len() -> I32 {
+    let s = "hello"
+    let cs = CStr::from_ptr(s as *U8)
+    assert_eq(cs.len(), 5, "CStr len should be 5")
+    return 0
+}
+
+@test
+func test_cstr_is_empty_false() -> I32 {
+    let s = "hello"
+    let cs = CStr::from_ptr(s as *U8)
+    assert(not cs.is_empty(), "CStr should not be empty")
+    return 0
+}
+
+@test
+func test_cstr_is_empty_true() -> I32 {
+    let s = ""
+    let cs = CStr::from_ptr(s as *U8)
+    assert(cs.is_empty(), "empty CStr should be empty")
+    assert_eq(cs.len(), 0, "empty CStr len should be 0")
+    return 0
+}
+
+@test
+func test_cstr_byte_at() -> I32 {
+    let s = "ABC"
+    let cs = CStr::from_ptr(s as *U8)
+    assert_eq(cs.byte_at(0) as I64, 65, "byte 0 should be 'A'")
+    assert_eq(cs.byte_at(1) as I64, 66, "byte 1 should be 'B'")
+    assert_eq(cs.byte_at(2) as I64, 67, "byte 2 should be 'C'")
+    return 0
+}
+
+@test
+func test_cstr_as_ptr() -> I32 {
+    let s = "test"
+    let raw = s as *U8
+    let cs = CStr::from_ptr(raw)
+    let back = cs.as_ptr()
+    // Both pointers should point to the same address
+    assert_eq(back as I64, raw as I64, "as_ptr should return original pointer")
+    return 0
+}
+
+@test
+func test_cstr_single_char() -> I32 {
+    let s = "x"
+    let cs = CStr::from_ptr(s as *U8)
+    assert_eq(cs.len(), 1, "single char CStr len should be 1")
+    assert(not cs.is_empty(), "single char CStr should not be empty")
+    assert_eq(cs.byte_at(0) as I64, 120, "byte should be 'x' (120)")
+    return 0
+}
+
+@test
+func test_cstr_to_str() -> I32 {
+    let s = "Hello, C!"
+    let cs = CStr::from_ptr(s as *U8)
+    let result: Str = cs.to_str()
+    assert_eq(result, "Hello, C!", "to_str should return original string")
+    return 0
+}
+
+@test
+func test_cstr_to_owned_str() -> I32 {
+    let s = "owned copy"
+    let cs = CStr::from_ptr(s as *U8)
+    let owned: Str = cs.to_owned_str()
+    assert_eq(owned, "owned copy", "to_owned_str should return equal string")
+    return 0
+}
+
+@test
+func test_cstr_partial_eq() -> I32 {
+    let a = CStr::from_ptr("abc" as *U8)
+    let b = CStr::from_ptr("abc" as *U8)
+    let c = CStr::from_ptr("xyz" as *U8)
+    assert(a == b, "equal CStr should be ==")
+    assert(not (a == c), "different CStr should not be ==")
+    return 0
+}
+
+@test
+func test_cstr_display() -> I32 {
+    let cs = CStr::from_ptr("display me" as *U8)
+    let s: Str = cs.to_string()
+    assert_eq(s, "display me", "Display should return string content")
+    return 0
+}

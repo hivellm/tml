@@ -1,0 +1,94 @@
+/// CStr — Borrowed C string with null-terminator guarantee
+///
+/// A `CStr` wraps a `*U8` pointer that is guaranteed to point to a
+/// null-terminated byte sequence. It provides safe methods for converting
+/// between C strings and TML strings.
+
+/// Borrowed C string. Wraps a pointer to a null-terminated byte sequence.
+/// Created via `CStr::from_ptr()` — caller guarantees the pointer is valid
+/// and null-terminated.
+pub type CStr {
+    ptr: *U8,
+}
+
+/// FFI: convert a C string pointer to a TML Str (identity — Str is ptr)
+@extern("c")
+func tml_str_from_cstr(cstr: *U8) -> Str
+
+/// Duplicate a C string into a heap-allocated copy (null-terminated)
+func cstr_dup(src: *U8, len: I64) -> Str {
+    let dst: *U8 = lowlevel { mem_alloc((len + 1) as U64) as *U8 }
+    lowlevel { copy_nonoverlapping[U8](src, dst, len) }
+    lowlevel { ptr_write[U8](ptr_offset[U8](dst, len), 0 as U8) }
+    return tml_str_from_cstr(dst)
+}
+
+/// Compute C string length by scanning for null byte
+func cstr_strlen(ptr: *U8) -> I64 {
+    var i: I64 = 0
+    var done = false
+    loop (not done) {
+        let byte = lowlevel { ptr_read[U8](ptr_offset[U8](ptr, i)) }
+        if byte == (0 as U8) {
+            done = true
+        } else {
+            i = i + 1
+        }
+    }
+    return i
+}
+
+impl CStr {
+    /// Wrap an existing C string pointer. The pointer MUST be null-terminated.
+    pub func from_ptr(ptr: *U8) -> CStr {
+        return CStr { ptr: ptr }
+    }
+
+    /// Get the raw pointer to the underlying C string
+    pub func as_ptr(this) -> *U8 {
+        return this.ptr
+    }
+
+    /// Convert to a TML Str. The returned Str borrows the same memory —
+    /// valid only as long as the underlying C string is alive.
+    pub func to_str(this) -> Str {
+        return tml_str_from_cstr(this.ptr)
+    }
+
+    /// Convert to an owned TML Str by copying the bytes to the heap.
+    /// Safe to use even if the original C string is freed later.
+    pub func to_owned_str(this) -> Str {
+        let n: I64 = cstr_strlen(this.ptr)
+        return cstr_dup(this.ptr, n)
+    }
+
+    /// Compute the byte length (not including the null terminator)
+    pub func len(this) -> I64 {
+        return cstr_strlen(this.ptr)
+    }
+
+    /// Check if the C string is empty (length 0)
+    pub func is_empty(this) -> Bool {
+        let first = lowlevel { ptr_read[U8](this.ptr) }
+        return first == (0 as U8)
+    }
+
+    /// Get the byte at a given index (0-based, no bounds check)
+    pub func byte_at(this, index: I64) -> U8 {
+        return lowlevel { ptr_read[U8](ptr_offset[U8](this.ptr, index)) }
+    }
+}
+
+impl PartialEq for CStr {
+    pub func eq(this, other: ref CStr) -> Bool {
+        let a: Str = this.to_str()
+        let b: Str = other.to_str()
+        return a == b
+    }
+}
+
+impl Display for CStr {
+    pub func to_string(this) -> Str {
+        return this.to_str()
+    }
+}
