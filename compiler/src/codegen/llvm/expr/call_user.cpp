@@ -412,7 +412,38 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 if (last_sep != std::string::npos) {
                     bare = bare.substr(last_sep + 2);
                 }
-                mangled = "@tml_" + mangle_tml_symbol(found_mod_name, bare, found_param_types);
+                // First, try to find the function in functions_ by qualified name.
+                // The module registry may aggregate functions from submodules into
+                // a parent module (e.g., core::fmt includes core::fmt::helpers::i16_to_str).
+                // But gen_func_decl registered the function with the SUBMODULE path.
+                // So found_mod_name (parent) would produce a different mangled name than
+                // the actual definition. Try to find the exact registered entry first.
+                bool found_in_functions = false;
+                // Try exact qualified lookup: found_mod_name::bare
+                std::string qualified_lookup = found_mod_name + "::" + bare;
+                auto qit = functions_.find(qualified_lookup);
+                if (qit != functions_.end()) {
+                    mangled = qit->second.llvm_name;
+                    found_in_functions = true;
+                }
+                // If not found, the function may be in a submodule. Search functions_
+                // for any entry whose key ends with "::bare_name" and whose llvm_name
+                // contains the bare function name in its mangled form.
+                if (!found_in_functions) {
+                    std::string suffix = "::" + bare;
+                    for (const auto& [key, fi] : functions_) {
+                        if (key.size() >= suffix.size() &&
+                            key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0 &&
+                            key.find(found_mod_name) == 0) {
+                            mangled = fi.llvm_name;
+                            found_in_functions = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found_in_functions) {
+                    mangled = "@tml_" + mangle_tml_symbol(found_mod_name, bare, found_param_types);
+                }
             }
         } else {
             // Check if this is a Type::method call on a primitive type
