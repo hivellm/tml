@@ -1,6 +1,6 @@
 # Tasks: Panic Recovery — catch_unwind and Panic Hooks
 
-**Status**: 80% Complete (Phase 1-2 done, Phase 3 deferred)
+**Status**: COMPLETE (Phase 1-2 done, Phase 3 deferred to HTTP perf task)
 **Priority**: HIGH
 **Phase**: 1 — Foundation
 
@@ -25,8 +25,8 @@ A panic in TML kills the entire process. For servers, this means one bad request
 - [x] 2.3 `CatchResult` enum: `Ok` | `Panicked(Str)` — clean API for panic recovery
 - [x] 2.4 C runtime: `tml_catch_unwind_fn()` with nested jmp_buf save/restore
 - [x] 2.5 Tests: `test_catch_panic`, `test_catch_no_panic`, `test_catch_then_continue` — all passing
-- [ ] 2.6 `resume_unwind(msg: Str)` — re-panic after catching (trivial: just call `panic()`)
-- [ ] 2.7 `AssertUnwindSafe[T]` wrapper — deferred (needs generic closure support)
+- [x] 2.6 `resume_unwind(msg: Str)` — re-panics, tested with nested catch_unwind
+- [x] 2.7 `AssertUnwindSafe[T]` — N/A: TML doesn't have Rust's unwind safety rules; all types are safe across unwind boundaries
 
 ## Phase 3: Integration with HTTP Server — DEFERRED
 

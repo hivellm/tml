@@ -1,5 +1,5 @@
 use test::{assert, assert_eq}
-use core::panic::{catch_unwind_fn, set_hook, clear_hook, CatchResult, PanicInfo}
+use core::panic::{catch_unwind_fn, set_hook, clear_hook, resume_unwind, CatchResult, PanicInfo}
 
 func panics_boom() -> Unit {
     panic("boom")
@@ -75,6 +75,31 @@ func test_catch_then_continue() -> I32 {
     when result2 {
         CatchResult::Ok => {},
         CatchResult::Panicked(msg) => { return 1 },
+    }
+    return 0
+}
+
+func does_resume_unwind() -> Unit {
+    let inner_fn: *U8 = lowlevel { panics_boom as *U8 }
+    let result = catch_unwind_fn(inner_fn)
+    when result {
+        CatchResult::Panicked(msg) => resume_unwind(msg),
+        CatchResult::Ok => {},
+    }
+}
+
+@test
+func test_resume_unwind() -> I32 {
+    let fn_ptr: *U8 = lowlevel { does_resume_unwind as *U8 }
+    let result = catch_unwind_fn(fn_ptr)
+    when result {
+        CatchResult::Panicked(msg) => {
+            assert_eq(msg, "boom", "resume_unwind should propagate message")
+        },
+        CatchResult::Ok => {
+            assert(false, "should have re-panicked")
+            return 1
+        },
     }
     return 0
 }

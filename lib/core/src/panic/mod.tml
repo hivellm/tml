@@ -132,3 +132,17 @@ pub func catch_unwind_fn(f: *U8) -> CatchResult {
     let msg: Str = tml_get_panic_message()
     return CatchResult::Panicked(msg)
 }
+
+/// Re-panic with a message. Use after catching a panic to propagate it.
+///
+/// ## Example
+/// ```tml
+/// let result = catch_unwind_fn(fn_ptr)
+/// when result {
+///     CatchResult::Panicked(msg) => resume_unwind(msg),
+///     CatchResult::Ok => {},
+/// }
+/// ```
+pub func resume_unwind(msg: Str) -> Unit {
+    panic(msg)
+}
