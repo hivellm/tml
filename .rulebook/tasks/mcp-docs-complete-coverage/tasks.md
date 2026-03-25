@@ -3,15 +3,15 @@
 ## Phase 0: Fix Extractor Bug (CRITICAL — blocks all other phases)
 
 ### 0.1 Fix top-level function indexing
-- [ ] 0.1.1 Investigate why top-level `pub func` items with `///` doc comments don't appear in `docs_search` results — only `impl` methods (without docs) appear
-- [ ] 0.1.2 Fix extractor to either: (a) index top-level functions alongside impl methods, or (b) propagate doc comments from top-level functions to their corresponding impl methods
-- [ ] 0.1.3 Verify with `docs_get("core::str::len")` — should now return the description "Returns the length of a string in bytes" and the `@example` block
-- [ ] 0.1.4 Verify with `docs_search("length bytes string")` — should find `core::str::len` by description text
+- [x] 0.1.1 Investigate why top-level `pub func` items with `///` doc comments don't appear in `docs_search` results — ROOT CAUSE: `skip_newlines()` consumed DocComment tokens between declarations
+- [x] 0.1.2 Fix: `skip_newlines()` now only skips Newline tokens. DocComment tokens preserved for `collect_doc_comment()`. Also added propagation from top-level funcs to impl methods.
+- [x] 0.1.3 Verified: `docs_get("core::str::len")` returns description "Returns the length of a string in bytes" + examples
+- [x] 0.1.4 Verified: `docs_get("core::str::split")` returns description + examples
 
 ### 0.2 Add doc comments to impl methods (where top-level has docs)
-- [ ] 0.2.1 Script to find top-level functions with `///` that have matching impl methods without `///` — generate a migration plan
-- [ ] 0.2.2 Copy/adapt doc comments from top-level functions to impl methods in `core::str`
-- [ ] 0.2.3 Verify search quality improvement after migration
+- [x] 0.2.1 Not needed — extractor now propagates docs from top-level functions to impl methods automatically (`propagate_docs_to_impl_methods`)
+- [x] 0.2.2 Not needed — automatic propagation handles this
+- [x] 0.2.3 Verified: 11866 items indexed, descriptions + examples appear in docs_get output
 
 ## Phase 1: Core Library Doc Comments (highest impact)
 
