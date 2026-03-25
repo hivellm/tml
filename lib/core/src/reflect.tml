@@ -347,6 +347,88 @@ pub behavior Reflect {
 }
 
 // ============================================================================
+// Field Access Utilities
+// ============================================================================
+
+/// Read/write struct fields by byte offset at runtime.
+/// Use `field_offset[T](index)` to get the offset, then these functions
+/// to read or write values. Base pointer obtained via `lowlevel { ref x as I64 }`.
+///
+/// ## Example
+/// ```tml
+/// var s = MyStruct { value: 42 }
+/// let base: I64 = lowlevel { ref s as I64 }
+/// let offset: I64 = field_offset[MyStruct](0)
+/// write_field_i64(base, offset, 99)
+/// assert_eq(s.value, 99)
+/// ```
+
+/// Write an I64 value to a struct field at the given byte offset.
+pub func write_field_i64(base_ptr: I64, offset: I64, value: I64) -> Unit {
+    let addr: I64 = base_ptr + offset
+    let ptr: *U8 = lowlevel { addr as *U8 }
+    lowlevel { ptr_write[I64](ptr as *I64, value) }
+}
+
+/// Read an I64 value from a struct field at the given byte offset.
+pub func read_field_i64(base_ptr: I64, offset: I64) -> I64 {
+    let addr: I64 = base_ptr + offset
+    let ptr: *U8 = lowlevel { addr as *U8 }
+    return lowlevel { ptr_read[I64](ptr as *I64) }
+}
+
+/// Write a Str to a struct field at the given byte offset.
+pub func write_field_str(base_ptr: I64, offset: I64, value: Str) -> Unit {
+    let addr: I64 = base_ptr + offset
+    let dst: *U8 = lowlevel { addr as *U8 }
+    lowlevel { copy_nonoverlapping[U8](ref value as *U8, dst, 8) }
+}
+
+/// Read a Str from a struct field at the given byte offset.
+pub func read_field_str(base_ptr: I64, offset: I64) -> Str {
+    let addr: I64 = base_ptr + offset
+    let src: *U8 = lowlevel { addr as *U8 }
+    var result: Str = ""
+    lowlevel { copy_nonoverlapping[U8](src, ref result as *U8, 8) }
+    return result
+}
+
+/// Write an F64 value to a struct field at the given byte offset.
+pub func write_field_f64(base_ptr: I64, offset: I64, value: F64) -> Unit {
+    let addr: I64 = base_ptr + offset
+    let dst: *U8 = lowlevel { addr as *U8 }
+    lowlevel { copy_nonoverlapping[U8](ref value as *U8, dst, 8) }
+}
+
+/// Read an F64 value from a struct field at the given byte offset.
+pub func read_field_f64(base_ptr: I64, offset: I64) -> F64 {
+    let addr: I64 = base_ptr + offset
+    let src: *U8 = lowlevel { addr as *U8 }
+    var result: F64 = 0.0
+    lowlevel { copy_nonoverlapping[U8](src, ref result as *U8, 8) }
+    return result
+}
+
+/// Write a Bool value to a struct field at the given byte offset.
+pub func write_field_bool(base_ptr: I64, offset: I64, value: Bool) -> Unit {
+    let addr: I64 = base_ptr + offset
+    let dst: *U8 = lowlevel { addr as *U8 }
+    var byte: U8 = 0 as U8
+    if value {
+        byte = 1 as U8
+    }
+    lowlevel { ptr_write[U8](dst, byte) }
+}
+
+/// Read a Bool value from a struct field at the given byte offset.
+pub func read_field_bool(base_ptr: I64, offset: I64) -> Bool {
+    let addr: I64 = base_ptr + offset
+    let src: *U8 = lowlevel { addr as *U8 }
+    let byte: U8 = lowlevel { ptr_read[U8](src) }
+    return byte != (0 as U8)
+}
+
+// ============================================================================
 // Reflection Utilities
 // ============================================================================
 

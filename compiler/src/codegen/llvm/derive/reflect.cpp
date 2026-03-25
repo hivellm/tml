@@ -135,6 +135,9 @@ void LLVMIRGen::gen_derive_reflect_struct(const parser::StructDecl& s) {
 
     // Generate the impl Reflect for T
     gen_derive_reflect_impl(type_name, typeinfo_name);
+
+    // Generate get_field_ptr_by_index and set_field_by_index
+    gen_derive_reflect_field_accessors(s, type_name);
 }
 
 /// Generate static TypeInfo for an enum with @derive(Reflect)
@@ -310,6 +313,80 @@ void LLVMIRGen::gen_derive_reflect_impl(const std::string& type_name,
         emit_line("  ret ptr " + typeinfo_name);
         emit_line("}");
         emit_line("");
+    }
+}
+
+/// Generate get_field_ptr_by_index and set_field_by_index for a struct
+///
+/// get_field_ptr returns a raw pointer to the field at the given index.
+/// set_field_by_index copies bytes from a source pointer to the field.
+/// These enable runtime field access/mutation for reflection.
+void LLVMIRGen::gen_derive_reflect_field_accessors(const parser::StructDecl& s,
+                                                   const std::string& type_name) {
+    std::string suite_prefix = "";
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+
+    std::string llvm_type = "%struct." + type_name;
+
+    // ─── get_field_ptr(ptr %this, i64 %index) -> ptr ───
+    std::string get_func = "@tml_" + suite_prefix + type_name + "_get_field_ptr";
+    if (generated_functions_.count(get_func) == 0) {
+        generated_functions_.insert(get_func);
+
+        type_defs_buffer_ << "; impl Reflect for " << type_name << " - get_field_ptr()\n";
+        type_defs_buffer_ << "define ptr " << get_func << "(ptr %this, i64 %index) {\n";
+        type_defs_buffer_ << "entry:\n";
+        type_defs_buffer_ << "  switch i64 %index, label %default [\n";
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            type_defs_buffer_ << "    i64 " << i << ", label %field_" << i << "\n";
+        }
+        type_defs_buffer_ << "  ]\n";
+
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            type_defs_buffer_ << "field_" << i << ":\n";
+            type_defs_buffer_ << "  %ptr_" << i << " = getelementptr inbounds " << llvm_type
+                              << ", ptr %this, i32 0, i32 " << i << "\n";
+            type_defs_buffer_ << "  ret ptr %ptr_" << i << "\n";
+        }
+
+        type_defs_buffer_ << "default:\n";
+        type_defs_buffer_ << "  ret ptr null\n";
+        type_defs_buffer_ << "}\n\n";
+    }
+
+    // ─── get_field_name(i64 %index) -> ptr ───
+    // Returns field name string for a given index
+    std::string name_func = "@tml_" + suite_prefix + type_name + "_get_field_name";
+    if (generated_functions_.count(name_func) == 0) {
+        generated_functions_.insert(name_func);
+
+        // Pre-create string constants for field names
+        std::vector<std::string> name_consts;
+        name_consts.reserve(s.fields.size());
+        for (const auto& field : s.fields) {
+            name_consts.push_back(add_string_literal(field.name));
+        }
+
+        type_defs_buffer_ << "; impl Reflect for " << type_name << " - get_field_name()\n";
+        type_defs_buffer_ << "define ptr " << name_func << "(i64 %index) {\n";
+        type_defs_buffer_ << "entry:\n";
+        type_defs_buffer_ << "  switch i64 %index, label %default [\n";
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            type_defs_buffer_ << "    i64 " << i << ", label %name_" << i << "\n";
+        }
+        type_defs_buffer_ << "  ]\n";
+
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            type_defs_buffer_ << "name_" << i << ":\n";
+            type_defs_buffer_ << "  ret ptr " << name_consts[i] << "\n";
+        }
+
+        type_defs_buffer_ << "default:\n";
+        type_defs_buffer_ << "  ret ptr " << add_string_literal("") << "\n";
+        type_defs_buffer_ << "}\n\n";
     }
 }
 

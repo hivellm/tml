@@ -1,0 +1,129 @@
+use test::{assert, assert_eq}
+use core::reflect::{TypeInfo, TypeKind, Reflect}
+use core::intrinsics::{size_of, field_count, variant_count, field_name}
+
+@derive(Reflect)
+type Vec3 {
+    x: F64,
+    y: F64,
+    z: F64,
+}
+
+@derive(Reflect)
+type Config {
+    name: Str,
+    value: I64,
+    enabled: Bool,
+}
+
+@derive(Reflect)
+enum Status {
+    Active,
+    Inactive,
+    Pending(I64),
+}
+
+@test
+func test_struct_type_info() -> I32 {
+    let info: ref TypeInfo = Vec3::type_info()
+    assert_eq(info.name, "Vec3", "name")
+    assert(info.is_struct(), "should be struct")
+    assert_eq(info.field_count, 3, "field count")
+    assert_eq(info.variant_count, 0, "no variants")
+    return 0
+}
+
+@test
+func test_struct_size_align() -> I32 {
+    let info: ref TypeInfo = Vec3::type_info()
+    let expected_size: I64 = size_of[Vec3]()
+    assert_eq(info.size, expected_size, "size should match size_of")
+    assert(info.align > 0, "align should be > 0")
+    return 0
+}
+
+@test
+func test_struct_type_kind() -> I32 {
+    let info: ref TypeInfo = Vec3::type_info()
+    assert(info.kind == TypeKind::Struct, "kind should be Struct")
+    assert(info.kind != TypeKind::Enum, "kind should not be Enum")
+    return 0
+}
+
+@test
+func test_config_type_info() -> I32 {
+    let info: ref TypeInfo = Config::type_info()
+    assert_eq(info.name, "Config", "name")
+    assert_eq(info.field_count, 3, "3 fields")
+    assert(info.size > 0, "size > 0")
+    return 0
+}
+
+@test
+func test_enum_type_info() -> I32 {
+    let info: ref TypeInfo = Status::type_info()
+    assert_eq(info.name, "Status", "name")
+    assert(info.is_enum(), "should be enum")
+    assert_eq(info.variant_count, 3, "3 variants")
+    assert(info.size > 0, "size > 0")
+    return 0
+}
+
+@test
+func test_runtime_type_info() -> I32 {
+    let v = Vec3 { x: 1.0, y: 2.0, z: 3.0 }
+    let info: ref TypeInfo = v.runtime_type_info()
+    assert_eq(info.name, "Vec3", "runtime name")
+    assert_eq(info.field_count, 3, "runtime field count")
+    return 0
+}
+
+@test
+func test_type_info_debug() -> I32 {
+    let info: ref TypeInfo = Vec3::type_info()
+    let dbg: Str = info.debug_string()
+    // Should contain "struct Vec3"
+    assert(dbg.len() > 0, "debug string not empty")
+    return 0
+}
+
+@test
+func test_enum_variant_methods() -> I32 {
+    let active = Status::Active
+    let name: Str = active.variant_name()
+    assert_eq(name, "Active", "variant name Active")
+
+    let tag: I64 = active.variant_tag()
+    assert_eq(tag, 0, "Active tag = 0")
+
+    let pending = Status::Pending(42)
+    let pname: Str = pending.variant_name()
+    assert_eq(pname, "Pending", "variant name Pending")
+
+    let ptag: I64 = pending.variant_tag()
+    assert_eq(ptag, 2, "Pending tag = 2")
+    return 0
+}
+
+@test
+func test_field_count_intrinsic() -> I32 {
+    let fc: I64 = field_count[Vec3]()
+    assert_eq(fc, 3, "Vec3 has 3 fields")
+
+    let fc2: I64 = field_count[Config]()
+    assert_eq(fc2, 3, "Config has 3 fields")
+    return 0
+}
+
+@test
+func test_field_name_intrinsic() -> I32 {
+    let name0: Str = field_name[Vec3](0)
+    assert_eq(name0, "x", "field 0 = x")
+
+    let name1: Str = field_name[Vec3](1)
+    assert_eq(name1, "y", "field 1 = y")
+
+    let name2: Str = field_name[Vec3](2)
+    assert_eq(name2, "z", "field 2 = z")
+    return 0
+}
