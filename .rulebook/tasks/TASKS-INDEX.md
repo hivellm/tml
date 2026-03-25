@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-03-25
-**Total tasks**: 28 active (2 archived)
+**Total tasks**: 27 active (3 archived)
 
 ## Phase 1 — Foundation & Language
 
@@ -14,7 +14,7 @@ Core language features, compiler infrastructure, and foundational gaps.
 | 1-03 | ~~Core FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% (20/20) |
 | 1-04 | [Std FFI Types](phase1-04-std-ffi-types/) | **NEW** | HIGH | 0% |
 | 1-05 | ~~Panic Recovery~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 1-06 | [Compiler Hints](phase1-06-compiler-hints/) | **NEW** | MEDIUM | 0% |
+| 1-06 | ~~Compiler Hints~~ | **ARCHIVED** 2026-03-25 | MEDIUM | 100% |
 | 1-07 | [Compiler C++ Unit Tests](phase1-07-compiler-unit-tests/) | Proposed | HIGHEST | 0% |
 | 1-08 | [Reflection System](phase1-08-reflection/) | In Progress — Phase 5 BLOCKED | MEDIUM | 53% (37/70) |
 
