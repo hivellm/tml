@@ -10,7 +10,8 @@ The sync package provides high-level synchronization primitives for communicatio
 
 ```tml
 use std::sync
-use std::sync.{channel, mpsc, broadcast, Barrier, Once}
+use std::sync.{channel, mpsc, Barrier, Once}
+// broadcast — not yet implemented, see design spec below
 ```
 
 ---
@@ -330,7 +331,90 @@ extend MpmcReceiver[T] with Duplicate {
 
 ---
 
-## Broadcast Channel
+## Semaphore
+
+Counting semaphore for bounded concurrency control. Limits concurrent access to a resource by maintaining a count of available permits.
+
+```tml
+use std::sync::semaphore::{Semaphore, SemaphoreGuard}
+
+// Create with 3 permits
+var sem = Semaphore::new(3)
+
+// Blocking acquire
+sem.acquire()
+sem.release()
+
+// Non-blocking
+if sem.try_acquire() {
+    // got permit
+    sem.release()
+}
+
+// RAII guard — permit released when guard is dropped
+{
+    let guard = sem.acquire_guard()
+    // permit held while guard is in scope
+} // permit automatically released here
+
+// Non-blocking guard
+when sem.try_acquire_guard() {
+    Just(guard) => { /* have permit */ },
+    Nothing => { /* no permit available */ },
+}
+```
+
+### API
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `func new(permits: I64) -> Semaphore` | Create with N permits |
+| `acquire` | `func acquire(mut this)` | Block until permit available |
+| `try_acquire` | `func try_acquire(mut this) -> Bool` | Non-blocking acquire |
+| `release` | `func release(mut this)` | Release a permit |
+| `acquire_guard` | `func acquire_guard(mut this) -> SemaphoreGuard` | Blocking acquire + RAII guard |
+| `try_acquire_guard` | `func try_acquire_guard(mut this) -> Maybe[SemaphoreGuard]` | Non-blocking guard |
+| `available_permits` | `func available_permits(this) -> I64` | Current available count |
+| `max_permits` | `func max_permits(this) -> I64` | Maximum permit count |
+
+---
+
+## WaitGroup
+
+Wait for a group of tasks to complete (Go-style fan-out/fan-in pattern).
+
+```tml
+use std::sync::wait_group::WaitGroup
+
+var wg = WaitGroup::new()
+
+// Fan out: add work items
+wg.add(3)
+
+// Each worker calls done() when finished
+wg.done()
+wg.done()
+wg.done()
+
+// Wait blocks until count reaches 0
+wg.wait()
+```
+
+### API
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `func new() -> WaitGroup` | Create with count 0 |
+| `add` | `func add(mut this, delta: I64)` | Increment counter |
+| `done` | `func done(mut this)` | Decrement counter (equivalent to `add(-1)`) |
+| `wait` | `func wait(mut this)` | Block until counter reaches 0 |
+| `count` | `func count(this) -> I64` | Current counter value |
+
+---
+
+## Broadcast Channel (NOT YET IMPLEMENTED)
+
+> **Status**: Planned — not yet implemented. The API below is the design spec.
 
 Sends to multiple receivers, each receiving all messages.
 

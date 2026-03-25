@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-03-22
-**Current state**: Compiler functional, 11,000+ tests passing, HTTP server at 183K req/s, Tracy profiler integrated, 99% library coverage, async network stack complete
+**Last updated**: 2026-03-25
+**Current state**: Compiler functional, 1,650+ TML tests passing (92% coverage), HTTP server at 183K req/s, Tracy profiler integrated, async network stack complete, panic recovery + compiler hints + FFI types added
 
 ---
 
@@ -31,8 +31,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 
 | Metric | Value |
 |--------|-------|
-| Tests passing | 11,000+ across 1,400+ files |
-| Library coverage | 99% (15,528/15,628 functions) |
+| TML tests passing | 1,650+ across 200+ test files |
+| Library coverage | 92.2% (5,854/6,346 functions) |
 | C++ compiler size | ~240,000 lines |
 | C runtime compiled | 15 files (15 essential FFI, 0 migration candidates) |
 | C runtime to migrate | 0 lines |

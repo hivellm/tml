@@ -601,47 +601,47 @@ extend VecDeque[T] {
 
 ---
 
-## BinaryHeap[T] — Priority Queue
+## BinaryHeap[T] — Max-Heap Priority Queue
 
-A max-heap providing O(log n) push and O(1) peek of the maximum.
+A max-heap backed by `List[T]`. The largest element is always at the top. O(log n) push/pop, O(1) peek.
 
 ```tml
-pub type BinaryHeap[T] {
-    data: Vec[T],
-}
+use std::collections::binary_heap::{BinaryHeap, MinHeap}
+
+var heap = BinaryHeap[I64]::new()
+heap.push(3)
+heap.push(1)
+heap.push(5)
+assert_eq(heap.pop(), Just(5))  // max first
 ```
 
-### Operations
+### BinaryHeap API
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `func new() -> BinaryHeap[T]` | Empty max-heap |
+| `with_capacity` | `func with_capacity(cap: I64) -> BinaryHeap[T]` | Pre-allocated |
+| `push` | `func push(mut this, item: T)` | Insert element, O(log n) |
+| `pop` | `func pop(mut this) -> Maybe[T]` | Remove max, O(log n) |
+| `peek` | `func peek(this) -> Maybe[T]` | View max, O(1) |
+| `len` | `func len(this) -> I64` | Element count |
+| `is_empty` | `func is_empty(this) -> Bool` | Check empty |
+| `clear` | `func clear(mut this)` | Remove all |
+| `from_items` | `func from_items(ref List[T]) -> BinaryHeap[T]` | Build from list |
+| `into_sorted` | `func into_sorted(mut this) -> List[T]` | Heap sort ascending |
+| `contains` | `func contains(this, item: T) -> Bool` | O(n) search |
+| `extend` | `func extend(mut this, ref List[T])` | Bulk push |
+
+### MinHeap[T] — Min-Heap Variant
+
+Same API as BinaryHeap but smallest element at top:
 
 ```tml
-extend BinaryHeap[T] where T: Ord {
-    /// Creates an empty BinaryHeap
-    pub func new() -> BinaryHeap[T]
-
-    /// Creates from a Vec
-    pub func from_vec(vec: Vec[T]) -> BinaryHeap[T]
-
-    /// Returns the number of elements
-    pub func len(this) -> U64
-
-    /// Pushes an element onto the heap
-    pub func push(mut this, value: T)
-
-    /// Removes and returns the maximum element
-    pub func pop(mut this) -> Maybe[T]
-
-    /// Returns a reference to the maximum element
-    pub func peek(this) -> Maybe[ref T]
-
-    /// Pushes a value and pops the maximum
-    pub func push_pop(mut this, value: T) -> T
-
-    /// Pops the maximum and pushes a value
-    pub func replace(mut this, value: T) -> Maybe[T]
-
-    /// Consumes the heap and returns a sorted Vec
-    pub func into_sorted_vec(this) -> Vec[T]
-}
+var min_h = MinHeap[I64]::new()
+min_h.push(5)
+min_h.push(1)
+min_h.push(3)
+assert_eq(min_h.pop(), Just(1))  // min first
 ```
 
 ---

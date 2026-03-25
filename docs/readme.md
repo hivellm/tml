@@ -195,6 +195,7 @@ Source: `lib/core/src/`
 | `core::simd` | `I32x4`, `F32x4`, `I64x2`, `F64x2`, `U8x16` — SIMD vectors | — |
 | `core::bitset` | `BitSet`, `BitArray` | — |
 | `core::ringbuf` | `RingBuffer[T]` — circular buffer | — |
+| `core::tuple` | Tuple implementations (Default, Clone, PartialEq, Eq, PartialOrd, Ord) for arities 2-6 | — |
 | `core::sync` | Raw atomic operations, memory fences, spinlocks | — |
 | `core::panic` | `PanicInfo`, `catch_unwind_fn`, `set_hook`, `clear_hook`, `resume_unwind`, `CatchResult` | — |
 | `core::hint` | `likely`, `unlikely`, `black_box_i64/bool/f64`, `spin_loop_hint`, `assume`, `unreachable_unchecked` | — |
