@@ -46,14 +46,22 @@ HTTP server performance, benchmarks, and networking improvements.
 
 ## Phase 4 — Tooling & Developer Experience
 
-LSP, debugger, package manager, test infrastructure.
+LSP, debugger, package manager, test infrastructure, documentation.
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
+| 4-00 | [MCP Docs Complete Coverage](mcp-docs-complete-coverage/) | **NEW** | **HIGHEST** | 0% |
 | 4-01 | [Developer Tooling (LSP + VSCode)](phase4-01-developer-tooling/) | In Progress — LSP 0% (no C++ impl) | MEDIUM | ~65% real |
 | 4-02 | [Inspector Diagnostics](phase4-02-inspector-diagnostics/) | Proposed | MEDIUM | 0% |
 | 4-03 | [Package Manager](phase4-03-package-manager/) | **BLOCKED** — no registry service | MEDIUM | 15% |
 | 4-04 | [Test Migration (Zig-inspired)](phase4-04-test-migration/) | In Progress — 2 blockers | MEDIUM | 71% (12/17) |
+| 4-05 | [Fix Legacy Codegen ABI Bugs](fix-legacy-codegen-abi-bugs/) | **NEW** — blocks audit_docs.tml | **HIGH** | 0% (0/14) |
+
+## Research
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| R-01 | [LLM IR Debugging Research](llm-ir-debugging-research/) | Data Collection | MEDIUM | 70% (phases 1-7 done) |
 
 ## Phase 5 — Performance & Optimization
 
