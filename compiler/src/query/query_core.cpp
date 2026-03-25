@@ -613,11 +613,93 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         }
     }
 
+    // Check if the module uses template literals or interpolated strings.
+    // These require library functions (to_string, str_concat_opt) that are only
+    // available in the AST codegen path (which inlines library definitions).
+    bool has_template_literals = false;
+    {
+        // Recursively check all expressions and statements for template literals
+        std::function<bool(const parser::Expr&)> check_expr;
+        std::function<bool(const parser::Stmt&)> check_stmt;
+        std::function<bool(const parser::BlockExpr&)> check_block;
+
+        check_expr = [&](const parser::Expr& e) -> bool {
+            if (e.is<parser::TemplateLiteralExpr>() || e.is<parser::InterpolatedStringExpr>())
+                return true;
+            if (e.is<parser::CallExpr>()) {
+                const auto& call = e.as<parser::CallExpr>();
+                if (check_expr(*call.callee))
+                    return true;
+                for (const auto& arg : call.args)
+                    if (check_expr(*arg))
+                        return true;
+            } else if (e.is<parser::MethodCallExpr>()) {
+                const auto& mc = e.as<parser::MethodCallExpr>();
+                if (check_expr(*mc.receiver))
+                    return true;
+                for (const auto& arg : mc.args)
+                    if (check_expr(*arg))
+                        return true;
+            } else if (e.is<parser::BlockExpr>()) {
+                if (check_block(e.as<parser::BlockExpr>()))
+                    return true;
+            } else if (e.is<parser::IfExpr>()) {
+                const auto& ife = e.as<parser::IfExpr>();
+                if (check_expr(*ife.condition) || check_expr(*ife.then_branch))
+                    return true;
+                if (ife.else_branch && check_expr(**ife.else_branch))
+                    return true;
+            } else if (e.is<parser::LoopExpr>()) {
+                const auto& loop = e.as<parser::LoopExpr>();
+                if (loop.body && check_expr(*loop.body))
+                    return true;
+            } else if (e.is<parser::BinaryExpr>()) {
+                const auto& bin = e.as<parser::BinaryExpr>();
+                if (check_expr(*bin.left) || check_expr(*bin.right))
+                    return true;
+            } else if (e.is<parser::UnaryExpr>()) {
+                if (check_expr(*e.as<parser::UnaryExpr>().operand))
+                    return true;
+            }
+            return false;
+        };
+
+        check_stmt = [&](const parser::Stmt& s) -> bool {
+            if (s.is<parser::ExprStmt>())
+                return check_expr(*s.as<parser::ExprStmt>().expr);
+            if (s.is<parser::LetStmt>()) {
+                const auto& ls = s.as<parser::LetStmt>();
+                if (ls.init.has_value() && check_expr(**ls.init))
+                    return true;
+            }
+            return false;
+        };
+
+        check_block = [&](const parser::BlockExpr& block) -> bool {
+            for (const auto& stmt : block.stmts)
+                if (check_stmt(*stmt))
+                    return true;
+            if (block.expr && check_expr(**block.expr))
+                return true;
+            return false;
+        };
+
+        for (const auto& decl : parsed.module->decls) {
+            if (has_template_literals)
+                break;
+            if (decl->is<parser::FuncDecl>() && decl->as<parser::FuncDecl>().body.has_value()) {
+                if (check_block(*decl->as<parser::FuncDecl>().body))
+                    has_template_literals = true;
+            }
+        }
+    }
+
     // Use MIR-based codegen when safe, AST codegen otherwise.
     // When Cranelift backend is selected, always use MIR path — library code
     // is compiled separately as runtime objects and linked in.
     bool force_mir = (ctx.options().backend == "cranelift");
-    if (force_mir || (!has_tml_imports_needing_codegen && !has_local_generics)) {
+    if (force_mir ||
+        (!has_tml_imports_needing_codegen && !has_local_generics && !has_template_literals)) {
         // MIR pipeline — use CodegenBackend abstraction
         auto mir = ctx.mir_build(ck.file_path, ck.module_name);
         if (!mir.success) {

@@ -104,6 +104,17 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
                 arg_type = PrintArgType::Float;
             else if (gen_type == "i32")
                 arg_type = PrintArgType::Int;
+            else if (gen_type == "%struct.Text") {
+                // Template literal result — Text { handle: *Unit }
+                // handle points to header: [data_ptr (offset 0), len (offset 8), ...]
+                // Extract handle, then load data_ptr from it
+                std::string handle = fresh_reg();
+                emit_line("  " + handle + " = extractvalue %struct.Text " + arg_val + ", 0");
+                std::string data_ptr = fresh_reg();
+                emit_line("  " + data_ptr + " = load ptr, ptr " + handle);
+                arg_val = data_ptr;
+                arg_type = PrintArgType::Str;
+            }
         }
 
         // Use runtime print functions that respect output suppression flag
