@@ -17,10 +17,13 @@ TML_MODULE("mcp")
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <iomanip>
 #include <map>
 #include <mutex>
 #include <set>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -157,10 +160,18 @@ static auto derive_module_path(const fs::path& file, const fs::path& root) -> st
 /// has no documentable items.
 static auto extract_hpp_docs(const fs::path& file_path, const fs::path& root)
     -> std::optional<doc::DocModule> {
-    std::ifstream file(file_path);
-    if (!file.is_open()) {
+    // Read entire file using C FILE* to avoid iostream ABI issues across DLL boundaries
+    FILE* fp = fopen(file_path.string().c_str(), "rb");
+    if (!fp) {
         return std::nullopt;
     }
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    std::string file_content(static_cast<size_t>(file_size), '\0');
+    size_t nread = fread(&file_content[0], 1, static_cast<size_t>(file_size), fp);
+    fclose(fp);
+    file_content.resize(nread);
 
     // Derive module path from compiler/include/X/Y.hpp -> compiler::X::Y
     auto rel = fs::relative(file_path, root / "compiler" / "include");
@@ -186,12 +197,14 @@ static auto extract_hpp_docs(const fs::path& file_path, const fs::path& root)
     result.path = mod_path;
     result.source_file = file_path.string();
 
+    // Parse lines from the in-memory content (avoid std::getline with ifstream)
+    std::istringstream file_stream(file_content);
     std::string line;
     std::string doc_comment;
     std::string module_doc;
     uint32_t line_num = 0;
 
-    while (std::getline(file, line)) {
+    while (std::getline(file_stream, line)) {
         ++line_num;
 
         // Trim leading whitespace
@@ -367,14 +380,22 @@ static auto extract_hpp_docs(const fs::path& file_path, const fs::path& root)
 
 /// Parses a single TML file and extracts documentation (parse-only, no type check).
 static auto parse_file_for_docs(const fs::path& file_path) -> std::optional<parser::Module> {
-    // Read source
-    std::ifstream file(file_path);
-    if (!file.is_open()) {
-        return std::nullopt;
+    // Read source — use C FILE* to avoid C++ iostream ABI issues across DLL boundaries.
+    // std::ifstream crashes when called from MCP DLL context on Windows (Zig CC toolchain).
+    std::string source;
+    {
+        FILE* fp = fopen(file_path.string().c_str(), "rb");
+        if (!fp) {
+            return std::nullopt;
+        }
+        fseek(fp, 0, SEEK_END);
+        long sz = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        source.resize(static_cast<size_t>(sz));
+        size_t nread = fread(&source[0], 1, static_cast<size_t>(sz), fp);
+        fclose(fp);
+        source.resize(nread);
     }
-    std::stringstream buf;
-    buf << file.rdbuf();
-    auto source = buf.str();
 
     // Preprocess
     preprocessor::Preprocessor pp;
@@ -446,6 +467,16 @@ static auto get_cache_dir(const fs::path& root) -> fs::path {
 }
 
 /// Saves the BM25, TfIdf, and HNSW indices to disk.
+/// Writes binary data to a file using C FILE* (avoids iostream ABI issues across DLL boundaries).
+static bool write_binary_file(const fs::path& path, const void* data, size_t size) {
+    FILE* fp = fopen(path.string().c_str(), "wb");
+    if (!fp)
+        return false;
+    size_t written = fwrite(data, 1, size, fp);
+    fclose(fp);
+    return written == size;
+}
+
 static void save_cached_indices(const DocSearchCache& cache, const fs::path& root,
                                 uint64_t fingerprint) {
     auto cache_dir = get_cache_dir(root);
@@ -455,51 +486,42 @@ static void save_cached_indices(const DocSearchCache& cache, const fs::path& roo
         return;
 
     // Save fingerprint
-    auto fp_path = cache_dir / "fingerprint.bin";
-    {
-        std::ofstream out(fp_path, std::ios::binary);
-        if (!out)
-            return;
-        out.write(reinterpret_cast<const char*>(&fingerprint), sizeof(fingerprint));
-    }
+    if (!write_binary_file(cache_dir / "fingerprint.bin", &fingerprint, sizeof(fingerprint)))
+        return;
 
     // Save BM25 index
     auto bm25_data = cache.bm25.serialize();
-    {
-        auto bm25_path = cache_dir / "bm25.bin";
-        std::ofstream out(bm25_path, std::ios::binary);
-        if (out)
-            out.write(reinterpret_cast<const char*>(bm25_data.data()), bm25_data.size());
-    }
+    write_binary_file(cache_dir / "bm25.bin", bm25_data.data(), bm25_data.size());
 
     // Save TfIdf vectorizer
     if (cache.vectorizer) {
         auto tfidf_data = cache.vectorizer->serialize();
-        auto tfidf_path = cache_dir / "tfidf.bin";
-        std::ofstream out(tfidf_path, std::ios::binary);
-        if (out)
-            out.write(reinterpret_cast<const char*>(tfidf_data.data()), tfidf_data.size());
+        write_binary_file(cache_dir / "tfidf.bin", tfidf_data.data(), tfidf_data.size());
     }
 
     // Save HNSW index
     if (cache.hnsw) {
         auto hnsw_data = cache.hnsw->serialize();
-        auto hnsw_path = cache_dir / "hnsw.bin";
-        std::ofstream out(hnsw_path, std::ios::binary);
-        if (out)
-            out.write(reinterpret_cast<const char*>(hnsw_data.data()), hnsw_data.size());
+        write_binary_file(cache_dir / "hnsw.bin", hnsw_data.data(), hnsw_data.size());
     }
 }
 
-/// Reads a binary file into a byte vector.
+/// Reads a binary file into a byte vector using C FILE* (avoids iostream ABI issues).
 static auto read_binary_file(const fs::path& path) -> std::vector<uint8_t> {
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
-    if (!in)
+    FILE* fp = fopen(path.string().c_str(), "rb");
+    if (!fp)
         return {};
-    auto size = in.tellg();
-    in.seekg(0);
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (size <= 0) {
+        fclose(fp);
+        return {};
+    }
     std::vector<uint8_t> data(static_cast<size_t>(size));
-    in.read(reinterpret_cast<char*>(data.data()), size);
+    size_t nread = fread(data.data(), 1, static_cast<size_t>(size), fp);
+    fclose(fp);
+    data.resize(nread);
     return data;
 }
 
@@ -516,10 +538,10 @@ static auto load_cached_indices(DocSearchCache& cache, const fs::path& root, uin
 
     uint64_t cached_fp = 0;
     {
-        std::ifstream in(fp_path, std::ios::binary);
-        if (!in)
+        auto fp_data = read_binary_file(fp_path);
+        if (fp_data.size() != sizeof(cached_fp))
             return false;
-        in.read(reinterpret_cast<char*>(&cached_fp), sizeof(cached_fp));
+        memcpy(&cached_fp, fp_data.data(), sizeof(cached_fp));
     }
     if (cached_fp != fingerprint)
         return false;

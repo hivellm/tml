@@ -110,6 +110,12 @@ private:
 
     /// Parses doc comment and populates DocItem fields.
     void populate_doc_fields(DocItem& item, const std::optional<std::string>& doc);
+
+    /// Propagates doc comments from top-level functions to matching impl methods
+    /// that lack their own documentation. This handles the common TML pattern where
+    /// a top-level `pub func len(s: Str)` has rich `///` docs, but the corresponding
+    /// `impl Str { func len(this) }` method has none.
+    static void propagate_docs_to_impl_methods(DocModule& module);
 };
 
 } // namespace tml::doc

@@ -107,27 +107,43 @@ auto Parser::expect(lexer::TokenKind kind, const std::string& message)
 }
 
 void Parser::skip_newlines() {
-    while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::DocComment) ||
-           check(lexer::TokenKind::ModuleDocComment)) {
+    while (check(lexer::TokenKind::Newline)) {
         advance();
     }
 }
 
 auto Parser::collect_doc_comment() -> std::optional<std::string> {
-    std::optional<std::string> doc;
+    std::string doc_text;
+    bool has_doc = false;
+    bool was_prev_doc = false;
 
-    // Skip newlines but collect the last doc comment before an item
+    // Collect ALL consecutive doc comment lines and join them
     while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::DocComment) ||
            check(lexer::TokenKind::ModuleDocComment)) {
         if (check(lexer::TokenKind::DocComment)) {
-            // Get the doc comment content from the token
             const auto& token = peek();
-            doc = token.doc_value().content;
+            const auto& content = token.doc_value().content;
+            if (has_doc) {
+                doc_text += "\n";
+            }
+            doc_text += content;
+            has_doc = true;
+            was_prev_doc = true;
+        } else if (check(lexer::TokenKind::Newline)) {
+            // A blank line between doc comments is preserved as a paragraph break,
+            // but a blank line followed by non-doc content ends the comment block.
+            if (was_prev_doc) {
+                // Will add newline on next doc comment if there is one
+            }
+            was_prev_doc = false;
         }
         advance();
     }
 
-    return doc;
+    if (has_doc) {
+        return doc_text;
+    }
+    return std::nullopt;
 }
 
 void Parser::report_error(const std::string& message) {

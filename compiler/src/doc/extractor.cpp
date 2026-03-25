@@ -107,10 +107,92 @@ auto Extractor::extract_all(
         }
     }
 
+    // Propagate doc comments from top-level functions to impl methods that lack docs.
+    // This handles the common TML pattern where top-level functions have rich /// comments
+    // but the corresponding impl methods (which users find via search) have none.
+    for (auto& mod : index.modules) {
+        propagate_docs_to_impl_methods(mod);
+    }
+
     // Build the index
     index.build_index();
 
     return index;
+}
+
+void Extractor::propagate_docs_to_impl_methods(DocModule& module) {
+    // Step 1: Collect all top-level functions with non-empty documentation.
+    // Key: function name, Value: pointer to the DocItem with docs.
+    // If multiple top-level functions share a name (overloads), we store the first
+    // one with docs — this is a heuristic that works for TML's typical patterns
+    // where each function name appears once at the top level.
+    std::unordered_map<std::string, const DocItem*> top_level_func_docs;
+
+    for (const auto& item : module.items) {
+        if (item.kind == DocItemKind::Function && !item.doc.empty()) {
+            top_level_func_docs.emplace(item.name, &item);
+        }
+    }
+
+    if (top_level_func_docs.empty()) {
+        return; // Nothing to propagate
+    }
+
+    // Step 2: For each impl block, check its methods for missing docs.
+    for (auto& item : module.items) {
+        if (item.kind != DocItemKind::Impl && item.kind != DocItemKind::TraitImpl) {
+            continue;
+        }
+
+        for (auto& method : item.methods) {
+            // Only propagate if the method has no documentation of its own
+            if (!method.doc.empty()) {
+                continue;
+            }
+
+            auto it = top_level_func_docs.find(method.name);
+            if (it == top_level_func_docs.end()) {
+                continue;
+            }
+
+            const DocItem* source = it->second;
+
+            // Copy all documentation fields from the top-level function
+            method.doc = source->doc;
+            method.summary = source->summary;
+            method.examples = source->examples;
+            method.throws = source->throws;
+            method.see_also = source->see_also;
+            method.since = source->since;
+            method.deprecated = source->deprecated;
+
+            // Merge parameter descriptions: the impl method may have different
+            // parameter names (e.g., "this" vs "s"), so we match by position
+            // when names differ, and by name when they match.
+            for (size_t pi = 0; pi < method.params.size() && pi < source->params.size(); ++pi) {
+                if (method.params[pi].description.empty()) {
+                    // Try name match first
+                    bool found = false;
+                    for (const auto& sp : source->params) {
+                        if (sp.name == method.params[pi].name && !sp.description.empty()) {
+                            method.params[pi].description = sp.description;
+                            found = true;
+                            break;
+                        }
+                    }
+                    // Fall back to positional match
+                    if (!found && !source->params[pi].description.empty()) {
+                        method.params[pi].description = source->params[pi].description;
+                    }
+                }
+            }
+
+            // Copy return description if the method's is empty
+            if (method.returns && source->returns && method.returns->description.empty()) {
+                method.returns->description = source->returns->description;
+            }
+        }
+    }
 }
 
 // ============================================================================

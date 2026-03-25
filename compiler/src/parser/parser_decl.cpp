@@ -893,6 +893,9 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators,
     skip_newlines();
 
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Collect doc comments (///) for behavior methods and associated types
+        auto method_doc = collect_doc_comment();
+
         // Parse method signature, default implementation, or associated type
         auto method_vis = parse_visibility();
 
@@ -945,7 +948,7 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators,
                                                       .default_type = std::move(default_type),
                                                       .span = type_span});
         } else {
-            auto func_result = parse_func_decl(method_vis);
+            auto func_result = parse_func_decl(method_vis, {}, std::move(method_doc));
             if (is_err(func_result))
                 return func_result;
 

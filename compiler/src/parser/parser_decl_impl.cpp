@@ -92,6 +92,9 @@ auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, 
     skip_newlines();
 
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Collect doc comments (///) before decorators and visibility
+        auto method_doc = collect_doc_comment();
+
         // Parse decorators before visibility (e.g., @allocates pub func ...)
         auto method_decos_result = parse_decorators();
         if (is_err(method_decos_result))
@@ -135,14 +138,15 @@ auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, 
                                                           .span = type_span});
         } else if (check(lexer::TokenKind::KwConst)) {
             // Associated constant: const NAME: Type = value
-            auto const_result = parse_const_decl(method_vis);
+            auto const_result = parse_const_decl(method_vis, std::move(method_doc));
             if (is_err(const_result))
                 return const_result;
 
             auto& const_decl = unwrap(const_result)->as<ConstDecl>();
             constants.push_back(std::move(const_decl));
         } else {
-            auto func_result = parse_func_decl(method_vis, std::move(method_decorators));
+            auto func_result =
+                parse_func_decl(method_vis, std::move(method_decorators), std::move(method_doc));
             if (is_err(func_result))
                 return func_result;
 
