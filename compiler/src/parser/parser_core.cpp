@@ -363,6 +363,40 @@ auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector
                   .span = SourceSpan::merge(start_span, end_span)};
 }
 
+auto Parser::parse_module_partial(const std::string& name) -> Module {
+    TML_ZONE("parser::parse_partial");
+    std::vector<DeclPtr> decls;
+    std::vector<std::string> module_docs;
+    auto start_span = peek().span;
+
+    // Collect module-level doc comments (//!) at the start of the file
+    while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::ModuleDocComment)) {
+        if (check(lexer::TokenKind::ModuleDocComment)) {
+            const auto& token = peek();
+            module_docs.push_back(token.doc_value().content);
+        }
+        advance();
+    }
+
+    while (!is_at_end()) {
+        auto decl_result = parse_decl();
+        if (is_ok(decl_result)) {
+            decls.push_back(std::move(unwrap(decl_result)));
+        } else {
+            // Record error but continue — skip to next declaration boundary
+            errors_.push_back(unwrap_err(decl_result));
+            synchronize();
+        }
+        skip_newlines();
+    }
+
+    auto end_span = previous().span;
+    return Module{.name = name,
+                  .module_docs = std::move(module_docs),
+                  .decls = std::move(decls),
+                  .span = SourceSpan::merge(start_span, end_span)};
+}
+
 // ============================================================================
 // Operator Helpers
 // ============================================================================

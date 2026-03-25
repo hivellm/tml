@@ -108,6 +108,11 @@ public:
     [[nodiscard]] auto parse_module(const std::string& name)
         -> Result<Module, std::vector<ParseError>>;
 
+    /// Parses an entire module, returning a partial Module even if there are
+    /// parse errors. Successful declarations are included; failed ones are
+    /// skipped. Used by the doc extractor to index files with partial errors.
+    [[nodiscard]] auto parse_module_partial(const std::string& name) -> Module;
+
     /// Parses a single declaration (for testing).
     [[nodiscard]] auto parse_decl() -> Result<DeclPtr, ParseError>;
 

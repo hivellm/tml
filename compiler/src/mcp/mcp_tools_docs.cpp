@@ -412,15 +412,20 @@ static auto parse_file_for_docs(const fs::path& file_path) -> std::optional<pars
         return std::nullopt;
     }
 
-    // Parse
+    // Parse — use partial mode so files with some parse errors (e.g. unit-variant
+    // enums that the parser currently misidentifies as struct fields) still get
+    // their successfully-parsed declarations indexed.
     parser::Parser parser(std::move(tokens));
     auto module_name = file_path.stem().string();
-    auto parse_result = parser.parse_module(module_name);
-    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+    auto module = parser.parse_module_partial(module_name);
+
+    // If the partial parse yielded no declarations and no module docs, there is
+    // nothing useful to index — skip the file.
+    if (module.decls.empty() && module.module_docs.empty()) {
         return std::nullopt;
     }
 
-    return std::move(std::get<parser::Module>(parse_result));
+    return std::move(module);
 }
 
 /// Checks if any tracked files have changed since the index was built.
