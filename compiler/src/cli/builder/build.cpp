@@ -48,6 +48,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     bool verbose = options.verbose;
     bool emit_ir_only = options.emit_ir_only;
+    bool emit_hir = options.emit_hir;
     bool emit_mir = options.emit_mir;
     bool no_cache = options.no_cache;
     BuildOutputType output_type = options.output_type;
@@ -154,6 +155,29 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             emit_all_borrow_errors(diag, errors);
             return 1;
         }
+    }
+
+    // Emit HIR if requested (early exit before MIR/LLVM)
+    if (emit_hir) {
+        auto env_copy = env;
+        hir::HirBuilder hir_builder(env_copy);
+        auto hir_module = hir_builder.lower_module(module);
+
+        fs::path build_dir = output_dir.empty() ? get_build_dir(false) : fs::path(output_dir);
+        fs::create_directories(build_dir);
+
+        fs::path hir_output = build_dir / (module_name + ".hir");
+        std::ofstream hir_file(hir_output);
+        if (!hir_file) {
+            TML_LOG_ERROR("build", "Cannot write to " << hir_output);
+            return 1;
+        }
+        hir::HirPrinter printer(false);
+        hir_file << printer.print_module(hir_module);
+        hir_file.close();
+
+        TML_LOG_INFO("build", "emit-hir: " << to_forward_slashes(hir_output.string()));
+        return 0;
     }
 
     // Emit MIR if requested (early exit before LLVM codegen)

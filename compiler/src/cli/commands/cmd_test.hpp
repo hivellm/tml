@@ -180,6 +180,7 @@ struct TestOptions {
     bool emit_pipeline = false;             // Emit compilation pipeline stages
     std::string pipeline_output_dir = "";   // Directory for pipeline output
     std::string output_dir = "";            // Output directory for generated files
+    bool debug_layers = false;              // Emit multi-layer IR diagnostics on failure
     bool new_runner = false;                // Deprecated (always true now)
     int max_compile_suites = 0;             // Max suites to compile per run (0 = unlimited)
 };

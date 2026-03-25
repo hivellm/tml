@@ -215,6 +215,7 @@ int tml_main(int argc, char* argv[]) {
         // Initialize with defaults (manifest values if available, otherwise hardcoded defaults)
         bool emit_ir_only = manifest_opt ? manifest_opt->build.emit_ir : false;
         bool emit_mir = false;
+        bool emit_hir = false;
         bool emit_header = manifest_opt ? manifest_opt->build.emit_header : false;
         bool no_cache = manifest_opt ? !manifest_opt->build.cache : false;
         bool debug_info = false;
@@ -265,6 +266,8 @@ int tml_main(int argc, char* argv[]) {
                 emit_ir_only = true;
             } else if (arg == "--emit-mir") {
                 emit_mir = true;
+            } else if (arg == "--emit-hir") {
+                emit_hir = true;
             } else if (arg == "--emit-header") {
                 emit_header = true;
             } else if (arg == "--no-cache") {
@@ -424,6 +427,7 @@ int tml_main(int argc, char* argv[]) {
         opts.verbose = verbose;
         opts.emit_ir_only = emit_ir_only;
         opts.emit_mir = emit_mir;
+        opts.emit_hir = emit_hir;
         opts.no_cache = no_cache;
         opts.emit_header = emit_header;
         opts.show_timings = show_timings;

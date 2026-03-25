@@ -23,8 +23,72 @@ TML_MODULE("mcp")
 #include "log/log.hpp"
 
 #include "json/json_parser.hpp"
+#include <cstdlib>
 
 namespace tml::mcp {
+
+// ============================================================================
+// Call Logger (NDJSON)
+// ============================================================================
+
+void McpServer::init_call_logger() {
+    if (call_log_fp_ != nullptr) {
+        return;
+    }
+
+    // Session ID from epoch ms
+    auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+    session_id_ = std::to_string(epoch_ms);
+
+    // Log path
+    std::string log_path = "mcp-call-log.jsonl";
+    const char* env_dir = std::getenv("TML_MCP_LOG_DIR");
+    if (env_dir != nullptr && env_dir[0] != '\0') {
+        log_path = std::string(env_dir) + "/mcp-call-log.jsonl";
+    }
+
+    call_log_fp_ = std::fopen(log_path.c_str(), "a");
+    if (call_log_fp_ == nullptr) {
+        return;
+    }
+
+    // Condition tracking
+    const char* dl_env = std::getenv("TML_DEBUG_LAYERS");
+    const char* condition =
+        (dl_env != nullptr && std::string(dl_env) == "1") ? "debug-layers" : "baseline";
+
+    std::fprintf(call_log_fp_,
+                 "{\"event\":\"session_start\",\"session\":\"%s\","
+                 "\"server\":\"%s\",\"version\":\"%s\",\"condition\":\"%s\"}\n",
+                 session_id_.c_str(), server_info_.name.c_str(), server_info_.version.c_str(),
+                 condition);
+    std::fflush(call_log_fp_);
+}
+
+void McpServer::log_tool_call(const std::string& tool_name, const std::string& params_json,
+                              bool is_error, int64_t duration_ms) {
+    if (call_log_fp_ == nullptr) {
+        init_call_logger();
+    }
+    if (call_log_fp_ == nullptr) {
+        return;
+    }
+
+    auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+
+    std::fprintf(call_log_fp_,
+                 "{\"event\":\"tool_call\",\"session\":\"%s\",\"seq\":%llu,"
+                 "\"ts\":%lld,\"tool\":\"%s\",\"params\":%s,"
+                 "\"duration_ms\":%lld,\"is_error\":%s}\n",
+                 session_id_.c_str(), static_cast<unsigned long long>(call_sequence_++),
+                 static_cast<long long>(epoch_ms), tool_name.c_str(), params_json.c_str(),
+                 static_cast<long long>(duration_ms), is_error ? "true" : "false");
+    std::fflush(call_log_fp_);
+}
 
 // ============================================================================
 // Constructor
@@ -81,6 +145,14 @@ void McpServer::run() {
         process_request(unwrap(request_result));
     }
 
+    // Write session end marker
+    if (call_log_fp_ != nullptr) {
+        std::fprintf(call_log_fp_,
+                     "{\"event\":\"session_end\",\"session\":\"%s\",\"total_calls\":%llu}\n",
+                     session_id_.c_str(), static_cast<unsigned long long>(call_sequence_));
+        std::fclose(call_log_fp_);
+        call_log_fp_ = nullptr;
+    }
     log("MCP server stopped");
 }
 
@@ -232,11 +304,32 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
     auto* arguments = params.get("arguments");
     json::JsonValue args = (arguments != nullptr) ? arguments->clone() : json::JsonValue();
 
-    // Call handler
+    // Pre-serialize params for logging (safe — before handler call)
+    std::string params_json = "{}";
+    if (arguments != nullptr) {
+        try {
+            params_json = arguments->to_string();
+        } catch (...) {
+            params_json = "{}";
+        }
+    }
+
+    // Call handler with timing for call logger
+    auto start = std::chrono::steady_clock::now();
     try {
         ToolResult result = it->second(args);
+        auto elapsed_ms =
+            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count());
+        log_tool_call(tool_name, params_json, result.is_error, elapsed_ms);
         return json::JsonRpcResponse::success(result.to_json(), std::move(id));
     } catch (const std::exception& e) {
+        auto elapsed_ms =
+            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count());
+        log_tool_call(tool_name, params_json, true, elapsed_ms);
         log("Tool error: " + std::string(e.what()));
         return json::JsonRpcResponse::success(ToolResult::error(e.what()).to_json(), std::move(id));
     }

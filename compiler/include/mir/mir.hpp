@@ -1020,4 +1020,17 @@ inline auto print_module(const Module& module, bool use_colors = false) -> std::
     return printer.print_module(module);
 }
 
+// Convenience free function for printing a single function by name.
+// Returns the printed function, or empty string if not found.
+inline auto print_function_by_name(const Module& module, const std::string& func_name,
+                                   bool use_colors = false) -> std::string {
+    MirPrinter printer(use_colors);
+    for (const auto& func : module.functions) {
+        if (func.name == func_name || func.name.find(func_name) != std::string::npos) {
+            return printer.print_function(func);
+        }
+    }
+    return {};
+}
+
 } // namespace tml::mir

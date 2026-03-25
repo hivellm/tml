@@ -19,6 +19,25 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.4] — 2026-03-25
+
+### Added (Compiler)
+
+- **`--debug-layers` flag** for `tml test` — on failure, automatically emits HIR, MIR, and LLVM IR for failing test functions with diagnosis hints identifying the likely bug layer
+- **`--emit-hir` flag** for `tml build` — emits HIR (High-level IR) to `.hir` file for debugging
+- **MIR `print_function_by_name`** convenience function — extract and print a single MIR function
+- **MCP call logger** — NDJSON logging of all MCP tool invocations (tool, params, timestamp, duration) to `mcp-call-log.jsonl` using C FILE* for Windows compatibility
+- **MCP `debug_layers` parameter** on the `test` tool — enables `--debug-layers` from MCP clients
+- **`TML_DEBUG_LAYERS=1` env var** — toggles debug-layers as default in MCP test tool (for A/B experiment conditions)
+- **`TML_MCP_LOG_DIR` env var** — override log file directory for MCP call logger
+- **Diagnosis hints** — `generate_diagnosis_hints()` analyzes error + IR content to suggest likely bug layer (parser, type system, HIR, codegen, runtime)
+
+### Added (Documentation)
+
+- **`docs/user/ch13-04-debug-layers.md`** — user guide for the debug-layers feature
+- **`docs/papers/llm-ir-debugging/`** — research paper structure for LLM-assisted debugging through multi-layer IR exposure
+- **`docs/papers/llm-ir-debugging/scripts/analyze_logs.py`** — analysis script with session labeling, condition comparison, statistical tests (Welch's t-test, Cohen's d), tool transition heatmaps
+
 ## [0.2.3] — 2026-03-25
 
 Major stdlib expansion: 8 tasks completed, panic recovery, compiler hints, FFI types, new collections and sync primitives.

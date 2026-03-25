@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP Call Log Entry",
+  "description": "NDJSON schema for MCP tool call logging. Each line is one of: session_start, tool_call, or session_end.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "event": { "const": "session_start" },
+        "session": { "type": "string", "description": "Unique session identifier (epoch_ms-hex)" },
+        "ts": { "type": "string", "format": "date-time", "description": "ISO 8601 timestamp" },
+        "server": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "required": ["event", "session", "ts"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": { "const": "tool_call" },
+        "session": { "type": "string" },
+        "seq": { "type": "integer", "description": "Call sequence number within session (0-based)" },
+        "ts": { "type": "string", "format": "date-time" },
+        "tool": { "type": "string", "description": "Tool name (e.g., 'test', 'emit-ir', 'compile')" },
+        "params": { "type": "object", "description": "Tool parameters as passed by the LLM (no output content)" },
+        "duration_ms": { "type": "integer", "description": "Execution time in milliseconds" },
+        "is_error": { "type": "boolean", "description": "Whether the tool returned an error" }
+      },
+      "required": ["event", "session", "seq", "ts", "tool", "params", "duration_ms", "is_error"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": { "const": "session_end" },
+        "session": { "type": "string" },
+        "ts": { "type": "string", "format": "date-time" },
+        "total_calls": { "type": "integer", "description": "Total tool calls in this session" }
+      },
+      "required": ["event", "session", "ts", "total_calls"]
+    }
+  ]
+}

@@ -140,6 +140,10 @@ auto make_test_tool() -> Tool {
                     {"fail_fast", "boolean", "Stop on first test failure", false},
                     {"structured", "boolean",
                      "Return parsed results: total, passed, failed, failures[]", false},
+                    {"debug_layers", "boolean",
+                     "On failure, emit multi-layer IR diagnostics (LLVM IR for failing "
+                     "functions). Helps identify which compilation layer caused the bug.",
+                     false},
                 }};
 }
 
@@ -853,6 +857,20 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         } else {
             cmd << " --no-fail-fast";
         }
+    }
+
+    // Add debug-layers flag (explicit param OR env var TML_DEBUG_LAYERS=1)
+    auto* debug_layers_param = params.get("debug_layers");
+    bool debug_layers_requested = (debug_layers_param != nullptr && debug_layers_param->is_bool() &&
+                                   debug_layers_param->as_bool());
+    if (!debug_layers_requested) {
+        const char* env_val = std::getenv("TML_DEBUG_LAYERS");
+        if (env_val != nullptr && std::string(env_val) == "1") {
+            debug_layers_requested = true;
+        }
+    }
+    if (debug_layers_requested) {
+        cmd << " --debug-layers";
     }
 
     // Timeout: 300s for normal tests, 600s for coverage/full suite

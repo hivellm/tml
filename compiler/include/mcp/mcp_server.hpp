@@ -42,6 +42,8 @@
 
 #include "json/json_rpc.hpp"
 #include "json/json_value.hpp"
+#include <chrono>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -105,6 +107,14 @@ private:
     // Registered tools
     std::vector<Tool> tools_;
     std::unordered_map<std::string, ToolHandler> tool_handlers_;
+
+    // Call logger (NDJSON) — uses C FILE* to avoid std::ofstream crash on some Windows configs
+    std::FILE* call_log_fp_ = nullptr;
+    std::string session_id_;
+    uint64_t call_sequence_ = 0;
+    void init_call_logger();
+    void log_tool_call(const std::string& tool_name, const std::string& params_json, bool is_error,
+                       int64_t duration_ms);
 
     // Request processing
     void process_request(const json::JsonRpcRequest& request);

@@ -61,6 +61,7 @@ struct TestConfig {
     bool list_suites = false;   // Print suites and exit
     int max_compile_suites = 0; // Max suites to compile per run (0 = unlimited)
     std::string root_dir;       // Discovery root (empty = cwd)
+    bool debug_layers = false;  // Emit multi-layer IR diagnostics on failure
 };
 
 // ============================================================================

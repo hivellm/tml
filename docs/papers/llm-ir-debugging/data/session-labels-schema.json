@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Session Bug Label",
+  "description": "Post-hoc classification of a debugging session from MCP call logs. Each entry labels one 'debugging episode' — a contiguous sequence of tool calls focused on diagnosing and fixing a single bug.",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "MCP session ID from the call log (matches session field in NDJSON)"
+    },
+    "episode_id": {
+      "type": "string",
+      "description": "Unique identifier for this debugging episode within the session (session may have multiple bugs)"
+    },
+    "call_range": {
+      "type": "object",
+      "properties": {
+        "start_seq": { "type": "integer", "description": "First call sequence number in this episode" },
+        "end_seq": { "type": "integer", "description": "Last call sequence number in this episode" }
+      },
+      "required": ["start_seq", "end_seq"],
+      "description": "Range of call sequence numbers that belong to this debugging episode"
+    },
+    "bug_layer": {
+      "type": "string",
+      "enum": ["lexer", "parser", "type-system", "hir", "thir", "mir", "codegen", "runtime", "library", "unknown"],
+      "description": "Compilation layer where the root cause lives"
+    },
+    "bug_category": {
+      "type": "string",
+      "enum": [
+        "type-mismatch", "abi-mismatch", "missing-impl", "wrong-instruction",
+        "layout-error", "dispatch-error", "monomorphization", "optimization-bug",
+        "parse-error", "symbol-resolution", "memory-error", "logic-error", "other"
+      ],
+      "description": "Category of the bug within its layer"
+    },
+    "condition": {
+      "type": "string",
+      "enum": ["baseline", "debug-layers"],
+      "description": "Whether --debug-layers was active during this episode"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["fixed", "partial", "abandoned", "workaround"],
+      "description": "How the episode ended"
+    },
+    "fix_commit": {
+      "type": "string",
+      "description": "Git commit hash of the fix (if outcome=fixed)"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "total_calls": { "type": "integer", "description": "Total MCP tool calls in this episode" },
+        "diagnosis_calls": { "type": "integer", "description": "emit-ir + emit-mir + check calls" },
+        "navigation_calls": { "type": "integer", "description": "Read + Grep + Glob calls (via other tools, not MCP)" },
+        "execution_calls": { "type": "integer", "description": "test + run + build + compile calls" },
+        "doc_calls": { "type": "integer", "description": "docs_search + docs_get + docs_list calls" },
+        "fix_attempts": { "type": "integer", "description": "Number of test→edit→test cycles" },
+        "time_to_fix_s": { "type": "number", "description": "Wall clock seconds from first failure to passing test" }
+      },
+      "description": "Computed metrics for this episode (auto-filled by analysis script)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes about this episode (optional)"
+    }
+  },
+  "required": ["session_id", "episode_id", "bug_layer", "condition", "outcome"]
+}

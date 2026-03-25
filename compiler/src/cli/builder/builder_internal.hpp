@@ -39,6 +39,7 @@
 #include "common.hpp"
 #include "hir/hir.hpp"
 #include "hir/hir_builder.hpp"
+#include "hir/hir_printer.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "log/log.hpp"
