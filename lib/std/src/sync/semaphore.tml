@@ -1,0 +1,109 @@
+/// Semaphore — Counting semaphore for bounded concurrency control.
+///
+/// Limits concurrent access to a resource by maintaining a count of available
+/// permits. Threads call `acquire()` to wait for a permit and `release()`
+/// to return one.
+
+use std::sync::atomic::AtomicI64
+use std::sync::ordering::Ordering
+
+@extern("tml_thread_yield")
+func ffi_yield()
+
+/// A counting semaphore backed by atomic operations.
+pub type Semaphore {
+    permits: AtomicI64,
+    max_permits: I64,
+}
+
+impl Semaphore {
+    /// Create a new semaphore with the given number of permits.
+    pub func new(permits: I64) -> Semaphore {
+        return Semaphore {
+            permits: AtomicI64::new(permits),
+            max_permits: permits,
+        }
+    }
+
+    /// Block until a permit is available, then acquire it.
+    pub func acquire(mut this) {
+        var acquired = false
+        loop (not acquired) {
+            let current = this.permits.load(Ordering::SeqCst)
+            if current > 0 {
+                let result = this.permits.compare_exchange(
+                    current, current - 1,
+                    Ordering::SeqCst, Ordering::SeqCst
+                )
+                when result {
+                    Ok(v) => { acquired = true },
+                    Err(v) => {},  // CAS failed, retry
+                }
+            } else {
+                ffi_yield()
+            }
+        }
+    }
+
+    /// Try to acquire a permit without blocking.
+    /// Returns `true` if acquired, `false` if none available.
+    pub func try_acquire(mut this) -> Bool {
+        let current = this.permits.load(Ordering::SeqCst)
+        if current <= 0 {
+            return false
+        }
+        let result = this.permits.compare_exchange(
+            current, current - 1,
+            Ordering::SeqCst, Ordering::SeqCst
+        )
+        when result {
+            Ok(v) => return true,
+            Err(v) => return false,
+        }
+    }
+
+    /// Release a permit.
+    pub func release(mut this) {
+        this.permits.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Get current number of available permits.
+    pub func available_permits(this) -> I64 {
+        return this.permits.load(Ordering::SeqCst)
+    }
+
+    /// Get the maximum number of permits.
+    pub func max_permits(this) -> I64 {
+        return this.max_permits
+    }
+
+    /// Acquire a permit and return an RAII guard that releases on drop.
+    pub func acquire_guard(mut this) -> SemaphoreGuard {
+        this.acquire()
+        return SemaphoreGuard { semaphore: ref this }
+    }
+
+    /// Try to acquire a permit, returning a guard if successful.
+    pub func try_acquire_guard(mut this) -> Maybe[SemaphoreGuard] {
+        if this.try_acquire() {
+            return Just(SemaphoreGuard { semaphore: ref this })
+        }
+        return Nothing
+    }
+}
+
+// ─── SemaphoreGuard ────────────────────────────────────────────────
+
+/// RAII guard for a semaphore permit. Releases the permit when dropped.
+///
+/// Created by `Semaphore::acquire_guard()` or `try_acquire_guard()`.
+/// When this guard goes out of scope, the permit is automatically released.
+pub type SemaphoreGuard {
+    semaphore: mut ref Semaphore,
+}
+
+impl Drop for SemaphoreGuard {
+    func drop(mut this) {
+        this.semaphore.release()
+    }
+}

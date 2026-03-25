@@ -1,0 +1,82 @@
+use test::{assert, assert_eq}
+use std::sync::semaphore::{Semaphore, SemaphoreGuard}
+
+@test
+func test_semaphore_new() -> I32 {
+    let sem = Semaphore::new(3)
+    assert_eq(sem.available_permits(), 3, "initial permits")
+    assert_eq(sem.max_permits(), 3, "max permits")
+    return 0
+}
+
+@test
+func test_acquire_release() -> I32 {
+    var sem = Semaphore::new(2)
+    sem.acquire()
+    assert_eq(sem.available_permits(), 1, "after first acquire")
+    sem.acquire()
+    assert_eq(sem.available_permits(), 0, "after second acquire")
+    sem.release()
+    assert_eq(sem.available_permits(), 1, "after release")
+    sem.release()
+    assert_eq(sem.available_permits(), 2, "after second release")
+    return 0
+}
+
+@test
+func test_try_acquire() -> I32 {
+    var sem = Semaphore::new(1)
+    assert(sem.try_acquire(), "first try_acquire should succeed")
+    assert(not sem.try_acquire(), "second try_acquire should fail")
+    sem.release()
+    assert(sem.try_acquire(), "try_acquire after release should succeed")
+    return 0
+}
+
+@test
+func test_zero_permits() -> I32 {
+    var sem = Semaphore::new(0)
+    assert_eq(sem.available_permits(), 0, "zero permits")
+    assert(not sem.try_acquire(), "should not acquire from 0-permit sem")
+    sem.release()  // Can release to increase above initial
+    assert_eq(sem.available_permits(), 1, "after release on 0-permit sem")
+    return 0
+}
+
+@test
+func test_acquire_guard() -> I32 {
+    var sem = Semaphore::new(2)
+    // Acquire guard in a block — should release when dropped
+    {
+        let guard = sem.acquire_guard()
+        assert_eq(sem.available_permits(), 1, "during guard")
+    }
+    // Guard dropped — permit should be released
+    assert_eq(sem.available_permits(), 2, "after guard dropped")
+    return 0
+}
+
+@test
+func test_try_acquire_guard() -> I32 {
+    var sem = Semaphore::new(1)
+    when sem.try_acquire_guard() {
+        Just(guard) => {
+            assert_eq(sem.available_permits(), 0, "permit held by guard")
+            // try again — should fail
+            when sem.try_acquire_guard() {
+                Just(g) => {
+                    assert(false, "should not get second guard")
+                    return 1
+                },
+                Nothing => {},
+            }
+        },
+        Nothing => {
+            assert(false, "should acquire guard")
+            return 1
+        },
+    }
+    // Guard dropped
+    assert_eq(sem.available_permits(), 1, "after guard dropped")
+    return 0
+}
