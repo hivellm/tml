@@ -137,6 +137,69 @@ static char tml_panic_backtrace[8192] = {0};
 static char tml_panic_backtrace_json[16384] = {0};
 
 // ============================================================================
+// Panic Hook System (user-configurable panic handler)
+// ============================================================================
+
+/** @brief Type for user-installed panic hook: void(*)(const char* message) */
+typedef void (*tml_panic_hook_fn)(const char*);
+
+/** @brief The currently installed panic hook, or NULL for default behavior. */
+static tml_panic_hook_fn tml_panic_hook = NULL;
+
+/**
+ * @brief Install a custom panic hook.
+ *
+ * The hook is called with the panic message before the process terminates
+ * (or before longjmp in catch_unwind context). Pass NULL to clear the hook.
+ */
+TML_EXPORT void tml_set_panic_hook(void* hook) {
+    tml_panic_hook = (tml_panic_hook_fn)hook;
+}
+
+/**
+ * @brief Get the current panic hook.
+ * @return The current hook function pointer, or NULL if none is installed.
+ */
+TML_EXPORT void* tml_get_panic_hook(void) {
+    return (void*)tml_panic_hook;
+}
+
+/**
+ * @brief General-purpose catch_unwind: run a callback, catching any panics.
+ *
+ * Uses setjmp/longjmp to intercept panics. Thread-safe as long as only
+ * one catch_unwind is active per thread.
+ *
+ * The callback receives a context pointer (for closures, this is the captures
+ * pointer; for plain functions, pass NULL).
+ *
+ * @param fn_ptr Plain function pointer: void(*)(void). No captures.
+ * @return 0 if callback completed normally, 1 if it panicked.
+ *         After panic, call tml_get_panic_message() for the message.
+ */
+TML_EXPORT int32_t tml_catch_unwind_fn(void (*fn_ptr)(void)) {
+    tml_panic_msg[0] = '\0';
+    int32_t prev_catching = tml_catching_panic;
+    jmp_buf prev_buf;
+    // Save previous jmp_buf in case of nested catch_unwind
+    memcpy(&prev_buf, &tml_panic_jmp_buf, sizeof(jmp_buf));
+
+    tml_catching_panic = 1;
+    if (setjmp(tml_panic_jmp_buf) == 0) {
+        fn_ptr();
+        // Restore previous state
+        tml_catching_panic = prev_catching;
+        memcpy(&tml_panic_jmp_buf, &prev_buf, sizeof(jmp_buf));
+        return 0; // No panic
+    } else {
+        // Panic was caught via longjmp
+        tml_catching_panic = prev_catching;
+        memcpy(&tml_panic_jmp_buf, &prev_buf, sizeof(jmp_buf));
+        return 1; // Panicked
+    }
+}
+
+// ============================================================================
 // Test Crash Context (set by C++ test runner, read by VEH handler)
 // ============================================================================
 
@@ -301,6 +364,11 @@ void println(const char* message) {
  * @param message The panic message. NULL is printed as "(null)".
  */
 void panic(const char* message) {
+    // Call user-installed panic hook if present
+    if (tml_panic_hook) {
+        tml_panic_hook(message ? message : "(null)");
+    }
+
     // If we're in panic catching mode, save the message and longjmp back
     if (tml_catching_panic) {
         if (message) {

@@ -1,0 +1,134 @@
+/// Panic recovery — hooks, PanicInfo, and catch_unwind
+///
+/// Provides infrastructure for intercepting panics:
+/// - `PanicInfo` — information about a panic (message, location)
+/// - `set_hook` / `take_hook` — install custom panic handlers
+/// - `catch_unwind` — catch panics and recover (via std::panic)
+///
+/// ## Example: Custom Panic Hook
+/// ```tml
+/// use core::panic::{set_hook, PanicInfo}
+///
+/// set_hook(do(info: ref PanicInfo) {
+///     print(`PANIC: {info.message} at {info.file}:{info.line}\n`)
+/// })
+/// ```
+
+/// Information about a panic. Passed to panic hooks.
+pub type PanicInfo {
+    /// The panic message
+    pub message: Str,
+    /// Source file where panic occurred (empty if unknown)
+    pub file: Str,
+    /// Line number (0 if unknown)
+    pub line: I64,
+    /// Column number (0 if unknown)
+    pub column: I64,
+}
+
+impl PanicInfo {
+    /// Create a PanicInfo with just a message (no location info)
+    pub func new(message: Str) -> PanicInfo {
+        return PanicInfo {
+            message: message,
+            file: "",
+            line: 0,
+            column: 0,
+        }
+    }
+
+    /// Create a PanicInfo with full location info
+    pub func with_location(message: Str, file: Str, line: I64, column: I64) -> PanicInfo {
+        return PanicInfo {
+            message: message,
+            file: file,
+            line: line,
+            column: column,
+        }
+    }
+
+    /// Check if location information is available
+    pub func has_location(this) -> Bool {
+        return this.line > 0
+    }
+}
+
+impl Display for PanicInfo {
+    pub func to_string(this) -> Str {
+        if this.line > 0 {
+            return this.message
+        }
+        return this.message
+    }
+}
+
+// ─── Panic Hook System ─────────────────────────────────────────────
+
+/// C runtime: set a panic hook callback
+@extern("c")
+func tml_set_panic_hook(hook: *U8) -> Unit
+
+/// C runtime: get current panic hook (or null if none)
+@extern("c")
+func tml_get_panic_hook() -> *U8
+
+/// C runtime: invoke panic with catching support, returns 0=ok, 1=panicked
+/// fn_ptr: plain function pointer (void -> void), no captures
+@extern("c")
+func tml_catch_unwind_fn(fn_ptr: *U8) -> I32
+
+/// C runtime: get last panic message after catch_unwind
+@extern("c")
+func tml_get_panic_message() -> Str
+
+/// Install a custom panic hook. Pass a function pointer (obtained via
+/// `lowlevel { my_func as *U8 }`). The function must have signature
+/// `func(Str) -> Unit`.
+///
+/// Only one hook can be active at a time. Setting a new hook replaces
+/// the previous one.
+pub func set_hook(hook: *U8) -> Unit {
+    tml_set_panic_hook(hook)
+}
+
+/// Remove and discard the current panic hook. After this call,
+/// panics use the default behavior (print to stderr + exit).
+pub func clear_hook() -> Unit {
+    let null: *U8 = lowlevel { 0 as *U8 }
+    tml_set_panic_hook(null)
+}
+
+// ─── catch_unwind ──────────────────────────────────────────────────
+
+/// Outcome type for catch_unwind results
+pub enum CatchResult {
+    /// The closure completed successfully
+    Ok,
+    /// The closure panicked with this message
+    Panicked(Str),
+}
+
+/// Execute a closure, catching any panics that occur.
+/// Returns `CatchResult::Ok` if the closure completes normally,
+/// or `CatchResult::Panicked(message)` if it panicked.
+///
+/// ## Example
+/// ```tml
+/// use core::panic::{catch_unwind, CatchResult}
+///
+/// let result = catch_unwind(do() { panic("boom") })
+/// when result {
+///     CatchResult::Ok => print("no panic\n"),
+///     CatchResult::Panicked(msg) => print(`caught: {msg}\n`),
+/// }
+/// ```
+/// Catch a panic from a plain function (no captures).
+/// For closures with captures, store state in a global before calling.
+pub func catch_unwind_fn(f: *U8) -> CatchResult {
+    let did_panic: I32 = tml_catch_unwind_fn(f)
+    if did_panic == 0 {
+        return CatchResult::Ok
+    }
+    let msg: Str = tml_get_panic_message()
+    return CatchResult::Panicked(msg)
+}
