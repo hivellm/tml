@@ -1,0 +1,166 @@
+/// Core FFI types — type-safe wrappers for C interop
+///
+/// Provides platform-correct integer type wrappers (`c_int`, `c_long`, `c_size_t`),
+/// opaque types (`c_void`), and C string types (`CStr`) that match C ABI conventions.
+///
+/// ## Migration Guide: Raw Pointers → FFI Types
+///
+/// | Before (unsafe)            | After (type-safe)              | Why                           |
+/// |----------------------------|--------------------------------|-------------------------------|
+/// | `*U8` for opaque handles   | `*c_void`                      | Prevents accidental byte read |
+/// | `I32` for C `int`          | `c_int`                        | Documents intent, ABI-correct |
+/// | `I64` for C `long`         | `c_long` + `as_i32()`/`as_i64()` | Platform-safe (LLP64 vs LP64) |
+/// | `U64` for `size_t`         | `c_size_t`                     | Self-documenting              |
+/// | `*U8` for C strings        | `CStr` + `to_str()`           | Null-terminator guarantee     |
+/// | `F64` for C `double`       | `c_double`                     | Matches C ABI exactly         |
+///
+/// ## Usage Examples
+///
+/// ```tml
+/// use core::ffi::{c_void, c_int, c_size_t, c_long_bits}
+/// use core::ffi::cstr::CStr
+///
+/// // Opaque handle
+/// @extern("c") func sqlite3_open(path: *U8, db: *(*c_void)) -> c_int
+///
+/// // C string interop
+/// let cs = CStr::from_ptr("hello" as *U8)
+/// let s: Str = cs.to_str()
+///
+/// // Platform-aware code
+/// let bits: I64 = c_long_bits()  // 32 on Windows, 64 on Unix
+/// ```
+
+// ─── Opaque void type ────────────────────────────────────────────────
+/// Opaque type representing C's `void`. Used as `*c_void` for untyped pointers.
+pub type c_void {
+    _opaque: U8,
+}
+
+// ─── C Integer wrapper types ─────────────────────────────────────────
+
+/// C `int` — signed 32-bit integer
+pub type c_int { val: I32 }
+
+impl c_int {
+    pub func from(v: I32) -> c_int { return c_int { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+}
+
+/// C `unsigned int` — unsigned 32-bit integer
+pub type c_uint { val: U32 }
+
+impl c_uint {
+    pub func from(v: U32) -> c_uint { return c_uint { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+}
+
+/// C `long` — I32 on Windows (LLP64), I64 on 64-bit Unix (LP64).
+/// Stored as I64 for uniform representation. Use `as_i32()` when calling
+/// Windows APIs that expect 32-bit `long`, use `as_i64()` for Unix APIs.
+pub type c_long { val: I64 }
+
+/// Returns the bit width of C `long` on this platform (32 on Windows, 64 on Unix).
+#if WINDOWS
+pub func c_long_bits() -> I64 { return 32 }
+pub func c_long_max() -> I64 { return 2147483647 }
+#else
+pub func c_long_bits() -> I64 { return 64 }
+pub func c_long_max() -> I64 { return 9223372036854775807 }
+#endif
+
+impl c_long {
+    pub func from(v: I64) -> c_long { return c_long { val: v } }
+    pub func as_i64(this) -> I64 { return this.val }
+    /// Truncate to I32 — use on Windows where C `long` is 32-bit.
+    pub func as_i32(this) -> I32 { return this.val as I32 }
+}
+
+/// C `unsigned long` — U32 on Windows (LLP64), U64 on 64-bit Unix (LP64).
+/// Stored as U64 for uniform representation. Use `as_u32()` for Windows APIs.
+pub type c_ulong { val: U64 }
+
+impl c_ulong {
+    pub func from(v: U64) -> c_ulong { return c_ulong { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+    /// Truncate to U32 — use on Windows where C `unsigned long` is 32-bit.
+    pub func as_u32(this) -> U32 { return this.val as U32 }
+}
+
+/// C `long long` — signed 64-bit integer (all platforms)
+pub type c_longlong { val: I64 }
+
+impl c_longlong {
+    pub func from(v: I64) -> c_longlong { return c_longlong { val: v } }
+    pub func as_i64(this) -> I64 { return this.val }
+}
+
+/// C `unsigned long long` — unsigned 64-bit integer (all platforms)
+pub type c_ulonglong { val: U64 }
+
+impl c_ulonglong {
+    pub func from(v: U64) -> c_ulonglong { return c_ulonglong { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+}
+
+// ─── Floating-point wrappers ─────────────────────────────────────────
+
+/// C `float` — 32-bit IEEE 754
+pub type c_float { val: F32 }
+
+impl c_float {
+    pub func from(v: F32) -> c_float { return c_float { val: v } }
+    pub func as_f64(this) -> F64 { return this.val as F64 }
+}
+
+/// C `double` — 64-bit IEEE 754
+pub type c_double { val: F64 }
+
+impl c_double {
+    pub func from(v: F64) -> c_double { return c_double { val: v } }
+    pub func as_f64(this) -> F64 { return this.val }
+}
+
+// ─── Size type wrappers ──────────────────────────────────────────────
+
+/// C `size_t` — unsigned pointer-sized integer
+pub type c_size_t { val: U64 }
+
+impl c_size_t {
+    pub func from(v: U64) -> c_size_t { return c_size_t { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+    pub func as_u64(this) -> U64 { return this.val }
+}
+
+/// C `ssize_t` — signed pointer-sized integer (POSIX)
+pub type c_ssize_t { val: I64 }
+
+impl c_ssize_t {
+    pub func from(v: I64) -> c_ssize_t { return c_ssize_t { val: v } }
+    pub func as_i64(this) -> I64 { return this.val }
+}
+
+/// C `ptrdiff_t` — signed pointer difference type
+pub type c_ptrdiff_t { val: I64 }
+
+impl c_ptrdiff_t {
+    pub func from(v: I64) -> c_ptrdiff_t { return c_ptrdiff_t { val: v } }
+    pub func as_i64(this) -> I64 { return this.val }
+}
+
+/// C `intptr_t` — signed integer wide enough to hold a pointer
+pub type c_intptr_t { val: I64 }
+
+impl c_intptr_t {
+    pub func from(v: I64) -> c_intptr_t { return c_intptr_t { val: v } }
+    pub func as_i64(this) -> I64 { return this.val }
+}
+
+/// C `uintptr_t` — unsigned integer wide enough to hold a pointer
+pub type c_uintptr_t { val: U64 }
+
+impl c_uintptr_t {
+    pub func from(v: U64) -> c_uintptr_t { return c_uintptr_t { val: v } }
+    pub func as_i64(this) -> I64 { return this.val as I64 }
+    pub func as_u64(this) -> U64 { return this.val }
+}
