@@ -1,0 +1,140 @@
+/// CString — Owned, heap-allocated, null-terminated C string.
+///
+/// Unlike `CStr` (which borrows existing memory), `CString` owns its buffer.
+/// It guarantees null-termination and rejects strings with interior null bytes.
+///
+/// ## Examples
+/// ```tml
+/// use std::ffi::cstring::CString
+///
+/// let cs = CString::new("hello").unwrap()
+/// assert_eq(cs.len(), 5)
+/// assert_eq(cs.as_cstr().to_str(), "hello")
+/// // Memory is freed when cs goes out of scope
+/// ```
+
+use core::ffi::cstr::CStr
+
+/// An owned, heap-allocated, null-terminated C string.
+///
+/// The buffer always has a trailing null byte that is not included in `len()`.
+/// Interior null bytes are not allowed — `CString::new` returns `Err` if found.
+pub type CString {
+    ptr: *U8,
+    len: I64,
+}
+
+/// Helper: check if a Str contains a null byte
+func has_interior_null(s: Str) -> Bool {
+    let slen = s.len()
+    var i: I64 = 0
+    var found = false
+    loop (i < slen and not found) {
+        let byte = lowlevel { ptr_read[U8](ptr_offset[U8](s as *U8, i)) }
+        if byte == (0 as U8) {
+            found = true
+        }
+        i = i + 1
+    }
+    return found
+}
+
+impl CString {
+    /// Create a new CString from a TML Str.
+    ///
+    /// Returns `Err("interior null byte")` if the string contains \0.
+    /// The resulting CString owns a heap copy with a trailing null.
+    pub func new(s: Str) -> Outcome[CString, Str] {
+        if has_interior_null(s) {
+            return Err("interior null byte in CString::new")
+        }
+        let slen = s.len()
+        let buf: *U8 = lowlevel { mem_alloc((slen + 1) as U64) as *U8 }
+        // Copy string bytes
+        lowlevel { copy_nonoverlapping[U8](s as *U8, buf, slen) }
+        // Write null terminator
+        lowlevel { ptr_write[U8](ptr_offset[U8](buf, slen), 0 as U8) }
+        return Ok(CString { ptr: buf, len: slen })
+    }
+
+    /// Create a CString from a raw pointer, taking ownership.
+    ///
+    /// The pointer MUST have been allocated with `mem_alloc` and MUST be
+    /// null-terminated. The CString takes ownership and will free the memory.
+    pub func from_raw(ptr: *U8) -> CString {
+        // Scan for length
+        let cs = CStr::from_ptr(ptr)
+        return CString { ptr: ptr, len: cs.len() }
+    }
+
+    /// Consume the CString and return the raw pointer.
+    ///
+    /// The caller is responsible for freeing the memory.
+    /// After this call, the CString is consumed and must not be used.
+    pub func into_raw(this) -> *U8 {
+        return this.ptr
+    }
+
+    /// Borrow this CString as a CStr.
+    pub func as_cstr(this) -> CStr {
+        return CStr::from_ptr(this.ptr)
+    }
+
+    /// Get the raw pointer to the null-terminated buffer.
+    pub func as_ptr(this) -> *U8 {
+        return this.ptr
+    }
+
+    /// Get the byte length (not including the null terminator).
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Check if the string is empty.
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Convert to a TML Str (borrows the same memory — valid while CString lives).
+    pub func to_str(this) -> Str {
+        return this.as_cstr().to_str()
+    }
+
+    /// Get the byte at a given index.
+    pub func byte_at(this, index: I64) -> U8 {
+        return lowlevel { ptr_read[U8](ptr_offset[U8](this.ptr, index)) }
+    }
+}
+
+impl Drop for CString {
+    func drop(mut this) {
+        if this.ptr != (0 as *U8) {
+            lowlevel { mem_free(this.ptr as *U8) }
+        }
+    }
+}
+
+impl PartialEq for CString {
+    pub func eq(this, other: ref CString) -> Bool {
+        if this.len != other.len {
+            return false
+        }
+        var i: I64 = 0
+        var equal = true
+        loop (i < this.len and equal) {
+            let a = lowlevel { ptr_read[U8](ptr_offset[U8](this.ptr, i)) }
+            let b = lowlevel { ptr_read[U8](ptr_offset[U8](other.ptr, i)) }
+            if a != b {
+                equal = false
+            }
+            i = i + 1
+        }
+        return equal
+    }
+}
+
+impl Display for CString {
+    pub func to_string(this) -> Str {
+        return this.to_str()
+    }
+}
