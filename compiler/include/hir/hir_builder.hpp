@@ -294,6 +294,9 @@ private:
     auto lower_await(const parser::AwaitExpr& await) -> HirExprPtr;
     auto lower_path(const parser::PathExpr& path) -> HirExprPtr;
     auto lower_lowlevel(const parser::LowlevelExpr& lowlevel) -> HirExprPtr;
+    auto lower_template_literal(const parser::TemplateLiteralExpr& tpl) -> HirExprPtr;
+    auto lower_template_literal_segments(const std::vector<parser::InterpolatedSegment>& segments,
+                                         SourceSpan span) -> HirExprPtr;
 
     // ========================================================================
     // Statement Lowering

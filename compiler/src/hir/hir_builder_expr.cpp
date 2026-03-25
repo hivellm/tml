@@ -226,6 +226,10 @@ auto HirBuilder::lower_expr(const parser::Expr& expr) -> HirExprPtr {
                 return lower_path(e);
             } else if constexpr (std::is_same_v<T, parser::LowlevelExpr>) {
                 return lower_lowlevel(e);
+            } else if constexpr (std::is_same_v<T, parser::TemplateLiteralExpr>) {
+                return lower_template_literal(e);
+            } else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
+                return lower_template_literal_segments(e.segments, expr.span);
             } else {
                 // Fallback for unsupported expressions
                 return make_hir_literal(fresh_id(), int64_t(0), types::make_unit(), expr.span);
@@ -1404,6 +1408,76 @@ auto HirBuilder::lower_lowlevel(const parser::LowlevelExpr& lowlevel) -> HirExpr
     auto result = std::make_unique<HirExpr>();
     result->kind =
         HirLowlevelExpr{fresh_id(), std::move(stmts), std::move(expr), type, lowlevel.span};
+    return result;
+}
+
+// ============================================================================
+// Template Literal Desugaring
+// ============================================================================
+//
+// Desugars template literals into a chain of str_concat_opt() calls:
+//   `{i}: {s}` → str_concat_opt(str_concat_opt(I64::to_string(i), ": "), s)
+//
+// Each non-string expression is converted to a string via Type::to_string().
+// String segments become literal constants. The result type is Str (ptr).
+
+auto HirBuilder::lower_template_literal(const parser::TemplateLiteralExpr& tpl) -> HirExprPtr {
+    return lower_template_literal_segments(tpl.segments, tpl.span);
+}
+
+auto HirBuilder::lower_template_literal_segments(
+    const std::vector<parser::InterpolatedSegment>& segments, SourceSpan span) -> HirExprPtr {
+    auto str_type = types::make_primitive(types::PrimitiveKind::Str);
+
+    if (segments.empty()) {
+        // Empty template → empty string literal
+        return make_hir_literal(fresh_id(), std::string(""), str_type, span);
+    }
+
+    // Convert each segment to a Str-typed HirExpr
+    std::vector<HirExprPtr> str_parts;
+    for (const auto& seg : segments) {
+        if (std::holds_alternative<std::string>(seg.content)) {
+            // Literal text segment → string literal
+            const auto& text = std::get<std::string>(seg.content);
+            if (!text.empty()) {
+                str_parts.push_back(make_hir_literal(fresh_id(), text, str_type, seg.span));
+            }
+        } else {
+            // Expression segment → lower the expression, then convert to string
+            const auto& expr_ptr = std::get<parser::ExprPtr>(seg.content);
+            auto lowered = lower_expr(*expr_ptr);
+
+            // Check if expression is already Str — skip to_string
+            auto expr_resolved_type = get_expr_type(*expr_ptr);
+            if (expr_resolved_type && expr_resolved_type->is<types::PrimitiveType>() &&
+                expr_resolved_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                str_parts.push_back(std::move(lowered));
+                continue; // Already a string, no conversion needed
+            }
+
+            // Emit val.to_string() as a method call — the MIR codegen
+            // knows how to dispatch method calls to the correct mangled names.
+            auto receiver_type = expr_resolved_type ? expr_resolved_type : types::make_i64();
+            str_parts.push_back(make_hir_method_call(fresh_id(), std::move(lowered), "to_string",
+                                                     {}, {}, receiver_type, str_type, seg.span));
+        }
+    }
+
+    if (str_parts.empty()) {
+        return make_hir_literal(fresh_id(), std::string(""), str_type, span);
+    }
+
+    // Chain str_concat_opt calls: fold left
+    auto result = std::move(str_parts[0]);
+    for (size_t i = 1; i < str_parts.size(); ++i) {
+        std::vector<HirExprPtr> concat_args;
+        concat_args.push_back(std::move(result));
+        concat_args.push_back(std::move(str_parts[i]));
+        result =
+            make_hir_call(fresh_id(), "str_concat_opt", {}, std::move(concat_args), str_type, span);
+    }
+
     return result;
 }
 
