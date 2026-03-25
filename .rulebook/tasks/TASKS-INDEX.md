@@ -15,7 +15,7 @@ Core language features, compiler infrastructure, and foundational gaps.
 | 1-04 | ~~Std FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
 | 1-05 | ~~Panic Recovery~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
 | 1-06 | ~~Compiler Hints~~ | **ARCHIVED** 2026-03-25 | MEDIUM | 100% |
-| 1-07 | [Compiler C++ Unit Tests](phase1-07-compiler-unit-tests/) | Proposed | HIGHEST | 0% |
+| 1-07 | ~~Compiler C++ Unit Tests~~ | **ARCHIVED** 2026-03-25 (82 files exist) | HIGHEST | 100% |
 | 1-08 | [Reflection System](phase1-08-reflection/) | In Progress — Phase 5 BLOCKED | MEDIUM | 53% (37/70) |
 
 ## Phase 2 — Stdlib Completeness
