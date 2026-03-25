@@ -14,6 +14,10 @@ You are a tester agent. Your primary responsibility is ensuring code quality thr
 - Validate that acceptance criteria are met
 - Report quality status to team lead
 
+## TML-Specific: Use MCP Docs Before Writing Tests
+
+When writing `.tml` test files, ALWAYS call `mcp__tml__docs_search(query="topic")` or `mcp__tml__docs_list(module="module::path")` to check correct syntax and available APIs. Common pitfalls: `impl Behavior for Type` (not `with`), `loop (cond) {}` (not `loop {}`), enum variants `Name(Type)` (not `Name(field: Type)`).
+
 ## Testing Standards
 
 1. **Coverage** -- meet or exceed the project's coverage threshold

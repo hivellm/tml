@@ -611,20 +611,29 @@ static void build_doc_index(DocSearchCache& cache) {
     cache.tracked_files.clear();
 
     for (const auto& file : all_files) {
-        auto module_opt = parse_file_for_docs(file);
-        if (!module_opt) {
-            continue;
-        }
+        try {
+            auto module_opt = parse_file_for_docs(file);
+            if (!module_opt) {
+                continue;
+            }
 
-        parsed_modules.push_back(std::move(*module_opt));
-        auto module_path = derive_module_path(file, root);
-        module_pairs.push_back({&parsed_modules.back(), module_path});
+            parsed_modules.push_back(std::move(*module_opt));
+            auto module_path = derive_module_path(file, root);
+            module_pairs.push_back({&parsed_modules.back(), module_path});
 
-        // Track file modification time
-        std::error_code ec;
-        auto mtime = fs::last_write_time(file, ec);
-        if (!ec) {
-            cache.tracked_files.push_back({file, mtime});
+            // Track file modification time
+            std::error_code ec;
+            auto mtime = fs::last_write_time(file, ec);
+            if (!ec) {
+                cache.tracked_files.push_back({file, mtime});
+            }
+        } catch (const std::exception& e) {
+            // Skip files that fail to parse — don't crash the MCP server
+            TML_LOG_WARN("mcp",
+                         "Skipping doc extraction for " << file.string() << ": " << e.what());
+        } catch (...) {
+            TML_LOG_WARN("mcp",
+                         "Skipping doc extraction for " << file.string() << ": unknown error");
         }
     }
 
@@ -634,21 +643,35 @@ static void build_doc_index(DocSearchCache& cache) {
 
     // Build the doc index from TML library sources
     if (!module_pairs.empty()) {
-        cache.index = extractor.extract_all(module_pairs);
+        try {
+            cache.index = extractor.extract_all(module_pairs);
+        } catch (const std::exception& e) {
+            TML_LOG_ERROR("mcp", "Doc index build failed: " << e.what());
+        } catch (...) {
+            TML_LOG_ERROR("mcp", "Doc index build failed: unknown error");
+        }
     }
 
     // Extract documentation from compiler C++ headers
     for (const auto& hpp_file : hpp_files) {
-        auto hpp_mod = extract_hpp_docs(hpp_file, root);
-        if (hpp_mod && (!hpp_mod->items.empty() || !hpp_mod->doc.empty())) {
-            cache.index.modules.push_back(std::move(*hpp_mod));
-        }
+        try {
+            auto hpp_mod = extract_hpp_docs(hpp_file, root);
+            if (hpp_mod && (!hpp_mod->items.empty() || !hpp_mod->doc.empty())) {
+                cache.index.modules.push_back(std::move(*hpp_mod));
+            }
 
-        // Track hpp file modification time
-        std::error_code ec;
-        auto mtime = fs::last_write_time(hpp_file, ec);
-        if (!ec) {
-            cache.tracked_files.push_back({hpp_file, mtime});
+            // Track hpp file modification time
+            std::error_code ec;
+            auto mtime = fs::last_write_time(hpp_file, ec);
+            if (!ec) {
+                cache.tracked_files.push_back({hpp_file, mtime});
+            }
+        } catch (const std::exception& e) {
+            TML_LOG_WARN("mcp", "Skipping hpp doc extraction for " << hpp_file.string() << ": "
+                                                                   << e.what());
+        } catch (...) {
+            TML_LOG_WARN("mcp", "Skipping hpp doc extraction for " << hpp_file.string()
+                                                                   << ": unknown error");
         }
     }
 
@@ -708,8 +731,12 @@ static void build_doc_index(DocSearchCache& cache) {
     cache.bm25.build();
 
     // Build HNSW: vectorize all documents and insert
-    cache.vectorizer->build();
-    size_t dims = cache.vectorizer->dims();
+    // NOTE: HNSW disabled temporarily — crashes with 4000+ items on Windows.
+    // BM25 text search still works.
+    // TODO: Re-enable once the crash root cause is identified
+    // cache.vectorizer->build();
+    // size_t dims = cache.vectorizer->dims();
+    size_t dims = 0; // Disabled
 
     if (dims > 0) {
         cache.hnsw = std::make_unique<search::HnswIndex>(dims);
@@ -739,7 +766,17 @@ void ensure_doc_index() {
     std::lock_guard<std::mutex> lock(g_doc_cache.mutex);
 
     if (!g_doc_cache.initialized || files_changed(g_doc_cache)) {
-        build_doc_index(g_doc_cache);
+        try {
+            TML_LOG_INFO("mcp", "Building doc index...");
+            build_doc_index(g_doc_cache);
+            TML_LOG_INFO("mcp", "Doc index built: " << g_doc_cache.all_items.size() << " items");
+        } catch (const std::exception& e) {
+            TML_LOG_ERROR("mcp", "Doc index build failed: " << e.what());
+            g_doc_cache.initialized = true;
+        } catch (...) {
+            TML_LOG_ERROR("mcp", "Doc index build failed: unknown error");
+            g_doc_cache.initialized = true;
+        }
     }
 }
 

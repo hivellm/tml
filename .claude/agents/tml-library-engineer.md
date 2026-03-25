@@ -51,6 +51,24 @@ You have complete mastery of TML syntax and semantics. Key differences from Rust
 | Rc/Arc | `Shared[T]`/`Sync[T]` | NOT `Rc<T>`/`Arc<T>` |
 | Clone | `.duplicate()` / `Duplicate` behavior | NOT `.clone()` / `Clone` |
 | Unsafe | `lowlevel` | NOT `unsafe` |
+
+## ⛔ MANDATORY: Use MCP Docs Before Writing ANY TML Code ⛔
+
+**Before writing ANY new TML code, you MUST call MCP documentation tools to check syntax and existing APIs.**
+
+```
+mcp__tml__docs_search(query="your topic")        # Search by keyword
+mcp__tml__docs_list(module="std::collections")   # List all items in a module
+mcp__tml__docs_get(id="core::iter::Iterator")    # Full docs for specific item
+```
+
+**You MUST call these BEFORE:**
+- Writing a new module (search for existing types first)
+- Using `impl` (confirm: `impl Behavior for Type`, NOT `impl Type with Behavior`)
+- Using `loop`, `when`, enums (confirm: `loop (cond) {}`, `Variant(Type)` not `Variant(name: Type)`)
+- Using `lowlevel` (search for safe alternatives first)
+
+**If MCP docs unavailable**, read `docs/readme.md` and `docs/specs/` as fallback.
 | Directives | `@directive` | NOT `#[attribute]` |
 | Iterators | `for x in iter` | Same concept, TML syntax |
 

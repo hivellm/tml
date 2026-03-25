@@ -35,19 +35,40 @@ Full test suite → all pass ✓
 
 ## ⛔ MANDATORY: Consult Language Reference Before Implementing ⛔
 
-**Before writing ANY new TML code, you MUST read [docs/readme.md](docs/readme.md).**
+**Before writing ANY new TML code, you MUST use MCP documentation tools AND/OR read [docs/readme.md](docs/readme.md).**
 
-This is a HARD REQUIREMENT. The TML standard library has **500+ types, 5000+ functions**, and **template literals** already implemented. Past implementations ignored existing APIs (Buffer, Text, HashMap, List, Slice, Outcome, TcpStream, Mutex, template literals) and instead used raw `lowlevel` blocks everywhere — producing 692 unnecessary unsafe blocks in the HTTP module alone.
+This is a HARD REQUIREMENT. The TML standard library has **500+ types, 5000+ functions**, and **template literals** already implemented. Past implementations ignored existing APIs and used wrong syntax, costing hours of debugging.
+
+**Step 1 — Use MCP Docs (PREFERRED, instant, searchable):**
+
+```
+mcp__tml__docs_search(query="Mutex lock")           # Find types/functions by keyword
+mcp__tml__docs_list(module="std::sync")              # List ALL items in a module
+mcp__tml__docs_get(id="std::collections::HashMap")   # Full docs for a specific item
+```
+
+**You MUST call `mcp__tml__docs_search` or `mcp__tml__docs_list` BEFORE:**
+- Writing a new TML module (search for existing types that do the same thing)
+- Using `impl` (confirm syntax: `impl Behavior for Type`, NOT `impl Type with Behavior`)
+- Using `loop`, `when`, enums (confirm syntax: `loop (cond) {}`, `Start(I64)` not `Start(name: I64)`)
+- Using `lowlevel` (search for safe API alternatives first)
+- Using any type you haven't used in this session
+
+**Step 2 — Static Docs (FALLBACK, if MCP is down):**
+
+1. **ALWAYS check [docs/readme.md](docs/readme.md)** for existing types before using `lowlevel { ptr_read/ptr_write/mem_alloc }`
+2. **Check `docs/packages/`** for detailed API docs of any module
+3. **Check `docs/user/`** for tutorial-style guides on language features
+4. **Check `docs/specs/`** for formal language specification
 
 **Rules:**
 
-1. **ALWAYS check [docs/readme.md](docs/readme.md)** for existing types before using `lowlevel { ptr_read/ptr_write/mem_alloc }`
-2. **Use `Text` for string building** — not manual `copy_nonoverlapping` chains
-3. **Use `Buffer` for byte manipulation** — not raw `ptr_read[U8]`/`ptr_write[U8]`
-4. **Use `HashMap`/`List` for collections** — not manual array+offset layouts
-5. **Use `Outcome[T,E]` with `!`** — not raw I64 error codes
-6. **Use template literals** — `` `Hello, {name}!` `` returns `Text`, works today
-7. **Use `Mutex[T]`/`Sync[T]` for shared state** — not manual memory layouts with offsets
+1. **Use `Text` for string building** — not manual `copy_nonoverlapping` chains
+2. **Use `Buffer` for byte manipulation** — not raw `ptr_read[U8]`/`ptr_write[U8]`
+3. **Use `HashMap`/`List` for collections** — not manual array+offset layouts
+4. **Use `Outcome[T,E]` with `!`** — not raw I64 error codes
+5. **Use template literals** — `` `Hello, {name}!` `` returns `Text`, works today
+6. **Use `Mutex[T]`/`Sync[T]` for shared state** — not manual memory layouts with offsets
 
 **The ONLY acceptable uses of `lowlevel` are:**
 - FFI calls to C runtime (`@extern("c")` wrappers)
