@@ -1,9 +1,11 @@
 # Tasks — Priority Table
 
-**Updated**: 2026-03-21
-**Active**: 14 tasks | **Archived**: 14
-**Test baseline**: 1599+ tests, ~110/119 HTTP, 52/52 iter, 73/73 collections
-**Version**: 0.2.1
+**Updated**: 2026-03-25
+**Active**: 29 tasks | **Archived**: 15
+**Test baseline**: 1633+ tests, 92.2% coverage
+**Version**: 0.2.3
+
+> **NOTE**: Tasks now use phased naming (`phase<X>-<NN>-<label>`). See [TASKS-INDEX.md](TASKS-INDEX.md) for the full organized list.
 
 ---
 

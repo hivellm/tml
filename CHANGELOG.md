@@ -19,6 +19,39 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.3] — 2026-03-25
+
+Task reorganization, compiler codegen fix, and core FFI types completion.
+
+### Added (Core Library)
+
+- **Core FFI types** (`lib/core/src/ffi/`) — Type-safe C interop wrappers
+  - `c_void` — opaque type for `void*` pointers
+  - `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_longlong`, `c_ulonglong` — C integer wrappers
+  - `c_float`, `c_double` — C floating-point wrappers
+  - `c_size_t`, `c_ssize_t`, `c_ptrdiff_t`, `c_intptr_t`, `c_uintptr_t` — size type wrappers
+  - `c_long_bits()`, `c_long_max()` — platform-aware constants (32 on Windows, 64 on Unix)
+  - `CStr` — borrowed C string with null-terminator guarantee: `from_ptr`, `to_str`, `to_owned_str`, `len`, `is_empty`, `byte_at`, `as_ptr`
+  - `impl PartialEq for CStr`, `impl Display for CStr`
+  - Migration guide in module doc comments
+  - 24 tests across 2 test files (primitive_types, cstr)
+
+### Fixed (Compiler)
+
+- **`@derive(Reflect)` size/align** — TypeInfo now reports correct size and alignment via LLVM constant expressions (`ptrtoint(getelementptr)`). Previously hardcoded to 0.
+
+### Changed (Project)
+
+- **Task reorganization** — 30 tasks renamed to `phase<X>-<NN>-<label>` format across 6 phases
+- **13 new stdlib tasks** created with full Rulebook format (BinaryHeap, Semaphore, WaitGroup, Seek, BigInt, Complex, Trie, IntervalTree, core net types, FFI types, panic recovery, compiler hints)
+- **Language completeness roadmap** updated from 41% to 79% (many items were already implemented)
+
+### Stats
+- **Tests**: 1633+ passing, 92.2% coverage
+- **Tasks**: 30 organized (13 new + 17 renamed), 1 archived (phase1-03-core-ffi-types)
+
+---
+
 ## [0.2.2] — 2026-03-22
 
 Performance, profiling, and code quality release: Tracy profiler integration, HTTP at 183K req/s, and 700+ lowlevel blocks migrated to typed accessors.

@@ -5,6 +5,12 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-03-25
+
+### Fixed
+
+- **`@derive(Reflect)` size/align** — TypeInfo `size` and `align` fields now computed correctly via LLVM constant expressions (`ptrtoint(getelementptr(..., null, 1))`). Previously hardcoded to 0, breaking any reflection-based code that needed memory layout info. Verified: `Point{I64,I64}`=16/8, `Small{I32,I32}`=8/4, `Color`(3 variants)=4/4, `Shape{F64,F64}`=24/8.
+
 ## [0.2.2] — 2026-03-22
 
 ### Added
