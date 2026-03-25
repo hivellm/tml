@@ -5,6 +5,28 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-03-25
+
+### Added
+
+- **MinHeap[T]** (`collections/binary_heap.tml`) — min-heap priority queue
+  - `new`, `push`, `pop`, `peek`, `len`, `is_empty`, `clear`, `contains`
+  - Smallest element always at top
+- **BinaryHeap advanced operations** — `from_items`, `into_sorted`, `contains`, `extend`
+- **SemaphoreGuard** (`sync/semaphore.tml`) — RAII guard for semaphore permits
+  - `acquire_guard()` → auto-release on scope exit
+  - `try_acquire_guard() -> Maybe[SemaphoreGuard]` — non-blocking
+  - `impl Drop for SemaphoreGuard` — releases permit
+
+### Fixed
+
+- **CString Drop** (`ffi/cstring.tml`) — `impl Drop for CString` now frees heap memory via `mem_free`
+
+### Tests
+
+- 12 BinaryHeap tests (6 original + from_items, into_sorted, contains, MinHeap basic/peek/contains)
+- 6 Semaphore tests (4 original + acquire_guard, try_acquire_guard)
+
 ## [0.2.2] — 2026-03-22
 
 ### Changed

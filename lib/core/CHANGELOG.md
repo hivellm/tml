@@ -9,18 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Panic Recovery** (`panic/mod.tml`) — catch panics and recover
+  - `PanicInfo` struct: message, file, line, column
+  - `set_hook` / `clear_hook` — custom panic handlers
+  - `catch_unwind_fn` — catch panics via setjmp/longjmp, returns `CatchResult`
+  - `resume_unwind` — re-panic after catching
+- **Compiler Hints** (`hint.tml`) — optimization directives
+  - `unreachable_unchecked`, `black_box_i64/bool/f64`, `spin_loop_hint`
+  - `likely` / `unlikely` — branch prediction hints
+  - `assume` — optimizer assertions
 - **Core FFI types** (`ffi/mod.tml`) — Type-safe C interop wrappers
   - `c_void`, `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_longlong`, `c_ulonglong`
   - `c_float`, `c_double`, `c_size_t`, `c_ssize_t`, `c_ptrdiff_t`, `c_intptr_t`, `c_uintptr_t`
-  - Platform-aware: `c_long_bits()` (32 on Windows, 64 on Unix), `c_long_max()`
-  - Migration guide in module doc comments
+  - `c_long_bits()` / `c_long_max()` — platform-aware (32 on Windows, 64 on Unix)
 - **CStr** (`ffi/cstr.tml`) — Borrowed C string with null-terminator guarantee
-  - `from_ptr`, `to_str` (zero-copy), `to_owned_str` (heap copy), `len`, `is_empty`, `byte_at`, `as_ptr`
+  - `from_ptr`, `to_str`, `to_owned_str`, `len`, `is_empty`, `byte_at`, `as_ptr`
   - `impl PartialEq for CStr`, `impl Display for CStr`
 
 ### Tests
 
-- 14 primitive type tests, 10 CStr tests — all passing
+- 7 panic recovery tests (catch, no-panic, continue, resume, PanicInfo, location)
+- 9 hint tests (likely, unlikely, black_box, spin_loop, assume)
+- 14 FFI primitive type tests, 10 CStr tests
 
 ## [0.2.2] — 2026-03-22
 

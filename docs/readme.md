@@ -196,6 +196,9 @@ Source: `lib/core/src/`
 | `core::bitset` | `BitSet`, `BitArray` | — |
 | `core::ringbuf` | `RingBuffer[T]` — circular buffer | — |
 | `core::sync` | Raw atomic operations, memory fences, spinlocks | — |
+| `core::panic` | `PanicInfo`, `catch_unwind_fn`, `set_hook`, `clear_hook`, `resume_unwind`, `CatchResult` | — |
+| `core::hint` | `likely`, `unlikely`, `black_box_i64/bool/f64`, `spin_loop_hint`, `assume`, `unreachable_unchecked` | — |
+| `core::ffi` | `c_void`, `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_size_t`, `c_ssize_t`, `CStr` | — |
 | `core::intrinsics` | `ptr_read`, `ptr_write`, `mem_alloc`, `mem_free`, `copy_nonoverlapping` | [specs/23-INTRINSICS.md](specs/23-INTRINSICS.md) |
 
 ---
@@ -217,6 +220,8 @@ Source: `lib/std/src/`
 | `std::collections::btreemap` | `BTreeMap[K,V]` — sorted map | [packages/10-COLLECTIONS.md](packages/10-COLLECTIONS.md) |
 | `std::collections::btreeset` | `BTreeSet[T]` — sorted set | [packages/10-COLLECTIONS.md](packages/10-COLLECTIONS.md) |
 | `std::collections::deque` | `Deque[T]` — double-ended queue | [packages/10-COLLECTIONS.md](packages/10-COLLECTIONS.md) |
+| `std::collections::binary_heap` | `BinaryHeap[T]` — max-heap: `push`, `pop`, `peek`, `from_items`, `into_sorted`, `contains` | [packages/10-COLLECTIONS.md](packages/10-COLLECTIONS.md) |
+| `std::collections::binary_heap` | `MinHeap[T]` — min-heap: `push`, `pop`, `peek`, `contains` | [packages/10-COLLECTIONS.md](packages/10-COLLECTIONS.md) |
 | `std::collections::buffer` | `Buffer` — byte buffer: `get`, `set`, `write_byte`, `read_byte`, endian read/write, `to_hex` | [packages/03-BUFFER.md](packages/03-BUFFER.md) |
 
 ### Concurrency & Synchronization
@@ -233,6 +238,14 @@ Source: `lib/std/src/`
 | `std::sync::ordering` | `Ordering` — memory ordering | [packages/13-SYNC.md](packages/13-SYNC.md) |
 | `std::sync::queue` | `LockFreeQueue[T]` | [packages/13-SYNC.md](packages/13-SYNC.md) |
 | `std::sync::stack` | `LockFreeStack[T]` | [packages/13-SYNC.md](packages/13-SYNC.md) |
+| `std::sync::semaphore` | `Semaphore`, `SemaphoreGuard` — counting semaphore with RAII guard | [packages/13-SYNC.md](packages/13-SYNC.md) |
+| `std::sync::wait_group` | `WaitGroup` — wait for N tasks: `add`, `done`, `wait` | [packages/13-SYNC.md](packages/13-SYNC.md) |
+
+### FFI (Foreign Function Interface)
+| Module | Types | Docs |
+|--------|-------|------|
+| `std::ffi::cstring` | `CString` — owned heap-allocated C string with Drop, `new`, `from_raw`, `into_raw`, `as_cstr` | — |
+| `std::ffi::os_str` | `OsStr`, `OsString` — platform byte strings, `from_str`, `to_str`, `push` | — |
 
 ### Threading
 | Module | Types | Docs |

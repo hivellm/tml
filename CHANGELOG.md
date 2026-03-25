@@ -21,34 +21,60 @@ For detailed changes in each component, see:
 
 ## [0.2.3] — 2026-03-25
 
-Task reorganization, compiler codegen fix, and core FFI types completion.
+Major stdlib expansion: 8 tasks completed, panic recovery, compiler hints, FFI types, new collections and sync primitives.
 
 ### Added (Core Library)
 
-- **Core FFI types** (`lib/core/src/ffi/`) — Type-safe C interop wrappers
-  - `c_void` — opaque type for `void*` pointers
-  - `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_longlong`, `c_ulonglong` — C integer wrappers
-  - `c_float`, `c_double` — C floating-point wrappers
-  - `c_size_t`, `c_ssize_t`, `c_ptrdiff_t`, `c_intptr_t`, `c_uintptr_t` — size type wrappers
-  - `c_long_bits()`, `c_long_max()` — platform-aware constants (32 on Windows, 64 on Unix)
-  - `CStr` — borrowed C string with null-terminator guarantee: `from_ptr`, `to_str`, `to_owned_str`, `len`, `is_empty`, `byte_at`, `as_ptr`
-  - `impl PartialEq for CStr`, `impl Display for CStr`
+- **Panic Recovery** (`core::panic`) — catch_unwind, hooks, PanicInfo
+  - `PanicInfo` struct — message, file, line, column
+  - `set_hook(fn_ptr)` / `clear_hook()` — install custom panic handler called before crash
+  - `catch_unwind_fn(fn_ptr) -> CatchResult` — catch panics via setjmp/longjmp
+  - `resume_unwind(msg)` — re-panic after catching
+  - `CatchResult` enum: `Ok` | `Panicked(Str)`
+  - C runtime: `tml_set_panic_hook`, `tml_catch_unwind_fn`, hook call in `panic()`
+
+- **Compiler Hints** (`core::hint`) — optimization directives
+  - `unreachable_unchecked()` — LLVM `unreachable` instruction
+  - `black_box_i64/bool/f64()` — inline asm memory clobber (prevents constant folding)
+  - `spin_loop_hint()` — x86 PAUSE instruction for busy-wait loops
+  - `likely(Bool) / unlikely(Bool)` — branch prediction via `@llvm.expect.i1`
+  - `assume(Bool)` — `@llvm.assume` for optimizer assertions
+
+- **Core FFI types** (`core::ffi`) — Type-safe C interop wrappers
+  - `c_void`, `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_longlong`, `c_ulonglong`
+  - `c_float`, `c_double`, `c_size_t`, `c_ssize_t`, `c_ptrdiff_t`, `c_intptr_t`, `c_uintptr_t`
+  - `c_long_bits()`, `c_long_max()` — platform-aware (32 on Windows, 64 on Unix)
+  - `CStr` — borrowed C string: `from_ptr`, `to_str`, `to_owned_str`, `len`, `is_empty`, `byte_at`
   - Migration guide in module doc comments
-  - 24 tests across 2 test files (primitive_types, cstr)
+
+### Added (Standard Library)
+
+- **CString Drop** (`std::ffi::cstring`) — `impl Drop for CString` now frees heap memory
+- **BinaryHeap advanced** (`std::collections::binary_heap`)
+  - `from_items(ref List[T])` — build heap from list
+  - `into_sorted() -> List[T]` — heap sort ascending
+  - `contains(T) -> Bool` — O(n) search
+  - `extend(ref List[T])` — bulk push
+- **MinHeap[T]** — min-heap variant (smallest first): `new`, `push`, `pop`, `peek`, `contains`
+- **SemaphoreGuard** (`std::sync::semaphore`) — RAII guard with Drop
+  - `acquire_guard()` — blocking acquire + auto-release guard
+  - `try_acquire_guard() -> Maybe[SemaphoreGuard]` — non-blocking
 
 ### Fixed (Compiler)
 
-- **`@derive(Reflect)` size/align** — TypeInfo now reports correct size and alignment via LLVM constant expressions (`ptrtoint(getelementptr)`). Previously hardcoded to 0.
+- **`@derive(Reflect)` size/align** — TypeInfo now reports correct size and alignment via LLVM constant expressions. Previously hardcoded to 0.
+- **`black_box` intrinsic** — new C++ intrinsic using inline asm with memory clobber
+- **`spin_loop_hint` intrinsic** — new C++ intrinsic emitting x86 PAUSE
 
 ### Changed (Project)
 
 - **Task reorganization** — 30 tasks renamed to `phase<X>-<NN>-<label>` format across 6 phases
-- **13 new stdlib tasks** created with full Rulebook format (BinaryHeap, Semaphore, WaitGroup, Seek, BigInt, Complex, Trie, IntervalTree, core net types, FFI types, panic recovery, compiler hints)
-- **Language completeness roadmap** updated from 41% to 79% (many items were already implemented)
+- **Language completeness roadmap** updated from 41% to 79%
+- **8 tasks archived**: core FFI, std FFI, panic recovery, compiler hints, BinaryHeap, Semaphore, WaitGroup, compiler unit tests
 
 ### Stats
-- **Tests**: 1633+ passing, 92.2% coverage
-- **Tasks**: 30 organized (13 new + 17 renamed), 1 archived (phase1-03-core-ffi-types)
+- **Tests**: 1650+ passing, 92%+ coverage
+- **Tasks**: 22 active, 8 archived this session
 
 ---
 

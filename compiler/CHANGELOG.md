@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.3] — 2026-03-25
 
+### Added
+
+- **`black_box` intrinsic** — inline asm with memory clobber, prevents optimizer from eliminating values (for benchmarks)
+- **`spin_loop_hint` intrinsic** — emits x86 PAUSE instruction for busy-wait loops
+- **Panic hook support** — `tml_set_panic_hook`, `tml_get_panic_hook` in essential.c; `panic()` now calls user hook before longjmp/exit
+- **`tml_catch_unwind_fn`** — general-purpose setjmp/longjmp panic catching with nested jmp_buf save/restore
+
 ### Fixed
 
-- **`@derive(Reflect)` size/align** — TypeInfo `size` and `align` fields now computed correctly via LLVM constant expressions (`ptrtoint(getelementptr(..., null, 1))`). Previously hardcoded to 0, breaking any reflection-based code that needed memory layout info. Verified: `Point{I64,I64}`=16/8, `Small{I32,I32}`=8/4, `Color`(3 variants)=4/4, `Shape{F64,F64}`=24/8.
+- **`@derive(Reflect)` size/align** — TypeInfo `size` and `align` fields now computed correctly via LLVM constant expressions (`ptrtoint(getelementptr(..., null, 1))`). Previously hardcoded to 0.
 
 ## [0.2.2] — 2026-03-22
 
