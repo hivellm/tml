@@ -1,0 +1,411 @@
+/// Documentation Audit Script for TML Project
+///
+/// Scans C++ compiler headers/sources and TML library code for missing
+/// documentation. Reports per-file violation counts with line references.
+
+use std::file::File
+use std::glob::Glob
+use std::collections::List
+use core::str
+
+// Violation type constants
+const VT_FILE_HEADER: I32 = 0
+const VT_TYPE: I32 = 1
+const VT_METHOD: I32 = 2
+const VT_MACRO: I32 = 4
+const VT_WRONG_STYLE: I32 = 6
+const VT_INTERNAL_FN: I32 = 8
+const VT_TML_FUNC: I32 = 10
+const VT_TML_TYPE: I32 = 11
+const VT_TML_BEHAVIOR: I32 = 12
+const VT_TML_MODULE: I32 = 13
+const NUM_TYPES: I64 = 14
+
+/// A documentation violation.
+type Violation {
+    vtype: I32,
+    line: I64,
+    message: Str,
+}
+
+/// Per-file report.
+type FileReport {
+    path: Str,
+    violations: List[Violation],
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Check if previous non-blank line is a /// doc comment.
+func has_doc_before(lines: List[Str], idx: I64) -> Bool {
+    var i = idx - 1
+    loop (i >= 0) {
+        let line = lines.get(i)
+        let trimmed = str::trim(line)
+        if str::len(trimmed) > 0 {
+            return str::starts_with(trimmed, "///")
+        }
+        i = i - 1
+    }
+    return false
+}
+
+/// Violation code string.
+func vcode(v: I32) -> Str {
+    when v {
+        0  => "V1",  1  => "V2",  2  => "V3",  4  => "V5",
+        6  => "V7",  8  => "V9",  10 => "V11", 11 => "V12",
+        12 => "V13", 13 => "V14", _  => "V??",
+    }
+}
+
+/// Violation description.
+func vdesc(v: I32) -> Str {
+    when v {
+        0  => "Missing file header",
+        1  => "Undocumented class/struct",
+        2  => "Undocumented public method",
+        4  => "Undocumented macro",
+        6  => "Wrong comment style",
+        8  => "Undocumented internal fn >10 lines",
+        10 => "TML undocumented function",
+        11 => "TML undocumented type/enum",
+        12 => "TML undocumented behavior",
+        13 => "TML missing module doc",
+        _  => "Unknown",
+    }
+}
+
+// ============================================================================
+// C++ Header Scanner — pushes results directly to reports list
+// ============================================================================
+
+/// Scan a C++ header and add violations to reports.
+func scan_header(reports: List[FileReport], filepath: Str) {
+    var report = FileReport { path: filepath, violations: List[Violation]::new() }
+    let content = File::read_all(filepath)
+    if str::len(content) == 0 { reports.push(report); return }
+    let lines = str::split(content, "\n")
+    let n = lines.len()
+
+    // V1: file header
+    var i: I64 = 0
+    var checked_header = false
+    loop (i < n and not checked_header) {
+        let s = str::trim(lines.get(i))
+        if str::len(s) > 0 and not str::starts_with(s, "#pragma") {
+            checked_header = true
+            if not str::starts_with(s, "///") and not str::starts_with(s, "//!") {
+                var found = false
+                var j: I64 = 0
+                loop (j < i and not found) {
+                    if str::starts_with(str::trim(lines.get(j)), "///") { found = true }
+                    j = j + 1
+                }
+                if not found {
+                    report.violations.push(Violation { vtype: VT_FILE_HEADER, line: i + 1, message: "Missing file header" })
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    // Line scan
+    var in_pub = false
+    i = 0
+    loop (i < n) {
+        let s = str::trim(lines.get(i))
+
+        if str::starts_with(s, "public:") { in_pub = true }
+        if str::starts_with(s, "private:") or str::starts_with(s, "protected:") { in_pub = false }
+
+        // V7: wrong style
+        if str::starts_with(s, "//!") or str::starts_with(s, "/*") {
+            if i + 1 < n {
+                let nxt = str::trim(lines.get(i + 1))
+                if str::contains(nxt, "class ") or str::contains(nxt, "struct ") or str::contains(nxt, "enum ") {
+                    report.violations.push(Violation { vtype: VT_WRONG_STYLE, line: i + 1, message: "Wrong comment style" })
+                }
+            }
+        }
+
+        // V2: undocumented type
+        if (str::starts_with(s, "class ") or str::starts_with(s, "struct ")) and not str::ends_with(s, ";") {
+            if not has_doc_before(lines, i) {
+                report.violations.push(Violation { vtype: VT_TYPE, line: i + 1, message: "Undocumented type" })
+            }
+        }
+
+        // V3: undocumented public method
+        if in_pub and str::contains(s, "(") and not str::starts_with(s, "//") and not str::starts_with(s, "~")
+           and not str::contains(s, "operator") and not str::contains(s, "= delete") {
+            if str::contains(s, "auto ") or str::contains(s, "void ") or str::contains(s, "-> ") {
+                if not has_doc_before(lines, i) {
+                    report.violations.push(Violation { vtype: VT_METHOD, line: i + 1, message: "Undocumented public method" })
+                }
+            }
+        }
+
+        // V5: undocumented macro
+        if str::starts_with(s, "#define ") and not str::contains(s, "_H") {
+            if not has_doc_before(lines, i) {
+                report.violations.push(Violation { vtype: VT_MACRO, line: i + 1, message: "Undocumented macro" })
+            }
+        }
+
+        i = i + 1
+    }
+    reports.push(report)
+}
+
+// ============================================================================
+// C++ Source Scanner
+// ============================================================================
+
+/// Scan a C++ source file and add violations to reports.
+func scan_source(reports: List[FileReport], filepath: Str) {
+    var report = FileReport { path: filepath, violations: List[Violation]::new() }
+    let content = File::read_all(filepath)
+    if str::len(content) == 0 { reports.push(report); return }
+    let lines = str::split(content, "\n")
+    let n = lines.len()
+
+    // V1: file header
+    var i: I64 = 0
+    var checked = false
+    loop (i < n and not checked) {
+        let s = str::trim(lines.get(i))
+        if str::len(s) > 0 and not str::starts_with(s, "#include") and not str::starts_with(s, "#pragma")
+           and not str::starts_with(s, "TML_MODULE") {
+            checked = true
+            if not str::starts_with(s, "///") and not str::starts_with(s, "//!") {
+                var found = false
+                var j: I64 = 0
+                loop (j < i and not found) {
+                    let jt = str::trim(lines.get(j))
+                    if str::starts_with(jt, "///") or str::starts_with(jt, "//!") { found = true }
+                    j = j + 1
+                }
+                if not found {
+                    report.violations.push(Violation { vtype: VT_FILE_HEADER, line: i + 1, message: "Missing file header" })
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    // V9: undocumented static functions >10 lines
+    i = 0
+    loop (i < n) {
+        let s = str::trim(lines.get(i))
+        if str::starts_with(s, "static ") and str::contains(s, "(") and str::contains(s, "{") {
+            var depth: I64 = 0
+            var body: I64 = 0
+            var k = i
+            var done = false
+            loop (k < n and not done) {
+                let bl = lines.get(k)
+                if str::contains(bl, "{") { depth = depth + 1 }
+                if str::contains(bl, "}") { depth = depth - 1 }
+                body = body + 1
+                if depth <= 0 and k > i { done = true }
+                k = k + 1
+            }
+            if body > 10 and not has_doc_before(lines, i) {
+                report.violations.push(Violation { vtype: VT_INTERNAL_FN, line: i + 1, message: "Undocumented static function" })
+            }
+        }
+        i = i + 1
+    }
+    reports.push(report)
+}
+
+// ============================================================================
+// TML File Scanner
+// ============================================================================
+
+/// Scan a TML source file and add violations to reports.
+func scan_tml(reports: List[FileReport], filepath: Str) {
+    var report = FileReport { path: filepath, violations: List[Violation]::new() }
+    let content = File::read_all(filepath)
+    if str::len(content) == 0 { reports.push(report); return }
+    let lines = str::split(content, "\n")
+    let n = lines.len()
+
+    // V14: module-level doc
+    var has_mod_doc = false
+    var i: I64 = 0
+    var stop = false
+    loop (i < n and i < 20 and not stop) {
+        let s = str::trim(lines.get(i))
+        if str::starts_with(s, "///") { has_mod_doc = true; stop = true }
+        if str::len(s) > 0 and not str::starts_with(s, "///") and not str::starts_with(s, "use ")
+           and not str::starts_with(s, "//") { stop = true }
+        i = i + 1
+    }
+    if not has_mod_doc {
+        report.violations.push(Violation { vtype: VT_TML_MODULE, line: 1, message: "Missing module doc" })
+    }
+
+    // V11-V13: undocumented declarations
+    i = 0
+    loop (i < n) {
+        let s = str::trim(lines.get(i))
+        if str::len(s) > 0 and not str::starts_with(s, "//") and not str::starts_with(s, "use ") {
+            if str::starts_with(s, "func ") or str::starts_with(s, "pub func ") {
+                if not has_doc_before(lines, i) {
+                    report.violations.push(Violation { vtype: VT_TML_FUNC, line: i + 1, message: "Undocumented function" })
+                }
+            }
+            if str::starts_with(s, "type ") or str::starts_with(s, "enum ") {
+                if not has_doc_before(lines, i) {
+                    report.violations.push(Violation { vtype: VT_TML_TYPE, line: i + 1, message: "Undocumented type/enum" })
+                }
+            }
+            if str::starts_with(s, "behavior ") {
+                if not has_doc_before(lines, i) {
+                    report.violations.push(Violation { vtype: VT_TML_BEHAVIOR, line: i + 1, message: "Undocumented behavior" })
+                }
+            }
+        }
+        i = i + 1
+    }
+    reports.push(report)
+}
+
+// ============================================================================
+// Report
+// ============================================================================
+
+/// Print the audit report.
+func print_report(reports: List[FileReport]) {
+    var total: I64 = reports.len()
+    var violated: I64 = 0
+    var total_v: I64 = 0
+
+    var counts = List[I64]::new()
+    var ci: I64 = 0
+    loop (ci < NUM_TYPES) { counts.push(0); ci = ci + 1 }
+
+    var ri: I64 = 0
+    loop (ri < total) {
+        let r = reports.get(ri)
+        let vc = r.violations.len()
+        if vc > 0 { violated = violated + 1 }
+        var vi: I64 = 0
+        loop (vi < vc) {
+            let v = r.violations.get(vi)
+            total_v = total_v + 1
+            let idx = v.vtype
+            if idx >= 0 and idx < 14 { counts.set(idx, counts.get(idx) + 1) }
+            vi = vi + 1
+        }
+        ri = ri + 1
+    }
+
+    println("============================================================")
+    println("  TML Project Documentation Audit Report")
+    println("============================================================")
+    println("Files scanned:     ")
+    println("Files with issues: ")
+    println("")
+    println("--- Violations by Type ---")
+
+    ci = 0
+    loop (ci < NUM_TYPES) {
+        let c = counts.get(ci)
+        if c > 0 {
+            println(vdesc(ci))
+        }
+        ci = ci + 1
+    }
+
+    println("")
+    println("--- Per-File Violations ---")
+    ri = 0
+    loop (ri < total) {
+        let r = reports.get(ri)
+        let vc = r.violations.len()
+        if vc > 0 {
+            println(r.path)
+            var vi: I64 = 0
+            loop (vi < vc) {
+                let v = r.violations.get(vi)
+                println(v.message)
+                vi = vi + 1
+            }
+        }
+        ri = ri + 1
+    }
+    println("============================================================")
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+func main() {
+    var reports = List[FileReport]::new()
+
+    // Scan C++ headers
+    println("Scanning C++ headers...")
+    let h_glob = Glob::find("compiler/include", "**/*.hpp")
+    var h_count: I64 = 0
+    loop (h_count < h_glob.count()) {
+        let p = h_glob.next()
+        if str::len(p) > 0 { scan_header(reports, p) }
+        h_count = h_count + 1
+    }
+    h_glob.free()
+
+    let h2_glob = Glob::find("compiler/include", "**/*.h")
+    var h2_count: I64 = 0
+    loop (h2_count < h2_glob.count()) {
+        let p = h2_glob.next()
+        if str::len(p) > 0 { scan_header(reports, p) }
+        h2_count = h2_count + 1
+    }
+    h2_glob.free()
+    println("  headers scanned")
+
+    // Scan C++ sources
+    println("Scanning C++ sources...")
+    let cpp_glob = Glob::find("compiler/src", "**/*.cpp")
+    var cpp_count: I64 = 0
+    loop (cpp_count < cpp_glob.count()) {
+        let p = cpp_glob.next()
+        if str::len(p) > 0 { scan_source(reports, p) }
+        cpp_count = cpp_count + 1
+    }
+    cpp_glob.free()
+    println("  sources scanned")
+
+    // Scan TML core
+    println("Scanning TML core...")
+    let core_glob = Glob::find("lib/core/src", "**/*.tml")
+    var core_count: I64 = 0
+    loop (core_count < core_glob.count()) {
+        let p = core_glob.next()
+        if str::len(p) > 0 { scan_tml(reports, p) }
+        core_count = core_count + 1
+    }
+    core_glob.free()
+    println("  core scanned")
+
+    // Scan TML std
+    println("Scanning TML std...")
+    let std_glob = Glob::find("lib/std/src", "**/*.tml")
+    var std_count: I64 = 0
+    loop (std_count < std_glob.count()) {
+        let p = std_glob.next()
+        if str::len(p) > 0 { scan_tml(reports, p) }
+        std_count = std_count + 1
+    }
+    std_glob.free()
+    println("  std scanned")
+
+    println("")
+    print_report(reports)
+}
