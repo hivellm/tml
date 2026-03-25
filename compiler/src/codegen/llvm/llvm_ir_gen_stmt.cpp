@@ -1134,7 +1134,24 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                                          : mangled_check;
             bool lst_matches = false;
             if (auto* named = std::get_if<types::NamedType>(&last_semantic_type_->kind)) {
-                lst_matches = (named->name == base_check);
+                if (named->name == base_check) {
+                    // Base name matches. Now verify type arguments match too.
+                    // Without this check, a stale last_semantic_type_ from a previous
+                    // expression (e.g., List[Violation]::new()) would be incorrectly
+                    // applied to a variable of a different instantiation (e.g., List[Str]).
+                    if (delim_check != std::string::npos && !named->type_args.empty()) {
+                        // var_type has type args (e.g., "List__Str") — verify they match
+                        std::string semantic_mangled =
+                            mangle_struct_name(named->name, named->type_args);
+                        lst_matches = (semantic_mangled == mangled_check);
+                    } else if (delim_check == std::string::npos && named->type_args.empty()) {
+                        // Neither has type args — simple non-generic type match
+                        lst_matches = true;
+                    } else {
+                        // One has type args and the other doesn't — mismatch
+                        lst_matches = false;
+                    }
+                }
             }
             if (lst_matches) {
                 // Check for unresolved generic type args (e.g., K, V, T, E).
