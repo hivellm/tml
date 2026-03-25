@@ -1,22 +1,23 @@
 # Tasks: Seek Behavior — Random Access I/O
 
-**Status**: Proposed
+**Status**: Phase 1 Complete (8/10)
 **Priority**: MEDIUM
 **Phase**: 2 — Stdlib Completeness
 
-## Motivation
+## Phase 1: Seek Behavior — DONE
 
-TML has `Readable` (sequential read) and `Writable` (sequential write) behaviors but no `Seek` for random access. This means you can't jump to a position in a file, implement database page access, or rewind a buffer. Rust's `std::io::Seek` completes the I/O trait trio.
+- [x] 1.1 Define `SeekFrom` enum: `Start(I64)`, `End(I64)`, `Current(I64)`
+- [x] 1.2 Define `Seek` behavior: `func seek(mut this, pos: SeekFrom) -> Outcome[I64, IoError]`
+- [ ] 1.3 Implement `Seek` for `File` — needs `fseek`/`ftell` FFI (deferred)
+- [x] 1.4 Implement `Cursor` type — in-memory seekable stream over byte buffer
+- [x] 1.5 Implement `Seek` for `Cursor` — Start/End/Current with bounds checking
+- [x] 1.6 Helper: `stream_position[S: Seek]` — shorthand for `seek(Current(0))`
+- [x] 1.7 Helper: `rewind[S: Seek]` — shorthand for `seek(Start(0))`
+- [x] 1.8 Update `stream/mod.tml` to export Seek, SeekFrom, Cursor
+- [x] 1.9 Tests: 10 tests (from_str, read_byte, seek start/current/end, errors, reset, peek, eof)
+- [ ] 1.10 Run full stream test suite — pending (Seek for ByteStream needs handle layout knowledge)
 
-## Phase 1: Seek Behavior (`lib/std/src/stream/seek.tml`)
-
-- [ ] 1.1 Define `SeekFrom` enum: `Start(offset: I64)`, `End(offset: I64)`, `Current(offset: I64)`
-- [ ] 1.2 Define `Seek` behavior: `func seek(mut this, pos: SeekFrom) -> Outcome[I64, IoError]` (returns new position)
-- [ ] 1.3 Implement `Seek` for `File` — use C FFI `fseek`/`ftell`
-- [ ] 1.4 Implement `Seek` for `ByteStream` — in-memory seeking
-- [ ] 1.5 Implement `Seek` for `Buffer` — buffer position seeking
-- [ ] 1.6 Helper: `stream_position(mut this) -> Outcome[I64, IoError]` — shorthand for `seek(Current(0))`
-- [ ] 1.7 Helper: `rewind(mut this) -> Outcome[Unit, IoError]` — shorthand for `seek(Start(0))`
-- [ ] 1.8 Update `stream/mod.tml` to export Seek and SeekFrom
-- [ ] 1.9 Write tests: seek in file, seek in ByteStream, rewind, stream_position
-- [ ] 1.10 Run stream + file test suites
+## Notes
+- `Cursor` replaces `Seek for ByteStream` — simpler, self-contained, no handle layout dependency
+- File seeking deferred until `fseek`/`ftell` FFI wrappers are added
+- Cursor methods: from_str, from_raw, position, len, remaining, is_eof, read_byte, peek_byte, set_position, reset

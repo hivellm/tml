@@ -1,0 +1,132 @@
+use test::{assert, assert_eq}
+use std::stream::seek::{Cursor, SeekFrom}
+
+@test
+func test_cursor_from_str() -> I32 {
+    let cur = Cursor::from_str("hello")
+    assert_eq(cur.len(), 5, "len should be 5")
+    assert_eq(cur.position(), 0, "initial pos should be 0")
+    assert_eq(cur.remaining(), 5, "remaining should be 5")
+    assert(not cur.is_eof(), "should not be eof")
+    return 0
+}
+
+@test
+func test_cursor_read_byte() -> I32 {
+    var cur = Cursor::from_str("ABC")
+    when cur.read_byte() {
+        Just(b) => assert_eq(b as I64, 65, "first byte = A"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    assert_eq(cur.position(), 1, "pos after read")
+    when cur.read_byte() {
+        Just(b) => assert_eq(b as I64, 66, "second byte = B"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_seek_start() -> I32 {
+    var cur = Cursor::from_str("hello world")
+    let result = cur.seek(SeekFrom::Start(6))
+    when result {
+        Ok(pos) => assert_eq(pos, 6, "seek to 6"),
+        Err(e) => assert(false, "seek should not fail"),
+    }
+    assert_eq(cur.position(), 6, "position after seek")
+    when cur.read_byte() {
+        Just(b) => assert_eq(b as I64, 119, "byte at 6 = 'w'"),
+        Nothing => assert(false, "should read byte"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_seek_current() -> I32 {
+    var cur = Cursor::from_str("abcdef")
+    cur.read_byte()  // pos = 1
+    cur.read_byte()  // pos = 2
+    let result = cur.seek(SeekFrom::Current(2))
+    when result {
+        Ok(pos) => assert_eq(pos, 4, "seek current +2 from 2 = 4"),
+        Err(e) => assert(false, "seek should not fail"),
+    }
+    when cur.read_byte() {
+        Just(b) => assert_eq(b as I64, 101, "byte at 4 = 'e'"),
+        Nothing => assert(false, "should read byte"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_seek_end() -> I32 {
+    var cur = Cursor::from_str("test")
+    let result = cur.seek(SeekFrom::End(-1))
+    when result {
+        Ok(pos) => assert_eq(pos, 3, "seek end -1 = 3"),
+        Err(e) => assert(false, "seek should not fail"),
+    }
+    when cur.read_byte() {
+        Just(b) => assert_eq(b as I64, 116, "last byte = 't'"),
+        Nothing => assert(false, "should read byte"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_seek_negative_error() -> I32 {
+    var cur = Cursor::from_str("abc")
+    let result = cur.seek(SeekFrom::Start(-1))
+    when result {
+        Ok(pos) => assert(false, "should fail on negative seek"),
+        Err(e) => assert(true, "correctly rejected negative seek"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_seek_past_end_error() -> I32 {
+    var cur = Cursor::from_str("abc")
+    let result = cur.seek(SeekFrom::Start(100))
+    when result {
+        Ok(pos) => assert(false, "should fail on seek past end"),
+        Err(e) => assert(true, "correctly rejected seek past end"),
+    }
+    return 0
+}
+
+@test
+func test_cursor_reset() -> I32 {
+    var cur = Cursor::from_str("hello")
+    cur.read_byte()
+    cur.read_byte()
+    assert_eq(cur.position(), 2, "pos = 2")
+    cur.reset()
+    assert_eq(cur.position(), 0, "pos = 0 after reset")
+    return 0
+}
+
+@test
+func test_cursor_peek_byte() -> I32 {
+    var cur = Cursor::from_str("XY")
+    when cur.peek_byte() {
+        Just(b) => assert_eq(b as I64, 88, "peek = X"),
+        Nothing => assert(false, "should peek"),
+    }
+    assert_eq(cur.position(), 0, "peek should not advance")
+    return 0
+}
+
+@test
+func test_cursor_eof() -> I32 {
+    var cur = Cursor::from_str("ab")
+    cur.read_byte()
+    cur.read_byte()
+    assert(cur.is_eof(), "should be eof")
+    when cur.read_byte() {
+        Just(b) => assert(false, "should not read past eof"),
+        Nothing => assert(true, "correctly returned Nothing"),
+    }
+    return 0
+}

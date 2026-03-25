@@ -1,0 +1,149 @@
+/// Seek — Random access I/O behavior and Cursor type.
+///
+/// Provides the ability to move the read/write cursor within a stream.
+/// Includes `Cursor` — an in-memory seekable stream over a byte buffer.
+
+use core::error::{IoError, IoErrorKind}
+
+// ============================================================================
+// SeekFrom — Where to seek from
+// ============================================================================
+
+/// Specifies the reference point for a seek operation.
+pub type SeekFrom {
+    /// Seek from the beginning. Offset must be >= 0.
+    Start(I64),
+    /// Seek from the end. Offset is typically <= 0.
+    End(I64),
+    /// Seek relative to current position.
+    Current(I64),
+}
+
+// ============================================================================
+// Seek behavior
+// ============================================================================
+
+/// A stream that supports random access.
+pub behavior Seek {
+    /// Move the cursor. Returns the new absolute position.
+    func seek(mut this, pos: SeekFrom) -> Outcome[I64, IoError]
+}
+
+// ============================================================================
+// Cursor — In-memory seekable byte stream
+// ============================================================================
+
+/// An in-memory buffer with a seekable read position.
+///
+/// Wraps a raw byte pointer + length with a movable cursor.
+/// Created from a Str (borrows its bytes) or from raw data.
+///
+/// ```tml
+/// var cur = Cursor::from_str("hello world")
+/// cur.seek(SeekFrom::Start(6))
+/// let byte = cur.read_byte()  // 'w'
+/// ```
+pub type Cursor {
+    data: *U8,
+    len: I64,
+    pos: I64,
+}
+
+impl Cursor {
+    /// Create a Cursor over a string's bytes.
+    pub func from_str(s: Str) -> Cursor {
+        return Cursor { data: s as *U8, len: s.len(), pos: 0 }
+    }
+
+    /// Create a Cursor from raw data pointer and length.
+    pub func from_raw(data: *U8, len: I64) -> Cursor {
+        return Cursor { data: data, len: len, pos: 0 }
+    }
+
+    /// Current cursor position.
+    pub func position(this) -> I64 {
+        return this.pos
+    }
+
+    /// Total length of underlying data.
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Remaining bytes from cursor to end.
+    pub func remaining(this) -> I64 {
+        return this.len - this.pos
+    }
+
+    /// Whether cursor is at or past the end.
+    pub func is_eof(this) -> Bool {
+        return this.pos >= this.len
+    }
+
+    /// Read a single byte at current position and advance.
+    pub func read_byte(mut this) -> Maybe[U8] {
+        if this.pos >= this.len {
+            return Nothing
+        }
+        let byte = lowlevel { ptr_read[U8](ptr_offset[U8](this.data, this.pos)) }
+        this.pos = this.pos + 1
+        return Just(byte)
+    }
+
+    /// Peek at the byte at current position without advancing.
+    pub func peek_byte(this) -> Maybe[U8] {
+        if this.pos >= this.len {
+            return Nothing
+        }
+        let byte = lowlevel { ptr_read[U8](ptr_offset[U8](this.data, this.pos)) }
+        return Just(byte)
+    }
+
+    /// Set position directly (unchecked).
+    pub func set_position(mut this, pos: I64) {
+        this.pos = pos
+    }
+
+    /// Reset to beginning.
+    pub func reset(mut this) {
+        this.pos = 0
+    }
+}
+
+impl Seek for Cursor {
+    pub func seek(mut this, pos: SeekFrom) -> Outcome[I64, IoError] {
+        let new_pos: I64 = when pos {
+            Start(offset) => offset,
+            End(offset) => this.len + offset,
+            Current(offset) => this.pos + offset,
+        }
+        if new_pos < 0 {
+            return Err(IoError::with_message(
+                IoErrorKind::InvalidInput,
+                "seek to negative position"
+            ))
+        }
+        if new_pos > this.len {
+            return Err(IoError::with_message(
+                IoErrorKind::InvalidInput,
+                "seek past end of stream"
+            ))
+        }
+        this.pos = new_pos
+        return Ok(new_pos)
+    }
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Get the current position. Equivalent to `seek(Current(0))`.
+pub func stream_position[S: Seek](s: mut ref S) -> Outcome[I64, IoError] {
+    return s.seek(SeekFrom::Current(0))
+}
+
+/// Reset to the beginning. Equivalent to `seek(Start(0))`.
+pub func rewind[S: Seek](s: mut ref S) -> Outcome[I64, IoError] {
+    return s.seek(SeekFrom::Start(0))
+}
