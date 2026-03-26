@@ -41,6 +41,7 @@ pub type List[T] {
 
 impl[T] List[T] {
     /// Creates a new list with the specified initial capacity.
+    /// Call with `List[T]::new(8)` for specific capacity or `List[T]::new(0)` for default.
     pub func new(initial_capacity: I64) -> List[T] {
         // Ensure minimum capacity of 4
         var cap: I64 = initial_capacity
