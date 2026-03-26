@@ -92,6 +92,30 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_path(expr.as<parser::PathExpr>());
     } else if (expr.is<parser::MethodCallExpr>()) {
         result = gen_method_call(expr.as<parser::MethodCallExpr>());
+        // Mark struct arguments as consumed (moved) to prevent double-free.
+        // When a struct with droppable fields (e.g. FileReport with List[Violation])
+        // is passed by value to a method like push(), the method takes ownership.
+        // Without this, emit_scope_drops() would drop the local variable's fields,
+        // leaving the collection with dangling pointers (heap corruption).
+        for (const auto& arg : expr.as<parser::MethodCallExpr>().args) {
+            if (arg->is<parser::IdentExpr>()) {
+                const auto& ident = arg->as<parser::IdentExpr>();
+                // Check ALL scopes for a pending drop (struct with droppable fields).
+                // The variable may be in any parent scope, not just the innermost.
+                for (const auto& scope : drop_scopes_) {
+                    bool found = false;
+                    for (const auto& di : scope) {
+                        if (di.var_name == ident.name && (di.needs_field_drops || di.is_heap_str)) {
+                            mark_var_consumed(ident.name);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found)
+                        break;
+                }
+            }
+        }
     } else if (expr.is<parser::ClosureExpr>()) {
         return gen_closure(expr.as<parser::ClosureExpr>());
     } else if (expr.is<parser::LowlevelExpr>()) {
