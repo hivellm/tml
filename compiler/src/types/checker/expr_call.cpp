@@ -161,15 +161,21 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
         const auto& path = call.callee->as<parser::PathExpr>();
         if (path.path.segments.size() == 1) {
             const std::string& name = path.path.segments[0];
-            // List of intrinsics that take a type parameter and return I64
-            if (name == "type_id" || name == "size_of" || name == "align_of") {
-                // These intrinsics take a type parameter [T] and return I64
-                // The type argument is validated by codegen, we just need to return the right type
+            // Compiler intrinsics that take a type parameter [T] and return I64
+            if (name == "type_id" || name == "size_of" || name == "align_of" ||
+                name == "field_count" || name == "variant_count" || name == "field_type_id" ||
+                name == "field_offset" || name == "method_count") {
                 return make_primitive(PrimitiveKind::I64);
             }
-            // type_name[T]() returns Str
-            if (name == "type_name") {
+            // Compiler intrinsics returning Str
+            if (name == "type_name" || name == "field_name" || name == "base_class" ||
+                name == "method_name") {
                 return make_primitive(PrimitiveKind::Str);
+            }
+            // OOP reflection intrinsics returning Bool
+            if (name == "is_abstract" || name == "is_sealed" || name == "is_virtual" ||
+                name == "is_override" || name == "is_static_method") {
+                return make_primitive(PrimitiveKind::Bool);
             }
 
             // Handle generic free function calls with explicit type args: func[T](args)

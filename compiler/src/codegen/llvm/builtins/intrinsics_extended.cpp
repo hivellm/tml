@@ -1258,6 +1258,182 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
         return "0";
     }
 
+    // ========================================================================
+    // OOP Reflection Intrinsics
+    // ========================================================================
+
+    // Helper: extract type name from generic parameter [T]
+    auto extract_class_type_name = [&]() -> std::string {
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    if (resolved->is<types::NamedType>()) {
+                        return resolved->as<types::NamedType>().name;
+                    }
+                }
+            }
+        }
+        return "";
+    };
+
+    // base_class[T]() -> Str
+    // Returns the base class name, or "" if no base class
+    if (intrinsic_name == "base_class") {
+        std::string type_name = extract_class_type_name();
+        std::string base;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value() && class_def->base_class.has_value()) {
+                base = *class_def->base_class;
+            }
+        }
+        if (base.empty()) {
+            last_expr_type_ = "ptr";
+            return "null";
+        }
+        // Emit string constant for the base class name
+        std::string str_const = add_string_literal(base);
+        last_expr_type_ = "ptr";
+        return str_const;
+    }
+
+    // is_abstract[T]() -> Bool
+    if (intrinsic_name == "is_abstract") {
+        std::string type_name = extract_class_type_name();
+        bool result = false;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value()) {
+                result = class_def->is_abstract;
+            }
+        }
+        last_expr_type_ = "i1";
+        return result ? "true" : "false";
+    }
+
+    // is_sealed[T]() -> Bool
+    if (intrinsic_name == "is_sealed") {
+        std::string type_name = extract_class_type_name();
+        bool result = false;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value()) {
+                result = class_def->is_sealed;
+            }
+        }
+        last_expr_type_ = "i1";
+        return result ? "true" : "false";
+    }
+
+    // method_count[T]() -> I64
+    // Returns the number of methods (including inherited) in a class
+    if (intrinsic_name == "method_count") {
+        std::string type_name = extract_class_type_name();
+        size_t count = 0;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value()) {
+                count = class_def->methods.size();
+            }
+        }
+        last_expr_type_ = "i64";
+        return std::to_string(count);
+    }
+
+    // method_name[T](index: I64) -> Str
+    // Returns the name of the method at the given index
+    if (intrinsic_name == "method_name") {
+        std::string type_name = extract_class_type_name();
+        size_t index = 0;
+        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
+            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+            }
+        }
+        std::string name;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value() && index < class_def->methods.size()) {
+                name = class_def->methods[index].sig.name;
+            }
+        }
+        if (name.empty()) {
+            last_expr_type_ = "ptr";
+            return "null";
+        }
+        std::string str_const = add_string_literal(name);
+        last_expr_type_ = "ptr";
+        return str_const;
+    }
+
+    // is_virtual[T](index: I64) -> Bool
+    if (intrinsic_name == "is_virtual") {
+        std::string type_name = extract_class_type_name();
+        size_t index = 0;
+        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
+            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+            }
+        }
+        bool result = false;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value() && index < class_def->methods.size()) {
+                result = class_def->methods[index].is_virtual;
+            }
+        }
+        last_expr_type_ = "i1";
+        return result ? "true" : "false";
+    }
+
+    // is_override[T](index: I64) -> Bool
+    if (intrinsic_name == "is_override") {
+        std::string type_name = extract_class_type_name();
+        size_t index = 0;
+        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
+            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+            }
+        }
+        bool result = false;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value() && index < class_def->methods.size()) {
+                result = class_def->methods[index].is_override;
+            }
+        }
+        last_expr_type_ = "i1";
+        return result ? "true" : "false";
+    }
+
+    // is_static_method[T](index: I64) -> Bool
+    if (intrinsic_name == "is_static_method") {
+        std::string type_name = extract_class_type_name();
+        size_t index = 0;
+        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
+            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+            }
+        }
+        bool result = false;
+        if (!type_name.empty()) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value() && index < class_def->methods.size()) {
+                result = class_def->methods[index].is_static;
+            }
+        }
+        last_expr_type_ = "i1";
+        return result ? "true" : "false";
+    }
+
     // Intrinsic not implemented - return nullopt to fall through
     return std::nullopt;
 }

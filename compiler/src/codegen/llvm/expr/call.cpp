@@ -418,6 +418,111 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
     }
 
+    // ============ OOP REFLECTION INTRINSICS ============
+    // Handle intrinsics like is_abstract[T](), method_count[T](), method_name[T](i), etc.
+    // These are compile-time intrinsics that query ClassDef metadata.
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& pe = call.callee->as<parser::PathExpr>();
+        if (pe.path.segments.size() == 1 && pe.generics.has_value() && !pe.generics->args.empty()) {
+            const std::string& iname = pe.path.segments[0];
+
+            // Extract the type name from the generic argument
+            auto extract_type = [&]() -> std::string {
+                const auto& first_arg = pe.generics->args[0];
+                if (first_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    if (resolved->is<types::NamedType>()) {
+                        return resolved->as<types::NamedType>().name;
+                    }
+                }
+                return "";
+            };
+
+            // Extract integer argument (for method_name[T](0))
+            auto extract_index = [&]() -> size_t {
+                if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
+                    const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+                    if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                        return static_cast<size_t>(
+                            std::get<lexer::IntValue>(lit.token.value).value);
+                    }
+                }
+                return 0;
+            };
+
+            if (iname == "is_abstract" || iname == "is_sealed") {
+                std::string type_name = extract_type();
+                bool result = false;
+                if (!type_name.empty()) {
+                    auto cd = env_.lookup_class(type_name);
+                    if (cd.has_value()) {
+                        result = (iname == "is_abstract") ? cd->is_abstract : cd->is_sealed;
+                    }
+                }
+                last_expr_type_ = "i1";
+                return result ? "true" : "false";
+            }
+
+            if (iname == "method_count") {
+                std::string type_name = extract_type();
+                size_t count = 0;
+                if (!type_name.empty()) {
+                    auto cd = env_.lookup_class(type_name);
+                    if (cd.has_value()) {
+                        count = cd->methods.size();
+                    }
+                }
+                last_expr_type_ = "i64";
+                return std::to_string(count);
+            }
+
+            if (iname == "base_class" || iname == "method_name") {
+                std::string type_name = extract_type();
+                std::string str_val;
+                if (!type_name.empty()) {
+                    auto cd = env_.lookup_class(type_name);
+                    if (cd.has_value()) {
+                        if (iname == "base_class" && cd->base_class.has_value()) {
+                            str_val = *cd->base_class;
+                        } else if (iname == "method_name") {
+                            size_t idx = extract_index();
+                            if (idx < cd->methods.size()) {
+                                str_val = cd->methods[idx].sig.name;
+                            }
+                        }
+                    }
+                }
+                if (str_val.empty()) {
+                    last_expr_type_ = "ptr";
+                    return "null";
+                }
+                last_expr_type_ = "ptr";
+                return add_string_literal(str_val);
+            }
+
+            if (iname == "is_virtual" || iname == "is_override" || iname == "is_static_method") {
+                std::string type_name = extract_type();
+                size_t idx = extract_index();
+                bool result = false;
+                if (!type_name.empty()) {
+                    auto cd = env_.lookup_class(type_name);
+                    if (cd.has_value() && idx < cd->methods.size()) {
+                        if (iname == "is_virtual") {
+                            result = cd->methods[idx].is_virtual;
+                        } else if (iname == "is_override") {
+                            result = cd->methods[idx].is_override;
+                        } else {
+                            result = cd->methods[idx].is_static;
+                        }
+                    }
+                }
+                last_expr_type_ = "i1";
+                return result ? "true" : "false";
+            }
+        }
+    }
+
     // ============ PRIMITIVE TYPE STATIC METHODS ============
     // Handle Type::default() calls for primitive types
     if (call.callee->is<parser::PathExpr>()) {
