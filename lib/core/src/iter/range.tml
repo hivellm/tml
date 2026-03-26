@@ -84,6 +84,7 @@ pub behavior Step {
 // ============================================================================
 
 impl Step for I8 {
+    /// Returns the number of steps from `start` to `end` for `I8` values.
     pub func steps_between(start: ref I8, end: ref I8) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -91,6 +92,7 @@ impl Step for I8 {
         return Nothing
     }
 
+    /// Returns this `I8` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[I8] {
         if count < 0 {
             return Nothing
@@ -103,6 +105,7 @@ impl Step for I8 {
         return Just(result as I8)
     }
 
+    /// Returns this `I8` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[I8] {
         if count < 0 {
             return Nothing
@@ -117,6 +120,7 @@ impl Step for I8 {
 }
 
 impl Step for I16 {
+    /// Returns the number of steps from `start` to `end` for `I16` values.
     pub func steps_between(start: ref I16, end: ref I16) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -124,6 +128,7 @@ impl Step for I16 {
         return Nothing
     }
 
+    /// Returns this `I16` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[I16] {
         if count < 0 {
             return Nothing
@@ -136,6 +141,7 @@ impl Step for I16 {
         return Just(result as I16)
     }
 
+    /// Returns this `I16` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[I16] {
         if count < 0 {
             return Nothing
@@ -150,6 +156,7 @@ impl Step for I16 {
 }
 
 impl Step for I32 {
+    /// Returns the number of steps from `start` to `end` for `I32` values.
     pub func steps_between(start: ref I32, end: ref I32) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -157,6 +164,7 @@ impl Step for I32 {
         return Nothing
     }
 
+    /// Returns this `I32` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[I32] {
         if count < 0 {
             return Nothing
@@ -169,6 +177,7 @@ impl Step for I32 {
         return Just(result as I32)
     }
 
+    /// Returns this `I32` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[I32] {
         if count < 0 {
             return Nothing
@@ -183,6 +192,7 @@ impl Step for I32 {
 }
 
 impl Step for I64 {
+    /// Returns the number of steps from `start` to `end` for `I64` values, checking for overflow.
     pub func steps_between(start: ref I64, end: ref I64) -> Maybe[I64] {
         if *start <= *end {
             // For I64, check for overflow when computing the difference
@@ -201,6 +211,7 @@ impl Step for I64 {
         return Nothing
     }
 
+    /// Returns this `I64` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[I64] {
         if count < 0 {
             return Nothing
@@ -213,6 +224,7 @@ impl Step for I64 {
         return Just(this + count)
     }
 
+    /// Returns this `I64` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[I64] {
         if count < 0 {
             return Nothing
@@ -245,6 +257,7 @@ impl Step for I64 {
 }
 
 impl Step for U8 {
+    /// Returns the number of steps from `start` to `end` for `U8` values.
     pub func steps_between(start: ref U8, end: ref U8) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -252,6 +265,7 @@ impl Step for U8 {
         return Nothing
     }
 
+    /// Returns this `U8` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[U8] {
         if count < 0 {
             return Nothing
@@ -264,6 +278,7 @@ impl Step for U8 {
         return Just(result as U8)
     }
 
+    /// Returns this `U8` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[U8] {
         if count < 0 {
             return Nothing
@@ -277,6 +292,7 @@ impl Step for U8 {
 }
 
 impl Step for U16 {
+    /// Returns the number of steps from `start` to `end` for `U16` values.
     pub func steps_between(start: ref U16, end: ref U16) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -284,6 +300,7 @@ impl Step for U16 {
         return Nothing
     }
 
+    /// Returns this `U16` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[U16] {
         if count < 0 {
             return Nothing
@@ -296,6 +313,7 @@ impl Step for U16 {
         return Just(result as U16)
     }
 
+    /// Returns this `U16` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[U16] {
         if count < 0 {
             return Nothing
@@ -309,6 +327,7 @@ impl Step for U16 {
 }
 
 impl Step for U32 {
+    /// Returns the number of steps from `start` to `end` for `U32` values.
     pub func steps_between(start: ref U32, end: ref U32) -> Maybe[I64] {
         if *start <= *end {
             return Just((*end - *start) as I64)
@@ -316,6 +335,7 @@ impl Step for U32 {
         return Nothing
     }
 
+    /// Returns this `U32` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[U32] {
         if count < 0 {
             return Nothing
@@ -328,6 +348,7 @@ impl Step for U32 {
         return Just(result as U32)
     }
 
+    /// Returns this `U32` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[U32] {
         if count < 0 {
             return Nothing
@@ -341,6 +362,7 @@ impl Step for U32 {
 }
 
 impl Step for U64 {
+    /// Returns the number of steps from `start` to `end` for `U64` values, or `Nothing` if the count exceeds `I64::MAX`.
     pub func steps_between(start: ref U64, end: ref U64) -> Maybe[I64] {
         if *start <= *end {
             let diff: U64 = *end - *start
@@ -354,6 +376,7 @@ impl Step for U64 {
         return Nothing
     }
 
+    /// Returns this `U64` value advanced forward by `count`, or `Nothing` on overflow.
     pub func forward_checked(this, count: I64) -> Maybe[U64] {
         if count < 0 {
             return Nothing
@@ -370,6 +393,7 @@ impl Step for U64 {
         return Just(this + count_u64)
     }
 
+    /// Returns this `U64` value moved backward by `count`, or `Nothing` on underflow.
     pub func backward_checked(this, count: I64) -> Maybe[U64] {
         if count < 0 {
             return Nothing

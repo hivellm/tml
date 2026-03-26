@@ -151,52 +151,72 @@ pub behavior UnsignedInteger: Integer {}
 // ============================================================================
 
 impl Zero for I8 {
+    /// Returns the zero value for `I8` (0).
     pub func zero() -> I8 { return 0 }
+    /// Returns `true` if this `I8` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for I16 {
+    /// Returns the zero value for `I16` (0).
     pub func zero() -> I16 { return 0 }
+    /// Returns `true` if this `I16` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for I32 {
+    /// Returns the zero value for `I32` (0).
     pub func zero() -> I32 { return 0 }
+    /// Returns `true` if this `I32` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for I64 {
+    /// Returns the zero value for `I64` (0).
     pub func zero() -> I64 { return 0 }
+    /// Returns `true` if this `I64` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for U8 {
+    /// Returns the zero value for `U8` (0).
     pub func zero() -> U8 { return 0 }
+    /// Returns `true` if this `U8` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for U16 {
+    /// Returns the zero value for `U16` (0).
     pub func zero() -> U16 { return 0 }
+    /// Returns `true` if this `U16` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for U32 {
+    /// Returns the zero value for `U32` (0).
     pub func zero() -> U32 { return 0 }
+    /// Returns `true` if this `U32` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for U64 {
+    /// Returns the zero value for `U64` (0).
     pub func zero() -> U64 { return 0 }
+    /// Returns `true` if this `U64` value is zero.
     pub func is_zero(this) -> Bool { return this == 0 }
 }
 
 impl Zero for F32 {
+    /// Returns the zero value for `F32` (0.0).
     pub func zero() -> F32 { return 0.0 }
+    /// Returns `true` if this `F32` value is zero.
     pub func is_zero(this) -> Bool { return this == 0.0 }
 }
 
 impl Zero for F64 {
+    /// Returns the zero value for `F64` (0.0).
     pub func zero() -> F64 { return 0.0 }
+    /// Returns `true` if this `F64` value is zero.
     pub func is_zero(this) -> Bool { return this == 0.0 }
 }
 
@@ -205,52 +225,72 @@ impl Zero for F64 {
 // ============================================================================
 
 impl One for I8 {
+    /// Returns the one value for `I8` (1).
     pub func one() -> I8 { return 1 }
+    /// Returns `true` if this `I8` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for I16 {
+    /// Returns the one value for `I16` (1).
     pub func one() -> I16 { return 1 }
+    /// Returns `true` if this `I16` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for I32 {
+    /// Returns the one value for `I32` (1).
     pub func one() -> I32 { return 1 }
+    /// Returns `true` if this `I32` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for I64 {
+    /// Returns the one value for `I64` (1).
     pub func one() -> I64 { return 1 }
+    /// Returns `true` if this `I64` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for U8 {
+    /// Returns the one value for `U8` (1).
     pub func one() -> U8 { return 1 }
+    /// Returns `true` if this `U8` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for U16 {
+    /// Returns the one value for `U16` (1).
     pub func one() -> U16 { return 1 }
+    /// Returns `true` if this `U16` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for U32 {
+    /// Returns the one value for `U32` (1).
     pub func one() -> U32 { return 1 }
+    /// Returns `true` if this `U32` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for U64 {
+    /// Returns the one value for `U64` (1).
     pub func one() -> U64 { return 1 }
+    /// Returns `true` if this `U64` value is one.
     pub func is_one(this) -> Bool { return this == 1 }
 }
 
 impl One for F32 {
+    /// Returns the one value for `F32` (1.0).
     pub func one() -> F32 { return 1.0 }
+    /// Returns `true` if this `F32` value is one.
     pub func is_one(this) -> Bool { return this == 1.0 }
 }
 
 impl One for F64 {
+    /// Returns the one value for `F64` (1.0).
     pub func one() -> F64 { return 1.0 }
+    /// Returns `true` if this `F64` value is one.
     pub func is_one(this) -> Bool { return this == 1.0 }
 }
 
@@ -259,42 +299,58 @@ impl One for F64 {
 // ============================================================================
 
 impl Bounded for I8 {
+    /// Returns the minimum value of `I8` (-128).
     pub func min_value() -> I8 { return -128 }
+    /// Returns the maximum value of `I8` (127).
     pub func max_value() -> I8 { return 127 }
 }
 
 impl Bounded for I16 {
+    /// Returns the minimum value of `I16` (-32768).
     pub func min_value() -> I16 { return -32768 }
+    /// Returns the maximum value of `I16` (32767).
     pub func max_value() -> I16 { return 32767 }
 }
 
 impl Bounded for I32 {
+    /// Returns the minimum value of `I32` (-2147483648).
     pub func min_value() -> I32 { return -2147483648 }
+    /// Returns the maximum value of `I32` (2147483647).
     pub func max_value() -> I32 { return 2147483647 }
 }
 
 impl Bounded for I64 {
+    /// Returns the minimum value of `I64` (-9223372036854775808).
     pub func min_value() -> I64 { return -9223372036854775808 }
+    /// Returns the maximum value of `I64` (9223372036854775807).
     pub func max_value() -> I64 { return 9223372036854775807 }
 }
 
 impl Bounded for U8 {
+    /// Returns the minimum value of `U8` (0).
     pub func min_value() -> U8 { return 0 }
+    /// Returns the maximum value of `U8` (255).
     pub func max_value() -> U8 { return 255 }
 }
 
 impl Bounded for U16 {
+    /// Returns the minimum value of `U16` (0).
     pub func min_value() -> U16 { return 0 }
+    /// Returns the maximum value of `U16` (65535).
     pub func max_value() -> U16 { return 65535 }
 }
 
 impl Bounded for U32 {
+    /// Returns the minimum value of `U32` (0).
     pub func min_value() -> U32 { return 0 }
+    /// Returns the maximum value of `U32` (4294967295).
     pub func max_value() -> U32 { return 4294967295 }
 }
 
 impl Bounded for U64 {
+    /// Returns the minimum value of `U64` (0).
     pub func min_value() -> U64 { return 0 }
+    /// Returns the maximum value of `U64` (18446744073709551615).
     pub func max_value() -> U64 { return 18446744073709551615 }
 }
 

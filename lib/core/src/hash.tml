@@ -102,6 +102,7 @@ pub behavior Hash {
 
 /// `Hash` for `I8` - extends to `I64` for the hash value.
 impl Hash for I8 {
+    /// Returns this `I8` value sign-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -109,6 +110,7 @@ impl Hash for I8 {
 
 /// `Hash` for `I16` - extends to `I64` for the hash value.
 impl Hash for I16 {
+    /// Returns this `I16` value sign-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -116,6 +118,7 @@ impl Hash for I16 {
 
 /// `Hash` for `I32` - extends to `I64` for the hash value.
 impl Hash for I32 {
+    /// Returns this `I32` value sign-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -123,6 +126,7 @@ impl Hash for I32 {
 
 /// `Hash` for `I64` - the value is its own hash.
 impl Hash for I64 {
+    /// Returns this `I64` value as its own hash.
     pub func hash(this) -> I64 {
         return this
     }
@@ -130,6 +134,7 @@ impl Hash for I64 {
 
 /// `Hash` for `U8` - extends to `I64` for the hash value.
 impl Hash for U8 {
+    /// Returns this `U8` value zero-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -137,6 +142,7 @@ impl Hash for U8 {
 
 /// `Hash` for `U16` - extends to `I64` for the hash value.
 impl Hash for U16 {
+    /// Returns this `U16` value zero-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -144,6 +150,7 @@ impl Hash for U16 {
 
 /// `Hash` for `U32` - extends to `I64` for the hash value.
 impl Hash for U32 {
+    /// Returns this `U32` value zero-extended to `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -151,6 +158,7 @@ impl Hash for U32 {
 
 /// `Hash` for `U64` - converts to `I64` for the hash value.
 impl Hash for U64 {
+    /// Returns this `U64` value reinterpreted as `I64` as its hash.
     pub func hash(this) -> I64 {
         return this as I64
     }
@@ -158,6 +166,7 @@ impl Hash for U64 {
 
 /// `Hash` for `Bool` - `true` hashes to `1`, `false` to `0`.
 impl Hash for Bool {
+    /// Returns `1` if `true`, `0` if `false`.
     pub func hash(this) -> I64 {
         if this {
             return 1
@@ -170,6 +179,7 @@ impl Hash for Bool {
 ///
 /// Equal strings always produce equal hashes.
 impl Hash for Str {
+    /// Computes an FNV-1a hash over the string's bytes, returning the result as `I64`.
     pub func hash(this) -> I64 {
         // FNV-1a hash over string bytes (pure TML, no C runtime)
         let addr: I64 = this as I64
@@ -201,6 +211,7 @@ impl Hash for Str {
 /// - `Nothing` hashes to `0`
 /// - `Just(v)` combines `v.hash()` with a discriminant to avoid collisions
 impl[T: Hash] Hash for Maybe[T] {
+    /// Returns `0` for `Nothing`, or a combination of the inner value's hash and a discriminant for `Just`.
     pub func hash(this) -> I64 {
         when this {
             Just(val) => {
@@ -225,6 +236,7 @@ impl[T: Hash] Hash for Maybe[T] {
 /// - `Ok(v)` combines `v.hash()` with discriminant 1
 /// - `Err(e)` combines `e.hash()` with discriminant 2
 impl[T: Hash, E: Hash] Hash for Outcome[T, E] {
+    /// Combines the inner value's hash with a variant discriminant to distinguish `Ok` from `Err`.
     pub func hash(this) -> I64 {
         when this {
             Ok(val) => {
@@ -406,6 +418,7 @@ impl DefaultHasher {
 }
 
 impl Hasher for DefaultHasher {
+    /// Feeds a byte slice into the FNV-1a hasher, mixing each byte into the state.
     pub func write(mut this, bytes: ref [U8]) {
         var i: I64 = 0
         let len: I64 = bytes.len()
@@ -416,11 +429,13 @@ impl Hasher for DefaultHasher {
         }
     }
 
+    /// Feeds a single byte into the FNV-1a hasher.
     pub func write_u8(mut this, value: U8) {
         this.state = this.state ^ (value as U64)
         this.state = this.state.wrapping_mul(FNV_PRIME)
     }
 
+    /// Feeds an `I32` value into the hasher by writing its four bytes in little-endian order.
     pub func write_i32(mut this, value: I32) {
         // Write each byte of the I32
         let v: U32 = value as U32
@@ -430,6 +445,7 @@ impl Hasher for DefaultHasher {
         this.write_u8(((v >> 24) & 0xFF) as U8)
     }
 
+    /// Feeds an `I64` value into the hasher by writing its eight bytes in little-endian order.
     pub func write_i64(mut this, value: I64) {
         // Write each byte of the I64
         let v: U64 = value as U64
@@ -443,18 +459,21 @@ impl Hasher for DefaultHasher {
         this.write_u8(((v >> 56) & 0xFF) as U8)
     }
 
+    /// Returns the current FNV-1a hash state as an `I64`.
     pub func finish(this) -> I64 {
         return this.state as I64
     }
 }
 
 impl Default for DefaultHasher {
+    /// Returns a new `DefaultHasher` initialized with the FNV-1a offset basis.
     pub func default() -> DefaultHasher {
         return DefaultHasher { state: FNV_OFFSET_BASIS }
     }
 }
 
 impl Duplicate for DefaultHasher {
+    /// Creates a copy of this `DefaultHasher` with the same internal state.
     pub func duplicate(this) -> DefaultHasher {
         return DefaultHasher { state: this.state }
     }
@@ -514,18 +533,21 @@ impl RandomState {
 impl BuildHasher for RandomState {
     type Hasher = DefaultHasher
 
+    /// Creates a new `DefaultHasher` seeded from the random keys of this `RandomState`.
     pub func build_hasher(this) -> DefaultHasher {
         return DefaultHasher::with_seed(this.k0 ^ this.k1)
     }
 }
 
 impl Default for RandomState {
+    /// Returns a new `RandomState` initialized with fresh random keys.
     pub func default() -> RandomState {
         return RandomState::new()
     }
 }
 
 impl Duplicate for RandomState {
+    /// Creates a copy of this `RandomState` with the same random keys.
     pub func duplicate(this) -> RandomState {
         return RandomState { k0: this.k0, k1: this.k1 }
     }

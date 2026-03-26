@@ -144,6 +144,7 @@ pub behavior ShrAssign[Rhs] {
 
 /// Logical negation for `Bool`.
 impl Not for Bool {
+    /// Performs bitwise NOT on the Bool value.
     pub func negate(this) -> Bool {
         return not this
     }
@@ -155,6 +156,7 @@ impl Not for Bool {
 
 /// `I8 & I8 -> I8`
 impl BitAnd for I8 {
+    /// Performs bitwise AND on two I8 values.
     pub func bitand(this, rhs: I8) -> I8 {
         return this & rhs
     }
@@ -162,6 +164,7 @@ impl BitAnd for I8 {
 
 /// `I16 & I16 -> I16`
 impl BitAnd for I16 {
+    /// Performs bitwise AND on two I16 values.
     pub func bitand(this, rhs: I16) -> I16 {
         return this & rhs
     }
@@ -169,6 +172,7 @@ impl BitAnd for I16 {
 
 /// `I32 & I32 -> I32`
 impl BitAnd for I32 {
+    /// Performs bitwise AND on two I32 values.
     pub func bitand(this, rhs: I32) -> I32 {
         return this & rhs
     }
@@ -176,6 +180,7 @@ impl BitAnd for I32 {
 
 /// `I64 & I64 -> I64`
 impl BitAnd for I64 {
+    /// Performs bitwise AND on two I64 values.
     pub func bitand(this, rhs: I64) -> I64 {
         return this & rhs
     }
@@ -183,6 +188,7 @@ impl BitAnd for I64 {
 
 /// `U8 & U8 -> U8`
 impl BitAnd for U8 {
+    /// Performs bitwise AND on two U8 values.
     pub func bitand(this, rhs: U8) -> U8 {
         return this & rhs
     }
@@ -190,6 +196,7 @@ impl BitAnd for U8 {
 
 /// `U16 & U16 -> U16`
 impl BitAnd for U16 {
+    /// Performs bitwise AND on two U16 values.
     pub func bitand(this, rhs: U16) -> U16 {
         return this & rhs
     }
@@ -197,6 +204,7 @@ impl BitAnd for U16 {
 
 /// `U32 & U32 -> U32`
 impl BitAnd for U32 {
+    /// Performs bitwise AND on two U32 values.
     pub func bitand(this, rhs: U32) -> U32 {
         return this & rhs
     }
@@ -204,6 +212,7 @@ impl BitAnd for U32 {
 
 /// `U64 & U64 -> U64`
 impl BitAnd for U64 {
+    /// Performs bitwise AND on two U64 values.
     pub func bitand(this, rhs: U64) -> U64 {
         return this & rhs
     }
@@ -215,6 +224,7 @@ impl BitAnd for U64 {
 
 /// `I8 | I8 -> I8`
 impl BitOr for I8 {
+    /// Performs bitwise OR on two I8 values.
     pub func bitor(this, rhs: I8) -> I8 {
         return this | rhs
     }
@@ -222,6 +232,7 @@ impl BitOr for I8 {
 
 /// `I16 | I16 -> I16`
 impl BitOr for I16 {
+    /// Performs bitwise OR on two I16 values.
     pub func bitor(this, rhs: I16) -> I16 {
         return this | rhs
     }
@@ -229,6 +240,7 @@ impl BitOr for I16 {
 
 /// `I32 | I32 -> I32`
 impl BitOr for I32 {
+    /// Performs bitwise OR on two I32 values.
     pub func bitor(this, rhs: I32) -> I32 {
         return this | rhs
     }
@@ -236,6 +248,7 @@ impl BitOr for I32 {
 
 /// `I64 | I64 -> I64`
 impl BitOr for I64 {
+    /// Performs bitwise OR on two I64 values.
     pub func bitor(this, rhs: I64) -> I64 {
         return this | rhs
     }
@@ -243,6 +256,7 @@ impl BitOr for I64 {
 
 /// `U8 | U8 -> U8`
 impl BitOr for U8 {
+    /// Performs bitwise OR on two U8 values.
     pub func bitor(this, rhs: U8) -> U8 {
         return this | rhs
     }
@@ -250,6 +264,7 @@ impl BitOr for U8 {
 
 /// `U16 | U16 -> U16`
 impl BitOr for U16 {
+    /// Performs bitwise OR on two U16 values.
     pub func bitor(this, rhs: U16) -> U16 {
         return this | rhs
     }
@@ -257,6 +272,7 @@ impl BitOr for U16 {
 
 /// `U32 | U32 -> U32`
 impl BitOr for U32 {
+    /// Performs bitwise OR on two U32 values.
     pub func bitor(this, rhs: U32) -> U32 {
         return this | rhs
     }
@@ -264,6 +280,7 @@ impl BitOr for U32 {
 
 /// `U64 | U64 -> U64`
 impl BitOr for U64 {
+    /// Performs bitwise OR on two U64 values.
     pub func bitor(this, rhs: U64) -> U64 {
         return this | rhs
     }
@@ -275,6 +292,7 @@ impl BitOr for U64 {
 
 /// `I8 ^ I8 -> I8`
 impl BitXor for I8 {
+    /// Performs bitwise XOR on two I8 values.
     pub func bitxor(this, rhs: I8) -> I8 {
         return this ^ rhs
     }
@@ -282,6 +300,7 @@ impl BitXor for I8 {
 
 /// `I16 ^ I16 -> I16`
 impl BitXor for I16 {
+    /// Performs bitwise XOR on two I16 values.
     pub func bitxor(this, rhs: I16) -> I16 {
         return this ^ rhs
     }
@@ -289,6 +308,7 @@ impl BitXor for I16 {
 
 /// `I32 ^ I32 -> I32`
 impl BitXor for I32 {
+    /// Performs bitwise XOR on two I32 values.
     pub func bitxor(this, rhs: I32) -> I32 {
         return this ^ rhs
     }
@@ -296,6 +316,7 @@ impl BitXor for I32 {
 
 /// `I64 ^ I64 -> I64`
 impl BitXor for I64 {
+    /// Performs bitwise XOR on two I64 values.
     pub func bitxor(this, rhs: I64) -> I64 {
         return this ^ rhs
     }
@@ -303,6 +324,7 @@ impl BitXor for I64 {
 
 /// `U8 ^ U8 -> U8`
 impl BitXor for U8 {
+    /// Performs bitwise XOR on two U8 values.
     pub func bitxor(this, rhs: U8) -> U8 {
         return this ^ rhs
     }
@@ -310,6 +332,7 @@ impl BitXor for U8 {
 
 /// `U16 ^ U16 -> U16`
 impl BitXor for U16 {
+    /// Performs bitwise XOR on two U16 values.
     pub func bitxor(this, rhs: U16) -> U16 {
         return this ^ rhs
     }
@@ -317,6 +340,7 @@ impl BitXor for U16 {
 
 /// `U32 ^ U32 -> U32`
 impl BitXor for U32 {
+    /// Performs bitwise XOR on two U32 values.
     pub func bitxor(this, rhs: U32) -> U32 {
         return this ^ rhs
     }
@@ -324,6 +348,7 @@ impl BitXor for U32 {
 
 /// `U64 ^ U64 -> U64`
 impl BitXor for U64 {
+    /// Performs bitwise XOR on two U64 values.
     pub func bitxor(this, rhs: U64) -> U64 {
         return this ^ rhs
     }
@@ -335,6 +360,7 @@ impl BitXor for U64 {
 
 /// `I8 << I32 -> I8`
 impl Shl for I8 {
+    /// Left-shifts the I8 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> I8 {
         return this << rhs
     }
@@ -342,6 +368,7 @@ impl Shl for I8 {
 
 /// `I16 << I32 -> I16`
 impl Shl for I16 {
+    /// Left-shifts the I16 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> I16 {
         return this << rhs
     }
@@ -349,6 +376,7 @@ impl Shl for I16 {
 
 /// `I32 << I32 -> I32`
 impl Shl for I32 {
+    /// Left-shifts the I32 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> I32 {
         return this << rhs
     }
@@ -356,6 +384,7 @@ impl Shl for I32 {
 
 /// `I64 << I32 -> I64`
 impl Shl for I64 {
+    /// Left-shifts the I64 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> I64 {
         return this << rhs
     }
@@ -363,6 +392,7 @@ impl Shl for I64 {
 
 /// `U8 << I32 -> U8`
 impl Shl for U8 {
+    /// Left-shifts the U8 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> U8 {
         return this << rhs
     }
@@ -370,6 +400,7 @@ impl Shl for U8 {
 
 /// `U16 << I32 -> U16`
 impl Shl for U16 {
+    /// Left-shifts the U16 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> U16 {
         return this << rhs
     }
@@ -377,6 +408,7 @@ impl Shl for U16 {
 
 /// `U32 << I32 -> U32`
 impl Shl for U32 {
+    /// Left-shifts the U32 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> U32 {
         return this << rhs
     }
@@ -384,6 +416,7 @@ impl Shl for U32 {
 
 /// `U64 << I32 -> U64`
 impl Shl for U64 {
+    /// Left-shifts the U64 value by rhs bits.
     pub func shift_left(this, rhs: I32) -> U64 {
         return this << rhs
     }
@@ -395,6 +428,7 @@ impl Shl for U64 {
 
 /// `I8 >> I32 -> I8` (arithmetic shift)
 impl Shr for I8 {
+    /// Right-shifts the I8 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> I8 {
         return this >> rhs
     }
@@ -402,6 +436,7 @@ impl Shr for I8 {
 
 /// `I16 >> I32 -> I16` (arithmetic shift)
 impl Shr for I16 {
+    /// Right-shifts the I16 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> I16 {
         return this >> rhs
     }
@@ -409,6 +444,7 @@ impl Shr for I16 {
 
 /// `I32 >> I32 -> I32` (arithmetic shift)
 impl Shr for I32 {
+    /// Right-shifts the I32 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> I32 {
         return this >> rhs
     }
@@ -416,6 +452,7 @@ impl Shr for I32 {
 
 /// `I64 >> I32 -> I64` (arithmetic shift)
 impl Shr for I64 {
+    /// Right-shifts the I64 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> I64 {
         return this >> rhs
     }
@@ -423,6 +460,7 @@ impl Shr for I64 {
 
 /// `U8 >> I32 -> U8` (logical shift)
 impl Shr for U8 {
+    /// Right-shifts the U8 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> U8 {
         return this >> rhs
     }
@@ -430,6 +468,7 @@ impl Shr for U8 {
 
 /// `U16 >> I32 -> U16` (logical shift)
 impl Shr for U16 {
+    /// Right-shifts the U16 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> U16 {
         return this >> rhs
     }
@@ -437,6 +476,7 @@ impl Shr for U16 {
 
 /// `U32 >> I32 -> U32` (logical shift)
 impl Shr for U32 {
+    /// Right-shifts the U32 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> U32 {
         return this >> rhs
     }
@@ -444,6 +484,7 @@ impl Shr for U32 {
 
 /// `U64 >> I32 -> U64` (logical shift)
 impl Shr for U64 {
+    /// Right-shifts the U64 value by rhs bits.
     pub func shift_right(this, rhs: I32) -> U64 {
         return this >> rhs
     }
@@ -455,6 +496,7 @@ impl Shr for U64 {
 
 /// `I8 &= I8`
 impl BitAndAssign for I8 {
+    /// Performs bitwise AND on two I8 values.
     pub func bitand_assign(mut this, rhs: I8) {
         this = this & rhs
     }
@@ -462,6 +504,7 @@ impl BitAndAssign for I8 {
 
 /// `I16 &= I16`
 impl BitAndAssign for I16 {
+    /// Performs bitwise AND on two I16 values.
     pub func bitand_assign(mut this, rhs: I16) {
         this = this & rhs
     }
@@ -469,6 +512,7 @@ impl BitAndAssign for I16 {
 
 /// `I32 &= I32`
 impl BitAndAssign for I32 {
+    /// Performs bitwise AND on two I32 values.
     pub func bitand_assign(mut this, rhs: I32) {
         this = this & rhs
     }
@@ -476,6 +520,7 @@ impl BitAndAssign for I32 {
 
 /// `I64 &= I64`
 impl BitAndAssign for I64 {
+    /// Performs bitwise AND on two I64 values.
     pub func bitand_assign(mut this, rhs: I64) {
         this = this & rhs
     }
@@ -483,6 +528,7 @@ impl BitAndAssign for I64 {
 
 /// `U8 &= U8`
 impl BitAndAssign for U8 {
+    /// Performs bitwise AND on two U8 values.
     pub func bitand_assign(mut this, rhs: U8) {
         this = this & rhs
     }
@@ -490,6 +536,7 @@ impl BitAndAssign for U8 {
 
 /// `U16 &= U16`
 impl BitAndAssign for U16 {
+    /// Performs bitwise AND on two U16 values.
     pub func bitand_assign(mut this, rhs: U16) {
         this = this & rhs
     }
@@ -497,6 +544,7 @@ impl BitAndAssign for U16 {
 
 /// `U32 &= U32`
 impl BitAndAssign for U32 {
+    /// Performs bitwise AND on two U32 values.
     pub func bitand_assign(mut this, rhs: U32) {
         this = this & rhs
     }
@@ -504,6 +552,7 @@ impl BitAndAssign for U32 {
 
 /// `U64 &= U64`
 impl BitAndAssign for U64 {
+    /// Performs bitwise AND on two U64 values.
     pub func bitand_assign(mut this, rhs: U64) {
         this = this & rhs
     }
@@ -515,6 +564,7 @@ impl BitAndAssign for U64 {
 
 /// `I8 |= I8`
 impl BitOrAssign for I8 {
+    /// Performs bitwise OR on two I8 values.
     pub func bitor_assign(mut this, rhs: I8) {
         this = this | rhs
     }
@@ -522,6 +572,7 @@ impl BitOrAssign for I8 {
 
 /// `I16 |= I16`
 impl BitOrAssign for I16 {
+    /// Performs bitwise OR on two I16 values.
     pub func bitor_assign(mut this, rhs: I16) {
         this = this | rhs
     }
@@ -529,6 +580,7 @@ impl BitOrAssign for I16 {
 
 /// `I32 |= I32`
 impl BitOrAssign for I32 {
+    /// Performs bitwise OR on two I32 values.
     pub func bitor_assign(mut this, rhs: I32) {
         this = this | rhs
     }
@@ -536,6 +588,7 @@ impl BitOrAssign for I32 {
 
 /// `I64 |= I64`
 impl BitOrAssign for I64 {
+    /// Performs bitwise OR on two I64 values.
     pub func bitor_assign(mut this, rhs: I64) {
         this = this | rhs
     }
@@ -543,6 +596,7 @@ impl BitOrAssign for I64 {
 
 /// `U8 |= U8`
 impl BitOrAssign for U8 {
+    /// Performs bitwise OR on two U8 values.
     pub func bitor_assign(mut this, rhs: U8) {
         this = this | rhs
     }
@@ -550,6 +604,7 @@ impl BitOrAssign for U8 {
 
 /// `U16 |= U16`
 impl BitOrAssign for U16 {
+    /// Performs bitwise OR on two U16 values.
     pub func bitor_assign(mut this, rhs: U16) {
         this = this | rhs
     }
@@ -557,6 +612,7 @@ impl BitOrAssign for U16 {
 
 /// `U32 |= U32`
 impl BitOrAssign for U32 {
+    /// Performs bitwise OR on two U32 values.
     pub func bitor_assign(mut this, rhs: U32) {
         this = this | rhs
     }
@@ -564,6 +620,7 @@ impl BitOrAssign for U32 {
 
 /// `U64 |= U64`
 impl BitOrAssign for U64 {
+    /// Performs bitwise OR on two U64 values.
     pub func bitor_assign(mut this, rhs: U64) {
         this = this | rhs
     }
@@ -575,6 +632,7 @@ impl BitOrAssign for U64 {
 
 /// `I8 ^= I8`
 impl BitXorAssign for I8 {
+    /// Performs bitwise XOR on two I8 values.
     pub func bitxor_assign(mut this, rhs: I8) {
         this = this ^ rhs
     }
@@ -582,6 +640,7 @@ impl BitXorAssign for I8 {
 
 /// `I16 ^= I16`
 impl BitXorAssign for I16 {
+    /// Performs bitwise XOR on two I16 values.
     pub func bitxor_assign(mut this, rhs: I16) {
         this = this ^ rhs
     }
@@ -589,6 +648,7 @@ impl BitXorAssign for I16 {
 
 /// `I32 ^= I32`
 impl BitXorAssign for I32 {
+    /// Performs bitwise XOR on two I32 values.
     pub func bitxor_assign(mut this, rhs: I32) {
         this = this ^ rhs
     }
@@ -596,6 +656,7 @@ impl BitXorAssign for I32 {
 
 /// `I64 ^= I64`
 impl BitXorAssign for I64 {
+    /// Performs bitwise XOR on two I64 values.
     pub func bitxor_assign(mut this, rhs: I64) {
         this = this ^ rhs
     }
@@ -603,6 +664,7 @@ impl BitXorAssign for I64 {
 
 /// `U8 ^= U8`
 impl BitXorAssign for U8 {
+    /// Performs bitwise XOR on two U8 values.
     pub func bitxor_assign(mut this, rhs: U8) {
         this = this ^ rhs
     }
@@ -610,6 +672,7 @@ impl BitXorAssign for U8 {
 
 /// `U16 ^= U16`
 impl BitXorAssign for U16 {
+    /// Performs bitwise XOR on two U16 values.
     pub func bitxor_assign(mut this, rhs: U16) {
         this = this ^ rhs
     }
@@ -617,6 +680,7 @@ impl BitXorAssign for U16 {
 
 /// `U32 ^= U32`
 impl BitXorAssign for U32 {
+    /// Performs bitwise XOR on two U32 values.
     pub func bitxor_assign(mut this, rhs: U32) {
         this = this ^ rhs
     }
@@ -624,6 +688,7 @@ impl BitXorAssign for U32 {
 
 /// `U64 ^= U64`
 impl BitXorAssign for U64 {
+    /// Performs bitwise XOR on two U64 values.
     pub func bitxor_assign(mut this, rhs: U64) {
         this = this ^ rhs
     }
@@ -635,6 +700,7 @@ impl BitXorAssign for U64 {
 
 /// `I8 <<= I32`
 impl ShlAssign for I8 {
+    /// Left-shifts the I8 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -642,6 +708,7 @@ impl ShlAssign for I8 {
 
 /// `I16 <<= I32`
 impl ShlAssign for I16 {
+    /// Left-shifts the I16 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -649,6 +716,7 @@ impl ShlAssign for I16 {
 
 /// `I32 <<= I32`
 impl ShlAssign for I32 {
+    /// Left-shifts the I32 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -656,6 +724,7 @@ impl ShlAssign for I32 {
 
 /// `I64 <<= I32`
 impl ShlAssign for I64 {
+    /// Left-shifts the I64 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -663,6 +732,7 @@ impl ShlAssign for I64 {
 
 /// `U8 <<= I32`
 impl ShlAssign for U8 {
+    /// Left-shifts the U8 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -670,6 +740,7 @@ impl ShlAssign for U8 {
 
 /// `U16 <<= I32`
 impl ShlAssign for U16 {
+    /// Left-shifts the U16 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -677,6 +748,7 @@ impl ShlAssign for U16 {
 
 /// `U32 <<= I32`
 impl ShlAssign for U32 {
+    /// Left-shifts the U32 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -684,6 +756,7 @@ impl ShlAssign for U32 {
 
 /// `U64 <<= I32`
 impl ShlAssign for U64 {
+    /// Left-shifts the U64 value by rhs bits.
     pub func shl_assign(mut this, rhs: I32) {
         this = this << rhs
     }
@@ -695,6 +768,7 @@ impl ShlAssign for U64 {
 
 /// `I8 >>= I32`
 impl ShrAssign for I8 {
+    /// Right-shifts the I8 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -702,6 +776,7 @@ impl ShrAssign for I8 {
 
 /// `I16 >>= I32`
 impl ShrAssign for I16 {
+    /// Right-shifts the I16 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -709,6 +784,7 @@ impl ShrAssign for I16 {
 
 /// `I32 >>= I32`
 impl ShrAssign for I32 {
+    /// Right-shifts the I32 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -716,6 +792,7 @@ impl ShrAssign for I32 {
 
 /// `I64 >>= I32`
 impl ShrAssign for I64 {
+    /// Right-shifts the I64 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -723,6 +800,7 @@ impl ShrAssign for I64 {
 
 /// `U8 >>= I32`
 impl ShrAssign for U8 {
+    /// Right-shifts the U8 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -730,6 +808,7 @@ impl ShrAssign for U8 {
 
 /// `U16 >>= I32`
 impl ShrAssign for U16 {
+    /// Right-shifts the U16 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -737,6 +816,7 @@ impl ShrAssign for U16 {
 
 /// `U32 >>= I32`
 impl ShrAssign for U32 {
+    /// Right-shifts the U32 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
@@ -744,6 +824,7 @@ impl ShrAssign for U32 {
 
 /// `U64 >>= I32`
 impl ShrAssign for U64 {
+    /// Right-shifts the U64 value by rhs bits.
     pub func shr_assign(mut this, rhs: I32) {
         this = this >> rhs
     }
