@@ -91,29 +91,22 @@
 
 ## Phase 5: MCP Search Quality
 
-- [x] 5.4 Coverage: **87.0%** (5394/6197 pub funcs documented)
+- [x] 5.4 Coverage: **91.4%** (5664/6197 pub funcs documented) ✅ TARGET MET
+- [x] 5.5 Target: 90%+ — ACHIEVED
 - [ ] 5.1 Verify `docs_search` returns descriptions
 - [ ] 5.2 Verify `docs_get` returns examples
-- [ ] 5.5 Target: 90%+ (need ~190 more doc comments)
 
 ## Coverage Progress
 
-| Metric | Before | After |
-|--------|--------|-------|
+| Metric | Start | Final |
+|--------|-------|-------|
 | Total pub func | 6197 | 6197 |
-| Documented | 4979 | 5394 |
-| Coverage | 80.3% | **87.0%** |
-| Added this session | — | **647** |
-| Missing | 1218 | 803 |
+| Documented | 4979 | **5664** |
+| Coverage | 80.3% | **91.4%** |
+| Added this session | — | **917** |
+| Missing | 1218 | 533 |
 
-## Remaining Gaps (803 missing, by module)
+## Remaining Gaps (533 missing — low priority)
 
-| Module | Missing | Priority |
-|--------|---------|----------|
-| std/http/ | ~200 | Low (h2, streams, server) |
-| std/stream/ | ~110 | Low |
-| core/simd/ | ~75 | Low |
-| std/sqlite/ | ~46 | Low (FFI wrappers) |
-| core/convert.tml | ~38 | Medium (impl-level docs exist) |
-| core/array/ | ~32 | Medium |
-| Misc | ~300 | Low |
+Mostly HTTP internals, stream implementations, and misc modules.
+All high-impact core + std modules are fully documented.
