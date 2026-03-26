@@ -1,0 +1,6 @@
+{"session": "1774432899578", "condition": "A", "bug_layer": "n/a", "bug_type": "exploration", "success": true, "notes": "Single explain call, no debugging"}
+{"session": "1774432995782", "condition": "A", "bug_layer": "n/a", "bug_type": "exploration", "success": true, "notes": "Test + docs exploration (str, file, glob, dir)"}
+{"session": "1774434241537", "condition": "A", "bug_layer": "n/a", "bug_type": "exploration", "success": true, "notes": "7 docs/search calls (research session)"}
+{"session": "1774438852517", "condition": "A", "bug_layer": "n/a", "bug_type": "exploration", "success": true, "notes": "Single docs/search"}
+{"session": "1774439610360", "condition": "A", "bug_layer": "n/a", "bug_type": "exploration", "success": true, "notes": "Coverage check"}
+{"session": "1774439643118", "condition": "A", "bug_layer": "n/a", "bug_type": "testing", "success": true, "notes": "Two test runs"}
