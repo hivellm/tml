@@ -42,7 +42,7 @@
 
 ## 8. Experiment — Organic Data Collection
 - [x] 8.1 Condition A (baseline): MCP call logger active, --debug-layers NOT default (current state)
-- [ ] 8.2 Condition B (enhanced): After sufficient A data, enable --debug-layers as default in MCP test tool
+- [x] 8.2 Condition B (enhanced): --debug-layers enabled as default in MCP test tool (d805b08a, 2026-03-26)
 - [ ] 8.3 Post-hoc: classify each debugging session by bug layer and condition (use analyze_logs.py)
 - [ ] 8.4 Compare tool usage patterns between conditions A and B
 
