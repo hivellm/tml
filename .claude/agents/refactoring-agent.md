@@ -6,6 +6,10 @@ tools: Read, Glob, Grep, Edit, Write, Bash
 maxTurns: 25
 ---
 
+## ⛔ MANDATORY: Use MCP Docs Before Refactoring TML ⛔
+
+Before refactoring ANY TML code, call `mcp__tml__docs_search` to check for existing APIs that could replace manual implementations. Example: `mcp__tml__docs_search(query="Buffer append")` before touching byte manipulation code. This is NON-NEGOTIABLE.
+
 ## Responsibilities
 
 - Identify code smells: long methods, large classes, duplicate logic, and deep nesting

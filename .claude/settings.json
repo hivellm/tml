@@ -19,5 +19,5 @@
       "mcp__rulebook__*"
     ]
   },
-  "enabledMcpjsonServers": ["tml"]
+  "enabledMcpjsonServers": ["tml", "rulebook"]
 }

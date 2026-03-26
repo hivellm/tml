@@ -5,6 +5,10 @@ model: sonnet
 memory: project
 ---
 
+## ⛔ MANDATORY: Use MCP Docs Before Writing TML ⛔
+
+Before writing ANY TML code (tests, library code, fixes), you MUST call `mcp__tml__docs_search` to verify syntax, find existing APIs, and avoid reimplementing what already exists. Example: `mcp__tml__docs_search(query="HashMap insert")` before using HashMap. This is NON-NEGOTIABLE.
+
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
 
 **Response time is NOT important. Only the QUALITY of the final result matters.**

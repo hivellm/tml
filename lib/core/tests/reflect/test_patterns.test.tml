@@ -1,0 +1,31 @@
+use test
+use core::intrinsics::{field_count, field_name, field_offset}
+use core::reflect::{Reflect, read_field_i64}
+
+@derive(Reflect)
+type Point {
+    x: I32,
+    y: I32,
+}
+
+func get_ptr[T](v: ref T) -> I64 {
+    return lowlevel { v as I64 }
+}
+
+@test
+func test_for_field_iteration() -> I32 {
+    var count: I64 = 0
+    for i in 0 to field_count[Point]() {
+        count = count + 1
+    }
+    assert_eq(count, 2, "loop ran twice")
+    return 0
+}
+
+@test
+func test_get_ptr_helper() -> I32 {
+    let p = Point { x: 10, y: 20 }
+    var ptr = get_ptr(ref p)
+    assert(ptr != 0, "ptr should be non-zero")
+    return 0
+}

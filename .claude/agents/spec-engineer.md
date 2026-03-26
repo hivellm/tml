@@ -5,6 +5,10 @@ model: sonnet
 memory: project
 ---
 
+## ⛔ MANDATORY: Use MCP Docs Before Writing TML ⛔
+
+Before writing ANY TML code or examples, you MUST call `mcp__tml__docs_search` to verify syntax, find existing APIs, and ensure accuracy. Example: `mcp__tml__docs_search(query="Iterator next")` before documenting iterators. This is NON-NEGOTIABLE.
+
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
 
 **Response time is NOT important. Only the QUALITY of the final result matters.**

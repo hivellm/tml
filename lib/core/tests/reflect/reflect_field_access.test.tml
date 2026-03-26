@@ -1,0 +1,110 @@
+use test::{assert, assert_eq}
+use core::reflect::{TypeInfo, Reflect, read_field_i64, write_field_i64, read_field_f64, write_field_f64, read_field_str, write_field_str}
+use core::intrinsics::{field_name, field_offset, field_count}
+
+@derive(Reflect)
+type Point {
+    x: F64,
+    y: F64,
+}
+
+@derive(Reflect)
+type Config {
+    name: Str,
+    value: I64,
+    enabled: Bool,
+}
+
+@test
+func test_read_i64_field() -> I32 {
+    let c = Config { name: "test", value: 42, enabled: true }
+    let base: I64 = lowlevel { ref c as I64 }
+    let offset: I64 = field_offset[Config](1)
+    let val: I64 = read_field_i64(base, offset)
+    assert_eq(val, 42, "value should be 42")
+    return 0
+}
+
+@test
+func test_write_i64_field() -> I32 {
+    var c = Config { name: "test", value: 0, enabled: false }
+    let base: I64 = lowlevel { ref c as I64 }
+    let offset: I64 = field_offset[Config](1)
+    write_field_i64(base, offset, 100)
+    assert_eq(c.value, 100, "value should be 100")
+    return 0
+}
+
+@test
+func test_read_f64_field() -> I32 {
+    let p = Point { x: 3.14, y: 2.71 }
+    let base: I64 = lowlevel { ref p as I64 }
+    let val: F64 = read_field_f64(base, field_offset[Point](0))
+    assert(val > 3.13, "x > 3.13")
+    assert(val < 3.15, "x < 3.15")
+    return 0
+}
+
+@test
+func test_write_f64_field() -> I32 {
+    var p = Point { x: 0.0, y: 0.0 }
+    let base: I64 = lowlevel { ref p as I64 }
+    write_field_f64(base, field_offset[Point](0), 99.5)
+    assert(p.x > 99.4, "x should be ~99.5")
+    return 0
+}
+
+@test
+func test_read_str_field() -> I32 {
+    let c = Config { name: "hello", value: 0, enabled: false }
+    let base: I64 = lowlevel { ref c as I64 }
+    let name: Str = read_field_str(base, field_offset[Config](0))
+    assert_eq(name, "hello", "name should be hello")
+    return 0
+}
+
+@test
+func test_write_str_field() -> I32 {
+    var c = Config { name: "old", value: 0, enabled: false }
+    let base: I64 = lowlevel { ref c as I64 }
+    write_field_str(base, field_offset[Config](0), "new")
+    assert_eq(c.name, "new", "name should be new")
+    return 0
+}
+
+@test
+func test_field_lookup_by_name() -> I32 {
+    let target: Str = "value"
+    let fc: I64 = field_count[Config]()
+    var found_offset: I64 = 0 - 1
+    var i: I64 = 0
+    loop (i < fc) {
+        if field_name[Config](i) == target {
+            found_offset = field_offset[Config](i)
+        }
+        i = i + 1
+    }
+    assert(found_offset >= 0, "should find 'value' field")
+
+    let c = Config { name: "x", value: 77, enabled: true }
+    let base: I64 = lowlevel { ref c as I64 }
+    let val: I64 = read_field_i64(base, found_offset)
+    assert_eq(val, 77, "read by name lookup")
+    return 0
+}
+
+@test
+func test_write_field_by_name() -> I32 {
+    var c = Config { name: "x", value: 0, enabled: false }
+    let base: I64 = lowlevel { ref c as I64 }
+    let fc: I64 = field_count[Config]()
+    var i: I64 = 0
+    loop (i < fc) {
+        if field_name[Config](i) == "value" {
+            write_field_i64(base, field_offset[Config](i), 999)
+        }
+        i = i + 1
+    }
+    assert_eq(c.value, 999, "value should be 999")
+    return 0
+}

@@ -5,6 +5,10 @@ model: opus
 memory: project
 ---
 
+## ⛔ MANDATORY: Use MCP Docs for TML Code ⛔
+
+When writing equivalent TML code for IR comparison, call `mcp__tml__docs_search` to verify TML syntax and type signatures match the language spec.
+
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
 
 **Response time is NOT important. Only the QUALITY of the final result matters.**

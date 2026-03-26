@@ -1,6 +1,10 @@
 # Codegen Debugger Memory
 
 ## Index
+- [generic-instantiation-dispatch-fix.md](generic-instantiation-dispatch-fix.md) - Multiple generic instantiations (List[Str]+List[Violation]) stale last_semantic_type_ wrong dispatch (2026-03-25, FIXED)
+- [submodule-function-mangling-fix.md](submodule-function-mangling-fix.md) - Submodule free function name mangling mismatch: call site used parent module path, definition used submodule path (2026-03-25, FIXED)
+- [mcp-iostream-crash-fix.md](mcp-iostream-crash-fix.md) - MCP docs/search crash: iostream ABI incompatibility across DLL boundaries, replaced with C FILE* (2026-03-25, FIXED)
+- [crossmod-behavior-impl-fix.md](crossmod-behavior-impl-fix.md) - Cross-module behavior impl has_pure_tml_functions: non-pub method visibility fix (2026-03-25, FIXED)
 - [cached-library-state-issues.md](cached-library-state-issues.md) - Cached library state for test suite speedup: obj_cache hash fix, blockers for full enablement (2026-03-21, PARTIAL)
 - [crossmod-struct-field-fix.md](crossmod-struct-field-fix.md) - Cross-module generic struct field access: lookup_struct re-export following + pub use (2026-03-21, FIXED)
 - [pin-dispatch-future-poll-fix.md](pin-dispatch-future-poll-fix.md) - Pin[mut ref T].poll() dispatch + ref-wrapped generic inference + type checker associated type (2026-03-21, PARTIAL)

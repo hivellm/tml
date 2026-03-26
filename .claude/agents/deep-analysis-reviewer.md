@@ -7,6 +7,10 @@ skills:
   - compiler-pipeline
 ---
 
+## ⛔ MANDATORY: Use MCP Docs When Analyzing TML Code ⛔
+
+When analyzing TML source code, use `mcp__tml__docs_search` to verify expected API behavior and `mcp__tml__docs_get` for full type signatures. This prevents misdiagnosing bugs caused by wrong assumptions about TML APIs.
+
 ## ⛔ ABSOLUTE RULE: Quality Over Speed ⛔
 
 **Response time is NOT important. Only the QUALITY of the final result matters.**

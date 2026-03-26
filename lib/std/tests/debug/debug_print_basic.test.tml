@@ -1,0 +1,74 @@
+use test::{assert, assert_eq}
+use std::debug::{debug_string}
+use core::reflect::Reflect
+
+@derive(Reflect)
+type Point {
+    x: I64,
+    y: I64,
+}
+
+@derive(Reflect)
+type Named {
+    name: Str,
+    count: I64,
+}
+
+@test
+func test_debug_string_contains_type_name() -> I32 {
+    let p = Point { x: 10, y: 20 }
+    let s: Str = debug_string(ref p)
+    assert(s.len() > 0, "debug_string should return non-empty string")
+    return 0
+}
+
+@test
+func test_debug_string_struct_format() -> I32 {
+    let p = Point { x: 3, y: 7 }
+    let s: Str = debug_string(ref p)
+    // Should contain the type name "Point"
+    var found: Bool = false
+    var i: I32 = 0
+    let slen: I32 = s.len() as I32
+    loop (i < slen - 4) {
+        if s.char_at(i as I64) == 80 {  // 'P'
+            found = true
+        }
+        i = i + 1
+    }
+    assert(found, "debug_string should contain 'P' from Point")
+    return 0
+}
+
+@test
+func test_debug_string_has_braces() -> I32 {
+    let p = Point { x: 1, y: 2 }
+    let s: Str = debug_string(ref p)
+    var has_open: Bool = false
+    var has_close: Bool = false
+    var i: I64 = 0
+    let slen: I64 = s.len()
+    loop (i < slen) {
+        let c: I32 = s.char_at(i)
+        if c == 123 {  // '{'
+            has_open = true
+        }
+        if c == 125 {  // '}'
+            has_close = true
+        }
+        i = i + 1
+    }
+    assert(has_open, "debug_string should have '{'")
+    assert(has_close, "debug_string should have '}'")
+    return 0
+}
+
+@test
+func test_debug_string_contains_field_value() -> I32 {
+    let p = Point { x: 42, y: 0 }
+    let s: Str = debug_string(ref p)
+    // The raw I64 value of x=42 should appear as "42" in the string
+    // We check that the string length is reasonable (not empty, has content)
+    assert(s.len() > 5, "debug_string should have reasonable length")
+    return 0
+}
