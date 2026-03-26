@@ -230,70 +230,86 @@ impl WritableStream {
 
     // ---- Internal accessors ----
 
+    /// Returns the raw write buffer handle pointer.
     pub func get_buf(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_BUFFER)
     }
 
+    /// Returns the current stream state (writable, ending, or finished).
     pub func get_state(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_STATE)
     }
 
+    /// Sets the stream state.
     pub func set_state(mut this, state: I64) {
         ws_wr(this.handle as I64 + WS_OFF_STATE, state)
     }
 
+    /// Returns the highWaterMark value.
     pub func get_hwm(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_HWM)
     }
 
+    /// Returns the _write callback function pointer.
     pub func get_write_fn(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_WRITE_FN)
     }
 
+    /// Returns the current cork nesting count.
     pub func get_corked(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_CORKED)
     }
 
+    /// Sets the cork nesting count.
     pub func set_corked(mut this, val: I64) {
         ws_wr(this.handle as I64 + WS_OFF_CORKED, val)
     }
 
+    /// Returns true if the stream has been destroyed (or handle is null).
     pub func is_destroyed_internal(this) -> Bool {
         if this.handle == (0 as *Unit) { return true }
         ws_rd(this.handle as I64 + WS_OFF_DESTROYED) != 0
     }
 
+    /// Sets the destroyed flag in the handle.
     pub func set_destroyed_flag(mut this) {
         ws_wr(this.handle as I64 + WS_OFF_DESTROYED, 1)
     }
 
+    /// Returns true if an error has been emitted.
     pub func is_errored_internal(this) -> Bool {
         if this.handle == (0 as *Unit) { return false }
         ws_rd(this.handle as I64 + WS_OFF_ERRORED) != 0
     }
 
+    /// Sets the errored flag in the handle.
     pub func set_errored_flag(mut this) {
         ws_wr(this.handle as I64 + WS_OFF_ERRORED, 1)
     }
 
+    /// Returns true if the buffer is full and a drain event is pending.
     pub func get_needs_drain(this) -> Bool {
         ws_rd(this.handle as I64 + WS_OFF_NEEDS_DRAIN) != 0
     }
 
+    /// Sets or clears the needs-drain flag.
     pub func set_needs_drain(mut this, val: I64) {
         ws_wr(this.handle as I64 + WS_OFF_NEEDS_DRAIN, val)
     }
 
+    /// Returns the error string pointer (0 if no error).
     pub func get_error_ptr(this) -> I64 {
         ws_rd(this.handle as I64 + WS_OFF_ERROR_PTR)
     }
 
+    /// Sets the error string pointer.
     pub func set_error_ptr(mut this, ptr: I64) {
         ws_wr(this.handle as I64 + WS_OFF_ERROR_PTR, ptr)
     }
 
     // ---- Internal: process buffered data through _write ----
 
+    /// Passes data through the user-provided _write callback.
     pub func do_write(mut this, data: Str) {
         let write_fn: I64 = this.get_write_fn()
         if write_fn != 0 {
@@ -302,6 +318,7 @@ impl WritableStream {
         }
     }
 
+    /// Flushes the internal write buffer through the _write callback and emits drain if needed.
     pub func flush_buffer(mut this) {
         let buf: I64 = this.get_buf()
         let buf_len: I64 = wbuf_len(buf)

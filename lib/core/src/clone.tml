@@ -174,56 +174,67 @@ pub behavior Copy: Duplicate {
 
 /// `Duplicate` implementation for `I8`.
 impl Duplicate for I8 {
+    /// Returns a duplicate value of I8.
     pub func duplicate(this) -> I8 { return this }
 }
 
 /// `Duplicate` implementation for `I16`.
 impl Duplicate for I16 {
+    /// Returns a duplicate value of I16.
     pub func duplicate(this) -> I16 { return this }
 }
 
 /// `Duplicate` implementation for `I32`.
 impl Duplicate for I32 {
+    /// Returns a duplicate value of I32.
     pub func duplicate(this) -> I32 { return this }
 }
 
 /// `Duplicate` implementation for `I64`.
 impl Duplicate for I64 {
+    /// Returns a duplicate value of I64.
     pub func duplicate(this) -> I64 { return this }
 }
 
 /// `Duplicate` implementation for `U8`.
 impl Duplicate for U8 {
+    /// Returns a duplicate value of U8.
     pub func duplicate(this) -> U8 { return this }
 }
 
 /// `Duplicate` implementation for `U16`.
 impl Duplicate for U16 {
+    /// Returns a duplicate value of U16.
     pub func duplicate(this) -> U16 { return this }
 }
 
 /// `Duplicate` implementation for `U32`.
 impl Duplicate for U32 {
+    /// Returns a duplicate value of U32.
     pub func duplicate(this) -> U32 { return this }
 }
 
 /// `Duplicate` implementation for `U64`.
 impl Duplicate for U64 {
+    /// Returns a duplicate value of U64.
     pub func duplicate(this) -> U64 { return this }
 }
 
 /// `Duplicate` implementation for `F32`.
 impl Duplicate for F32 {
+    /// Returns a duplicate value of F32.
     pub func duplicate(this) -> F32 { return this }
 }
 
 /// `Duplicate` implementation for `F64`.
 impl Duplicate for F64 {
+    /// Returns a duplicate value of F64.
     pub func duplicate(this) -> F64 { return this }
 }
 
 /// `Duplicate` implementation for `Bool`.
 impl Duplicate for Bool {
+    /// Returns a duplicate value of Bool.
     pub func duplicate(this) -> Bool { return this }
 }
 
@@ -231,6 +242,7 @@ impl Duplicate for Bool {
 /// Creates a deep copy of the string (new allocation with same content).
 impl Duplicate for Str {
     @allocates
+    /// Returns a duplicate value of Str by allocating a new string with the same content.
     pub func duplicate(this) -> Str {
         let src: I64 = this as I64
         if src == 0 {
@@ -322,6 +334,7 @@ pub behavior Owned {
 ///
 /// Creates a duplicate by duplicating the contained value (if [`Just`]).
 impl[T: Duplicate] Duplicate for Maybe[T] {
+    /// Returns a duplicate value of Maybe[T] by duplicating the contained value if present.
     pub func duplicate(this) -> Maybe[T] {
         when this {
             Just(val) => return Just(val.duplicate()),
@@ -338,6 +351,7 @@ impl[T: Duplicate] Duplicate for Maybe[T] {
 ///
 /// Creates a duplicate by duplicating the contained value or error.
 impl[T: Duplicate, E: Duplicate] Duplicate for Outcome[T, E] {
+    /// Returns a duplicate value of Outcome[T, E] by duplicating the contained value or error.
     pub func duplicate(this) -> Outcome[T, E] {
         when this {
             Ok(val) => return Ok(val.duplicate()),

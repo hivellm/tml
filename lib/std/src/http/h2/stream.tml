@@ -27,18 +27,27 @@ pub type H2StreamState {
 }
 
 impl H2StreamState {
+    /// Returns the idle stream state.
     pub func Idle() -> H2StreamState { H2StreamState { value: 0 } }
+    /// Returns the reserved (local) stream state.
     pub func ReservedLocal() -> H2StreamState { H2StreamState { value: 1 } }
+    /// Returns the reserved (remote) stream state.
     pub func ReservedRemote() -> H2StreamState { H2StreamState { value: 2 } }
+    /// Returns the open stream state.
     pub func Open() -> H2StreamState { H2StreamState { value: 3 } }
+    /// Returns the half-closed (local) stream state.
     pub func HalfClosedLocal() -> H2StreamState { H2StreamState { value: 4 } }
+    /// Returns the half-closed (remote) stream state.
     pub func HalfClosedRemote() -> H2StreamState { H2StreamState { value: 5 } }
+    /// Returns the closed stream state.
     pub func Closed() -> H2StreamState { H2StreamState { value: 6 } }
 
+    /// Returns true if this state equals another.
     pub func eq(this, other: H2StreamState) -> Bool {
         this.value == other.value
     }
 
+    /// Returns the human-readable name of this state.
     pub func to_string(this) -> Str {
         if this.value == 0 { return "idle" }
         if this.value == 1 { return "reserved (local)" }
@@ -71,18 +80,23 @@ pub const H2_EVENT_RESET: I64 = 3
 pub const H2_EVENT_WINDOW_UPDATE: I64 = 4
 
 impl H2StreamResult {
+    /// Creates a no-event result.
     pub func none() -> H2StreamResult {
         H2StreamResult { event_type: 0, end_stream: 0, data_len: 0, error_code: 0, window_increment: 0 }
     }
+    /// Creates a headers-complete result.
     pub func headers_complete(end_stream: I64) -> H2StreamResult {
         H2StreamResult { event_type: 1, end_stream: end_stream, data_len: 0, error_code: 0, window_increment: 0 }
     }
+    /// Creates a data result with the given payload length and end-stream flag.
     pub func data(data_len: I64, end_stream: I64) -> H2StreamResult {
         H2StreamResult { event_type: 2, end_stream: end_stream, data_len: data_len, error_code: 0, window_increment: 0 }
     }
+    /// Creates a stream-reset result with the given error code.
     pub func reset(error_code: I64) -> H2StreamResult {
         H2StreamResult { event_type: 3, end_stream: 1, data_len: 0, error_code: error_code, window_increment: 0 }
     }
+    /// Creates a window-update result with the given increment.
     pub func window_update(increment: I64) -> H2StreamResult {
         H2StreamResult { event_type: 4, end_stream: 0, data_len: 0, error_code: 0, window_increment: increment }
     }
@@ -109,6 +123,7 @@ pub type H2Stream {
 }
 
 impl H2Stream {
+    /// Creates a new H2Stream with the given id and initial flow-control windows.
     pub func new(id: I64, initial_send_window: I64, initial_recv_window: I64) -> H2Stream {
         H2Stream {
             id: id,
@@ -121,28 +136,36 @@ impl H2Stream {
         }
     }
 
+    /// Returns the stream identifier.
     pub func get_id(this) -> I64 { this.id }
+    /// Returns the current stream state.
     pub func get_state(this) -> H2StreamState { this.state }
 
+    /// Returns true if this stream was initiated by the client (odd ID).
     pub func is_client_initiated(this) -> Bool {
         this.id > 0 and (this.id % 2) == 1
     }
 
+    /// Returns true if this stream was initiated by the server (even ID).
     pub func is_server_initiated(this) -> Bool {
         this.id > 0 and (this.id % 2) == 0
     }
 
+    /// Returns true if the stream can receive frames in its current state.
     pub func can_recv(this) -> Bool {
         let s: I64 = this.state.value
         s == 0 or s == 3 or s == 4 or s == 2
     }
 
+    /// Returns true if the stream can send frames in its current state.
     pub func can_send(this) -> Bool {
         let s: I64 = this.state.value
         s == 0 or s == 3 or s == 5 or s == 1
     }
 
+    /// Returns the current send flow-control window size.
     pub func get_send_window(this) -> I64 { this.send_window }
+    /// Returns the current receive flow-control window size.
     pub func get_recv_window(this) -> I64 { this.recv_window }
 
     // ── Receive-side state transitions ─────────────────────────────
@@ -255,6 +278,7 @@ impl H2Stream {
 
     // ── Send-side transitions ──────────────────────────────────────
 
+    /// Updates the stream state for a sent HEADERS frame.
     pub func send_headers(this, end_stream: I64) -> Outcome[Unit, H2Error] {
         let s: I64 = this.state.value
         if s == 0 { this.state = H2StreamState::Open() }
@@ -271,6 +295,7 @@ impl H2Stream {
         Ok(())
     }
 
+    /// Updates the send window and state for a sent DATA frame.
     pub func send_data(this, length: I64, end_stream: I64) -> Outcome[Unit, H2Error] {
         let s: I64 = this.state.value
         if s != 3 and s != 5 {
@@ -288,6 +313,7 @@ impl H2Stream {
         Ok(())
     }
 
+    /// Transitions the stream to closed state for a sent RST_STREAM frame.
     pub func send_rst_stream(this) -> Outcome[Unit, H2Error] {
         if this.state.value == 0 {
             return Err(H2Error::protocol_error("cannot RST_STREAM idle"))

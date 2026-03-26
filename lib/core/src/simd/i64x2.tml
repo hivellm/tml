@@ -52,6 +52,7 @@ impl I64x2 {
 
     // -- Arithmetic --
 
+    /// Performs lane-wise addition on I64x2 SIMD vector lanes.
     pub func add(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -63,6 +64,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise subtraction on I64x2 SIMD vector lanes.
     pub func sub(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -74,6 +76,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise multiplication on I64x2 SIMD vector lanes.
     pub func mul(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -85,6 +88,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise division on I64x2 SIMD vector lanes.
     pub func div(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -96,6 +100,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise negation on I64x2 SIMD vector lanes.
     pub func neg(this) -> I64x2 {
         lowlevel {
             let z = simd_splat[I64x2, I64](0 as I64)
@@ -109,24 +114,29 @@ impl I64x2 {
 
     // -- Comparison (scalar — returns Mask2) --
 
+    /// Performs lane-wise equality comparison on I64x2 SIMD vector lanes.
     pub func eq(this, other: I64x2) -> Mask2 {
         return Mask2 { m0: this.e0 == other.e0, m1: this.e1 == other.e1 }
     }
 
+    /// Performs lane-wise inequality comparison on I64x2 SIMD vector lanes.
     pub func ne(this, other: I64x2) -> Mask2 {
         return Mask2 { m0: this.e0 != other.e0, m1: this.e1 != other.e1 }
     }
 
+    /// Performs lane-wise less-than comparison on I64x2 SIMD vector lanes.
     pub func lt(this, other: I64x2) -> Mask2 {
         return Mask2 { m0: this.e0 < other.e0, m1: this.e1 < other.e1 }
     }
 
+    /// Performs lane-wise greater-than comparison on I64x2 SIMD vector lanes.
     pub func gt(this, other: I64x2) -> Mask2 {
         return Mask2 { m0: this.e0 > other.e0, m1: this.e1 > other.e1 }
     }
 
     // -- Bitwise --
 
+    /// Performs lane-wise bitwise AND on I64x2 SIMD vector lanes.
     pub func band(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -138,6 +148,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise bitwise OR on I64x2 SIMD vector lanes.
     pub func bor(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -149,6 +160,7 @@ impl I64x2 {
         }
     }
 
+    /// Performs lane-wise bitwise XOR on I64x2 SIMD vector lanes.
     pub func bxor(this, other: I64x2) -> I64x2 {
         lowlevel {
             let a = simd_load[I64x2](ref this)
@@ -162,6 +174,7 @@ impl I64x2 {
 
     // -- Horizontal --
 
+    /// Returns the horizontal sum of all I64x2 SIMD vector lanes.
     pub func sum(this) -> I64 {
         lowlevel {
             let v = simd_load[I64x2](ref this)
@@ -171,6 +184,7 @@ impl I64x2 {
         }
     }
 
+    /// Returns the horizontal minimum of all I64x2 SIMD vector lanes.
     pub func hmin(this) -> I64 {
         lowlevel {
             let v = simd_load[I64x2](ref this)
@@ -181,6 +195,7 @@ impl I64x2 {
         }
     }
 
+    /// Returns the horizontal maximum of all I64x2 SIMD vector lanes.
     pub func hmax(this) -> I64 {
         lowlevel {
             let v = simd_load[I64x2](ref this)
@@ -191,12 +206,14 @@ impl I64x2 {
         }
     }
 
+    /// Returns the lane-wise minimum of two I64x2 SIMD vectors.
     pub func min(this, other: I64x2) -> I64x2 {
         var r0: I64 = this.e0; if other.e0 < r0 { r0 = other.e0 }
         var r1: I64 = this.e1; if other.e1 < r1 { r1 = other.e1 }
         return I64x2 { e0: r0, e1: r1 }
     }
 
+    /// Returns the lane-wise maximum of two I64x2 SIMD vectors.
     pub func max(this, other: I64x2) -> I64x2 {
         var r0: I64 = this.e0; if other.e0 > r0 { r0 = other.e0 }
         var r1: I64 = this.e1; if other.e1 > r1 { r1 = other.e1 }

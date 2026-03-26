@@ -62,42 +62,52 @@ impl PassThroughStream {
         this.duplex.end()
     }
 
+    /// Buffers all writes until uncork() is called.
     pub func cork(mut this) {
         this.duplex.cork()
     }
 
+    /// Flushes buffered writes when the cork count reaches zero.
     pub func uncork(mut this) {
         this.duplex.uncork()
     }
 
+    /// Returns true if the writable side accepts writes.
     pub func writable(this) -> Bool {
         this.duplex.writable()
     }
 
+    /// Returns the number of bytes buffered on the writable side.
     pub func writable_length(this) -> I64 {
         this.duplex.writable_length()
     }
 
+    /// Returns true if end() was called and finish was emitted.
     pub func writable_finished(this) -> Bool {
         this.duplex.writable_finished()
     }
 
+    /// Returns true if end() has been called on the writable side.
     pub func writable_ended(this) -> Bool {
         this.duplex.writable_ended()
     }
 
+    /// Returns true if the writable side is corked.
     pub func writable_corked(this) -> Bool {
         this.duplex.writable_corked()
     }
 
+    /// Returns the cork nesting count.
     pub func writable_corked_count(this) -> I64 {
         this.duplex.writable_corked_count()
     }
 
+    /// Returns the writable side highWaterMark.
     pub func writable_high_water_mark(this) -> I64 {
         this.duplex.writable_high_water_mark()
     }
 
+    /// Returns true if the writable buffer is full and drain is pending.
     pub func writable_needs_drain(this) -> Bool {
         this.duplex.writable_needs_drain()
     }
@@ -106,64 +116,79 @@ impl PassThroughStream {
     // Readable side
     // ================================================================
 
+    /// Reads up to size bytes from the readable side.
     @allocates
     pub func read(mut this, size: I64) -> Str {
         this.duplex.read(size)
     }
 
+    /// Reads all buffered data from the readable side.
     @allocates
     pub func read_all(mut this) -> Str {
         this.duplex.read_all()
     }
 
+    /// Returns true if the readable side has data or has not ended.
     pub func readable(this) -> Bool {
         this.duplex.readable()
     }
 
+    /// Returns the number of bytes buffered on the readable side.
     pub func readable_length(this) -> I64 {
         this.duplex.readable_length()
     }
 
+    /// Returns true if the readable side is in flowing mode.
     pub func readable_flowing(this) -> Bool {
         this.duplex.readable_flowing()
     }
 
+    /// Returns true if the readable side has ended.
     pub func readable_ended(this) -> Bool {
         this.duplex.readable_ended()
     }
 
+    /// Returns the readable side highWaterMark.
     pub func readable_high_water_mark(this) -> I64 {
         this.duplex.readable_high_water_mark()
     }
 
+    /// Returns true if a data event has been emitted at least once.
     pub func readable_did_read(this) -> Bool {
         this.duplex.readable_did_read()
     }
 
+    /// Returns true if the readable side is paused.
     pub func is_paused(this) -> Bool {
         this.duplex.is_paused()
     }
 
+    /// Pauses the readable side, buffering incoming data.
     pub func pause(mut this) {
         this.duplex.pause()
     }
 
+    /// Resumes the readable side, flushing buffered data via data events.
     pub func resume(mut this) {
         this.duplex.resume()
     }
 
+    /// Pushes data back to the front of the readable buffer.
     pub func unshift(mut this, data: Str) {
         this.duplex.unshift(data)
     }
 
+    /// Pipes all output to a writable destination.
     pub func pipe(mut this, dest: mut ref WritableStream) {
         this.duplex.pipe(dest)
     }
 
+    /// Removes the pipe to a specific writable destination.
     pub func unpipe(mut this, dest: mut ref WritableStream) {
         this.duplex.unpipe(dest)
     }
 
+    /// Removes all pipe destinations.
     pub func unpipe_all(mut this) {
         this.duplex.unpipe_all()
     }
@@ -172,43 +197,53 @@ impl PassThroughStream {
     // Shared
     // ================================================================
 
+    /// Registers an event listener.
     pub func on(mut this, event: Str, listener: I64) {
         this.duplex.on(event, listener)
     }
 
+    /// Registers a one-time event listener.
     pub func once(mut this, event: Str, listener: I64) {
         this.duplex.once(event, listener)
     }
 
+    /// Removes an event listener.
     pub func off(mut this, event: Str, listener: I64) -> Bool {
         this.duplex.off(event, listener)
     }
 
+    /// Emits an event on the stream.
     pub func emit(mut this, event: Str, data: I64) -> Bool {
         this.duplex.emit(event, data)
     }
 
+    /// Returns true if the stream has been destroyed.
     pub func closed(this) -> Bool {
         this.duplex.closed()
     }
 
+    /// Returns true if the stream has been destroyed.
     pub func destroyed(this) -> Bool {
         this.duplex.destroyed()
     }
 
+    /// Returns true if an error has been emitted.
     pub func errored(this) -> Bool {
         this.duplex.errored()
     }
 
+    /// Returns the error message, or empty string if no error.
     @allocates
     pub func error_message(this) -> Str {
         this.duplex.error_message()
     }
 
+    /// Destroys the stream and releases all resources.
     pub func destroy(mut this) {
         this.duplex.destroy()
     }
 
+    /// Destroys the stream with an error, emitting the error event.
     pub func destroy_with_error(mut this, err: Str) {
         this.duplex.destroy_with_error(err)
     }

@@ -260,97 +260,120 @@ impl ReadableStream {
 
     // ---- Internal accessors ----
 
+    /// Returns the raw buffer handle pointer.
     pub func get_buf(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_BUFFER)
     }
 
+    /// Returns the current stream state (null, flowing, or paused).
     pub func get_state(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_STATE)
     }
 
+    /// Sets the stream state.
     pub func set_state(mut this, state: I64) {
         rs_wr(this.handle as I64 + OFFSET_STATE, state)
     }
 
+    /// Returns the highWaterMark value.
     pub func get_hwm(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_HWM)
     }
 
+    /// Returns the _read callback function pointer.
     pub func get_read_fn(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_READ_FN)
     }
 
+    /// Returns true if push_eof has been called.
     pub func is_ended(this) -> Bool {
         rs_rd(this.handle as I64 + OFFSET_ENDED) != 0
     }
 
+    /// Marks the stream as ended.
     pub func set_ended(mut this) {
         rs_wr(this.handle as I64 + OFFSET_ENDED, 1)
     }
 
+    /// Returns true if the stream has been destroyed (or handle is null).
     pub func is_destroyed_internal(this) -> Bool {
         if this.handle == (0 as *Unit) { return true }
         rs_rd(this.handle as I64 + OFFSET_DESTROYED) != 0
     }
 
+    /// Sets the destroyed flag in the handle.
     pub func set_destroyed_flag(mut this) {
         rs_wr(this.handle as I64 + OFFSET_DESTROYED, 1)
     }
 
+    /// Returns true if an error has been emitted.
     pub func is_errored_internal(this) -> Bool {
         rs_rd(this.handle as I64 + OFFSET_ERRORED) != 0
     }
 
+    /// Sets the errored flag in the handle.
     pub func set_errored_flag(mut this) {
         rs_wr(this.handle as I64 + OFFSET_ERRORED, 1)
     }
 
+    /// Returns the piped writable destination pointer (0 if none).
     pub func get_pipe_dest(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_PIPE_DEST)
     }
 
+    /// Sets the piped writable destination pointer.
     pub func set_pipe_dest(mut this, dest: I64) {
         rs_wr(this.handle as I64 + OFFSET_PIPE_DEST, dest)
     }
 
+    /// Returns the error string pointer (0 if no error).
     pub func get_error_ptr(this) -> I64 {
         rs_rd(this.handle as I64 + OFFSET_ERROR_PTR)
     }
 
+    /// Sets the error string pointer.
     pub func set_error_ptr(mut this, ptr: I64) {
         rs_wr(this.handle as I64 + OFFSET_ERROR_PTR, ptr)
     }
 
+    /// Returns true if a data event has ever been emitted.
     pub func get_did_read(this) -> Bool {
         rs_rd(this.handle as I64 + OFFSET_DID_READ) != 0
     }
 
+    /// Marks that a data event has been emitted.
     pub func set_did_read(mut this) {
         rs_wr(this.handle as I64 + OFFSET_DID_READ, 1)
     }
 
     // ---- Internal emitter helpers ----
 
+    /// Registers a persistent event listener on the internal emitter.
     pub func emitter_on(mut this, event: Str, listener: I64) {
         this.emitter.on(event, listener)
     }
 
+    /// Registers a one-time event listener on the internal emitter.
     pub func emitter_once(mut this, event: Str, listener: I64) {
         this.emitter.once(event, listener)
     }
 
+    /// Removes an event listener from the internal emitter.
     pub func emitter_off(mut this, event: Str, listener: I64) -> Bool {
         this.emitter.off(event, listener)
     }
 
+    /// Emits an event through the internal emitter.
     pub func emitter_emit(mut this, event: Str, data: I64) -> Bool {
         this.emitter.emit(event, data)
     }
 
+    /// Returns true if any listeners are registered for the given event.
     pub func emitter_has_listeners(this, event: Str) -> Bool {
         this.emitter.has_listeners(event)
     }
 
+    /// Destroys the internal event emitter and frees its resources.
     pub func emitter_destroy(mut this) {
         this.emitter.destroy()
     }

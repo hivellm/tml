@@ -14,18 +14,22 @@ pub type F64x2 {
 }
 
 impl F64x2 {
+    /// Constructs a vector from two lane values.
     pub func new(e0: F64, e1: F64) -> F64x2 {
         return F64x2 { e0: e0, e1: e1 }
     }
 
+    /// Broadcasts a single value to all lanes.
     pub func splat(v: F64) -> F64x2 {
         return F64x2 { e0: v, e1: v }
     }
 
+    /// Returns a vector with all lanes set to zero.
     pub func zero() -> F64x2 {
         return F64x2 { e0: 0.0, e1: 0.0 }
     }
 
+    /// Gets a lane value by index (0-1). Returns 0.0 for out-of-bounds.
     pub func get(this, idx: I32) -> F64 {
         if idx < 0 or idx > 1 { return 0.0 }
         lowlevel {
@@ -34,6 +38,7 @@ impl F64x2 {
         }
     }
 
+    /// Returns a new vector with lane `idx` replaced by `val`.
     pub func set(this, idx: I32, val: F64) -> F64x2 {
         lowlevel {
             let v = simd_load[F64x2](ref this)
@@ -46,6 +51,7 @@ impl F64x2 {
 
     // -- Arithmetic --
 
+    /// Performs lane-wise addition on F64x2 SIMD vector lanes.
     pub func add(this, other: F64x2) -> F64x2 {
         lowlevel {
             let a = simd_load[F64x2](ref this)
@@ -57,6 +63,7 @@ impl F64x2 {
         }
     }
 
+    /// Performs lane-wise subtraction on F64x2 SIMD vector lanes.
     pub func sub(this, other: F64x2) -> F64x2 {
         lowlevel {
             let a = simd_load[F64x2](ref this)
@@ -68,6 +75,7 @@ impl F64x2 {
         }
     }
 
+    /// Performs lane-wise multiplication on F64x2 SIMD vector lanes.
     pub func mul(this, other: F64x2) -> F64x2 {
         lowlevel {
             let a = simd_load[F64x2](ref this)
@@ -79,6 +87,7 @@ impl F64x2 {
         }
     }
 
+    /// Performs lane-wise division on F64x2 SIMD vector lanes.
     pub func div(this, other: F64x2) -> F64x2 {
         lowlevel {
             let a = simd_load[F64x2](ref this)
@@ -90,6 +99,7 @@ impl F64x2 {
         }
     }
 
+    /// Performs lane-wise negation on F64x2 SIMD vector lanes.
     pub func neg(this) -> F64x2 {
         lowlevel {
             let z = simd_splat[F64x2, F64](0.0)
@@ -103,24 +113,29 @@ impl F64x2 {
 
     // -- Comparison (scalar — returns Mask2) --
 
+    /// Performs lane-wise equality comparison on F64x2 SIMD vector lanes.
     pub func eq(this, other: F64x2) -> Mask2 {
         return Mask2 { m0: this.e0 == other.e0, m1: this.e1 == other.e1 }
     }
 
+    /// Performs lane-wise inequality comparison on F64x2 SIMD vector lanes.
     pub func ne(this, other: F64x2) -> Mask2 {
         return Mask2 { m0: this.e0 != other.e0, m1: this.e1 != other.e1 }
     }
 
+    /// Performs lane-wise less-than comparison on F64x2 SIMD vector lanes.
     pub func lt(this, other: F64x2) -> Mask2 {
         return Mask2 { m0: this.e0 < other.e0, m1: this.e1 < other.e1 }
     }
 
+    /// Performs lane-wise greater-than comparison on F64x2 SIMD vector lanes.
     pub func gt(this, other: F64x2) -> Mask2 {
         return Mask2 { m0: this.e0 > other.e0, m1: this.e1 > other.e1 }
     }
 
     // -- Horizontal --
 
+    /// Returns the horizontal sum of all F64x2 SIMD vector lanes.
     pub func sum(this) -> F64 {
         lowlevel {
             let v = simd_load[F64x2](ref this)
@@ -130,6 +145,7 @@ impl F64x2 {
         }
     }
 
+    /// Returns the horizontal minimum of all F64x2 SIMD vector lanes.
     pub func hmin(this) -> F64 {
         lowlevel {
             let v = simd_load[F64x2](ref this)
@@ -140,6 +156,7 @@ impl F64x2 {
         }
     }
 
+    /// Returns the horizontal maximum of all F64x2 SIMD vector lanes.
     pub func hmax(this) -> F64 {
         lowlevel {
             let v = simd_load[F64x2](ref this)
@@ -150,12 +167,14 @@ impl F64x2 {
         }
     }
 
+    /// Returns the lane-wise minimum of two F64x2 SIMD vectors.
     pub func min(this, other: F64x2) -> F64x2 {
         var r0: F64 = this.e0; if other.e0 < r0 { r0 = other.e0 }
         var r1: F64 = this.e1; if other.e1 < r1 { r1 = other.e1 }
         return F64x2 { e0: r0, e1: r1 }
     }
 
+    /// Returns the lane-wise maximum of two F64x2 SIMD vectors.
     pub func max(this, other: F64x2) -> F64x2 {
         var r0: F64 = this.e0; if other.e0 > r0 { r0 = other.e0 }
         var r1: F64 = this.e1; if other.e1 > r1 { r1 = other.e1 }
@@ -164,6 +183,7 @@ impl F64x2 {
 
     // -- Math --
 
+    /// Returns the lane-wise absolute value of F64x2 SIMD vector lanes.
     pub func abs(this) -> F64x2 {
         var r0: F64 = this.e0; if r0 < 0.0 { r0 = 0.0 - r0 }
         var r1: F64 = this.e1; if r1 < 0.0 { r1 = 0.0 - r1 }
