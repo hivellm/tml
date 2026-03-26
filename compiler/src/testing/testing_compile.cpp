@@ -469,7 +469,10 @@ static std::string build_stdlib_object(const CompileConfig& config) {
     codegen::LLVMGenOptions lib_opts;
     lib_opts.coverage_enabled = config.coverage;
     lib_opts.library_ir_only = true;
-    lib_opts.lazy_library_defs = true;
+    lib_opts.lazy_library_defs = false; // Emit ALL public library functions, not just referenced
+                                        // ones. With lazy=true, functions like
+                                        // AllocError::debug_string were missing because nothing
+                                        // referenced them during bootstrap compilation.
     lib_opts.emit_comments = config.verbose;
 #ifdef _WIN32
     lib_opts.target_triple = "x86_64-pc-windows-msvc";

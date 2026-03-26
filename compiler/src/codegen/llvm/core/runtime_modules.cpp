@@ -1705,7 +1705,52 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     }
                 }
 
-                if (!queued_recovery && verify_round == 2) {
+                // Try to resolve from pending library methods/funcs.
+                // These are deferred library functions that were registered but
+                // not yet emitted because lazy mode only generates on-demand.
+                if (pending_library_methods_.count(ref) || pending_library_funcs_.count(ref)) {
+                    // Found in pending — queue for generation
+                    if (!generated.count(ref)) {
+                        auto method_it = pending_library_methods_.find(ref);
+                        if (method_it != pending_library_methods_.end()) {
+                            auto saved_prefix = current_module_prefix_;
+                            auto saved_name = current_module_name_;
+                            auto saved_sub = current_submodule_name_;
+                            current_module_prefix_ = method_it->second.module_prefix;
+                            current_module_name_ = method_it->second.module_name;
+                            current_submodule_name_ = method_it->second.submodule_name;
+                            in_library_body_ = true;
+                            current_impl_type_ = method_it->second.type_name;
+                            gen_impl_method(method_it->second.type_name, *method_it->second.method);
+                            current_impl_type_.clear();
+                            current_module_prefix_ = saved_prefix;
+                            current_module_name_ = saved_name;
+                            current_submodule_name_ = saved_sub;
+                            generated.insert(ref);
+                            queued_recovery = true;
+                            TML_LOG_DEBUG("codegen",
+                                          "[LAZY_LIB] Recovery: emitted pending method " << ref);
+                        }
+                        auto func_it = pending_library_funcs_.find(ref);
+                        if (func_it != pending_library_funcs_.end()) {
+                            auto saved_prefix = current_module_prefix_;
+                            auto saved_name = current_module_name_;
+                            auto saved_sub = current_submodule_name_;
+                            current_module_prefix_ = func_it->second.module_prefix;
+                            current_module_name_ = func_it->second.module_name;
+                            current_submodule_name_ = func_it->second.submodule_name;
+                            in_library_body_ = true;
+                            gen_func_decl(*func_it->second.func);
+                            current_module_prefix_ = saved_prefix;
+                            current_module_name_ = saved_name;
+                            current_submodule_name_ = saved_sub;
+                            generated.insert(ref);
+                            queued_recovery = true;
+                            TML_LOG_DEBUG("codegen",
+                                          "[LAZY_LIB] Recovery: emitted pending func " << ref);
+                        }
+                    }
+                } else if (!queued_recovery && verify_round == 2) {
                     // Final round: genuinely unresolved reference
                     TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED: " << ref);
                 }
