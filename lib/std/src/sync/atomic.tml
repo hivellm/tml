@@ -609,18 +609,22 @@ impl AtomicI64 {
     /// A constant indicating whether this atomic type is always lock-free.
     pub const LOCK_FREE: Bool = true
 
+    /// Creates a new AtomicI64 with the given initial value.
     pub func new(v: I64) -> AtomicI64 {
         return AtomicI64 { value: v }
     }
 
+    /// Loads the current value atomically.
     pub func load(this, order: Ordering) -> I64 {
         lowlevel { return this.value }
     }
 
+    /// Stores a value atomically.
     pub func store(mut this, val: I64, order: Ordering) -> Unit {
         lowlevel { this.value = val }
     }
 
+    /// Atomically swaps the value, returning the previous value.
     pub func swap(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -629,6 +633,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange(
         mut this,
         current: I64,
@@ -645,6 +650,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange_weak(
         mut this,
         current: I64,
@@ -663,6 +669,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically adds to the value, returning the previous value.
     pub func fetch_add(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -671,6 +678,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically subtracts from the value, returning the previous value.
     pub func fetch_sub(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -679,6 +687,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically performs bitwise AND, returning the previous value.
     pub func fetch_and(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -687,6 +696,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically performs bitwise OR, returning the previous value.
     pub func fetch_or(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -695,6 +705,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically performs bitwise XOR, returning the previous value.
     pub func fetch_xor(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -703,6 +714,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically computes the maximum, returning the previous value.
     pub func fetch_max(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -711,6 +723,7 @@ impl AtomicI64 {
         }
     }
 
+    /// Atomically computes the minimum, returning the previous value.
     pub func fetch_min(mut this, val: I64, order: Ordering) -> I64 {
         lowlevel {
             let old: I64 = this.value
@@ -719,10 +732,12 @@ impl AtomicI64 {
         }
     }
 
+    /// Returns `true` if operations on this type are lock-free.
     pub func is_lock_free(this) -> Bool {
         return true
     }
 
+    /// Consumes the atomic and returns the contained value.
     pub func into_inner(this) -> I64 {
         return this.value
     }
@@ -742,18 +757,22 @@ impl AtomicU32 {
     /// A constant indicating whether this atomic type is always lock-free.
     pub const LOCK_FREE: Bool = true
 
+    /// Creates a new AtomicU32 with the given initial value.
     pub func new(v: U32) -> AtomicU32 {
         return AtomicU32 { value: v }
     }
 
+    /// Loads the current value atomically.
     pub func load(this, order: Ordering) -> U32 {
         lowlevel { return this.value }
     }
 
+    /// Stores a value atomically.
     pub func store(mut this, val: U32, order: Ordering) -> Unit {
         lowlevel { this.value = val }
     }
 
+    /// Atomically swaps the value, returning the previous value.
     pub func swap(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -762,6 +781,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange(
         mut this,
         current: U32,
@@ -778,6 +798,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange_weak(
         mut this,
         current: U32,
@@ -796,6 +817,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically adds to the value, returning the previous value.
     pub func fetch_add(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -804,6 +826,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically subtracts from the value, returning the previous value.
     pub func fetch_sub(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -812,6 +835,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically performs bitwise AND, returning the previous value.
     pub func fetch_and(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -820,6 +844,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically performs bitwise OR, returning the previous value.
     pub func fetch_or(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -828,6 +853,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically performs bitwise XOR, returning the previous value.
     pub func fetch_xor(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -836,6 +862,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically computes the maximum, returning the previous value.
     pub func fetch_max(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -844,6 +871,7 @@ impl AtomicU32 {
         }
     }
 
+    /// Atomically computes the minimum, returning the previous value.
     pub func fetch_min(mut this, val: U32, order: Ordering) -> U32 {
         lowlevel {
             let old: U32 = this.value
@@ -852,10 +880,12 @@ impl AtomicU32 {
         }
     }
 
+    /// Returns `true` if operations on this type are lock-free.
     pub func is_lock_free(this) -> Bool {
         return true
     }
 
+    /// Consumes the atomic and returns the contained value.
     pub func into_inner(this) -> U32 {
         return this.value
     }
@@ -875,18 +905,22 @@ impl AtomicU64 {
     /// A constant indicating whether this atomic type is always lock-free.
     pub const LOCK_FREE: Bool = true
 
+    /// Creates a new AtomicU64 with the given initial value.
     pub func new(v: U64) -> AtomicU64 {
         return AtomicU64 { value: v }
     }
 
+    /// Loads the current value atomically.
     pub func load(this, order: Ordering) -> U64 {
         lowlevel { return this.value }
     }
 
+    /// Stores a value atomically.
     pub func store(mut this, val: U64, order: Ordering) -> Unit {
         lowlevel { this.value = val }
     }
 
+    /// Atomically swaps the value, returning the previous value.
     pub func swap(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -895,6 +929,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange(
         mut this,
         current: U64,
@@ -911,6 +946,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange_weak(
         mut this,
         current: U64,
@@ -929,6 +965,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically adds to the value, returning the previous value.
     pub func fetch_add(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -937,6 +974,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically subtracts from the value, returning the previous value.
     pub func fetch_sub(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -945,6 +983,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically performs bitwise AND, returning the previous value.
     pub func fetch_and(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -953,6 +992,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically performs bitwise OR, returning the previous value.
     pub func fetch_or(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -961,6 +1001,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically performs bitwise XOR, returning the previous value.
     pub func fetch_xor(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -969,6 +1010,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically computes the maximum, returning the previous value.
     pub func fetch_max(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -977,6 +1019,7 @@ impl AtomicU64 {
         }
     }
 
+    /// Atomically computes the minimum, returning the previous value.
     pub func fetch_min(mut this, val: U64, order: Ordering) -> U64 {
         lowlevel {
             let old: U64 = this.value
@@ -985,10 +1028,12 @@ impl AtomicU64 {
         }
     }
 
+    /// Returns `true` if operations on this type are lock-free.
     pub func is_lock_free(this) -> Bool {
         return true
     }
 
+    /// Consumes the atomic and returns the contained value.
     pub func into_inner(this) -> U64 {
         return this.value
     }
@@ -1011,18 +1056,22 @@ impl AtomicUsize {
     /// A constant indicating whether this atomic type is always lock-free.
     pub const LOCK_FREE: Bool = true
 
+    /// Creates a new AtomicUsize with the given initial value.
     pub func new(v: Usize) -> AtomicUsize {
         return AtomicUsize { value: v }
     }
 
+    /// Loads the current value atomically.
     pub func load(this, order: Ordering) -> Usize {
         lowlevel { return this.value }
     }
 
+    /// Stores a value atomically.
     pub func store(mut this, val: Usize, order: Ordering) -> Unit {
         lowlevel { this.value = val }
     }
 
+    /// Atomically swaps the value, returning the previous value.
     pub func swap(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1031,6 +1080,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange(
         mut this,
         current: Usize,
@@ -1047,6 +1097,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange_weak(
         mut this,
         current: Usize,
@@ -1065,6 +1116,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically adds to the value, returning the previous value.
     pub func fetch_add(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1073,6 +1125,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically subtracts from the value, returning the previous value.
     pub func fetch_sub(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1081,6 +1134,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically performs bitwise AND, returning the previous value.
     pub func fetch_and(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1089,6 +1143,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically performs bitwise OR, returning the previous value.
     pub func fetch_or(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1097,6 +1152,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically performs bitwise XOR, returning the previous value.
     pub func fetch_xor(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1105,6 +1161,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically computes the maximum, returning the previous value.
     pub func fetch_max(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1113,6 +1170,7 @@ impl AtomicUsize {
         }
     }
 
+    /// Atomically computes the minimum, returning the previous value.
     pub func fetch_min(mut this, val: Usize, order: Ordering) -> Usize {
         lowlevel {
             let old: Usize = this.value
@@ -1121,10 +1179,12 @@ impl AtomicUsize {
         }
     }
 
+    /// Returns `true` if operations on this type are lock-free.
     pub func is_lock_free(this) -> Bool {
         return true
     }
 
+    /// Consumes the atomic and returns the contained value.
     pub func into_inner(this) -> Usize {
         return this.value
     }
@@ -1144,18 +1204,22 @@ impl AtomicIsize {
     /// A constant indicating whether this atomic type is always lock-free.
     pub const LOCK_FREE: Bool = true
 
+    /// Creates a new AtomicIsize with the given initial value.
     pub func new(v: Isize) -> AtomicIsize {
         return AtomicIsize { value: v }
     }
 
+    /// Loads the current value atomically.
     pub func load(this, order: Ordering) -> Isize {
         lowlevel { return this.value }
     }
 
+    /// Stores a value atomically.
     pub func store(mut this, val: Isize, order: Ordering) -> Unit {
         lowlevel { this.value = val }
     }
 
+    /// Atomically swaps the value, returning the previous value.
     pub func swap(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1164,6 +1228,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange(
         mut this,
         current: Isize,
@@ -1180,6 +1245,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically compares and swaps if equal, returning the previous value.
     pub func compare_exchange_weak(
         mut this,
         current: Isize,
@@ -1198,6 +1264,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically adds to the value, returning the previous value.
     pub func fetch_add(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1206,6 +1273,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically subtracts from the value, returning the previous value.
     pub func fetch_sub(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1214,6 +1282,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically performs bitwise AND, returning the previous value.
     pub func fetch_and(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1222,6 +1291,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically performs bitwise OR, returning the previous value.
     pub func fetch_or(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1230,6 +1300,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically performs bitwise XOR, returning the previous value.
     pub func fetch_xor(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1238,6 +1309,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically computes the maximum, returning the previous value.
     pub func fetch_max(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1246,6 +1318,7 @@ impl AtomicIsize {
         }
     }
 
+    /// Atomically computes the minimum, returning the previous value.
     pub func fetch_min(mut this, val: Isize, order: Ordering) -> Isize {
         lowlevel {
             let old: Isize = this.value
@@ -1254,10 +1327,12 @@ impl AtomicIsize {
         }
     }
 
+    /// Returns `true` if operations on this type are lock-free.
     pub func is_lock_free(this) -> Bool {
         return true
     }
 
+    /// Consumes the atomic and returns the contained value.
     pub func into_inner(this) -> Isize {
         return this.value
     }

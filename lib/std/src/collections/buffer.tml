@@ -32,18 +32,22 @@ use core::str
 // Memory helpers (using lowlevel intrinsics, same pattern as list.tml)
 // ============================================================================
 
+/// Allocates `size` bytes of uninitialized memory and returns a raw pointer.
 pub func buf_mem_alloc(size: I64) -> *Unit {
     lowlevel { mem_alloc(size) }
 }
 
+/// Frees memory previously allocated with `buf_mem_alloc`.
 pub func buf_mem_free(ptr: *Unit) {
     lowlevel { mem_free(ptr) }
 }
 
+/// Reallocates a previously allocated block to `new_size` bytes, returning the new pointer.
 pub func buf_mem_realloc(ptr: *Unit, new_size: I64) -> *Unit {
     lowlevel { mem_realloc(ptr, new_size) }
 }
 
+/// Returns the byte length of a string (excluding the null terminator).
 pub func buf_str_len(s: Str) -> I64 {
     str::len(s)
 }
@@ -181,6 +185,7 @@ pub func buf_ensure_len(h: I64, needed: I64) {
 // Hex conversion helpers
 // ============================================================================
 
+/// Converts a hex digit value (0-15) to its ASCII character ('0'-'9', 'a'-'f').
 pub func hex_digit_to_char(d: I32) -> I32 {
     if d < 10 {
         return d + 48  // '0'
@@ -188,6 +193,7 @@ pub func hex_digit_to_char(d: I32) -> I32 {
     return d - 10 + 97  // 'a'
 }
 
+/// Converts an ASCII hex character ('0'-'9', 'a'-'f', 'A'-'F') to its digit value (0-15).
 pub func hex_char_to_val(c: I32) -> I32 {
     if c >= 48 and c <= 57 {       // '0'-'9'
         return c - 48

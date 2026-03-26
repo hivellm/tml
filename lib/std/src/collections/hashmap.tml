@@ -222,6 +222,7 @@ impl[K, V] HashMap[K, V] {
     // NOTE: SSE2 SIMD probing works for non-generic functions (4ns/op vs 9ns scalar)
     // but generic instantiation has codegen bugs with SIMD intrinsics inside lowlevel blocks.
     // Reverted to scalar until generic+SIMD codegen is fixed.
+    /// Returns the value associated with the given key, or the zero value of V if not found.
     pub func get(this, key: K) -> V {
         let hdr: I64 = this.handle as I64
         let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
