@@ -1261,9 +1261,31 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     }
     locals_[var_name] = var_info;
 
-    // Register for drop if type implements Drop
+    // Register for drop if type implements Drop.
+    // IMPORTANT: suppress field drops for `let` bindings initialized from method calls
+    // (like `let r = list.get(i)`). These return by-value copies whose inner handles
+    // are shared with the collection. Dropping the copy's fields would free shared data,
+    // causing heap corruption when the collection is later accessed.
     std::string type_name = extract_type_name_for_drop(var_type);
-    register_for_drop(var_name, alloca_reg, type_name, var_type);
+    bool suppress_field_drops = false;
+    if (let.init.has_value()) {
+        const auto& init_expr = *let.init.value();
+        if (init_expr.is<parser::MethodCallExpr>() || init_expr.is<parser::CallExpr>()) {
+            // Let bindings from method/function calls don't own their struct fields.
+            // The caller (collection) retains ownership of inner heap handles.
+            suppress_field_drops = true;
+        }
+    }
+    if (suppress_field_drops) {
+        // Only register direct Drop impl (not field-level drops)
+        bool has_direct_drop = env_.type_implements(type_name, "Drop");
+        if (has_direct_drop) {
+            register_for_drop(var_name, alloca_reg, type_name, var_type);
+        }
+        // Skip registration — no field drops for non-owning let bindings
+    } else {
+        register_for_drop(var_name, alloca_reg, type_name, var_type);
+    }
 
     // Register heap-allocated Str variables for automatic free at scope exit.
     // is_heap_str_producer checks if the init expression produces heap Str.
