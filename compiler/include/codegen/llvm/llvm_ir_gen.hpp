@@ -773,7 +773,11 @@ private:
         std::string base_class; // Base class name (empty if none)
         bool is_abstract = false;
         bool is_sealed = false;
-        size_t method_count = 0; // Number of instance methods (non-static)
+        size_t method_count = 0;               // Total methods (including static)
+        std::vector<std::string> method_names; // All method names in declaration order
+        std::vector<bool> method_is_virtual;   // Per-method virtual flag
+        std::vector<bool> method_is_override;  // Per-method override flag
+        std::vector<bool> method_is_static;    // Per-method static flag
     };
     std::unordered_map<std::string, ClassMeta> class_meta_;
 

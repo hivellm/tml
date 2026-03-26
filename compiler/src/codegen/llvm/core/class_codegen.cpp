@@ -626,6 +626,22 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
     // Store vtable layout
     class_vtable_layout_[c.name] = vtable_methods;
 
+    // Populate class_meta_ for OOP reflection intrinsics
+    {
+        ClassMeta meta;
+        meta.base_class = c.extends.has_value() ? c.extends->segments.back() : "";
+        meta.is_abstract = c.is_abstract;
+        meta.is_sealed = c.is_sealed;
+        meta.method_count = c.methods.size();
+        for (const auto& method : c.methods) {
+            meta.method_names.push_back(method.name);
+            meta.method_is_virtual.push_back(method.is_virtual);
+            meta.method_is_override.push_back(method.is_override);
+            meta.method_is_static.push_back(method.is_static);
+        }
+        class_meta_[c.name] = meta;
+    }
+
     // Emit vtable type
     std::string vtable_type_name = "%vtable." + c.name;
     std::string vtable_type = vtable_type_name + " = type { ";

@@ -468,9 +468,38 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 std::string type_name = extract_type();
                 size_t count = 0;
                 if (!type_name.empty()) {
+                    // Try TypeEnv first (most complete)
                     auto cd = env_.lookup_class(type_name);
                     if (cd.has_value()) {
                         count = cd->methods.size();
+                    }
+                    // Fallback: codegen's vtable layout (populated by gen_class_decl)
+                    if (count == 0) {
+                        auto vt_it = class_vtable_layout_.find(type_name);
+                        if (vt_it != class_vtable_layout_.end()) {
+                            count = vt_it->second.size();
+                        }
+                    }
+                    // Fallback: codegen's class_meta_
+                    if (count == 0) {
+                        auto meta_it = class_meta_.find(type_name);
+                        if (meta_it != class_meta_.end()) {
+                            count = meta_it->second.method_count;
+                        }
+                    }
+                    // Fallback: count from AST class methods directly
+                    if (count == 0) {
+                        auto class_fields_it = class_fields_.find(type_name);
+                        if (class_fields_it != class_fields_.end()) {
+                            // class_fields_ exists → class was processed. Count methods
+                            // by scanning the local pending_class_methods_ or similar.
+                            // For now, emit a comment so we can debug
+                            emit_line("  ; DEBUG method_count: type=" + type_name + " env_lookup=" +
+                                      (cd.has_value() ? "yes" : "no") + " vtable=" +
+                                      std::to_string(class_vtable_layout_.count(type_name)) +
+                                      " meta=" + std::to_string(class_meta_.count(type_name)) +
+                                      " fields=" + std::to_string(class_fields_it->second.size()));
+                        }
                     }
                 }
                 last_expr_type_ = "i64";
@@ -490,6 +519,23 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             if (idx < cd->methods.size()) {
                                 str_val = cd->methods[idx].sig.name;
                             }
+                        }
+                    }
+                    // Fallback: use codegen's class_meta_ for method names
+                    if (str_val.empty() && iname == "method_name") {
+                        auto meta_it = class_meta_.find(type_name);
+                        if (meta_it != class_meta_.end()) {
+                            size_t idx = extract_index();
+                            if (idx < meta_it->second.method_names.size()) {
+                                str_val = meta_it->second.method_names[idx];
+                            }
+                        }
+                    }
+                    // Fallback for base_class: check class_meta_
+                    if (str_val.empty() && iname == "base_class") {
+                        auto meta_it = class_meta_.find(type_name);
+                        if (meta_it != class_meta_.end() && !meta_it->second.base_class.empty()) {
+                            str_val = meta_it->second.base_class;
                         }
                     }
                 }
@@ -514,6 +560,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             result = cd->methods[idx].is_override;
                         } else {
                             result = cd->methods[idx].is_static;
+                        }
+                    }
+                    // Fallback: use class_meta_ for method flags
+                    if (!cd.has_value() || cd->methods.empty()) {
+                        auto meta_it = class_meta_.find(type_name);
+                        if (meta_it != class_meta_.end() &&
+                            idx < meta_it->second.method_names.size()) {
+                            if (iname == "is_virtual") {
+                                result = meta_it->second.method_is_virtual[idx];
+                            } else if (iname == "is_override") {
+                                result = meta_it->second.method_is_override[idx];
+                            } else {
+                                result = meta_it->second.method_is_static[idx];
+                            }
                         }
                     }
                 }
