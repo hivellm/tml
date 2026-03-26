@@ -280,12 +280,14 @@ impl[T] Drop for Shared[T] {
 }
 
 impl[T] Display for Shared[T] where T: Display {
+    /// Returns the display string of the contained value.
     pub func to_string(this) -> Str {
         return this.get().to_string()
     }
 }
 
 impl[T] Debug for Shared[T] where T: Debug {
+    /// Returns the debug string representation of the Shared pointer and its value.
     pub func debug_string(this) -> Str {
         return "Shared(strong=" + this.strong_count().to_string() + ", " + this.get().debug_string() + ")"
     }

@@ -219,12 +219,14 @@ impl[T] Duplicate for Heap[T] where T: Duplicate {
 }
 
 impl[T] Display for Heap[T] where T: Display {
+    /// Returns the display string of the heap-allocated value.
     pub func to_string(this) -> Str {
         return "Heap"
     }
 }
 
 impl[T] Debug for Heap[T] where T: Debug {
+    /// Returns the debug string representation of the Heap pointer.
     pub func debug_string(this) -> Str {
         return "Heap(...)"
     }
