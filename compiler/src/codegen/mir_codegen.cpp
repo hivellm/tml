@@ -739,15 +739,89 @@ void MirCodegen::emit_preamble() {
     emitln("}");
     emitln();
 
-    // Primitive to_string declarations (for devirtualized method calls)
-    emitln("declare ptr @tml_N4core2I89to_stringE(i8)");
-    emitln("declare ptr @tml_N4core3I169to_stringE(i16)");
-    emitln("declare ptr @tml_N4core3I329to_stringE(i32)");
-    emitln("declare ptr @tml_N4core3I649to_stringE(i64)");
-    emitln("declare ptr @tml_N4core4I1289to_stringE(i128)");
-    emitln("declare ptr @tml_N4core3F329to_stringE(float)");
-    emitln("declare ptr @tml_N4core3F649to_stringE(double)");
-    emitln("declare void @tml_str_free(ptr)");
+    // Inline to_string implementations for template literal support.
+    // These use snprintf to convert primitives to heap-allocated strings,
+    // eliminating the dependency on TML library functions (which aren't
+    // available in standalone MIR builds).
+    emitln("declare dso_local i32 @snprintf(ptr, i64, ptr, ...)");
+    emitln("declare dso_local void @tml_str_free(ptr)");
+    emitln("@.fmt.i64 = private constant [5 x i8] c\"%lld\\00\"");
+    emitln("@.fmt.i32 = private constant [3 x i8] c\"%d\\00\"");
+    emitln("@.fmt.f64 = private constant [3 x i8] c\"%g\\00\"");
+    emitln();
+
+    // I64::to_string — snprintf into malloc'd buffer
+    emitln("define internal ptr @tml_N4core3I649to_stringE(i64 %v) {");
+    emitln("entry:");
+    emitln("  %buf = call ptr @malloc(i64 24)");
+    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 24, ptr @.fmt.i64, i64 %v)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // I32::to_string
+    emitln("define internal ptr @tml_N4core3I329to_stringE(i32 %v) {");
+    emitln("entry:");
+    emitln("  %buf = call ptr @malloc(i64 16)");
+    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 16, ptr @.fmt.i32, i32 %v)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // I16::to_string — extend to i32
+    emitln("define internal ptr @tml_N4core3I169to_stringE(i16 %v) {");
+    emitln("entry:");
+    emitln("  %ext = sext i16 %v to i32");
+    emitln("  %buf = call ptr @malloc(i64 8)");
+    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 8, ptr @.fmt.i32, i32 %ext)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // I8::to_string — extend to i32
+    emitln("define internal ptr @tml_N4core2I89to_stringE(i8 %v) {");
+    emitln("entry:");
+    emitln("  %ext = sext i8 %v to i32");
+    emitln("  %buf = call ptr @malloc(i64 8)");
+    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 8, ptr @.fmt.i32, i32 %ext)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // I128::to_string — truncate to i64 (approx)
+    emitln("define internal ptr @tml_N4core4I1289to_stringE(i128 %v) {");
+    emitln("entry:");
+    emitln("  %trunc = trunc i128 %v to i64");
+    emitln("  %buf = call ptr @malloc(i64 24)");
+    emitln(
+        "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 24, ptr @.fmt.i64, i64 %trunc)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // F64::to_string
+    emitln("define internal ptr @tml_N4core3F649to_stringE(double %v) {");
+    emitln("entry:");
+    emitln("  %buf = call ptr @malloc(i64 32)");
+    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.f64, double %v)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // F32::to_string — extend to double
+    emitln("define internal ptr @tml_N4core3F329to_stringE(float %v) {");
+    emitln("entry:");
+    emitln("  %ext = fpext float %v to double");
+    emitln("  %buf = call ptr @malloc(i64 32)");
+    emitln(
+        "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.f64, double %ext)");
+    emitln("  ret ptr %buf");
+    emitln("}");
+
+    // Bool::to_string
+    emitln("define internal ptr @tml_N4core4Bool9to_stringE(i1 %v) {");
+    emitln("entry:");
+    emitln("  %r = select i1 %v, ptr @.str.bool.true, ptr @.str.bool.false");
+    emitln("  ret ptr %r");
+    emitln("}");
+
+    // Aliases for MIR method dispatch (which generates lowercase_type + "_" + method)
+    // These handle cases where the MIR builder creates CallInst with bare function names
+    emitln("@to_string = internal alias ptr (i1), ptr @tml_N4core4Bool9to_stringE");
     emitln();
 
     // Black box functions (prevent optimization)
