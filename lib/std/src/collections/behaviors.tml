@@ -78,6 +78,7 @@ use core::intrinsics::ptr_read
 
 /// Deep clones a list, duplicating each element.
 impl[T: Duplicate] Duplicate for List[T] {
+    /// Returns a deep clone of this list with each element duplicated.
     pub func duplicate(this) -> List[T] {
         let result: List[T] = List::new(this.capacity())
         let mut i: I64 = 0
@@ -98,6 +99,7 @@ impl[T: Duplicate] Duplicate for List[T] {
 /// Two lists are equal if they have the same length and all corresponding
 /// elements are equal.
 impl[T: PartialEq] PartialEq for List[T] {
+    /// Returns true if this list is element-wise equal to another list.
     pub func eq(this, other: ref List[T]) -> Bool {
         if this.len() != other.len() {
             return false
@@ -135,6 +137,7 @@ impl[T: Eq] Eq for List[T] {}
 /// assert([2] > [1, 2, 3])      // 2 > 1
 /// ```
 impl[T: PartialOrd] PartialOrd for List[T] {
+    /// Returns the lexicographic ordering between this list and another, or Nothing if elements are incomparable.
     pub func partial_cmp(this, other: ref List[T]) -> Maybe[Ordering] {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
@@ -164,6 +167,7 @@ impl[T: PartialOrd] PartialOrd for List[T] {
 }
 
 impl[T: Ord] Ord for List[T] {
+    /// Returns the total lexicographic ordering between this list and another.
     pub func cmp(this, other: ref List[T]) -> Ordering {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
@@ -193,6 +197,7 @@ impl[T: Ord] Ord for List[T] {
 
 /// Creates an empty list with default initial capacity.
 impl[T] Default for List[T] {
+    /// Returns a new empty list with default initial capacity.
     pub func default() -> List[T] {
         return List::new(8)
     }
@@ -204,6 +209,7 @@ impl[T] Default for List[T] {
 
 /// Formats a list as `[elem1, elem2, elem3]`.
 impl[T: Display] Display for List[T] {
+    /// Returns the list formatted as `[elem1, elem2, elem3]`.
     @allocates
     pub func to_string(this) -> Str {
         let mut result: Str = "["
@@ -221,6 +227,7 @@ impl[T: Display] Display for List[T] {
 
 /// Formats a list with type info as `List[elem1, elem2, elem3]`.
 impl[T: Debug] Debug for List[T] {
+    /// Returns the list formatted as `List[elem1, elem2, elem3]` with debug representations.
     @allocates
     pub func debug_string(this) -> Str {
         let mut result: Str = "List["

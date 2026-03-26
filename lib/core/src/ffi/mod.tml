@@ -43,7 +43,9 @@ pub type c_void {
 pub type c_int { val: I32 }
 
 impl c_int {
+    /// Creates a `c_int` from an `I32` value.
     pub func from(v: I32) -> c_int { return c_int { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
 }
 
@@ -51,7 +53,9 @@ impl c_int {
 pub type c_uint { val: U32 }
 
 impl c_uint {
+    /// Creates a `c_uint` from a `U32` value.
     pub func from(v: U32) -> c_uint { return c_uint { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
 }
 
@@ -63,14 +67,18 @@ pub type c_long { val: I64 }
 /// Returns the bit width of C `long` on this platform (32 on Windows, 64 on Unix).
 #if WINDOWS
 pub func c_long_bits() -> I64 { return 32 }
+/// Returns the maximum value of C `long` on this platform.
 pub func c_long_max() -> I64 { return 2147483647 }
 #else
 pub func c_long_bits() -> I64 { return 64 }
+/// Returns the maximum value of C `long` on this platform.
 pub func c_long_max() -> I64 { return 9223372036854775807 }
 #endif
 
 impl c_long {
+    /// Creates a `c_long` from an `I64` value.
     pub func from(v: I64) -> c_long { return c_long { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val }
     /// Truncate to I32 — use on Windows where C `long` is 32-bit.
     pub func as_i32(this) -> I32 { return this.val as I32 }
@@ -81,7 +89,9 @@ impl c_long {
 pub type c_ulong { val: U64 }
 
 impl c_ulong {
+    /// Creates a `c_ulong` from a `U64` value.
     pub func from(v: U64) -> c_ulong { return c_ulong { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
     /// Truncate to U32 — use on Windows where C `unsigned long` is 32-bit.
     pub func as_u32(this) -> U32 { return this.val as U32 }
@@ -91,7 +101,9 @@ impl c_ulong {
 pub type c_longlong { val: I64 }
 
 impl c_longlong {
+    /// Creates a `c_longlong` from an `I64` value.
     pub func from(v: I64) -> c_longlong { return c_longlong { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val }
 }
 
@@ -99,7 +111,9 @@ impl c_longlong {
 pub type c_ulonglong { val: U64 }
 
 impl c_ulonglong {
+    /// Creates a `c_ulonglong` from a `U64` value.
     pub func from(v: U64) -> c_ulonglong { return c_ulonglong { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
 }
 
@@ -109,7 +123,9 @@ impl c_ulonglong {
 pub type c_float { val: F32 }
 
 impl c_float {
+    /// Creates a `c_float` from an `F32` value.
     pub func from(v: F32) -> c_float { return c_float { val: v } }
+    /// Returns the value as an `F64`.
     pub func as_f64(this) -> F64 { return this.val as F64 }
 }
 
@@ -117,7 +133,9 @@ impl c_float {
 pub type c_double { val: F64 }
 
 impl c_double {
+    /// Creates a `c_double` from an `F64` value.
     pub func from(v: F64) -> c_double { return c_double { val: v } }
+    /// Returns the value as an `F64`.
     pub func as_f64(this) -> F64 { return this.val }
 }
 
@@ -127,8 +145,11 @@ impl c_double {
 pub type c_size_t { val: U64 }
 
 impl c_size_t {
+    /// Creates a `c_size_t` from a `U64` value.
     pub func from(v: U64) -> c_size_t { return c_size_t { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
+    /// Returns the value as a `U64`.
     pub func as_u64(this) -> U64 { return this.val }
 }
 
@@ -136,7 +157,9 @@ impl c_size_t {
 pub type c_ssize_t { val: I64 }
 
 impl c_ssize_t {
+    /// Creates a `c_ssize_t` from an `I64` value.
     pub func from(v: I64) -> c_ssize_t { return c_ssize_t { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val }
 }
 
@@ -144,7 +167,9 @@ impl c_ssize_t {
 pub type c_ptrdiff_t { val: I64 }
 
 impl c_ptrdiff_t {
+    /// Creates a `c_ptrdiff_t` from an `I64` value.
     pub func from(v: I64) -> c_ptrdiff_t { return c_ptrdiff_t { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val }
 }
 
@@ -152,7 +177,9 @@ impl c_ptrdiff_t {
 pub type c_intptr_t { val: I64 }
 
 impl c_intptr_t {
+    /// Creates a `c_intptr_t` from an `I64` value.
     pub func from(v: I64) -> c_intptr_t { return c_intptr_t { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val }
 }
 
@@ -160,7 +187,10 @@ impl c_intptr_t {
 pub type c_uintptr_t { val: U64 }
 
 impl c_uintptr_t {
+    /// Creates a `c_uintptr_t` from a `U64` value.
     pub func from(v: U64) -> c_uintptr_t { return c_uintptr_t { val: v } }
+    /// Returns the value as an `I64`.
     pub func as_i64(this) -> I64 { return this.val as I64 }
+    /// Returns the value as a `U64`.
     pub func as_u64(this) -> U64 { return this.val }
 }

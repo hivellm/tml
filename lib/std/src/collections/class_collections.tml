@@ -243,14 +243,17 @@ impl[T] HashSet[T] {
         }
     }
 
+    /// Returns the number of elements in the set.
     pub func count(this) -> I64 {
         return this.length
     }
 
+    /// Returns true if the set contains no elements.
     pub func is_empty(this) -> Bool {
         return this.length == 0
     }
 
+    /// Removes all elements from the set.
     pub func clear(mut this) {
         this.data.clear()
         this.length = 0
@@ -569,18 +572,22 @@ impl[T] Queue[T] {
         }
     }
 
+    /// Returns the number of elements in the queue.
     pub func count(this) -> I64 {
         return this.length
     }
 
+    /// Returns true if the queue contains no elements.
     pub func is_empty(this) -> Bool {
         return this.length == 0
     }
 
+    /// Adds an item to the back of the queue (alias for enqueue).
     pub func add(mut this, item: T) {
         this.enqueue(item)
     }
 
+    /// Removes all elements from the queue.
     pub func clear(mut this) {
         this.data.clear()
         this.head = 0
@@ -746,18 +753,22 @@ impl[T] Stack[T] {
         }
     }
 
+    /// Returns the number of elements in the stack.
     pub func count(this) -> I64 {
         return this.length
     }
 
+    /// Returns true if the stack contains no elements.
     pub func is_empty(this) -> Bool {
         return this.length == 0
     }
 
+    /// Pushes an item onto the stack (alias for push).
     pub func add(mut this, item: T) {
         this.push(item)
     }
 
+    /// Removes all elements from the stack.
     pub func clear(mut this) {
         this.data.clear()
         this.length = 0
@@ -883,18 +894,22 @@ impl[T] LinkedList[T] {
         }
     }
 
+    /// Returns the number of elements in the list.
     pub func count(this) -> I64 {
         return this.length
     }
 
+    /// Returns true if the list contains no elements.
     pub func is_empty(this) -> Bool {
         return this.length == 0
     }
 
+    /// Adds an item at the end of the list (alias for add_last).
     pub func add(mut this, item: T) {
         this.add_last(item)
     }
 
+    /// Removes all elements from the list.
     pub func clear(mut this) {
         this.nodes.clear()
         this.node_count = 0

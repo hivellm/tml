@@ -23,76 +23,139 @@ impl Status {
     }
 
     // ── 1xx Informational ───────────────────────────────────
+    /// Returns the HTTP 100 Continue status code.
     pub func CONTINUE() -> Status { Status { code_value: 100 } }
+    /// Returns the HTTP 101 Switching Protocols status code.
     pub func SWITCHING_PROTOCOLS() -> Status { Status { code_value: 101 } }
+    /// Returns the HTTP 102 Processing status code.
     pub func PROCESSING() -> Status { Status { code_value: 102 } }
+    /// Returns the HTTP 103 Early Hints status code.
     pub func EARLY_HINTS() -> Status { Status { code_value: 103 } }
 
     // ── 2xx Success ─────────────────────────────────────────
+    /// Returns the HTTP 200 OK status code.
     pub func OK() -> Status { Status { code_value: 200 } }
+    /// Returns the HTTP 201 Created status code.
     pub func CREATED() -> Status { Status { code_value: 201 } }
+    /// Returns the HTTP 202 Accepted status code.
     pub func ACCEPTED() -> Status { Status { code_value: 202 } }
+    /// Returns the HTTP 203 Non-Authoritative Information status code.
     pub func NON_AUTHORITATIVE_INFORMATION() -> Status { Status { code_value: 203 } }
+    /// Returns the HTTP 204 No Content status code.
     pub func NO_CONTENT() -> Status { Status { code_value: 204 } }
+    /// Returns the HTTP 205 Reset Content status code.
     pub func RESET_CONTENT() -> Status { Status { code_value: 205 } }
+    /// Returns the HTTP 206 Partial Content status code.
     pub func PARTIAL_CONTENT() -> Status { Status { code_value: 206 } }
+    /// Returns the HTTP 207 Multi-Status status code.
     pub func MULTI_STATUS() -> Status { Status { code_value: 207 } }
+    /// Returns the HTTP 208 Already Reported status code.
     pub func ALREADY_REPORTED() -> Status { Status { code_value: 208 } }
+    /// Returns the HTTP 226 IM Used status code.
     pub func IM_USED() -> Status { Status { code_value: 226 } }
 
     // ── 3xx Redirection ─────────────────────────────────────
+    /// Returns the HTTP 300 Multiple Choices status code.
     pub func MULTIPLE_CHOICES() -> Status { Status { code_value: 300 } }
+    /// Returns the HTTP 301 Moved Permanently status code.
     pub func MOVED_PERMANENTLY() -> Status { Status { code_value: 301 } }
+    /// Returns the HTTP 302 Found status code.
     pub func FOUND() -> Status { Status { code_value: 302 } }
+    /// Returns the HTTP 303 See Other status code.
     pub func SEE_OTHER() -> Status { Status { code_value: 303 } }
+    /// Returns the HTTP 304 Not Modified status code.
     pub func NOT_MODIFIED() -> Status { Status { code_value: 304 } }
+    /// Returns the HTTP 305 Use Proxy status code.
     pub func USE_PROXY() -> Status { Status { code_value: 305 } }
+    /// Returns the HTTP 307 Temporary Redirect status code.
     pub func TEMPORARY_REDIRECT() -> Status { Status { code_value: 307 } }
+    /// Returns the HTTP 308 Permanent Redirect status code.
     pub func PERMANENT_REDIRECT() -> Status { Status { code_value: 308 } }
 
     // ── 4xx Client Errors ───────────────────────────────────
+    /// Returns the HTTP 400 Bad Request status code.
     pub func BAD_REQUEST() -> Status { Status { code_value: 400 } }
+    /// Returns the HTTP 401 Unauthorized status code.
     pub func UNAUTHORIZED() -> Status { Status { code_value: 401 } }
+    /// Returns the HTTP 402 Payment Required status code.
     pub func PAYMENT_REQUIRED() -> Status { Status { code_value: 402 } }
+    /// Returns the HTTP 403 Forbidden status code.
     pub func FORBIDDEN() -> Status { Status { code_value: 403 } }
+    /// Returns the HTTP 404 Not Found status code.
     pub func NOT_FOUND() -> Status { Status { code_value: 404 } }
+    /// Returns the HTTP 405 Method Not Allowed status code.
     pub func METHOD_NOT_ALLOWED() -> Status { Status { code_value: 405 } }
+    /// Returns the HTTP 406 Not Acceptable status code.
     pub func NOT_ACCEPTABLE() -> Status { Status { code_value: 406 } }
+    /// Returns the HTTP 407 Proxy Authentication Required status code.
     pub func PROXY_AUTHENTICATION_REQUIRED() -> Status { Status { code_value: 407 } }
+    /// Returns the HTTP 408 Request Timeout status code.
     pub func REQUEST_TIMEOUT() -> Status { Status { code_value: 408 } }
+    /// Returns the HTTP 409 Conflict status code.
     pub func CONFLICT() -> Status { Status { code_value: 409 } }
+    /// Returns the HTTP 410 Gone status code.
     pub func GONE() -> Status { Status { code_value: 410 } }
+    /// Returns the HTTP 411 Length Required status code.
     pub func LENGTH_REQUIRED() -> Status { Status { code_value: 411 } }
+    /// Returns the HTTP 412 Precondition Failed status code.
     pub func PRECONDITION_FAILED() -> Status { Status { code_value: 412 } }
+    /// Returns the HTTP 413 Payload Too Large status code.
     pub func PAYLOAD_TOO_LARGE() -> Status { Status { code_value: 413 } }
+    /// Returns the HTTP 414 URI Too Long status code.
     pub func URI_TOO_LONG() -> Status { Status { code_value: 414 } }
+    /// Returns the HTTP 415 Unsupported Media Type status code.
     pub func UNSUPPORTED_MEDIA_TYPE() -> Status { Status { code_value: 415 } }
+    /// Returns the HTTP 416 Range Not Satisfiable status code.
     pub func RANGE_NOT_SATISFIABLE() -> Status { Status { code_value: 416 } }
+    /// Returns the HTTP 417 Expectation Failed status code.
     pub func EXPECTATION_FAILED() -> Status { Status { code_value: 417 } }
+    /// Returns the HTTP 418 I'm a Teapot status code.
     pub func IM_A_TEAPOT() -> Status { Status { code_value: 418 } }
+    /// Returns the HTTP 421 Misdirected Request status code.
     pub func MISDIRECTED_REQUEST() -> Status { Status { code_value: 421 } }
+    /// Returns the HTTP 422 Unprocessable Entity status code.
     pub func UNPROCESSABLE_ENTITY() -> Status { Status { code_value: 422 } }
+    /// Returns the HTTP 423 Locked status code.
     pub func LOCKED() -> Status { Status { code_value: 423 } }
+    /// Returns the HTTP 424 Failed Dependency status code.
     pub func FAILED_DEPENDENCY() -> Status { Status { code_value: 424 } }
+    /// Returns the HTTP 425 Too Early status code.
     pub func TOO_EARLY() -> Status { Status { code_value: 425 } }
+    /// Returns the HTTP 426 Upgrade Required status code.
     pub func UPGRADE_REQUIRED() -> Status { Status { code_value: 426 } }
+    /// Returns the HTTP 428 Precondition Required status code.
     pub func PRECONDITION_REQUIRED() -> Status { Status { code_value: 428 } }
+    /// Returns the HTTP 429 Too Many Requests status code.
     pub func TOO_MANY_REQUESTS() -> Status { Status { code_value: 429 } }
+    /// Returns the HTTP 431 Request Header Fields Too Large status code.
     pub func REQUEST_HEADER_FIELDS_TOO_LARGE() -> Status { Status { code_value: 431 } }
+    /// Returns the HTTP 451 Unavailable For Legal Reasons status code.
     pub func UNAVAILABLE_FOR_LEGAL_REASONS() -> Status { Status { code_value: 451 } }
 
     // ── 5xx Server Errors ───────────────────────────────────
+    /// Returns the HTTP 500 Internal Server Error status code.
     pub func INTERNAL_SERVER_ERROR() -> Status { Status { code_value: 500 } }
+    /// Returns the HTTP 501 Not Implemented status code.
     pub func NOT_IMPLEMENTED() -> Status { Status { code_value: 501 } }
+    /// Returns the HTTP 502 Bad Gateway status code.
     pub func BAD_GATEWAY() -> Status { Status { code_value: 502 } }
+    /// Returns the HTTP 503 Service Unavailable status code.
     pub func SERVICE_UNAVAILABLE() -> Status { Status { code_value: 503 } }
+    /// Returns the HTTP 504 Gateway Timeout status code.
     pub func GATEWAY_TIMEOUT() -> Status { Status { code_value: 504 } }
+    /// Returns the HTTP 505 HTTP Version Not Supported status code.
     pub func HTTP_VERSION_NOT_SUPPORTED() -> Status { Status { code_value: 505 } }
+    /// Returns the HTTP 506 Variant Also Negotiates status code.
     pub func VARIANT_ALSO_NEGOTIATES() -> Status { Status { code_value: 506 } }
+    /// Returns the HTTP 507 Insufficient Storage status code.
     pub func INSUFFICIENT_STORAGE() -> Status { Status { code_value: 507 } }
+    /// Returns the HTTP 508 Loop Detected status code.
     pub func LOOP_DETECTED() -> Status { Status { code_value: 508 } }
+    /// Returns the HTTP 509 Bandwidth Limit Exceeded status code.
     pub func BANDWIDTH_LIMIT_EXCEEDED() -> Status { Status { code_value: 509 } }
+    /// Returns the HTTP 510 Not Extended status code.
     pub func NOT_EXTENDED() -> Status { Status { code_value: 510 } }
+    /// Returns the HTTP 511 Network Authentication Required status code.
     pub func NETWORK_AUTHENTICATION_REQUIRED() -> Status { Status { code_value: 511 } }
 
     // ── Category Checks ─────────────────────────────────────
@@ -137,7 +200,7 @@ impl Status {
         this.code_value == 502 or this.code_value == 503 or this.code_value == 504
     }
 
-    /// Returns the standard reason phrase for the status code.
+    /// Returns the standard IANA reason phrase for the status code, or "Unknown" for unrecognized codes.
     pub func reason(this) -> Str {
         // 1xx
         if this.code_value == 100 { return "Continue" }
