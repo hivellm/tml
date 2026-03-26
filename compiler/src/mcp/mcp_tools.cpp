@@ -141,8 +141,8 @@ auto make_test_tool() -> Tool {
                     {"structured", "boolean",
                      "Return parsed results: total, passed, failed, failures[]", false},
                     {"debug_layers", "boolean",
-                     "On failure, emit multi-layer IR diagnostics (LLVM IR for failing "
-                     "functions). Helps identify which compilation layer caused the bug.",
+                     "Emit multi-layer IR diagnostics on failure (default: true). "
+                     "Set to false to disable. Includes HIR + MIR + LLVM IR for failing functions.",
                      false},
                 }};
 }
@@ -859,17 +859,20 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         }
     }
 
-    // Add debug-layers flag (explicit param OR env var TML_DEBUG_LAYERS=1)
+    // debug-layers: enabled by default (Condition B for LLM debugging research).
+    // Can be explicitly disabled via debug_layers=false or TML_DEBUG_LAYERS=0.
+    // When enabled, test failures include multi-layer IR diagnostics (HIR + MIR + LLVM IR).
     auto* debug_layers_param = params.get("debug_layers");
-    bool debug_layers_requested = (debug_layers_param != nullptr && debug_layers_param->is_bool() &&
-                                   debug_layers_param->as_bool());
-    if (!debug_layers_requested) {
+    bool debug_layers = true; // Default ON for Condition B
+    if (debug_layers_param != nullptr && debug_layers_param->is_bool()) {
+        debug_layers = debug_layers_param->as_bool();
+    } else {
         const char* env_val = std::getenv("TML_DEBUG_LAYERS");
-        if (env_val != nullptr && std::string(env_val) == "1") {
-            debug_layers_requested = true;
+        if (env_val != nullptr && std::string(env_val) == "0") {
+            debug_layers = false;
         }
     }
-    if (debug_layers_requested) {
+    if (debug_layers) {
         cmd << " --debug-layers";
     }
 

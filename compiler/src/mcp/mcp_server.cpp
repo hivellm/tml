@@ -54,10 +54,11 @@ void McpServer::init_call_logger() {
         return;
     }
 
-    // Condition tracking
+    // Condition tracking — default is now "debug-layers" (Condition B).
+    // Set TML_DEBUG_LAYERS=0 to revert to baseline for comparison.
     const char* dl_env = std::getenv("TML_DEBUG_LAYERS");
     const char* condition =
-        (dl_env != nullptr && std::string(dl_env) == "1") ? "debug-layers" : "baseline";
+        (dl_env != nullptr && std::string(dl_env) == "0") ? "baseline" : "debug-layers";
 
     std::fprintf(call_log_fp_,
                  "{\"event\":\"session_start\",\"session\":\"%s\","

@@ -115,13 +115,30 @@ Source: Real bugs from TML development history (git log). Each bug has:
 - ANOVA for cross-condition comparison
 - Effect size (Cohen's d) for practical significance
 
+## Condition B Activation Log
+
+**Date**: 2026-03-26
+**Commit**: `--debug-layers` enabled as default in MCP test tool
+**Change**: `debug_layers` default flipped from `false` to `true` in `mcp_tools.cpp`
+**Logger**: Condition tag flipped from `baseline` to `debug-layers` in `mcp_server.cpp`
+**Revert**: Set `TML_DEBUG_LAYERS=0` env var to return to Condition A
+
+### Condition A Data Collection Period
+- Start: 2026-03-24 (session with `--debug-layers` flag implementation)
+- End: 2026-03-26 (this commit)
+- Sessions: ~5-8 organic debugging sessions (codegen fixes)
+- Key bugs fixed under A: MIR print dispatch, missing args, template literals, heap corruption
+
+### Condition B Data Collection Period
+- Start: 2026-03-26 (this commit)
+- End: TBD (until sufficient organic data collected)
+- All MCP `test` calls now include `--debug-layers` by default
+- On failure, output includes HIR + MIR + LLVM IR + diagnosis hints
+
 ## Timeline
 
 - **Week 1**: Instrument MCP (call logger) — DONE
-- **Week 2**: Curate bug set from git history
-- **Week 3**: Implement --debug-layers Phase 1 (LLVM IR on failure)
-- **Week 4**: Run Condition A (baseline) sessions
-- **Week 5**: Run Condition B (enhanced errors) sessions
-- **Week 6**: Implement --debug-layers Phase 2-3 (MIR + HIR)
-- **Week 7**: Run Condition C (full debug-layers) sessions
-- **Week 8**: Analysis and paper writing
+- **Week 2**: Implement --debug-layers Phases 1-3 (LLVM IR + MIR + HIR) — DONE
+- **Week 3-4**: Condition A (baseline) organic data collection — DONE
+- **Week 5+**: Condition B (debug-layers default ON) organic data collection — ACTIVE
+- **TBD**: Post-hoc analysis, bug classification, paper writing
