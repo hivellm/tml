@@ -93,8 +93,8 @@
 
 - [x] 5.4 Coverage: **91.4%** (5664/6197 pub funcs documented) ✅ TARGET MET
 - [x] 5.5 Target: 90%+ — ACHIEVED
-- [ ] 5.1 Verify `docs_search` returns descriptions
-- [ ] 5.2 Verify `docs_get` returns examples
+- [x] 5.1 Verified: `docs_search("HashMap insert")` → descriptions ✓, `docs_search("Mutex lock")` → descriptions ✓
+- [x] 5.2 Verified: `docs_get("core::str::split")` → description + examples + params ✓
 
 ## Coverage Progress
 
