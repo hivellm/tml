@@ -678,6 +678,7 @@ pub type OutcomeIter[T] {
 impl[T] Iterator for OutcomeIter[T] {
     type Item = T
 
+    /// Returns the Ok value on the first call, then Nothing on subsequent calls.
     pub func next(mut this) -> Maybe[T] {
         let result: Maybe[T] = this.value
         this.value = Nothing

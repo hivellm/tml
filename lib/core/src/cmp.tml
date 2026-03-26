@@ -494,66 +494,77 @@ pub behavior Ord: Eq + PartialOrd {
 // ============================================================================
 
 impl PartialEq for I8 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref I8) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for I16 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref I16) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for I32 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref I32) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for I64 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref I64) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for U8 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref U8) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for U16 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref U16) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for U32 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref U32) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for U64 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref U64) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for F32 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref F32) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for F64 {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref F64) -> Bool {
         return this == *other
     }
 }
 
 impl PartialEq for Bool {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref Bool) -> Bool {
         return this == *other
     }
@@ -579,12 +590,14 @@ impl Eq for Bool {}
 // ============================================================================
 
 impl PartialOrd for I8 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref I8) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for I8 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref I8) -> Ordering {
         let o: I8 = *other
         if this < o {
@@ -598,12 +611,14 @@ impl Ord for I8 {
 }
 
 impl PartialOrd for I16 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref I16) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for I16 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref I16) -> Ordering {
         let o: I16 = *other
         if this < o {
@@ -617,12 +632,14 @@ impl Ord for I16 {
 }
 
 impl PartialOrd for I32 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref I32) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for I32 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref I32) -> Ordering {
         let o: I32 = *other
         if this < o {
@@ -636,12 +653,14 @@ impl Ord for I32 {
 }
 
 impl PartialOrd for I64 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref I64) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for I64 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref I64) -> Ordering {
         let o: I64 = *other
         if this < o {
@@ -659,12 +678,14 @@ impl Ord for I64 {
 // ============================================================================
 
 impl PartialOrd for U8 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref U8) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for U8 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref U8) -> Ordering {
         let o: U8 = *other
         if this < o {
@@ -678,12 +699,14 @@ impl Ord for U8 {
 }
 
 impl PartialOrd for U16 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref U16) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for U16 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref U16) -> Ordering {
         let o: U16 = *other
         if this < o {
@@ -697,12 +720,14 @@ impl Ord for U16 {
 }
 
 impl PartialOrd for U32 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref U32) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for U32 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref U32) -> Ordering {
         let o: U32 = *other
         if this < o {
@@ -716,12 +741,14 @@ impl Ord for U32 {
 }
 
 impl PartialOrd for U64 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref U64) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for U64 {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref U64) -> Ordering {
         let o: U64 = *other
         if this < o {
@@ -739,6 +766,7 @@ impl Ord for U64 {
 // ============================================================================
 
 impl PartialOrd for F32 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref F32) -> Maybe[Ordering] {
         let o: F32 = *other
         // NaN comparisons return Nothing
@@ -756,6 +784,7 @@ impl PartialOrd for F32 {
 }
 
 impl PartialOrd for F64 {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref F64) -> Maybe[Ordering] {
         let o: F64 = *other
         // NaN comparisons return Nothing
@@ -777,12 +806,14 @@ impl PartialOrd for F64 {
 // ============================================================================
 
 impl PartialOrd for Bool {
+    /// Compares self with other, returning an Ordering.
     pub func partial_cmp(this, other: ref Bool) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 }
 
 impl Ord for Bool {
+    /// Returns the total ordering between self and other.
     pub func cmp(this, other: ref Bool) -> Ordering {
         let o: Bool = *other
         // false < true
@@ -833,6 +864,7 @@ pub func min[T: Ord](a: T, b: T) -> T {
 // ============================================================================
 
 impl[T: PartialEq] PartialEq for Maybe[T] {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref Maybe[T]) -> Bool {
         when this {
             Just(a) => {
@@ -858,6 +890,7 @@ impl[T: Eq] Eq for Maybe[T] {}
 // ============================================================================
 
 impl[T: PartialEq, E: PartialEq] PartialEq for Outcome[T, E] {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref Outcome[T, E]) -> Bool {
         when this {
             Ok(a) => {
@@ -883,6 +916,7 @@ impl[T: Eq, E: Eq] Eq for Outcome[T, E] {}
 // ============================================================================
 
 impl PartialEq for Ordering {
+    /// Returns true if self equals other.
     pub func eq(this, other: ref Ordering) -> Bool {
         when this {
             Ordering::Less => {

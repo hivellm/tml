@@ -715,6 +715,7 @@ pub type MaybeIter[T] {
 impl[T] Iterator for MaybeIter[T] {
     type Item = T
 
+    /// Returns the contained value on the first call, then Nothing on subsequent calls.
     pub func next(mut this) -> Maybe[T] {
         let result: Maybe[T] = this.value
         this.value = Nothing

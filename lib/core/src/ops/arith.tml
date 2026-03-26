@@ -122,6 +122,7 @@ pub behavior Neg {
 
 /// `I8 + I8 -> I8`
 impl Add for I8 {
+    /// Adds two I8 values.
     pub func add(this, rhs: I8) -> I8 {
         return this + rhs
     }
@@ -129,6 +130,7 @@ impl Add for I8 {
 
 /// `I16 + I16 -> I16`
 impl Add for I16 {
+    /// Adds two I16 values.
     pub func add(this, rhs: I16) -> I16 {
         return this + rhs
     }
@@ -136,6 +138,7 @@ impl Add for I16 {
 
 /// `I32 + I32 -> I32`
 impl Add for I32 {
+    /// Adds two I32 values.
     pub func add(this, rhs: I32) -> I32 {
         return this + rhs
     }
@@ -143,6 +146,7 @@ impl Add for I32 {
 
 /// `I64 + I64 -> I64`
 impl Add for I64 {
+    /// Adds two I64 values.
     pub func add(this, rhs: I64) -> I64 {
         return this + rhs
     }
@@ -150,6 +154,7 @@ impl Add for I64 {
 
 /// `U8 + U8 -> U8`
 impl Add for U8 {
+    /// Adds two U8 values.
     pub func add(this, rhs: U8) -> U8 {
         return this + rhs
     }
@@ -157,6 +162,7 @@ impl Add for U8 {
 
 /// `U16 + U16 -> U16`
 impl Add for U16 {
+    /// Adds two U16 values.
     pub func add(this, rhs: U16) -> U16 {
         return this + rhs
     }
@@ -164,6 +170,7 @@ impl Add for U16 {
 
 /// `U32 + U32 -> U32`
 impl Add for U32 {
+    /// Adds two U32 values.
     pub func add(this, rhs: U32) -> U32 {
         return this + rhs
     }
@@ -171,6 +178,7 @@ impl Add for U32 {
 
 /// `U64 + U64 -> U64`
 impl Add for U64 {
+    /// Adds two U64 values.
     pub func add(this, rhs: U64) -> U64 {
         return this + rhs
     }
@@ -178,6 +186,7 @@ impl Add for U64 {
 
 /// `F32 + F32 -> F32`
 impl Add for F32 {
+    /// Adds two F32 values.
     pub func add(this, rhs: F32) -> F32 {
         return this + rhs
     }
@@ -185,6 +194,7 @@ impl Add for F32 {
 
 /// `F64 + F64 -> F64`
 impl Add for F64 {
+    /// Adds two F64 values.
     pub func add(this, rhs: F64) -> F64 {
         return this + rhs
     }
@@ -196,6 +206,7 @@ impl Add for F64 {
 
 /// `I8 - I8 -> I8`
 impl Sub for I8 {
+    /// Subtracts rhs from self, returning the difference as I8.
     pub func sub(this, rhs: I8) -> I8 {
         return this - rhs
     }
@@ -203,6 +214,7 @@ impl Sub for I8 {
 
 /// `I16 - I16 -> I16`
 impl Sub for I16 {
+    /// Subtracts rhs from self, returning the difference as I16.
     pub func sub(this, rhs: I16) -> I16 {
         return this - rhs
     }
@@ -210,6 +222,7 @@ impl Sub for I16 {
 
 /// `I32 - I32 -> I32`
 impl Sub for I32 {
+    /// Subtracts rhs from self, returning the difference as I32.
     pub func sub(this, rhs: I32) -> I32 {
         return this - rhs
     }
@@ -217,6 +230,7 @@ impl Sub for I32 {
 
 /// `I64 - I64 -> I64`
 impl Sub for I64 {
+    /// Subtracts rhs from self, returning the difference as I64.
     pub func sub(this, rhs: I64) -> I64 {
         return this - rhs
     }
@@ -224,6 +238,7 @@ impl Sub for I64 {
 
 /// `U8 - U8 -> U8`
 impl Sub for U8 {
+    /// Subtracts rhs from self, returning the difference as U8.
     pub func sub(this, rhs: U8) -> U8 {
         return this - rhs
     }
@@ -231,6 +246,7 @@ impl Sub for U8 {
 
 /// `U16 - U16 -> U16`
 impl Sub for U16 {
+    /// Subtracts rhs from self, returning the difference as U16.
     pub func sub(this, rhs: U16) -> U16 {
         return this - rhs
     }
@@ -238,6 +254,7 @@ impl Sub for U16 {
 
 /// `U32 - U32 -> U32`
 impl Sub for U32 {
+    /// Subtracts rhs from self, returning the difference as U32.
     pub func sub(this, rhs: U32) -> U32 {
         return this - rhs
     }
@@ -245,6 +262,7 @@ impl Sub for U32 {
 
 /// `U64 - U64 -> U64`
 impl Sub for U64 {
+    /// Subtracts rhs from self, returning the difference as U64.
     pub func sub(this, rhs: U64) -> U64 {
         return this - rhs
     }
@@ -252,6 +270,7 @@ impl Sub for U64 {
 
 /// `F32 - F32 -> F32`
 impl Sub for F32 {
+    /// Subtracts rhs from self, returning the difference as F32.
     pub func sub(this, rhs: F32) -> F32 {
         return this - rhs
     }
@@ -259,6 +278,7 @@ impl Sub for F32 {
 
 /// `F64 - F64 -> F64`
 impl Sub for F64 {
+    /// Subtracts rhs from self, returning the difference as F64.
     pub func sub(this, rhs: F64) -> F64 {
         return this - rhs
     }
@@ -270,6 +290,7 @@ impl Sub for F64 {
 
 /// `I8 * I8 -> I8`
 impl Mul for I8 {
+    /// Multiplies two I8 values.
     pub func mul(this, rhs: I8) -> I8 {
         return this * rhs
     }
@@ -277,6 +298,7 @@ impl Mul for I8 {
 
 /// `I16 * I16 -> I16`
 impl Mul for I16 {
+    /// Multiplies two I16 values.
     pub func mul(this, rhs: I16) -> I16 {
         return this * rhs
     }
@@ -284,6 +306,7 @@ impl Mul for I16 {
 
 /// `I32 * I32 -> I32`
 impl Mul for I32 {
+    /// Multiplies two I32 values.
     pub func mul(this, rhs: I32) -> I32 {
         return this * rhs
     }
@@ -291,6 +314,7 @@ impl Mul for I32 {
 
 /// `I64 * I64 -> I64`
 impl Mul for I64 {
+    /// Multiplies two I64 values.
     pub func mul(this, rhs: I64) -> I64 {
         return this * rhs
     }
@@ -298,6 +322,7 @@ impl Mul for I64 {
 
 /// `U8 * U8 -> U8`
 impl Mul for U8 {
+    /// Multiplies two U8 values.
     pub func mul(this, rhs: U8) -> U8 {
         return this * rhs
     }
@@ -305,6 +330,7 @@ impl Mul for U8 {
 
 /// `U16 * U16 -> U16`
 impl Mul for U16 {
+    /// Multiplies two U16 values.
     pub func mul(this, rhs: U16) -> U16 {
         return this * rhs
     }
@@ -312,6 +338,7 @@ impl Mul for U16 {
 
 /// `U32 * U32 -> U32`
 impl Mul for U32 {
+    /// Multiplies two U32 values.
     pub func mul(this, rhs: U32) -> U32 {
         return this * rhs
     }
@@ -319,6 +346,7 @@ impl Mul for U32 {
 
 /// `U64 * U64 -> U64`
 impl Mul for U64 {
+    /// Multiplies two U64 values.
     pub func mul(this, rhs: U64) -> U64 {
         return this * rhs
     }
@@ -326,6 +354,7 @@ impl Mul for U64 {
 
 /// `F32 * F32 -> F32`
 impl Mul for F32 {
+    /// Multiplies two F32 values.
     pub func mul(this, rhs: F32) -> F32 {
         return this * rhs
     }
@@ -333,6 +362,7 @@ impl Mul for F32 {
 
 /// `F64 * F64 -> F64`
 impl Mul for F64 {
+    /// Multiplies two F64 values.
     pub func mul(this, rhs: F64) -> F64 {
         return this * rhs
     }
@@ -344,6 +374,7 @@ impl Mul for F64 {
 
 /// `I8 / I8 -> I8` (truncating division)
 impl Div for I8 {
+    /// Divides self by rhs, returning the I8 quotient.
     pub func div(this, rhs: I8) -> I8 {
         return this / rhs
     }
@@ -351,6 +382,7 @@ impl Div for I8 {
 
 /// `I16 / I16 -> I16` (truncating division)
 impl Div for I16 {
+    /// Divides self by rhs, returning the I16 quotient.
     pub func div(this, rhs: I16) -> I16 {
         return this / rhs
     }
@@ -358,6 +390,7 @@ impl Div for I16 {
 
 /// `I32 / I32 -> I32` (truncating division)
 impl Div for I32 {
+    /// Divides self by rhs, returning the I32 quotient.
     pub func div(this, rhs: I32) -> I32 {
         return this / rhs
     }
@@ -365,6 +398,7 @@ impl Div for I32 {
 
 /// `I64 / I64 -> I64` (truncating division)
 impl Div for I64 {
+    /// Divides self by rhs, returning the I64 quotient.
     pub func div(this, rhs: I64) -> I64 {
         return this / rhs
     }
@@ -372,6 +406,7 @@ impl Div for I64 {
 
 /// `U8 / U8 -> U8`
 impl Div for U8 {
+    /// Divides self by rhs, returning the U8 quotient.
     pub func div(this, rhs: U8) -> U8 {
         return this / rhs
     }
@@ -379,6 +414,7 @@ impl Div for U8 {
 
 /// `U16 / U16 -> U16`
 impl Div for U16 {
+    /// Divides self by rhs, returning the U16 quotient.
     pub func div(this, rhs: U16) -> U16 {
         return this / rhs
     }
@@ -386,6 +422,7 @@ impl Div for U16 {
 
 /// `U32 / U32 -> U32`
 impl Div for U32 {
+    /// Divides self by rhs, returning the U32 quotient.
     pub func div(this, rhs: U32) -> U32 {
         return this / rhs
     }
@@ -393,6 +430,7 @@ impl Div for U32 {
 
 /// `U64 / U64 -> U64`
 impl Div for U64 {
+    /// Divides self by rhs, returning the U64 quotient.
     pub func div(this, rhs: U64) -> U64 {
         return this / rhs
     }
@@ -400,6 +438,7 @@ impl Div for U64 {
 
 /// `F32 / F32 -> F32`
 impl Div for F32 {
+    /// Divides self by rhs, returning the F32 quotient.
     pub func div(this, rhs: F32) -> F32 {
         return this / rhs
     }
@@ -407,6 +446,7 @@ impl Div for F32 {
 
 /// `F64 / F64 -> F64`
 impl Div for F64 {
+    /// Divides self by rhs, returning the F64 quotient.
     pub func div(this, rhs: F64) -> F64 {
         return this / rhs
     }
@@ -418,6 +458,7 @@ impl Div for F64 {
 
 /// `I8 % I8 -> I8`
 impl Rem for I8 {
+    /// Returns the remainder of self divided by rhs as I8.
     pub func rem(this, rhs: I8) -> I8 {
         return this % rhs
     }
@@ -425,6 +466,7 @@ impl Rem for I8 {
 
 /// `I16 % I16 -> I16`
 impl Rem for I16 {
+    /// Returns the remainder of self divided by rhs as I16.
     pub func rem(this, rhs: I16) -> I16 {
         return this % rhs
     }
@@ -432,6 +474,7 @@ impl Rem for I16 {
 
 /// `I32 % I32 -> I32`
 impl Rem for I32 {
+    /// Returns the remainder of self divided by rhs as I32.
     pub func rem(this, rhs: I32) -> I32 {
         return this % rhs
     }
@@ -439,6 +482,7 @@ impl Rem for I32 {
 
 /// `I64 % I64 -> I64`
 impl Rem for I64 {
+    /// Returns the remainder of self divided by rhs as I64.
     pub func rem(this, rhs: I64) -> I64 {
         return this % rhs
     }
@@ -446,6 +490,7 @@ impl Rem for I64 {
 
 /// `U8 % U8 -> U8`
 impl Rem for U8 {
+    /// Returns the remainder of self divided by rhs as U8.
     pub func rem(this, rhs: U8) -> U8 {
         return this % rhs
     }
@@ -453,6 +498,7 @@ impl Rem for U8 {
 
 /// `U16 % U16 -> U16`
 impl Rem for U16 {
+    /// Returns the remainder of self divided by rhs as U16.
     pub func rem(this, rhs: U16) -> U16 {
         return this % rhs
     }
@@ -460,6 +506,7 @@ impl Rem for U16 {
 
 /// `U32 % U32 -> U32`
 impl Rem for U32 {
+    /// Returns the remainder of self divided by rhs as U32.
     pub func rem(this, rhs: U32) -> U32 {
         return this % rhs
     }
@@ -467,6 +514,7 @@ impl Rem for U32 {
 
 /// `U64 % U64 -> U64`
 impl Rem for U64 {
+    /// Returns the remainder of self divided by rhs as U64.
     pub func rem(this, rhs: U64) -> U64 {
         return this % rhs
     }
@@ -478,6 +526,7 @@ impl Rem for U64 {
 
 /// `-I8 -> I8`
 impl Neg for I8 {
+    /// Negates the I8 value.
     pub func neg(this) -> I8 {
         return 0 as I8 - this
     }
@@ -485,6 +534,7 @@ impl Neg for I8 {
 
 /// `-I16 -> I16`
 impl Neg for I16 {
+    /// Negates the I16 value.
     pub func neg(this) -> I16 {
         return 0 as I16 - this
     }
@@ -492,6 +542,7 @@ impl Neg for I16 {
 
 /// `-I32 -> I32`
 impl Neg for I32 {
+    /// Negates the I32 value.
     pub func neg(this) -> I32 {
         return 0 - this
     }
@@ -499,6 +550,7 @@ impl Neg for I32 {
 
 /// `-I64 -> I64`
 impl Neg for I64 {
+    /// Negates the I64 value.
     pub func neg(this) -> I64 {
         return 0 - this
     }
@@ -506,6 +558,7 @@ impl Neg for I64 {
 
 /// `-F32 -> F32`
 impl Neg for F32 {
+    /// Negates the F32 value.
     pub func neg(this) -> F32 {
         return 0.0 as F32 - this
     }
@@ -513,6 +566,7 @@ impl Neg for F32 {
 
 /// `-F64 -> F64`
 impl Neg for F64 {
+    /// Negates the F64 value.
     pub func neg(this) -> F64 {
         return 0.0 - this
     }
@@ -593,6 +647,7 @@ pub behavior RemAssign[Rhs] {
 
 /// `I8 += I8`
 impl AddAssign for I8 {
+    /// Adds rhs to self in place for I8.
     pub func add_assign(mut this, rhs: I8) {
         this = this + rhs
     }
@@ -600,6 +655,7 @@ impl AddAssign for I8 {
 
 /// `I16 += I16`
 impl AddAssign for I16 {
+    /// Adds rhs to self in place for I16.
     pub func add_assign(mut this, rhs: I16) {
         this = this + rhs
     }
@@ -607,6 +663,7 @@ impl AddAssign for I16 {
 
 /// `I32 += I32`
 impl AddAssign for I32 {
+    /// Adds rhs to self in place for I32.
     pub func add_assign(mut this, rhs: I32) {
         this = this + rhs
     }
@@ -614,6 +671,7 @@ impl AddAssign for I32 {
 
 /// `I64 += I64`
 impl AddAssign for I64 {
+    /// Adds rhs to self in place for I64.
     pub func add_assign(mut this, rhs: I64) {
         this = this + rhs
     }
@@ -621,6 +679,7 @@ impl AddAssign for I64 {
 
 /// `U8 += U8`
 impl AddAssign for U8 {
+    /// Adds rhs to self in place for U8.
     pub func add_assign(mut this, rhs: U8) {
         this = this + rhs
     }
@@ -628,6 +687,7 @@ impl AddAssign for U8 {
 
 /// `U16 += U16`
 impl AddAssign for U16 {
+    /// Adds rhs to self in place for U16.
     pub func add_assign(mut this, rhs: U16) {
         this = this + rhs
     }
@@ -635,6 +695,7 @@ impl AddAssign for U16 {
 
 /// `U32 += U32`
 impl AddAssign for U32 {
+    /// Adds rhs to self in place for U32.
     pub func add_assign(mut this, rhs: U32) {
         this = this + rhs
     }
@@ -642,6 +703,7 @@ impl AddAssign for U32 {
 
 /// `U64 += U64`
 impl AddAssign for U64 {
+    /// Adds rhs to self in place for U64.
     pub func add_assign(mut this, rhs: U64) {
         this = this + rhs
     }
@@ -649,6 +711,7 @@ impl AddAssign for U64 {
 
 /// `F32 += F32`
 impl AddAssign for F32 {
+    /// Adds rhs to self in place for F32.
     pub func add_assign(mut this, rhs: F32) {
         this = this + rhs
     }
@@ -656,6 +719,7 @@ impl AddAssign for F32 {
 
 /// `F64 += F64`
 impl AddAssign for F64 {
+    /// Adds rhs to self in place for F64.
     pub func add_assign(mut this, rhs: F64) {
         this = this + rhs
     }
@@ -667,6 +731,7 @@ impl AddAssign for F64 {
 
 /// `I8 -= I8`
 impl SubAssign for I8 {
+    /// Subtracts rhs from self in place for I8.
     pub func sub_assign(mut this, rhs: I8) {
         this = this - rhs
     }
@@ -674,6 +739,7 @@ impl SubAssign for I8 {
 
 /// `I16 -= I16`
 impl SubAssign for I16 {
+    /// Subtracts rhs from self in place for I16.
     pub func sub_assign(mut this, rhs: I16) {
         this = this - rhs
     }
@@ -681,6 +747,7 @@ impl SubAssign for I16 {
 
 /// `I32 -= I32`
 impl SubAssign for I32 {
+    /// Subtracts rhs from self in place for I32.
     pub func sub_assign(mut this, rhs: I32) {
         this = this - rhs
     }
@@ -688,6 +755,7 @@ impl SubAssign for I32 {
 
 /// `I64 -= I64`
 impl SubAssign for I64 {
+    /// Subtracts rhs from self in place for I64.
     pub func sub_assign(mut this, rhs: I64) {
         this = this - rhs
     }
@@ -695,6 +763,7 @@ impl SubAssign for I64 {
 
 /// `U8 -= U8`
 impl SubAssign for U8 {
+    /// Subtracts rhs from self in place for U8.
     pub func sub_assign(mut this, rhs: U8) {
         this = this - rhs
     }
@@ -702,6 +771,7 @@ impl SubAssign for U8 {
 
 /// `U16 -= U16`
 impl SubAssign for U16 {
+    /// Subtracts rhs from self in place for U16.
     pub func sub_assign(mut this, rhs: U16) {
         this = this - rhs
     }
@@ -709,6 +779,7 @@ impl SubAssign for U16 {
 
 /// `U32 -= U32`
 impl SubAssign for U32 {
+    /// Subtracts rhs from self in place for U32.
     pub func sub_assign(mut this, rhs: U32) {
         this = this - rhs
     }
@@ -716,6 +787,7 @@ impl SubAssign for U32 {
 
 /// `U64 -= U64`
 impl SubAssign for U64 {
+    /// Subtracts rhs from self in place for U64.
     pub func sub_assign(mut this, rhs: U64) {
         this = this - rhs
     }
@@ -723,6 +795,7 @@ impl SubAssign for U64 {
 
 /// `F32 -= F32`
 impl SubAssign for F32 {
+    /// Subtracts rhs from self in place for F32.
     pub func sub_assign(mut this, rhs: F32) {
         this = this - rhs
     }
@@ -730,6 +803,7 @@ impl SubAssign for F32 {
 
 /// `F64 -= F64`
 impl SubAssign for F64 {
+    /// Subtracts rhs from self in place for F64.
     pub func sub_assign(mut this, rhs: F64) {
         this = this - rhs
     }
@@ -741,6 +815,7 @@ impl SubAssign for F64 {
 
 /// `I8 *= I8`
 impl MulAssign for I8 {
+    /// Multiplies self by rhs in place for I8.
     pub func mul_assign(mut this, rhs: I8) {
         this = this * rhs
     }
@@ -748,6 +823,7 @@ impl MulAssign for I8 {
 
 /// `I16 *= I16`
 impl MulAssign for I16 {
+    /// Multiplies self by rhs in place for I16.
     pub func mul_assign(mut this, rhs: I16) {
         this = this * rhs
     }
@@ -755,6 +831,7 @@ impl MulAssign for I16 {
 
 /// `I32 *= I32`
 impl MulAssign for I32 {
+    /// Multiplies self by rhs in place for I32.
     pub func mul_assign(mut this, rhs: I32) {
         this = this * rhs
     }
@@ -762,6 +839,7 @@ impl MulAssign for I32 {
 
 /// `I64 *= I64`
 impl MulAssign for I64 {
+    /// Multiplies self by rhs in place for I64.
     pub func mul_assign(mut this, rhs: I64) {
         this = this * rhs
     }
@@ -769,6 +847,7 @@ impl MulAssign for I64 {
 
 /// `U8 *= U8`
 impl MulAssign for U8 {
+    /// Multiplies self by rhs in place for U8.
     pub func mul_assign(mut this, rhs: U8) {
         this = this * rhs
     }
@@ -776,6 +855,7 @@ impl MulAssign for U8 {
 
 /// `U16 *= U16`
 impl MulAssign for U16 {
+    /// Multiplies self by rhs in place for U16.
     pub func mul_assign(mut this, rhs: U16) {
         this = this * rhs
     }
@@ -783,6 +863,7 @@ impl MulAssign for U16 {
 
 /// `U32 *= U32`
 impl MulAssign for U32 {
+    /// Multiplies self by rhs in place for U32.
     pub func mul_assign(mut this, rhs: U32) {
         this = this * rhs
     }
@@ -790,6 +871,7 @@ impl MulAssign for U32 {
 
 /// `U64 *= U64`
 impl MulAssign for U64 {
+    /// Multiplies self by rhs in place for U64.
     pub func mul_assign(mut this, rhs: U64) {
         this = this * rhs
     }
@@ -797,6 +879,7 @@ impl MulAssign for U64 {
 
 /// `F32 *= F32`
 impl MulAssign for F32 {
+    /// Multiplies self by rhs in place for F32.
     pub func mul_assign(mut this, rhs: F32) {
         this = this * rhs
     }
@@ -804,6 +887,7 @@ impl MulAssign for F32 {
 
 /// `F64 *= F64`
 impl MulAssign for F64 {
+    /// Multiplies self by rhs in place for F64.
     pub func mul_assign(mut this, rhs: F64) {
         this = this * rhs
     }
@@ -815,6 +899,7 @@ impl MulAssign for F64 {
 
 /// `I8 /= I8`
 impl DivAssign for I8 {
+    /// Divides self by rhs in place for I8.
     pub func div_assign(mut this, rhs: I8) {
         this = this / rhs
     }
@@ -822,6 +907,7 @@ impl DivAssign for I8 {
 
 /// `I16 /= I16`
 impl DivAssign for I16 {
+    /// Divides self by rhs in place for I16.
     pub func div_assign(mut this, rhs: I16) {
         this = this / rhs
     }
@@ -829,6 +915,7 @@ impl DivAssign for I16 {
 
 /// `I32 /= I32`
 impl DivAssign for I32 {
+    /// Divides self by rhs in place for I32.
     pub func div_assign(mut this, rhs: I32) {
         this = this / rhs
     }
@@ -836,6 +923,7 @@ impl DivAssign for I32 {
 
 /// `I64 /= I64`
 impl DivAssign for I64 {
+    /// Divides self by rhs in place for I64.
     pub func div_assign(mut this, rhs: I64) {
         this = this / rhs
     }
@@ -843,6 +931,7 @@ impl DivAssign for I64 {
 
 /// `U8 /= U8`
 impl DivAssign for U8 {
+    /// Divides self by rhs in place for U8.
     pub func div_assign(mut this, rhs: U8) {
         this = this / rhs
     }
@@ -850,6 +939,7 @@ impl DivAssign for U8 {
 
 /// `U16 /= U16`
 impl DivAssign for U16 {
+    /// Divides self by rhs in place for U16.
     pub func div_assign(mut this, rhs: U16) {
         this = this / rhs
     }
@@ -857,6 +947,7 @@ impl DivAssign for U16 {
 
 /// `U32 /= U32`
 impl DivAssign for U32 {
+    /// Divides self by rhs in place for U32.
     pub func div_assign(mut this, rhs: U32) {
         this = this / rhs
     }
@@ -864,6 +955,7 @@ impl DivAssign for U32 {
 
 /// `U64 /= U64`
 impl DivAssign for U64 {
+    /// Divides self by rhs in place for U64.
     pub func div_assign(mut this, rhs: U64) {
         this = this / rhs
     }
@@ -871,6 +963,7 @@ impl DivAssign for U64 {
 
 /// `F32 /= F32`
 impl DivAssign for F32 {
+    /// Divides self by rhs in place for F32.
     pub func div_assign(mut this, rhs: F32) {
         this = this / rhs
     }
@@ -878,6 +971,7 @@ impl DivAssign for F32 {
 
 /// `F64 /= F64`
 impl DivAssign for F64 {
+    /// Divides self by rhs in place for F64.
     pub func div_assign(mut this, rhs: F64) {
         this = this / rhs
     }
@@ -889,6 +983,7 @@ impl DivAssign for F64 {
 
 /// `I8 %= I8`
 impl RemAssign for I8 {
+    /// Assigns the remainder of self divided by rhs in place for I8.
     pub func rem_assign(mut this, rhs: I8) {
         this = this % rhs
     }
@@ -896,6 +991,7 @@ impl RemAssign for I8 {
 
 /// `I16 %= I16`
 impl RemAssign for I16 {
+    /// Assigns the remainder of self divided by rhs in place for I16.
     pub func rem_assign(mut this, rhs: I16) {
         this = this % rhs
     }
@@ -903,6 +999,7 @@ impl RemAssign for I16 {
 
 /// `I32 %= I32`
 impl RemAssign for I32 {
+    /// Assigns the remainder of self divided by rhs in place for I32.
     pub func rem_assign(mut this, rhs: I32) {
         this = this % rhs
     }
@@ -910,6 +1007,7 @@ impl RemAssign for I32 {
 
 /// `I64 %= I64`
 impl RemAssign for I64 {
+    /// Assigns the remainder of self divided by rhs in place for I64.
     pub func rem_assign(mut this, rhs: I64) {
         this = this % rhs
     }
@@ -917,6 +1015,7 @@ impl RemAssign for I64 {
 
 /// `U8 %= U8`
 impl RemAssign for U8 {
+    /// Assigns the remainder of self divided by rhs in place for U8.
     pub func rem_assign(mut this, rhs: U8) {
         this = this % rhs
     }
@@ -924,6 +1023,7 @@ impl RemAssign for U8 {
 
 /// `U16 %= U16`
 impl RemAssign for U16 {
+    /// Assigns the remainder of self divided by rhs in place for U16.
     pub func rem_assign(mut this, rhs: U16) {
         this = this % rhs
     }
@@ -931,6 +1031,7 @@ impl RemAssign for U16 {
 
 /// `U32 %= U32`
 impl RemAssign for U32 {
+    /// Assigns the remainder of self divided by rhs in place for U32.
     pub func rem_assign(mut this, rhs: U32) {
         this = this % rhs
     }
@@ -938,6 +1039,7 @@ impl RemAssign for U32 {
 
 /// `U64 %= U64`
 impl RemAssign for U64 {
+    /// Assigns the remainder of self divided by rhs in place for U64.
     pub func rem_assign(mut this, rhs: U64) {
         this = this % rhs
     }
