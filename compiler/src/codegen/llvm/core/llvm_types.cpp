@@ -761,8 +761,57 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         if (found)
                             break;
                     }
+                    // If not found as a struct, check if it's an enum (e.g., BorrowState)
+                    // Module-internal enums referenced as struct fields need type definitions.
+                    if (!found && env_.module_registry()) {
+                        for (const auto& [mn, m] : env_.module_registry()->get_all_modules()) {
+                            auto try_emit_enum =
+                                [&](const std::unordered_map<std::string, types::EnumDef>& emap)
+                                -> bool {
+                                auto eit = emap.find(named.name);
+                                if (eit == emap.end())
+                                    return false;
+                                const auto& edef = eit->second;
+                                if (!edef.type_params.empty())
+                                    return false; // Generic enum — handled elsewhere
+                                int max_payload = 0;
+                                for (const auto& [vn, vts] : edef.variants) {
+                                    int vsz = 0;
+                                    for (const auto& vt : vts) {
+                                        std::string lft = llvm_type_from_semantic(vt);
+                                        if (lft == "i8")
+                                            vsz += 1;
+                                        else if (lft == "i16")
+                                            vsz += 2;
+                                        else if (lft == "i32" || lft == "float")
+                                            vsz += 4;
+                                        else
+                                            vsz += 8;
+                                    }
+                                    if (vsz > max_payload)
+                                        max_payload = vsz;
+                                }
+                                std::string tn = "%struct." + named.name;
+                                std::string ed;
+                                if (max_payload == 0)
+                                    ed = tn + " = type { i32 }";
+                                else if (max_payload <= 4)
+                                    ed = tn + " = type { i32, i32 }";
+                                else
+                                    ed = tn + " = type { i32, [1 x i64] }";
+                                type_defs_buffer_ << ed << "\n";
+                                struct_types_[named.name] = tn;
+                                int tag = 0;
+                                for (const auto& [vn, vts] : edef.variants)
+                                    enum_variants_[named.name + "::" + vn] = tag++;
+                                found = true;
+                                return true;
+                            };
+                            if (try_emit_enum(m.enums) || try_emit_enum(m.internal_enums))
+                                break;
+                        }
+                    }
                     // Cache negative result to avoid re-parsing for this type again
-                    // (e.g., enum types like "Ordering" will never be found as structs)
                     if (!found) {
                         not_found_struct_types_.insert(named.name);
                     }

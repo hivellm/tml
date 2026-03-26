@@ -146,7 +146,65 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
         fields.push_back({decl.fields[i].name, static_cast<int>(i), ft, field_type});
     }
 
-    // 4. Emit struct type definition to type_defs_buffer_ (ensures types before functions)
+    // 4. Ensure all referenced struct/enum types are defined.
+    // When a field references %struct.BorrowState (a module-internal enum), that type
+    // must be emitted before this struct. Search for undefined %struct.X references
+    // and emit them by computing the enum layout from the module registry.
+    for (const auto& ft : field_types) {
+        if (ft.starts_with("%struct.") && struct_types_.find(ft.substr(8)) == struct_types_.end()) {
+            std::string dep_name = ft.substr(8); // e.g., "BorrowState"
+            if (env_.module_registry()) {
+                for (const auto& [mod_path, mod] : env_.module_registry()->get_all_modules()) {
+                    // Lambda to find and emit an enum definition from a map
+                    auto find_and_emit =
+                        [&](const std::unordered_map<std::string, types::EnumDef>& enum_map)
+                        -> bool {
+                        auto it = enum_map.find(dep_name);
+                        if (it == enum_map.end())
+                            return false;
+                        const auto& edef = it->second;
+                        // Compute enum layout: { i32 tag, [max_payload] }
+                        int max_payload_bytes = 0;
+                        for (const auto& [vname, vtypes] : edef.variants) {
+                            int variant_size = 0;
+                            for (const auto& vt : vtypes) {
+                                std::string llvm_ft = llvm_type_from_semantic(vt);
+                                if (llvm_ft == "i8")
+                                    variant_size += 1;
+                                else if (llvm_ft == "i16")
+                                    variant_size += 2;
+                                else if (llvm_ft == "i32" || llvm_ft == "float")
+                                    variant_size += 4;
+                                else
+                                    variant_size += 8;
+                            }
+                            if (variant_size > max_payload_bytes)
+                                max_payload_bytes = variant_size;
+                        }
+                        std::string dep_type_name = "%struct." + dep_name;
+                        std::string enum_def;
+                        if (max_payload_bytes == 0)
+                            enum_def = dep_type_name + " = type { i32 }";
+                        else if (max_payload_bytes <= 4)
+                            enum_def = dep_type_name + " = type { i32, i32 }";
+                        else
+                            enum_def = dep_type_name + " = type { i32, [1 x i64] }";
+                        type_defs_buffer_ << enum_def << "\n";
+                        struct_types_[dep_name] = dep_type_name;
+                        int tag = 0;
+                        for (const auto& [vname, vtypes] : edef.variants) {
+                            enum_variants_[dep_name + "::" + vname] = tag++;
+                        }
+                        return true;
+                    };
+                    if (find_and_emit(mod.enums) || find_and_emit(mod.internal_enums))
+                        break;
+                }
+            }
+        }
+    }
+
+    // 5. Emit struct type definition to type_defs_buffer_ (ensures types before functions)
     std::string def = type_name + " = type { ";
     for (size_t i = 0; i < field_types.size(); ++i) {
         if (i > 0)
@@ -156,7 +214,7 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
     def += " }";
     type_defs_buffer_ << def << "\n";
 
-    // 5. Register for later use
+    // 6. Register for later use
     struct_types_[mangled] = type_name;
     struct_fields_[mangled] = fields;
 }
