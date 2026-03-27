@@ -2,7 +2,7 @@
 
 ## Progress: 97% (68/70 tasks complete)
 
-**Status**: Nearly Complete — 97% (68/70). All reflection intrinsics working (structs, enums, classes, interfaces, behaviors). Phase 5.5 call_virtual has utilities but needs function pointer calling. 2 items remain: runtime dynamic dispatch + benchmarks.
+**Status**: Nearly Complete — 97% (68/70). All reflection intrinsics implemented including dynamic function pointer calls. 2 items blocked by `tml run` class method resolution (pre-existing query system limitation).
 
 **Proposal**: See [proposal.md](proposal.md) for full RFC
 
@@ -102,9 +102,12 @@
 - [x] 5.4.3 Works for both interfaces AND behaviors (traits) via fallback chain
 - [x] 5.4.4 Verified: Drawable(1 method), Resizable(2 methods), Display(1 method)
 
-### 5.5 Dynamic Dispatch Reflection — PARTIAL
-- [x] 5.5.1 get_vtable_ptr() + call_vtable_slot_i64() utilities in reflect.tml (a5c87498)
-- [ ] 5.5.2-5.5.5 Full call_virtual() requires runtime function pointer calling (language feature)
+### 5.5 Dynamic Dispatch Reflection ✓
+- [x] 5.5.1 get_vtable_ptr() + call_vtable_slot_i64/ptr/void() in reflect.tml (a5c87498, f5e847c5)
+- [x] 5.5.2 call_fn_ptr_i64/ptr/void() lowlevel intrinsics for indirect calls (f5e847c5)
+- [x] 5.5.3 Vtable slot dispatch: read function pointer + call via inttoptr + indirect call
+- [ ] 5.5.4 Full call_virtual(name) by string — blocked by class method resolution in query system
+- [ ] 5.5.5 Test dynamic dispatch — blocked by `tml run` class method resolution
 
 ## Phase 6: Integration & Testing (P3)
 
