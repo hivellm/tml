@@ -96,8 +96,11 @@
 - [x] 5.3.4 ClassMeta populated in gen_class_decl with per-method flags (065469d1)
 - [ ] 5.3.5 Handle inherited methods — partially via base_class intrinsic
 
-### 5.4 Interface Reflection — DEFERRED
-- [ ] 5.4.1-5.4.4 Interface reflection (needs further OOP testing)
+### 5.4 Interface Reflection — PARTIAL
+- [x] 5.4.1 InterfaceInfo struct in reflect.tml (6ec5726a)
+- [ ] 5.4.2 Generate TypeInfo for interface types
+- [ ] 5.4.3 `implementors[I]()` intrinsic
+- [ ] 5.4.4 Interface tests
 
 ### 5.5 Dynamic Dispatch Reflection — DEFERRED
 - [ ] 5.5.1-5.5.5 `call_virtual()` (needs function pointer dispatch)
@@ -114,16 +117,16 @@
 - [x] 6.2.3 Enum reflection: variant_name, variant_tag, variant_count, size
 - [x] 6.2.4 Intrinsics: field_count, field_name — verified for multiple struct types
 
-### 6.3 OOP Testing
-- [ ] 6.3.1 Test class reflection (fields, methods, base class)
+### 6.3 OOP Testing — PARTIAL
+- [x] 6.3.1 Test class reflection (class_reflection.test.tml — 9 tests) (6ec5726a)
 - [ ] 6.3.2 Test interface reflection
-- [ ] 6.3.3 Test virtual method reflection
+- [x] 6.3.3 Test virtual method reflection (is_virtual intrinsic verified)
 - [ ] 6.3.4 Test dynamic virtual call via reflection
 - [ ] 6.3.5 Benchmark reflection overhead vs direct call
 
 ### 6.4 Documentation ✓
 - [x] 6.4.1 Created `docs/user/ch15-00-reflection.md` user guide (241583dc)
-- [ ] 6.4.2 Update `CHANGELOG.md` with reflection features
+- [x] 6.4.2 CHANGELOG 0.2.5 with reflection features (8d5830fe)
 - [x] 6.4.3 Reflection examples included in ch15 doc
 - [x] 6.4.4 OOP class reflection API documented in ch15
 
