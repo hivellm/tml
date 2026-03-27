@@ -1647,6 +1647,8 @@ private:
     auto gen_call(const parser::CallExpr& call) -> std::string;
 
     // gen_call sub-dispatchers (split for file size management)
+    auto gen_call_enum_constructor(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
     auto gen_call_generic_struct_method(const parser::CallExpr& call, const std::string& fn_name)
         -> std::optional<std::string>;
     auto gen_call_user_function(const parser::CallExpr& call, const std::string& fn_name)
