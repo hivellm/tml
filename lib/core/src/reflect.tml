@@ -243,6 +243,42 @@ impl Debug for MethodInfo {
 }
 
 // ============================================================================
+// InterfaceInfo - Metadata about an OOP interface
+// ============================================================================
+
+/// Metadata about an interface type.
+///
+/// Provides runtime access to interface name and required methods.
+pub type InterfaceInfo {
+    /// The name of the interface
+    pub name: Str,
+    /// Number of methods declared in this interface
+    pub method_count: I64,
+    /// Whether this interface extends other interfaces
+    pub has_parents: Bool
+}
+
+impl InterfaceInfo {
+    /// Creates a new InterfaceInfo.
+    pub func new(name: Str, method_count: I64, has_parents: Bool) -> InterfaceInfo {
+        return InterfaceInfo {
+            name: name,
+            method_count: method_count,
+            has_parents: has_parents
+        }
+    }
+}
+
+impl Debug for InterfaceInfo {
+    /// Returns the debug string representation of this interface info.
+    pub func debug_string(this) -> Str {
+        var result: Str = "interface " + this.name
+        result = result + " (methods=" + this.method_count.to_string() + ")"
+        return result
+    }
+}
+
+// ============================================================================
 // TypeInfo - Complete type metadata
 // ============================================================================
 

@@ -241,8 +241,8 @@ impl Duplicate for Bool {
 /// `Duplicate` implementation for `Str`.
 /// Creates a deep copy of the string (new allocation with same content).
 impl Duplicate for Str {
-    @allocates
     /// Returns a duplicate value of Str by allocating a new string with the same content.
+    @allocates
     pub func duplicate(this) -> Str {
         let src: I64 = this as I64
         if src == 0 {

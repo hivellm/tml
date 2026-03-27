@@ -1,0 +1,95 @@
+// OOP Class Reflection Tests
+// Tests the compile-time class reflection intrinsics
+use test
+use std::collections::List
+
+class Animal {
+    name: Str
+
+    virtual func speak(this) -> Str {
+        return "..."
+    }
+
+    func get_name(this) -> Str {
+        return this.name
+    }
+
+    new(name: Str) {
+        this.name = name
+    }
+}
+
+sealed class Shape {
+    sides: I32
+
+    new(sides: I32) {
+        this.sides = sides
+    }
+
+    func get_sides(this) -> I32 {
+        return this.sides
+    }
+}
+
+@test
+func test_is_abstract_false() -> I32 {
+    let result: Bool = is_abstract[Animal]()
+    assert(not result, "Animal is not abstract")
+    return 0
+}
+
+@test
+func test_is_sealed_false() -> I32 {
+    let result: Bool = is_sealed[Animal]()
+    assert(not result, "Animal is not sealed")
+    return 0
+}
+
+@test
+func test_is_sealed_true() -> I32 {
+    let result: Bool = is_sealed[Shape]()
+    assert(result, "Shape IS sealed")
+    return 0
+}
+
+@test
+func test_method_count_animal() -> I32 {
+    let mc: I64 = method_count[Animal]()
+    assert_eq(mc, 2, "Animal has 2 methods: speak, get_name")
+    return 0
+}
+
+@test
+func test_method_count_shape() -> I32 {
+    let mc: I64 = method_count[Shape]()
+    assert_eq(mc, 1, "Shape has 1 method: get_sides")
+    return 0
+}
+
+@test
+func test_method_name_0() -> I32 {
+    let m0: Str = method_name[Animal](0)
+    assert_eq(m0, "speak", "Animal method 0 is speak")
+    return 0
+}
+
+@test
+func test_method_name_1() -> I32 {
+    let m1: Str = method_name[Animal](1)
+    assert_eq(m1, "get_name", "Animal method 1 is get_name")
+    return 0
+}
+
+@test
+func test_is_virtual_speak() -> I32 {
+    let v: Bool = is_virtual[Animal](0)
+    assert(v, "speak IS virtual")
+    return 0
+}
+
+@test
+func test_is_virtual_get_name() -> I32 {
+    let v: Bool = is_virtual[Animal](1)
+    assert(not v, "get_name is NOT virtual")
+    return 0
+}
