@@ -139,7 +139,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "field_count", "variant_count", "field_name", "field_type_id", "field_offset",
         // OOP reflection intrinsics
         "base_class", "is_abstract", "is_sealed", "method_count", "method_name", "is_virtual",
-        "is_override", "is_static_method",
+        "is_override", "is_static_method", "interface_method_count", "interface_method_name",
         // Memory copy/set intrinsics
         "copy_nonoverlapping", "copy", "write_bytes",
         // SIMD vector intrinsics

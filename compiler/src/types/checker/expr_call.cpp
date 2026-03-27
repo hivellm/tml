@@ -164,12 +164,13 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
             // Compiler intrinsics that take a type parameter [T] and return I64
             if (name == "type_id" || name == "size_of" || name == "align_of" ||
                 name == "field_count" || name == "variant_count" || name == "field_type_id" ||
-                name == "field_offset" || name == "method_count") {
+                name == "field_offset" || name == "method_count" ||
+                name == "interface_method_count") {
                 return make_primitive(PrimitiveKind::I64);
             }
             // Compiler intrinsics returning Str
             if (name == "type_name" || name == "field_name" || name == "base_class" ||
-                name == "method_name") {
+                name == "method_name" || name == "interface_method_name") {
                 return make_primitive(PrimitiveKind::Str);
             }
             // OOP reflection intrinsics returning Bool
