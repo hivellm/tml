@@ -140,6 +140,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // OOP reflection intrinsics
         "base_class", "is_abstract", "is_sealed", "method_count", "method_name", "is_virtual",
         "is_override", "is_static_method", "interface_method_count", "interface_method_name",
+        // Dynamic function pointer call intrinsics
+        "call_fn_ptr_i64", "call_fn_ptr_void", "call_fn_ptr_ptr",
         // Memory copy/set intrinsics
         "copy_nonoverlapping", "copy", "write_bytes",
         // SIMD vector intrinsics

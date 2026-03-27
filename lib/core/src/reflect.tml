@@ -574,21 +574,36 @@ pub func get_vtable_ptr(obj_ptr: I64) -> I64 {
     return lowlevel { ptr_read[I64](vtable_ptr_addr) }
 }
 
-/// Call a virtual method by vtable slot index.
+/// Call a virtual method by vtable slot index (returns I64).
 ///
-/// This reads a function pointer from the vtable at the given slot
+/// Reads the function pointer from the vtable at the given slot
 /// and calls it with the object pointer as the first argument.
-/// Returns the result as I64 (caller must interpret the type).
 ///
 /// # Safety
-/// This is lowlevel — the caller must ensure the slot index is valid
-/// and the function signature matches (takes ptr, returns I64).
+/// The caller must ensure the slot index is valid and the function
+/// signature matches: `func(this: ptr) -> I64`.
 pub func call_vtable_slot_i64(obj_ptr: I64, vtable_ptr: I64, slot: I64) -> I64 {
-    // Each vtable slot is a pointer (8 bytes on x86_64)
     let func_ptr_addr: I64 = vtable_ptr + slot * 8
     let func_ptr: *I64 = func_ptr_addr as *I64
     let fn_addr: I64 = lowlevel { ptr_read[I64](func_ptr) }
-    // Can't call arbitrary function pointers in pure TML without FFI.
-    // Return the function pointer address for now.
-    return fn_addr
+    return lowlevel { call_fn_ptr_i64(fn_addr, obj_ptr) }
+}
+
+/// Call a virtual method by vtable slot index (returns Str/ptr).
+///
+/// Same as call_vtable_slot_i64 but for methods returning Str (pointer).
+/// The result is the pointer cast to I64; use `as Str` to convert.
+pub func call_vtable_slot_ptr(obj_ptr: I64, vtable_ptr: I64, slot: I64) -> I64 {
+    let func_ptr_addr: I64 = vtable_ptr + slot * 8
+    let func_ptr: *I64 = func_ptr_addr as *I64
+    let fn_addr: I64 = lowlevel { ptr_read[I64](func_ptr) }
+    return lowlevel { call_fn_ptr_ptr(fn_addr, obj_ptr) }
+}
+
+/// Call a virtual method by vtable slot index (no return value).
+pub func call_vtable_slot_void(obj_ptr: I64, vtable_ptr: I64, slot: I64) {
+    let func_ptr_addr: I64 = vtable_ptr + slot * 8
+    let func_ptr: *I64 = func_ptr_addr as *I64
+    let fn_addr: I64 = lowlevel { ptr_read[I64](func_ptr) }
+    lowlevel { call_fn_ptr_void(fn_addr, obj_ptr) }
 }
