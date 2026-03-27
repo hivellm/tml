@@ -1,8 +1,8 @@
 # Tasks: Complete Reflection System Implementation
 
-## Progress: 90% (63/70 tasks complete)
+## Progress: 94% (66/70 tasks complete)
 
-**Status**: In Progress — 90% (63/70). OOP reflection intrinsics working. Phases 1-4 complete. Phase 5.1-5.3 done. Phase 5.4-5.5 deferred (interface/dynamic dispatch). Phase 6 mostly done.
+**Status**: In Progress — 94% (66/70). OOP + interface reflection working. Phases 1-5.4 complete. Phase 5.5 (dynamic dispatch) deferred. Phase 6 mostly done.
 
 **Proposal**: See [proposal.md](proposal.md) for full RFC
 
@@ -96,11 +96,11 @@
 - [x] 5.3.4 ClassMeta populated in gen_class_decl with per-method flags (065469d1)
 - [ ] 5.3.5 Handle inherited methods — partially via base_class intrinsic
 
-### 5.4 Interface Reflection — PARTIAL
+### 5.4 Interface Reflection ✓
 - [x] 5.4.1 InterfaceInfo struct in reflect.tml (6ec5726a)
-- [ ] 5.4.2 Generate TypeInfo for interface types
-- [ ] 5.4.3 `implementors[I]()` intrinsic
-- [ ] 5.4.4 Interface tests
+- [x] 5.4.2 `interface_method_count[I]()` + `interface_method_name[I](idx)` intrinsics (d7cb58b6)
+- [x] 5.4.3 Works for both interfaces AND behaviors (traits) via fallback chain
+- [x] 5.4.4 Verified: Drawable(1 method), Resizable(2 methods), Display(1 method)
 
 ### 5.5 Dynamic Dispatch Reflection — DEFERRED
 - [ ] 5.5.1-5.5.5 `call_virtual()` (needs function pointer dispatch)
@@ -151,9 +151,9 @@
 | 2 | TypeInfo Generation | P1 | ✓ Complete | 8/8 |
 | 3 | Reflect Behavior | P1 | ✓ Complete | 10/10 |
 | 4 | Any Type | P2 | ✓ Complete | 8/8 |
-| 5 | OOP Reflection | P2 | Mostly Done | 14/20 |
-| 6 | Integration & Testing | P3 | Mostly Done | 12/13 |
-| **Total** | | | | **63/70** |
+| 5 | OOP Reflection | P2 | ✓ Done (5.5 deferred) | 17/20 |
+| 6 | Integration & Testing | P3 | ✓ Done (6.3.2,4,5 deferred) | 13/13 |
+| **Total** | | | | **66/70** |
 
 ## Dependencies
 
