@@ -91,3 +91,43 @@ func struct_debug_string[T: Reflect](value: ref T, type_name: Str, fc: I64) -> S
     }
     return result
 }
+
+/// Convert any Reflect type to a JSON-like string representation.
+///
+/// For struct types, produces: `{"field0": <raw_i64>, "field1": <raw_i64>}`
+/// For other types, produces: `{"__type": "TypeName"}`
+///
+/// Field values are shown as raw I64 bit-pattern values.
+pub func to_json[T: Reflect](value: ref T) -> Str {
+    let info = value.runtime_type_info()
+    let type_name: Str = info.name
+    let kind_tag: I32 = info.kind.tag()
+
+    // Struct: kind_tag == 0
+    if kind_tag == 0 {
+        return struct_to_json(value, info.field_count)
+    }
+
+    // Other types
+    return "{\"__type\": \"" + type_name + "\"}"
+}
+
+func struct_to_json[T: Reflect](value: ref T, fc: I64) -> Str {
+    var result: Str = "{"
+    if fc > 0 {
+        let base: I64 = get_ref_ptr(value)
+        var i: I64 = 0
+        loop (i < fc) {
+            if i > 0 {
+                result = result + ", "
+            }
+            let fname: Str = field_name[T](i)
+            let offset: I64 = field_offset[T](i)
+            let raw: I64 = read_field_i64(base, offset)
+            result = result + "\"" + fname + "\": " + raw.to_string()
+            i = i + 1
+        }
+    }
+    result = result + "}"
+    return result
+}

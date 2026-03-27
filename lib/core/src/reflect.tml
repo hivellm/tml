@@ -202,6 +202,47 @@ impl Debug for VariantInfo {
 }
 
 // ============================================================================
+// MethodInfo - Metadata about a class method
+// ============================================================================
+
+/// Metadata about a single method in a class type.
+///
+/// Provides runtime access to method name and modifiers.
+pub type MethodInfo {
+    /// The name of the method as declared in source code
+    pub name: Str,
+    /// Whether this method uses virtual dispatch
+    pub is_virtual: Bool,
+    /// Whether this method overrides a base class method
+    pub is_override: Bool,
+    /// Whether this method is static (no receiver)
+    pub is_static: Bool
+}
+
+impl MethodInfo {
+    /// Creates a new MethodInfo with the given metadata.
+    pub func new(name: Str, is_virtual: Bool, is_override: Bool, is_static: Bool) -> MethodInfo {
+        return MethodInfo {
+            name: name,
+            is_virtual: is_virtual,
+            is_override: is_override,
+            is_static: is_static
+        }
+    }
+}
+
+impl Debug for MethodInfo {
+    /// Returns the debug string representation of this method info.
+    pub func debug_string(this) -> Str {
+        var result: Str = this.name
+        if this.is_virtual { result = "virtual " + result }
+        if this.is_override { result = "override " + result }
+        if this.is_static { result = "static " + result }
+        return result
+    }
+}
+
+// ============================================================================
 // TypeInfo - Complete type metadata
 // ============================================================================
 
@@ -269,19 +310,42 @@ impl TypeInfo {
         }
     }
 
-    /// Returns true if this type is a struct
+    /// Creates a new TypeInfo for a class type.
+    pub func for_class(id: U64, name: Str, size: I64, align: I64, field_count: I64, method_count: I64) -> TypeInfo {
+        return TypeInfo {
+            id: id,
+            name: name,
+            kind: TypeKind::Class,
+            size: size,
+            align: align,
+            field_count: field_count,
+            variant_count: method_count
+        }
+    }
+
+    /// Returns true if this type is a struct.
     pub func is_struct(this) -> Bool {
         return this.kind == TypeKind::Struct
     }
 
-    /// Returns true if this type is an enum
+    /// Returns true if this type is an enum.
     pub func is_enum(this) -> Bool {
         return this.kind == TypeKind::Enum
     }
 
-    /// Returns true if this type is a primitive
+    /// Returns true if this type is a primitive.
     pub func is_primitive(this) -> Bool {
         return this.kind == TypeKind::Primitive
+    }
+
+    /// Returns true if this type is a class.
+    pub func is_class(this) -> Bool {
+        return this.kind == TypeKind::Class
+    }
+
+    /// For class types, returns the method count (stored in variant_count field).
+    pub func method_count(this) -> I64 {
+        return this.variant_count
     }
 }
 
