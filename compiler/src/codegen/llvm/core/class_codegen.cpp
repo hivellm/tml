@@ -626,19 +626,47 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
     // Store vtable layout
     class_vtable_layout_[c.name] = vtable_methods;
 
-    // Populate class_meta_ for OOP reflection intrinsics
+    // Populate class_meta_ for OOP reflection intrinsics.
+    // Include inherited methods from base class (recursively).
     {
         ClassMeta meta;
         meta.base_class = c.extends.has_value() ? c.extends->segments.back() : "";
         meta.is_abstract = c.is_abstract;
         meta.is_sealed = c.is_sealed;
-        meta.method_count = c.methods.size();
+
+        // Add inherited methods first (from base class chain)
+        if (!meta.base_class.empty()) {
+            auto base_it = class_meta_.find(meta.base_class);
+            if (base_it != class_meta_.end()) {
+                // Copy base methods, skip overridden ones
+                for (size_t i = 0; i < base_it->second.method_names.size(); ++i) {
+                    const auto& base_method = base_it->second.method_names[i];
+                    // Check if this class overrides this method
+                    bool overridden = false;
+                    for (const auto& m : c.methods) {
+                        if (m.name == base_method && m.is_override) {
+                            overridden = true;
+                            break;
+                        }
+                    }
+                    if (!overridden) {
+                        meta.method_names.push_back(base_method);
+                        meta.method_is_virtual.push_back(base_it->second.method_is_virtual[i]);
+                        meta.method_is_override.push_back(false);
+                        meta.method_is_static.push_back(base_it->second.method_is_static[i]);
+                    }
+                }
+            }
+        }
+
+        // Add this class's own methods
         for (const auto& method : c.methods) {
             meta.method_names.push_back(method.name);
             meta.method_is_virtual.push_back(method.is_virtual);
             meta.method_is_override.push_back(method.is_override);
             meta.method_is_static.push_back(method.is_static);
         }
+        meta.method_count = meta.method_names.size();
         class_meta_[c.name] = meta;
     }
 

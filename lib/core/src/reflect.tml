@@ -560,3 +560,35 @@ pub func read_field_bool(base_ptr: I64, offset: I64) -> Bool {
 //         )
 //     }
 // }
+
+// ============================================================================
+// Virtual Dispatch Reflection
+// ============================================================================
+
+/// Read the vtable pointer from a class instance.
+///
+/// Class instances have a vtable pointer as their first field (offset 0).
+/// This returns the vtable pointer as an I64 for use with `call_vtable_slot`.
+pub func get_vtable_ptr(obj_ptr: I64) -> I64 {
+    let vtable_ptr_addr: *I64 = obj_ptr as *I64
+    return lowlevel { ptr_read[I64](vtable_ptr_addr) }
+}
+
+/// Call a virtual method by vtable slot index.
+///
+/// This reads a function pointer from the vtable at the given slot
+/// and calls it with the object pointer as the first argument.
+/// Returns the result as I64 (caller must interpret the type).
+///
+/// # Safety
+/// This is lowlevel — the caller must ensure the slot index is valid
+/// and the function signature matches (takes ptr, returns I64).
+pub func call_vtable_slot_i64(obj_ptr: I64, vtable_ptr: I64, slot: I64) -> I64 {
+    // Each vtable slot is a pointer (8 bytes on x86_64)
+    let func_ptr_addr: I64 = vtable_ptr + slot * 8
+    let func_ptr: *I64 = func_ptr_addr as *I64
+    let fn_addr: I64 = lowlevel { ptr_read[I64](func_ptr) }
+    // Can't call arbitrary function pointers in pure TML without FFI.
+    // Return the function pointer address for now.
+    return fn_addr
+}

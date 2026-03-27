@@ -1,0 +1,57 @@
+// Interface Reflection Tests
+use test
+use std::collections::List
+
+interface Drawable {
+    func draw(this) -> I32
+}
+
+interface Resizable {
+    func resize(this, w: I32, h: I32)
+    func get_area(this) -> I32
+}
+
+@test
+func test_interface_method_count_single() -> I32 {
+    let mc: I64 = interface_method_count[Drawable]()
+    assert_eq(mc, 1, "Drawable has 1 method")
+    return 0
+}
+
+@test
+func test_interface_method_count_multi() -> I32 {
+    let mc: I64 = interface_method_count[Resizable]()
+    assert_eq(mc, 2, "Resizable has 2 methods")
+    return 0
+}
+
+@test
+func test_interface_method_name() -> I32 {
+    let m0: Str = interface_method_name[Drawable](0)
+    assert_eq(m0, "draw", "Drawable method 0 is draw")
+    return 0
+}
+
+@test
+func test_interface_method_names_multi() -> I32 {
+    let m0: Str = interface_method_name[Resizable](0)
+    assert_eq(m0, "resize", "Resizable method 0 is resize")
+    let m1: Str = interface_method_name[Resizable](1)
+    assert_eq(m1, "get_area", "Resizable method 1 is get_area")
+    return 0
+}
+
+@test
+func test_behavior_method_count() -> I32 {
+    // Test with built-in Display behavior
+    let mc: I64 = interface_method_count[Display]()
+    assert_eq(mc, 1, "Display has 1 method")
+    return 0
+}
+
+@test
+func test_behavior_method_name() -> I32 {
+    let m0: Str = interface_method_name[Display](0)
+    assert_eq(m0, "to_string", "Display method 0 is to_string")
+    return 0
+}
