@@ -19,6 +19,42 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.5] — 2026-03-26
+
+### Fixed (Compiler — Codegen)
+
+- **MIR print type dispatch** — `println(42)` segfaulted because MIR called `@println(i32 42)` instead of `@print_i32(i32 42)`. Added type-specific dispatch for all primitive types.
+- **Missing static method arguments** — `List[T]::new()` crashed on Win64 because the call was emitted with 0 args but the definition expected 1 (initial_capacity). Now fills defaults.
+- **Template literal support** — MIR native implementation via inline `to_string` (snprintf). No legacy codegen fallback needed.
+- **Nested struct shallow copy / heap corruption** — `List.push(report)` followed by scope drops freed shared List handles. Fixed by marking struct args as consumed and suppressing field drops for let bindings from method calls.
+- **Missing enum type definitions** — `RefCell__I32` referenced `%struct.BorrowState` but the enum type was never emitted. Auto-emit from module registry.
+- **Non-lazy stdlib for tests** — Pre-compiled stdlib now includes ALL public library functions.
+- **dso_local on all declarations** — Prevents LLVM 23+ from merging function declarations with similar signatures.
+
+### Added (Compiler — Reflection)
+
+- **8 OOP reflection intrinsics**: `is_abstract[T]()`, `is_sealed[T]()`, `base_class[T]()`, `method_count[T]()`, `method_name[T](i)`, `is_virtual[T](i)`, `is_override[T](i)`, `is_static_method[T](i)`
+- **ClassMeta** populated during `gen_class_decl` with method names and virtual/override/static flags
+- **MethodInfo** type in `core::reflect` — name, is_virtual, is_override, is_static
+- **InterfaceInfo** type in `core::reflect` — name, method_count, has_parents
+- **TypeInfo::for_class** factory + `is_class()`, `method_count()` methods
+- **`to_json[T: Reflect]`** in `std::debug` — JSON-like serialization of reflected types
+- **`docs/user/ch15-00-reflection.md`** — complete reflection user guide
+
+### Added (Research)
+
+- **Condition B activation** — `--debug-layers` now default ON in MCP test tool for organic data collection
+
+### Improved (Documentation)
+
+- **91.4% doc coverage** (5664/6197 pub funcs) — 917 doc comments added across core + std libraries
+- **MCP docs verification** — `docs_search` returns descriptions, `docs_get` returns examples
+
+### Other
+
+- Deleted 22 stale `.tml.meta` v7 cache files
+- `audit_docs.tml` runs end-to-end (901 files, 103KB report)
+
 ## [0.2.4] — 2026-03-25
 
 ### Added (Compiler)
