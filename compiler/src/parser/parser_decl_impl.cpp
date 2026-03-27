@@ -100,6 +100,19 @@ auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, 
         if (is_err(method_decos_result))
             return unwrap_err(method_decos_result);
         auto method_decorators = std::move(unwrap(method_decos_result));
+
+        // Also collect doc comments that appear AFTER decorators
+        // e.g., @allocates /// doc comment \n pub func ...
+        if (!method_doc.has_value()) {
+            method_doc = collect_doc_comment();
+        } else if (check(lexer::TokenKind::DocComment)) {
+            // Merge: append post-decorator doc to pre-decorator doc
+            auto post_doc = collect_doc_comment();
+            if (post_doc.has_value()) {
+                method_doc = *method_doc + "\n" + *post_doc;
+            }
+        }
+
         auto method_vis = parse_visibility();
 
         // Check for associated type binding: type Name = ConcreteType or type Name[T] =

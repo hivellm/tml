@@ -524,6 +524,7 @@ add_library(tml_types STATIC
     src/types/env_lookups.cpp
     src/types/module.cpp
     src/types/env_module_support.cpp
+    src/types/env_module_load.cpp
     src/types/env_module_loading.cpp
     # Checker modules (split from checker.cpp)
     src/types/checker/helpers.cpp
@@ -538,6 +539,7 @@ add_library(tml_types STATIC
     src/types/checker/decl_struct.cpp
     src/types/checker/expr_call.cpp
     src/types/checker/expr_call_method.cpp
+    src/types/checker/expr_call_method_types.cpp
     # Builtin modules (moved from env_builtins*.cpp)
     src/types/builtins/register.cpp
     src/types/builtins/types.cpp
@@ -729,11 +731,13 @@ add_library(tml_codegen STATIC
     src/codegen/mir/mir_types.cpp
     src/codegen/mir/terminators.cpp
     src/codegen/mir/instructions.cpp
+    src/codegen/mir/instructions_call.cpp
     src/codegen/mir/instructions_method.cpp
     src/codegen/mir/instructions_misc.cpp
     # LLVM backend implementation
     src/codegen/llvm/llvm_codegen_backend.cpp
     src/codegen/llvm/llvm_ir_gen_stmt.cpp
+    src/codegen/llvm/llvm_ir_gen_stmt_let.cpp
     src/codegen/llvm/llvm_ir_gen_expr.cpp
     # LLVM declaration codegen
     src/codegen/llvm/decl/llvm_struct_decl.cpp
@@ -762,11 +766,13 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/core/llvm_types.cpp
     src/codegen/llvm/core/types_resolve.cpp
     src/codegen/llvm/core/generic.cpp
+    src/codegen/llvm/core/generic_instantiate.cpp
     src/codegen/llvm/core/runtime.cpp
     src/codegen/llvm/core/runtime_modules.cpp
     src/codegen/llvm/core/dyn.cpp
     src/codegen/llvm/core/generate.cpp
     src/codegen/llvm/core/generate_cache.cpp
+    src/codegen/llvm/core/generate_entry.cpp
     src/codegen/llvm/core/generate_support.cpp
     src/codegen/llvm/core/debug_info.cpp
     src/codegen/llvm/core/target.cpp
@@ -778,7 +784,12 @@ add_library(tml_codegen STATIC
     # LLVM expression codegen
     src/codegen/llvm/expr/core.cpp
     src/codegen/llvm/expr/call.cpp
+    src/codegen/llvm/expr/call_class.cpp
+    src/codegen/llvm/expr/call_enum.cpp
+    src/codegen/llvm/expr/call_generic_func.cpp
     src/codegen/llvm/expr/call_generic_struct.cpp
+    src/codegen/llvm/expr/call_indirect.cpp
+    src/codegen/llvm/expr/call_primitive.cpp
     src/codegen/llvm/expr/call_user.cpp
     src/codegen/llvm/expr/binary.cpp
     src/codegen/llvm/expr/binary_ops.cpp
@@ -787,6 +798,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/expr/closure.cpp
     src/codegen/llvm/expr/infer.cpp
     src/codegen/llvm/expr/infer_methods.cpp
+    src/codegen/llvm/expr/infer_types.cpp
     src/codegen/llvm/expr/llvm_struct_expr.cpp
     src/codegen/llvm/expr/struct_field.cpp
     src/codegen/llvm/expr/tuple.cpp
@@ -821,6 +833,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/builtins/async.cpp
     src/codegen/llvm/builtins/intrinsics.cpp
     src/codegen/llvm/builtins/intrinsics_extended.cpp
+    src/codegen/llvm/builtins/intrinsics_slice_simd.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
@@ -1182,6 +1195,7 @@ add_library(tml_doc STATIC
     src/doc/extractor.cpp
     src/doc/generators.cpp
     src/doc/generators_html.cpp
+    src/doc/generators_html_assets.cpp
 )
 target_link_libraries(tml_doc PUBLIC tml_parser)
 target_include_directories(tml_doc PUBLIC include src)
@@ -1202,7 +1216,9 @@ add_library(tml_mcp_lib STATIC
     src/mcp/mcp_tools.cpp
     src/mcp/mcp_tools_docs.cpp
     src/mcp/mcp_tools_docs_handlers.cpp
+    src/mcp/mcp_tools_docs_index.cpp
     src/mcp/mcp_tools_project.cpp
+    src/mcp/mcp_tools_project_analysis.cpp
 )
 target_link_libraries(tml_mcp_lib PUBLIC tml_json tml_codegen tml_search)
 target_include_directories(tml_mcp_lib PUBLIC include src)
@@ -1580,6 +1596,7 @@ add_library(tml_cli STATIC
     src/cli/builder/compiler_setup.cpp
     src/cli/builder/dependency_resolver.cpp
     src/cli/builder/builder_helpers.cpp
+    src/cli/builder/builder_helpers_runtime.cpp
     src/cli/builder/object_compiler.cpp
     src/cli/builder/parallel_build.cpp
     src/cli/builder/rlib.cpp
@@ -1595,6 +1612,7 @@ add_library(tml_cli STATIC
     src/testing/testing_discovery.cpp
     src/testing/testing_compile.cpp
     src/testing/testing_coverage.cpp
+    src/testing/testing_coverage_html.cpp
     src/testing/testing_reporter.cpp
     # Linter modules
     src/cli/linter/config.cpp

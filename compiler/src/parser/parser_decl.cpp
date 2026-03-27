@@ -226,6 +226,11 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         // Enum: { Variant | Variant(...) | Variant { } }
         advance(); // consume '{'
         skip_newlines();
+        // Skip doc comments for enum/struct disambiguation lookahead
+        while (check(lexer::TokenKind::DocComment)) {
+            advance();
+            skip_newlines();
+        }
 
         bool is_enum = false;
         if (check(lexer::TokenKind::Identifier)) {

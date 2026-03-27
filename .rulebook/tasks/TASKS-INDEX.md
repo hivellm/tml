@@ -56,6 +56,7 @@ LSP, debugger, package manager, test infrastructure, documentation.
 | 4-03 | [Package Manager](phase4-03-package-manager/) | **BLOCKED** — no registry service | MEDIUM | 15% |
 | 4-04 | [Test Migration (Zig-inspired)](phase4-04-test-migration/) | In Progress — 2 blockers | MEDIUM | 71% (12/17) |
 | 4-05 | [Fix Legacy Codegen ABI Bugs](fix-legacy-codegen-abi-bugs/) | **NEW** — blocks audit_docs.tml | **HIGH** | 0% (0/14) |
+| 4-06 | [Split Large Files (1500+ lines)](refactor-split-large-files/) | **NEW** | MEDIUM | 0% (0/23) |
 
 ## Research
 

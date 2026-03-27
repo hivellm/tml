@@ -1491,6 +1491,9 @@ private:
     auto require_class_instantiation(const std::string& base_name,
                                      const std::vector<types::TypePtr>& type_args) -> std::string;
     void generate_pending_instantiations();
+    /// Generate main entry point, test/bench/fuzz harness, and HTTP route registration.
+    /// Called from generate() after all function bodies have been emitted.
+    void generate_main_and_test_harness(const parser::Module& module);
     void gen_struct_instantiation(const parser::StructDecl& decl,
                                   const std::vector<types::TypePtr>& type_args);
     void gen_enum_instantiation(const parser::EnumDecl& decl,
@@ -1647,7 +1650,15 @@ private:
     auto gen_call(const parser::CallExpr& call) -> std::string;
 
     // gen_call sub-dispatchers (split for file size management)
+    auto gen_call_primitive_or_intrinsic(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
     auto gen_call_enum_constructor(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
+    auto gen_call_indirect(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
+    auto gen_call_generic_func(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
+    auto gen_call_class_constructor(const parser::CallExpr& call, const std::string& fn_name)
         -> std::optional<std::string>;
     auto gen_call_generic_struct_method(const parser::CallExpr& call, const std::string& fn_name)
         -> std::optional<std::string>;
@@ -1787,6 +1798,8 @@ private:
         -> std::optional<std::string>;
     auto try_gen_intrinsic(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
+    auto try_gen_intrinsic_slice_simd(const std::string& intrinsic_name, const std::string& fn_name,
+                                      const parser::CallExpr& call) -> std::optional<std::string>;
     auto try_gen_intrinsic_extended(const std::string& intrinsic_name, const parser::CallExpr& call,
                                     const std::string& fn_name) -> std::optional<std::string>;
 
@@ -1810,6 +1823,8 @@ private:
 
     // Type inference for generics instantiation
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;
+    // Continuation of infer_expr_type for field, block, closure, conditional, call expressions
+    auto infer_expr_type_extended(const parser::Expr& expr) -> std::optional<types::TypePtr>;
     // Continuation of infer_expr_type for method calls, tuples, arrays, index, cast
     auto infer_expr_type_continued(const parser::Expr& expr) -> types::TypePtr;
     // Extract a generic parameter from a parser field type by matching against

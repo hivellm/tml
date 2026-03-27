@@ -163,6 +163,9 @@ private:
     auto check_unary(const parser::UnaryExpr& unary) -> TypePtr;
     auto check_call(const parser::CallExpr& call, TypePtr expected_type = nullptr) -> TypePtr;
     auto check_method_call(const parser::MethodCallExpr& call) -> TypePtr;
+    auto check_method_call_builtin_types(const parser::MethodCallExpr& call,
+                                         const TypePtr& obj_type, const std::string& method_name)
+        -> std::optional<TypePtr>;
     auto check_field_access(const parser::FieldExpr& field) -> TypePtr;
     auto check_index(const parser::IndexExpr& idx) -> TypePtr;
     auto check_block(const parser::BlockExpr& block) -> TypePtr;

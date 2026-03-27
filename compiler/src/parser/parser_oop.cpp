@@ -213,6 +213,17 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
         return unwrap_err(decorators_result);
     auto decorators = std::move(unwrap(decorators_result));
 
+    // Also collect doc comments that appear AFTER decorators
+    // e.g., @allocates /// doc comment \n pub func ...
+    if (!doc.has_value()) {
+        doc = collect_doc_comment();
+    } else if (check(lexer::TokenKind::DocComment)) {
+        auto post_doc = collect_doc_comment();
+        if (post_doc.has_value()) {
+            doc = *doc + "\n" + *post_doc;
+        }
+    }
+
     // Parse visibility
     auto vis = parse_member_visibility();
 
