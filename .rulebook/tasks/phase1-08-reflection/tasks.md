@@ -1,8 +1,8 @@
 # Tasks: Complete Reflection System Implementation
 
-## Progress: 94% (66/70 tasks complete)
+## Progress: 97% (68/70 tasks complete)
 
-**Status**: In Progress — 94% (66/70). OOP + interface reflection working. Phases 1-5.4 complete. Phase 5.5 (dynamic dispatch) deferred. Phase 6 mostly done.
+**Status**: Nearly Complete — 97% (68/70). All reflection intrinsics working (structs, enums, classes, interfaces, behaviors). Phase 5.5 call_virtual has utilities but needs function pointer calling. 2 items remain: runtime dynamic dispatch + benchmarks.
 
 **Proposal**: See [proposal.md](proposal.md) for full RFC
 
@@ -94,7 +94,7 @@
 - [ ] 5.3.2 Extend TypeInfo with interfaces array — deferred
 - [x] 5.3.3 MethodInfo struct (name, is_virtual, is_override, is_static) (241583dc)
 - [x] 5.3.4 ClassMeta populated in gen_class_decl with per-method flags (065469d1)
-- [ ] 5.3.5 Handle inherited methods — partially via base_class intrinsic
+- [x] 5.3.5 Handle inherited methods — ClassMeta includes base class methods (a5c87498)
 
 ### 5.4 Interface Reflection ✓
 - [x] 5.4.1 InterfaceInfo struct in reflect.tml (6ec5726a)
@@ -102,8 +102,9 @@
 - [x] 5.4.3 Works for both interfaces AND behaviors (traits) via fallback chain
 - [x] 5.4.4 Verified: Drawable(1 method), Resizable(2 methods), Display(1 method)
 
-### 5.5 Dynamic Dispatch Reflection — DEFERRED
-- [ ] 5.5.1-5.5.5 `call_virtual()` (needs function pointer dispatch)
+### 5.5 Dynamic Dispatch Reflection — PARTIAL
+- [x] 5.5.1 get_vtable_ptr() + call_vtable_slot_i64() utilities in reflect.tml (a5c87498)
+- [ ] 5.5.2-5.5.5 Full call_virtual() requires runtime function pointer calling (language feature)
 
 ## Phase 6: Integration & Testing (P3)
 
@@ -117,11 +118,11 @@
 - [x] 6.2.3 Enum reflection: variant_name, variant_tag, variant_count, size
 - [x] 6.2.4 Intrinsics: field_count, field_name — verified for multiple struct types
 
-### 6.3 OOP Testing — PARTIAL
+### 6.3 OOP Testing ✓
 - [x] 6.3.1 Test class reflection (class_reflection.test.tml — 9 tests) (6ec5726a)
-- [ ] 6.3.2 Test interface reflection
+- [x] 6.3.2 Test interface reflection (interface_reflection.test.tml — 6 tests) (a5c87498)
 - [x] 6.3.3 Test virtual method reflection (is_virtual intrinsic verified)
-- [ ] 6.3.4 Test dynamic virtual call via reflection
+- [ ] 6.3.4 Test dynamic virtual call via reflection (blocked: needs fn ptr calling)
 - [ ] 6.3.5 Benchmark reflection overhead vs direct call
 
 ### 6.4 Documentation ✓
@@ -151,9 +152,9 @@
 | 2 | TypeInfo Generation | P1 | ✓ Complete | 8/8 |
 | 3 | Reflect Behavior | P1 | ✓ Complete | 10/10 |
 | 4 | Any Type | P2 | ✓ Complete | 8/8 |
-| 5 | OOP Reflection | P2 | ✓ Done (5.5 deferred) | 17/20 |
-| 6 | Integration & Testing | P3 | ✓ Done (6.3.2,4,5 deferred) | 13/13 |
-| **Total** | | | | **66/70** |
+| 5 | OOP Reflection | P2 | ✓ Done (5.5.2-5 needs fn ptrs) | 18/20 |
+| 6 | Integration & Testing | P3 | ✓ Done (6.3.4-5 blocked) | 12/13 |
+| **Total** | | | | **68/70** |
 
 ## Dependencies
 
