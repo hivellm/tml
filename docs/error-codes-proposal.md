@@ -1,8 +1,37 @@
 # Error Codes Expansion Proposal
 
-> Generated: 2026-03-28
+> Generated: 2026-03-28 | Updated: full pipeline audit
 
-## Current State
+## Current State — REAL Numbers
+
+### Codes per pipeline stage
+
+| Pipeline Stage | Prefix | Codes with IDs | Untagged errors | Total error sites |
+|----------------|--------|---------------|-----------------|-------------------|
+| Preprocessor | — | **0** | ~18 | 18 |
+| Lexer | L | 17 | 0 | 17 |
+| Parser | P | 27 | 0 | 27 |
+| Type Checker | T | 79 | **63** | 142 |
+| Borrow Checker | B | 18 (in builder_helpers) | **0 in checker itself** | 18 |
+| HIR Lowering | — | **0** | ~2 | 2 |
+| THIR Lowering | — | **0** | ~1 | 1 |
+| MIR Building | — | 2 | ~21 | 23 |
+| Legacy Codegen | C | 35 | **8** | 43 |
+| LLVM Backend | — | **0** | ~17 (raw LLVM strings) | 17 |
+| Linker (LLD) | — | **0** | ~10 (raw LLD strings) | 10 |
+| Query System | — | **0** | ~39 | 39 |
+| Module Loading | — | 2 | ~63 | 65 |
+| Semantic | S | 7 | 0 | 7 |
+| Reflection | R | 1 | 0 | 1 |
+| Format/Lint | — | **0** | ~28 | 28 |
+| Testing | — | **0** | ~10 | 10 |
+| General | E | 7 | 0 | 7 |
+| Warnings | W | 4 | 0 | 4 |
+| **Total** | | **197** | **~270** | **~460** |
+
+**Only 43% of error sites have codes. 57% are untagged.**
+
+### Error codes summary
 
 | Category | Prefix | Count | Range | Description |
 |----------|--------|-------|-------|-------------|
@@ -339,41 +368,127 @@ Currently many different situations all emit "Type mismatch: expected X, found Y
 
 ---
 
+### C036-C050: Legacy Codegen — Untagged Errors
+
+8 codegen errors emit `report_error()` without a code. Plus new codes for common failure modes:
+
+| Code | Description |
+|------|-------------|
+| C036 | @no_mangle cannot be used with generic functions |
+| C037 | unwrap_or_else requires a closure or function reference |
+| C038 | Unsupported expression in codegen |
+| C039 | Unsupported statement in codegen |
+| C040 | Failed to resolve function for call |
+| C041 | Struct field access on non-struct type in codegen |
+| C042 | Enum variant access on non-enum type in codegen |
+| C043 | Closure capture codegen failed |
+| C044 | Generic instantiation produced invalid LLVM type |
+| C045 | sret convention mismatch in function call |
+| C046 | ABI mismatch for extern function call |
+| C047 | Void function returning non-void value |
+| C048 | Array bounds exceeded in codegen |
+| C049 | Integer overflow in constant evaluation |
+| C050 | Bitcast between incompatible types |
+
+### S010-S025: Semantic Analysis Expansion (currently only 7 codes)
+
+| Code | Description |
+|------|-------------|
+| S014 | Unused variable '{name}' |
+| S015 | Unused import '{module}' |
+| S016 | Unreachable code after return/break/panic |
+| S017 | Variable '{name}' shadows outer scope binding |
+| S018 | @deprecated: function '{name}' is deprecated |
+| S019 | Implicit integer narrowing: I64 → I32 without cast |
+| S020 | Empty when/match arm with no body |
+| S021 | Redundant pattern: arm already covered by previous arm |
+| S022 | Missing when/match arms (non-exhaustive) |
+| S023 | Division by zero in constant expression |
+| S024 | Large stack allocation (> 1MB local variable) |
+| S025 | Infinite loop detected (loop without break/return) |
+
+### L021-L030: Lexer Expansion
+
+| Code | Description |
+|------|-------------|
+| L021 | Unterminated string literal |
+| L022 | Unterminated character literal |
+| L023 | Unterminated block comment |
+| L024 | Invalid escape sequence '\\{c}' |
+| L025 | Invalid unicode escape '\\u{...}' |
+| L026 | Numeric literal overflow |
+| L027 | Invalid numeric literal suffix |
+| L028 | Invalid binary literal (expected 0 or 1) |
+| L029 | Invalid octal literal (expected 0-7) |
+| L030 | Invalid hex literal (expected 0-9, a-f) |
+
+### P066-P080: Parser Expansion
+
+| Code | Description |
+|------|-------------|
+| P066 | Expected type annotation after ':' |
+| P067 | Expected expression, found '{token}' |
+| P068 | Expected '}' to close block started at line {n} |
+| P069 | Expected ')' to close parentheses started at line {n} |
+| P070 | Expected ']' to close bracket started at line {n} |
+| P071 | Unexpected token after end of expression |
+| P072 | Maximum nesting depth exceeded |
+| P073 | Invalid decorator syntax |
+| P074 | Expected function name, found keyword '{kw}' |
+| P075 | Unexpected end of file |
+| P076 | Expected ',' or '}' in struct literal |
+| P077 | Expected ',' or ')' in function arguments |
+| P078 | Duplicate field '{name}' in struct literal |
+| P079 | Invalid pattern in let binding |
+| P080 | Expected 'func' keyword in behavior declaration |
+
 ## Complete Summary
 
 | Category | Prefix | Current | Proposed New | Total After |
 |----------|--------|---------|-------------|-------------|
 | Preprocessor | PP | **0** | +10 | 10 |
-| Lexer | L | 17 | 0 | 17 |
-| Parser | P | 27 | 0 | 27 |
-| Type Checker | T | 79+63 untagged | +70 | 149 |
-| Borrow Checker | B | 18 | +13 | 31 |
-| HIR Lowering | H | **0** | +15 | 15 |
-| MIR Building | M | 2 | +18 | 20 |
-| Codegen | C | 35 | 0 | 35 |
-| LLVM Backend | K | **0** | +15 | 15 |
-| Query System | Q | **0** | +10 | 10 |
-| Module Loading | D | 2 | +13 | 15 |
-| Linker | N | **0** | +10 | 10 |
-| Semantic | S | 7 | 0 | 7 |
-| Reflection | R | 1 | +4 | 5 |
-| Formatter/Lint | F | **0** | +10 | 10 |
-| Testing | X | **0** | +10 | 10 |
-| Warnings | W | 4 | +11 | 15 |
+| Lexer | L | 17 | +10 (L021-L030) | 27 |
+| Parser | P | 27 | +15 (P066-P080) | 42 |
+| Type Checker | T | 79+63 untagged | +70 (T091-T160) | 149 |
+| Borrow Checker | B | 18 | +13 (B018-B030) | 31 |
+| HIR Lowering | H | **0** | +15 (H001-H015) | 15 |
+| MIR Building | M | 2 | +18 (M001-M020) | 20 |
+| Codegen | C | 35+8 untagged | +15 (C036-C050) | 50 |
+| Semantic | S | 7 | +12 (S014-S025) | 19 |
+| LLVM Backend | K | **0** | +15 (K001-K015) | 15 |
+| Query System | Q | **0** | +10 (Q001-Q010) | 10 |
+| Module Loading | D | 2 | +13 (D001-D015) | 15 |
+| Linker | N | **0** | +10 (N001-N010) | 10 |
+| Reflection | R | 1 | +4 (R002-R005) | 5 |
+| Formatter/Lint | F | **0** | +10 (F001-F010) | 10 |
+| Testing | X | **0** | +10 (X001-X010) | 10 |
+| Warnings | W | 4 | +11 (W005-W015) | 15 |
 | General | E | 7 | 0 | 7 |
-| **Total** | | **197 + 63** | **+199** | **398 (zero untagged)** |
+| **Total** | | **197 tagged + ~270 untagged** | **+261 new codes** | **460 (zero untagged)** |
 
 ## Implementation Priority
 
-1. **CRITICAL**: Tag 63 untagged type checker errors (T091-T160) — pure mechanical
-2. **HIGH**: Module loading errors (D001-D015) — most common user-facing errors
-3. **HIGH**: Linker errors (N001-N010) — currently show raw LLD output
-4. **HIGH**: LLVM backend errors (K001-K015) — currently show raw LLVM error text
-5. **MEDIUM**: Borrow checker expansion (B018-B030) — improve ownership error messages
-6. **MEDIUM**: HIR lowering codes (H001-H015) — debug generic instantiation failures
-7. **MEDIUM**: MIR building codes (M001-M020) — debug codegen pipeline
-8. **MEDIUM**: Warnings (W005-W015) — developer experience
-9. **LOW**: Preprocessor (PP001-PP010) — rarely hits users
-10. **LOW**: Query system (Q001-Q010) — internal diagnostics
-11. **LOW**: Formatter/Lint (F001-F010) — optional tooling
-12. **LOW**: Testing (X001-X010) — test runner diagnostics
+### Phase A: Tag existing untagged errors (pure mechanical — no new logic)
+1. **T091-T160**: 63 type checker errors → add code parameter to `error()` calls
+2. **C036-C050**: 8 codegen errors → add code to `report_error()` calls
+
+### Phase B: User-facing error improvements (HIGH value)
+3. **D001-D015**: Module loading — currently shows raw "module not found" without guidance
+4. **N001-N010**: Linker — currently shows raw LLD output, not actionable
+5. **K001-K015**: LLVM backend — currently shows raw LLVM parse errors, not actionable
+6. **L021-L030**: Lexer — unterminated strings/comments lack specific codes
+7. **P066-P080**: Parser — "Expected X, found Y" needs more specific codes
+
+### Phase C: Developer experience (MEDIUM value)
+8. **S014-S025**: Semantic warnings — unused vars, unreachable code, shadowing
+9. **W005-W015**: Warnings — overlap with S-codes, for non-semantic warnings
+10. **B018-B030**: Borrow checker — richer diagnostics for ownership errors
+11. **H001-H015**: HIR — debug generic instantiation failures
+12. **M001-M020**: MIR — debug codegen pipeline
+
+### Phase D: Internal diagnostics (LOW value — for compiler devs)
+13. **PP001-PP010**: Preprocessor — rarely hits users
+14. **Q001-Q010**: Query system — cycle detection, cache errors
+15. **F001-F010**: Formatter/Lint — optional tooling
+16. **X001-X010**: Testing — test runner diagnostics
+17. **R002-R005**: Reflection — already works, better messages
