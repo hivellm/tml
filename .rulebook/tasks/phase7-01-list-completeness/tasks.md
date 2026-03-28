@@ -1,28 +1,28 @@
 # Tasks: List[T] Completeness — Rust Vec Parity
 
-**Status**: Proposed
+**Status**: In Progress
 **Priority**: CRITICAL
 **Phase**: 7 — Rust Parity
 
 ## Phase 1: Critical Methods (blocks common patterns)
 
-- [ ] 1.1 `contains(this, value: T) -> Bool` — linear scan for element
-- [ ] 1.2 `insert(this, index: I64, value: T)` — insert at index, shift right
-- [ ] 1.3 `remove(this, index: I64) -> T` — remove at index, shift left
-- [ ] 1.4 `reverse(this)` — reverse in place
-- [ ] 1.5 `swap(this, i: I64, j: I64)` — swap two elements
-- [ ] 1.6 `sort(this)` — in-place sort (quicksort or mergesort via get/set/swap)
-- [ ] 1.7 `sort_by(this, cmp: func(ref T, ref T) -> I32)` — sort with comparator
-- [ ] 1.8 Tests: contains, insert, remove, reverse, swap, sort, sort_by
+- [x] 1.1 `contains(this, value: T) -> Bool` — linear scan for element
+- [x] 1.2 `insert(this, index: I64, value: T)` — insert at index, shift right
+- [x] 1.3 `remove(this, index: I64) -> T` — remove at index, shift left
+- [x] 1.4 `reverse(this)` — reverse in place
+- [x] 1.5 `swap(this, i: I64, j: I64)` — swap two elements
+- [x] 1.6 `sort(this)` — in-place quicksort via get/set/swap
+- [ ] 1.7 `sort_by(this, cmp: func(ref T, ref T) -> I32)` — sort with comparator (needs lambda codegen fix)
+- [x] 1.8 Tests: contains, insert, remove, reverse, swap, sort (list_phase1.test.tml + list_sort.test.tml)
 
 ## Phase 2: High Priority Methods
 
-- [ ] 2.1 `swap_remove(this, index: I64) -> T` — O(1) remove by swapping with last
+- [x] 2.1 `swap_remove(this, index: I64) -> T` — O(1) remove by swapping with last
 - [ ] 2.2 `binary_search(this, value: T) -> Outcome[I64, I64]` — sorted list search
 - [ ] 2.3 `iter(this) -> ListIter[T]` — iterator over elements
-- [ ] 2.4 `extend(this, other: List[T])` — append all elements from another list
-- [ ] 2.5 `index_of(this, value: T) -> Maybe[I64]` — find first index of value
-- [ ] 2.6 Tests: swap_remove, binary_search, iter, extend, index_of
+- [x] 2.4 `extend(this, other: ref List[T])` — append all elements from another list
+- [x] 2.5 `index_of(this, value: T) -> Maybe[I64]` — find first index of value (implemented in list.tml, not yet tested)
+- [ ] 2.6 Tests: binary_search, iter, extend, index_of
 
 ## Phase 3: Medium Priority Methods
 
@@ -37,3 +37,9 @@
 - [ ] 3.9 `fill(this, value: T)` — set all elements
 - [ ] 3.10 `sort_by_key(this, key: func(ref T) -> K)` — sort by key function
 - [ ] 3.11 Tests: all Phase 3 methods
+
+## Notes
+
+- `sort_by` needs lambda/closure as parameter — may require codegen support for `func(ref T, ref T) -> I32` callbacks
+- `index_of` was implemented alongside `contains` (same search pattern)
+- `swap_remove` and `extend` were implemented as bonus in Phase 1

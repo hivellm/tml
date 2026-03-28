@@ -44,13 +44,27 @@
 - [x] 8.1 Condition A (baseline): MCP call logger active, --debug-layers NOT default (current state)
 - [x] 8.2 Condition B (enhanced): --debug-layers enabled as default in MCP test tool (d805b08a, 2026-03-26)
 - [x] 8.3 Post-hoc: classified 6 Condition A sessions (all exploration, no deep debugging in MCP logs)
-- [ ] 8.4 Compare tool usage patterns between conditions A and B
+- [x] 8.4 Compare tool usage patterns between conditions A and B (preliminary — see preliminary-analysis.md)
+  - Note: Comparison limited by severe sample imbalance (6 vs 54 sessions) and task type confound
+  - Key finding: debug_layers used only 3/216 calls (1.4%) even when default — underutilized
+  - Need more baseline data for fair statistical comparison
+
+## 8.5 Condition C — Prompt Reinforcement (2026-03-28)
+- [x] 8.5.1 Analyzed preliminary data: docs tools 10.5%, check 8.8%, debug_layers 1.4%
+- [x] 8.5.2 Added "Quick Decision Guide" table to .claude/rules/mcp-tool-reference.md
+- [x] 8.5.3 Added "NEVER Read Source Files to Understand APIs" to CLAUDE.md + consult-language-reference.md
+- [x] 8.5.4 Added "check BEFORE test" workflow rule to CLAUDE.md (check is 10x faster)
+- [x] 8.5.5 Added "ALWAYS use debug_layers on FIRST failure" rule to CLAUDE.md
+- [x] 8.5.6 All rules reference observed data percentages for transparency
+- [ ] 8.5.7 Collect data for 1-2 weeks under Condition C, compare with A/B
 
 ## 9. Analysis & Paper
-- [ ] 9.1 Parse all NDJSON logs, compute per-session metrics (tool counts, IR preference, fix attempts)
-- [ ] 9.2 Compute aggregate statistics per condition (means, success rates)
-- [ ] 9.3 Run statistical tests (paired t-test, Cohen's d)
-- [ ] 9.4 Generate tool transition heatmaps (Markov chain analysis)
+- [x] 9.1 Parse all NDJSON logs, compute per-session metrics (preliminary-analysis.md, 2026-03-28)
+  - 60 sessions, 238 calls, 12 tools, test=60.5%, test→test loop=64% of transitions
+- [ ] 9.2 Compute aggregate statistics per condition (means, success rates) — needs more baseline data
+- [ ] 9.3 Run statistical tests (paired t-test, Cohen's d) — blocked: n too small for significance
+- [x] 9.4 Generate tool transition analysis (Markov chain first-order, in preliminary-analysis.md)
+  - Heatmap visualization deferred until more data collected
 - [ ] 9.5 Write paper sections: Introduction, Background, System Design, Methodology, Results, Discussion
 - [ ] 9.6 Review and finalize paper
 
