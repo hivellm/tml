@@ -1,0 +1,155 @@
+// Tests for core::net::ip — Ipv4Addr, Ipv6Addr, IpAddr
+use test
+use core::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+
+// =============================================================================
+// Ipv4Addr — constructors, accessors, classification
+// =============================================================================
+
+@test
+func test_ipv4_new() -> I32 {
+    let addr: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    assert_eq(addr.octet0(), 192 as U8)
+    assert_eq(addr.octet1(), 168 as U8)
+    assert_eq(addr.octet2(), 1 as U8)
+    assert_eq(addr.octet3(), 1 as U8)
+    0
+}
+
+@test
+func test_ipv4_constants() -> I32 {
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    assert(lo.is_loopback(), "LOCALHOST should be loopback")
+
+    let unspec: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+
+    let bcast: Ipv4Addr = Ipv4Addr::BROADCAST()
+    assert(bcast.is_broadcast(), "BROADCAST should be broadcast")
+    0
+}
+
+@test
+func test_ipv4_from_bits() -> I32 {
+    let addr: Ipv4Addr = Ipv4Addr::from_bits(0x7F000001)
+    assert(addr.is_loopback(), "0x7F000001 should be 127.0.0.1")
+    assert_eq(addr.to_bits(), 0x7F000001 as U32)
+    0
+}
+
+@test
+func test_ipv4_classification() -> I32 {
+    assert(Ipv4Addr::new(10, 0, 0, 1).is_private(), "10.x is private")
+    assert(Ipv4Addr::new(172, 16, 0, 1).is_private(), "172.16.x is private")
+    assert(Ipv4Addr::new(192, 168, 1, 1).is_private(), "192.168.x is private")
+    assert(Ipv4Addr::new(169, 254, 1, 1).is_link_local(), "169.254.x is link-local")
+    assert(Ipv4Addr::new(224, 0, 0, 1).is_multicast(), "224.x is multicast")
+    assert(Ipv4Addr::new(8, 8, 8, 8).is_global(), "8.8.8.8 is global")
+    0
+}
+
+@test
+func test_ipv4_eq() -> I32 {
+    let a: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let b: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let c: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 1)
+    assert(a == b, "same addresses should be equal")
+    assert(a != c, "different addresses should not be equal")
+    0
+}
+
+@test
+func test_ipv4_display() -> I32 {
+    let addr: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    assert_eq(addr.to_string(), "192.168.1.1")
+    0
+}
+
+// =============================================================================
+// Ipv6Addr — constructors, classification
+// =============================================================================
+
+@test
+func test_ipv6_new() -> I32 {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    let segs = addr.segments()
+    assert_eq(segs[0], 0x2001 as U16)
+    assert_eq(segs[7], 1 as U16)
+    0
+}
+
+@test
+func test_ipv6_constants() -> I32 {
+    let lo: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(lo.is_loopback(), "LOCALHOST should be loopback")
+
+    let unspec: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    0
+}
+
+@test
+func test_ipv6_classification() -> I32 {
+    assert(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 1).is_multicast(), "ff02::1 is multicast")
+    assert(Ipv6Addr::new(0xFE80, 0, 0, 0, 0, 0, 0, 1).is_unicast_link_local(), "fe80::1 is link-local")
+    assert(Ipv6Addr::new(0xFC00, 0, 0, 0, 0, 0, 0, 1).is_unique_local(), "fc00::1 is unique local")
+    0
+}
+
+@test
+func test_ipv6_eq() -> I32 {
+    let a: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let b: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(a == b, "same addresses should be equal")
+    0
+}
+
+// =============================================================================
+// Ipv4 ↔ Ipv6 conversion
+// =============================================================================
+
+@test
+func test_ipv4_to_ipv6_mapped() -> I32 {
+    let v4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let v6: Ipv6Addr = v4.to_ipv6_mapped()
+    assert(v6.is_ipv4_mapped(), "should be IPv4-mapped")
+
+    let back = v6.to_ipv4()
+    when back {
+        Just(addr) => assert(addr == v4, "round-trip should preserve address"),
+        Nothing => assert(false, "to_ipv4 should return Just"),
+    }
+    0
+}
+
+// =============================================================================
+// IpAddr enum
+// =============================================================================
+
+@test
+func test_ipaddr_v4() -> I32 {
+    let ip: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert(ip.is_ipv4(), "should be V4")
+    assert(not ip.is_ipv6(), "should not be V6")
+    assert(ip.is_loopback(), "should be loopback")
+    0
+}
+
+@test
+func test_ipaddr_v6() -> I32 {
+    let ip: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    assert(ip.is_ipv6(), "should be V6")
+    assert(not ip.is_ipv4(), "should not be V4")
+    assert(ip.is_loopback(), "should be loopback")
+    0
+}
+
+@test
+func test_ipaddr_eq() -> I32 {
+    let a: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    let b: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    let c: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    assert(a == b, "same V4 should be equal")
+    assert(a != c, "V4 != V6")
+    0
+}

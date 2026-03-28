@@ -10,11 +10,11 @@
 //! - [`SocketAddrV6`] - IPv6 socket address (IP + port + flow info + scope ID)
 //! - [`SocketAddr`] - Socket address wrapper (currently IPv4 only)
 
-// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
+// Builtins (no import needed): PartialEq, Eq, PartialOrd, Ord, Ordering,
+// Display, Debug, Duplicate, Copy, Maybe, Just, Nothing
 use core::traits::hash::Hash
-use core::types::option::Maybe::{Just, Nothing}
 
-use super::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+use core::net::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
 
 // =============================================================================
 // SocketAddrV4 - IPv4 Socket Address

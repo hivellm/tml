@@ -416,6 +416,12 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     // Emit vtable constants for dyn dispatch (same as generate())
     emit_vtables(module);
 
+    // Emit test runtime declarations needed by test entry wrappers
+    if (!options_.test_entry_name.empty()) {
+        emitln("declare dso_local void @tml_set_test_timeout(i32)");
+        emitln("declare dso_local i32 @tml_run_test_with_catch(ptr)");
+    }
+
     // Emit entry point wrappers for the CGU that contains the `main` function.
     {
         bool this_cgu_has_main = false;
@@ -714,6 +720,7 @@ void MirCodegen::emit_preamble() {
     emitln("declare dso_local ptr @mem_alloc(i64)");
     emitln("declare dso_local void @mem_free(ptr)");
     emitln("declare dso_local void @tml_set_test_timeout(i32)");
+    emitln("declare dso_local i32 @tml_run_test_with_catch(ptr)");
     emitln("declare dso_local i64 @strlen(ptr)");
     emitln("declare dso_local ptr @malloc(i64)");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");

@@ -26,10 +26,9 @@
 //! let mapped = v4.to_ipv6_mapped()
 //! ```
 
-// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
+// Builtins (no import needed): PartialEq, Eq, PartialOrd, Ord, Ordering,
+// Display, Debug, Duplicate, Copy, Maybe, Just, Nothing
 use core::traits::hash::Hash
-use core::traits::default::Default
-use core::types::option::Maybe::{Just, Nothing}
 
 // =============================================================================
 // Ipv4Addr - IPv4 Address (32 bits)
