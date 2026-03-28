@@ -1,0 +1,13 @@
+// Tests for Heap::into_pin
+use test
+use core::alloc::Heap
+use core::runtime::pin::Pin
+
+@test
+func test_heap_into_pin_get_ref() -> Outcome[Unit, Str] {
+    let h: Heap[I32] = Heap::new(77)
+    let pinned: Pin[Heap[I32]] = h.into_pin()
+    let v: ref I32 = pinned.get_ref()
+    assert_eq(*v, 77 as I32, "into_pin get_ref should return correct value")
+    Ok(())
+}

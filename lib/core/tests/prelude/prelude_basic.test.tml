@@ -1,0 +1,18 @@
+// Tests that core::prelude re-exports work
+use test::{assert, assert_eq}
+use core::prelude::*
+
+@test
+func test_prelude_maybe() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    assert(x.is_just(), "Just(42) should be Just")
+    assert_eq(x.unwrap(), 42, "Just(42) should unwrap to 42")
+    return 0
+}
+
+@test
+func test_prelude_outcome() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    assert(x.is_ok(), "Ok(10) should be ok")
+    return 0
+}

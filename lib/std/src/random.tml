@@ -533,3 +533,7 @@ func splitmix_next(z: I64) -> I64 {
     x = x ^ (x >> 31)
     return x
 }
+
+// impl core::random::RngSource for Rng is BLOCKED — see core::random for the
+// behavior definition. The `Rng` type has all equivalent concrete methods
+// (next_i64, next_i32, next_bool, next_f64, range) for direct use.

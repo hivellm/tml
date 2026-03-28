@@ -1,0 +1,31 @@
+//! The core prelude — commonly used types re-exported for convenience.
+//!
+//! This module re-exports the most frequently used types from the core library.
+//! Users can import everything with `use core::prelude::*`.
+//!
+//! Eventually, the compiler will auto-inject this import for every module.
+
+/// Option type: Maybe[T] with Just(x) and Nothing
+pub use core::types::option::*
+
+/// Result type: Outcome[T,E] with Ok(x) and Err(e)
+pub use core::types::result::*
+
+/// Error handling
+pub use core::runtime::error::*
+
+/// Ordering for comparisons
+pub use core::traits::cmp::{Ordering, PartialEq, Eq, PartialOrd, Ord}
+
+/// Display and Debug formatting
+pub use core::fmt::traits::{Display, Debug}
+
+/// Clone/Duplicate
+pub use core::traits::clone::{Duplicate, Copy}
+
+/// Default values
+pub use core::traits::default::Default
+
+/// Iterator
+pub use core::iter::traits::iterator::Iterator
+pub use core::iter::traits::into_iterator::IntoIterator

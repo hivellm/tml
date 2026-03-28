@@ -146,3 +146,5 @@ pub mod ffi        // FFI types: c_int, c_long, c_void, CStr
 pub mod panic      // PanicInfo, set_hook, catch_unwind
 pub mod hint       // likely, unlikely, black_box, spin_loop_hint, unreachable_unchecked
 pub mod net        // IP addresses, socket addresses (pure data, no OS calls)
+pub mod io         // Read, Write, BufRead behaviors + IoError/IoErrorKind
+pub mod random     // RngSource, Random behaviors

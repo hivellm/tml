@@ -60,6 +60,20 @@ impl[T: Copy] Cell[T] {
     pub func into_inner(this) -> T {
         return this.value
     }
+
+    /// Updates the contained value by applying a function.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut c: Cell[I32] = Cell::new(5)
+    /// c.update(do(x) x * 2)
+    /// assert_eq(c.get(), 10)
+    /// ```
+    pub func update(mut this, f: func(T) -> T) {
+        let old: T = this.value
+        this.value = f(old)
+    }
 }
 
 /// `Cell` methods for types that are both `Copy` and `Default`.

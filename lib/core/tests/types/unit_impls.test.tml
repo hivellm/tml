@@ -1,0 +1,18 @@
+// Tests for Unit Display, Debug, Default impls (already exist)
+use test::{assert, assert_eq}
+
+@test
+func test_unit_to_string() -> I32 {
+    let u: Unit = ()
+    let s: Str = u.to_string()
+    assert_eq(s, "()", "Unit to_string should be '()'")
+    return 0
+}
+
+@test
+func test_unit_debug_string() -> I32 {
+    let u: Unit = ()
+    let s: Str = u.debug_string()
+    assert_eq(s, "()", "Unit debug_string should be '()'")
+    return 0
+}

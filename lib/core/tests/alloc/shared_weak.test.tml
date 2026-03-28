@@ -1,0 +1,68 @@
+// Tests for SharedWeak[T]: downgrade/upgrade, weak_count, ptr_eq, expired weak
+use test
+use core::alloc::Shared
+use core::alloc::SharedWeak
+
+@test
+func test_shared_downgrade_upgrade() -> Outcome[Unit, Str] {
+    let s: Shared[I32] = Shared::new(42)
+    let w: SharedWeak[I32] = s.downgrade()
+    when w.upgrade() {
+        Just(s2) => assert_eq(s2.get(), 42 as I32, "upgraded value should be 42"),
+        Nothing => {
+            return Err("upgrade should succeed while strong ref exists")
+        },
+    }
+    Ok(())
+}
+
+@test
+func test_shared_weak_count() -> Outcome[Unit, Str] {
+    let s: Shared[I32] = Shared::new(10)
+    assert_eq(s.weak_count(), 0 as I64, "no weak refs initially")
+    let w: SharedWeak[I32] = s.downgrade()
+    assert_eq(s.weak_count(), 1 as I64, "one weak ref after downgrade")
+    Ok(())
+}
+
+@test
+func test_shared_ptr_eq_same() -> Outcome[Unit, Str] {
+    let a: Shared[I32] = Shared::new(99)
+    let b: Shared[I32] = a.duplicate()
+    assert_true(a.ptr_eq(ref b), "duplicate should point to same allocation")
+    Ok(())
+}
+
+@test
+func test_shared_ptr_eq_different() -> Outcome[Unit, Str] {
+    let a: Shared[I32] = Shared::new(1)
+    let b: Shared[I32] = Shared::new(1)
+    assert_true(not a.ptr_eq(ref b), "different allocations should not be ptr_eq")
+    Ok(())
+}
+
+@test
+func test_shared_weak_is_expired() -> Outcome[Unit, Str] {
+    let w: SharedWeak[I32] = {
+        let s: Shared[I32] = Shared::new(5)
+        s.downgrade()
+    }
+    // After s goes out of scope, weak should be expired
+    assert_true(w.is_expired(), "weak ref should be expired after strong dropped")
+    Ok(())
+}
+
+@test
+func test_shared_weak_upgrade_expired() -> Outcome[Unit, Str] {
+    let w: SharedWeak[I32] = {
+        let s: Shared[I32] = Shared::new(5)
+        s.downgrade()
+    }
+    when w.upgrade() {
+        Just(_) => {
+            return Err("upgrade should fail after strong dropped")
+        },
+        Nothing => assert_true(true, "upgrade correctly returns Nothing"),
+    }
+    Ok(())
+}

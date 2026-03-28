@@ -286,6 +286,28 @@ pub behavior Iterator {
         }
     }
 
+    /// Checks if the elements of this iterator are sorted in ascending order.
+    pub func is_sorted(mut this) -> Bool where This::Item: Ord {
+        when this.next() {
+            Nothing => return true,
+            Just(first) => {
+                let mut prev: This::Item = first
+                loop (true) {
+                    when this.next() {
+                        Just(x) => {
+                            when x.cmp(ref prev) {
+                                Ordering::Less => return false,
+                                _ => {}
+                            }
+                            prev = x
+                        },
+                        Nothing => return true
+                    }
+                }
+            }
+        }
+    }
+
     /// Transforms an iterator into a collection.
     ///
     /// `collect()` takes an iterator and builds a collection from its elements.

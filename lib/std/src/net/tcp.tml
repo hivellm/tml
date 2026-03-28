@@ -42,6 +42,7 @@ use std::net::{SocketAddr, SocketAddrV4, IpAddr, Ipv4Addr}
 use std::net::error::{NetError, NetErrorKind}
 use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily, ShutdownMode}
 use core::time::Duration
+use core::str::substring_from
 
 // ============================================================================
 // TcpListener
@@ -140,6 +141,52 @@ impl TcpListener {
     /// Consumes the listener and returns the underlying raw socket.
     pub func into_raw_socket(this) -> RawSocket {
         this.socket
+    }
+
+    /// Returns an iterator over incoming connections.
+    ///
+    /// Each call to `next()` on the returned iterator will block until
+    /// a new connection is accepted.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::net::tcp::TcpListener
+    ///
+    /// let listener = TcpListener::bind(addr)!
+    /// let incoming = listener.incoming()
+    /// // Each call to incoming.next() accepts a connection
+    /// ```
+    pub func incoming(this) -> TcpIncoming {
+        return TcpIncoming { listener: this }
+    }
+}
+
+// ============================================================================
+// TcpIncoming — iterator over incoming connections
+// ============================================================================
+
+/// An iterator that infinitely `accept`s connections on a `TcpListener`.
+///
+/// Each call to `next()` blocks until a new connection is available,
+/// then returns `Just(stream)` or `Nothing` on error.
+pub type TcpIncoming {
+    listener: TcpListener,
+}
+
+impl TcpIncoming {
+    /// Accepts the next incoming connection.
+    ///
+    /// Returns `Just(TcpStream)` on success, or `Nothing` on error.
+    pub func next(mut this) -> Maybe[TcpStream] {
+        when this.listener.accept() {
+            Ok(pair) => {
+                return Just(pair.0)
+            },
+            Err(_) => {
+                return Nothing
+            }
+        }
     }
 }
 
@@ -336,6 +383,58 @@ impl TcpStream {
     /// Flushes this output stream. For TCP, this is a no-op.
     pub func flush(this) -> Outcome[(), NetError] {
         Ok(())
+    }
+
+    /// Writes a string completely to the socket, retrying on partial writes.
+    ///
+    /// Unlike `write_str`, this guarantees all bytes are sent by retrying
+    /// if the OS only writes a partial buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// stream.write_all("Hello, world!")!
+    /// ```
+    pub func write_all(this, data: Str) -> Outcome[Unit, NetError] {
+        var offset: I64 = 0
+        let total: I64 = data.len()
+        loop (offset < total) {
+            // Write remaining data starting from offset
+            let written: I64 = this.write_str(substring_from(data, offset))!
+            if written == 0 {
+                return Err(NetError::new(NetErrorKind::Other()))
+            }
+            offset = offset + written
+        }
+        Ok(())
+    }
+
+    /// Reads all data until EOF from the socket into a string.
+    ///
+    /// This method reads data in chunks until the connection is closed
+    /// (read returns 0 bytes), then returns all accumulated data as a string.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let data: Str = stream.read_to_string()!
+    /// ```
+    pub func read_to_string(this) -> Outcome[Str, NetError] {
+        var result: Str = ""
+        var buf: [U8; 4096] = [0; 4096]
+        loop (true) {
+            let n: I64 = this.read(mut ref buf)!
+            if n == 0 {
+                return Ok(result)
+            }
+            // Convert bytes read to string and append
+            var i: I64 = 0
+            loop (i < n) {
+                result = result + (buf[i] as Char).to_string()
+                i = i + 1
+            }
+        }
+        Ok(result)
     }
 }
 

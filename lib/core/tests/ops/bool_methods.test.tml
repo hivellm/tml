@@ -1,0 +1,41 @@
+// Tests for then_some and then_with functions
+use test::{assert, assert_eq}
+use core::ops::bit::{then_some, then_with}
+
+@test
+func test_then_some_true() -> I32 {
+    let result: Maybe[I32] = then_some(true, 42)
+    assert(result.is_just(), "then_some(true, 42) should return Just")
+    assert_eq(result.unwrap(), 42, "then_some(true, 42) should unwrap to 42")
+    return 0
+}
+
+@test
+func test_then_some_false() -> I32 {
+    let result: Maybe[I32] = then_some(false, 42)
+    assert(result.is_nothing(), "then_some(false, 42) should return Nothing")
+    return 0
+}
+
+@test
+func test_then_with_true() -> I32 {
+    let result: Maybe[I32] = then_with(true, do() -> I32 { return 99 })
+    assert(result.is_just(), "then_with(true, ...) should return Just")
+    assert_eq(result.unwrap(), 99, "then_with(true, do() 99) should unwrap to 99")
+    return 0
+}
+
+@test
+func test_then_with_false() -> I32 {
+    let result: Maybe[I32] = then_with(false, do() -> I32 { return 99 })
+    assert(result.is_nothing(), "then_with(false, ...) should return Nothing")
+    return 0
+}
+
+@test
+func test_then_some_zero() -> I32 {
+    let result: Maybe[I32] = then_some(true, 0)
+    assert(result.is_just(), "then_some(true, 0) should return Just(0)")
+    assert_eq(result.unwrap(), 0, "then_some(true, 0) should unwrap to 0")
+    return 0
+}

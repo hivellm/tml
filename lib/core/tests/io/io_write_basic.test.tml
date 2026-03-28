@@ -1,0 +1,51 @@
+// Test Write behavior impl
+use test
+use core::io::IoError
+use core::io::Write
+
+type FakeWriter {
+    written: I64,
+}
+
+impl Write for FakeWriter {
+    func write_bytes(mut this, data: Str) -> Outcome[I64, IoError] {
+        let n: I64 = data.len() as I64
+        this.written = this.written + n
+        return Ok(n)
+    }
+
+    func flush(mut this) -> Outcome[Unit, IoError] {
+        return Ok(())
+    }
+}
+
+@test
+func test_write_basic() -> Outcome[Unit, Str] {
+    var w: FakeWriter = FakeWriter { written: 0 }
+    let result = w.write_bytes("hello")
+    when result {
+        Ok(n) => assert_eq(n, 5 as I64, "should write 5"),
+        Err(_) => assert_true(false, "no error"),
+    }
+    Ok(())
+}
+
+@test
+func test_write_accumulates() -> Outcome[Unit, Str] {
+    var w: FakeWriter = FakeWriter { written: 0 }
+    let _ = w.write_bytes("hello")
+    let _ = w.write_bytes(" world")
+    assert_eq(w.written, 11 as I64, "total = 11")
+    Ok(())
+}
+
+@test
+func test_flush_ok() -> Outcome[Unit, Str] {
+    var w: FakeWriter = FakeWriter { written: 0 }
+    let result = w.flush()
+    when result {
+        Ok(_) => assert_true(true, "flush ok"),
+        Err(_) => assert_true(false, "flush should not error"),
+    }
+    Ok(())
+}

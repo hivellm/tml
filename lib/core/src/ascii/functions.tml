@@ -1,0 +1,89 @@
+//! Standalone ASCII classification and conversion functions for `U8` bytes.
+//!
+//! These functions provide a convenient API for working directly with raw bytes
+//! without constructing an `AsciiChar`. They mirror the methods on `AsciiChar`
+//! but operate on `U8` values directly.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ascii::{is_ascii_alphabetic, to_ascii_uppercase}
+//!
+//! assert(is_ascii_alphabetic(65))  // 'A'
+//! assert_eq(to_ascii_uppercase(97), 65)  // 'a' -> 'A'
+//! ```
+
+/// Returns `true` if `c` is an ASCII alphabetic character (A-Z or a-z).
+pub func is_ascii_alphabetic(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return (v >= 65 and v <= 90) or (v >= 97 and v <= 122)
+}
+
+/// Returns `true` if `c` is an ASCII decimal digit (0-9).
+pub func is_ascii_digit(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return v >= 48 and v <= 57
+}
+
+/// Returns `true` if `c` is an ASCII alphanumeric character (A-Z, a-z, or 0-9).
+pub func is_ascii_alphanumeric(c: U8) -> Bool {
+    return is_ascii_alphabetic(c) or is_ascii_digit(c)
+}
+
+/// Returns `true` if `c` is an ASCII whitespace character.
+///
+/// Whitespace characters: space (32), tab (9), newline (10), form feed (12),
+/// carriage return (13), vertical tab (11).
+pub func is_ascii_whitespace(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return v == 32 or v == 9 or v == 10 or v == 12 or v == 13 or v == 11
+}
+
+/// Returns `true` if `c` is an ASCII uppercase letter (A-Z).
+pub func is_ascii_uppercase(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return v >= 65 and v <= 90
+}
+
+/// Returns `true` if `c` is an ASCII lowercase letter (a-z).
+pub func is_ascii_lowercase(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return v >= 97 and v <= 122
+}
+
+/// Returns `true` if `c` is an ASCII punctuation character.
+///
+/// Punctuation ranges: 33-47, 58-64, 91-96, 123-126.
+pub func is_ascii_punctuation(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return (v >= 33 and v <= 47) or
+           (v >= 58 and v <= 64) or
+           (v >= 91 and v <= 96) or
+           (v >= 123 and v <= 126)
+}
+
+/// Returns `true` if `c` is an ASCII control character (0x00-0x1F or 0x7F).
+pub func is_ascii_control(c: U8) -> Bool {
+    let v: I32 = c as I32
+    return v < 32 or v == 127
+}
+
+/// Converts an ASCII uppercase letter to lowercase.
+///
+/// If `c` is not an uppercase letter (A-Z), it is returned unchanged.
+pub func to_ascii_lowercase(c: U8) -> U8 {
+    if is_ascii_uppercase(c) {
+        return (c as I32 + 32) as U8
+    }
+    return c
+}
+
+/// Converts an ASCII lowercase letter to uppercase.
+///
+/// If `c` is not a lowercase letter (a-z), it is returned unchanged.
+pub func to_ascii_uppercase(c: U8) -> U8 {
+    if is_ascii_lowercase(c) {
+        return (c as I32 - 32) as U8
+    }
+    return c
+}

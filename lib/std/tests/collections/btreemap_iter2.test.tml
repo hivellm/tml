@@ -1,16 +1,16 @@
 // Tests for BTreeMapIter — accumulation and range patterns
-use test::{assert, assert_eq}
+use test
 use std::collections::{BTreeMap, BTreeMapIter}
 
 @test
-func test_btreemap_iter_accumulate() -> I32 {
-    var m: BTreeMap = BTreeMap::create()
+func test_btreemap_iter_accumulate() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
     m.insert(1, 10)
     m.insert(2, 20)
     m.insert(3, 30)
     m.insert(4, 40)
     m.insert(5, 50)
-    var it: BTreeMapIter = m.iter()
+    var it: BTreeMapIter[I64, I64] = m.iter()
     var key_sum: I64 = 0
     var val_sum: I64 = 0
     var count: I64 = 0
@@ -20,42 +20,40 @@ func test_btreemap_iter_accumulate() -> I32 {
         count = count + 1
         it.next()
     }
-    assert_eq(count, 5, "should count 5 entries")
-    assert_eq(key_sum, 15, "key sum should be 1+2+3+4+5=15")
-    assert_eq(val_sum, 150, "value sum should be 10+20+30+40+50=150")
+    assert_eq(count, 5 as I64, "should count 5 entries")
+    assert_eq(key_sum, 15 as I64, "key sum should be 15")
+    assert_eq(val_sum, 150 as I64, "value sum should be 150")
     m.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreemap_iter_after_insert_remove() -> I32 {
-    var m: BTreeMap = BTreeMap::create()
+func test_btreemap_iter_after_insert_remove() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
     m.insert(10, 100)
     m.insert(20, 200)
     m.insert(30, 300)
     m.remove(20)
-    // After removing 20, should iterate: 10, 30
-    var it: BTreeMapIter = m.iter()
-    assert(it.has_next(), "should have entry")
-    assert_eq(it.key(), 10, "first key should be 10")
+    var it: BTreeMapIter[I64, I64] = m.iter()
+    assert_true(it.has_next(), "should have entry")
+    assert_eq(it.key(), 10 as I64, "first key should be 10")
     it.next()
-    assert(it.has_next(), "should have second entry")
-    assert_eq(it.key(), 30, "second key should be 30")
+    assert_true(it.has_next(), "should have second entry")
+    assert_eq(it.key(), 30 as I64, "second key should be 30")
     it.next()
-    assert(not it.has_next(), "should be exhausted")
+    assert_false(it.has_next(), "should be exhausted")
     m.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreemap_iter_next_past_end_safe() -> I32 {
-    var m: BTreeMap = BTreeMap::create()
+func test_btreemap_iter_next_past_end_safe() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
     m.insert(1, 10)
-    var it: BTreeMapIter = m.iter()
+    var it: BTreeMapIter[I64, I64] = m.iter()
     it.next()
-    // Already exhausted — calling next again should be safe
     it.next()
-    assert(not it.has_next(), "should remain exhausted")
+    assert_false(it.has_next(), "should remain exhausted")
     m.destroy()
-    return 0
+    Ok(())
 }

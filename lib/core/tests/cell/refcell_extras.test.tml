@@ -1,0 +1,21 @@
+// Tests for RefCell::into_inner, replace_with, swap
+use test
+use core::cell::RefCell
+
+@test
+func test_refcell_into_inner() -> Outcome[Unit, Str] {
+    let rc: RefCell[I32] = RefCell::new(42)
+    let val: I32 = rc.into_inner()
+    assert_eq(val, 42 as I32, "into_inner should return wrapped value")
+    Ok(())
+}
+
+@test
+func test_refcell_swap() -> Outcome[Unit, Str] {
+    var a: RefCell[I32] = RefCell::new(1)
+    var b: RefCell[I32] = RefCell::new(2)
+    a.swap(mut ref b)
+    assert_eq(a.value, 2 as I32, "a should have b's old value after swap")
+    assert_eq(b.value, 1 as I32, "b should have a's old value after swap")
+    Ok(())
+}

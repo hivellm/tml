@@ -22,8 +22,21 @@
 //! }
 //! ```
 
-pub mod char  // AsciiChar type
+pub mod char       // AsciiChar type
+pub mod functions  // standalone U8 classification/conversion functions
 
 // Re-export main types
 pub use char::AsciiChar
 pub use char::to_string
+
+// Re-export standalone functions
+pub use functions::is_ascii_alphabetic
+pub use functions::is_ascii_digit
+pub use functions::is_ascii_alphanumeric
+pub use functions::is_ascii_whitespace
+pub use functions::is_ascii_uppercase
+pub use functions::is_ascii_lowercase
+pub use functions::is_ascii_punctuation
+pub use functions::is_ascii_control
+pub use functions::to_ascii_lowercase
+pub use functions::to_ascii_uppercase

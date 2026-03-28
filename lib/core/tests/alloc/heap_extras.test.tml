@@ -1,0 +1,37 @@
+// Tests for Heap::as_ptr, as_mut_ptr, into_pin
+use test
+use core::alloc::Heap
+
+@test
+func test_heap_as_ptr_returns_nonnull() -> Outcome[Unit, Str] {
+    let h: Heap[I32] = Heap::new(99)
+    let p: *I32 = h.as_ptr()
+    assert_true(p != null, "as_ptr should return non-null pointer")
+    Ok(())
+}
+
+@test
+func test_heap_as_ptr_value() -> Outcome[Unit, Str] {
+    let h: Heap[I32] = Heap::new(42)
+    let p: *I32 = h.as_ptr()
+    let v: I32 = lowlevel { *p }
+    assert_eq(v, 42 as I32, "as_ptr should point to correct value")
+    Ok(())
+}
+
+@test
+func test_heap_as_mut_ptr_returns_nonnull() -> Outcome[Unit, Str] {
+    var h: Heap[I32] = Heap::new(7)
+    let p: *I32 = h.as_mut_ptr()
+    assert_true(p != null, "as_mut_ptr should return non-null pointer")
+    Ok(())
+}
+
+@test
+func test_heap_as_mut_ptr_write() -> Outcome[Unit, Str] {
+    var h: Heap[I32] = Heap::new(10)
+    let p: *I32 = h.as_mut_ptr()
+    lowlevel { *p = 55 }
+    assert_eq(h.get(), 55 as I32, "writing through as_mut_ptr should update value")
+    Ok(())
+}

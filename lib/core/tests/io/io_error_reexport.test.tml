@@ -1,0 +1,32 @@
+// Test IoError/IoErrorKind re-exports from core::io
+use test
+use core::io::IoError
+use core::io::IoErrorKind
+
+@test
+func test_io_error_not_found() -> Outcome[Unit, Str] {
+    let kind: IoErrorKind = IoErrorKind::NotFound
+    let err: IoError = IoError::new(kind)
+    let s: Str = err.to_string()
+    assert_true(s.len() > 0, "IoError to_string non-empty")
+    Ok(())
+}
+
+@test
+func test_io_error_permission_denied() -> Outcome[Unit, Str] {
+    let err: IoError = IoError::with_message(IoErrorKind::PermissionDenied, "no access")
+    let s: Str = err.to_string()
+    assert_true(s.len() > 0, "IoError with message formats")
+    Ok(())
+}
+
+@test
+func test_io_error_other() -> Outcome[Unit, Str] {
+    let err: IoError = IoError::new(IoErrorKind::Other)
+    let k: IoErrorKind = err.kind()
+    when k {
+        IoErrorKind::Other => assert_true(true, "kind is Other"),
+        _ => assert_true(false, "should be Other"),
+    }
+    Ok(())
+}

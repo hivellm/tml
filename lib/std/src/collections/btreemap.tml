@@ -3,15 +3,12 @@
 //! `BTreeMap[K, V]` maintains keys in sorted order, providing O(log n) lookup,
 //! O(n) insertion (due to shifting), and ordered iteration.
 //!
-//! Currently specialized for `I64` keys and `I64` values due to compiler
-//! limitations with nested generics in multi-param types.
-//!
 //! # Example
 //!
 //! ```tml
 //! use std::collections::BTreeMap
 //!
-//! var m: BTreeMap = BTreeMap::create()
+//! var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
 //! m.insert(3, 30)
 //! m.insert(1, 10)
 //! m.insert(2, 20)
@@ -19,29 +16,34 @@
 //! ```
 
 use std::collections::List
-use core::runtime::intrinsics::ptr_read
+use core::traits::cmp::Ordering
 
 /// A sorted key-value map using parallel sorted arrays.
 ///
-/// Keys and values are `I64`. Keys are maintained in sorted order.
+/// Keys are maintained in sorted order using the `Ord` behavior.
 /// Lookups use binary search (O(log n)).
 /// Insertions and removals are O(n) due to element shifting.
-pub type BTreeMap {
-    keys: List[I64],
-    values: List[I64],
+pub type BTreeMap[K, V] {
+    keys: List[K],
+    values: List[V],
     length: I64
 }
 
-impl BTreeMap {
+impl[K: Ord, V] BTreeMap[K, V] {
     /// Creates a new empty BTreeMap.
-    pub func create() -> BTreeMap {
-        let k: List[I64] = List[I64].new(16)
-        let v: List[I64] = List[I64].new(16)
-        return BTreeMap {
+    pub func new() -> BTreeMap[K, V] {
+        let k: List[K] = List[K].new(16)
+        let v: List[V] = List[V].new(16)
+        return BTreeMap[K, V] {
             keys: k,
             values: v,
             length: 0
         }
+    }
+
+    /// Creates a new empty BTreeMap (alias for new).
+    pub func create() -> BTreeMap[K, V] {
+        return BTreeMap[K, V]::new()
     }
 
     /// Returns the number of key-value pairs.
@@ -55,8 +57,8 @@ impl BTreeMap {
     }
 
     /// Inserts a key-value pair. If the key exists, its value is updated.
-    pub func insert(mut this, key: I64, value: I64) {
-        let idx: I64 = this.binary_search(key)
+    pub func insert(mut this, key: K, value: V) {
+        let idx: I64 = this.find_index(ref key)
         if idx >= 0 {
             this.values.set(idx, value)
             return
@@ -67,22 +69,31 @@ impl BTreeMap {
     }
 
     /// Returns the value for the given key, or panics if not found.
-    pub func get(this, key: I64) -> I64 {
-        let idx: I64 = this.binary_search(key)
+    pub func get(this, key: K) -> V {
+        let idx: I64 = this.find_index(ref key)
         if idx < 0 {
             panic("BTreeMap::get: key not found")
         }
         return this.values.get(idx)
     }
 
+    /// Returns Maybe[V] for the given key.
+    pub func get_opt(this, key: K) -> Maybe[V] {
+        let idx: I64 = this.find_index(ref key)
+        if idx < 0 {
+            return Nothing
+        }
+        return Just(this.values.get(idx))
+    }
+
     /// Returns true if the map contains the given key.
-    pub func contains_key(this, key: I64) -> Bool {
-        return this.binary_search(key) >= 0
+    pub func contains_key(this, key: K) -> Bool {
+        return this.find_index(ref key) >= 0
     }
 
     /// Removes a key-value pair. Returns true if the key was found.
-    pub func remove(mut this, key: I64) -> Bool {
-        let idx: I64 = this.binary_search(key)
+    pub func remove(mut this, key: K) -> Bool {
+        let idx: I64 = this.find_index(ref key)
         if idx < 0 {
             return false
         }
@@ -91,13 +102,34 @@ impl BTreeMap {
         return true
     }
 
+    /// Returns all keys in sorted order.
+    pub func keys(this) -> List[K] {
+        var result: List[K] = List[K].new(this.length)
+        var i: I64 = 0
+        loop (i < this.length) {
+            result.push(this.keys.get(i))
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns all values in key-sorted order.
+    pub func values(this) -> List[V] {
+        var result: List[V] = List[V].new(this.length)
+        var i: I64 = 0
+        loop (i < this.length) {
+            result.push(this.values.get(i))
+            i = i + 1
+        }
+        return result
+    }
 
     /// Removes all entries.
     pub func clear(mut this) {
         this.keys.destroy()
         this.values.destroy()
-        let k: List[I64] = List[I64].new(16)
-        let v: List[I64] = List[I64].new(16)
+        let k: List[K] = List[K].new(16)
+        let v: List[V] = List[V].new(16)
         this.keys = k
         this.values = v
         this.length = 0
@@ -110,7 +142,7 @@ impl BTreeMap {
     }
 
     /// Returns the smallest key, or panics if empty.
-    pub func min_key(this) -> I64 {
+    pub func min_key(this) -> K {
         if this.length == 0 {
             panic("BTreeMap::min_key: empty map")
         }
@@ -118,7 +150,7 @@ impl BTreeMap {
     }
 
     /// Returns the largest key, or panics if empty.
-    pub func max_key(this) -> I64 {
+    pub func max_key(this) -> K {
         if this.length == 0 {
             panic("BTreeMap::max_key: empty map")
         }
@@ -126,47 +158,47 @@ impl BTreeMap {
     }
 
     /// Returns the key at the given index (for ordered iteration).
-    pub func key_at(this, idx: I64) -> I64 {
+    pub func key_at(this, idx: I64) -> K {
         return this.keys.get(idx)
     }
 
     /// Returns the value at the given index (for ordered iteration).
-    pub func value_at(this, idx: I64) -> I64 {
+    pub func value_at(this, idx: I64) -> V {
         return this.values.get(idx)
     }
 
     /// Returns the first index with key >= from_key (inclusive lower bound).
-    pub func lower_bound(this, from_key: I64) -> I64 {
+    pub func lower_bound(this, from_key: K) -> I64 {
         var lo: I64 = 0
         var hi: I64 = this.length
         loop (lo < hi) {
             let mid: I64 = lo + (hi - lo) / 2
-            if this.keys.get(mid) < from_key {
-                lo = mid + 1
-            } else {
-                hi = mid
+            let mid_key: K = this.keys.get(mid)
+            when mid_key.cmp(ref from_key) {
+                Ordering::Less => { lo = mid + 1 },
+                _ => { hi = mid }
             }
         }
         return lo
     }
 
     /// Returns the first index with key > to_key (exclusive upper bound).
-    pub func upper_bound(this, to_key: I64) -> I64 {
+    pub func upper_bound(this, to_key: K) -> I64 {
         var lo: I64 = 0
         var hi: I64 = this.length
         loop (lo < hi) {
             let mid: I64 = lo + (hi - lo) / 2
-            if this.keys.get(mid) <= to_key {
-                lo = mid + 1
-            } else {
-                hi = mid
+            let mid_key: K = this.keys.get(mid)
+            when mid_key.cmp(ref to_key) {
+                Ordering::Greater => { hi = mid },
+                _ => { lo = mid + 1 }
             }
         }
         return lo
     }
 
     /// Count of entries with from_key <= key <= to_key.
-    pub func range_count(this, from_key: I64, to_key: I64) -> I64 {
+    pub func range_count(this, from_key: K, to_key: K) -> I64 {
         let lo: I64 = this.lower_bound(from_key)
         let hi: I64 = this.upper_bound(to_key)
         if hi > lo { return hi - lo }
@@ -175,13 +207,13 @@ impl BTreeMap {
 
     /// Returns the key of the i-th entry in range [from_key, to_key].
     /// Use range_count() to know how many entries exist.
-    pub func range_key_at(this, from_key: I64, to_key: I64, i: I64) -> I64 {
+    pub func range_key_at(this, from_key: K, to_key: K, i: I64) -> K {
         let lo: I64 = this.lower_bound(from_key)
         return this.keys.get(lo + i)
     }
 
     /// Returns the value of the i-th entry in range [from_key, to_key].
-    pub func range_value_at(this, from_key: I64, to_key: I64, i: I64) -> I64 {
+    pub func range_value_at(this, from_key: K, to_key: K, i: I64) -> V {
         let lo: I64 = this.lower_bound(from_key)
         return this.values.get(lo + i)
     }
@@ -191,25 +223,28 @@ impl BTreeMap {
     // ========================================================================
 
     /// Binary search returning index if found, or -(insertion_point + 1) if not.
-    pub func binary_search(this, key: I64) -> I64 {
+    pub func find_index(this, key: ref K) -> I64 {
         var lo: I64 = 0
         var hi: I64 = this.length - 1
         loop (lo <= hi) {
             let mid: I64 = lo + (hi - lo) / 2
-            let mid_key: I64 = this.keys.get(mid)
-            if mid_key == key {
-                return mid
-            } else if mid_key < key {
-                lo = mid + 1
-            } else {
-                hi = mid - 1
+            let mid_key: K = this.keys.get(mid)
+            when mid_key.cmp(key) {
+                Ordering::Equal => { return mid },
+                Ordering::Less => { lo = mid + 1 },
+                Ordering::Greater => { hi = mid - 1 }
             }
         }
         return 0 - lo - 1
     }
 
+    /// Kept for backward compatibility — delegates to find_index.
+    pub func binary_search(this, key: K) -> I64 {
+        return this.find_index(ref key)
+    }
+
     /// Insert key and value at position, shifting elements right.
-    pub func insert_at(mut this, pos: I64, key: I64, value: I64) {
+    pub func insert_at(mut this, pos: I64, key: K, value: V) {
         // Append at end to grow the lists
         this.keys.push(key)
         this.values.push(value)
@@ -233,99 +268,101 @@ impl BTreeMap {
             this.values.set(i, this.values.get(i + 1))
             i = i + 1
         }
-        let _k: I64 = this.keys.pop()
-        let _v: I64 = this.values.pop()
+        let _k: K = this.keys.pop()
+        let _v: V = this.values.pop()
+    }
+
+    /// Returns an iterator over entries with keys in [from, to] (inclusive).
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    /// m.insert(10, 100)
+    /// m.insert(20, 200)
+    /// m.insert(30, 300)
+    /// var it: BTreeMapIter[I64, I64] = m.range(10, 20)
+    /// // iterates keys 10, 20
+    /// ```
+    pub func range(this, from: K, to: K) -> BTreeMapIter[K, V] {
+        let lo: I64 = this.lower_bound(from)
+        let hi: I64 = this.upper_bound(to)
+        let count: I64 = if hi > lo { hi - lo } else { 0 }
+        var result_keys: List[K] = List[K].new(count)
+        var result_vals: List[V] = List[V].new(count)
+        var i: I64 = lo
+        loop (i < hi) {
+            result_keys.push(this.keys.get(i))
+            result_vals.push(this.values.get(i))
+            i = i + 1
+        }
+        return BTreeMapIter[K, V] {
+            keys: result_keys,
+            values: result_vals,
+            length: count,
+            index: 0
+        }
+    }
+
+    /// Returns an iterator over entries in sorted key order.
+    pub func iter(this) -> BTreeMapIter[K, V] {
+        var result_keys: List[K] = List[K].new(this.length)
+        var result_vals: List[V] = List[V].new(this.length)
+        var i: I64 = 0
+        loop (i < this.length) {
+            result_keys.push(this.keys.get(i))
+            result_vals.push(this.values.get(i))
+            i = i + 1
+        }
+        return BTreeMapIter[K, V] {
+            keys: result_keys,
+            values: result_vals,
+            length: this.length,
+            index: 0
+        }
     }
 }
 
-impl Drop for BTreeMap {
-    func drop(mut this) {
+impl[K: Ord, V] Drop for BTreeMap[K, V] {
+    pub func drop(mut this) {
         this.destroy()
     }
 }
 
 /// An iterator over BTreeMap entries in sorted key order.
-///
-/// Created by calling `iter()` on a BTreeMap.
-/// Yields (key, value) pairs in ascending key order.
-///
-/// Stores raw data pointers extracted from the List headers at construction.
-/// The BTreeMap must not be mutated while the iterator is alive.
-///
-/// # Example
-///
-/// ```tml
-/// var m: BTreeMap = BTreeMap::create()
-/// m.insert(1, 10)
-/// m.insert(2, 20)
-/// var it: BTreeMapIter = m.iter()
-/// loop (it.has_next()) {
-///     let k: I64 = it.key()
-///     let v: I64 = it.value()
-///     it.next()
-/// }
-/// ```
-pub type BTreeMapIter {
-    /// Raw pointer to the keys data buffer (I64 array).
-    keys_data: I64,
-    /// Raw pointer to the values data buffer (I64 array).
-    values_data: I64,
-    /// Total number of entries.
+pub type BTreeMapIter[K, V] {
+    keys: List[K],
+    values: List[V],
     length: I64,
-    /// Current position.
     index: I64
 }
 
-impl BTreeMapIter {
+impl[K, V] BTreeMapIter[K, V] {
     /// Returns `true` if there are more entries to iterate.
     pub func has_next(this) -> Bool {
         return this.index < this.length
     }
 
     /// Returns the key of the current entry.
-    /// Panics if the iterator is exhausted.
-    pub func key(this) -> I64 {
+    pub func key(this) -> K {
         if this.index >= this.length {
             panic("BTreeMapIter::key: iterator exhausted")
         }
-        // keys are I64 (8 bytes each), stride = 8
-        let stride: I64 = 8
-        return lowlevel { ptr_read[I64]((this.keys_data + this.index * stride) as *I64) }
+        return this.keys.get(this.index)
     }
 
     /// Returns the value of the current entry.
-    /// Panics if the iterator is exhausted.
-    pub func value(this) -> I64 {
+    pub func value(this) -> V {
         if this.index >= this.length {
             panic("BTreeMapIter::value: iterator exhausted")
         }
-        // values are I64 (8 bytes each), stride = 8
-        let stride: I64 = 8
-        return lowlevel { ptr_read[I64]((this.values_data + this.index * stride) as *I64) }
+        return this.values.get(this.index)
     }
 
     /// Advances the iterator to the next entry.
     pub func next(mut this) {
         if this.index < this.length {
             this.index = this.index + 1
-        }
-    }
-}
-
-impl BTreeMap {
-    /// Returns an iterator over entries in sorted key order.
-    ///
-    /// Extracts raw data pointers from the List[I64] headers.
-    /// List header layout: offset 0 = data ptr (I64), offset 8 = len, offset 16 = cap, offset 24 = stride.
-    /// The BTreeMap must not be mutated while the iterator is alive.
-    pub func iter(this) -> BTreeMapIter {
-        let keys_data: I64 = this.keys.data_ptr()
-        let values_data: I64 = this.values.data_ptr()
-        return BTreeMapIter {
-            keys_data: keys_data,
-            values_data: values_data,
-            length: this.length,
-            index: 0
         }
     }
 }

@@ -1,0 +1,101 @@
+//! Core random number generation trait.
+//!
+//! This module defines the [`Random`] behavior, which allows types to generate
+//! a random instance of themselves given a source of randomness.
+//!
+//! The concrete [`std::random::Rng`] type implements the [`RngSource`] behavior
+//! defined here, ensuring the standard library's PRNG satisfies this interface.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::random::{Random, RngSource}
+//!
+//! // Implement Random for a custom type
+//! type Coin { Heads, Tails }
+//!
+//! impl[R: RngSource] Random[R] for Coin {
+//!     func random(rng: mut ref R) -> Coin {
+//!         if rng.next_bool() {
+//!             return Coin::Heads
+//!         }
+//!         return Coin::Tails
+//!     }
+//! }
+//! ```
+
+// ============================================================================
+// RngSource behavior
+// ============================================================================
+
+/// A source of randomness.
+///
+/// Types implementing `RngSource` can generate random bits. The `std::random::Rng`
+/// type implements this behavior.
+pub behavior RngSource {
+    /// Returns a random I64 value.
+    func next_i64(mut this) -> I64
+
+    /// Returns a random I32 value.
+    func next_i32(mut this) -> I32
+
+    /// Returns a random Bool value.
+    func next_bool(mut this) -> Bool
+
+    /// Returns a random F64 in [0.0, 1.0).
+    func next_f64(mut this) -> F64
+
+    /// Returns a random I64 in [min, max).
+    func range(mut this, min: I64, max: I64) -> I64
+}
+
+// ============================================================================
+// Random behavior
+// ============================================================================
+
+/// Types that can generate a random instance of themselves.
+///
+/// This behavior is generic over the RNG source `R`, allowing it to work with
+/// any type that implements `RngSource`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::random::{Random, RngSource}
+/// use std::random::Rng
+///
+/// var rng: Rng = Rng::new()
+/// let n: I32 = I32::random(mut ref rng)
+/// ```
+pub behavior Random[R: RngSource] {
+    /// Creates a random instance of this type using the given RNG source.
+    func random(rng: mut ref R) -> Self
+}
+
+// ============================================================================
+// Standard primitive implementations of Random
+// ============================================================================
+
+impl[R: RngSource] Random[R] for I32 {
+    func random(rng: mut ref R) -> I32 {
+        return rng.next_i32()
+    }
+}
+
+impl[R: RngSource] Random[R] for I64 {
+    func random(rng: mut ref R) -> I64 {
+        return rng.next_i64()
+    }
+}
+
+impl[R: RngSource] Random[R] for F64 {
+    func random(rng: mut ref R) -> F64 {
+        return rng.next_f64()
+    }
+}
+
+impl[R: RngSource] Random[R] for Bool {
+    func random(rng: mut ref R) -> Bool {
+        return rng.next_bool()
+    }
+}

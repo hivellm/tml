@@ -88,6 +88,79 @@ impl[T] OnceCell[T] {
     pub func into_inner(this) -> Maybe[T] {
         return this.value
     }
+
+    /// Gets a mutable reference to the value if initialized.
+    ///
+    /// Returns `Nothing` if the cell is empty.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// var cell: OnceCell[I32] = OnceCell::new()
+    /// cell.set(42)
+    /// when cell.get_mut() {
+    ///     Just(v) => *v = 100,
+    ///     Nothing => panic("empty"),
+    /// }
+    /// ```
+    pub func get_mut(mut this) -> Maybe[mut ref T] {
+        if this.initialized {
+            when this.value {
+                Just(v) => return Just(mut ref v),
+                Nothing => return Nothing
+            }
+        }
+        return Nothing
+    }
+
+    /// Gets the value if initialized, or calls `f` to initialize it.
+    ///
+    /// Returns a reference to the initialized value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// var cell: OnceCell[I32] = OnceCell::new()
+    /// let v: ref I32 = cell.get_or_init(do() 42)
+    /// assert_eq(*v, 42)
+    /// ```
+    pub func get_or_init(mut this, f: func() -> T) -> ref T {
+        if not this.initialized {
+            this.value = Just(f())
+            this.initialized = true
+        }
+        when this.value {
+            Just(v) => return ref v,
+            Nothing => panic("OnceCell::get_or_init: internal error")
+        }
+    }
+
+    /// Gets the value if initialized, or calls the fallible `f` to initialize it.
+    ///
+    /// Returns `Ok(ref T)` on success or `Err(Str)` if initialization fails.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// var cell: OnceCell[I32] = OnceCell::new()
+    /// let v: Outcome[ref I32, Str] = cell.get_or_try_init(do() Ok(42))
+    /// ```
+    pub func get_or_try_init(mut this, f: func() -> Outcome[T, Str]) -> Outcome[ref T, Str] {
+        if not this.initialized {
+            let result: Outcome[T, Str] = f()
+            when result {
+                Ok(val) => {
+                    this.value = Just(val)
+                    this.initialized = true
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        when this.value {
+            Just(v) => return Ok(ref v),
+            Nothing => panic("OnceCell::get_or_try_init: internal error")
+        }
+    }
 }
 
 /// Default for `OnceCell[T]`: returns an empty cell.

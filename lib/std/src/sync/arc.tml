@@ -346,6 +346,61 @@ impl[T] Arc[T] {
             return Nothing
         }
     }
+
+    /// Makes a mutable reference into the given `Arc`.
+    ///
+    /// If there are other `Arc` pointers to the same allocation, then
+    /// `make_mut` will clone the inner value to a new allocation to
+    /// ensure unique ownership. This is also referred to as clone-on-write.
+    ///
+    /// If there are no other `Arc` pointers (strong_count == 1),
+    /// the inner value is returned directly without cloning.
+    ///
+    /// See also `get_mut`, which will fail rather than cloning.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let mut data = Arc::new(5)
+    /// *Arc::make_mut(mut ref data) = 42
+    /// assert_eq(*data, 42)
+    /// ```
+    pub func make_mut(this: mut ref Arc[T]) -> Maybe[mut ref T] {
+        lowlevel {
+            let strong: U64 = (*this.ptr).strong.load(Ordering::Acquire)
+
+            if strong == 1 {
+                // We're the only owner — return direct mutable access
+                return Just(ref (*this.ptr).data)
+            }
+
+            // Multiple owners — clone the data into a new Arc
+            // First, read the current data
+            let old_data: T = (*this.ptr).data
+
+            // Decrement strong count on old allocation (we're giving it up)
+            (*this.ptr).strong.fetch_sub(1, Ordering::Release)
+
+            // Allocate new ArcInner
+            let inner_size: I64 = size_of[ArcInner[T]]()
+            let inner_align: I64 = align_of[ArcInner[T]]()
+            let layout: Layout = Layout::from_size_align_unchecked(inner_size, inner_align)
+            let raw: Ptr[U8] = alloc_global(layout)
+            let new_ptr: Ptr[ArcInner[T]] = raw as Ptr[ArcInner[T]]
+
+            // Initialize new inner with strong=1, weak=1
+            (*new_ptr).strong = AtomicU64::new(1)
+            (*new_ptr).weak = AtomicU64::new(1)
+            (*new_ptr).data = old_data
+
+            // Replace our pointer
+            this.ptr = new_ptr
+
+            return Just(ref (*this.ptr).data)
+        }
+    }
 }
 
 impl[T] Duplicate for Arc[T] {

@@ -117,6 +117,53 @@ impl[T] RefCell[T] {
     pub func get_mut(mut this) -> mut ref T {
         return mut ref this.value
     }
+
+    /// Consumes this `RefCell`, returning the wrapped value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let rc: RefCell[I32] = RefCell::new(42)
+    /// let val: I32 = rc.into_inner()
+    /// assert_eq(val, 42)
+    /// ```
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+
+    /// Replaces the wrapped value using a function, returning the old value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut rc: RefCell[I32] = RefCell::new(5)
+    /// let old: I32 = rc.replace_with(do(v) *v + 1)
+    /// assert_eq(old, 5)
+    /// assert_eq(rc.value, 6)
+    /// ```
+    pub func replace_with(mut this, f: func(mut ref T) -> T) -> T {
+        let old: T = this.value
+        let new_val: T = f(mut ref this.value)
+        this.value = new_val
+        return old
+    }
+
+    /// Swaps the values of two `RefCell`s.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut a: RefCell[I32] = RefCell::new(1)
+    /// let mut b: RefCell[I32] = RefCell::new(2)
+    /// a.swap(mut ref b)
+    /// assert_eq(a.value, 2)
+    /// assert_eq(b.value, 1)
+    /// ```
+    pub func swap(mut this, other: mut ref RefCell[T]) {
+        let temp: T = this.value
+        this.value = other.value
+        other.value = temp
+    }
 }
 
 impl[T: Default] Default for RefCell[T] {

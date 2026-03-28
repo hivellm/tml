@@ -44,6 +44,7 @@
 //! | Use case | Single-threaded | Multi-threaded |
 
 use core::runtime::mem::{mem_alloc, mem_free, size_of}
+use core::runtime::intrinsics::field_offset
 use core::ops::Deref
 use core::traits::clone::Duplicate
 use core::fmt::{Display, Debug}
@@ -59,10 +60,11 @@ func atomic_fetch_sub_i32(ptr: *I32, val: I32) -> I32
 @extern("atomic_load_i32")
 func atomic_load_i32(ptr: *I32) -> I32
 
-/// Inner structure holding the value and atomic reference count.
+/// Inner structure holding the value and atomic reference counts.
 type SyncInner[T] {
     value: T,
-    strong_count: I32,  // Accessed atomically
+    strong_count: I32,  // field index 1 — accessed atomically
+    weak_count: I32,    // field index 2 — accessed atomically
 }
 
 /// An atomic reference-counted pointer for thread-safe shared ownership.
@@ -80,8 +82,7 @@ type SyncInner[T] {
 /// ## Thread Safety
 ///
 /// `Sync[T]` uses atomic operations for reference counting, making it safe
-/// to share across threads. The type `T` must be `Send` and `Sync` to be
-/// used with `Sync[T]`.
+/// to share across threads.
 ///
 /// ## Examples
 ///
@@ -103,6 +104,20 @@ pub type Sync[T] {
 }
 
 impl[T] Sync[T] {
+    /// Returns a `*I32` to the strong_count field (field index 1).
+    pub func strong_count_ptr(this) -> *I32 {
+        let addr: I64 = this.ptr as I64
+        let off: I64 = field_offset[SyncInner[T]](1)
+        return (addr + off) as *I32
+    }
+
+    /// Returns a `*I32` to the weak_count field (field index 2).
+    pub func weak_count_ptr(this) -> *I32 {
+        let ptr_addr: I64 = this.ptr as I64
+        let off: I64 = field_offset[SyncInner[T]](2)
+        return (ptr_addr + off) as *I32
+    }
+
     /// Creates a new `Sync[T]` with atomic reference count of 1.
     ///
     /// ## Examples
@@ -125,6 +140,7 @@ impl[T] Sync[T] {
         *typed_ptr = SyncInner[T] {
             value: value,
             strong_count: 1,
+            weak_count: 1,
         }
 
         return Sync { ptr: typed_ptr }
@@ -135,7 +151,7 @@ impl[T] Sync[T] {
         return Sync::new(T::default())
     }
 
-    /// Returns a reference to the inner value.
+    /// Returns a copy of the inner value.
     ///
     /// ## Examples
     ///
@@ -150,10 +166,7 @@ impl[T] Sync[T] {
         return (*this.ptr).value
     }
 
-    /// Returns the current atomic reference count.
-    ///
-    /// Note: This value may change immediately after being read in
-    /// multithreaded scenarios.
+    /// Returns the current atomic strong reference count.
     ///
     /// ## Examples
     ///
@@ -168,12 +181,32 @@ impl[T] Sync[T] {
         if this.ptr == null {
             return 0
         }
-        return atomic_load_i32(&(*this.ptr).strong_count)
+        return atomic_load_i32(this.strong_count_ptr())
+    }
+
+    /// Returns the current weak reference count (not counting the implicit weak ref).
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert_eq(sync.weak_count(), 0)
+    /// let weak = sync.downgrade()
+    /// assert_eq(sync.weak_count(), 1)
+    /// ```
+    pub func weak_count(this) -> I64 {
+        if this.ptr == null {
+            return 0 as I64
+        }
+        let raw: I32 = atomic_load_i32(this.weak_count_ptr())
+        let result: I64 = raw as I64 - 1 as I64
+        if result < 0 as I64 {
+            return 0 as I64
+        }
+        return result
     }
 
     /// Returns `true` if this is the only reference to the data.
-    ///
-    /// Note: In multithreaded scenarios, this may be immediately outdated.
     ///
     /// ## Examples
     ///
@@ -188,25 +221,22 @@ impl[T] Sync[T] {
         return this.strong_count() == 1
     }
 
-    /// Attempts to get a mutable reference if this is the only owner.
+    /// Attempts to get a mutable raw pointer if this is the only owner.
     ///
-    /// Returns `Just(value)` if unique, `Nothing` otherwise.
-    ///
-    /// Note: This is only safe if you can guarantee no other threads
-    /// are accessing the data.
+    /// Returns `Just(*T)` if unique, `Nothing` otherwise.
     ///
     /// ## Examples
     ///
     /// ```tml
     /// let mut sync = Sync::new(42)
     /// when sync.get_mut() {
-    ///     Just(val) => *val = 100,
+    ///     Just(p) => lowlevel { *p = 100 },
     ///     Nothing => print("Not unique")
     /// }
     /// ```
     pub func get_mut(mut this) -> Maybe[*T] {
         if this.is_unique() {
-            return Just(&mut (*this.ptr).value)
+            return Just(this.ptr as *T)
         } else {
             return Nothing
         }
@@ -244,7 +274,7 @@ impl[T] Sync[T] {
         if this.ptr == null {
             return null
         }
-        return &(*this.ptr).value
+        return this.ptr as *T
     }
 
     /// Creates a `Sync[T]` from a raw pointer.
@@ -260,7 +290,7 @@ impl[T] Sync[T] {
     /// Atomically increments the reference count (used internally by duplicate).
     pub func increment_count(this) {
         if this.ptr != null {
-            atomic_fetch_add_i32(&mut (*this.ptr).strong_count, 1)
+            atomic_fetch_add_i32(this.strong_count_ptr(), 1)
         }
     }
 
@@ -271,23 +301,131 @@ impl[T] Sync[T] {
         }
 
         // Atomically decrement and get the previous value
-        let prev: I32 = atomic_fetch_sub_i32(&mut (*this.ptr).strong_count, 1)
+        let prev: I32 = atomic_fetch_sub_i32(this.strong_count_ptr(), 1)
 
-        // If previous value was 1, we're now at 0 and should free
+        // If previous value was 1, we're now at 0 — decrement implicit weak ref
+        if prev == 1 {
+            let prev_weak: I32 = atomic_fetch_sub_i32(this.weak_count_ptr(), 1)
+            if prev_weak == 1 {
+                mem_free(this.ptr as *Unit)
+            }
+        }
+    }
+
+    /// Returns `true` if both `Sync` values point to the same allocation.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let a = Sync::new(42)
+    /// let b = a.duplicate()
+    /// assert(a.ptr_eq(ref b))
+    /// ```
+    pub func ptr_eq(this, other: ref Sync[T]) -> Bool {
+        return this.ptr == (*other).ptr
+    }
+
+    /// Creates a `SyncWeak[T]` reference to this allocation.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// let weak = sync.downgrade()
+    /// ```
+    pub func downgrade(this) -> SyncWeak[T] {
+        if this.ptr == null {
+            return SyncWeak { ptr: null }
+        }
+        // Atomically increment the weak count
+        atomic_fetch_add_i32(this.weak_count_ptr(), 1)
+        return SyncWeak { ptr: this.ptr }
+    }
+}
+
+/// A weak reference to `Sync[T]`-managed data.
+///
+/// `SyncWeak[T]` does not prevent the allocation from being freed. Use
+/// `upgrade()` to attempt to get a strong `Sync[T]` reference.
+///
+/// ## Examples
+///
+/// ```tml
+/// let sync = Sync::new(42)
+/// let weak = sync.downgrade()
+/// when weak.upgrade() {
+///     Just(s) => print(s.get().to_string()),
+///     Nothing => print("expired"),
+/// }
+/// ```
+pub type SyncWeak[T] {
+    ptr: *SyncInner[T],
+}
+
+impl[T] SyncWeak[T] {
+    /// Returns a `*I32` to the strong_count field (field index 1).
+    pub func strong_count_ptr(this) -> *I32 {
+        let addr: I64 = this.ptr as I64
+        let off: I64 = field_offset[SyncInner[T]](1)
+        return (addr + off) as *I32
+    }
+
+    /// Returns a `*I32` to the weak_count field (field index 2).
+    pub func weak_count_ptr(this) -> *I32 {
+        let ptr_addr: I64 = this.ptr as I64
+        let off: I64 = field_offset[SyncInner[T]](2)
+        return (ptr_addr + off) as *I32
+    }
+
+    /// Attempts to upgrade to a strong `Sync[T]` reference.
+    ///
+    /// Returns `Nothing` if the allocation has been freed.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// let weak = sync.downgrade()
+    /// when weak.upgrade() {
+    ///     Just(s) => assert_eq(s.get(), 42),
+    ///     Nothing => panic("should not be expired"),
+    /// }
+    /// ```
+    pub func upgrade(this) -> Maybe[Sync[T]] {
+        if this.ptr == null {
+            return Nothing
+        }
+        let strong: I32 = atomic_load_i32(this.strong_count_ptr())
+        if strong == 0 {
+            return Nothing
+        }
+        // Atomically increment strong count
+        atomic_fetch_add_i32(this.strong_count_ptr(), 1)
+        return Just(Sync { ptr: this.ptr })
+    }
+
+    /// Returns `true` if the allocation has been freed (strong count == 0).
+    pub func is_expired(this) -> Bool {
+        if this.ptr == null {
+            return true
+        }
+        return atomic_load_i32(this.strong_count_ptr()) == 0
+    }
+}
+
+impl[T] Drop for SyncWeak[T] {
+    func drop(mut this) {
+        if this.ptr == null {
+            return
+        }
+        let ptr_addr: I64 = this.ptr as I64
+        let off: I64 = field_offset[SyncInner[T]](2)
+        let weak_ptr: *I32 = (ptr_addr + off) as *I32
+        let prev: I32 = atomic_fetch_sub_i32(weak_ptr, 1)
         if prev == 1 {
             mem_free(this.ptr as *Unit)
         }
     }
-
-    /// Creates a weak reference to this `Sync[T]`.
-    ///
-    /// Weak references don't keep the value alive, but can be upgraded
-    /// to a strong reference if the value still exists.
-    ///
-    /// TODO: Implement Weak[T] type
-    // pub func downgrade(this) -> Weak[T] {
-    //     // Not implemented yet
-    // }
 }
 
 impl[T] Duplicate for Sync[T] {

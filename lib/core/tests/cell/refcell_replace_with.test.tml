@@ -1,0 +1,23 @@
+// Tests for RefCell::replace_with
+use test
+use core::cell::RefCell
+
+func increment(v: mut ref I32) -> I32 {
+    return *v + 1
+}
+
+@test
+func test_refcell_replace_with_returns_old() -> Outcome[Unit, Str] {
+    var rc: RefCell[I32] = RefCell::new(5)
+    let old: I32 = rc.replace_with(increment)
+    assert_eq(old, 5 as I32, "replace_with should return old value")
+    Ok(())
+}
+
+@test
+func test_refcell_replace_with_sets_new() -> Outcome[Unit, Str] {
+    var rc: RefCell[I32] = RefCell::new(5)
+    rc.replace_with(increment)
+    assert_eq(rc.value, 6 as I32, "replace_with should update value")
+    Ok(())
+}

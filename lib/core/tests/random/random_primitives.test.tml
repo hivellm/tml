@@ -1,0 +1,67 @@
+// Tests for impl Random[R] for I32, I64, F64, Bool
+use test
+use core::random::RngSource
+use core::random::Random
+
+type FixedRng {
+    val: I64,
+}
+
+impl RngSource for FixedRng {
+    func next_i64(mut this) -> I64 {
+        return this.val
+    }
+    func next_i32(mut this) -> I32 {
+        return this.val as I32
+    }
+    func next_bool(mut this) -> Bool {
+        return (this.val & 1) == 1
+    }
+    func next_f64(mut this) -> F64 {
+        return 0.75
+    }
+    func range(mut this, min: I64, max: I64) -> I64 {
+        if min >= max { return min }
+        return min + (this.val % (max - min))
+    }
+}
+
+@test
+func test_random_i32() -> Outcome[Unit, Str] {
+    var rng: FixedRng = FixedRng { val: 123 }
+    let v: I32 = I32::random(mut ref rng)
+    assert_eq(v, 123 as I32, "I32::random returns next_i32")
+    Ok(())
+}
+
+@test
+func test_random_i64() -> Outcome[Unit, Str] {
+    var rng: FixedRng = FixedRng { val: 456 }
+    let v: I64 = I64::random(mut ref rng)
+    assert_eq(v, 456 as I64, "I64::random returns next_i64")
+    Ok(())
+}
+
+@test
+func test_random_f64() -> Outcome[Unit, Str] {
+    var rng: FixedRng = FixedRng { val: 0 }
+    let v: F64 = F64::random(mut ref rng)
+    assert_true(v >= 0.0 and v < 1.0, "F64::random returns value in [0, 1)")
+    Ok(())
+}
+
+@test
+func test_random_bool_true() -> Outcome[Unit, Str] {
+    var rng: FixedRng = FixedRng { val: 1 }
+    let v: Bool = Bool::random(mut ref rng)
+    assert_true(v, "Bool::random returns true when val is odd")
+    Ok(())
+}
+
+@test
+func test_random_bool_false() -> Outcome[Unit, Str] {
+    var rng: FixedRng = FixedRng { val: 2 }
+    let v: Bool = Bool::random(mut ref rng)
+    assert_true(not v, "Bool::random returns false when val is even")
+    Ok(())
+}

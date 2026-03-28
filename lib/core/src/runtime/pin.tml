@@ -127,6 +127,22 @@ impl[P] Pin[P] {
     pub func into_inner_unchecked(this) -> P {
         return this.pointer
     }
+
+    /// Unwraps the `Pin[P]` and returns the wrapped pointer.
+    ///
+    /// Safe because `P: Unpin` means the pointed-to value can be moved.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut value: I32 = 42
+    /// let pinned: Pin[ref I32] = Pin::new(ref value)
+    /// let inner: ref I32 = pinned.into_inner()
+    /// assert_eq(*inner, 42)
+    /// ```
+    pub func into_inner(this) -> P where P: Unpin {
+        return this.pointer
+    }
 }
 
 // ============================================================================
@@ -144,6 +160,18 @@ impl[T] Pin[ref T] {
     /// Gets a shared reference to the pinned value.
     pub func get_ref(this) -> ref T {
         return this.pointer
+    }
+
+    /// Reborrows this `Pin[ref T]` as a new `Pin[ref T]`.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let pinned: Pin[ref I32] = Pin::new(ref value)
+    /// let reborrowed: Pin[ref I32] = pinned.as_ref()
+    /// ```
+    pub func as_ref(this) -> Pin[ref T] {
+        return Pin { pointer: this.pointer }
     }
 }
 
@@ -176,6 +204,46 @@ impl[T] Pin[mut ref T] {
     /// moved through the returned reference.
     pub func get_unchecked_mut(mut this) -> mut ref T {
         return this.pointer
+    }
+
+    /// Reborrows this `Pin[mut ref T]` as a `Pin[ref T]`.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    /// let shared: Pin[ref I32] = pinned.as_ref()
+    /// ```
+    pub func as_ref(this) -> Pin[ref T] {
+        return Pin { pointer: this.get_ref() }
+    }
+
+    /// Reborrows this `Pin[mut ref T]` as a new `Pin[mut ref T]`.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    /// let reborrowed: Pin[mut ref I32] = pinned.as_mut()
+    /// ```
+    pub func as_mut(mut this) -> Pin[mut ref T] {
+        return Pin { pointer: this.pointer }
+    }
+
+    /// Assigns a new value to the pinned location.
+    ///
+    /// Safe because `T: Unpin` — the value can be replaced freely.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// var value: I32 = 42
+    /// var pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    /// pinned.set(100)
+    /// assert_eq(value, 100)
+    /// ```
+    pub func set(mut this, value: T) where T: Unpin {
+        *this.pointer = value
     }
 }
 

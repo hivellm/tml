@@ -1,0 +1,48 @@
+// Tests for Pin extras: into_inner, as_ref, as_mut, set
+use test
+use core::runtime::pin::Pin
+
+@test
+func test_pin_into_inner_ref() -> Outcome[Unit, Str] {
+    var value: I32 = 42
+    let pinned: Pin[ref I32] = Pin::new(ref value)
+    let inner: ref I32 = pinned.into_inner()
+    assert_eq(*inner, 42 as I32, "into_inner should return the wrapped reference")
+    Ok(())
+}
+
+@test
+func test_pin_ref_as_ref() -> Outcome[Unit, Str] {
+    var value: I32 = 99
+    let pinned: Pin[ref I32] = Pin::new(ref value)
+    let reborrowed: Pin[ref I32] = pinned.as_ref()
+    assert_eq(*reborrowed.get_ref(), 99 as I32, "as_ref should reborrow the pin")
+    Ok(())
+}
+
+@test
+func test_pin_mut_ref_set() -> Outcome[Unit, Str] {
+    var value: I32 = 10
+    var pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    pinned.set(100)
+    assert_eq(value, 100 as I32, "set should update the pinned value")
+    Ok(())
+}
+
+@test
+func test_pin_mut_ref_as_ref() -> Outcome[Unit, Str] {
+    var value: I32 = 77
+    var pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    let shared: Pin[ref I32] = pinned.as_ref()
+    assert_eq(*shared.get_ref(), 77 as I32, "as_ref on Pin[mut ref T] should give Pin[ref T]")
+    Ok(())
+}
+
+@test
+func test_pin_mut_ref_as_mut() -> Outcome[Unit, Str] {
+    var value: I32 = 55
+    var pinned: Pin[mut ref I32] = Pin::new(mut ref value)
+    let reborrowed: Pin[mut ref I32] = pinned.as_mut()
+    assert_eq(*reborrowed.get_ref(), 55 as I32, "as_mut should reborrow as Pin[mut ref T]")
+    Ok(())
+}

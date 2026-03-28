@@ -829,3 +829,39 @@ impl ShrAssign for U64 {
         this = this >> rhs
     }
 }
+
+// ============================================================================
+// Bool convenience functions
+// ============================================================================
+
+/// Returns `Just(value)` if `condition` is `true`, or `Nothing` if `false`.
+///
+/// # Examples
+///
+/// ```tml
+/// let x: Maybe[I32] = then_some(true, 42)  // Just(42)
+/// let y: Maybe[I32] = then_some(false, 42) // Nothing
+/// ```
+pub func then_some[T](condition: Bool, value: T) -> Maybe[T] {
+    if condition {
+        return Just(value)
+    }
+    return Nothing
+}
+
+/// Returns `Just(f())` if `condition` is `true`, or `Nothing` if `false`.
+///
+/// The closure is only evaluated if `condition` is `true`.
+///
+/// # Examples
+///
+/// ```tml
+/// let x: Maybe[I32] = then_with(true, do() 42)  // Just(42)
+/// let y: Maybe[I32] = then_with(false, do() 42) // Nothing
+/// ```
+pub func then_with[T](condition: Bool, f: func() -> T) -> Maybe[T] {
+    if condition {
+        return Just(f())
+    }
+    return Nothing
+}

@@ -99,7 +99,7 @@ impl[T] Heap[T] {
         return Heap::new(T::default())
     }
 
-    /// Returns a reference to the value in the box.
+    /// Returns a copy of the value in the box.
     ///
     /// ## Examples
     ///
@@ -115,7 +115,7 @@ impl[T] Heap[T] {
         return lowlevel { *this.ptr }
     }
 
-    /// Returns a mutable reference to the value in the box.
+    /// Replaces the value in the box.
     ///
     /// ## Examples
     ///
@@ -153,6 +153,50 @@ impl[T] Heap[T] {
         // Null the pointer so drop() is a no-op (prevents double-free)
         this.ptr = null
         return value
+    }
+
+    /// Returns a raw pointer to the inner value.
+    ///
+    /// Note: `return ref (*ptr).field` is currently blocked by a compiler limitation
+    /// (T016 on `lowlevel { return ref *ptr }`). Use `as_ptr` to get the raw pointer.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// let p: *I32 = boxed.as_ptr()
+    /// let v: I32 = lowlevel { *p }
+    /// ```
+    pub func as_ptr(this) -> *T {
+        return this.ptr
+    }
+
+    /// Returns a mutable raw pointer to the inner value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut boxed = Heap::new(42)
+    /// let p: *I32 = boxed.as_mut_ptr()
+    /// lowlevel { *p = 100 }
+    /// ```
+    pub func as_mut_ptr(mut this) -> *T {
+        return this.ptr
+    }
+
+    /// Converts this `Heap[T]` into a `Pin[Heap[T]]`, pinning the value.
+    ///
+    /// After calling this, the value cannot be moved out of the heap.
+    /// Use `Pin::new_unchecked` internally.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// let pinned = boxed.into_pin()
+    /// ```
+    pub func into_pin(this) -> core::runtime::pin::Pin[Heap[T]] {
+        return lowlevel { Pin::new_unchecked(this) }
     }
 
     /// Returns the raw pointer without freeing memory.

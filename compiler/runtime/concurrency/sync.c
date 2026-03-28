@@ -556,6 +556,189 @@ TML_EXPORT uint32_t tml_thread_available_parallelism(void) {
 #endif // _WIN32
 
 // ============================================================================
+// Thread Park/Unpark
+// ============================================================================
+//
+// park/unpark uses per-thread state: an atomic "token" and an OS event.
+// - park():  If token is 1, consume it (set to 0) and return immediately.
+//            Otherwise, wait on the event until token becomes 1, then consume.
+// - unpark(thread_handle): Set the target thread's token to 1 and signal event.
+// - park_timeout(ms): Same as park but with a timeout.
+//
+// On Windows: uses CreateEvent + WaitForSingleObject
+// On Unix: uses pthread_mutex + pthread_cond
+//
+// Thread-local park state is stored via OS TLS.
+
+typedef struct {
+    volatile int32_t token; // 0 = unavailable, 1 = available
+#ifdef _WIN32
+    HANDLE event; // Auto-reset event
+#else
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+#endif
+} ParkState;
+
+// TLS key for the park state
+#ifdef _WIN32
+static DWORD park_tls_key = TLS_OUT_OF_INDEXES;
+static LONG park_tls_init = 0;
+
+static void ensure_park_tls(void) {
+    if (InterlockedCompareExchange(&park_tls_init, 1, 0) == 0) {
+        park_tls_key = TlsAlloc();
+    }
+    // Spin until key is valid (another thread may be initializing)
+    while (park_tls_key == TLS_OUT_OF_INDEXES) {
+        SwitchToThread();
+    }
+}
+
+static ParkState* get_park_state(void) {
+    ensure_park_tls();
+    ParkState* state = (ParkState*)TlsGetValue(park_tls_key);
+    if (!state) {
+        state = (ParkState*)calloc(1, sizeof(ParkState));
+        state->token = 0;
+        state->event = CreateEventA(NULL, FALSE, FALSE, NULL); // Auto-reset
+        TlsSetValue(park_tls_key, state);
+    }
+    return state;
+}
+#else
+static pthread_key_t park_tls_key;
+static pthread_once_t park_tls_once = PTHREAD_ONCE_INIT;
+
+static void park_tls_destroy(void* ptr) {
+    if (ptr) {
+        ParkState* state = (ParkState*)ptr;
+        pthread_mutex_destroy(&state->mutex);
+        pthread_cond_destroy(&state->cond);
+        free(state);
+    }
+}
+
+static void park_tls_init_fn(void) {
+    pthread_key_create(&park_tls_key, park_tls_destroy);
+}
+
+static ParkState* get_park_state(void) {
+    pthread_once(&park_tls_once, park_tls_init_fn);
+    ParkState* state = (ParkState*)pthread_getspecific(park_tls_key);
+    if (!state) {
+        state = (ParkState*)calloc(1, sizeof(ParkState));
+        state->token = 0;
+        pthread_mutex_init(&state->mutex, NULL);
+        pthread_cond_init(&state->cond, NULL);
+        pthread_setspecific(park_tls_key, state);
+    }
+    return state;
+}
+#endif
+
+/**
+ * @brief Parks the current thread until its token is available.
+ *
+ * If the token is already available (set by a prior unpark), it is consumed
+ * and the function returns immediately. Otherwise, the thread blocks until
+ * unpark() is called.
+ */
+TML_EXPORT void tml_thread_park(void) {
+    ParkState* state = get_park_state();
+
+#ifdef _WIN32
+    // Try to consume token without blocking
+    if (InterlockedCompareExchange(&state->token, 0, 1) == 1) {
+        return; // Token was available, consumed
+    }
+    // Wait for event signal
+    WaitForSingleObject(state->event, INFINITE);
+    // Consume the token
+    InterlockedExchange(&state->token, 0);
+#else
+    pthread_mutex_lock(&state->mutex);
+    while (state->token == 0) {
+        pthread_cond_wait(&state->cond, &state->mutex);
+    }
+    state->token = 0;
+    pthread_mutex_unlock(&state->mutex);
+#endif
+}
+
+/**
+ * @brief Parks the current thread with a timeout.
+ * @param timeout_ms Maximum time to wait in milliseconds.
+ *        0 means don't wait (just check and consume token if available).
+ */
+TML_EXPORT void tml_thread_park_timeout(uint64_t timeout_ms) {
+    ParkState* state = get_park_state();
+
+#ifdef _WIN32
+    // Try to consume token without blocking
+    if (InterlockedCompareExchange(&state->token, 0, 1) == 1) {
+        return; // Token was available, consumed
+    }
+    // Wait with timeout
+    WaitForSingleObject(state->event, (DWORD)timeout_ms);
+    // Consume the token if it became available
+    InterlockedExchange(&state->token, 0);
+#else
+    pthread_mutex_lock(&state->mutex);
+    if (state->token == 0 && timeout_ms > 0) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += timeout_ms / 1000;
+        ts.tv_nsec += (timeout_ms % 1000) * 1000000;
+        if (ts.tv_nsec >= 1000000000) {
+            ts.tv_sec++;
+            ts.tv_nsec -= 1000000000;
+        }
+        while (state->token == 0) {
+            if (pthread_cond_timedwait(&state->cond, &state->mutex, &ts) != 0) {
+                break; // Timeout
+            }
+        }
+    }
+    state->token = 0;
+    pthread_mutex_unlock(&state->mutex);
+#endif
+}
+
+/**
+ * @brief Makes the specified thread's park token available.
+ * @param park_state_ptr Pointer to the target thread's ParkState.
+ *
+ * If the thread is currently parked, it will be unblocked.
+ * If the thread is not parked, the token will be available for the next park().
+ */
+TML_EXPORT void tml_thread_unpark(void* park_state_ptr) {
+    if (!park_state_ptr)
+        return;
+    ParkState* state = (ParkState*)park_state_ptr;
+
+#ifdef _WIN32
+    InterlockedExchange(&state->token, 1);
+    SetEvent(state->event);
+#else
+    pthread_mutex_lock(&state->mutex);
+    state->token = 1;
+    pthread_cond_signal(&state->cond);
+    pthread_mutex_unlock(&state->mutex);
+#endif
+}
+
+/**
+ * @brief Returns a pointer to the current thread's ParkState.
+ *
+ * This must be stored and passed to tml_thread_unpark() to unpark this thread.
+ * The pointer is only valid for the lifetime of the thread.
+ */
+TML_EXPORT void* tml_thread_park_state(void) {
+    return (void*)get_park_state();
+}
+
+// ============================================================================
 // Atomic Operations
 // ============================================================================
 

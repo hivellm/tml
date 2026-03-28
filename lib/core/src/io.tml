@@ -1,0 +1,123 @@
+//! Core I/O traits.
+//!
+//! This module provides the fundamental I/O behaviors: [`Read`], [`Write`],
+//! and [`BufRead`]. These behaviors form the contract for all readable and
+//! writable types in TML.
+//!
+//! Error types are re-exported from `core::runtime::error` and also available
+//! via `std::io`.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::io::{Read, Write, IoError}
+//!
+//! func copy[R: Read, W: Write](src: mut ref R, dst: mut ref W) -> Outcome[I64, IoError] {
+//!     // read/write loop
+//!     return Ok(0)
+//! }
+//! ```
+
+pub use core::runtime::error::IoError
+pub use core::runtime::error::IoErrorKind
+
+// ============================================================================
+// Read behavior
+// ============================================================================
+
+/// The `Read` behavior allows reading bytes from a source.
+///
+/// Types implementing `Read` provide a `read` method that reads bytes into a
+/// provided buffer and returns the number of bytes read (or an I/O error).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::io::Read
+///
+/// func read_all[R: Read](reader: mut ref R) -> Outcome[I64, IoError] {
+///     var total: I64 = 0
+///     // read in a loop
+///     return Ok(total)
+/// }
+/// ```
+pub behavior Read {
+    /// Reads bytes from this source.
+    ///
+    /// Implementations fill `buf` with available bytes and return the count.
+    /// A return value of `Ok(0)` means end of stream (EOF).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(IoError)` if an I/O error occurred.
+    func read_bytes(mut this, max: I64) -> Outcome[I64, IoError]
+}
+
+// ============================================================================
+// Write behavior
+// ============================================================================
+
+/// The `Write` behavior allows writing bytes to a sink.
+///
+/// Types implementing `Write` provide a `write_bytes` method that writes bytes
+/// and returns the number written (or an I/O error).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::io::Write
+///
+/// func write_all[W: Write](writer: mut ref W, data: Str) -> Outcome[Unit, IoError] {
+///     // write in a loop
+///     return Ok(())
+/// }
+/// ```
+pub behavior Write {
+    /// Writes bytes into this sink.
+    ///
+    /// Returns the number of bytes written. Callers should loop until all
+    /// bytes are written since a short write is not an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(IoError)` if an I/O error occurred.
+    func write_bytes(mut this, data: Str) -> Outcome[I64, IoError]
+
+    /// Flushes any buffered data to the underlying device.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(IoError)` if a flush error occurred.
+    func flush(mut this) -> Outcome[Unit, IoError]
+}
+
+// ============================================================================
+// BufRead behavior
+// ============================================================================
+
+/// The `BufRead` behavior extends `Read` with buffered reading capabilities.
+///
+/// Types implementing `BufRead` have an internal buffer, enabling efficient
+/// line-by-line reading and other operations that benefit from buffering.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::io::BufRead
+///
+/// func read_lines[B: BufRead](reader: mut ref B) -> Outcome[Unit, IoError] {
+///     // read lines from reader
+///     return Ok(())
+/// }
+/// ```
+pub behavior BufRead: Read {
+    /// Reads bytes until a newline (`\n`) or EOF is reached.
+    ///
+    /// Returns a `Str` containing the line including the newline character
+    /// (if present). Returns an empty string at EOF.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(IoError)` if an I/O error occurred.
+    func read_line(mut this) -> Outcome[Str, IoError]
+}

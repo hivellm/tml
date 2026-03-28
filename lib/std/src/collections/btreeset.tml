@@ -1,14 +1,14 @@
 //! Sorted set backed by a BTreeMap.
 //!
-//! `BTreeSet` maintains elements in sorted order, providing O(log n)
-//! lookup and O(n) insertion. Currently specialized for `I64` elements.
+//! `BTreeSet[T]` maintains elements in sorted order using `Ord`, providing
+//! O(log n) lookup and O(n) insertion.
 //!
 //! # Example
 //!
 //! ```tml
 //! use std::collections::BTreeSet
 //!
-//! var s: BTreeSet = BTreeSet::create()
+//! var s: BTreeSet[I64] = BTreeSet[I64]::new()
 //! s.insert(3)
 //! s.insert(1)
 //! s.insert(2)
@@ -16,19 +16,23 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeMapIter}
-use core::runtime::intrinsics::ptr_read
 
-/// A sorted set of `I64` values, backed by a `BTreeMap`.
+/// A sorted set backed by a `BTreeMap[T, I64]`.
 ///
 /// Elements are maintained in sorted order. Lookups use binary search (O(log n)).
-pub type BTreeSet {
-    map: BTreeMap
+pub type BTreeSet[T] {
+    map: BTreeMap[T, I64]
 }
 
-impl BTreeSet {
+impl[T: Ord] BTreeSet[T] {
     /// Creates a new empty BTreeSet.
-    pub func create() -> BTreeSet {
-        return BTreeSet { map: BTreeMap::create() }
+    pub func new() -> BTreeSet[T] {
+        return BTreeSet[T] { map: BTreeMap[T, I64]::new() }
+    }
+
+    /// Creates a new empty BTreeSet (alias for new).
+    pub func create() -> BTreeSet[T] {
+        return BTreeSet[T]::new()
     }
 
     /// Returns the number of elements.
@@ -42,7 +46,7 @@ impl BTreeSet {
     }
 
     /// Inserts an element. Returns true if the element was not already present.
-    pub func insert(mut this, value: I64) -> Bool {
+    pub func insert(mut this, value: T) -> Bool {
         if this.map.contains_key(value) {
             return false
         }
@@ -51,12 +55,12 @@ impl BTreeSet {
     }
 
     /// Returns true if the set contains the given element.
-    pub func contains(this, value: I64) -> Bool {
+    pub func contains(this, value: T) -> Bool {
         return this.map.contains_key(value)
     }
 
     /// Removes an element. Returns true if the element was found.
-    pub func remove(mut this, value: I64) -> Bool {
+    pub func remove(mut this, value: T) -> Bool {
         return this.map.remove(value)
     }
 
@@ -71,23 +75,23 @@ impl BTreeSet {
     }
 
     /// Returns the smallest element, or panics if empty.
-    pub func min(this) -> I64 {
+    pub func min(this) -> T {
         return this.map.min_key()
     }
 
     /// Returns the largest element, or panics if empty.
-    pub func max(this) -> I64 {
+    pub func max(this) -> T {
         return this.map.max_key()
     }
 
     /// Returns the element at index i in sorted order.
-    pub func get_at(this, i: I64) -> I64 {
+    pub func get_at(this, i: I64) -> T {
         return this.map.key_at(i)
     }
 
     /// Returns a new set with all elements from both sets.
-    pub func union_with(this, other: ref BTreeSet) -> BTreeSet {
-        let mut result: BTreeSet = BTreeSet::create()
+    pub func union_with(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
+        var result: BTreeSet[T] = BTreeSet[T]::new()
         var i: I64 = 0
         loop (i < this.len()) {
             result.insert(this.map.key_at(i))
@@ -102,11 +106,11 @@ impl BTreeSet {
     }
 
     /// Returns a new set with elements common to both sets.
-    pub func intersection(this, other: ref BTreeSet) -> BTreeSet {
-        let mut result: BTreeSet = BTreeSet::create()
+    pub func intersection(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
+        var result: BTreeSet[T] = BTreeSet[T]::new()
         var i: I64 = 0
         loop (i < this.len()) {
-            let val: I64 = this.map.key_at(i)
+            let val: T = this.map.key_at(i)
             if other.contains(val) {
                 result.insert(val)
             }
@@ -116,11 +120,11 @@ impl BTreeSet {
     }
 
     /// Returns a new set with elements in this but not in other.
-    pub func difference(this, other: ref BTreeSet) -> BTreeSet {
-        let mut result: BTreeSet = BTreeSet::create()
+    pub func difference(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
+        var result: BTreeSet[T] = BTreeSet[T]::new()
         var i: I64 = 0
         loop (i < this.len()) {
-            let val: I64 = this.map.key_at(i)
+            let val: T = this.map.key_at(i)
             if not other.contains(val) {
                 result.insert(val)
             }
@@ -130,11 +134,11 @@ impl BTreeSet {
     }
 
     /// Returns a new set with elements in either but not both.
-    pub func symmetric_difference(this, other: ref BTreeSet) -> BTreeSet {
-        let mut result: BTreeSet = BTreeSet::create()
+    pub func symmetric_difference(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
+        var result: BTreeSet[T] = BTreeSet[T]::new()
         var i: I64 = 0
         loop (i < this.len()) {
-            let val: I64 = this.map.key_at(i)
+            let val: T = this.map.key_at(i)
             if not other.contains(val) {
                 result.insert(val)
             }
@@ -142,7 +146,7 @@ impl BTreeSet {
         }
         var j: I64 = 0
         loop (j < other.len()) {
-            let val: I64 = other.map.key_at(j)
+            let val: T = other.map.key_at(j)
             if not this.contains(val) {
                 result.insert(val)
             }
@@ -152,7 +156,7 @@ impl BTreeSet {
     }
 
     /// Returns true if all elements of this set are in other.
-    pub func is_subset(this, other: ref BTreeSet) -> Bool {
+    pub func is_subset(this, other: ref BTreeSet[T]) -> Bool {
         var i: I64 = 0
         loop (i < this.len()) {
             if not other.contains(this.map.key_at(i)) {
@@ -164,12 +168,12 @@ impl BTreeSet {
     }
 
     /// Returns true if this set contains all elements of other.
-    pub func is_superset(this, other: ref BTreeSet) -> Bool {
+    pub func is_superset(this, other: ref BTreeSet[T]) -> Bool {
         return other.is_subset(ref this)
     }
 
     /// Returns true if this set and other share no elements.
-    pub func is_disjoint(this, other: ref BTreeSet) -> Bool {
+    pub func is_disjoint(this, other: ref BTreeSet[T]) -> Bool {
         var i: I64 = 0
         loop (i < this.len()) {
             if other.contains(this.map.key_at(i)) {
@@ -179,54 +183,33 @@ impl BTreeSet {
         }
         return true
     }
+
+    /// Returns an iterator over elements in sorted ascending order.
+    pub func iter(this) -> BTreeSetIter[T] {
+        let map_iter: BTreeMapIter[T, I64] = this.map.iter()
+        return BTreeSetIter[T] { inner: map_iter }
+    }
 }
 
-impl Drop for BTreeSet {
-    func drop(mut this) {
+impl[T: Ord] Drop for BTreeSet[T] {
+    pub func drop(mut this) {
         this.destroy()
     }
 }
 
-impl BTreeSet {
-    /// Returns an iterator over elements in sorted ascending order.
-    ///
-    /// The BTreeSet must not be mutated while the iterator is alive.
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// var s: BTreeSet = BTreeSet::create()
-    /// s.insert(3)
-    /// s.insert(1)
-    /// s.insert(2)
-    /// var it: BTreeSetIter = s.iter()
-    /// loop (it.has_next()) {
-    ///     let v: I64 = it.value()
-    ///     it.next()
-    /// }
-    /// ```
-    pub func iter(this) -> BTreeSetIter {
-        let map_iter: BTreeMapIter = this.map.iter()
-        return BTreeSetIter { inner: map_iter }
-    }
-}
-
 /// An iterator over BTreeSet elements in sorted ascending order.
-///
-/// Created by calling `iter()` on a BTreeSet.
-pub type BTreeSetIter {
-    inner: BTreeMapIter
+pub type BTreeSetIter[T] {
+    inner: BTreeMapIter[T, I64]
 }
 
-impl BTreeSetIter {
+impl[T] BTreeSetIter[T] {
     /// Returns `true` if there are more elements to iterate.
     pub func has_next(this) -> Bool {
         return this.inner.has_next()
     }
 
     /// Returns the current element value.
-    /// Panics if the iterator is exhausted.
-    pub func value(this) -> I64 {
+    pub func value(this) -> T {
         return this.inner.key()
     }
 

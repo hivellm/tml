@@ -32,16 +32,16 @@
 //! when sharing is only needed within a single thread.
 
 use core::runtime::mem::{mem_alloc, mem_free, size_of}
-use core::runtime::intrinsics::ptr_write
 use core::ops::Deref
 use core::traits::clone::Duplicate
 use core::fmt::{Display, Debug}
 use core::traits::default::Default
 
-/// Inner structure holding the value and reference count.
+/// Inner structure holding the value and reference counts.
 type SharedInner[T] {
     value: T,
     strong_count: I32,
+    weak_count: I32,
 }
 
 /// A reference-counted pointer for shared ownership.
@@ -104,6 +104,7 @@ impl[T] Shared[T] {
         *typed_ptr = SharedInner[T] {
             value: value,
             strong_count: 1,
+            weak_count: 1,
         }
 
         return Shared { ptr: typed_ptr }
@@ -180,7 +181,7 @@ impl[T] Shared[T] {
     /// ```
     pub func get_mut(mut this) -> Maybe[*T] {
         if this.is_unique() {
-            return Just(&mut (*this.ptr).value)
+            return Just(this.ptr as *T)
         } else {
             return Nothing
         }
@@ -218,7 +219,7 @@ impl[T] Shared[T] {
         if this.ptr == null {
             return null
         }
-        return &(*this.ptr).value
+        return this.ptr as *T
     }
 
     /// Creates a `Shared[T]` from a raw pointer.
@@ -234,24 +235,154 @@ impl[T] Shared[T] {
     /// Increments the reference count (used internally by duplicate).
     pub func increment_count(this) {
         if this.ptr != null {
-            let count_ptr: *I32 = &(*this.ptr).strong_count as *I32
-            let old: I32 = *count_ptr
-            ptr_write[I32](count_ptr, old + 1)
+            let inner: SharedInner[T] = *this.ptr
+            let new_count: I32 = inner.strong_count + 1
+            lowlevel { (*this.ptr).strong_count = new_count }
         }
     }
 
-    /// Decrements the reference count and frees if zero.
+    /// Decrements the strong reference count. When strong reaches zero, the value
+    /// is dropped. When both strong and weak reach zero, the allocation is freed.
     pub func decrement_count(this) {
         if this.ptr == null {
             return
         }
 
-        let count_ptr: *I32 = &(*this.ptr).strong_count as *I32
-        let old: I32 = *count_ptr
-        let new_count: I32 = old - 1
-        ptr_write[I32](count_ptr, new_count)
+        let inner: SharedInner[T] = *this.ptr
+        let new_strong: I32 = inner.strong_count - 1
+        lowlevel { (*this.ptr).strong_count = new_strong }
 
-        if new_count == 0 {
+        if new_strong == 0 {
+            // Decrement the implicit weak ref held by strong refs
+            let old_weak: I32 = (*this.ptr).weak_count
+            let new_weak: I32 = old_weak - 1
+            lowlevel { (*this.ptr).weak_count = new_weak }
+            if new_weak == 0 {
+                mem_free(this.ptr as *Unit)
+            }
+        }
+    }
+
+    /// Returns the current weak reference count (not counting the implicit weak ref).
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// assert_eq(shared.weak_count(), 0)
+    /// let weak = shared.downgrade()
+    /// assert_eq(shared.weak_count(), 1)
+    /// ```
+    pub func weak_count(this) -> I64 {
+        if this.ptr == null {
+            return 0 as I64
+        }
+        // weak_count stores (user weak refs + 1 implicit); subtract 1 for the implicit
+        let raw: I32 = (*this.ptr).weak_count
+        let result: I64 = raw as I64 - 1 as I64
+        if result < 0 as I64 {
+            return 0 as I64
+        }
+        return result
+    }
+
+    /// Returns `true` if both `Shared` values point to the same allocation.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let a = Shared::new(42)
+    /// let b = a.duplicate()
+    /// assert(a.ptr_eq(ref b))
+    /// ```
+    pub func ptr_eq(this, other: ref Shared[T]) -> Bool {
+        return this.ptr == (*other).ptr
+    }
+
+    /// Creates a `Weak[T]` reference to this allocation.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// let weak = shared.downgrade()
+    /// ```
+    pub func downgrade(this) -> SharedWeak[T] {
+        if this.ptr == null {
+            return SharedWeak { ptr: null }
+        }
+        // Increment the weak count
+        let old_weak: I32 = (*this.ptr).weak_count
+        lowlevel { (*this.ptr).weak_count = old_weak + 1 }
+        return SharedWeak { ptr: this.ptr }
+    }
+}
+
+/// A weak reference to `Shared[T]`-managed data.
+///
+/// `SharedWeak[T]` does not prevent the allocation from being freed. Use
+/// `upgrade()` to attempt to get a strong `Shared[T]` reference.
+///
+/// ## Examples
+///
+/// ```tml
+/// let shared = Shared::new(42)
+/// let weak = shared.downgrade()
+/// when weak.upgrade() {
+///     Just(s) => print(s.get().to_string()),
+///     Nothing => print("expired"),
+/// }
+/// ```
+pub type SharedWeak[T] {
+    ptr: *SharedInner[T],
+}
+
+impl[T] SharedWeak[T] {
+    /// Attempts to upgrade to a strong `Shared[T]` reference.
+    ///
+    /// Returns `Nothing` if the allocation has been freed.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// let weak = shared.downgrade()
+    /// when weak.upgrade() {
+    ///     Just(s) => assert_eq(s.get(), 42),
+    ///     Nothing => panic("should not be expired"),
+    /// }
+    /// ```
+    pub func upgrade(this) -> Maybe[Shared[T]] {
+        if this.ptr == null {
+            return Nothing
+        }
+        let strong: I32 = (*this.ptr).strong_count
+        if strong == 0 {
+            return Nothing
+        }
+        // Increment strong count
+        lowlevel { (*this.ptr).strong_count = strong + 1 }
+        return Just(Shared { ptr: this.ptr })
+    }
+
+    /// Returns `true` if the allocation has been freed (strong count == 0).
+    pub func is_expired(this) -> Bool {
+        if this.ptr == null {
+            return true
+        }
+        return (*this.ptr).strong_count == 0
+    }
+}
+
+impl[T] Drop for SharedWeak[T] {
+    func drop(mut this) {
+        if this.ptr == null {
+            return
+        }
+        let old_weak: I32 = (*this.ptr).weak_count
+        let new_weak: I32 = old_weak - 1
+        lowlevel { (*this.ptr).weak_count = new_weak }
+        if new_weak == 0 {
             mem_free(this.ptr as *Unit)
         }
     }

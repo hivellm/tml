@@ -1,0 +1,49 @@
+// Tests for generic BTreeMap: keys/values accessors, get_opt
+use test
+use std::collections::BTreeMap
+
+@test
+func test_btreemap_keys() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(30, 300)
+    m.insert(10, 100)
+    m.insert(20, 200)
+    let ks: std::collections::List[I64] = m.keys()
+    assert_eq(ks.len(), 3 as I64, "keys list should have 3 entries")
+    assert_eq(ks.get(0), 10 as I64, "first key should be 10")
+    assert_eq(ks.get(1), 20 as I64, "second key should be 20")
+    assert_eq(ks.get(2), 30 as I64, "third key should be 30")
+    m.destroy()
+    Ok(())
+}
+
+@test
+func test_btreemap_values() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(30, 300)
+    m.insert(10, 100)
+    m.insert(20, 200)
+    let vs: std::collections::List[I64] = m.values()
+    assert_eq(vs.len(), 3 as I64, "values list should have 3 entries")
+    assert_eq(vs.get(0), 100 as I64, "first value (key 10) should be 100")
+    assert_eq(vs.get(1), 200 as I64, "second value (key 20) should be 200")
+    assert_eq(vs.get(2), 300 as I64, "third value (key 30) should be 300")
+    m.destroy()
+    Ok(())
+}
+
+@test
+func test_btreemap_get_opt() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(5, 50)
+    when m.get_opt(5) {
+        Just(v) => assert_eq(v, 50 as I64, "get_opt(5) should be Just(50)"),
+        Nothing => { return Err("expected Just(50), got Nothing") }
+    }
+    when m.get_opt(99) {
+        Just(_) => { return Err("expected Nothing for missing key") },
+        Nothing => assert_true(true, "get_opt(99) correctly returns Nothing")
+    }
+    m.destroy()
+    Ok(())
+}

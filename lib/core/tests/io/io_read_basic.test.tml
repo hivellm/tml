@@ -1,0 +1,35 @@
+// Test Read behavior impl
+use test
+use core::io::IoError
+use core::io::Read
+
+type FakeReader {
+    pos: I64,
+    total: I64,
+}
+
+impl Read for FakeReader {
+    func read_bytes(mut this, max: I64) -> Outcome[I64, IoError] {
+        let rem: I64 = this.total - this.pos
+        if rem <= 0 {
+            return Ok(0)
+        }
+        var n: I64 = rem
+        if max < rem {
+            n = max
+        }
+        this.pos = this.pos + n
+        return Ok(n)
+    }
+}
+
+@test
+func test_read_basic() -> Outcome[Unit, Str] {
+    var r: FakeReader = FakeReader { pos: 0, total: 5 }
+    let result = r.read_bytes(3)
+    when result {
+        Ok(n) => assert_eq(n, 3 as I64, "should read 3"),
+        Err(_) => assert_true(false, "no error"),
+    }
+    Ok(())
+}

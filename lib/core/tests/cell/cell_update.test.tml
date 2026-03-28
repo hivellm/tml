@@ -1,0 +1,37 @@
+// Tests for Cell::update
+use test
+use core::cell::Cell
+
+func double_i32(x: I32) -> I32 {
+    return x * 2
+}
+
+func add_ten(x: I32) -> I32 {
+    return x + 10
+}
+
+@test
+func test_cell_update_double() -> Outcome[Unit, Str] {
+    var c: Cell[I32] = Cell::new(5)
+    c.update(double_i32)
+    assert_eq(c.get(), 10 as I32, "update(double) of 5 should give 10")
+    Ok(())
+}
+
+@test
+func test_cell_update_chain() -> Outcome[Unit, Str] {
+    var c: Cell[I32] = Cell::new(3)
+    c.update(double_i32)
+    c.update(add_ten)
+    assert_eq(c.get(), 16 as I32, "update chain: 3 * 2 + 10 = 16")
+    Ok(())
+}
+
+@test
+func test_cell_update_identity() -> Outcome[Unit, Str] {
+    var c: Cell[I32] = Cell::new(99)
+    func identity(x: I32) -> I32 { return x }
+    c.update(identity)
+    assert_eq(c.get(), 99 as I32, "identity update should not change value")
+    Ok(())
+}

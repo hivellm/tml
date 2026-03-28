@@ -97,9 +97,12 @@
 //! - **Thread names**: May be truncated on some platforms
 //! - **Scheduling**: Depends on OS scheduler implementation
 
-use std::sync::atomic::{AtomicBool, Ordering}
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering}
 use core::traits::clone::Duplicate
 use core::traits::marker::Send
+use core::time::Duration
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::runtime::mem::{size_of, align_of}
 
 // ============================================================================
 // Platform-specific thread handle
@@ -114,12 +117,12 @@ type RawThread {
 }
 
 // External functions for platform-specific thread operations
-// These are implemented in the runtime (essential.c)
+// These are implemented in the runtime (sync.c)
 
 @extern("tml_thread_spawn")
 func raw_thread_spawn(
-    func_ptr: RawPtr[func() -> Unit],
-    arg: RawPtr[Unit],
+    func_ptr: *Unit,
+    arg: *Unit,
     stack_size: U64
 ) -> RawThread
 
@@ -140,6 +143,257 @@ func raw_thread_yield()
 
 @extern("tml_thread_available_parallelism")
 func raw_thread_available_parallelism() -> U32
+
+@extern("tml_thread_park")
+func raw_thread_park()
+
+@extern("tml_thread_park_timeout")
+func raw_thread_park_timeout(timeout_ms: U64)
+
+@extern("tml_thread_unpark")
+func raw_thread_unpark(park_state_ptr: *Unit)
+
+@extern("tml_thread_park_state")
+func raw_thread_park_state() -> *Unit
+
+@extern("tml_thread_panicking")
+func raw_thread_panicking() -> I32
+
+// ============================================================================
+// Thread spawn helpers — specialized entry points
+// ============================================================================
+
+/// Thread data for Unit-returning closures.
+@repr(C)
+type UnitThreadData {
+    closure: func(),
+    park_state: *Unit,
+}
+
+/// Thread data for I64-returning closures.
+@repr(C)
+type I64ThreadData {
+    closure: func() -> I64,
+    result: I64,
+    park_state: *Unit,
+}
+
+/// Entry point for Unit-returning threads.
+pub func unit_thread_entry(data_ptr: *Unit) {
+    lowlevel {
+        let data: Ptr[UnitThreadData] = data_ptr as Ptr[UnitThreadData]
+        // Store park state for this thread so spawner can unpark us
+        (*data).park_state = raw_thread_park_state()
+        let closure: func() = (*data).closure
+        closure()
+    }
+}
+
+/// Entry point for I64-returning threads.
+pub func i64_thread_entry(data_ptr: *Unit) {
+    lowlevel {
+        let data: Ptr[I64ThreadData] = data_ptr as Ptr[I64ThreadData]
+        // Store park state for this thread so spawner can unpark us
+        (*data).park_state = raw_thread_park_state()
+        let closure: func() -> I64 = (*data).closure
+        let value: I64 = closure()
+        (*data).result = value
+    }
+}
+
+// ============================================================================
+// Specialized JoinHandle types
+// ============================================================================
+
+/// JoinHandle for Unit-returning threads.
+pub type UnitJoinHandle {
+    raw: RawThread,
+    thread: Thread,
+    joined: AtomicBool,
+    _data_ptr: Ptr[U8],
+    _data_layout: Layout,
+}
+
+impl UnitJoinHandle {
+    /// Waits for the thread to finish.
+    pub func join(mut this) -> Outcome[Unit, JoinError] {
+        if this.joined.swap(true, Ordering::AcqRel) {
+            return Err(JoinError::AlreadyJoined)
+        }
+
+        let status: I32 = raw_thread_join(this.raw)
+
+        // Free the thread data
+        dealloc_global(this._data_ptr, this._data_layout)
+
+        if status != 0 {
+            return Err(JoinError::OsError(status))
+        }
+        return Ok(())
+    }
+
+    /// Checks if the thread has finished.
+    pub func is_finished(this) -> Bool {
+        return this.joined.load(Ordering::Acquire)
+    }
+
+    /// Gets a handle to the thread, including park state for unpark().
+    pub func thread(this) -> Thread {
+        // Read park state from the thread data
+        lowlevel {
+            let data: Ptr[UnitThreadData] = this._data_ptr as Ptr[UnitThreadData]
+            let ps: *Unit = (*data).park_state
+            return Thread {
+                id: this.thread.id,
+                name: this.thread.name,
+                _park_state: ps,
+            }
+        }
+    }
+
+    /// Detaches the thread, allowing it to run independently.
+    ///
+    /// The thread will continue running but can no longer be joined.
+    /// The thread data is freed and the OS handle is detached.
+    pub func detach(this) {
+        raw_thread_detach(this.raw)
+        dealloc_global(this._data_ptr, this._data_layout)
+    }
+}
+
+/// JoinHandle for I64-returning threads.
+pub type I64JoinHandle {
+    raw: RawThread,
+    thread: Thread,
+    joined: AtomicBool,
+    _data_ptr: Ptr[U8],
+    _data_layout: Layout,
+}
+
+impl I64JoinHandle {
+    /// Waits for the thread to finish and returns the I64 result.
+    pub func join(mut this) -> Outcome[I64, JoinError] {
+        if this.joined.swap(true, Ordering::AcqRel) {
+            return Err(JoinError::AlreadyJoined)
+        }
+
+        let status: I32 = raw_thread_join(this.raw)
+        if status != 0 {
+            dealloc_global(this._data_ptr, this._data_layout)
+            return Err(JoinError::OsError(status))
+        }
+
+        // Read result from thread data
+        lowlevel {
+            let data: Ptr[I64ThreadData] = this._data_ptr as Ptr[I64ThreadData]
+            let result: I64 = (*data).result
+            dealloc_global(this._data_ptr, this._data_layout)
+            return Ok(result)
+        }
+    }
+
+    /// Checks if the thread has finished.
+    pub func is_finished(this) -> Bool {
+        return this.joined.load(Ordering::Acquire)
+    }
+
+    /// Gets a handle to the thread, including park state for unpark().
+    pub func thread(this) -> Thread {
+        lowlevel {
+            let data: Ptr[I64ThreadData] = this._data_ptr as Ptr[I64ThreadData]
+            let ps: *Unit = (*data).park_state
+            return Thread {
+                id: this.thread.id,
+                name: this.thread.name,
+                _park_state: ps,
+            }
+        }
+    }
+
+    /// Detaches the thread, allowing it to run independently.
+    ///
+    /// The thread will continue running but can no longer be joined.
+    /// The return value will be lost.
+    pub func detach(this) {
+        raw_thread_detach(this.raw)
+        dealloc_global(this._data_ptr, this._data_layout)
+    }
+}
+
+// ============================================================================
+// Specialized spawn functions
+// ============================================================================
+
+/// Spawns a new thread that runs a `func()` closure (returns Unit).
+pub func spawn_fn(f: func()) -> UnitJoinHandle {
+    let data_size: I64 = size_of[UnitThreadData]()
+    let data_align: I64 = align_of[UnitThreadData]()
+    let layout: Layout = Layout::from_size_align_unchecked(data_size, data_align)
+    let data_raw: Ptr[U8] = alloc_global(layout)
+
+    lowlevel {
+        let data: Ptr[UnitThreadData] = data_raw as Ptr[UnitThreadData]
+        (*data).closure = f
+        (*data).park_state = 0 as *Unit
+    }
+
+    let entry_ptr: *Unit = unit_thread_entry as *Unit
+    let data_ptr: *Unit = data_raw as *Unit
+    let raw: RawThread = raw_thread_spawn(entry_ptr, data_ptr, 0 as U64)
+
+    if raw._handle == 0 {
+        dealloc_global(data_raw, layout)
+        panic("failed to spawn thread")
+    }
+
+    let thread_id: ThreadId = ThreadId { id: raw._handle }
+    let null_ps: *Unit = 0 as *Unit
+    let thread: Thread = Thread { id: thread_id, name: Nothing, _park_state: null_ps }
+
+    return UnitJoinHandle {
+        raw: raw,
+        thread: thread,
+        joined: AtomicBool::new(false),
+        _data_ptr: data_raw,
+        _data_layout: layout,
+    }
+}
+
+/// Spawns a new thread that runs a `func() -> I64` closure.
+pub func spawn_i64(f: func() -> I64) -> I64JoinHandle {
+    let data_size: I64 = size_of[I64ThreadData]()
+    let data_align: I64 = align_of[I64ThreadData]()
+    let layout: Layout = Layout::from_size_align_unchecked(data_size, data_align)
+    let data_raw: Ptr[U8] = alloc_global(layout)
+
+    lowlevel {
+        let data: Ptr[I64ThreadData] = data_raw as Ptr[I64ThreadData]
+        (*data).closure = f
+        (*data).result = 0
+        (*data).park_state = 0 as *Unit
+    }
+
+    let entry_ptr: *Unit = i64_thread_entry as *Unit
+    let data_ptr: *Unit = data_raw as *Unit
+    let raw: RawThread = raw_thread_spawn(entry_ptr, data_ptr, 0 as U64)
+
+    if raw._handle == 0 {
+        dealloc_global(data_raw, layout)
+        panic("failed to spawn thread")
+    }
+
+    let thread_id: ThreadId = ThreadId { id: raw._handle }
+    let null_ps: *Unit = 0 as *Unit
+    let thread: Thread = Thread { id: thread_id, name: Nothing, _park_state: null_ps }
+
+    return I64JoinHandle {
+        raw: raw,
+        thread: thread,
+        joined: AtomicBool::new(false),
+        _data_ptr: data_raw,
+        _data_layout: layout,
+    }
+}
 
 // ============================================================================
 // ThreadId
@@ -213,6 +467,8 @@ func next_thread_id() -> ThreadId {
 pub type Thread {
     id: ThreadId,
     name: Maybe[Str],
+    /// Pointer to the thread's ParkState (from C runtime, for unpark)
+    _park_state: *Unit,
 }
 
 impl Thread {
@@ -253,16 +509,17 @@ impl Thread {
 
     /// Atomically makes the handle's token available if it is not already.
     ///
-    /// Note: park/unpark is not yet fully implemented.
+    /// If the thread is currently blocked on `park()`, it will be unblocked.
+    /// If the thread is not parked, the next call to `park()` will return
+    /// immediately.
     pub func unpark(this) {
-        // In a full implementation, this would signal a condition variable
-        // or futex to wake up the parked thread
+        raw_thread_unpark(this._park_state)
     }
 }
 
 impl Duplicate for Thread {
     pub func duplicate(this) -> Thread {
-        return Thread { id: this.id, name: this.name }
+        return Thread { id: this.id, name: this.name, _park_state: this._park_state }
     }
 }
 
@@ -507,21 +764,10 @@ impl Builder {
     /// }
     /// ```
     pub func spawn[T: Send](this, f: func() -> T) -> Outcome[JoinHandle[T], SpawnError] {
-        let thread_id: ThreadId = next_thread_id()
-        let thread: Thread = Thread {
-            id: thread_id,
-            name: this.name,
-        }
-
-        let stack: U64 = this.stack_size.unwrap_or(0)  // 0 means default
-
-        // In a full implementation, we would:
-        // 1. Box the closure
-        // 2. Create a trampoline function
-        // 3. Pass the boxed closure to raw_thread_spawn
-        // 4. Store the result when the closure completes
-
-        // For now, return a placeholder
+        // Generic Builder::spawn is blocked by codegen limitations:
+        // - Can't get function pointers from generic functions
+        // - Closure captures with generics don't resolve correctly
+        // Use spawn_fn() or spawn_i64() for working thread spawning.
         return Err(SpawnError::Unsupported)
     }
 }
@@ -585,11 +831,10 @@ pub func spawn[T: Send](f: func() -> T) -> JoinHandle[T] {
 /// println("Current thread ID: " + current.id().as_u64().to_string())
 /// ```
 pub func current() -> Thread {
-    // In a full implementation, this would use thread-local storage
-    // to retrieve the current thread's Thread object
     return Thread {
         id: ThreadId { id: raw_thread_current_id() },
         name: Nothing,
+        _park_state: raw_thread_park_state(),
     }
 }
 
@@ -635,6 +880,30 @@ pub func sleep_ms(milliseconds: U64) {
     raw_thread_sleep_ms(milliseconds)
 }
 
+/// Puts the current thread to sleep for at least the specified duration.
+///
+/// The thread may sleep longer than the duration specified due to
+/// scheduling specifics or platform-dependent functionality.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+/// use core::time::Duration
+///
+/// // Sleep for 100 milliseconds
+/// thread::sleep(Duration::from_millis(100))
+///
+/// // Sleep for 2 seconds
+/// thread::sleep(Duration::from_secs(2))
+/// ```
+pub func sleep(duration: Duration) {
+    let millis: I64 = duration.as_millis()
+    if millis > 0 {
+        raw_thread_sleep_ms(millis as U64)
+    }
+}
+
 /// Blocks unless or until the current thread's token is made available.
 ///
 /// A call to `park` does not guarantee that the thread will remain parked
@@ -666,9 +935,44 @@ pub func sleep_ms(milliseconds: U64) {
 /// handle.join().unwrap()
 /// ```
 pub func park() {
-    // Note: park/unpark is not yet fully implemented.
-    // In a full implementation, this would use a condition variable or futex.
-    yield_now()
+    raw_thread_park()
+}
+
+/// Blocks unless or until the current thread's token is made available,
+/// or until the specified timeout has elapsed.
+///
+/// Like `park()`, but with a maximum wait time. The thread may wake up
+/// spuriously before the timeout expires.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// // Park for at most 100ms
+/// thread::park_timeout(100)
+/// ```
+pub func park_timeout(timeout_ms: I64) {
+    if timeout_ms > 0 {
+        raw_thread_park_timeout(timeout_ms as U64)
+    }
+}
+
+/// Returns `true` if the current thread is panicking.
+///
+/// This can be used in destructors to avoid double-panic scenarios.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// if thread::panicking() {
+///     // Don't do anything that might panic again
+/// }
+/// ```
+pub func panicking() -> Bool {
+    return raw_thread_panicking() != 0
 }
 
 /// Returns the number of hardware threads available to the program.

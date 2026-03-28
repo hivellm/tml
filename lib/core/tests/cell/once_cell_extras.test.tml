@@ -1,0 +1,85 @@
+// Tests for OnceCell::get_or_init, get_or_try_init, get_mut
+use test
+use core::cell::OnceCell
+
+func init_42() -> I32 {
+    return 42
+}
+
+func init_ok() -> Outcome[I32, Str] {
+    return Ok(99)
+}
+
+func init_err() -> Outcome[I32, Str] {
+    return Err("init failed")
+}
+
+@test
+func test_once_cell_get_or_init_empty() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    let v: ref I32 = cell.get_or_init(init_42)
+    assert_eq(*v, 42 as I32, "get_or_init on empty cell should call f")
+    Ok(())
+}
+
+@test
+func test_once_cell_get_or_init_already_set() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    cell.set(10)
+    let v: ref I32 = cell.get_or_init(init_42)
+    assert_eq(*v, 10 as I32, "get_or_init should not overwrite existing value")
+    Ok(())
+}
+
+@test
+func test_once_cell_get_or_try_init_ok() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    when cell.get_or_try_init(init_ok) {
+        Ok(v) => assert_eq(*v, 99 as I32, "get_or_try_init ok should give 99"),
+        Err(e) => {
+            return Err("expected Ok, got Err: " + e)
+        },
+    }
+    Ok(())
+}
+
+@test
+func test_once_cell_get_or_try_init_err() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    when cell.get_or_try_init(init_err) {
+        Ok(_) => {
+            return Err("expected Err, got Ok")
+        },
+        Err(e) => assert_eq(e, "init failed", "error message should match"),
+    }
+    assert_true(cell.is_empty(), "cell should still be empty after failed init")
+    Ok(())
+}
+
+@test
+func test_once_cell_get_mut_initialized() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    cell.set(5)
+    when cell.get_mut() {
+        Just(v) => {
+            *v = 100
+            assert_eq(*v, 100 as I32, "get_mut should allow mutation")
+        },
+        Nothing => {
+            return Err("expected Just, got Nothing")
+        },
+    }
+    Ok(())
+}
+
+@test
+func test_once_cell_get_mut_empty() -> Outcome[Unit, Str] {
+    var cell: OnceCell[I32] = OnceCell::new()
+    when cell.get_mut() {
+        Just(_) => {
+            return Err("empty cell should return Nothing from get_mut")
+        },
+        Nothing => assert_true(true, "correct: Nothing for empty cell"),
+    }
+    Ok(())
+}

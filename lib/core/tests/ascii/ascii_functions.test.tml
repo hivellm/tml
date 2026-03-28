@@ -1,0 +1,156 @@
+// Tests for standalone ASCII U8 classification and conversion functions
+use test
+use core::ascii::is_ascii_alphabetic
+use core::ascii::is_ascii_digit
+use core::ascii::is_ascii_alphanumeric
+use core::ascii::is_ascii_whitespace
+use core::ascii::is_ascii_uppercase
+use core::ascii::is_ascii_lowercase
+use core::ascii::is_ascii_punctuation
+use core::ascii::is_ascii_control
+use core::ascii::to_ascii_lowercase
+use core::ascii::to_ascii_uppercase
+
+// ============================================================================
+// is_ascii_alphabetic
+// ============================================================================
+
+@test
+func test_is_ascii_alphabetic_upper() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_alphabetic(65), "A is alphabetic")
+    assert_true(is_ascii_alphabetic(90), "Z is alphabetic")
+    Ok(())
+}
+
+@test
+func test_is_ascii_alphabetic_lower() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_alphabetic(97), "a is alphabetic")
+    assert_true(is_ascii_alphabetic(122), "z is alphabetic")
+    Ok(())
+}
+
+@test
+func test_is_ascii_alphabetic_non() -> Outcome[Unit, Str] {
+    assert_true(not is_ascii_alphabetic(48), "0 is not alphabetic")
+    assert_true(not is_ascii_alphabetic(32), "space is not alphabetic")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_digit
+// ============================================================================
+
+@test
+func test_is_ascii_digit_valid() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_digit(48), "0 is digit")
+    assert_true(is_ascii_digit(57), "9 is digit")
+    assert_true(is_ascii_digit(53), "5 is digit")
+    Ok(())
+}
+
+@test
+func test_is_ascii_digit_invalid() -> Outcome[Unit, Str] {
+    assert_true(not is_ascii_digit(97), "a is not digit")
+    assert_true(not is_ascii_digit(32), "space is not digit")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_alphanumeric
+// ============================================================================
+
+@test
+func test_is_ascii_alphanumeric() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_alphanumeric(65), "A is alphanumeric")
+    assert_true(is_ascii_alphanumeric(97), "a is alphanumeric")
+    assert_true(is_ascii_alphanumeric(48), "0 is alphanumeric")
+    assert_true(not is_ascii_alphanumeric(32), "space is not alphanumeric")
+    assert_true(not is_ascii_alphanumeric(46), ". is not alphanumeric")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_whitespace
+// ============================================================================
+
+@test
+func test_is_ascii_whitespace() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_whitespace(32), "space is whitespace")
+    assert_true(is_ascii_whitespace(9), "tab is whitespace")
+    assert_true(is_ascii_whitespace(10), "newline is whitespace")
+    assert_true(is_ascii_whitespace(13), "CR is whitespace")
+    assert_true(not is_ascii_whitespace(97), "a is not whitespace")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_uppercase / is_ascii_lowercase
+// ============================================================================
+
+@test
+func test_is_ascii_uppercase() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_uppercase(65), "A is uppercase")
+    assert_true(is_ascii_uppercase(90), "Z is uppercase")
+    assert_true(not is_ascii_uppercase(97), "a is not uppercase")
+    assert_true(not is_ascii_uppercase(48), "0 is not uppercase")
+    Ok(())
+}
+
+@test
+func test_is_ascii_lowercase() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_lowercase(97), "a is lowercase")
+    assert_true(is_ascii_lowercase(122), "z is lowercase")
+    assert_true(not is_ascii_lowercase(65), "A is not lowercase")
+    assert_true(not is_ascii_lowercase(48), "0 is not lowercase")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_punctuation
+// ============================================================================
+
+@test
+func test_is_ascii_punctuation() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_punctuation(33), "! is punctuation")
+    assert_true(is_ascii_punctuation(46), ". is punctuation")
+    assert_true(is_ascii_punctuation(64), "@ is punctuation")
+    assert_true(not is_ascii_punctuation(65), "A is not punctuation")
+    assert_true(not is_ascii_punctuation(48), "0 is not punctuation")
+    Ok(())
+}
+
+// ============================================================================
+// is_ascii_control
+// ============================================================================
+
+@test
+func test_is_ascii_control() -> Outcome[Unit, Str] {
+    assert_true(is_ascii_control(0), "NUL is control")
+    assert_true(is_ascii_control(7), "BEL is control")
+    assert_true(is_ascii_control(127), "DEL is control")
+    assert_true(not is_ascii_control(32), "space is not control")
+    assert_true(not is_ascii_control(97), "a is not control")
+    Ok(())
+}
+
+// ============================================================================
+// to_ascii_lowercase / to_ascii_uppercase
+// ============================================================================
+
+@test
+func test_to_ascii_lowercase() -> Outcome[Unit, Str] {
+    assert_eq(to_ascii_lowercase(65 as U8), 97 as U8, "A -> a")
+    assert_eq(to_ascii_lowercase(90 as U8), 122 as U8, "Z -> z")
+    assert_eq(to_ascii_lowercase(97 as U8), 97 as U8, "a stays a")
+    assert_eq(to_ascii_lowercase(48 as U8), 48 as U8, "0 stays 0")
+    Ok(())
+}
+
+@test
+func test_to_ascii_uppercase() -> Outcome[Unit, Str] {
+    assert_eq(to_ascii_uppercase(97 as U8), 65 as U8, "a -> A")
+    assert_eq(to_ascii_uppercase(122 as U8), 90 as U8, "z -> Z")
+    assert_eq(to_ascii_uppercase(65 as U8), 65 as U8, "A stays A")
+    assert_eq(to_ascii_uppercase(48 as U8), 48 as U8, "0 stays 0")
+    Ok(())
+}

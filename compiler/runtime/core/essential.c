@@ -76,6 +76,14 @@ TML_EXPORT void tml_disable_backtrace_on_panic(void) {
     tml_backtrace_on_panic = 0;
 }
 
+/**
+ * @brief Returns whether the current thread is panicking.
+ * @return 1 if panicking, 0 otherwise
+ */
+TML_EXPORT int32_t tml_thread_panicking(void) {
+    return tml_in_panic;
+}
+
 // ============================================================================
 // Output Suppression (for test runner to suppress test output)
 // ============================================================================

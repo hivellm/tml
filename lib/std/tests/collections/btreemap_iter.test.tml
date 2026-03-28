@@ -1,55 +1,54 @@
 // Tests for BTreeMapIter — ordered iteration over BTreeMap entries
-use test::{assert, assert_eq}
+use test
 use std::collections::{BTreeMap, BTreeMapIter}
 
 @test
-func test_btreemap_iter_empty() -> I32 {
-    let m: BTreeMap = BTreeMap::create()
-    var it: BTreeMapIter = m.iter()
-    assert(not it.has_next(), "empty map iterator should have no next")
+func test_btreemap_iter_empty() -> Outcome[Unit, Str] {
+    let m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
+    var it: BTreeMapIter[I64, I64] = m.iter()
+    assert_false(it.has_next(), "empty map iterator should have no next")
     m.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreemap_iter_single() -> I32 {
-    var m: BTreeMap = BTreeMap::create()
+func test_btreemap_iter_single() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
     m.insert(42, 420)
-    var it: BTreeMapIter = m.iter()
-    assert(it.has_next(), "should have first entry")
-    assert_eq(it.key(), 42, "key should be 42")
-    assert_eq(it.value(), 420, "value should be 420")
+    var it: BTreeMapIter[I64, I64] = m.iter()
+    assert_true(it.has_next(), "should have first entry")
+    assert_eq(it.key(), 42 as I64, "key should be 42")
+    assert_eq(it.value(), 420 as I64, "value should be 420")
     it.next()
-    assert(not it.has_next(), "should be exhausted after single entry")
+    assert_false(it.has_next(), "should be exhausted after single entry")
     m.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreemap_iter_sorted_order() -> I32 {
-    var m: BTreeMap = BTreeMap::create()
-    // Insert out of order — iterator must yield in sorted order
+func test_btreemap_iter_sorted_order() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
     m.insert(30, 300)
     m.insert(10, 100)
     m.insert(20, 200)
-    var it: BTreeMapIter = m.iter()
+    var it: BTreeMapIter[I64, I64] = m.iter()
 
-    assert(it.has_next(), "should have entry 0")
-    assert_eq(it.key(), 10, "first key should be 10")
-    assert_eq(it.value(), 100, "first value should be 100")
+    assert_true(it.has_next(), "should have entry 0")
+    assert_eq(it.key(), 10 as I64, "first key should be 10")
+    assert_eq(it.value(), 100 as I64, "first value should be 100")
     it.next()
 
-    assert(it.has_next(), "should have entry 1")
-    assert_eq(it.key(), 20, "second key should be 20")
-    assert_eq(it.value(), 200, "second value should be 200")
+    assert_true(it.has_next(), "should have entry 1")
+    assert_eq(it.key(), 20 as I64, "second key should be 20")
+    assert_eq(it.value(), 200 as I64, "second value should be 200")
     it.next()
 
-    assert(it.has_next(), "should have entry 2")
-    assert_eq(it.key(), 30, "third key should be 30")
-    assert_eq(it.value(), 300, "third value should be 300")
+    assert_true(it.has_next(), "should have entry 2")
+    assert_eq(it.key(), 30 as I64, "third key should be 30")
+    assert_eq(it.value(), 300 as I64, "third value should be 300")
     it.next()
 
-    assert(not it.has_next(), "should be exhausted")
+    assert_false(it.has_next(), "should be exhausted")
     m.destroy()
-    return 0
+    Ok(())
 }

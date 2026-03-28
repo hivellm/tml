@@ -1,16 +1,16 @@
 // Tests for BTreeSetIter — accumulation and edge cases
-use test::{assert, assert_eq}
+use test
 use std::collections::{BTreeSet, BTreeSetIter}
 
 @test
-func test_btreeset_iter_sum() -> I32 {
-    var s: BTreeSet = BTreeSet::create()
+func test_btreeset_iter_sum() -> Outcome[Unit, Str] {
+    var s: BTreeSet[I64] = BTreeSet[I64]::create()
     s.insert(1)
     s.insert(2)
     s.insert(3)
     s.insert(4)
     s.insert(5)
-    var it: BTreeSetIter = s.iter()
+    var it: BTreeSetIter[I64] = s.iter()
     var sum: I64 = 0
     var count: I64 = 0
     loop (it.has_next()) {
@@ -18,43 +18,42 @@ func test_btreeset_iter_sum() -> I32 {
         count = count + 1
         it.next()
     }
-    assert_eq(count, 5, "should visit 5 elements")
-    assert_eq(sum, 15, "sum of 1..5 should be 15")
+    assert_eq(count, 5 as I64, "should visit 5 elements")
+    assert_eq(sum, 15 as I64, "sum of 1..5 should be 15")
     s.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreeset_iter_after_remove() -> I32 {
-    var s: BTreeSet = BTreeSet::create()
+func test_btreeset_iter_after_remove() -> Outcome[Unit, Str] {
+    var s: BTreeSet[I64] = BTreeSet[I64]::create()
     s.insert(10)
     s.insert(20)
     s.insert(30)
     s.remove(20)
-    // After removing 20, should iterate: 10, 30
-    var it: BTreeSetIter = s.iter()
-    assert_eq(it.value(), 10, "first should be 10")
+    var it: BTreeSetIter[I64] = s.iter()
+    assert_eq(it.value(), 10 as I64, "first should be 10")
     it.next()
-    assert_eq(it.value(), 30, "second should be 30")
+    assert_eq(it.value(), 30 as I64, "second should be 30")
     it.next()
-    assert(not it.has_next(), "should be exhausted")
+    assert_false(it.has_next(), "should be exhausted")
     s.destroy()
-    return 0
+    Ok(())
 }
 
 @test
-func test_btreeset_iter_no_duplicates_visited() -> I32 {
-    var s: BTreeSet = BTreeSet::create()
+func test_btreeset_iter_no_duplicates_visited() -> Outcome[Unit, Str] {
+    var s: BTreeSet[I64] = BTreeSet[I64]::create()
     s.insert(5)
-    s.insert(5)  // duplicate — should not be stored
-    s.insert(5)  // duplicate — should not be stored
-    var it: BTreeSetIter = s.iter()
+    s.insert(5)
+    s.insert(5)
+    var it: BTreeSetIter[I64] = s.iter()
     var count: I64 = 0
     loop (it.has_next()) {
         count = count + 1
         it.next()
     }
-    assert_eq(count, 1, "should visit exactly 1 unique element")
+    assert_eq(count, 1 as I64, "should visit exactly 1 unique element")
     s.destroy()
-    return 0
+    Ok(())
 }
