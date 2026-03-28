@@ -626,44 +626,32 @@ auto handle_emit_ir(const json::JsonValue& params) -> ToolResult {
         return ToolResult::error("File not found: " + file_path);
     }
 
-    std::string tml_exe = get_tml_executable();
-    std::stringstream cmd;
-    cmd << tml_exe << " build " << file_path << " --emit-ir --legacy";
+    // Read source
+    auto source_opt = read_source_file(file_path);
+    if (!source_opt.has_value()) {
+        return ToolResult::error("Failed to read file: " + file_path);
+    }
 
-    // Add optimization level if specified
-    auto* optimize_param = params.get("optimize");
-    if (optimize_param != nullptr && optimize_param->is_string()) {
-        std::string opt = optimize_param->as_string();
-        if (opt == "O0" || opt == "O1" || opt == "O2" || opt == "O3") {
-            cmd << " -" << opt;
+    // Parse and type check (in-process, no subprocess)
+    auto ctx_result = parse_and_check(*source_opt, file_path);
+    if (std::holds_alternative<CompileError>(ctx_result)) {
+        return ToolResult::error(std::get<CompileError>(ctx_result).message);
+    }
+
+    auto& ctx = std::get<CompileContext>(ctx_result);
+
+    // Generate LLVM IR in-process using legacy codegen
+    codegen::LLVMIRGen gen(ctx.type_env);
+    auto ir_result = gen.generate(ctx.module);
+    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(ir_result)) {
+        const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(ir_result);
+        std::string error_msg = "Codegen errors:";
+        for (const auto& err : errors) {
+            error_msg += "\n  " + err.message;
         }
+        return ToolResult::error(error_msg);
     }
-
-    auto [output, exit_code] = execute_command(cmd.str());
-
-    if (exit_code != 0) {
-        return ToolResult::error("Failed to emit IR (exit code " + std::to_string(exit_code) +
-                                 ")\n" + output);
-    }
-
-    // Read the generated .ll file
-    fs::path input_path(file_path);
-    fs::path ll_path = fs::path("build/debug") / (input_path.stem().string() + ".ll");
-    if (!fs::exists(ll_path)) {
-        // Try other common locations
-        ll_path = input_path.parent_path() / (input_path.stem().string() + ".ll");
-    }
-
-    if (!fs::exists(ll_path)) {
-        return ToolResult::text("IR generation completed but .ll file not found.\n" + output);
-    }
-
-    auto ir_content = read_source_file(ll_path.string());
-    if (!ir_content) {
-        return ToolResult::error("Failed to read IR file: " + ll_path.string());
-    }
-
-    std::string ir = *ir_content;
+    std::string ir = std::get<std::string>(ir_result);
 
     // Apply function filter if specified
     auto* func_param = params.get("function");
