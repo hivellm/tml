@@ -221,8 +221,6 @@ void McpServer::send_error(json::JsonValue id, json::JsonRpcErrorCode code,
 
 void McpServer::log(const std::string& message) {
     TML_LOG_DEBUG("mcp", message);
-    // Always output to stderr for debugging
-    std::cerr << "[MCP] " << message << "\n" << std::flush;
 }
 
 // ============================================================================

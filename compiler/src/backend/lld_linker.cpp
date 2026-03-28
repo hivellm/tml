@@ -352,7 +352,8 @@ auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDL
 
     // Check if a previous call poisoned LLD's global state
     if (g_lld_poisoned.load(std::memory_order_acquire)) {
-        result.error_message = "LLD in-process unavailable (previous call corrupted global state)";
+        result.error_message =
+            "[N003] LLD in-process unavailable (previous call corrupted global state)";
         return result;
     }
 
@@ -361,7 +362,8 @@ auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDL
 
     // Double-check after acquiring the lock
     if (g_lld_poisoned.load(std::memory_order_acquire)) {
-        result.error_message = "LLD in-process unavailable (previous call corrupted global state)";
+        result.error_message =
+            "[N003] LLD in-process unavailable (previous call corrupted global state)";
         return result;
     }
 
@@ -456,8 +458,8 @@ auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDL
     }
 
     if (lld_result.retCode != 0) {
-        result.error_message =
-            "In-process LLD linking failed (exit code " + std::to_string(lld_result.retCode) + ")";
+        result.error_message = "[N002] In-process LLD linking failed (exit code " +
+                               std::to_string(lld_result.retCode) + ")";
         if (!stderr_str.empty()) {
             result.error_message += ":\n" + stderr_str;
         }
@@ -492,20 +494,20 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
     result.success = false;
 
     if (!initialized_) {
-        result.error_message = "LLD linker not initialized";
+        result.error_message = "[N004] LLD linker not initialized";
         return result;
     }
 
     // Verify all object files exist
     for (const auto& obj : object_files) {
         if (!file_exists(obj)) {
-            result.error_message = "Object file not found: " + obj.string();
+            result.error_message = "[N006] Object file not found: " + obj.string();
             return result;
         }
     }
 
     if (object_files.empty()) {
-        result.error_message = "No object files provided for linking";
+        result.error_message = "[N005] No object files provided for linking";
         return result;
     }
 
@@ -518,11 +520,11 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
         int ret = execute_command(cmd, options.verbose);
         if (ret != 0) {
             result.error_message =
-                "Static library creation failed with exit code " + std::to_string(ret);
+                "[N008] Static library creation failed with exit code " + std::to_string(ret);
             return result;
         }
         if (!file_exists(output_path)) {
-            result.error_message = "Output file was not created: " + output_path.string();
+            result.error_message = "[N007] Output file was not created: " + output_path.string();
             return result;
         }
         result.success = true;
@@ -563,7 +565,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
         }
         int ret = execute_command(cmd, options.verbose);
         if (ret != 0) {
-            result.error_message = "Linking failed with exit code " + std::to_string(ret);
+            result.error_message = "[N001] Linking failed with exit code " + std::to_string(ret);
             return result;
         }
         result.success = true;
@@ -589,7 +591,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
     if (result.success) {
         // Verify output was created
         if (!file_exists(output_path)) {
-            result.error_message = "Output file was not created: " + output_path.string();
+            result.error_message = "[N007] Output file was not created: " + output_path.string();
             result.success = false;
             return result;
         }

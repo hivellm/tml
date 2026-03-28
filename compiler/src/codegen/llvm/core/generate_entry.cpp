@@ -433,27 +433,11 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                 emit_line(test_done_label + ":");
                 prev_block = test_done_label;
             } else {
-                // Regular test - just call it
-                auto it = functions_.find(test_info.name);
-                if (it != functions_.end() && it->second.ret_type != "void") {
-                    std::string tmp = "%test_result_" + idx_str;
-                    emit_line("  " + tmp + " = call " + it->second.ret_type + " " + test_fn + "()");
-                } else if (it != functions_.end()) {
-                    emit_line("  call void " + test_fn + "()");
-                } else {
-                    // Test function not found in functions_ map - likely a name collision
-                    // with an imported module function (e.g., test function "test_assert_str_empty"
-                    // collides with module "test" function "assert_str_empty" -> both mangle to
-                    // "tml_test_assert_str_empty"). Emit as i32 call (test convention) with a
-                    // stderr warning.
-                    emit_line("  ; WARNING: test function '" + test_info.name +
-                              "' not found in functions_ map");
-                    emit_line(
-                        "  ; This may indicate a name collision with an imported module function.");
-                    emit_line("  ; Consider renaming the test function to avoid the collision.");
-                    std::string tmp = "%test_result_" + idx_str;
-                    emit_line("  " + tmp + " = call i32 " + test_fn + "()");
-                }
+                // Regular test - wrap with tml_run_test_with_catch for timeout + crash protection
+                require_runtime_decl("tml_run_test_with_catch");
+                std::string catch_result = "%test_catch_" + idx_str;
+                emit_line("  " + catch_result + " = call i32 @tml_run_test_with_catch(ptr " +
+                          test_fn + ")");
             }
 
             test_idx++;

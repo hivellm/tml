@@ -171,7 +171,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // @no_mangle + generics is an error: generic functions produce multiple
     // instantiations and cannot have a single stable symbol name.
     if (has_no_mangle(func) && !func.generics.empty()) {
-        report_error("@no_mangle cannot be used with generic functions", func.span);
+        report_error("@no_mangle cannot be used with generic functions", func.span, "C036");
         return;
     }
 

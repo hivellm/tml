@@ -111,7 +111,7 @@ auto LLVMBackend::initialize() -> bool {
     // Create per-instance LLVM context (thread-safe)
     context_ = LLVMContextCreate();
     if (!context_) {
-        last_error_ = "Failed to create LLVM context";
+        last_error_ = "[K010] Failed to create LLVM context";
         return false;
     }
 
@@ -133,7 +133,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     result.success = false;
 
     if (!initialized_) {
-        result.error_message = "LLVM backend not initialized";
+        result.error_message = "[K009] LLVM backend not initialized";
         return result;
     }
 
@@ -144,7 +144,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
         LLVMCreateMemoryBufferWithMemoryRangeCopy(ir_content.c_str(), ir_content.size(), "ir");
 
     if (!buffer) {
-        result.error_message = "Failed to create memory buffer for IR";
+        result.error_message = "[K006] Failed to create memory buffer for IR";
         return result;
     }
 
@@ -155,7 +155,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
         std::string llvm_error = consume_error_message(error);
         result.error_message =
-            "Failed to parse LLVM IR: " + llvm_error +
+            "[K001] Failed to parse LLVM IR: " + llvm_error +
             "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +
             "The generated LLVM IR is invalid. Common causes:\n" +
             "  • Type mismatches in function calls (e.g., passing struct by value vs ref)\n" +
@@ -178,7 +178,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     LLVMTargetRef target = nullptr;
     error = nullptr;
     if (LLVMGetTargetFromTriple(target_triple.c_str(), &target, &error) != 0) {
-        result.error_message = "Failed to get target: " + consume_error_message(error);
+        result.error_message = "[K005] Failed to get target: " + consume_error_message(error);
         LLVMDisposeModule(module);
         return result;
     }
@@ -225,7 +225,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
                                 opt_level, reloc_mode, LLVMCodeModelDefault);
 
     if (!target_machine) {
-        result.error_message = "Failed to create target machine";
+        result.error_message = "[K003] Failed to create target machine";
         LLVMDisposeModule(module);
         return result;
     }
@@ -270,7 +270,8 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     // Verify the module
     error = nullptr;
     if (LLVMVerifyModule(module, LLVMReturnStatusAction, &error) != 0) {
-        result.warnings.push_back("Module verification warning: " + consume_error_message(error));
+        result.warnings.push_back("[K002] Module verification warning: " +
+                                  consume_error_message(error));
     } else if (error) {
         LLVMDisposeMessage(error);
     }
@@ -307,13 +308,14 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
             continue;
         }
         // Non-retryable error
-        result.error_message = "Failed to emit object file: " + err_msg;
+        result.error_message = "[K004] Failed to emit object file: " + err_msg;
         LLVMDisposeTargetMachine(target_machine);
         LLVMDisposeModule(module);
         return result;
     }
     if (!emit_ok) {
-        result.error_message = "Failed to emit object file after " + std::to_string(max_retries) +
+        result.error_message = "[K004] Failed to emit object file after " +
+                               std::to_string(max_retries) +
                                " retries (file locked): " + output_str;
         LLVMDisposeTargetMachine(target_machine);
         LLVMDisposeModule(module);
@@ -339,7 +341,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
     result.success = false;
 
     if (!initialized_) {
-        result.error_message = "LLVM backend not initialized";
+        result.error_message = "[K009] LLVM backend not initialized";
         return result;
     }
 
@@ -350,7 +352,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
         LLVMCreateMemoryBufferWithMemoryRangeCopy(ir_content.c_str(), ir_content.size(), "ir");
 
     if (!buffer) {
-        result.error_message = "Failed to create memory buffer for IR";
+        result.error_message = "[K006] Failed to create memory buffer for IR";
         return result;
     }
 
@@ -361,7 +363,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
         std::string llvm_error = consume_error_message(error);
         result.error_message =
-            "Failed to parse LLVM IR: " + llvm_error +
+            "[K001] Failed to parse LLVM IR: " + llvm_error +
             "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +
             "The generated LLVM IR is invalid. Common causes:\n" +
             "  • Type mismatches in function calls (e.g., passing struct by value vs ref)\n" +
@@ -383,7 +385,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
     LLVMTargetRef target = nullptr;
     error = nullptr;
     if (LLVMGetTargetFromTriple(target_triple.c_str(), &target, &error) != 0) {
-        result.error_message = "Failed to get target: " + consume_error_message(error);
+        result.error_message = "[K005] Failed to get target: " + consume_error_message(error);
         LLVMDisposeModule(module);
         return result;
     }
@@ -429,7 +431,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
                                 opt_level, reloc_mode, LLVMCodeModelDefault);
 
     if (!target_machine) {
-        result.error_message = "Failed to create target machine";
+        result.error_message = "[K003] Failed to create target machine";
         LLVMDisposeModule(module);
         return result;
     }
@@ -455,7 +457,8 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
     error = nullptr;
     if (LLVMTargetMachineEmitToMemoryBuffer(target_machine, module, LLVMObjectFile, &error,
                                             &obj_buffer) != 0) {
-        result.error_message = "Failed to emit object to memory: " + consume_error_message(error);
+        result.error_message =
+            "[K011] Failed to emit object to memory: " + consume_error_message(error);
         LLVMDisposeTargetMachine(target_machine);
         LLVMDisposeModule(module);
         return result;
@@ -484,13 +487,13 @@ auto LLVMBackend::compile_ir_file_to_object(const fs::path& ir_file,
 
     // Read the IR file
     if (!fs::exists(ir_file)) {
-        result.error_message = "IR file not found: " + ir_file.string();
+        result.error_message = "[K008] IR file not found: " + ir_file.string();
         return result;
     }
 
     std::ifstream file(ir_file);
     if (!file) {
-        result.error_message = "Failed to open IR file: " + ir_file.string();
+        result.error_message = "[K007] Failed to open IR file: " + ir_file.string();
         return result;
     }
 
