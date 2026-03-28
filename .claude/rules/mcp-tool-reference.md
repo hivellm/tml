@@ -2,6 +2,17 @@
 
 Every MCP tool call is logged to `mcp-call-log.jsonl` for research. Use tools intentionally.
 
+## Quick Decision Guide
+
+| I want to... | Use this tool | NOT this |
+|--------------|--------------|----------|
+| See what methods a type has | `docs_list(module, kind="method")` | `Read` on source file |
+| Find a type or function | `docs_search(query)` | `Grep` on lib/ directory |
+| Check if my code has type errors | `check(file)` | `test` (slower) or `compile` |
+| Debug a test failure | `test(path, debug_layers=true)` | `test` again without IR |
+| See the generated LLVM IR | `emit-ir(file, function)` | `Bash` with tml.exe |
+| Understand an error code | `explain(code)` | Grepping the compiler source |
+
 ## Compilation & Execution Tools
 
 | Tool | Purpose | Key Params | When to Use |

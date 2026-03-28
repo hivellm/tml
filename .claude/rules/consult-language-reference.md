@@ -6,6 +6,18 @@ Before writing ANY new TML code, you MUST use the MCP documentation tools AND re
 
 The TML standard library has 500+ types and 5000+ functions already implemented. Past implementations ignored existing APIs, used wrong syntax, and created bugs that cost hours to debug. The MCP docs tools provide instant access to correct syntax, existing APIs, and known limitations.
 
+## NEVER Read Source Files to Understand APIs
+
+**DO NOT use `Read` on `lib/core/src/*.tml` or `lib/std/src/*.tml` to discover what a type provides.** Source files contain lowlevel implementation details (pointer arithmetic, memory layouts) that waste tokens and obscure the public API.
+
+**INSTEAD use:**
+- `mcp__tml__docs_list(module="std::collections::List", kind="method")` — see all public methods
+- `mcp__tml__docs_search(query="sort list")` — find relevant functions
+- `mcp__tml__docs_get(id="std::collections::List::sort")` — full docs for one item
+- `mcp__tml__docs_resolve(name="HashMap")` ��� find full qualified path
+
+Only read source files when you need to **modify** the implementation, not when you need to **use** it.
+
 ## Step 1: Use MCP Docs Tools (PREFERRED — instant, searchable)
 
 **Before writing ANY TML code, call one of these:**
