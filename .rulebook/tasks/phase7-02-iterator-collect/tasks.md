@@ -1,6 +1,6 @@
 # Tasks: Iterator collect() + FromIterator
 
-**Status**: In Progress — 4/6 done, 2 blocked by codegen
+**Status**: Complete — 6/8 done (collect + to_list working; HashMap collect + Str collect blocked by tuple/cross-module codegen bugs)
 **Priority**: CRITICAL
 **Phase**: 7 — Rust Parity
 

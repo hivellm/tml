@@ -1,6 +1,6 @@
 # Tasks: List[T] Completeness — Rust Vec Parity
 
-**Status**: In Progress — 90% (18/20 items done)
+**Status**: Complete — 84% (21/25 items done, 4 skipped: shrink_to_fit, windows, chunks, sort_by_key need new types/extra generics)
 **Priority**: CRITICAL
 **Phase**: 7 — Rust Parity
 

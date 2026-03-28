@@ -1,6 +1,6 @@
 # Tasks: std::env Module
 
-**Status**: Proposed
+**Status**: Complete — 11/11 done (get_var, set_var, remove_var, current_dir, temp_dir, args, 12 tests)
 **Priority**: HIGH
 **Phase**: 7 — Rust Parity
 

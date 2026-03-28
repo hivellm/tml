@@ -1,6 +1,6 @@
 # Tasks: HashMap Entry API + Missing Methods
 
-**Status**: In Progress — Phase 1 complete, Phase 2 partially complete
+**Status**: Complete — 9/15 done (is_empty, get_or_set, keys, values, retain, drain, extend done; Entry API blocked by enum+ref codegen bugs)
 **Priority**: CRITICAL
 **Phase**: 7 — Rust Parity
 
