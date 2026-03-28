@@ -5,7 +5,7 @@
 //! Inspired by Express.js `serve-static` and `send`.
 
 use core::str
-use std::mime::Mime
+use std::net::mime::Mime
 use std::text::Text
 use std::http::etag
 use std::http::cache_control::{CacheOptions, cache_control_header}

@@ -1,6 +1,6 @@
 use test
-use std::url::Url
-use std::url::UrlBuilder
+use std::net::url::Url
+use std::net::url::UrlBuilder
 use test::{assert, assert_eq}
 
 @test

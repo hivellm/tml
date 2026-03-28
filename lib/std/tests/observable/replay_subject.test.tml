@@ -1,6 +1,6 @@
 // Tests for ReplaySubjectI32 — replays last N values to new subscribers
 use test::{assert, assert_eq}
-use std::observable::{
+use std::events::observable::{
     replay_subject_new_i32, replay_subject_push_i32,
     replay_subject_count_i32, replay_subject_get_i32,
     subject_is_completed_i32, subject_has_error_i32,

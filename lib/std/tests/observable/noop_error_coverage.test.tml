@@ -1,6 +1,6 @@
 // Tests for observable::noop_error — a no-op error handler
 use test::{assert}
-use std::observable::noop_error
+use std::events::observable::noop_error
 
 @test
 func test_noop_error_does_not_crash() -> I32 {

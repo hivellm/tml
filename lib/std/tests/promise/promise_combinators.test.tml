@@ -1,7 +1,7 @@
 // Tests for Promise combinators — all, race, any, all_settled
 use test::{assert, assert_eq}
 use core::alloc::Shared
-use std::promise::{Promise, PromiseState,
+use std::events::promise::{Promise, PromiseState,
     promise_all_i32, promise_race_i32, promise_any_i32}
 
 // Concrete constructors to avoid generic monomorphization bug in List.push.

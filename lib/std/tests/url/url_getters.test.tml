@@ -1,6 +1,6 @@
 // Tests for Url getter methods — get_scheme, get_host, get_port, get_path, get_query, get_fragment
 use test
-use std::url::Url
+use std::net::url::Url
 
 @test
 func test_url_get_scheme() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for MIME type constant constructors
 use test::{assert, assert_eq}
-use std::mime
+use std::net::mime
 
 @test
 func test_text_constants() -> I32 {

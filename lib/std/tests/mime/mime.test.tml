@@ -1,6 +1,6 @@
 // Tests for Mime::with_params, essence, get_suffix, is_audio, is_video, is_application
 use test::{assert, assert_eq}
-use std::mime::{Mime, IMAGE_SVG, AUDIO_MPEG, VIDEO_MP4, APPLICATION_JSON}
+use std::net::mime::{Mime, IMAGE_SVG, AUDIO_MPEG, VIDEO_MP4, APPLICATION_JSON}
 
 @test
 func test_with_params() -> I32 {

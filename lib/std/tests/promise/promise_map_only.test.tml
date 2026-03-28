@@ -1,6 +1,6 @@
 // Tests for Promise edge cases — value extraction and state transitions
 use test::{assert, assert_eq}
-use std::promise::{Promise, PromiseState}
+use std::events::promise::{Promise, PromiseState}
 
 @test
 func test_promise_value_fulfilled() -> I32 {

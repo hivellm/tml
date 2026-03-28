@@ -1,6 +1,6 @@
 // Tests for Url::authority() and Url::host_port()
 use test
-use std::url::Url
+use std::net::url::Url
 
 @test
 func test_url_authority_simple() -> I32 {

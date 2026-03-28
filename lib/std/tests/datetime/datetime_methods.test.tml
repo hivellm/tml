@@ -1,6 +1,6 @@
 // Tests for DateTime methods: weekday, day_of_year, is_leap_year, to_rfc2822, to_string, debug_string
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_weekday_epoch() -> I32 {

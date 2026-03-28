@@ -1,6 +1,6 @@
 // Tests for BehaviorSubjectI32 — replays current value to new subscribers
 use test::{assert, assert_eq}
-use std::observable::{
+use std::events::observable::{
     behavior_subject_new_i32, behavior_subject_value_i32,
     behavior_subject_set_value_i32,
     subject_is_completed_i32, subject_has_error_i32,

@@ -1,7 +1,7 @@
 // Tests for promise_all_settled_i32
 use test::{assert, assert_eq}
 use core::alloc::Shared
-use std::promise::{Promise, PromiseState, promise_all_settled_i32}
+use std::events::promise::{Promise, PromiseState, promise_all_settled_i32}
 
 func resolved(v: I32) -> Promise[I32] {
     return Promise { inner: Shared::new(PromiseState::Fulfilled(v)) }

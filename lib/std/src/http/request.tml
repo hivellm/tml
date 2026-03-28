@@ -6,7 +6,7 @@
 
 use core::str
 use core::fmt::helpers::i64_to_str
-use std::url::Url
+use std::net::url::Url
 use std::http::method::Method
 use std::http::headers::Headers
 use std::http::version::HttpVersion

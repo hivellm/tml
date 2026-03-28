@@ -6,7 +6,7 @@
 //! numeric/uppercase ranges, negated ranges, caret negation, wildcards in dir segments,
 //! backslash normalization, multiple globstars, and complex path patterns.
 
-use std::glob::matches
+use std::file::glob::matches
 use test::{assert, assert_eq}
 
 // ============================================================================

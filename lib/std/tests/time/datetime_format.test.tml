@@ -1,6 +1,6 @@
 // Tests for DateTime formatting methods
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_iso8601_epoch() -> I32 {

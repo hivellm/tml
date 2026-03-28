@@ -5,7 +5,7 @@
 //! files-and-dirs matching, deep single file, next() iteration, count(),
 //! find_all() convenience function, empty dir, and sorted output.
 
-use std::glob::{Glob, matches, find_all}
+use std::file::glob::{Glob, matches, find_all}
 use std::file::{File, Dir, Path}
 use test::{assert, assert_eq}
 

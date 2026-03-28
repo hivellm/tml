@@ -1,6 +1,6 @@
 // Tests for DateTime formatting and parsing
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_to_iso8601() -> I32 {

@@ -1,6 +1,6 @@
 // Integration test: datetime formatting and parsing
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_now_format_round_trip() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for SubjectI32 — state management and multicast pattern
 use test::{assert, assert_eq}
-use std::observable::{
+use std::events::observable::{
     subject_new_i32, subject_complete_i32, subject_error_i32,
     subject_is_completed_i32, subject_has_error_i32, subject_next_id_i32
 }

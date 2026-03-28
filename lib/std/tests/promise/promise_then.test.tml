@@ -1,6 +1,6 @@
 // Tests for Promise chaining — map, catch, finally
 use test::{assert, assert_eq}
-use std::promise::{Promise, promise_map_i32, promise_catch_i32, promise_finally_i32}
+use std::events::promise::{Promise, promise_map_i32, promise_catch_i32, promise_finally_i32}
 
 // ============================================================================
 // promise_map_i32 tests

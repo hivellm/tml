@@ -1,6 +1,6 @@
 // Tests for Mime predicates: is_audio, is_video
 use test::{assert}
-use std::mime::Mime
+use std::net::mime::Mime
 
 @test
 func test_is_audio() -> I32 {

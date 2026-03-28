@@ -1,6 +1,6 @@
 use test
-use std::mime::Mime
-use std::mime
+use std::net::mime::Mime
+use std::net::mime
 
 // === to_string formatting ===
 

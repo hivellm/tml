@@ -1,6 +1,6 @@
 // Tests for DateTime parsing functions
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_parse_iso8601() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for merge and concat operators
 use test::{assert, assert_eq}
-use std::observable::{
+use std::events::observable::{
     ObservableI32,
     observable_of2_i32, observable_of3_i32, observable_empty_i32,
     observable_merge_i32, observable_concat_i32,

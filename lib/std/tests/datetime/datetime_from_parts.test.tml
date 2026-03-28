@@ -1,6 +1,6 @@
 // Tests for DateTime::from_parts, from_timestamp with known values
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_from_parts_epoch() -> I32 {

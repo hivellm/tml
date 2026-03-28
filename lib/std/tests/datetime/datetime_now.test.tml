@@ -1,6 +1,6 @@
 // Tests for std::datetime — DateTime::now
 use test::{assert, assert_eq}
-use std::datetime::DateTime
+use std::time::datetime::DateTime
 
 @test
 func test_datetime_now_returns_reasonable_year() -> I32 {

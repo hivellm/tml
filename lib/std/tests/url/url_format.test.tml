@@ -1,5 +1,5 @@
 use test
-use std::url::Url
+use std::net::url::Url
 
 @test
 func test_to_string_simple() -> I32 {
