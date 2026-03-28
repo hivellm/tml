@@ -1,0 +1,41 @@
+// Tests for env::args() iterator
+use test::{assert, assert_eq}
+use std::env
+
+@test
+func test_args_len_nonnegative() -> I32 {
+    let a: env::Args = env::args()
+    assert(a.len() >= 0, "args len should be non-negative")
+    return 0
+}
+
+@test
+func test_args_iteration_count() -> I32 {
+    var a: env::Args = env::args()
+    let count: I32 = a.len()
+    var iterated: I32 = 0
+    loop (a.has_next()) {
+        let _arg: Str = a.next()
+        iterated = iterated + 1
+    }
+    assert_eq(iterated, count)
+    return 0
+}
+
+@test
+func test_args_reset() -> I32 {
+    var a: env::Args = env::args()
+    let count: I32 = a.len()
+    loop (a.has_next()) {
+        let _arg: Str = a.next()
+    }
+    assert(not a.has_next(), "has_next should be false after full iteration")
+    a.reset()
+    var iterated: I32 = 0
+    loop (a.has_next()) {
+        let _arg: Str = a.next()
+        iterated = iterated + 1
+    }
+    assert_eq(iterated, count)
+    return 0
+}

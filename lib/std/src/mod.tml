@@ -26,6 +26,7 @@
 //! | [`zlib`] | Compression (gzip, deflate, brotli, zstd) |
 //! | [`log`] | Structured logging with level-based filtering |
 //! | [`os`] | OS info, subprocess, signal, pipe |
+//! | [`env`] | Environment variables, CWD, temp dir, args |
 //! | [`search`] | Vector search and text retrieval (BM25, HNSW, SIMD) |
 //! | [`glob`] | High-performance glob pattern matching |
 //! | [`math`] | Mathematical functions and constants |
@@ -58,6 +59,7 @@ pub mod hash
 pub mod zlib
 pub mod log
 pub mod os
+pub mod env        // Environment variables, CWD, temp dir, args (Rust-compatible API)
 pub mod search
 pub mod glob
 pub mod math

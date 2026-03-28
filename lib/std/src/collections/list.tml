@@ -350,6 +350,320 @@ impl[T] List[T] {
 
         result
     }
+
+    // =========================================================================
+    // Search & Query
+    // =========================================================================
+
+    /// Returns `true` if the list contains an element equal to `value`.
+    pub func contains(this, value: T) -> Bool {
+        let n: I64 = this.len()
+        var i: I64 = 0
+        loop (i < n) {
+            if this.get(i) == value {
+                return true
+            }
+            i = i + 1
+        }
+        false
+    }
+
+    /// Returns the index of the first element equal to `value`, or `Nothing` if not found.
+    pub func index_of(this, value: T) -> Maybe[I64] {
+        let n: I64 = this.len()
+        var i: I64 = 0
+        loop (i < n) {
+            if this.get(i) == value {
+                return Just(i)
+            }
+            i = i + 1
+        }
+        Nothing
+    }
+
+    /// Performs a binary search on a sorted list.
+    ///
+    /// Returns `Ok(index)` if the value is found, or `Err(index)` where `index`
+    /// is the insertion point that would maintain sorted order.
+    ///
+    /// The list MUST be sorted in ascending order before calling this method.
+    pub func binary_search(this, value: T) -> Outcome[I64, I64] {
+        let n: I64 = this.len()
+        var lo: I64 = 0
+        var hi: I64 = n
+        loop (lo < hi) {
+            let mid: I64 = lo + (hi - lo) / 2
+            let mid_val: T = this.get(mid)
+            if mid_val == value {
+                return Ok(mid)
+            }
+            if mid_val < value {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        Err(lo)
+    }
+
+    // =========================================================================
+    // Mutation — swap, reverse, insert, remove
+    // =========================================================================
+
+    /// Swaps the elements at indices `i` and `j`.
+    pub func swap(this, i: I64, j: I64) {
+        let tmp: T = this.get(i)
+        this.set(i, this.get(j))
+        this.set(j, tmp)
+    }
+
+    /// Reverses the order of elements in the list in place.
+    pub func reverse(this) {
+        let n: I64 = this.len()
+        var lo: I64 = 0
+        var hi: I64 = n - 1
+        loop (lo < hi) {
+            this.swap(lo, hi)
+            lo = lo + 1
+            hi = hi - 1
+        }
+    }
+
+    /// Inserts an element at the given index, shifting all elements after it to the right.
+    pub func insert(this, index: I64, value: T) {
+        // Push to grow (reuses grow logic), then shift
+        this.push(value)
+        let cur_len: I64 = this.len()
+        var i: I64 = cur_len - 1
+        loop (i > index) {
+            this.set(i, this.get(i - 1))
+            i = i - 1
+        }
+        this.set(index, value)
+    }
+
+    /// Removes and returns the element at the given index, shifting all elements after it to the left.
+    pub func remove(this, index: I64) -> T {
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+
+        let removed: T = this.get(index)
+        var i: I64 = index
+        loop (i < cur_len - 1) {
+            this.set(i, this.get(i + 1))
+            i = i + 1
+        }
+        lowlevel { ptr_write[I64](p_len, cur_len - 1) }
+        removed
+    }
+
+    /// Removes the element at `index` by swapping it with the last element. O(1) but doesn't preserve order.
+    pub func swap_remove(this, index: I64) -> T {
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let last_idx: I64 = cur_len - 1
+
+        let removed: T = this.get(index)
+        if index != last_idx {
+            this.set(index, this.get(last_idx))
+        }
+        lowlevel { ptr_write[I64](p_len, last_idx) }
+        removed
+    }
+
+    /// Appends all elements from another list.
+    pub func extend(this, other: ref List[T]) {
+        let n: I64 = other.len()
+        var i: I64 = 0
+        loop (i < n) {
+            this.push(other.get(i))
+            i = i + 1
+        }
+    }
+
+    // =========================================================================
+    // Capacity & Resize
+    // =========================================================================
+
+    /// Ensures the list has capacity for at least `additional` more elements
+    /// without reallocating.
+    pub func reserve(this, additional: I64) {
+        let cur_len: I64 = this.len()
+        let cur_cap: I64 = this.capacity()
+        let needed: I64 = cur_len + additional
+        if needed <= cur_cap {
+            return
+        }
+
+        let hdr: I64 = this.handle as I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Double capacity until sufficient
+        var new_cap: I64 = cur_cap
+        loop (new_cap < needed) {
+            new_cap = new_cap * 2
+        }
+
+        let new_size: I64 = new_cap * stride
+
+        // Reallocate data buffer
+        let p_data: *I64 = hdr as *I64
+        let old_data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+        let old_data: *Unit = old_data_addr as *Unit
+        let new_data: *Unit = lowlevel { mem_realloc(old_data, new_size) }
+
+        // Update header
+        lowlevel { ptr_write[I64](p_data, new_data as I64) }
+        let p_cap: *I64 = (hdr + 16) as *I64
+        lowlevel { ptr_write[I64](p_cap, new_cap) }
+    }
+
+    /// Shortens the list to `new_len` elements. If `new_len` is greater than
+    /// or equal to the current length, this has no effect.
+    pub func truncate(this, new_len: I64) {
+        let cur_len: I64 = this.len()
+        if new_len < cur_len {
+            let hdr: I64 = this.handle as I64
+            let p_len: *I64 = (hdr + 8) as *I64
+            lowlevel { ptr_write[I64](p_len, new_len) }
+        }
+    }
+
+    /// Removes consecutive duplicate elements in place.
+    /// The list should be sorted first if you want to remove all duplicates.
+    pub func dedup(this) {
+        let n: I64 = this.len()
+        if n < 2 {
+            return
+        }
+        var write_idx: I64 = 1
+        var read_idx: I64 = 1
+        loop (read_idx < n) {
+            if this.get(read_idx) != this.get(write_idx - 1) {
+                if write_idx != read_idx {
+                    this.set(write_idx, this.get(read_idx))
+                }
+                write_idx = write_idx + 1
+            }
+            read_idx = read_idx + 1
+        }
+        this.truncate(write_idx)
+    }
+
+    /// Sets all elements in the list to `value`.
+    pub func fill(this, value: T) {
+        let n: I64 = this.len()
+        var i: I64 = 0
+        loop (i < n) {
+            this.set(i, value)
+            i = i + 1
+        }
+    }
+
+    /// Resizes the list to `new_len` elements. If growing, fills new slots with `value`.
+    /// If shrinking, truncates the list.
+    pub func resize(this, new_len: I64, value: T) {
+        let cur_len: I64 = this.len()
+        if new_len <= cur_len {
+            this.truncate(new_len)
+        } else {
+            this.reserve(new_len - cur_len)
+            var i: I64 = cur_len
+            loop (i < new_len) {
+                this.push(value)
+                i = i + 1
+            }
+        }
+    }
+
+    /// Splits the list at position `mid`, returning two new lists.
+    /// The first list contains elements `[0, mid)`, the second `[mid, len)`.
+    /// The original list is left empty.
+    pub func split_at(this, mid: I64) -> (List[T], List[T]) {
+        let n: I64 = this.len()
+        let left: List[T] = List[T].new(mid)
+        let right: List[T] = List[T].new(n - mid)
+        var i: I64 = 0
+        loop (i < mid) {
+            left.push(this.get(i))
+            i = i + 1
+        }
+        loop (i < n) {
+            right.push(this.get(i))
+            i = i + 1
+        }
+        this.clear()
+        (left, right)
+    }
+
+    // =========================================================================
+    // Sorting
+    // =========================================================================
+
+    /// Sorts the list in ascending order using an in-place quicksort.
+    pub func sort(this) {
+        let n: I64 = this.len()
+        if n > 1 {
+            this._quicksort(0, n - 1)
+        }
+    }
+
+    /// Sorts the list using a custom comparator function.
+    ///
+    /// The comparator should return a negative value if `a < b`, zero if `a == b`,
+    /// and a positive value if `a > b`.
+    pub func sort_by(this, cmp: func(ref T, ref T) -> I32) {
+        let n: I64 = this.len()
+        if n > 1 {
+            this._quicksort_by(0, n - 1, cmp)
+        }
+    }
+
+    // Internal quicksort with custom comparator
+    func _quicksort_by(this, lo: I64, hi: I64, cmp: func(ref T, ref T) -> I32) {
+        if lo < hi {
+            let pivot_val: T = this.get(hi)
+            var i: I64 = lo
+            var j: I64 = lo
+            loop (j < hi) {
+                let cur: T = this.get(j)
+                if cmp(ref cur, ref pivot_val) <= 0 {
+                    this.swap(i, j)
+                    i = i + 1
+                }
+                j = j + 1
+            }
+            this.swap(i, hi)
+            if i > 0 {
+                this._quicksort_by(lo, i - 1, cmp)
+            }
+            this._quicksort_by(i + 1, hi, cmp)
+        }
+    }
+
+    // Internal quicksort (ascending, uses PartialOrd <=)
+    func _quicksort(this, lo: I64, hi: I64) {
+        if lo < hi {
+            let pivot_val: T = this.get(hi)
+            var i: I64 = lo
+            var j: I64 = lo
+            loop (j < hi) {
+                if this.get(j) <= pivot_val {
+                    this.swap(i, j)
+                    i = i + 1
+                }
+                j = j + 1
+            }
+            this.swap(i, hi)
+            if i > 0 {
+                this._quicksort(lo, i - 1)
+            }
+            this._quicksort(i + 1, hi)
+        }
+    }
 }
 
 impl[T] Drop for List[T] {

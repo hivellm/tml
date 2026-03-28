@@ -1,0 +1,36 @@
+// Tests for Iterator collect: ListIter.to_list() // v4
+use test
+use std::collections::List
+
+@test
+func test_to_list_basic() -> I32 {
+    let list: List[I64] = List::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+
+    let collected: List[I64] = list.iter().to_list()
+    assert_eq(collected.len(), 3 as I64, "should have 3 items")
+    assert_eq(collected.get(0), 10 as I64, "first item")
+    assert_eq(collected.get(1), 20 as I64, "second item")
+    assert_eq(collected.get(2), 30 as I64, "third item")
+    return 0
+}
+
+@test
+func test_to_list_empty() -> I32 {
+    let list: List[I64] = List::new(4)
+    let collected: List[I64] = list.iter().to_list()
+    assert_eq(collected.len(), 0 as I64, "empty list")
+    return 0
+}
+
+@test
+func test_to_list_single() -> I32 {
+    let list: List[I64] = List::new(4)
+    list.push(42)
+    let collected: List[I64] = list.iter().to_list()
+    assert_eq(collected.len(), 1 as I64, "single item")
+    assert_eq(collected.get(0), 42 as I64, "value preserved")
+    return 0
+}

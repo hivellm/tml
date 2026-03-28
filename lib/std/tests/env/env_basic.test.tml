@@ -1,0 +1,17 @@
+// Tests for current_dir and temp_dir
+use test::{assert}
+use std::env
+
+@test
+func test_current_dir_nonempty() -> I32 {
+    let cwd: Str = env::current_dir()
+    assert(cwd.len() > 0, "current_dir should return non-empty path")
+    return 0
+}
+
+@test
+func test_temp_dir_nonempty() -> I32 {
+    let tmp: Str = env::temp_dir()
+    assert(tmp.len() > 0, "temp_dir should return non-empty path")
+    return 0
+}

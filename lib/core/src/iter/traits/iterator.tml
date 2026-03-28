@@ -285,4 +285,24 @@ pub behavior Iterator {
             }
         }
     }
+
+    /// Transforms an iterator into a collection.
+    ///
+    /// `collect()` takes an iterator and builds a collection from its elements.
+    /// The target collection type must implement [`FromIterator`].
+    ///
+    /// # Note
+    ///
+    /// Due to current compiler limitations with generic trait dispatch,
+    /// prefer using concrete `to_list()` methods on iterator types for
+    /// reliable codegen. This method is provided for forward compatibility.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let list: List[I64] = (1 to 5).collect()
+    /// ```
+    pub func collect[C: FromIterator[This::Item]](mut this) -> C {
+        return C::from_iter(this)
+    }
 }

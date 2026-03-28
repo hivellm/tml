@@ -1,0 +1,38 @@
+// Tests for collect: order preservation and independent copy // v1
+use test
+use std::collections::List
+
+@test
+func test_to_list_preserves_order() -> I32 {
+    let list: List[I64] = List::new(8)
+    list.push(5)
+    list.push(3)
+    list.push(1)
+    list.push(4)
+    list.push(2)
+
+    let collected: List[I64] = list.iter().to_list()
+    assert_eq(collected.len(), 5 as I64, "5 items")
+    assert_eq(collected.get(0), 5 as I64, "order preserved 0")
+    assert_eq(collected.get(1), 3 as I64, "order preserved 1")
+    assert_eq(collected.get(2), 1 as I64, "order preserved 2")
+    assert_eq(collected.get(3), 4 as I64, "order preserved 3")
+    assert_eq(collected.get(4), 2 as I64, "order preserved 4")
+    return 0
+}
+
+@test
+func test_to_list_independent_copy() -> I32 {
+    let list: List[I64] = List::new(4)
+    list.push(1)
+    list.push(2)
+
+    let collected: List[I64] = list.iter().to_list()
+    // Modify original
+    list.push(3)
+
+    // Collected should not change
+    assert_eq(collected.len(), 2 as I64, "collected has 2 items")
+    assert_eq(list.len(), 3 as I64, "original has 3 items")
+    return 0
+}

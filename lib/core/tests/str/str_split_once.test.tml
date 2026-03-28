@@ -1,0 +1,88 @@
+// Tests for split_once and rsplit_once
+use test
+use core::str
+
+@test
+func test_split_once_basic() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("key=value", "=")
+    assert(r.is_just(), "split_once found delimiter")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "split_once before")
+    assert_eq(pair.1, "value", "split_once after")
+    return 0
+}
+
+@test
+func test_split_once_not_found() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("hello", "=")
+    assert(r.is_nothing(), "split_once nothing when not found")
+    return 0
+}
+
+@test
+func test_split_once_multi_delimiter() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("a::b::c", "::")
+    assert(r.is_just(), "split_once found ::")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "a", "split_once before multi")
+    assert_eq(pair.1, "b::c", "split_once after multi (first only)")
+    return 0
+}
+
+@test
+func test_split_once_at_start() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("=value", "=")
+    assert(r.is_just(), "split_once at start")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "", "split_once empty before")
+    assert_eq(pair.1, "value", "split_once after start")
+    return 0
+}
+
+@test
+func test_split_once_at_end() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("key=", "=")
+    assert(r.is_just(), "split_once at end")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "split_once before end")
+    assert_eq(pair.1, "", "split_once empty after")
+    return 0
+}
+
+@test
+func test_split_once_method() -> I32 {
+    let s: Str = "host:port"
+    let r: Maybe[(Str, Str)] = s.split_once(":")
+    assert(r.is_just(), "split_once method found")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "host", "split_once method before")
+    assert_eq(pair.1, "port", "split_once method after")
+    return 0
+}
+
+@test
+func test_rsplit_once_basic() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("a::b::c", "::")
+    assert(r.is_just(), "rsplit_once found")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "a::b", "rsplit_once before (last)")
+    assert_eq(pair.1, "c", "rsplit_once after (last)")
+    return 0
+}
+
+@test
+func test_rsplit_once_single() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("key=value", "=")
+    assert(r.is_just(), "rsplit_once single occurrence")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "rsplit_once before single")
+    assert_eq(pair.1, "value", "rsplit_once after single")
+    return 0
+}
+
+@test
+func test_rsplit_once_not_found() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("hello", "=")
+    assert(r.is_nothing(), "rsplit_once nothing when not found")
+    return 0
+}

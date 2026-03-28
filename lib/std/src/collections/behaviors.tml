@@ -358,6 +358,32 @@ impl[T] Iterator for ListIter[T] {
     }
 }
 
+impl[T] ListIter[T] {
+    /// Collects remaining elements into a new `List[T]`.
+    ///
+    /// Consumes the iterator and returns a list containing all remaining elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let list: List[I64] = List::new(4)
+    /// list.push(1)
+    /// list.push(2)
+    /// list.push(3)
+    /// let collected: List[I64] = list.iter().to_list()
+    /// assert_eq(collected.len(), 3)
+    /// ```
+    pub func to_list(mut this) -> List[T] {
+        let result: List[T] = List::new(8)
+        loop (true) {
+            when this.next() {
+                Just(item) => result.push(item),
+                Nothing => return result
+            }
+        }
+    }
+}
+
 /// Enables using a list in `for` loops.
 impl[T] IntoIterator for List[T] {
     type Item = T

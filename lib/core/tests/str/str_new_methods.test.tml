@@ -1,0 +1,486 @@
+// Tests for new Str methods added in Phase 7-05
+// Phase 1: split_once, rsplit_once, strip_prefix, strip_suffix, splitn, is_ascii, eq_ignore_ascii_case
+// Phase 2: rsplit, replacen, trim_matches, matches, bytes
+// BLOCKED: char_indices — List[(I64, I32)] codegen crash
+use test
+use core::str
+
+// ============================================================================
+// split_once
+// ============================================================================
+
+@test
+func test_split_once_basic() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("key=value", "=")
+    assert(r.is_just(), "split_once found delimiter")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "split_once before")
+    assert_eq(pair.1, "value", "split_once after")
+    return 0
+}
+
+@test
+func test_split_once_not_found() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("hello", "=")
+    assert(r.is_nothing(), "split_once nothing when not found")
+    return 0
+}
+
+@test
+func test_split_once_multi_delimiter() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("a::b::c", "::")
+    assert(r.is_just(), "split_once found ::")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "a", "split_once before multi")
+    assert_eq(pair.1, "b::c", "split_once after multi (first only)")
+    return 0
+}
+
+@test
+func test_split_once_at_start() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("=value", "=")
+    assert(r.is_just(), "split_once at start")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "", "split_once empty before")
+    assert_eq(pair.1, "value", "split_once after start")
+    return 0
+}
+
+@test
+func test_split_once_at_end() -> I32 {
+    let r: Maybe[(Str, Str)] = str::split_once("key=", "=")
+    assert(r.is_just(), "split_once at end")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "split_once before end")
+    assert_eq(pair.1, "", "split_once empty after")
+    return 0
+}
+
+// Method form
+@test
+func test_split_once_method() -> I32 {
+    let s: Str = "host:port"
+    let r: Maybe[(Str, Str)] = s.split_once(":")
+    assert(r.is_just(), "split_once method found")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "host", "split_once method before")
+    assert_eq(pair.1, "port", "split_once method after")
+    return 0
+}
+
+// ============================================================================
+// rsplit_once
+// ============================================================================
+
+@test
+func test_rsplit_once_basic() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("a::b::c", "::")
+    assert(r.is_just(), "rsplit_once found")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "a::b", "rsplit_once before (last)")
+    assert_eq(pair.1, "c", "rsplit_once after (last)")
+    return 0
+}
+
+@test
+func test_rsplit_once_single() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("key=value", "=")
+    assert(r.is_just(), "rsplit_once single occurrence")
+    let pair: (Str, Str) = r.unwrap()
+    assert_eq(pair.0, "key", "rsplit_once before single")
+    assert_eq(pair.1, "value", "rsplit_once after single")
+    return 0
+}
+
+@test
+func test_rsplit_once_not_found() -> I32 {
+    let r: Maybe[(Str, Str)] = str::rsplit_once("hello", "=")
+    assert(r.is_nothing(), "rsplit_once nothing when not found")
+    return 0
+}
+
+// ============================================================================
+// strip_prefix
+// ============================================================================
+
+@test
+func test_strip_prefix_basic() -> I32 {
+    let r: Maybe[Str] = str::strip_prefix("hello world", "hello ")
+    assert(r.is_just(), "strip_prefix found")
+    assert_eq(r.unwrap(), "world", "strip_prefix result")
+    return 0
+}
+
+@test
+func test_strip_prefix_not_found() -> I32 {
+    let r: Maybe[Str] = str::strip_prefix("hello", "world")
+    assert(r.is_nothing(), "strip_prefix not found")
+    return 0
+}
+
+@test
+func test_strip_prefix_empty_prefix() -> I32 {
+    let r: Maybe[Str] = str::strip_prefix("hello", "")
+    assert(r.is_just(), "strip_prefix empty prefix")
+    assert_eq(r.unwrap(), "hello", "strip_prefix empty prefix result")
+    return 0
+}
+
+@test
+func test_strip_prefix_full_match() -> I32 {
+    let r: Maybe[Str] = str::strip_prefix("hello", "hello")
+    assert(r.is_just(), "strip_prefix full match")
+    assert_eq(r.unwrap(), "", "strip_prefix full match result")
+    return 0
+}
+
+@test
+func test_strip_prefix_method() -> I32 {
+    let s: Str = "https://example.com"
+    let r: Maybe[Str] = s.strip_prefix("https://")
+    assert(r.is_just(), "strip_prefix method found")
+    assert_eq(r.unwrap(), "example.com", "strip_prefix method result")
+    return 0
+}
+
+// ============================================================================
+// strip_suffix
+// ============================================================================
+
+@test
+func test_strip_suffix_basic() -> I32 {
+    let r: Maybe[Str] = str::strip_suffix("hello world", " world")
+    assert(r.is_just(), "strip_suffix found")
+    assert_eq(r.unwrap(), "hello", "strip_suffix result")
+    return 0
+}
+
+@test
+func test_strip_suffix_not_found() -> I32 {
+    let r: Maybe[Str] = str::strip_suffix("hello", "world")
+    assert(r.is_nothing(), "strip_suffix not found")
+    return 0
+}
+
+@test
+func test_strip_suffix_empty_suffix() -> I32 {
+    let r: Maybe[Str] = str::strip_suffix("hello", "")
+    assert(r.is_just(), "strip_suffix empty suffix")
+    assert_eq(r.unwrap(), "hello", "strip_suffix empty suffix result")
+    return 0
+}
+
+@test
+func test_strip_suffix_full_match() -> I32 {
+    let r: Maybe[Str] = str::strip_suffix("hello", "hello")
+    assert(r.is_just(), "strip_suffix full match")
+    assert_eq(r.unwrap(), "", "strip_suffix full match result")
+    return 0
+}
+
+@test
+func test_strip_suffix_method() -> I32 {
+    let s: Str = "file.txt"
+    let r: Maybe[Str] = s.strip_suffix(".txt")
+    assert(r.is_just(), "strip_suffix method found")
+    assert_eq(r.unwrap(), "file", "strip_suffix method result")
+    return 0
+}
+
+// ============================================================================
+// splitn
+// ============================================================================
+
+@test
+func test_splitn_basic() -> I32 {
+    let parts: List[Str] = str::splitn("a,b,c,d", 3, ",")
+    assert_eq(parts.len(), 3, "splitn len=3")
+    assert_eq(parts.get(0), "a", "splitn[0]")
+    assert_eq(parts.get(1), "b", "splitn[1]")
+    assert_eq(parts.get(2), "c,d", "splitn[2] remainder")
+    return 0
+}
+
+@test
+func test_splitn_n_larger_than_parts() -> I32 {
+    let parts: List[Str] = str::splitn("a,b,c", 10, ",")
+    assert_eq(parts.len(), 3, "splitn n>parts gives all")
+    assert_eq(parts.get(0), "a", "splitn large n [0]")
+    assert_eq(parts.get(1), "b", "splitn large n [1]")
+    assert_eq(parts.get(2), "c", "splitn large n [2]")
+    return 0
+}
+
+@test
+func test_splitn_n1() -> I32 {
+    let parts: List[Str] = str::splitn("a,b,c", 1, ",")
+    assert_eq(parts.len(), 1, "splitn n=1 gives whole string")
+    assert_eq(parts.get(0), "a,b,c", "splitn n=1 result")
+    return 0
+}
+
+@test
+func test_splitn_method() -> I32 {
+    let s: Str = "one:two:three:four"
+    let parts: List[Str] = s.splitn(2, ":")
+    assert_eq(parts.len(), 2, "splitn method len=2")
+    assert_eq(parts.get(0), "one", "splitn method [0]")
+    assert_eq(parts.get(1), "two:three:four", "splitn method [1] remainder")
+    return 0
+}
+
+// ============================================================================
+// is_ascii
+// ============================================================================
+
+@test
+func test_is_ascii_all_ascii() -> I32 {
+    assert(str::is_ascii("hello world"), "is_ascii all ascii")
+    assert(str::is_ascii("0123456789"), "is_ascii digits")
+    assert(str::is_ascii("!@#$%"), "is_ascii symbols")
+    return 0
+}
+
+@test
+func test_is_ascii_empty() -> I32 {
+    assert(str::is_ascii(""), "is_ascii empty string")
+    return 0
+}
+
+@test
+func test_is_ascii_non_ascii() -> I32 {
+    // byte 0xFF is non-ASCII
+    assert(not str::is_ascii("\xff"), "is_ascii detects 0xFF")
+    return 0
+}
+
+@test
+func test_is_ascii_boundary() -> I32 {
+    // byte 127 is ASCII (DEL), byte 128 is not
+    assert(str::is_ascii("\x7f"), "is_ascii 127 is ascii")
+    assert(not str::is_ascii("\x80"), "is_ascii 128 is not ascii")
+    return 0
+}
+
+@test
+func test_is_ascii_method() -> I32 {
+    let s: Str = "TML"
+    assert(s.is_ascii(), "is_ascii method")
+    return 0
+}
+
+// ============================================================================
+// eq_ignore_ascii_case
+// ============================================================================
+
+@test
+func test_eq_ignore_case_basic() -> I32 {
+    assert(str::eq_ignore_ascii_case("Hello", "hello"), "eq_ignore_case basic")
+    assert(str::eq_ignore_ascii_case("WORLD", "world"), "eq_ignore_case all upper")
+    assert(str::eq_ignore_ascii_case("TML", "tml"), "eq_ignore_case TML")
+    return 0
+}
+
+@test
+func test_eq_ignore_case_same() -> I32 {
+    assert(str::eq_ignore_ascii_case("hello", "hello"), "eq_ignore_case identical")
+    return 0
+}
+
+@test
+func test_eq_ignore_case_not_equal() -> I32 {
+    assert(not str::eq_ignore_ascii_case("abc", "xyz"), "eq_ignore_case different")
+    assert(not str::eq_ignore_ascii_case("hello", "hell"), "eq_ignore_case different length")
+    return 0
+}
+
+@test
+func test_eq_ignore_case_empty() -> I32 {
+    assert(str::eq_ignore_ascii_case("", ""), "eq_ignore_case both empty")
+    assert(not str::eq_ignore_ascii_case("", "a"), "eq_ignore_case empty vs non")
+    return 0
+}
+
+@test
+func test_eq_ignore_case_method() -> I32 {
+    let s: Str = "Content-Type"
+    assert(s.eq_ignore_ascii_case("content-type"), "eq_ignore_case method")
+    return 0
+}
+
+// ============================================================================
+// rsplit
+// ============================================================================
+
+@test
+func test_rsplit_basic() -> I32 {
+    let parts: List[Str] = str::rsplit("a,b,c", ",")
+    assert_eq(parts.len(), 3, "rsplit len")
+    assert_eq(parts.get(0), "c", "rsplit[0] last segment first")
+    assert_eq(parts.get(1), "b", "rsplit[1]")
+    assert_eq(parts.get(2), "a", "rsplit[2] first segment last")
+    return 0
+}
+
+@test
+func test_rsplit_no_delimiter() -> I32 {
+    let parts: List[Str] = str::rsplit("hello", ",")
+    assert_eq(parts.len(), 1, "rsplit no delim len=1")
+    assert_eq(parts.get(0), "hello", "rsplit no delim result")
+    return 0
+}
+
+@test
+func test_rsplit_method() -> I32 {
+    let s: Str = "x/y/z"
+    let parts: List[Str] = s.rsplit("/")
+    assert_eq(parts.len(), 3, "rsplit method len")
+    assert_eq(parts.get(0), "z", "rsplit method [0]")
+    assert_eq(parts.get(1), "y", "rsplit method [1]")
+    assert_eq(parts.get(2), "x", "rsplit method [2]")
+    return 0
+}
+
+// ============================================================================
+// replacen
+// ============================================================================
+
+@test
+func test_replacen_basic() -> I32 {
+    assert_eq(str::replacen("aaa", "a", "b", 2), "bba", "replacen 2 of 3")
+    return 0
+}
+
+@test
+func test_replacen_all() -> I32 {
+    assert_eq(str::replacen("aaa", "a", "b", 99), "bbb", "replacen all")
+    return 0
+}
+
+@test
+func test_replacen_zero() -> I32 {
+    assert_eq(str::replacen("aaa", "a", "b", 0), "aaa", "replacen 0 = no change")
+    return 0
+}
+
+@test
+func test_replacen_not_found() -> I32 {
+    assert_eq(str::replacen("hello", "x", "y", 5), "hello", "replacen not found")
+    return 0
+}
+
+@test
+func test_replacen_method() -> I32 {
+    let s: Str = "hello hello hello"
+    let result: Str = s.replacen("hello", "hi", 2)
+    assert_eq(result, "hi hi hello", "replacen method 2 replacements")
+    return 0
+}
+
+// ============================================================================
+// trim_matches
+// ============================================================================
+
+@test
+func test_trim_matches_single_char() -> I32 {
+    assert_eq(str::trim_matches("##hello##", "#"), "hello", "trim_matches single char")
+    return 0
+}
+
+@test
+func test_trim_matches_multiple_chars() -> I32 {
+    assert_eq(str::trim_matches("xyzHELLOzyx", "xyz"), "HELLO", "trim_matches char set")
+    return 0
+}
+
+@test
+func test_trim_matches_no_match() -> I32 {
+    assert_eq(str::trim_matches("hello", "#"), "hello", "trim_matches no match")
+    return 0
+}
+
+@test
+func test_trim_matches_all_match() -> I32 {
+    assert_eq(str::trim_matches("###", "#"), "", "trim_matches all trimmed")
+    return 0
+}
+
+@test
+func test_trim_matches_empty() -> I32 {
+    assert_eq(str::trim_matches("", "#"), "", "trim_matches empty string")
+    return 0
+}
+
+@test
+func test_trim_matches_method() -> I32 {
+    let s: Str = "***world***"
+    assert_eq(s.trim_matches("*"), "world", "trim_matches method")
+    return 0
+}
+
+// ============================================================================
+// matches
+// ============================================================================
+
+@test
+func test_matches_basic() -> I32 {
+    let ms: List[Str] = str::matches("hello world hello", "hello")
+    assert_eq(ms.len(), 2, "matches count=2")
+    assert_eq(ms.get(0), "hello", "matches[0]")
+    assert_eq(ms.get(1), "hello", "matches[1]")
+    return 0
+}
+
+@test
+func test_matches_not_found() -> I32 {
+    let ms: List[Str] = str::matches("hello", "xyz")
+    assert_eq(ms.len(), 0, "matches not found = empty list")
+    return 0
+}
+
+@test
+func test_matches_overlapping_non_overlap() -> I32 {
+    // "aa" in "aaaa": non-overlapping gives 2 matches
+    let ms: List[Str] = str::matches("aaaa", "aa")
+    assert_eq(ms.len(), 2, "matches non-overlapping")
+    return 0
+}
+
+@test
+func test_matches_method() -> I32 {
+    let s: Str = "cat dog cat fish cat"
+    let ms: List[Str] = s.matches("cat")
+    assert_eq(ms.len(), 3, "matches method count=3")
+    return 0
+}
+
+// ============================================================================
+// bytes
+// ============================================================================
+
+@test
+func test_bytes_basic() -> I32 {
+    let bs: List[U8] = str::bytes("abc")
+    assert_eq(bs.len(), 3, "bytes len=3")
+    assert_eq(bs.get(0) as I32, 97, "bytes[0]='a'")
+    assert_eq(bs.get(1) as I32, 98, "bytes[1]='b'")
+    assert_eq(bs.get(2) as I32, 99, "bytes[2]='c'")
+    return 0
+}
+
+@test
+func test_bytes_empty() -> I32 {
+    let bs: List[U8] = str::bytes("")
+    assert_eq(bs.len(), 0, "bytes empty")
+    return 0
+}
+
+@test
+func test_bytes_method() -> I32 {
+    let s: Str = "Hi"
+    let bs: List[U8] = s.bytes()
+    assert_eq(bs.len(), 2, "bytes method len=2")
+    assert_eq(bs.get(0) as I32, 72, "bytes method [0]='H'")
+    assert_eq(bs.get(1) as I32, 105, "bytes method [1]='i'")
+    return 0
+}

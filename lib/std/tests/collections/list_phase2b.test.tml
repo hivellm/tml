@@ -1,0 +1,122 @@
+// Tests for List[T] Phase 2b — index_of, binary_search
+use test
+use std::collections::List
+
+@test
+func test_index_of_found() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    let result: Maybe[I64] = list.index_of(20)
+    when result {
+        Just(idx) => assert_eq(idx, 1),
+        Nothing => assert(false, "should have found 20"),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_index_of_not_found() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    let result: Maybe[I64] = list.index_of(99)
+    when result {
+        Just(_) => assert(false, "should not find 99"),
+        Nothing => {},
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_index_of_first_occurrence() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(5)
+    list.push(10)
+    list.push(5)
+    let result: Maybe[I64] = list.index_of(5)
+    when result {
+        Just(idx) => assert_eq(idx, 0),
+        Nothing => assert(false, "should have found 5"),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_binary_search_found() -> I32 {
+    let list = List[I64]::new(8)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    list.push(40)
+    list.push(50)
+    let result: Outcome[I64, I64] = list.binary_search(30)
+    when result {
+        Ok(idx) => assert_eq(idx, 2),
+        Err(_) => assert(false, "should have found 30"),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_binary_search_not_found() -> I32 {
+    let list = List[I64]::new(8)
+    list.push(10)
+    list.push(20)
+    list.push(40)
+    list.push(50)
+    let result: Outcome[I64, I64] = list.binary_search(30)
+    when result {
+        Ok(_) => assert(false, "should not find 30"),
+        Err(ins) => assert_eq(ins, 2),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_binary_search_first_element() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    let result: Outcome[I64, I64] = list.binary_search(1)
+    when result {
+        Ok(idx) => assert_eq(idx, 0),
+        Err(_) => assert(false, "should have found 1"),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_binary_search_last_element() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    let result: Outcome[I64, I64] = list.binary_search(3)
+    when result {
+        Ok(idx) => assert_eq(idx, 2),
+        Err(_) => assert(false, "should have found 3"),
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_binary_search_empty() -> I32 {
+    let list = List[I64]::new(4)
+    let result: Outcome[I64, I64] = list.binary_search(42)
+    when result {
+        Ok(_) => assert(false, "empty list should not find"),
+        Err(ins) => assert_eq(ins, 0),
+    }
+    list.destroy()
+    0
+}

@@ -1,0 +1,47 @@
+// Tests for List[T] iter
+use test
+use std::collections::List
+
+@test
+func test_iter_basic() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    var it = list.iter()
+    let a: Maybe[I64] = it.next()
+    when a {
+        Just(v) => assert_eq(v, 10),
+        Nothing => assert(false, "expected 10"),
+    }
+    let b: Maybe[I64] = it.next()
+    when b {
+        Just(v) => assert_eq(v, 20),
+        Nothing => assert(false, "expected 20"),
+    }
+    let c: Maybe[I64] = it.next()
+    when c {
+        Just(v) => assert_eq(v, 30),
+        Nothing => assert(false, "expected 30"),
+    }
+    let d: Maybe[I64] = it.next()
+    when d {
+        Just(_) => assert(false, "expected Nothing"),
+        Nothing => {},
+    }
+    list.destroy()
+    0
+}
+
+@test
+func test_iter_empty() -> I32 {
+    let list = List[I64]::new(4)
+    var it = list.iter()
+    let a: Maybe[I64] = it.next()
+    when a {
+        Just(_) => assert(false, "expected Nothing on empty"),
+        Nothing => {},
+    }
+    list.destroy()
+    0
+}

@@ -1,0 +1,57 @@
+// Tests for List[T] Phase 2 — reserve, truncate, fill
+use test
+use std::collections::List
+
+@test
+func test_reserve() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.reserve(100)
+    assert(list.capacity() >= 102, "capacity should be at least 102")
+    assert_eq(list.len(), 2)
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 2)
+    list.destroy()
+    0
+}
+
+@test
+func test_truncate() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    list.truncate(2)
+    assert_eq(list.len(), 2)
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 2)
+    list.destroy()
+    0
+}
+
+@test
+func test_truncate_no_effect() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.truncate(10)
+    assert_eq(list.len(), 2)
+    list.destroy()
+    0
+}
+
+@test
+func test_fill() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.fill(42)
+    assert_eq(list.get(0), 42)
+    assert_eq(list.get(1), 42)
+    assert_eq(list.get(2), 42)
+    list.destroy()
+    0
+}

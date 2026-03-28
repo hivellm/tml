@@ -1,0 +1,63 @@
+// Tests for List[T] sort
+use test
+use std::collections::List
+
+@test
+func test_sort_i64() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(30)
+    list.push(10)
+    list.push(50)
+    list.push(20)
+    list.push(40)
+    list.sort()
+    assert_eq(list.get(0), 10)
+    assert_eq(list.get(1), 20)
+    assert_eq(list.get(2), 30)
+    assert_eq(list.get(3), 40)
+    assert_eq(list.get(4), 50)
+    list.destroy()
+    0
+}
+
+@test
+func test_sort_already_sorted() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.sort()
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 2)
+    assert_eq(list.get(2), 3)
+    list.destroy()
+    0
+}
+
+@test
+func test_sort_single() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(42)
+    list.sort()
+    assert_eq(list.get(0), 42)
+    list.destroy()
+    0
+}
+
+@test
+func test_sort_duplicates() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(3)
+    list.push(1)
+    list.push(3)
+    list.push(1)
+    list.push(2)
+    list.sort()
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 1)
+    assert_eq(list.get(2), 2)
+    assert_eq(list.get(3), 3)
+    assert_eq(list.get(4), 3)
+    list.destroy()
+    0
+}

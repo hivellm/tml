@@ -1,0 +1,107 @@
+// Tests for List[T] Phase 1 — contains, swap, reverse, insert, remove
+use test
+use std::collections::List
+
+@test
+func test_contains() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    assert(list.contains(20), "should contain 20")
+    assert(not list.contains(99), "should not contain 99")
+    list.destroy()
+    0
+}
+
+@test
+func test_swap() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    list.swap(0, 2)
+    assert_eq(list.get(0), 30)
+    assert_eq(list.get(2), 10)
+    list.destroy()
+    0
+}
+
+@test
+func test_reverse() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    list.reverse()
+    assert_eq(list.get(0), 4)
+    assert_eq(list.get(1), 3)
+    assert_eq(list.get(2), 2)
+    assert_eq(list.get(3), 1)
+    list.destroy()
+    0
+}
+
+@test
+func test_insert() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(3)
+    list.push(4)
+    list.insert(1, 2)
+    assert_eq(list.len(), 4)
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 2)
+    assert_eq(list.get(2), 3)
+    assert_eq(list.get(3), 4)
+    list.destroy()
+    0
+}
+
+@test
+func test_remove() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    let removed: I64 = list.remove(1)
+    assert_eq(removed, 20)
+    assert_eq(list.len(), 2)
+    assert_eq(list.get(0), 10)
+    assert_eq(list.get(1), 30)
+    list.destroy()
+    0
+}
+
+@test
+func test_swap_remove() -> I32 {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    let removed: I64 = list.swap_remove(0)
+    assert_eq(removed, 10)
+    assert_eq(list.len(), 2)
+    assert_eq(list.get(0), 30)
+    assert_eq(list.get(1), 20)
+    list.destroy()
+    0
+}
+
+@test
+func test_extend() -> I32 {
+    let a = List[I64]::new(4)
+    a.push(1)
+    a.push(2)
+    let b = List[I64]::new(4)
+    b.push(3)
+    b.push(4)
+    a.extend(ref b)
+    assert_eq(a.len(), 4)
+    assert_eq(a.get(2), 3)
+    assert_eq(a.get(3), 4)
+    a.destroy()
+    b.destroy()
+    0
+}
