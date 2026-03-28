@@ -21,12 +21,66 @@ For detailed changes in each component, see:
 
 ## [0.2.6] — 2026-03-28
 
+### Added (Phase 7 — Rust Parity Sprint, 14/16 tasks complete)
+
+**Collections**
+
+- **`List[T]` completeness** (`phase7-01`) — 15 new methods: `sort_by`, `binary_search`, `index_of`, `reserve`, `truncate`, `dedup`, `split_at`, `resize`, `fill`, `sort`, `insert`, `remove`, `contains`, `reverse`, `swap`. Iterator-based `collect()` support.
+- **`Iterator.collect()`** (`phase7-02`) — `FromIterator` behavior + `collect()` on all iterators. `ListIter::to_list()` alias. `HashMap::from_iter`.
+- **`HashMap` extras** (`phase7-03`) — 8 new methods: `is_empty`, `get_or_set`, `keys`, `values`, `retain`, `drain_keys`, `drain_values`, `extend_from`.
+- **`BTreeMap[K,V]` / `BTreeSet[T]` generics** (`phase7-15`) — Previously I64-only; now fully generic with range iterators (`range`, `range_from`, `range_to`, `range_full`).
+
+**Strings**
+
+- **`Str` completeness** (`phase7-05`) — 12 new functions: `split_once`, `rsplit_once`, `strip_prefix`, `strip_suffix`, `splitn`, `is_ascii`, `eq_ignore_ascii_case`, `rsplit`, `replacen`, `trim_matches`, `matches`, `bytes`.
+
+**File I/O**
+
+- **File I/O completeness** (`phase7-06`) — Binary `read_bytes`/`write_bytes`, `DirEntry` type, `read_dir` iterator, `remove_all`, `FileMetadata` struct, `metadata()` function.
+
+**Concurrency**
+
+- **Bounded channels** (`phase7-07`) — `sync_channel(capacity)` → `(SyncSender[T], Receiver[T])`, `TrySendError` enum, `Iterator` impl for `Receiver[T]`.
+- **Thread completeness** (`phase7-11`) — Real `park`/`unpark` using Windows Event objects (not spin-wait), `spawn_fn`/`spawn_i64` thread factories, `panicking()` query, `JoinHandle::detach()`.
+
+**Environment**
+
+- **`std::env` module** (`phase7-04`) — `get_var`, `set_var`, `remove_var`, `current_dir`, `temp_dir`, `args`. Full FFI to OS `getenv`/`setenv`/`getcwd`.
+
+**Core Types**
+
+- **`Maybe[T]` extras** (`phase7-08`) — `is_just_and`, `get_or_insert`, `replace`, `unzip`.
+- **`Bool` utilities** (`phase7-10`) — `then_some` and `then_with` standalone functions.
+- **`core::prelude`** (`phase7-10`) — `lib/core/src/prelude.tml` with re-exports of `Maybe`, `Outcome`, `List`, `HashMap`, `Str`, `Text`, `Iterator`, `Display`, `Debug`, `Clone`, `Eq`, `Ord`, `Hash`, `Default`.
+
+**Networking**
+
+- **Net extras** (`phase7-12`) — `TcpListener::incoming()` iterator, `write_all()`, `read_to_string()` on `TcpStream`.
+
+**Core I/O & Traits**
+
+- **`core::io` behaviors** (`phase7-13`) — `Read`, `Write`, `BufRead` behaviors defined in `lib/core/src/io.tml`. Stream and file modules now implement these shared traits.
+- **ASCII classification** (`phase7-13`) — 10 functions in `core::ascii`: `is_ascii_alphabetic`, `is_ascii_digit`, `is_ascii_alphanumeric`, `is_ascii_uppercase`, `is_ascii_lowercase`, `is_ascii_punctuation`, `is_ascii_whitespace`, `is_ascii_control`, `is_ascii_graphic`, `is_ascii_hexdigit`.
+- **`core::random` trait** (`phase7-13`) — `Random` behavior in `lib/core/src/random.tml`; `std::random::Rng` now implements it.
+
+**Memory & Smart Pointers**
+
+- **Weak pointer extras** (`phase7-14`) — `SharedWeak[T]` and `SyncWeak[T]` with `downgrade`/`upgrade`, `ptr_eq` for pointer identity.
+- **Cell extras** (`phase7-14`) — `Cell::update`, `into_inner`, `replace_with`, `swap`, `get_or_init`.
+- **Pin extras** (`phase7-14`) — `Pin::into_inner`, `as_ref`, `as_mut`, `set`.
+
+**Iterator extras** (`phase7-09`) — `is_sorted`, `is_sorted_by` on all iterators.
+
 ### Added (Compiler)
 
 - **Pre-condition runtime assertions** — `pre: expr` contracts now emit `if (!cond) panic(msg)` at function entry. Type checker validates contract expressions return Bool (error T090).
 - **`impl_count[T]()` / `impl_name[T](index)`** intrinsics — query which behaviors a type implements at compile time.
 - **Compile-time field index validation** — `field_name[T](N)`, `field_type_id[T](N)`, `field_offset[T](N)` now emit error R001 when N exceeds field count.
 - **MCP emit-ir rewrite** — changed from subprocess (8s timeout) to in-process `LLVMIRGen::generate()` (sub-second). Fixes "Connection closed" errors.
+
+### Added (Phase 0 — Error Codes Expansion, 55/55 complete)
+
+- **55 new compiler error codes** fully implemented: T-series (type errors), R-series (reflection errors), B-series (borrow checker errors), L-series (lowlevel errors). Each code has a message, explanation, and recovery hint accessible via `tml explain <code>`.
 
 ### Added (Standard Library)
 

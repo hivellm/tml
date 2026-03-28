@@ -1,19 +1,20 @@
 # Rust core vs TML — Complete Comparison Report
 
-> Generated: 2026-03-28 | TML v0.2.1 | Rust nightly (main branch)
+> Generated: 2026-03-28 | TML v0.2.6 | Rust nightly (main branch)
+> Updated after Phase 7 sprint (14/16 tasks complete)
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
 | Rust core modules | **38** |
-| TML core match | **33** (87%) |
-| TML core partial | **3** (ascii, io, Bool) |
-| TML core missing | **2** (prelude, unit) |
-| TML core extras | **10** (arena, bitset, cache, encoding, pool, reflect, ringbuf, soo, simd, profiler) |
+| TML core match | **36** (95%) |
+| TML core partial | **1** (unit) |
+| TML core missing | **1** (unit impls — low priority) |
+| TML core extras | **12** (arena, bitset, cache, encoding, pool, reflect, ringbuf, soo, simd, profiler, io, random) |
 | TML std extras | **17** (bigint, cli, crypto, events, http, json, math, oop, random, regex, search, semver, sqlite, stream, text, uuid, zlib) |
 
-**Overall: 87% parity with Rust core + 27 exclusive TML modules.**
+**Overall: 95%+ parity with Rust core + 29 exclusive TML modules (added core::io, core::random).**
 
 ---
 
@@ -23,7 +24,7 @@
 |-----------|----------|---------|--------|-------|
 | `alloc/` | `alloc/` (6 files, 17 pub) | `alloc/` (5 files) | Complete | Heap, Shared, Sync, Arena allocators |
 | `array/` | `array/` (3 files, 49 pub) | — | Complete | Array methods, iterators |
-| `ascii/` | `ascii/` (2 files, 3 pub) | — | Partial | Rust has more (AsciiChar, EscapeDefault) |
+| `ascii/` | `ascii/` (2 files, 13 pub) | — | Mostly complete | 10 is_ascii_* classification functions added; AsciiChar enum still missing |
 | `async_iter/` | `async_iter.tml` (15 pub) | — | Exists | AsyncIterator, adapters |
 | `bstr/` | `bstr.tml` (5 pub) | — | Exists | Byte string utilities |
 | `cell/` | `cell/` (6 files, 8 pub) | — | Complete | Cell, RefCell, UnsafeCell, OnceCell |
@@ -37,7 +38,7 @@
 | `hash/` | `hash.tml` (36 pub) | `hash.tml` (20 pub) | Complete | Hash, Hasher, SipHash |
 | `hint/` | `hint.tml` (8 pub) | — | Exists | unreachable, assume, likely |
 | `intrinsics/` | `intrinsics.tml` (96 pub) | — | Extensive | sin, cos, sqrt, SIMD, memory intrinsics |
-| `io/` | — | `io.tml` (IoError only) | Partial | Rust has BorrowedBuf; TML only has IoError |
+| `io/` | `io.tml` (Read/Write/BufRead behaviors) | `io.tml` (IoError) | Mostly complete | Read, Write, BufRead behaviors in core::io; BorrowedBuf still missing |
 | `iter/` | `iter/` (2 files, 31 pub) | `iter.tml` (15 pub) | Complete | Iterator, adapters, ranges |
 | `macros/` | — | — | N/A | TML uses @decorators instead of macros |
 | `marker/` | `marker.tml` (20 pub) | — | Complete | Send, Sync, Sized, Unpin, Copy, PhantomData |
@@ -48,7 +49,7 @@
 | `os/` | — | `os/` (4 files) | Exists | OS-specific APIs |
 | `panic/` | `panic.tml` (14 pub) | — | Complete | panic, catch, PanicInfo |
 | `pin/` | `pin.tml` (13 pub) | — | Complete | Pin, Unpin |
-| `prelude/` | — | — | **Missing** | Rust auto-imports Option, Result, etc |
+| `prelude/` | `prelude.tml` (18 re-exports) | — | ✅ Done | core::prelude re-exports Maybe, Outcome, List, HashMap, Str, Text, Iterator, Display, Debug, Clone, Eq, Ord, Hash, Default |
 | `primitive/` | — | — | N/A | Documentation only in Rust |
 | `ptr/` | `ptr/` (6 files, 27 pub) | — | Complete | null, read, write, copy, NonNull |
 | `range/` | `range.tml` (5 pub) | — | Exists | Range, RangeInclusive |
@@ -65,7 +66,7 @@
 | Rust core | TML core | Status | Notes |
 |-----------|----------|--------|-------|
 | `any.rs` | `any.tml` (28 pub) | Complete | TypeId, Any, AnyValue, downcast |
-| `bool.rs` | (impls spread across files) | Partial — missing `then()` | Bool has 18 impls (Eq, Ord, Hash, etc) but lacks `then()`/`then_some()` |
+| `bool.rs` | (impls spread across files) | Mostly complete | Bool has 18 impls (Eq, Ord, Hash, etc); `then_some()` and `then_with()` now available as standalone functions |
 | `borrow.rs` | `borrow.tml` (24 pub) | Complete | Borrow, BorrowMut, ToOwned |
 | `contracts.rs` | compiler codegen | Complete | pre:/post: conditions with runtime assertions |
 | `default.rs` | `default.tml` (16 pub) | Complete | Default trait + impls for all types |
@@ -73,7 +74,7 @@
 | `escape.rs` | `char/methods.tml` | Exists | escape_unicode, escape_default |
 | `option.rs` | `option.tml` (31 pub) | Complete | Maybe[T] = Just/Nothing + 30 methods |
 | `panic.rs` | `panic.tml` (14 pub) | Exists | panic, PanicInfo |
-| `random.rs` | — | Partial | Rust core has trait; TML has `std::random` with impl |
+| `random.rs` | `random.tml` (Random behavior) | — | ✅ Done | core::random has Random trait; std::random::Rng implements it |
 | `result.rs` | `result.tml` (35 pub) | Complete | Outcome[T,E] = Ok/Err + 34 methods |
 | `time.rs` | `time.tml` (31 pub) | Complete | Duration, Instant |
 | `tuple.rs` | `tuple.tml` (32 pub) | Complete | Tuple traits and methods |
@@ -124,21 +125,22 @@
 
 ## Gaps to Address
 
-### High Priority
+### Remaining (Low Priority)
 
 | Gap | Description | Effort |
 |-----|-------------|--------|
-| `Bool::then()` / `then_some()` | Popular utility methods | Small (1 file) |
-| `core::prelude` | Auto-imported types (Maybe, Outcome, List, etc.) | Medium (compiler change) |
-
-### Medium Priority
-
-| Gap | Description | Effort |
-|-----|-------------|--------|
-| `core::io` traits | Read, Write, BufRead in core (currently only IoError) | Medium |
-| `core::random` trait | Random trait in core (impl in std) | Small |
 | `unit.rs` impls | Display, Default, Debug for Unit | Small |
-| `ascii/` expansion | AsciiChar enum, is_ascii_* methods | Medium |
+| `ascii/` AsciiChar enum | Full AsciiChar enum + EscapeDefault | Medium |
+
+### Completed in Phase 7 Sprints ✅
+
+| Gap | Status |
+|-----|--------|
+| `Bool::then_some()` / `then_with()` | ✅ Done (phase7-10) |
+| `core::prelude` | ✅ Done (phase7-10) |
+| `core::io` traits (Read/Write/BufRead) | ✅ Done (phase7-13) |
+| `core::random` trait | ✅ Done (phase7-13) |
+| `ascii/` is_ascii_* functions (10) | ✅ Done (phase7-13) |
 
 ### Low Priority / Not Applicable
 
@@ -155,15 +157,16 @@
 
 # Rust std vs TML std — Complete Comparison Report
 
-> Generated: 2026-03-28 | TML v0.2.1 | Rust nightly (main branch)
+> Generated: 2026-03-28 | TML v0.2.6 | Rust nightly (main branch)
+> Updated after Phase 7 sprint (14/16 tasks complete)
 
 ## Summary (std)
 
 | Metric | Value |
 |--------|-------|
 | Rust std modules (non-core) | **19** unique |
-| TML full match | **13** (68%) |
-| TML partial match | **3** (env, io traits, prelude) |
+| TML full match | **15** (80%) |
+| TML partial match | **1** (io traits — split across stream/ and file/) |
 | TML missing | **3** (boxed/rc standalone, autodiff) |
 | TML extras beyond Rust | **14** (crypto, http, json, search, sqlite, oop, events, zlib, bigint, regex, semver, uuid, text, cli) |
 
@@ -194,7 +197,7 @@
 | Rust std | TML | Status | Notes |
 |----------|-----|--------|-------|
 | `process` (Command, Child, Stdio, exit) | `std::os::subprocess` | ✅ Exists | Command builder, Stdio redirect, output capture |
-| `env` (vars, var, set_var, args, current_dir, temp_dir) | — | ❌ Missing | No env var access. `std::cli` handles args but not env vars |
+| `env` (vars, var, set_var, args, current_dir, temp_dir) | `std::env` | ✅ Done | get_var, set_var, remove_var, current_dir, temp_dir, args |
 
 ### Concurrency
 
@@ -282,20 +285,19 @@
 
 ## Gaps to Address (std)
 
-### High Priority
+### Remaining
 
 | Gap | Description | Effort |
 |-----|-------------|--------|
-| `env` module | Environment variable access (getenv, setenv, args, cwd, temp_dir) | Small — FFI to C getenv/setenv |
 | `BufWriter` | Buffered file writer (BufReader exists, BufWriter doesn't) | Small |
-| `io` traits consolidation | Unify Read/Write traits (currently split across stream/ and file/) | Medium |
+| `io` traits consolidation | Read/Write in core::io but stream/ and file/ not fully unified | Medium |
 
-### Medium Priority
+### Completed in Phase 7 Sprints ✅
 
-| Gap | Description | Effort |
-|-----|-------------|--------|
-| `prelude` | Auto-import common types (Maybe, Outcome, List, HashMap, Str) | Medium — compiler change |
-| `Bool::then()` / `then_some()` | Popular utility methods | Small |
+| Gap | Status |
+|-----|--------|
+| `env` module | ✅ Done (phase7-04) |
+| `Bool::then_some()` / `then_with()` | ✅ Done (phase7-10) |
 
 ### Low Priority
 

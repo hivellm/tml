@@ -72,7 +72,7 @@ Full-featured standard library with collections, networking, crypto, HTTP, JSON,
 | mutex | `std::sync::Mutex` | `Mutex[T]`, `MutexGuard[T]` — mutual exclusion |
 | rwlock | `std::sync::RwLock` | `RwLock[T]` — reader-writer lock |
 | arc | `std::sync::Arc` | `Arc[T]`, `Weak[T]` — atomic reference counting |
-| mpsc | `std::sync::mpsc` | `Sender[T]`, `Receiver[T]` — channels |
+| mpsc | `std::sync::mpsc` | `Sender[T]`, `Receiver[T]` — unbounded channels; `SyncSender[T]` — bounded via `sync_channel` |
 | barrier | `std::sync::Barrier` | Thread barrier |
 | condvar | `std::sync::Condvar` | Condition variable |
 | semaphore | `std::sync::Semaphore` | Counting semaphore |
@@ -179,6 +179,12 @@ Full-featured standard library with collections, networking, crypto, HTTP, JSON,
 | types | `std::types` | Extended type utilities |
 | interfaces | `std::interfaces` | Common interface definitions |
 | object | `std::object` | Re-export of `std::oop::object` |
+
+### Environment
+
+| Module | Path | Description |
+|--------|------|-------------|
+| env | `std::env` | `get_var`, `set_var`, `remove_var`, `current_dir`, `temp_dir`, `args` — environment variables and process context |
 
 ### OS & Platform (`os/`)
 

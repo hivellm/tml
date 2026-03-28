@@ -93,7 +93,7 @@ Foundation types and behaviors for the TML language. Everything here is availabl
 |--------|------|-------------|
 | str | `core::str` | String methods — split, find, replace, trim, parse, chars |
 | char | `core::char` | Unicode scalar — properties, escape, case conversion |
-| ascii | `core::ascii` | ASCII character classification and conversion |
+| ascii | `core::ascii` | ASCII character classification (`is_ascii_alphabetic`, `is_ascii_digit`, etc.) and conversion |
 | encoding | `core::encoding` | Base64, hex, UTF-8/16/32 codecs, BStr |
 
 ### Operators (`ops/`)
@@ -110,6 +110,24 @@ Foundation types and behaviors for the TML language. Everything here is availabl
 | drop | `core::ops` | `Drop` — custom destructors |
 | try_trait | `core::ops` | `Try`, `FromResidual` — `?` operator support |
 | coroutine | `core::ops` | `Coroutine`, `CoroutineState` |
+
+### I/O Traits
+
+| Module | Path | Description |
+|--------|------|-------------|
+| io | `core::io` | `Read`, `Write`, `BufRead` — shared I/O behaviors used by file, stream, and net modules |
+
+### Prelude
+
+| Module | Path | Description |
+|--------|------|-------------|
+| prelude | `core::prelude` | Re-exports of commonly used types: `Maybe`, `Outcome`, `List`, `HashMap`, `Str`, `Text`, `Iterator`, `Display`, `Debug`, `Clone`, `Eq`, `Ord`, `Hash`, `Default` |
+
+### Random
+
+| Module | Path | Description |
+|--------|------|-------------|
+| random | `core::random` | `Random` behavior — trait for RNG implementations; `std::random::Rng` implements this |
 
 ### Other
 
