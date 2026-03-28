@@ -1,0 +1,55 @@
+// Tests for Wrapping[T] extra methods: shift_left, shift_right, bitand, bitor, bitxor, bitnot
+use test
+
+use core::num::wrapping::Wrapping
+
+@test
+func test_wrapping_shift_left() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(1)
+    let result: Wrapping[I32] = x.shift_left(4)
+    assert_eq(result.value(), 16, "1 << 4 == 16")
+    return 0
+}
+
+@test
+func test_wrapping_shift_right() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(16)
+    let result: Wrapping[I32] = x.shift_right(2)
+    assert_eq(result.value(), 4, "16 >> 2 == 4")
+    return 0
+}
+
+@test
+func test_wrapping_bitand() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(12)
+    let y: Wrapping[I32] = Wrapping::new(10)
+    let result: Wrapping[I32] = x.bitand(y)
+    assert_eq(result.value(), 8, "12 & 10 == 8")
+    return 0
+}
+
+@test
+func test_wrapping_bitor() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(12)
+    let y: Wrapping[I32] = Wrapping::new(10)
+    let result: Wrapping[I32] = x.bitor(y)
+    assert_eq(result.value(), 14, "12 | 10 == 14")
+    return 0
+}
+
+@test
+func test_wrapping_bitxor() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(12)
+    let y: Wrapping[I32] = Wrapping::new(10)
+    let result: Wrapping[I32] = x.bitxor(y)
+    assert_eq(result.value(), 6, "12 ^ 10 == 6")
+    return 0
+}
+
+@test
+func test_wrapping_bitnot() -> I32 {
+    let x: Wrapping[I32] = Wrapping::new(0)
+    let result: Wrapping[I32] = x.bitnot()
+    assert_eq(result.value(), -1, "~0 == -1 in two's complement")
+    return 0
+}

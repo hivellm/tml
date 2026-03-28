@@ -1,0 +1,45 @@
+// Tests for Slice::split (predicate-based)
+use test
+
+use core::slice::Slice
+use std::collections::List
+
+@test
+func test_split_basic() -> I32 {
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 0)
+    atomic_store(ptr_offset(ptr, 2), 2)
+    atomic_store(ptr_offset(ptr, 3), 0)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+
+    let parts: List[Slice[I32]] = slice.split(do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 3, "should split into 3 parts")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_split_no_separator() -> I32 {
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+
+    let parts: List[Slice[I32]] = slice.split(do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 1, "no separator means 1 part")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_split_empty() -> I32 {
+    let slice: Slice[I32] = Slice::from_raw(0 as *Unit, 0)
+    let parts: List[Slice[I32]] = slice.split(do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 1, "empty slice splits into 1 empty part")
+    return 0
+}

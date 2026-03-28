@@ -266,6 +266,46 @@ impl Formatter {
         return this.sign_aware_zero_pad
     }
 
+    /// Returns `true` if the sign mode is `Plus` (always show sign).
+    ///
+    /// This is a shorthand for checking if `sign() == Sign::Plus`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// assert(fmt.sign_plus() == false)
+    /// fmt.set_sign(Sign::Plus)
+    /// assert(fmt.sign_plus() == true)
+    /// ```
+    pub func sign_plus(this) -> Bool {
+        when this.sign {
+            Sign::Plus => return true,
+            Sign::Minus => return false,
+            Sign::Space => return false,
+        }
+    }
+
+    /// Returns `true` if the sign mode is `Minus` (only show sign for negative).
+    ///
+    /// This is a shorthand for checking if `sign() == Sign::Minus`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// assert(fmt.sign_minus() == true)  // Minus is the default
+    /// fmt.set_sign(Sign::Plus)
+    /// assert(fmt.sign_minus() == false)
+    /// ```
+    pub func sign_minus(this) -> Bool {
+        when this.sign {
+            Sign::Minus => return true,
+            Sign::Plus => return false,
+            Sign::Space => return false,
+        }
+    }
+
     // ========================================================================
     // Formatting Methods
     // ========================================================================
@@ -389,6 +429,11 @@ impl Formatter {
         }
     }
 }
+
+// NOTE: impl Write for Formatter is BLOCKED by a codegen bug where behavior
+// method dispatch passes Str as i32 instead of ptr. The Write behavior's
+// default write_char/write_fmt methods trigger this bug. Once fixed,
+// add a `buffer: Str` field to Formatter and implement Write for it.
 
 use core::str
 

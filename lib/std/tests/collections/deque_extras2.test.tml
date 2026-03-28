@@ -1,0 +1,145 @@
+// Tests for Deque extras: retain, drain, rotate_left, rotate_right, binary_search
+use test::{assert, assert_eq}
+use std::collections::Deque
+
+@test
+func test_deque_retain_even() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    dq.push_back(4)
+    dq.push_back(5)
+    dq.retain(do(x: ref I64) *x % 2 == 0)
+    assert_eq(dq.len(), 2, "retain even: len 2")
+    assert_eq(dq.get(0), 2, "retain even: get(0)==2")
+    assert_eq(dq.get(1), 4, "retain even: get(1)==4")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_retain_all() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.retain(do(x: ref I64) true)
+    assert_eq(dq.len(), 2, "retain all: len 2")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_retain_none() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.retain(do(x: ref I64) false)
+    assert_eq(dq.len(), 0, "retain none: empty")
+    assert(dq.is_empty(), "retain none: is_empty")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_drain_basic() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    let drained = dq.drain()
+    assert_eq(drained.len(), 3, "drained len == 3")
+    assert_eq(drained.get(0), 1, "drained[0] == 1")
+    assert_eq(drained.get(1), 2, "drained[1] == 2")
+    assert_eq(drained.get(2), 3, "drained[2] == 3")
+    assert_eq(dq.len(), 0, "deque empty after drain")
+    assert(dq.is_empty(), "is_empty after drain")
+    drained.destroy()
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_rotate_left() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    dq.push_back(4)
+    dq.push_back(5)
+    dq.rotate_left(2)
+    // [1,2,3,4,5] rotated left 2 → [3,4,5,1,2]
+    assert_eq(dq.get(0), 3, "rotate_left: get(0)==3")
+    assert_eq(dq.get(1), 4, "rotate_left: get(1)==4")
+    assert_eq(dq.get(2), 5, "rotate_left: get(2)==5")
+    assert_eq(dq.get(3), 1, "rotate_left: get(3)==1")
+    assert_eq(dq.get(4), 2, "rotate_left: get(4)==2")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_rotate_right() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    dq.push_back(4)
+    dq.push_back(5)
+    dq.rotate_right(2)
+    // [1,2,3,4,5] rotated right 2 → [4,5,1,2,3]
+    assert_eq(dq.get(0), 4, "rotate_right: get(0)==4")
+    assert_eq(dq.get(1), 5, "rotate_right: get(1)==5")
+    assert_eq(dq.get(2), 1, "rotate_right: get(2)==1")
+    assert_eq(dq.get(3), 2, "rotate_right: get(3)==2")
+    assert_eq(dq.get(4), 3, "rotate_right: get(4)==3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_rotate_by_length_noop() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    dq.rotate_left(3)
+    // rotate by full length is a no-op
+    assert_eq(dq.get(0), 1, "full rotate: still 1")
+    assert_eq(dq.get(2), 3, "full rotate: still 3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_binary_search_found() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(3)
+    dq.push_back(5)
+    dq.push_back(7)
+    dq.push_back(9)
+    let r = dq.binary_search(5)
+    when r {
+        Ok(idx) => assert_eq(idx, 2, "binary_search found at 2"),
+        Err(_) => assert(false, "should have found 5"),
+    }
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_binary_search_not_found() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(3)
+    dq.push_back(5)
+    dq.push_back(7)
+    let r = dq.binary_search(4)
+    when r {
+        Ok(_) => assert(false, "4 should not be found"),
+        Err(insert_pos) => assert_eq(insert_pos, 2, "insert pos for 4 is 2"),
+    }
+    dq.destroy()
+    return 0
+}

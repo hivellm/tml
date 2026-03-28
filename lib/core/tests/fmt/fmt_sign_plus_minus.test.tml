@@ -1,0 +1,31 @@
+// Tests for Formatter::sign_plus() and sign_minus()
+use test
+
+use core::fmt::formatter::Formatter
+use core::fmt::traits::Sign
+
+@test
+func test_sign_plus_default() -> I32 {
+    let fmt: Formatter = Formatter::new()
+    assert(fmt.sign_plus() == false, "default is not Plus")
+    assert(fmt.sign_minus() == true, "default is Minus")
+    return 0
+}
+
+@test
+func test_sign_plus_set() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_sign(Sign::Plus)
+    assert(fmt.sign_plus() == true, "Plus mode")
+    assert(fmt.sign_minus() == false, "not Minus mode")
+    return 0
+}
+
+@test
+func test_sign_space() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_sign(Sign::Space)
+    assert(fmt.sign_plus() == false, "Space is not Plus")
+    assert(fmt.sign_minus() == false, "Space is not Minus")
+    return 0
+}

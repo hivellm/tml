@@ -1,0 +1,67 @@
+// Tests for Slice::splitn and Slice::rsplitn
+use test
+
+use core::slice::Slice
+use std::collections::List
+
+@test
+func test_splitn_basic() -> I32 {
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 0)
+    atomic_store(ptr_offset(ptr, 2), 2)
+    atomic_store(ptr_offset(ptr, 3), 0)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+
+    let parts: List[Slice[I32]] = slice.splitn(2, do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 2, "splitn(2) should give 2 parts")
+    // First part: [1], second part: [2, 0, 3]
+    let first: Slice[I32] = parts.get(0)
+    assert_eq(first.len(), 1, "first part has 1 element")
+    let second: Slice[I32] = parts.get(1)
+    assert_eq(second.len(), 3, "second part has remaining 3 elements")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_splitn_limit_exceeds() -> I32 {
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 0)
+    atomic_store(ptr_offset(ptr, 2), 2)
+    atomic_store(ptr_offset(ptr, 3), 0)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+
+    let parts: List[Slice[I32]] = slice.splitn(10, do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 3, "splitn(10) with 2 separators gives 3 parts")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_rsplitn_basic() -> I32 {
+    let ptr: *Unit = alloc(5)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 0)
+    atomic_store(ptr_offset(ptr, 2), 2)
+    atomic_store(ptr_offset(ptr, 3), 0)
+    atomic_store(ptr_offset(ptr, 4), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+
+    let parts: List[Slice[I32]] = slice.rsplitn(2, do(x: ref I32) *x == 0)
+    assert_eq(parts.len(), 2, "rsplitn(2) should give 2 parts")
+    // Splitting from right: last separator at index 3
+    // First part: [1, 0, 2], second part: [3]
+    let first: Slice[I32] = parts.get(0)
+    assert_eq(first.len(), 3, "first part (left remainder) has 3 elements")
+    let second: Slice[I32] = parts.get(1)
+    assert_eq(second.len(), 1, "second part has 1 element")
+
+    dealloc(ptr)
+    return 0
+}

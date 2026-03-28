@@ -216,3 +216,196 @@ impl[T] Drop for Deque[T] {
         this.destroy()
     }
 }
+
+// ─── DequeIter ──────────────────────────────────────────────────────────────
+
+/// Forward iterator over a snapshot of a [`Deque[T]`].
+///
+/// Created by [`Deque::iter`]. Iterates elements from front to back.
+pub type DequeIter[T] {
+    data: List[T],
+    head: I64,
+    capacity: I64,
+    length: I64,
+    index: I64,
+}
+
+impl[T] DequeIter[T] {
+    /// Returns the next element, or Nothing when exhausted.
+    pub func next(mut this) -> Maybe[T] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let actual: I64 = (this.head + this.index) % this.capacity
+        let val: T = this.data.get(actual)
+        this.index = this.index + 1
+        return Just(val)
+    }
+}
+
+// ─── Additional Deque[T] methods ────────────────────────────────────────────
+
+impl[T] Deque[T] {
+    /// Returns the number of elements. Alias for `count()`.
+    pub func len(this) -> I64 {
+        return this.length
+    }
+
+    /// Inserts `value` at logical position `index` (0 = front), shifting elements after it back.
+    ///
+    /// Panics if `index > length`.
+    pub func insert(mut this, index: I64, value: T) {
+        if index < 0 or index > this.length {
+            panic("Deque::insert index out of bounds")
+        }
+        // Push to back first (ensures capacity and initialization)
+        this.push_back(value)
+        // Shift the newly added element from the back to position `index`
+        var i: I64 = this.length - 1
+        loop (i > index) {
+            let prev: I64 = i - 1
+            let cur_idx: I64 = (this.head + i) % this.capacity
+            let prev_idx: I64 = (this.head + prev) % this.capacity
+            let tmp: T = this.data.get(prev_idx)
+            this.data.set(cur_idx, tmp)
+            i = i - 1
+        }
+        let target_idx: I64 = (this.head + index) % this.capacity
+        this.data.set(target_idx, value)
+    }
+
+    /// Removes and returns the element at logical position `index`, shifting elements after it forward.
+    ///
+    /// Returns `Nothing` if `index` is out of bounds.
+    pub func remove(mut this, index: I64) -> Maybe[T] {
+        if index < 0 or index >= this.length {
+            return Nothing
+        }
+        let actual: I64 = (this.head + index) % this.capacity
+        let removed: T = this.data.get(actual)
+        // Shift elements from index+1 forward to fill the gap
+        var i: I64 = index
+        loop (i < this.length - 1) {
+            let cur_idx: I64 = (this.head + i) % this.capacity
+            let next_idx: I64 = (this.head + i + 1) % this.capacity
+            this.data.set(cur_idx, this.data.get(next_idx))
+            i = i + 1
+        }
+        this.length = this.length - 1
+        if this.length == 0 {
+            this.head = 0
+        }
+        return Just(removed)
+    }
+
+    /// Returns a forward iterator over the elements (front to back).
+    pub func iter(this) -> DequeIter[T] {
+        return DequeIter {
+            data: this.data,
+            head: this.head,
+            capacity: this.capacity,
+            length: this.length,
+            index: 0,
+        }
+    }
+
+    /// Retains only elements for which `pred` returns true, removing the rest.
+    pub func retain(mut this, pred: func(ref T) -> Bool) {
+        var write: I64 = 0
+        var read: I64 = 0
+        loop (read < this.length) {
+            let read_idx: I64 = (this.head + read) % this.capacity
+            let val: T = this.data.get(read_idx)
+            if pred(ref val) {
+                if write != read {
+                    let write_idx: I64 = (this.head + write) % this.capacity
+                    this.data.set(write_idx, val)
+                }
+                write = write + 1
+            }
+            read = read + 1
+        }
+        this.length = write
+        if this.length == 0 {
+            this.head = 0
+        }
+    }
+
+    /// Removes all elements and returns them in a `List[T]` (front to back order).
+    pub func drain(mut this) -> List[T] {
+        var result: List[T] = List[T].new(this.length)
+        var i: I64 = 0
+        loop (i < this.length) {
+            let idx: I64 = (this.head + i) % this.capacity
+            result.push(this.data.get(idx))
+            i = i + 1
+        }
+        this.length = 0
+        this.head = 0
+        return result
+    }
+
+    /// Rotates the deque left by `n` positions.
+    ///
+    /// Elements shifted off the front are appended to the back.
+    /// Equivalent to calling `pop_front` + `push_back` n times, but O(1) for the head pointer.
+    pub func rotate_left(mut this, n: I64) {
+        if this.length == 0 {
+            return
+        }
+        let steps: I64 = n % this.length
+        if steps == 0 {
+            return
+        }
+        this.head = (this.head + steps) % this.capacity
+    }
+
+    /// Rotates the deque right by `n` positions.
+    ///
+    /// Elements shifted off the back are prepended to the front.
+    pub func rotate_right(mut this, n: I64) {
+        if this.length == 0 {
+            return
+        }
+        let steps: I64 = n % this.length
+        if steps == 0 {
+            return
+        }
+        this.head = (this.head - steps + this.capacity) % this.capacity
+    }
+}
+
+/// Binary search methods for sorted Deque.
+impl[T: Ord] Deque[T] {
+    /// Searches a sorted deque for `value`.
+    ///
+    /// Returns `Ok(index)` if found, or `Err(insert_index)` giving the position
+    /// where `value` could be inserted to maintain sort order.
+    pub func binary_search(this, value: T) -> Outcome[I64, I64] {
+        var lo: I64 = 0
+        var hi: I64 = this.length
+        var found: Bool = false
+        var result_ok: I64 = 0
+        var result_err: I64 = 0
+        loop (lo < hi and not found) {
+            let mid: I64 = lo + (hi - lo) / 2
+            let mid_idx: I64 = (this.head + mid) % this.capacity
+            let mid_val: T = this.data.get(mid_idx)
+            if mid_val == value {
+                found = true
+                result_ok = mid
+            } else {
+                if mid_val < value {
+                    lo = mid + 1
+                } else {
+                    hi = mid
+                }
+                result_err = lo
+            }
+        }
+        if found {
+            return Ok(result_ok)
+        }
+        return Err(lo)
+    }
+}

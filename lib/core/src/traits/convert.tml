@@ -699,3 +699,60 @@ impl TryFrom[U64] for I64 {
         return Ok(value as I64)
     }
 }
+
+// ============================================================================
+// Infallible Type
+// ============================================================================
+
+/// The error type for infallible conversions.
+///
+/// `Infallible` is an uninhabited type — it can never be constructed. This
+/// makes it useful as an error type for operations that can never fail,
+/// such as infallible `From` conversions used through the `TryFrom` interface.
+///
+/// Since `Infallible` can never be constructed, `Outcome[T, Infallible]` is
+/// logically equivalent to `T` — the `Err` branch is unreachable.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::convert::Infallible
+///
+/// // This function can never fail
+/// func parse_always(s: Str) -> Outcome[Str, Infallible] {
+///     return Ok(s)
+/// }
+///
+/// // Since the error is Infallible, we know unwrap() will never panic
+/// let result: Str = parse_always("hello").unwrap()
+/// ```
+///
+/// # Relationship with From/TryFrom
+///
+/// When a type implements `From[T]`, the conversion is infallible. If you
+/// also want to use it through the `TryFrom` interface, use `Infallible`
+/// as the error type to indicate the conversion always succeeds.
+pub type Infallible {
+    // Empty enum with no variants — cannot be constructed
+    _impossible: Never
+}
+
+/// A type that can never be constructed.
+///
+/// This is used to implement uninhabited types like `Infallible`.
+type Never {}
+
+use core::fmt::traits::{Display, Debug}
+
+impl Display for Infallible {
+    pub func to_string(this) -> Str {
+        // This code is unreachable since Infallible cannot be constructed
+        return "infallible"
+    }
+}
+
+impl Debug for Infallible {
+    pub func debug_string(this) -> Str {
+        return "Infallible"
+    }
+}

@@ -71,3 +71,88 @@ pub mod wrapping    // Wrapping[T] wrapper type
 pub mod nonzero     // NonZero[T] wrapper type
 pub mod overflow    // Checked*, Saturating*, Wrapping*, Overflowing* behaviors
 pub mod integer     // abs, signum, is_positive, is_negative, pow, MIN/MAX constants
+
+// ============================================================================
+// ParseIntError and IntErrorKind
+// ============================================================================
+
+/// The kind of error that can occur when parsing an integer.
+pub type IntErrorKind {
+    /// The input was empty.
+    Empty,
+    /// An invalid digit was encountered for the given radix.
+    InvalidDigit,
+    /// The integer is too large to fit in the target type.
+    PosOverflow,
+    /// The integer is too small to fit in the target type (negative overflow).
+    NegOverflow,
+    /// The value is zero but the target type does not allow it (e.g., NonZero).
+    Zero
+}
+
+/// An error which can be returned when parsing an integer.
+///
+/// This error is used as the error type for many `from_str` functions
+/// on integer types.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::ParseIntError
+///
+/// let err = ParseIntError::new(IntErrorKind::InvalidDigit)
+/// assert_eq(err.kind(), IntErrorKind::InvalidDigit)
+/// ```
+pub type ParseIntError {
+    kind_val: IntErrorKind
+}
+
+impl ParseIntError {
+    /// Creates a new `ParseIntError` with the given kind.
+    pub func new(kind: IntErrorKind) -> ParseIntError {
+        return ParseIntError { kind_val: kind }
+    }
+
+    /// Returns the kind of this error.
+    pub func kind(this) -> IntErrorKind {
+        return this.kind_val
+    }
+}
+
+use core::fmt::traits::{Display, Debug}
+
+impl Display for IntErrorKind {
+    pub func to_string(this) -> Str {
+        when this {
+            IntErrorKind::Empty => return "empty string",
+            IntErrorKind::InvalidDigit => return "invalid digit",
+            IntErrorKind::PosOverflow => return "positive overflow",
+            IntErrorKind::NegOverflow => return "negative overflow",
+            IntErrorKind::Zero => return "zero not allowed",
+        }
+    }
+}
+
+impl Debug for IntErrorKind {
+    pub func debug_string(this) -> Str {
+        when this {
+            IntErrorKind::Empty => return "IntErrorKind::Empty",
+            IntErrorKind::InvalidDigit => return "IntErrorKind::InvalidDigit",
+            IntErrorKind::PosOverflow => return "IntErrorKind::PosOverflow",
+            IntErrorKind::NegOverflow => return "IntErrorKind::NegOverflow",
+            IntErrorKind::Zero => return "IntErrorKind::Zero",
+        }
+    }
+}
+
+impl Display for ParseIntError {
+    pub func to_string(this) -> Str {
+        return "invalid integer: " + this.kind_val.to_string()
+    }
+}
+
+impl Debug for ParseIntError {
+    pub func debug_string(this) -> Str {
+        return "ParseIntError { kind: " + this.kind_val.debug_string() + " }"
+    }
+}

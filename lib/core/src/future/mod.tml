@@ -428,18 +428,18 @@ pub behavior FutureExt: Future {
     ///     second_future(result)
     /// })
     /// ```
-    // func and_then[Fut, F](this, f: F) -> AndThen[This, F]
-    // where F: FnOnce[(This::Output,), Output = Fut], Fut: Future {
-    //     return AndThen { state: AndThenState::First { future: this, f: f } }
-    // }
+    func and_then[Fut, F](this, f: F) -> AndThen[This, F]
+    where F: FnOnce[(This::Output,), Output = Fut], Fut: Future {
+        return AndThen { state: AndThenState::First { future: this, f: f } }
+    }
 
     /// Fuses this future, making it safe to poll after completion.
     ///
     /// After the inner future completes, `is_terminated()` returns `true`
     /// and subsequent polls return `Poll::Pending`.
-    // func fuse(this) -> Fuse[This] {
-    //     return Fuse { future: Just(this) }
-    // }
+    func fuse(this) -> Fuse[This] {
+        return Fuse { future: Just(this) }
+    }
 }
 
 // ============================================================================

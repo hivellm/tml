@@ -1,0 +1,23 @@
+// Tests for Infallible type
+use test
+
+use core::traits::convert::Infallible
+
+@test
+func test_infallible_display() -> I32 {
+    // Infallible can't be constructed, so we just verify the type exists
+    // and can be used as a type parameter
+    let result: Outcome[I32, Infallible] = Ok(42)
+    assert(result.is_ok(), "Ok should be ok")
+    assert_eq(result.unwrap(), 42, "should be 42")
+    return 0
+}
+
+@test
+func test_infallible_outcome_always_ok() -> I32 {
+    // Since Infallible can never be constructed,
+    // Outcome[T, Infallible] is always Ok(T)
+    let v: Outcome[Str, Infallible] = Ok("hello")
+    assert_eq(v.unwrap(), "hello", "infallible outcome is always Ok")
+    return 0
+}

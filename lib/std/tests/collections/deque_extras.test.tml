@@ -1,0 +1,117 @@
+// Tests for Deque extras: len, insert, remove, iter
+use test::{assert, assert_eq}
+use std::collections::Deque
+
+@test
+func test_deque_len_alias() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    assert_eq(dq.len(), 3, "len should be 3")
+    assert_eq(dq.len(), dq.count(), "len == count")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_insert_at_front() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(2)
+    dq.push_back(3)
+    dq.insert(0, 1)
+    assert_eq(dq.len(), 3, "len after insert")
+    assert_eq(dq.get(0), 1, "get(0) == 1")
+    assert_eq(dq.get(1), 2, "get(1) == 2")
+    assert_eq(dq.get(2), 3, "get(2) == 3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_insert_at_back() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.insert(2, 3)
+    assert_eq(dq.len(), 3, "len after insert at back")
+    assert_eq(dq.get(0), 1, "get(0) == 1")
+    assert_eq(dq.get(1), 2, "get(1) == 2")
+    assert_eq(dq.get(2), 3, "get(2) == 3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_insert_middle() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(3)
+    dq.insert(1, 2)
+    assert_eq(dq.len(), 3, "len after middle insert")
+    assert_eq(dq.get(0), 1, "get(0) == 1")
+    assert_eq(dq.get(1), 2, "get(1) == 2")
+    assert_eq(dq.get(2), 3, "get(2) == 3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_remove_front() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.push_back(30)
+    let removed: Maybe[I64] = dq.remove(0)
+    assert_eq(removed.unwrap(), 10, "removed == 10")
+    assert_eq(dq.len(), 2, "len after remove")
+    assert_eq(dq.get(0), 20, "get(0) == 20")
+    assert_eq(dq.get(1), 30, "get(1) == 30")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_remove_middle() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+    let removed: Maybe[I64] = dq.remove(1)
+    assert_eq(removed.unwrap(), 2, "removed == 2")
+    assert_eq(dq.len(), 2, "len after remove")
+    assert_eq(dq.get(0), 1, "get(0) == 1")
+    assert_eq(dq.get(1), 3, "get(1) == 3")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_remove_oob() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    let r: Maybe[I64] = dq.remove(5)
+    assert(r.is_nothing(), "oob remove should be Nothing")
+    assert_eq(dq.len(), 1, "len unchanged")
+    dq.destroy()
+    return 0
+}
+
+@test
+func test_deque_iter_basic() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.push_back(30)
+    var it = dq.iter()
+    let a: Maybe[I64] = it.next()
+    assert_eq(a.unwrap(), 10, "iter first == 10")
+    let b: Maybe[I64] = it.next()
+    assert_eq(b.unwrap(), 20, "iter second == 20")
+    let c: Maybe[I64] = it.next()
+    assert_eq(c.unwrap(), 30, "iter third == 30")
+    let d: Maybe[I64] = it.next()
+    assert(d.is_nothing(), "iter exhausted")
+    dq.destroy()
+    return 0
+}

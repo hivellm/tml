@@ -209,6 +209,107 @@ impl[T] BinaryHeap[T] {
             i = largest
         }
     }
+
+    /// Returns a non-consuming iterator over elements in heap-internal order (not sorted).
+    ///
+    /// To iterate in sorted order, use `into_sorted()`.
+    pub func iter(this) -> HeapIter[T] {
+        var snapshot = List[T].new(this.length)
+        var i: I64 = 0
+        loop (i < this.length) {
+            snapshot.push(this.data.get(i))
+            i = i + 1
+        }
+        let snap_len: I64 = this.length
+        return HeapIter { snapshot: snapshot, length: snap_len, index: 0 }
+    }
+
+    /// Removes all elements and returns them in a sorted ascending `List[T]`.
+    ///
+    /// The heap is empty after this call.
+    pub func drain(mut this) -> List[T] {
+        var result = List[T].new(this.length)
+        var count: I64 = this.length
+        var i: I64 = 0
+        loop (i < count) {
+            when this.pop() {
+                Just(val) => result.push(val),
+                Nothing => {},
+            }
+            i = i + 1
+        }
+        // result is in descending order (max-heap pops max first), reverse it
+        var lo: I64 = 0
+        var hi: I64 = result.len() - 1
+        loop (lo < hi) {
+            let tmp = result.get(lo)
+            result.set(lo, result.get(hi))
+            result.set(hi, tmp)
+            lo = lo + 1
+            hi = hi - 1
+        }
+        return result
+    }
+
+    /// Merges all elements from `other` into this heap. `other` is cleared after the call.
+    pub func append(mut this, other: mut ref BinaryHeap[T]) {
+        var i: I64 = 0
+        loop (i < other.length) {
+            this.push(other.data.get(i))
+            i = i + 1
+        }
+        other.clear()
+    }
+
+    /// Retains only elements for which `pred` returns true, then restores the heap invariant.
+    pub func retain(mut this, pred: func(ref T) -> Bool) {
+        var write: I64 = 0
+        var read: I64 = 0
+        loop (read < this.length) {
+            let val: T = this.data.get(read)
+            if pred(ref val) {
+                this.data.set(write, val)
+                write = write + 1
+            }
+            read = read + 1
+        }
+        this.length = write
+        // Re-heapify from last non-leaf down to root
+        if this.length > 1 {
+            var start: I64 = (this.length / 2) - 1
+            loop (start >= 0) {
+                this.sift_down(start)
+                if start == 0 {
+                    return
+                }
+                start = start - 1
+            }
+        }
+    }
+}
+
+// ─── HeapIter[T] — Non-consuming iterator ───────────────────────────────────
+
+/// An iterator over a snapshot of a [`BinaryHeap[T]`].
+///
+/// Created by [`BinaryHeap::iter`]. Iterates elements in heap-internal order.
+/// To get sorted order, use [`BinaryHeap::into_sorted`] or [`BinaryHeap::drain`].
+pub type HeapIter[T] {
+    snapshot: List[T],
+    length: I64,
+    index: I64,
+}
+
+impl[T] HeapIter[T] {
+    /// Returns the next element, or `Nothing` when exhausted.
+    pub func next(mut this) -> Maybe[T] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let val: T = this.snapshot.get(this.index)
+        this.index = this.index + 1
+        return Just(val)
+    }
 }
 
 // ─── MinHeap[T] — Min-heap variant ─────────────────────────────────

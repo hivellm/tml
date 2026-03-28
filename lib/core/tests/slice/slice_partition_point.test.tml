@@ -1,0 +1,60 @@
+// Tests for Slice::partition_point
+use test
+
+use core::slice::Slice
+
+@test
+func test_partition_point_basic() -> I32 {
+    let ptr: *Unit = alloc(6)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+    atomic_store(ptr_offset(ptr, 3), 4)
+    atomic_store(ptr_offset(ptr, 4), 5)
+    atomic_store(ptr_offset(ptr, 5), 6)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 6)
+
+    let idx: I64 = slice.partition_point(do(x: ref I32) *x <= 3)
+    assert_eq(idx, 3, "partition_point should be 3")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_partition_point_all_true() -> I32 {
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+
+    let idx: I64 = slice.partition_point(do(x: ref I32) *x <= 100)
+    assert_eq(idx, 3, "all elements satisfy pred, partition_point == len")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_partition_point_all_false() -> I32 {
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+
+    let idx: I64 = slice.partition_point(do(x: ref I32) *x < 0)
+    assert_eq(idx, 0, "no elements satisfy pred, partition_point == 0")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_partition_point_empty() -> I32 {
+    let slice: Slice[I32] = Slice::from_raw(0 as *Unit, 0)
+    let idx: I64 = slice.partition_point(do(x: ref I32) *x <= 5)
+    assert_eq(idx, 0, "empty slice partition_point == 0")
+    return 0
+}

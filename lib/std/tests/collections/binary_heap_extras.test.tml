@@ -1,0 +1,113 @@
+// Tests for BinaryHeap extras: iter, drain, append, retain
+use test::{assert, assert_eq}
+use std::collections::binary_heap::{BinaryHeap, HeapIter}
+use std::collections::List
+
+@test
+func test_heap_iter_basic() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(3)
+    heap.push(1)
+    heap.push(5)
+    var it = heap.iter()
+    // Collect all elements from iterator
+    var count: I64 = 0
+    var done: Bool = false
+    loop (not done) {
+        let r: Maybe[I64] = it.next()
+        when r {
+            Just(_) => { count = count + 1 },
+            Nothing => { done = true },
+        }
+    }
+    assert_eq(count, 3, "iter should yield 3 elements")
+    // Heap is not consumed
+    assert_eq(heap.len(), 3, "heap still has 3 elements after iter")
+    return 0
+}
+
+@test
+func test_heap_iter_empty() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    var it = heap.iter()
+    let r: Maybe[I64] = it.next()
+    assert(r.is_nothing(), "iter on empty heap should be Nothing")
+    return 0
+}
+
+@test
+func test_heap_drain_sorted() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(3)
+    heap.push(1)
+    heap.push(5)
+    heap.push(2)
+    let sorted = heap.drain()
+    assert_eq(sorted.len(), 4, "drained 4 elements")
+    assert_eq(sorted.get(0), 1, "drain sorted[0] == 1")
+    assert_eq(sorted.get(1), 2, "drain sorted[1] == 2")
+    assert_eq(sorted.get(2), 3, "drain sorted[2] == 3")
+    assert_eq(sorted.get(3), 5, "drain sorted[3] == 5")
+    assert_eq(heap.len(), 0, "heap empty after drain")
+    assert(heap.is_empty(), "is_empty after drain")
+    sorted.destroy()
+    return 0
+}
+
+@test
+func test_heap_append() -> I32 {
+    var heap1 = BinaryHeap[I64]::new()
+    heap1.push(5)
+    heap1.push(3)
+    var heap2 = BinaryHeap[I64]::new()
+    heap2.push(4)
+    heap2.push(1)
+    heap2.push(2)
+    heap1.append(ref heap2)
+    assert_eq(heap1.len(), 5, "merged heap has 5 elements")
+    assert_eq(heap2.len(), 0, "other heap is empty after append")
+    // max should still be 5
+    assert_eq(heap1.pop().unwrap(), 5, "max after append == 5")
+    assert_eq(heap1.pop().unwrap(), 4, "second after append == 4")
+    return 0
+}
+
+@test
+func test_heap_retain_even() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(1)
+    heap.push(2)
+    heap.push(3)
+    heap.push(4)
+    heap.push(5)
+    heap.retain(do(x: ref I64) *x % 2 == 0)
+    assert_eq(heap.len(), 2, "retain even: len 2")
+    // After retain, heap property should hold — max first
+    assert_eq(heap.pop().unwrap(), 4, "retain even: max is 4")
+    assert_eq(heap.pop().unwrap(), 2, "retain even: next is 2")
+    return 0
+}
+
+@test
+func test_heap_retain_none() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(1)
+    heap.push(2)
+    heap.push(3)
+    heap.retain(do(x: ref I64) false)
+    assert_eq(heap.len(), 0, "retain none: empty")
+    assert(heap.is_empty(), "retain none: is_empty")
+    return 0
+}
+
+@test
+func test_heap_retain_all() -> I32 {
+    var heap = BinaryHeap[I64]::new()
+    heap.push(10)
+    heap.push(20)
+    heap.push(30)
+    heap.retain(do(x: ref I64) true)
+    assert_eq(heap.len(), 3, "retain all: len 3")
+    assert_eq(heap.pop().unwrap(), 30, "max still 30")
+    return 0
+}

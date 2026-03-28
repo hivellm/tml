@@ -299,6 +299,266 @@ impl[T] Slice[T] {
 }
 
 // ============================================================================
+// Split First / Split Last
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Returns the first element and a slice of the rest, or `Nothing` if empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3]
+    /// let slice = v.as_slice()
+    /// when slice.split_first() {
+    ///     Just((first, rest)) => {
+    ///         assert_eq(*first, 1)
+    ///         assert_eq(rest.len(), 2)
+    ///     },
+    ///     Nothing => panic("should not be empty")
+    /// }
+    /// ```
+    pub func split_first(this) -> Maybe[(ref T, Slice[T])] {
+        if this.len == 0 {
+            return Nothing
+        }
+        let first_ref: ref T = lowlevel { slice_get(this.data, 0) }
+        let rest: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.data, 1) },
+            len: this.len - 1
+        }
+        return Just((first_ref, rest))
+    }
+
+    /// Returns the last element and a slice of everything before it, or `Nothing` if empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3]
+    /// let slice = v.as_slice()
+    /// when slice.split_last() {
+    ///     Just((last, init)) => {
+    ///         assert_eq(*last, 3)
+    ///         assert_eq(init.len(), 2)
+    ///     },
+    ///     Nothing => panic("should not be empty")
+    /// }
+    /// ```
+    pub func split_last(this) -> Maybe[(ref T, Slice[T])] {
+        if this.len == 0 {
+            return Nothing
+        }
+        let last_ref: ref T = lowlevel { slice_get(this.data, this.len - 1) }
+        let init: Slice[T] = Slice {
+            data: this.data,
+            len: this.len - 1
+        }
+        return Just((last_ref, init))
+    }
+}
+
+// ============================================================================
+// Predicate-Based Splitting
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Splits the slice by a predicate, returning a list of sub-slices.
+    ///
+    /// The predicate is called on each element. When it returns `true`,
+    /// the element is used as a separator and is not included in any sub-slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 0, 2, 0, 3]
+    /// let slice = v.as_slice()
+    /// let parts = slice.split(do(x: ref I32) *x == 0)
+    /// assert_eq(parts.len(), 3)
+    /// ```
+    pub func split(this, pred: func(ref T) -> Bool) -> List[Slice[T]] {
+        var result: List[Slice[T]] = List::new()
+        var start: I64 = 0
+        var i: I64 = 0
+        loop (i < this.len) {
+            let elem: ref T = lowlevel { slice_get(this.data, i) }
+            if pred(elem) {
+                let sub: Slice[T] = Slice {
+                    data: lowlevel { slice_offset(this.data, start) },
+                    len: i - start
+                }
+                result.push(sub)
+                start = i + 1
+            }
+            i = i + 1
+        }
+        // Push the final segment
+        let sub: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.data, start) },
+            len: this.len - start
+        }
+        result.push(sub)
+        return result
+    }
+
+    /// Splits the slice by a predicate, returning at most `n` sub-slices.
+    ///
+    /// The last sub-slice contains the remainder of the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 0, 2, 0, 3]
+    /// let slice = v.as_slice()
+    /// let parts = slice.splitn(2, do(x: ref I32) *x == 0)
+    /// assert_eq(parts.len(), 2)
+    /// ```
+    pub func splitn(this, n: I64, pred: func(ref T) -> Bool) -> List[Slice[T]] {
+        var result: List[Slice[T]] = List::new()
+        if n == 0 {
+            return result
+        }
+        var start: I64 = 0
+        var count: I64 = 1
+        var i: I64 = 0
+        loop (i < this.len) {
+            if count >= n {
+                // Reached the limit; the rest is one segment
+                let sub: Slice[T] = Slice {
+                    data: lowlevel { slice_offset(this.data, start) },
+                    len: this.len - start
+                }
+                result.push(sub)
+                return result
+            }
+            let elem: ref T = lowlevel { slice_get(this.data, i) }
+            if pred(elem) {
+                let sub: Slice[T] = Slice {
+                    data: lowlevel { slice_offset(this.data, start) },
+                    len: i - start
+                }
+                result.push(sub)
+                start = i + 1
+                count = count + 1
+            }
+            i = i + 1
+        }
+        // Push the final segment
+        let sub: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.data, start) },
+            len: this.len - start
+        }
+        result.push(sub)
+        return result
+    }
+
+    /// Splits the slice by a predicate from the right, returning at most `n` sub-slices.
+    ///
+    /// The first sub-slice contains the remainder of the slice.
+    /// The result is in the same order as the original slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 0, 2, 0, 3]
+    /// let slice = v.as_slice()
+    /// let parts = slice.rsplitn(2, do(x: ref I32) *x == 0)
+    /// assert_eq(parts.len(), 2)
+    /// ```
+    pub func rsplitn(this, n: I64, pred: func(ref T) -> Bool) -> List[Slice[T]] {
+        var result: List[Slice[T]] = List::new()
+        if n == 0 {
+            return result
+        }
+        var end: I64 = this.len
+        var count: I64 = 1
+        var i: I64 = this.len - 1
+        loop (i >= 0) {
+            if count >= n {
+                // Reached the limit; the rest (from 0 to end) is one segment
+                let sub: Slice[T] = Slice {
+                    data: this.data,
+                    len: end
+                }
+                result.push(sub)
+                // Reverse result to maintain left-to-right order
+                reverse_slice_list(mut ref result)
+                return result
+            }
+            let elem: ref T = lowlevel { slice_get(this.data, i) }
+            if pred(elem) {
+                let sub: Slice[T] = Slice {
+                    data: lowlevel { slice_offset(this.data, i + 1) },
+                    len: end - (i + 1)
+                }
+                result.push(sub)
+                end = i
+                count = count + 1
+            }
+            i = i - 1
+        }
+        // Push the remaining segment (from start to end)
+        let sub: Slice[T] = Slice {
+            data: this.data,
+            len: end
+        }
+        result.push(sub)
+        // Reverse result to maintain left-to-right order
+        reverse_slice_list(mut ref result)
+        return result
+    }
+}
+
+/// Reverses a list of slices in place (helper for rsplitn).
+func reverse_slice_list[T](list: mut ref List[Slice[T]]) {
+    let length: I64 = list.len()
+    var left: I64 = 0
+    var right: I64 = length - 1
+    loop (left < right) {
+        list.swap(left, right)
+        left = left + 1
+        right = right - 1
+    }
+}
+
+// ============================================================================
+// Partition Point
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Returns the index of the partition point according to the given predicate
+    /// (the index of the first element for which the predicate returns `false`).
+    ///
+    /// Assumes the slice is partitioned: all elements where `pred` returns `true`
+    /// come before all elements where it returns `false`.
+    ///
+    /// Uses binary search, so this runs in O(log n) time.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3, 4, 5, 6]
+    /// let slice = v.as_slice()
+    /// let idx = slice.partition_point(do(x: ref I32) *x <= 3)
+    /// assert_eq(idx, 3)
+    /// ```
+    pub func partition_point(this, pred: func(ref T) -> Bool) -> I64 {
+        var left: I64 = 0
+        var right: I64 = this.len
+        loop (left < right) {
+            let mid: I64 = left + (right - left) / 2
+            let elem: ref T = lowlevel { slice_get(this.data, mid) }
+            if pred(elem) {
+                left = mid + 1
+            } else {
+                right = mid
+            }
+        }
+        return left
+    }
+}
+
+// ============================================================================
 // Binary Search
 // ============================================================================
 

@@ -1,0 +1,50 @@
+// Tests for Slice::split_first and Slice::split_last
+use test
+
+use core::slice::Slice
+
+@test
+func test_split_first_nonempty() -> I32 {
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+
+    let result = slice.split_first()
+    assert(result.is_just(), "split_first should return Just for non-empty")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_split_first_empty() -> I32 {
+    let slice: Slice[I32] = Slice::from_raw(0 as *Unit, 0)
+    let result = slice.split_first()
+    assert(result.is_nothing(), "split_first should return Nothing for empty")
+    return 0
+}
+
+@test
+func test_split_last_nonempty() -> I32 {
+    let ptr: *Unit = alloc(3)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+    let slice: Slice[I32] = Slice::from_raw(ptr, 3)
+
+    let result = slice.split_last()
+    assert(result.is_just(), "split_last should return Just for non-empty")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_split_last_empty() -> I32 {
+    let slice: Slice[I32] = Slice::from_raw(0 as *Unit, 0)
+    let result = slice.split_last()
+    assert(result.is_nothing(), "split_last should return Nothing for empty")
+    return 0
+}

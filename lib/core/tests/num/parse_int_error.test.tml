@@ -1,0 +1,45 @@
+// Tests for ParseIntError and IntErrorKind
+use test
+
+use core::num::{ParseIntError, IntErrorKind}
+
+@test
+func test_parse_int_error_kind() -> I32 {
+    let err: ParseIntError = ParseIntError::new(IntErrorKind::InvalidDigit)
+    let k: IntErrorKind = err.kind()
+    // We can't compare enums directly, but we can use Display
+    let s: Str = err.to_string()
+    assert_eq(s, "invalid integer: invalid digit", "error message")
+    return 0
+}
+
+@test
+func test_int_error_kind_display() -> I32 {
+    let k1: IntErrorKind = IntErrorKind::Empty
+    assert_eq(k1.to_string(), "empty string", "Empty display")
+
+    let k2: IntErrorKind = IntErrorKind::PosOverflow
+    assert_eq(k2.to_string(), "positive overflow", "PosOverflow display")
+
+    let k3: IntErrorKind = IntErrorKind::NegOverflow
+    assert_eq(k3.to_string(), "negative overflow", "NegOverflow display")
+
+    let k4: IntErrorKind = IntErrorKind::Zero
+    assert_eq(k4.to_string(), "zero not allowed", "Zero display")
+    return 0
+}
+
+@test
+func test_int_error_kind_debug() -> I32 {
+    let k: IntErrorKind = IntErrorKind::InvalidDigit
+    assert_eq(k.debug_string(), "IntErrorKind::InvalidDigit", "debug string")
+    return 0
+}
+
+@test
+func test_parse_int_error_debug() -> I32 {
+    let err: ParseIntError = ParseIntError::new(IntErrorKind::Empty)
+    let s: Str = err.debug_string()
+    assert_eq(s, "ParseIntError { kind: IntErrorKind::Empty }", "debug")
+    return 0
+}

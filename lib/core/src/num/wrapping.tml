@@ -101,6 +101,57 @@ impl[T] Wrapping[T] {
 }
 
 // ============================================================================
+// Additional Arithmetic Methods for Wrapping[I32]
+// ============================================================================
+
+impl Wrapping[I32] {
+    /// Wrapping power. Wraps around at the type boundary.
+    pub func pow(this, exp: I32) -> Wrapping[I32] {
+        var result: I32 = 1
+        var b: I32 = this.inner
+        var e: I32 = exp
+        loop (e > 0) {
+            if e % 2 == 1 {
+                result = result.wrapping_mul(b)
+            }
+            b = b.wrapping_mul(b)
+            e = e / 2
+        }
+        return Wrapping::new(result)
+    }
+
+    /// Wrapping left shift.
+    pub func shift_left(this, n: I32) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_shl[I32](this.inner, n) })
+    }
+
+    /// Wrapping right shift.
+    pub func shift_right(this, n: I32) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_shr[I32](this.inner, n) })
+    }
+
+    /// Bitwise AND of two wrapping values.
+    pub func bitand(this, other: Wrapping[I32]) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_and[I32](this.inner, other.inner) })
+    }
+
+    /// Bitwise OR of two wrapping values.
+    pub func bitor(this, other: Wrapping[I32]) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_or[I32](this.inner, other.inner) })
+    }
+
+    /// Bitwise XOR of two wrapping values.
+    pub func bitxor(this, other: Wrapping[I32]) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_xor[I32](this.inner, other.inner) })
+    }
+
+    /// Bitwise NOT of the wrapping value.
+    pub func bitnot(this) -> Wrapping[I32] {
+        return Wrapping::new(lowlevel { llvm_not[I32](this.inner) })
+    }
+}
+
+// ============================================================================
 // Trait Implementations
 // ============================================================================
 
