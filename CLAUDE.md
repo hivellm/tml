@@ -373,6 +373,41 @@ grep Profile .sandbox/test_output.log
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ MANDATORY: Tasks Must Fit One Implementation Cycle ⛔
+
+**Every task MUST be completable in a single implementation cycle (one agent team session). If a task is too large, SPLIT IT before starting.**
+
+This is a HARD REQUIREMENT. Large tasks lead to partial implementations, deferred items, stale progress, and abandoned work. Small, focused tasks get completed to 100%.
+
+**Rules:**
+
+1. **One task = one cycle** — if a task has more than ~25 checklist items, it's too big
+2. **Split before starting** — analyze scope FIRST, split into smaller tasks, THEN implement
+3. **Each split task must be independently completable** — no task should depend on another unfinished split
+4. **Each split task must be independently testable** — it compiles, tests pass, can be committed
+5. **Name splits sequentially** — `phase7-05a-str-phase1`, `phase7-05b-str-phase2`
+
+**How to split:**
+
+- By priority tier: Critical methods first, Medium methods second, Low methods third
+- By module: one task per file/module being modified
+- By dependency: implement dependencies first, then dependents
+- By complexity: simple additions first, infrastructure changes second
+
+**Example — BAD (150 items in one task):**
+```
+phase5-01-simd-optimization: 116 items → agents implement 30%, defer 70%
+```
+
+**Example — GOOD (3 focused tasks):**
+```
+phase5-01a-simd-detect: 15 items (CPUID + feature detection)
+phase5-01b-simd-types: 20 items (256-bit vector types)
+phase5-01c-simd-stdlib: 20 items (SIMD-accelerated stdlib functions)
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Analyze Before Executing ⛔
 
 **YOU MUST ANALYZE PROJECT PATTERNS AND CONVENTIONS BEFORE EXECUTING ANY TASK.**
