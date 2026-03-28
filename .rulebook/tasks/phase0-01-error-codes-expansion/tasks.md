@@ -1,27 +1,30 @@
 # Tasks: Error Codes Expansion — 197 → 460 Codes
 
-**Status**: Proposed
+**Status**: In Progress — Phase A complete (4/55 items)
 **Priority**: HIGH
 **Phase**: 0 — Infrastructure (blocks all other phases — better errors = faster debugging)
+
+> **AUDIT UPDATE (2026-03-28)**: Initial grep reported 87 untagged type checker errors, but deep audit found 83 were false positives (multi-line calls where the code appeared on continuation lines). Only **4 genuinely untagged errors** existed and were fixed (T200, T201, T207). Type checker now has **zero untagged errors**. The remaining work is Phases B-D which require NEW error infrastructure, not just tagging.
 
 ## Phase A: Tag Existing Untagged Errors (mechanical — no new logic)
 
 > 71 errors. Just add the code string parameter to existing `error()` / `report_error()` calls.
 
-### A.1 Type Checker — 63 untagged errors → T091-T160
+### A.1 Type Checker — ✅ DONE (was 63 reported, only 4 genuinely untagged)
 
-- [ ] A.1.1 T091-T100: Access & visibility — private member, unknown field/method/variant/struct/behavior, missing field, duplicate variable (10 codes in `checker/expr.cpp`, `expr_call_method.cpp`, `stmt.cpp`)
-- [ ] A.1.2 T111-T117: Pattern matching — destructure mismatch, tuple arity, enum pattern, when arm types (7 codes in `checker/control.cpp`, `stmt.cpp`)
-- [ ] A.1.3 T121-T132: Type mismatch specializations — const decl, let-else, return, pointer write, args count, for loop, unsigned negative, integer overflow, try operator (12 codes in `checker/stmt.cpp`, `expr.cpp`, `core.cpp`)
-- [ ] A.1.4 T136-T140: OOP/class — circular inheritance, override non-virtual, override signature, abstract methods (5 codes in `checker/core_oop.cpp`)
-- [ ] A.1.5 T146-T154: Decorators — @Controller, @flags, @value, @pool, @link, @extern ABI (9 codes in `checker/core.cpp`, `decl_struct.cpp`)
-- [ ] A.1.6 T156-T160: Misc — union literal, struct update base, pointer offset, function error (5 codes in `checker/expr.cpp`, `stmt.cpp`)
-- [ ] A.1.7 Verify: `tml check` on all test files still produces same errors (just with codes now)
+- [x] A.1.1 Deep audit: 83/87 grep hits were false positives (multi-line calls)
+- [x] A.1.2 Fixed T200 in resolve.cpp:132 — unknown behavior in dyn type
+- [x] A.1.3 Fixed T201 in resolve.cpp:140 — behavior not object-safe
+- [x] A.1.4 Fixed T200 in resolve.cpp:178 — unknown behavior in impl type
+- [x] A.1.5 Fixed T207 in types_checker.cpp:530 — undefined variable/function
+- [x] A.1.6 Verified: zero untagged error() calls remain in all 10 checker files
+- [x] A.1.7 Type checker: 79 → 83 codes (T001-T207). All tagged.
 
-### A.2 Legacy Codegen — 8 untagged errors → C036-C043
+### A.2 Legacy Codegen — NEEDS AUDIT (may also be false positives)
 
-- [ ] A.2.1 Add codes to 8 `report_error()` calls without code parameter in `compiler/src/codegen/llvm/`
-- [ ] A.2.2 Verify: existing codegen tests still pass
+- [ ] A.2.1 Deep audit: run multi-line grep on `compiler/src/codegen/llvm/` to find genuinely untagged `report_error()` calls
+- [ ] A.2.2 Tag any genuinely untagged calls with C036+
+- [ ] A.2.3 Verify: existing codegen tests still pass
 
 ## Phase B: User-Facing Error Improvements (HIGH value)
 
