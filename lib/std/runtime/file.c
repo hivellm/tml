@@ -12,6 +12,7 @@
 #include <direct.h>
 #include <io.h>
 #include <limits.h>
+#include <windows.h>
 #ifndef MAX_PATH
 #define MAX_PATH 260
 #endif
@@ -278,6 +279,398 @@ int64_t file_seek_from(TmlFile* file, int64_t offset, int32_t whence) {
         return -1;
     file->position = (int64_t)pos;
     return file->position;
+}
+
+// ============================================================================
+// Binary Read/Write Operations
+// ============================================================================
+
+// Read bytes from file into a buffer at the given pointer address
+// Returns actual number of bytes read
+int64_t file_read_bytes(TmlFile* file, int64_t buf_ptr, int64_t count) {
+    if (!file || !file->is_open || !buf_ptr || count <= 0)
+        return 0;
+    size_t read = fread((void*)buf_ptr, 1, (size_t)count, (FILE*)file->handle);
+    file->position += read;
+    return (int64_t)read;
+}
+
+// Write bytes from a buffer at the given pointer address to file
+// Returns actual number of bytes written
+int64_t file_write_bytes(TmlFile* file, int64_t buf_ptr, int64_t count) {
+    if (!file || !file->is_open || !buf_ptr || count <= 0)
+        return 0;
+    if (!(file->mode & (TML_FILE_WRITE | TML_FILE_APPEND)))
+        return 0;
+    size_t written = fwrite((void*)buf_ptr, 1, (size_t)count, (FILE*)file->handle);
+    file->position += written;
+    if (file->position > file->size) {
+        file->size = file->position;
+    }
+    return (int64_t)written;
+}
+
+// Get size of a file by path (for pre-allocating buffer)
+int64_t file_get_file_size(const char* path) {
+    if (!path)
+        return -1;
+    struct stat st;
+    if (stat(path, &st) != 0)
+        return -1;
+    return (int64_t)st.st_size;
+}
+
+// Read all bytes from a file into a buffer at the given pointer
+// Caller must ensure buf_ptr has enough capacity (use file_get_file_size first)
+// Returns actual bytes read
+int64_t file_read_all_bytes(const char* path, int64_t buf_ptr, int64_t buf_capacity) {
+    if (!path || !buf_ptr || buf_capacity <= 0)
+        return 0;
+
+    FILE* fp = fopen(path, "rb");
+    if (!fp)
+        return 0;
+
+    size_t read = fread((void*)buf_ptr, 1, (size_t)buf_capacity, fp);
+    fclose(fp);
+    return (int64_t)read;
+}
+
+// Write all bytes from a buffer to a file (overwrites)
+bool file_write_all_bytes(const char* path, int64_t buf_ptr, int64_t count) {
+    if (!path || !buf_ptr || count <= 0)
+        return false;
+
+    FILE* fp = fopen(path, "wb");
+    if (!fp)
+        return false;
+
+    size_t written = fwrite((void*)buf_ptr, 1, (size_t)count, fp);
+    fclose(fp);
+    return written == (size_t)count;
+}
+
+// ============================================================================
+// Directory Listing Operations
+// ============================================================================
+
+TmlDirList* dir_list(const char* path) {
+    if (!path)
+        return NULL;
+
+    TmlDirList* list = (TmlDirList*)malloc(sizeof(TmlDirList));
+    if (!list)
+        return NULL;
+
+    list->count = 0;
+    list->capacity = 32;
+    list->entries = (TmlDirEntry*)malloc(sizeof(TmlDirEntry) * list->capacity);
+    if (!list->entries) {
+        free(list);
+        return NULL;
+    }
+
+#ifdef _WIN32
+    // Windows: FindFirstFile/FindNextFile
+    size_t path_len = strlen(path);
+    char* search_path = (char*)malloc(path_len + 3);
+    if (!search_path) {
+        free(list->entries);
+        free(list);
+        return NULL;
+    }
+    memcpy(search_path, path, path_len);
+    // Append \* for search pattern
+    if (path_len > 0 && (path[path_len - 1] == '/' || path[path_len - 1] == '\\')) {
+        search_path[path_len] = '*';
+        search_path[path_len + 1] = '\0';
+    } else {
+        search_path[path_len] = '\\';
+        search_path[path_len + 1] = '*';
+        search_path[path_len + 2] = '\0';
+    }
+
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(search_path, &ffd);
+    free(search_path);
+
+    if (hFind == INVALID_HANDLE_VALUE)
+        return list; // Return empty list, not NULL
+
+    do {
+        // Skip . and ..
+        if (strcmp(ffd.cFileName, ".") == 0 || strcmp(ffd.cFileName, "..") == 0)
+            continue;
+
+        // Grow if needed
+        if (list->count >= list->capacity) {
+            list->capacity *= 2;
+            TmlDirEntry* new_entries =
+                (TmlDirEntry*)realloc(list->entries, sizeof(TmlDirEntry) * list->capacity);
+            if (!new_entries)
+                break;
+            list->entries = new_entries;
+        }
+
+        TmlDirEntry* entry = &list->entries[list->count];
+
+        // Name
+        size_t name_len = strlen(ffd.cFileName);
+        entry->name = (char*)malloc(name_len + 1);
+        if (!entry->name)
+            break;
+        memcpy(entry->name, ffd.cFileName, name_len + 1);
+
+        // Full path
+        size_t full_len = path_len + 1 + name_len;
+        entry->path = (char*)malloc(full_len + 1);
+        if (!entry->path) {
+            free(entry->name);
+            break;
+        }
+        memcpy(entry->path, path, path_len);
+        entry->path[path_len] = '/';
+        memcpy(entry->path + path_len + 1, ffd.cFileName, name_len + 1);
+
+        entry->is_dir = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        entry->is_file = !entry->is_dir;
+
+        list->count++;
+    } while (FindNextFileA(hFind, &ffd) != 0);
+
+    FindClose(hFind);
+#else
+    // POSIX: opendir/readdir
+    DIR* dir = opendir(path);
+    if (!dir)
+        return list;
+
+    struct dirent* de;
+    size_t path_len = strlen(path);
+
+    while ((de = readdir(dir)) != NULL) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+
+        if (list->count >= list->capacity) {
+            list->capacity *= 2;
+            TmlDirEntry* new_entries =
+                (TmlDirEntry*)realloc(list->entries, sizeof(TmlDirEntry) * list->capacity);
+            if (!new_entries)
+                break;
+            list->entries = new_entries;
+        }
+
+        TmlDirEntry* entry = &list->entries[list->count];
+
+        size_t name_len = strlen(de->d_name);
+        entry->name = (char*)malloc(name_len + 1);
+        if (!entry->name)
+            break;
+        memcpy(entry->name, de->d_name, name_len + 1);
+
+        size_t full_len = path_len + 1 + name_len;
+        entry->path = (char*)malloc(full_len + 1);
+        if (!entry->path) {
+            free(entry->name);
+            break;
+        }
+        memcpy(entry->path, path, path_len);
+        entry->path[path_len] = '/';
+        memcpy(entry->path + path_len + 1, de->d_name, name_len + 1);
+
+        // Use stat for is_file/is_dir
+        struct stat st;
+        if (stat(entry->path, &st) == 0) {
+            entry->is_file = S_ISREG(st.st_mode);
+            entry->is_dir = S_ISDIR(st.st_mode);
+        } else {
+            entry->is_file = false;
+            entry->is_dir = false;
+        }
+
+        list->count++;
+    }
+
+    closedir(dir);
+#endif
+
+    return list;
+}
+
+void dir_list_free(TmlDirList* list) {
+    if (!list)
+        return;
+    for (int64_t i = 0; i < list->count; i++) {
+        free(list->entries[i].name);
+        free(list->entries[i].path);
+    }
+    free(list->entries);
+    free(list);
+}
+
+int64_t dir_list_count(TmlDirList* list) {
+    return list ? list->count : 0;
+}
+
+const char* dir_entry_name(TmlDirList* list, int64_t index) {
+    if (!list || index < 0 || index >= list->count)
+        return "";
+    return list->entries[index].name;
+}
+
+const char* dir_entry_path(TmlDirList* list, int64_t index) {
+    if (!list || index < 0 || index >= list->count)
+        return "";
+    return list->entries[index].path;
+}
+
+bool dir_entry_is_file(TmlDirList* list, int64_t index) {
+    if (!list || index < 0 || index >= list->count)
+        return false;
+    return list->entries[index].is_file;
+}
+
+bool dir_entry_is_dir(TmlDirList* list, int64_t index) {
+    if (!list || index < 0 || index >= list->count)
+        return false;
+    return list->entries[index].is_dir;
+}
+
+bool path_remove_dir_all(const char* path) {
+    if (!path)
+        return false;
+
+#ifdef _WIN32
+    size_t path_len = strlen(path);
+    char* search_path = (char*)malloc(path_len + 3);
+    if (!search_path)
+        return false;
+    memcpy(search_path, path, path_len);
+    if (path_len > 0 && (path[path_len - 1] == '/' || path[path_len - 1] == '\\')) {
+        search_path[path_len] = '*';
+        search_path[path_len + 1] = '\0';
+    } else {
+        search_path[path_len] = '\\';
+        search_path[path_len + 1] = '*';
+        search_path[path_len + 2] = '\0';
+    }
+
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(search_path, &ffd);
+    free(search_path);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        // Directory might already be empty or not exist
+        return _rmdir(path) == 0;
+    }
+
+    bool success = true;
+    do {
+        if (strcmp(ffd.cFileName, ".") == 0 || strcmp(ffd.cFileName, "..") == 0)
+            continue;
+
+        size_t name_len = strlen(ffd.cFileName);
+        char* child = (char*)malloc(path_len + 1 + name_len + 1);
+        if (!child) {
+            success = false;
+            break;
+        }
+        memcpy(child, path, path_len);
+        child[path_len] = '\\';
+        memcpy(child + path_len + 1, ffd.cFileName, name_len + 1);
+
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!path_remove_dir_all(child))
+                success = false;
+        } else {
+            if (remove(child) != 0)
+                success = false;
+        }
+        free(child);
+    } while (FindNextFileA(hFind, &ffd) != 0);
+
+    FindClose(hFind);
+    if (success)
+        success = (_rmdir(path) == 0);
+    return success;
+#else
+    DIR* dir = opendir(path);
+    if (!dir)
+        return false;
+
+    size_t path_len = strlen(path);
+    struct dirent* de;
+    bool success = true;
+
+    while ((de = readdir(dir)) != NULL) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+
+        size_t name_len = strlen(de->d_name);
+        char* child = (char*)malloc(path_len + 1 + name_len + 1);
+        if (!child) {
+            success = false;
+            break;
+        }
+        memcpy(child, path, path_len);
+        child[path_len] = '/';
+        memcpy(child + path_len + 1, de->d_name, name_len + 1);
+
+        struct stat st;
+        if (stat(child, &st) == 0 && S_ISDIR(st.st_mode)) {
+            if (!path_remove_dir_all(child))
+                success = false;
+        } else {
+            if (remove(child) != 0)
+                success = false;
+        }
+        free(child);
+    }
+
+    closedir(dir);
+    if (success)
+        success = (rmdir(path) == 0);
+    return success;
+#endif
+}
+
+// ============================================================================
+// File Metadata Operations
+// ============================================================================
+
+int64_t file_metadata_size(const char* path) {
+    if (!path)
+        return -1;
+    struct stat st;
+    if (stat(path, &st) != 0)
+        return -1;
+    return (int64_t)st.st_size;
+}
+
+int64_t file_metadata_modified(const char* path) {
+    if (!path)
+        return -1;
+    struct stat st;
+    if (stat(path, &st) != 0)
+        return -1;
+    return (int64_t)st.st_mtime;
+}
+
+bool file_metadata_is_readonly(const char* path) {
+    if (!path)
+        return false;
+#ifdef _WIN32
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return false;
+    return (attrs & FILE_ATTRIBUTE_READONLY) != 0;
+#else
+    struct stat st;
+    if (stat(path, &st) != 0)
+        return false;
+    return (st.st_mode & S_IWUSR) == 0;
+#endif
 }
 
 // ============================================================================

@@ -1,0 +1,42 @@
+// Tests for HashMap keys/values methods
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+use std::collections::list::List
+
+@test
+func test_keys_and_values() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+
+    // Empty map
+    let k0 = map.keys()
+    assert_eq(k0.len(), 0, "keys of empty map should be empty")
+    k0.destroy()
+
+    let v0 = map.values()
+    assert_eq(v0.len(), 0, "values of empty map should be empty")
+    v0.destroy()
+
+    // With entries
+    map.set("a", 10)
+    map.set("b", 20)
+    map.set("c", 30)
+
+    let k = map.keys()
+    assert_eq(k.len(), 3, "should have 3 keys")
+    k.destroy()
+
+    let v = map.values()
+    assert_eq(v.len(), 3, "should have 3 values")
+    // Sum all values (order-independent check)
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < v.len()) {
+        sum = sum + v.get(i)
+        i = i + 1
+    }
+    assert_eq(sum, 60, "sum of values should be 60")
+    v.destroy()
+
+    map.destroy()
+    return 0
+}

@@ -1,0 +1,87 @@
+use test
+use std::file::File
+use std::collections::Buffer
+
+@test
+func test_write_and_read_bytes() -> Outcome[Unit, Str] {
+    // Write binary data to a file
+    let path: Str = ".sandbox/test_binary_io.bin"
+    var buf: Buffer = Buffer::new(8)
+    buf.write_byte(0x48)  // H
+    buf.write_byte(0x65)  // e
+    buf.write_byte(0x6C)  // l
+    buf.write_byte(0x6C)  // l
+    buf.write_byte(0x6F)  // o
+
+    let file_w: File = File::open_write(path)
+    let written: I64 = file_w.write_bytes(buf)
+    file_w.close()
+
+    assert_eq(written, 5)
+
+    // Read it back
+    let file_r: File = File::open_read(path)
+    let read_buf: Buffer = file_r.read_bytes(5)
+    file_r.close()
+
+    assert_eq(read_buf.len(), 5)
+    assert_eq(read_buf.get(0), 0x48)
+    assert_eq(read_buf.get(1), 0x65)
+    assert_eq(read_buf.get(2), 0x6C)
+    assert_eq(read_buf.get(3), 0x6C)
+    assert_eq(read_buf.get(4), 0x6F)
+
+    Ok(())
+}
+
+@test
+func test_read_all_bytes_write_all_bytes() -> Outcome[Unit, Str] {
+    let path: Str = ".sandbox/test_binary_all.bin"
+
+    // Create binary data
+    var data: Buffer = Buffer::new(10)
+    data.write_byte(0xFF)
+    data.write_byte(0x00)
+    data.write_byte(0xAB)
+    data.write_byte(0xCD)
+
+    // Write all bytes
+    let ok: Bool = File::write_all_bytes(path, data)
+    assert_true(ok)
+
+    // Read all bytes
+    let result: Buffer = File::read_all_bytes(path)
+    assert_eq(result.len(), 4)
+    assert_eq(result.get(0), 0xFF)
+    assert_eq(result.get(1), 0x00)
+    assert_eq(result.get(2), 0xAB)
+    assert_eq(result.get(3), 0xCD)
+
+    Ok(())
+}
+
+@test
+func test_read_bytes_partial() -> Outcome[Unit, Str] {
+    let path: Str = ".sandbox/test_binary_partial.bin"
+
+    // Write 10 bytes
+    var data: Buffer = Buffer::new(10)
+    var i: I64 = 0
+    loop (i < 10) {
+        data.write_byte(i as I32)
+        i = i + 1
+    }
+    File::write_all_bytes(path, data)
+
+    // Read only 3 bytes
+    let file_r: File = File::open_read(path)
+    let partial: Buffer = file_r.read_bytes(3)
+    file_r.close()
+
+    assert_eq(partial.len(), 3)
+    assert_eq(partial.get(0), 0)
+    assert_eq(partial.get(1), 1)
+    assert_eq(partial.get(2), 2)
+
+    Ok(())
+}

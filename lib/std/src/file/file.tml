@@ -54,6 +54,54 @@ func ffi_file_write_all(path: Str, content: Str) -> Bool
 @extern("file_append_all")
 func ffi_file_append_all(path: Str, content: Str) -> Bool
 
+// Binary I/O FFI declarations
+@extern("file_read_bytes")
+func ffi_file_read_bytes(handle: *Unit, buf_ptr: I64, count: I64) -> I64
+
+@extern("file_write_bytes")
+func ffi_file_write_bytes(handle: *Unit, buf_ptr: I64, count: I64) -> I64
+
+@extern("file_get_file_size")
+func ffi_file_get_file_size(path: Str) -> I64
+
+@extern("file_read_all_bytes")
+func ffi_file_read_all_bytes(path: Str, buf_ptr: I64, buf_capacity: I64) -> I64
+
+@extern("file_write_all_bytes")
+func ffi_file_write_all_bytes(path: Str, buf_ptr: I64, count: I64) -> Bool
+
+// File metadata FFI declarations
+@extern("file_metadata_size")
+func ffi_file_metadata_size(path: Str) -> I64
+
+@extern("file_metadata_modified")
+func ffi_file_metadata_modified(path: Str) -> I64
+
+@extern("file_metadata_is_readonly")
+func ffi_file_metadata_is_readonly(path: Str) -> Bool
+
+use std::collections::Buffer
+
+/// Metadata about a file or directory.
+///
+/// Contains size, modification time, and permission information.
+///
+/// # Example
+///
+/// ```tml
+/// let meta: FileMetadata = File::metadata("config.txt")
+/// print(meta.size.to_string())
+/// ```
+pub type FileMetadata {
+    /// Size in bytes. -1 if the file does not exist.
+    size: I64,
+    /// Last modification time as a Unix timestamp (seconds since epoch).
+    /// -1 if unavailable.
+    modified: I64,
+    /// True if the file is read-only.
+    is_readonly: Bool
+}
+
 /// A file handle for reading and writing operations.
 ///
 /// `File` provides both instance methods for streaming I/O
@@ -119,6 +167,54 @@ impl File {
         ffi_file_close(this.handle)
     }
 
+    /// Read binary data from the file into a Buffer.
+    ///
+    /// Reads up to `count` bytes from the current file position.
+    /// Returns a Buffer containing the bytes actually read.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let file = File::open_read("image.png")
+    /// let header: Buffer = file.read_bytes(8)
+    /// file.close()
+    /// ```
+    pub func read_bytes(this, count: I64) -> Buffer {
+        var buf: Buffer = Buffer::new(count)
+        if count <= 0 {
+            return buf
+        }
+        // Allocate temp buffer, read into it, copy to Buffer, free temp
+        let tmp: *Unit = lowlevel { mem_alloc(count) }
+        let n: I64 = ffi_file_read_bytes(this.handle, tmp as I64, count)
+        if n > 0 {
+            buf.write_from_ptr(tmp as I64, n)
+        }
+        lowlevel { mem_free(tmp) }
+        return buf
+    }
+
+    /// Write binary data from a Buffer to the file.
+    ///
+    /// Writes the entire contents of the buffer.
+    /// Returns the number of bytes actually written.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let file = File::open_write("output.bin")
+    /// var buf: Buffer = Buffer::new(4)
+    /// buf.write_byte(0x89)
+    /// buf.write_byte(0x50)
+    /// let written: I64 = file.write_bytes(buf)
+    /// file.close()
+    /// ```
+    pub func write_bytes(this, data: Buffer) -> I64 {
+        let ptr: I64 = data.data_ptr()
+        let count: I64 = data.len()
+        return ffi_file_write_bytes(this.handle, ptr, count)
+    }
+
     // ========== Static utility functions ==========
 
     /// Read entire file contents as a string
@@ -136,6 +232,74 @@ impl File {
     /// Append content to a file
     pub func append_all(path: Str, content: Str) -> Bool {
         return ffi_file_append_all(path, content)
+    }
+
+    /// Read entire file contents as binary data.
+    ///
+    /// Returns a Buffer containing all bytes from the file.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let data: Buffer = File::read_all_bytes("image.png")
+    /// print(data.len().to_string())
+    /// ```
+    pub func read_all_bytes(path: Str) -> Buffer {
+        let file_size: I64 = ffi_file_get_file_size(path)
+        if file_size <= 0 {
+            return Buffer::new(0)
+        }
+        var buf: Buffer = Buffer::new(file_size)
+        // Allocate temp buffer, read into it, copy to Buffer, free temp
+        let tmp: *Unit = lowlevel { mem_alloc(file_size) }
+        let n: I64 = ffi_file_read_all_bytes(path, tmp as I64, file_size)
+        if n > 0 {
+            buf.write_from_ptr(tmp as I64, n)
+        }
+        lowlevel { mem_free(tmp) }
+        return buf
+    }
+
+    /// Write binary data to a file (overwrites if exists).
+    ///
+    /// Returns true if all bytes were written successfully.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var buf: Buffer = Buffer::new(16)
+    /// buf.write_str("hello binary")
+    /// File::write_all_bytes("output.bin", buf)
+    /// ```
+    pub func write_all_bytes(path: Str, data: Buffer) -> Bool {
+        let ptr: I64 = data.data_ptr()
+        let count: I64 = data.len()
+        return ffi_file_write_all_bytes(path, ptr, count)
+    }
+
+    /// Get metadata for a file or directory.
+    ///
+    /// Returns a `FileMetadata` with size, modification time, and
+    /// permission information. If the path does not exist, `size`
+    /// and `modified` will be -1.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let meta: FileMetadata = File::metadata("config.txt")
+    /// if meta.size >= 0 {
+    ///     print("Size: " + meta.size.to_string())
+    /// }
+    /// ```
+    pub func metadata(path: Str) -> FileMetadata {
+        let s: I64 = ffi_file_metadata_size(path)
+        let m: I64 = ffi_file_metadata_modified(path)
+        let ro: Bool = ffi_file_metadata_is_readonly(path)
+        return FileMetadata {
+            size: s,
+            modified: m,
+            is_readonly: ro
+        }
     }
 }
 

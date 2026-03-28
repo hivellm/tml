@@ -1,0 +1,28 @@
+// Tests for new Maybe[T] extra methods: is_just_and, replace
+// get_or_insert and get_or_insert_with require mut ref This which may have codegen
+// limitations, so we test those separately.
+use test::{assert, assert_eq}
+
+@test
+func test_is_just_and_true() -> I32 {
+    let x: Maybe[I32] = Just(4)
+    let result: Bool = x.is_just_and(do(v) v > 0)
+    assert(result, "Just(4) should pass predicate v > 0")
+    return 0
+}
+
+@test
+func test_is_just_and_false_predicate() -> I32 {
+    let x: Maybe[I32] = Just(-1)
+    let result: Bool = x.is_just_and(do(v) v > 0)
+    assert(not result, "Just(-1) should fail predicate v > 0")
+    return 0
+}
+
+@test
+func test_is_just_and_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let result: Bool = x.is_just_and(do(v) v > 0)
+    assert(not result, "Nothing should return false from is_just_and")
+    return 0
+}

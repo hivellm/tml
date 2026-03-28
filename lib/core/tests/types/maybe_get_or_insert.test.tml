@@ -1,0 +1,36 @@
+// Tests for Maybe::get_or_insert and get_or_insert_with
+// Note: These return Unit (not ref T) due to codegen limitations with
+// mut ref This + inner reference return. They still correctly mutate the option.
+use test::{assert, assert_eq}
+
+@test
+func test_get_or_insert_on_nothing() -> I32 {
+    var x: Maybe[I32] = Nothing
+    x.get_or_insert(5)
+    assert(x == Just(5), "x should be Just(5) after get_or_insert")
+    return 0
+}
+
+@test
+func test_get_or_insert_on_just_does_not_change() -> I32 {
+    var x: Maybe[I32] = Just(3)
+    x.get_or_insert(99)
+    assert(x == Just(3), "x should remain Just(3)")
+    return 0
+}
+
+@test
+func test_get_or_insert_with_on_nothing() -> I32 {
+    var x: Maybe[I32] = Nothing
+    x.get_or_insert_with(do() 42)
+    assert(x == Just(42), "x should be Just(42)")
+    return 0
+}
+
+@test
+func test_get_or_insert_with_on_just_does_not_call_closure() -> I32 {
+    var x: Maybe[I32] = Just(7)
+    x.get_or_insert_with(do() 99)
+    assert(x == Just(7), "x should remain Just(7)")
+    return 0
+}

@@ -1,0 +1,77 @@
+use test
+use std::file::{File, Dir, DirEntry, Path}
+use std::collections::List
+
+@test
+func test_read_dir_basic() -> Outcome[Unit, Str] {
+    // Create a test directory with known contents
+    let dir_path: Str = ".sandbox/test_read_dir"
+    Dir::create_all(dir_path)
+    File::write_all(".sandbox/test_read_dir/a.txt", "aaa")
+    File::write_all(".sandbox/test_read_dir/b.txt", "bbb")
+    Dir::create(".sandbox/test_read_dir/subdir")
+
+    let entries: List[DirEntry] = Dir::read_dir(dir_path)
+    assert_eq(entries.len(), 3)
+
+    // Check that we can find our files (order is OS-dependent)
+    var found_a: Bool = false
+    var found_b: Bool = false
+    var found_subdir: Bool = false
+    var i: I64 = 0
+    loop (i < entries.len()) {
+        let e: DirEntry = entries.get(i)
+        if e.name == "a.txt" {
+            found_a = true
+            assert_true(e.is_file)
+            assert_true(not e.is_dir)
+        }
+        if e.name == "b.txt" {
+            found_b = true
+            assert_true(e.is_file)
+        }
+        if e.name == "subdir" {
+            found_subdir = true
+            assert_true(e.is_dir)
+            assert_true(not e.is_file)
+        }
+        i = i + 1
+    }
+
+    assert_true(found_a)
+    assert_true(found_b)
+    assert_true(found_subdir)
+
+    // Cleanup
+    Dir::remove_all(dir_path)
+
+    Ok(())
+}
+
+@test
+func test_remove_all() -> Outcome[Unit, Str] {
+    let root: Str = ".sandbox/test_remove_all"
+    Dir::create_all(".sandbox/test_remove_all/nested/deep")
+    File::write_all(".sandbox/test_remove_all/file1.txt", "data")
+    File::write_all(".sandbox/test_remove_all/nested/file2.txt", "data")
+    File::write_all(".sandbox/test_remove_all/nested/deep/file3.txt", "data")
+
+    assert_true(Path::exists(root))
+    let ok: Bool = Dir::remove_all(root)
+    assert_true(ok)
+    assert_true(not Path::exists(root))
+
+    Ok(())
+}
+
+@test
+func test_read_dir_empty() -> Outcome[Unit, Str] {
+    let dir_path: Str = ".sandbox/test_read_dir_empty"
+    Dir::create_all(dir_path)
+
+    let entries: List[DirEntry] = Dir::read_dir(dir_path)
+    assert_eq(entries.len(), 0)
+
+    Dir::remove(dir_path)
+    Ok(())
+}

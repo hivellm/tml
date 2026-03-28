@@ -72,6 +72,7 @@
 use core::iter::*
 // PartialEq is a builtin behavior - no import needed
 use core::traits::default::Default
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // ============================================================================
 // Maybe[T] Type (defined in std::types, enhanced here)
@@ -647,6 +648,109 @@ impl[T] Maybe[T] {
 }
 
 // ============================================================================
+// Mutation and Insertion
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns `true` if the option is a `Just` value and the predicate returns `true`.
+    ///
+    /// Returns `false` if the option is `Nothing`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x: Maybe[I64] = Just(4)
+    /// assert(x.is_just_and(do(v) v > 0))
+    ///
+    /// let y: Maybe[I64] = Nothing
+    /// assert(not y.is_just_and(do(v) v > 0))
+    /// ```
+    pub func is_just_and(this, pred: func(ref T) -> Bool) -> Bool {
+        when this {
+            Just(val) => return pred(ref val),
+            Nothing => return false,
+        }
+    }
+
+    /// Inserts `value` into the option if it is `Nothing`, ensuring the option
+    /// contains a value. Returns the contained value after insertion.
+    ///
+    /// Note: Returns by value (T) rather than by reference due to current
+    /// compiler limitations with `mut ref This` + inner reference return.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var x: Maybe[I64] = Nothing
+    /// x.get_or_insert(5)
+    /// assert(x == Just(5))
+    ///
+    /// var y: Maybe[I64] = Just(3)
+    /// y.get_or_insert(99)
+    /// assert(y == Just(3))  // unchanged
+    /// ```
+    pub func get_or_insert(mut this: mut ref This, value: T) {
+        let ptr: Ptr[Maybe[T]] = lowlevel { this as Ptr[Maybe[T]] }
+        let current: Maybe[T] = ptr_read[Maybe[T]](ptr)
+        when current {
+            Nothing => {
+                let new_val: Maybe[T] = Just(value)
+                ptr_write[Maybe[T]](ptr, new_val)
+            },
+            Just(_) => {}
+        }
+    }
+
+    /// Inserts a value computed by `f` into the option if it is `Nothing`,
+    /// ensuring the option contains a value.
+    ///
+    /// Note: Does not return a reference due to current compiler limitations.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var x: Maybe[I64] = Nothing
+    /// x.get_or_insert_with(do() 42)
+    /// assert(x == Just(42))
+    /// ```
+    pub func get_or_insert_with(mut this: mut ref This, f: func() -> T) {
+        let ptr: Ptr[Maybe[T]] = lowlevel { this as Ptr[Maybe[T]] }
+        let current: Maybe[T] = ptr_read[Maybe[T]](ptr)
+        when current {
+            Nothing => {
+                let new_val: Maybe[T] = Just(f())
+                ptr_write[Maybe[T]](ptr, new_val)
+            },
+            Just(_) => {}
+        }
+    }
+
+    /// Replaces the current value in the option with `value`, returning the old value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var x: Maybe[I64] = Just(2)
+    /// let old: Maybe[I64] = x.replace(5)
+    /// assert(old == Just(2))
+    /// assert(x == Just(5))
+    ///
+    /// var y: Maybe[I64] = Nothing
+    /// let old2: Maybe[I64] = y.replace(3)
+    /// assert(old2 == Nothing)
+    /// assert(y == Just(3))
+    /// ```
+    pub func replace(mut this: mut ref This, value: T) -> Maybe[T] {
+        let ptr: Ptr[Maybe[T]] = lowlevel { this as Ptr[Maybe[T]] }
+        let old: Maybe[T] = ptr_read[Maybe[T]](ptr)
+        let new_val: Maybe[T] = Just(value)
+        ptr_write[Maybe[T]](ptr, new_val)
+        return old
+    }
+
+}
+
+// ============================================================================
 // Flattening
 // ============================================================================
 
@@ -671,6 +775,41 @@ impl[T] Maybe[Maybe[T]] {
         when this {
             Just(inner) => return inner,
             Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Unzipping
+// ============================================================================
+
+impl[A, B] Maybe[(A, B)] {
+    /// Unzips a `Maybe` of a pair into two `Maybe` values.
+    ///
+    /// If `self` is `Just((a, b))`, returns `(Just(a), Just(b))`.
+    /// If `self` is `Nothing`, returns `(Nothing, Nothing)`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x: Maybe[(I64, I64)] = Just((1, 2))
+    /// let (a, b) = x.unzip()
+    /// assert(a == Just(1))
+    /// assert(b == Just(2))
+    ///
+    /// let y: Maybe[(I64, I64)] = Nothing
+    /// let (c, d) = y.unzip()
+    /// assert(c == Nothing)
+    /// assert(d == Nothing)
+    /// ```
+    pub func unzip(this) -> (Maybe[A], Maybe[B]) {
+        when this {
+            Just(pair) => return (Just(pair.0), Just(pair.1)),
+            Nothing => {
+                let na: Maybe[A] = Nothing
+                let nb: Maybe[B] = Nothing
+                return (na, nb)
+            }
         }
     }
 }

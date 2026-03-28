@@ -1,0 +1,36 @@
+// Tests for bounded channel: sync_channel, SyncSender, BoundedReceiver
+use test::{assert, assert_eq}
+use std::sync::mpsc::{sync_channel, SyncSender, BoundedReceiver}
+
+@test
+func test_sync_channel_basic_send_recv() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](2)
+    let tx: SyncSender[I32] = result.0
+    var rx: BoundedReceiver[I32] = result.1
+
+    let _ = tx.send(42)
+    let val: I32 = rx.recv().unwrap()
+    assert_eq(val, 42, "should receive sent value")
+    return 0
+}
+
+@test
+func test_sync_channel_capacity() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](3)
+    let tx: SyncSender[I32] = result.0
+    let rx: BoundedReceiver[I32] = result.1
+    assert_eq(rx.capacity(), 3 as I64, "capacity should match bound")
+    return 0
+}
+
+@test
+func test_sync_channel_len() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](4)
+    let tx: SyncSender[I32] = result.0
+    let rx: BoundedReceiver[I32] = result.1
+    assert_eq(rx.len(), 0 as I64, "new channel len should be 0")
+    let _ = tx.send(1)
+    let _ = tx.send(2)
+    assert_eq(rx.len(), 2 as I64, "len should be 2 after two sends")
+    return 0
+}

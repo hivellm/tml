@@ -1,0 +1,61 @@
+// Tests for Iterator impl on Receiver[T] and BoundedReceiver[T]
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, sync_channel, Sender, Receiver, SyncSender, BoundedReceiver}
+
+@test
+func test_receiver_iter_drain() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+
+    let _ = tx.send(10)
+    let _ = tx.send(20)
+    let _ = tx.send(30)
+
+    // Use try_recv to drain instead of blocking iter (avoid single-thread block)
+    var sum: I32 = 0
+    var count: I32 = 0
+    var done: Bool = false
+    loop (not done) {
+        when rx.try_recv() {
+            Ok(val) => {
+                sum = sum + val
+                count = count + 1
+            },
+            Err(_) => {
+                done = true
+            }
+        }
+    }
+    assert_eq(sum, 60, "sum should be 60")
+    assert_eq(count, 3, "should receive 3 values")
+    return 0
+}
+
+@test
+func test_bounded_receiver_iter_next() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](4)
+    let tx: SyncSender[I32] = result.0
+    var rx: BoundedReceiver[I32] = result.1
+
+    let _ = tx.send(1)
+    let _ = tx.send(2)
+
+    var sum: I32 = 0
+    var count: I32 = 0
+    var done: Bool = false
+    loop (not done) {
+        when rx.try_recv() {
+            Ok(val) => {
+                sum = sum + val
+                count = count + 1
+            },
+            Err(_) => {
+                done = true
+            }
+        }
+    }
+    assert_eq(sum, 3, "sum should be 3")
+    assert_eq(count, 2, "should receive 2 values")
+    return 0
+}

@@ -1,17 +1,21 @@
 //! Directory operations.
 //!
 //! Provides the [`Dir`] type for creating, removing, and
-//! managing directories.
+//! managing directories, and [`DirEntry`] for directory listing results.
 //!
 //! # Example
 //!
 //! ```tml
-//! use std::file::Dir
+//! use std::file::{Dir, DirEntry}
 //!
 //! Dir::create("output")
 //! Dir::create_all("a/b/c")
+//!
+//! let entries: List[DirEntry] = Dir::read_dir("src")
 //! Dir::remove("output")
 //! ```
+
+use std::collections::List
 
 // FFI declarations for C runtime directory operations
 @extern("path_create_dir")
@@ -23,9 +27,64 @@ func ffi_path_create_dir_all(path: Str) -> Bool
 @extern("path_remove_dir")
 func ffi_path_remove_dir(path: Str) -> Bool
 
+@extern("path_remove_dir_all")
+func ffi_path_remove_dir_all(path: Str) -> Bool
+
+// Directory listing FFI
+@extern("dir_list")
+func ffi_dir_list(path: Str) -> *Unit
+
+@extern("dir_list_free")
+func ffi_dir_list_free(handle: *Unit)
+
+@extern("dir_list_count")
+func ffi_dir_list_count(handle: *Unit) -> I64
+
+@allocates
+@extern("dir_entry_name")
+func ffi_dir_entry_name(handle: *Unit, index: I64) -> Str
+
+@allocates
+@extern("dir_entry_path")
+func ffi_dir_entry_path(handle: *Unit, index: I64) -> Str
+
+@extern("dir_entry_is_file")
+func ffi_dir_entry_is_file(handle: *Unit, index: I64) -> Bool
+
+@extern("dir_entry_is_dir")
+func ffi_dir_entry_is_dir(handle: *Unit, index: I64) -> Bool
+
+/// A directory entry returned by [`Dir::read_dir`].
+///
+/// Contains the name, full path, and type information for a
+/// file or subdirectory within a listed directory.
+///
+/// # Example
+///
+/// ```tml
+/// let entries: List[DirEntry] = Dir::read_dir("src")
+/// var i: I64 = 0
+/// loop (i < entries.len()) {
+///     let e: DirEntry = entries.get(i)
+///     print(e.name)
+///     i = i + 1
+/// }
+/// ```
+pub type DirEntry {
+    /// The file or directory name (without path prefix).
+    name: Str,
+    /// The full path to the entry.
+    path: Str,
+    /// True if this entry is a regular file.
+    is_file: Bool,
+    /// True if this entry is a directory.
+    is_dir: Bool
+}
+
 /// Directory manipulation utilities.
 ///
-/// `Dir` provides static methods for creating and removing directories.
+/// `Dir` provides static methods for creating, removing,
+/// and listing directories.
 ///
 /// # Example
 ///
@@ -52,5 +111,62 @@ impl Dir {
     /// Remove an empty directory
     pub func remove(path: Str) -> Bool {
         return ffi_path_remove_dir(path)
+    }
+
+    /// Remove a directory and all its contents recursively.
+    ///
+    /// Deletes all files and subdirectories within the given path,
+    /// then removes the directory itself.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// Dir::create_all("tmp/a/b")
+    /// File::write_all("tmp/a/b/test.txt", "hello")
+    /// Dir::remove_all("tmp")  // removes everything
+    /// ```
+    pub func remove_all(path: Str) -> Bool {
+        return ffi_path_remove_dir_all(path)
+    }
+
+    /// List the contents of a directory.
+    ///
+    /// Returns a `List[DirEntry]` containing all files and subdirectories
+    /// in the given path. The `.` and `..` entries are excluded.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let entries: List[DirEntry] = Dir::read_dir("src")
+    /// var i: I64 = 0
+    /// loop (i < entries.len()) {
+    ///     let e: DirEntry = entries.get(i)
+    ///     if e.is_file {
+    ///         print(e.name + "\n")
+    ///     }
+    ///     i = i + 1
+    /// }
+    /// ```
+    pub func read_dir(path: Str) -> List[DirEntry] {
+        var result: List[DirEntry] = List::new()
+        let handle: *Unit = ffi_dir_list(path)
+        let count: I64 = ffi_dir_list_count(handle)
+        var i: I64 = 0
+        loop (i < count) {
+            let entry_name: Str = ffi_dir_entry_name(handle, i)
+            let entry_path: Str = ffi_dir_entry_path(handle, i)
+            let entry_is_file: Bool = ffi_dir_entry_is_file(handle, i)
+            let entry_is_dir: Bool = ffi_dir_entry_is_dir(handle, i)
+            let entry: DirEntry = DirEntry {
+                name: entry_name,
+                path: entry_path,
+                is_file: entry_is_file,
+                is_dir: entry_is_dir
+            }
+            result.push(entry)
+            i = i + 1
+        }
+        ffi_dir_list_free(handle)
+        return result
     }
 }

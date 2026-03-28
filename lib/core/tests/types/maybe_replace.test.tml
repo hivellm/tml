@@ -1,0 +1,31 @@
+// Tests for Maybe::replace — swaps current value, returns old
+use test::{assert, assert_eq}
+
+@test
+func test_replace_just_with_new_value() -> I32 {
+    var x: Maybe[I32] = Just(2)
+    let old: Maybe[I32] = x.replace(5)
+    assert(old == Just(2), "old value should be Just(2)")
+    assert(x == Just(5), "x should be updated to Just(5)")
+    return 0
+}
+
+@test
+func test_replace_nothing_inserts_value() -> I32 {
+    var y: Maybe[I32] = Nothing
+    let old: Maybe[I32] = y.replace(3)
+    assert(old == Nothing, "old value should be Nothing")
+    assert(y == Just(3), "y should be updated to Just(3)")
+    return 0
+}
+
+@test
+func test_replace_overwrites_repeatedly() -> I32 {
+    var x: Maybe[I32] = Just(1)
+    let old1: Maybe[I32] = x.replace(2)
+    let old2: Maybe[I32] = x.replace(3)
+    assert(old1 == Just(1), "first old should be Just(1)")
+    assert(old2 == Just(2), "second old should be Just(2)")
+    assert(x == Just(3), "x should be Just(3) after two replaces")
+    return 0
+}

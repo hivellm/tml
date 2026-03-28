@@ -1,0 +1,24 @@
+use test
+use std::file::{File, FileMetadata}
+
+@test
+func test_metadata_existing_file() -> Outcome[Unit, Str] {
+    let path: Str = ".sandbox/test_meta.txt"
+    File::write_all(path, "hello world")
+
+    let meta: FileMetadata = File::metadata(path)
+    assert_eq(meta.size, 11)
+    assert_true(meta.modified > 0)
+    assert_true(not meta.is_readonly)
+
+    Ok(())
+}
+
+@test
+func test_metadata_nonexistent() -> Outcome[Unit, Str] {
+    let meta: FileMetadata = File::metadata(".sandbox/nonexistent_xyz_123.txt")
+    assert_eq(meta.size, -1)
+    assert_eq(meta.modified, -1)
+
+    Ok(())
+}

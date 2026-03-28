@@ -1,0 +1,21 @@
+// Tests for HashMap get_or_set
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_get_or_set() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+
+    // Key doesn't exist — should insert and return default
+    let v1 = map.get_or_set("x", 42)
+    assert_eq(v1, 42, "should return default 42")
+    assert_eq(map.len(), 1, "should have 1 entry")
+
+    // Key exists — should return existing value
+    let v2 = map.get_or_set("x", 99)
+    assert_eq(v2, 42, "should return existing 42, not 99")
+    assert_eq(map.len(), 1, "should still have 1 entry")
+
+    map.destroy()
+    return 0
+}

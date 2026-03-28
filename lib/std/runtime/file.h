@@ -72,6 +72,41 @@ bool path_remove_dir(const char* path);
 bool path_rename(const char* from, const char* to);
 bool path_copy(const char* from, const char* to);
 
+// Binary read/write
+int64_t file_read_bytes(TmlFile* file, int64_t buf_ptr, int64_t count);
+int64_t file_write_bytes(TmlFile* file, int64_t buf_ptr, int64_t count);
+int64_t file_read_all_bytes(const char* path, int64_t buf_ptr, int64_t buf_capacity);
+int64_t file_get_file_size(const char* path);
+bool file_write_all_bytes(const char* path, int64_t buf_ptr, int64_t count);
+
+// Directory listing
+typedef struct {
+    char* name;
+    char* path;
+    bool is_file;
+    bool is_dir;
+} TmlDirEntry;
+
+typedef struct {
+    TmlDirEntry* entries;
+    int64_t count;
+    int64_t capacity;
+} TmlDirList;
+
+TmlDirList* dir_list(const char* path);
+void dir_list_free(TmlDirList* list);
+int64_t dir_list_count(TmlDirList* list);
+const char* dir_entry_name(TmlDirList* list, int64_t index);
+const char* dir_entry_path(TmlDirList* list, int64_t index);
+bool dir_entry_is_file(TmlDirList* list, int64_t index);
+bool dir_entry_is_dir(TmlDirList* list, int64_t index);
+bool path_remove_dir_all(const char* path);
+
+// File metadata
+int64_t file_metadata_size(const char* path);
+int64_t file_metadata_modified(const char* path);
+bool file_metadata_is_readonly(const char* path);
+
 // Path manipulation (returns malloc'd strings)
 char* path_join(const char* base, const char* child);
 char* path_parent(const char* path);

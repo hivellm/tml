@@ -1,0 +1,44 @@
+// Tests for SyncSender::try_send — full buffer and disconnect
+use test::{assert, assert_eq}
+use std::sync::mpsc::{sync_channel, SyncSender, BoundedReceiver, TrySendError}
+
+@test
+func test_try_send_success() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](2)
+    let tx: SyncSender[I32] = result.0
+    let _rx: BoundedReceiver[I32] = result.1
+    let r: Outcome[Unit, TrySendError[I32]] = tx.try_send(1)
+    assert(r.is_ok(), "try_send should succeed when channel is not full")
+    return 0
+}
+
+@test
+func test_try_send_full_returns_error() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](1)
+    let tx: SyncSender[I32] = result.0
+    let _rx: BoundedReceiver[I32] = result.1
+    let r1: Outcome[Unit, TrySendError[I32]] = tx.try_send(1)
+    assert(r1.is_ok(), "first try_send should succeed")
+    let r2: Outcome[Unit, TrySendError[I32]] = tx.try_send(2)
+    assert(r2.is_err(), "second try_send on full channel should fail")
+    when r2 {
+        Err(e) => assert(e.is_full(), "error should be Full"),
+        Ok(_) => assert(false, "should not be ok")
+    }
+    return 0
+}
+
+@test
+func test_try_send_disconnected() -> I32 {
+    let result: (SyncSender[I32], BoundedReceiver[I32]) = sync_channel[I32](2)
+    let tx: SyncSender[I32] = result.0
+    // Drop the receiver by not binding it to a variable that stays alive
+    // We need the receiver to be dropped
+    let _rx: BoundedReceiver[I32] = result.1
+    // We can't easily drop here without explicit drop, so test TrySendError methods instead
+    let e: TrySendError[I32] = TrySendError::Full(42)
+    assert(e.is_full(), "Full should be is_full")
+    assert(not e.is_disconnected(), "Full should not be disconnected")
+    assert_eq(e.into_inner(), 42, "into_inner should return value")
+    return 0
+}

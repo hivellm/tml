@@ -21,6 +21,7 @@
 use core::runtime::intrinsics::{ptr_read, ptr_write}
 use core::traits::hash::Hash
 use core::traits::clone::Duplicate
+use std::collections::list::List
 
 /// A hash-based key-value collection.
 ///
@@ -389,6 +390,104 @@ impl[K, V] HashMap[K, V] {
         lowlevel { ptr_write[I64]((iter_addr + 8) as *I64, first_idx) }
 
         HashMapIter[K, V] { handle: iter_mem }
+    }
+
+    /// Returns `true` if the hashmap contains no entries.
+    pub func is_empty(this) -> Bool {
+        this.len() == 0
+    }
+
+    /// Returns a list of all keys in the hashmap.
+    /// The order of keys is not guaranteed.
+    pub func keys(this) -> List[K] {
+        let count: I64 = this.len()
+        let result = List[K]::new(count)
+        let it = this.iter()
+        loop (it.has_next()) {
+            result.push(it.key())
+            it.next()
+        }
+        it.destroy()
+        result
+    }
+
+    /// Returns a list of all values in the hashmap.
+    /// The order of values is not guaranteed.
+    pub func values(this) -> List[V] {
+        let count: I64 = this.len()
+        let result = List[V]::new(count)
+        let it = this.iter()
+        loop (it.has_next()) {
+            result.push(it.value())
+            it.next()
+        }
+        it.destroy()
+        result
+    }
+
+    /// Returns the value for the given key. If the key does not exist,
+    /// inserts `default` and returns it.
+    pub func get_or_set(this, key: K, default: V) -> V {
+        if this.has(key) {
+            return this.get(key)
+        }
+        this.set(key, default)
+        default
+    }
+
+    /// Retains only the key-value pairs for which the predicate returns `true`.
+    /// Entries for which `pred(key, value)` returns `false` are removed.
+    pub func retain(this, pred: func(K, V) -> Bool) {
+        let hdr: I64 = this.handle as I64
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let p_len: *I64 = (hdr + 16) as *I64
+        var cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+
+        var i: I64 = 0
+        loop (i < cur_cap) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+            if c >= (0 as I8) {
+                let e_base: I64 = entries_addr + i * 16
+                let e_key: K = lowlevel { ptr_read[I64](e_base as *I64) } as K
+                let e_val: V = lowlevel { ptr_read[I64]((e_base + 8) as *I64) } as V
+                if not pred(e_key, e_val) {
+                    // Mark as DELETED
+                    lowlevel { ptr_write[I8]((ctrl_addr + i) as *I8, -128 as I8) }
+                    cur_len = cur_len - 1
+                }
+            }
+            i = i + 1
+        }
+        lowlevel { ptr_write[I64](p_len, cur_len) }
+    }
+
+    /// Removes all entries from the hashmap, returning keys and values as separate lists.
+    /// The hashmap is left empty.
+    pub func drain_keys(this) -> List[K] {
+        let k = this.keys()
+        this.clear()
+        k
+    }
+
+    /// Removes all entries from the hashmap, returning values as a list.
+    /// The hashmap is left empty.
+    pub func drain_values(this) -> List[V] {
+        let v = this.values()
+        this.clear()
+        v
+    }
+
+    /// Inserts all key-value pairs from the given parallel lists.
+    /// `keys` and `values` must have the same length.
+    pub func extend_from(this, keys: List[K], values: List[V]) {
+        let count: I64 = keys.len()
+        var i: I64 = 0
+        loop (i < count) {
+            this.set(keys.get(i), values.get(i))
+            i = i + 1
+        }
     }
 
     // Private: hash a key using K's Hash impl.

@@ -1,0 +1,9 @@
+// Tests for Maybe[(A, B)]::unzip
+// BLOCKED: impl[A, B] Maybe[(A, B)] monomorphization codegen bug —
+// when called with Maybe[(I32, I32)], the compiler resolves A=tuple_I32_I32
+// instead of A=I32, B=I32. %struct.B remains opaque in LLVM IR,
+// causing: "base element of getelementptr must be sized"
+// The implementation in option.tml is correct TML. Bug is in compiler.
+//
+// Tests are intentionally omitted until the compiler bug is fixed.
+use test::{assert, assert_eq}

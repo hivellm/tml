@@ -1,0 +1,19 @@
+// Tests for HashMap drain_keys and drain_values
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_drain_keys() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    map.set("x", 10)
+    map.set("y", 20)
+
+    let k = map.drain_keys()
+
+    assert_eq(map.len(), 0, "map should be empty after drain_keys")
+    assert_eq(k.len(), 2, "should have 2 keys")
+
+    k.destroy()
+    map.destroy()
+    return 0
+}

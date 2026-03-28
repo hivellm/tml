@@ -1,0 +1,29 @@
+// Tests for HashMap extend_from
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_extend_from() -> I32 {
+    let src = HashMap::new[Str, I64](16)
+    src.set("b", 2)
+    src.set("c", 3)
+
+    let dst = HashMap::new[Str, I64](16)
+    dst.set("a", 1)
+
+    // Use keys/values from src to extend dst
+    let k = src.keys()
+    let v = src.values()
+    dst.extend_from(k, v)
+
+    assert_eq(dst.len(), 3, "should have 3 entries after extend")
+    assert_eq(dst.get("a"), 1, "a should be 1")
+    assert(dst.has("b"), "should have b")
+    assert(dst.has("c"), "should have c")
+
+    k.destroy()
+    v.destroy()
+    src.destroy()
+    dst.destroy()
+    return 0
+}

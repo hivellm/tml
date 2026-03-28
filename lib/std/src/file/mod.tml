@@ -37,10 +37,10 @@ pub mod path
 pub mod bufio
 
 // Re-export file types
-pub use std::file::file::{File}
+pub use std::file::file::{File, FileMetadata}
 
 // Re-export directory types
-pub use std::file::dir::{Dir}
+pub use std::file::dir::{Dir, DirEntry}
 
 // Re-export path types
 pub use std::file::path::{Path, PathBuf}

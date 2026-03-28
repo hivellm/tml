@@ -1,0 +1,15 @@
+// Tests for HashMap is_empty
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_is_empty() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    assert(map.is_empty(), "new map should be empty")
+    map.set("a", 1)
+    assert(not map.is_empty(), "map with entry should not be empty")
+    map.clear()
+    assert(map.is_empty(), "cleared map should be empty")
+    map.destroy()
+    return 0
+}

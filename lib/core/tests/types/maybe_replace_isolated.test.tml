@@ -1,0 +1,11 @@
+// Isolated test for replace only
+use test::{assert, assert_eq}
+
+@test
+func test_replace_just() -> I32 {
+    var x: Maybe[I32] = Just(2)
+    let old: Maybe[I32] = x.replace(5)
+    assert(old == Just(2), "old should be Just(2)")
+    assert(x == Just(5), "x should be Just(5)")
+    return 0
+}
