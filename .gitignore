@@ -86,6 +86,7 @@ compiler/cranelift/target/
 !/.rulebook/knowledge/
 !/.rulebook/learnings/
 !/.rulebook/rules/
+!/.rulebook/archive/
 .rulebook-memory/
 
 # Backup
