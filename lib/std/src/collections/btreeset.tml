@@ -184,6 +184,12 @@ impl[T: Ord] BTreeSet[T] {
         return true
     }
 
+    /// Returns an iterator over elements with values in [from, until] (inclusive).
+    pub func range(this, from: T, until: T) -> BTreeSetIter[T] {
+        let map_iter: BTreeMapIter[T, I64] = this.map.range(from, until)
+        return BTreeSetIter[T] { inner: map_iter }
+    }
+
     /// Returns an iterator over elements in sorted ascending order.
     pub func iter(this) -> BTreeSetIter[T] {
         let map_iter: BTreeMapIter[T, I64] = this.map.iter()

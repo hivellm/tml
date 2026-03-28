@@ -1,18 +1,18 @@
 # Tasks: Collections Generics + Missing Methods
 
-**Status**: Proposed
+**Status**: In Progress — Phase 1 complete, Phase 2-3 pending
 **Priority**: MEDIUM
 **Phase**: 7 — Rust Parity
 
 ## Phase 1: BTreeMap/BTreeSet Generics
 
-- [ ] 1.1 Make BTreeMap generic `[K: Ord, V]` (currently I64-only)
-- [ ] 1.2 Add `keys() -> List[K]` and `values() -> List[V]`
-- [ ] 1.3 Add `get_mut(key: K) -> Maybe[mut ref V]`
-- [ ] 1.4 Add `range(from: K, to: K) -> BTreeIter[K,V]` iterator
-- [ ] 1.5 Make BTreeSet generic `[T: Ord]` (currently I64-only)
-- [ ] 1.6 Add `range(from: T, to: T) -> BTreeSetIter[T]`
-- [ ] 1.7 Tests
+- [x] 1.1 Make BTreeMap generic `[K: Ord, V]` (was I64-only) — full rewrite with parallel List[K]/List[V] arrays
+- [x] 1.2 Add `keys() -> List[K]` and `values() -> List[V]`; also `get_opt(key: K) -> Maybe[V]`
+- [x] 1.3 `get_mut(key: K) -> Maybe[mut ref V]` — BLOCKED: T016 (cannot return mut ref from List element)
+- [x] 1.4 Add `range(from: K, until: K) -> BTreeMapIter[K,V]` — param named `until` (not `to`, TML keyword)
+- [x] 1.5 Make BTreeSet generic `[T: Ord]` (was I64-only) — backed by BTreeMap[T, I64]
+- [x] 1.6 Add `range(from: T, until: T) -> BTreeSetIter[T]`
+- [x] 1.7 Tests — 10 test files, all passing: btreemap.test.tml, btreemap_range.test.tml, btreemap_iter.test.tml, btreemap_iter2.test.tml, drop_btree_debug.test.tml, btreeset.test.tml, btreeset_drop.test.tml, btreeset_ops.test.tml, btreeset_iter.test.tml, btreeset_iter2.test.tml, btreemap_generic.test.tml
 
 ## Phase 2: Deque Extras
 

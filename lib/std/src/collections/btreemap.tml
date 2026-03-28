@@ -284,9 +284,9 @@ impl[K: Ord, V] BTreeMap[K, V] {
     /// var it: BTreeMapIter[I64, I64] = m.range(10, 20)
     /// // iterates keys 10, 20
     /// ```
-    pub func range(this, from: K, to: K) -> BTreeMapIter[K, V] {
+    pub func range(this, from: K, until: K) -> BTreeMapIter[K, V] {
         let lo: I64 = this.lower_bound(from)
-        let hi: I64 = this.upper_bound(to)
+        let hi: I64 = this.upper_bound(until)
         let count: I64 = if hi > lo { hi - lo } else { 0 }
         var result_keys: List[K] = List[K].new(count)
         var result_vals: List[V] = List[V].new(count)

@@ -1,0 +1,9 @@
+use test
+use std::thread
+
+@test
+func test_panicking_returns_false() -> Outcome[Unit, Str] {
+    // Outside of a panic handler, panicking() should return false
+    assert_false(thread::panicking())
+    Ok(())
+}

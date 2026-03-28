@@ -1,0 +1,12 @@
+use test
+use std::sync::Arc
+
+@test
+func test_arc_make_mut_single_owner() -> Outcome[Unit, Str] {
+    let mut x: Arc[I32] = Arc::new(5)
+
+    // With single owner, make_mut should return Just(mut ref)
+    let result = Arc::make_mut(mut ref x)
+    assert_true(result.is_just())
+    Ok(())
+}

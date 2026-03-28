@@ -1,0 +1,10 @@
+use test
+use std::thread
+
+@test
+func test_park_timeout_returns() -> Outcome[Unit, Str] {
+    // park_timeout should return after the timeout even without unpark
+    thread::park_timeout(20)
+    assert_true(true)
+    Ok(())
+}

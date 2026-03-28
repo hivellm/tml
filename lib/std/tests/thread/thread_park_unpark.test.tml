@@ -1,0 +1,22 @@
+use test
+use std::thread
+use std::thread::{spawn_fn, UnitJoinHandle}
+
+@test
+func test_park_unpark_basic() -> Outcome[Unit, Str] {
+    // Spawn a thread that parks itself
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        thread::park()
+    })
+
+    // Give the thread time to start and park
+    thread::sleep_ms(20 as U64)
+
+    // Unpark the thread
+    handle.thread().unpark()
+
+    // Join should succeed
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}

@@ -1,0 +1,27 @@
+use test
+use std::thread
+use core::time::Duration
+
+@test
+func test_sleep_duration_millis() -> Outcome[Unit, Str] {
+    // Sleep for a small duration - should not crash
+    thread::sleep(Duration::from_millis(10))
+    assert_true(true)
+    Ok(())
+}
+
+@test
+func test_sleep_duration_zero() -> Outcome[Unit, Str] {
+    // Sleep for zero duration - should be a no-op
+    thread::sleep(Duration::from_millis(0))
+    assert_true(true)
+    Ok(())
+}
+
+@test
+func test_sleep_ms_still_works() -> Outcome[Unit, Str] {
+    // Existing sleep_ms should still work
+    thread::sleep_ms(10)
+    assert_true(true)
+    Ok(())
+}

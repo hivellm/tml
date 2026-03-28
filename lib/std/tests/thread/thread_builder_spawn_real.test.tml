@@ -1,0 +1,33 @@
+use test
+use std::thread::{spawn_fn, spawn_i64, UnitJoinHandle, I64JoinHandle}
+
+@test
+func test_spawn_fn_unit() -> Outcome[Unit, Str] {
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        // No-op — just verify we can spawn and join
+    })
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}
+
+@test
+func test_spawn_i64_value() -> Outcome[Unit, Str] {
+    let handle: I64JoinHandle = spawn_i64(do() -> I64 {
+        return 42
+    })
+    let result = handle.join()
+    assert_true(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+    Ok(())
+}
+
+@test
+func test_spawn_fn_with_sleep() -> Outcome[Unit, Str] {
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        thread::sleep_ms(10 as U64)
+    })
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}

@@ -1,0 +1,21 @@
+use test
+use std::thread
+use std::thread::{spawn_fn, UnitJoinHandle}
+
+@test
+func test_unpark_before_park() -> Outcome[Unit, Str] {
+    // Spawn a thread that delays then parks
+    let handle: UnitJoinHandle = spawn_fn(do() {
+        thread::sleep_ms(30 as U64)
+        thread::park()
+    })
+
+    // Unpark before the thread calls park
+    thread::sleep_ms(10 as U64)
+    handle.thread().unpark()
+
+    // Join should succeed (park consumed the pre-set token)
+    let result = handle.join()
+    assert_true(result.is_ok())
+    Ok(())
+}
